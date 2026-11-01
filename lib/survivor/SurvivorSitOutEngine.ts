@@ -269,7 +269,7 @@ async function getNominatedAndAcceptedActions(leagueId: string, week: number): P
 export async function getSurvivorTribeBalanceState(leagueId: string, week: number): Promise<SurvivorTribeBalanceState> {
   const [league, tribes] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { survivorPhase: true } }),
-    getTribesWithMembers(leagueId),
+    getTribesWithMembers(leagueId, { activeOnly: true }),
   ])
 
   const merged = ['merge', 'post_merge', 'jury', 'finale'].includes(league?.survivorPhase ?? '')

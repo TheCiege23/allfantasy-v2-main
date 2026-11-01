@@ -12,6 +12,8 @@ import { isAutomaticCeremonyDue, partitionReleasedPlayers, selectActiveFinalScor
 import { createSGWeeklyReward, seedSGDraftIdols } from './rewards'
 import { parseSGActionCommand, parseSGPowerCommand, powersVisibleTo, validateSGPowerPlay } from './powers'
 import type { SGConfig, SGMatchup, SGPower, SGTeam } from './types'
+import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { readSGFaabSplit, reverseSGFaabSplit, splitSGChoppedFaab, type SGFaabSplit } from './faabSplit'
 
 export type SGTribeMember = { rosterId: string; tribeId: string; captain?: boolean }
 export type SGLivePeriod = {
@@ -38,6 +40,8 @@ export type SGLivePeriod = {
     powerIds: string[]
     choppedTeamIds: string[]
     immuneTribeId: string | null
+    /** FAAB moved by this chop (./faabSplit.ts), so a reversal can give it back. */
+    faabSplit?: SGFaabSplit | null
   }
 }
 
@@ -482,7 +486,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
   }
   const previous = await prisma.survivorGuillotineChop.count({ where: { leagueId, period: periodNumber, reversedAt: null } })
   if (previous) throw new Error('This period has already been chopped.')
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true, userId: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true, userId: true, settings: true } })
   if (!league) throw new Error('League not found.')
   const [rosters, scores, priorScores, pastChops, sealed] = await Promise.all([
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, playerData: true, redraftRosterId: true, updatedAt: true } }),
@@ -580,6 +584,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
     externalId: { in: result.choppedTeamIds } },
     select: { claimedByUserId: true, externalId: true, teamName: true, ownerName: true } })
   const now = new Date()
+  let faabSplit: SGFaabSplit | null = null
   await prisma.$transaction(async tx => {
     for (const rosterId of result.choppedTeamIds) {
       const roster = active.find(r => r.id === rosterId)!
@@ -614,6 +619,11 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
           data: { droppedAt: now } })
       }
     }
+    // "Split it among the survivors" (League.settings.guillotineFaabOnChop): same transaction as the chop.
+    faabSplit = readFaabOnChop(league.settings) === 'split'
+      ? await splitSGChoppedFaab(tx, { choppedRosterIds: result.choppedTeamIds,
+        survivorRosterIds: active.map(r => r.id).filter(id => !result.choppedTeamIds.includes(id)) })
+      : null
     if (sealed.length) await tx.survivorGuillotinePower.updateMany({ where: { leagueId, id: { in: sealed.map(p => p.id) } },
       data: { status: 'used', revealedAt: now } })
     const lostOwnerIds = choppedOwners.map(owner => owner.claimedByUserId).filter((id): id is string => !!id)
@@ -651,7 +661,7 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         periodState: { ...state, ceremonyStarted: true, placements: result.placements,
           chopSnapshot: { teams, protectedTeamIds: sealed.map(p => p.targetRosterId).filter((id): id is string => !!id),
             powerIds: sealed.map(p => p.id), choppedTeamIds: result.choppedTeamIds,
-            immuneTribeId: result.immuneTribeId } } as unknown as Prisma.InputJsonValue } })
+            immuneTribeId: result.immuneTribeId, faabSplit } } as unknown as Prisma.InputJsonValue } })
     if (finished.count !== 1) throw new Error('Season changed during the chop; retry with fresh scores and powers.')
     if (hosted) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
       message: result.placements.length
@@ -659,6 +669,10 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
         : `Survivor Guilly period ${periodNumber} chop: ${result.choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period: periodNumber, stage: 3,
         rosterIds: result.choppedTeamIds, placements: result.placements } } })
+    // After the chop announcement, so the league reads them in order.
+    if (faabSplit) await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
+      message: `The chopped team's unspent FAAB ($${faabSplit.pool}) is split among the ${Object.keys(faabSplit.shares).length} survivors.`,
+      metadata: { survivorGuillotine: true, event: 'faab_split', period: periodNumber, pool: faabSplit.pool, shares: faabSplit.shares } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return result
 }
@@ -727,6 +741,7 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
   if (chops.length !== original.choppedTeamIds.length) throw new Error('Chop audit is incomplete; commissioner review required.')
   const restored: string[] = []
   const contested: string[] = []
+  let faabReturn: { unrecovered: number } | null = null
   await prisma.$transaction(async tx => {
     for (const chop of chops) {
       const snapshot = chop.releaseSnapshot as { playerData?: unknown;
@@ -764,6 +779,9 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
     }
     if (original.powerIds.length) await tx.survivorGuillotinePower.updateMany({ where: { leagueId,
       id: { in: original.powerIds }, status: 'used' }, data: { status: 'sealed' } })
+    // The reversed chop's FAAB split goes back too (as much as the survivors still hold).
+    const split = readSGFaabSplit(original.faabSplit)
+    if (split) faabReturn = await reverseSGFaabSplit(tx, split)
     const saved = await tx.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
       data: { status: 'active', revision: { increment: 1 },
         periodState: { ...state, ceremonyStarted: false, placements: [], chopSnapshot: null } as unknown as Prisma.InputJsonValue } })
@@ -771,7 +789,8 @@ export async function reconcileSGLiveStatCorrection(leagueId: string) {
     await tx.leagueChatMessage.create({ data: { leagueId, userId: league.userId, type: 'system',
       message: `Survivor Guilly period ${state.period} chop was reversed after a stat correction. The ceremony will run again with corrected scores.`,
       metadata: { survivorGuillotine: true, event: 'chop_reversed', period: state.period,
-        restoredPlayerIds: restored, claimedPlayerIdsRetained: contested } } })
+        restoredPlayerIds: restored, claimedPlayerIdsRetained: contested,
+        ...(faabReturn ? { faabUnrecovered: faabReturn.unrecovered } : {}) } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { status: 'reversed' as const, restoredPlayerIds: restored, claimedPlayerIdsRetained: contested,
     correctedResult: result }

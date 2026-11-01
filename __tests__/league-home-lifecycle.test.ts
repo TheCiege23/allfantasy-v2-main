@@ -144,13 +144,14 @@ describe('league home: Draft HQ says which draft, and stops calling a finished o
     expect(SRC).toContain('${league.season ?? \'\'}')
   })
 
-  it('⚠ populated rosters are evidence a draft happened, even with no draft row', () => {
+  it('⚠ only rosters with players are evidence a draft happened, even with no draft row', () => {
     /*
      * The old else-branch was a false statement about the LEAGUE rather than a
      * true one about our data — the same failure the buzz panel had. A league
-     * whose rosters we are rendering has obviously drafted.
+     * whose rosters contain players has drafted; an imported pre-draft league
+     * already has one empty roster row per team.
      */
-    expect(SRC).toContain('const draftedAlready = rosterCountForDraft > 0')
+    expect(SRC).toContain('const draftedAlready = rosteredPlayerCount > 0')
     expect(SRC).not.toContain("reason: 'no draft has been set up for this league'")
     expect(SRC).not.toContain('we did not capture the board itself')
     expect(SRC).toContain('Open Draft HQ to check the draft history on file')
@@ -236,7 +237,8 @@ describe('league home: FAAB is a column, and a dash when we do not know it', () 
   })
 
   it('reads one roster query for two jobs instead of counting twice', () => {
-    expect(SRC).toContain('const rosterCountForDraft = rosterRows.length')
+    expect(SRC).toContain('const rosteredPlayerCount = rosterRows.reduce(')
+    expect(SRC).toContain('rosterPlayerIds(row.playerData).length')
   })
 })
 

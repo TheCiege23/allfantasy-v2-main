@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { MAX_PLAYOFF_TEAMS, playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -29,6 +30,7 @@ export function PlayoffSettingsPanel({
   const [champLength, setChampLength] = useState(initialData.championshipLength ?? 1)
   const [seeding, setSeeding] = useState((initialData.playoffSeedingRule ?? 'default') as string)
   const [lower, setLower] = useState((initialData.playoffLowerBracket ?? 'toilet') as string)
+  const [thirdPlace, setThirdPlace] = useState(initialData.thirdPlaceGameEnabled !== false)
 
   useEffect(() => {
     setStartWeek(initialData.playoffStartWeek ?? 14)
@@ -37,6 +39,7 @@ export function PlayoffSettingsPanel({
     setChampLength(initialData.championshipLength ?? 1)
     setSeeding(initialData.playoffSeedingRule ?? 'default')
     setLower(initialData.playoffLowerBracket ?? 'toilet')
+    setThirdPlace(initialData.thirdPlaceGameEnabled !== false)
   }, [initialData])
 
   /*
@@ -52,11 +55,20 @@ export function PlayoffSettingsPanel({
     const final = playoffFinalWeek({ playoffStartWeek: startWeek, teams: n, weeksPerRound: weeksPer, championshipLength: champLength })
     return final == null || final <= seasonWeeks
   }
-  const teamOptions = [4, 6, 8, 10, 12, 14, 16].filter((n) => n <= leagueCap || n === teams)
+  // Odd fields (3, 5 … 15) are free, like the even ones: the bracket engine gives the top seeds
+  // first-round byes (canonicalNflRedraftPlayoffRuntime), and the server accepts any field up to 16
+  // (owner's rule, 08d407e24; reconfirmed 2026-10-25).
+  const teamOptions = Array.from({ length: MAX_PLAYOFF_TEAMS - 2 }, (_, i) => i + 3).filter((n) => n <= leagueCap || n === teams)
   // The last eight weeks of the sport's season (weeks 11-18 when the sport is unknown), and the current one.
   const firstStartOption = seasonWeeks == null ? 11 : Math.max(2, seasonWeeks - 7)
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts): no start
+  // after week 25 is offered there (the current week stays listed so the field shows what is saved).
+  const startWeekCap = maxPlayoffStartWeekFor({ leagueType: initialData.leagueType, sport: initialData.sport })
   const startWeekOptions = Array.from(
-    new Set([...Array.from({ length: 8 }, (_, i) => firstStartOption + i), startWeek]),
+    new Set([
+      ...Array.from({ length: 8 }, (_, i) => firstStartOption + i).filter((w) => startWeekCap == null || w <= startWeekCap),
+      startWeek,
+    ]),
   ).sort((a, b) => a - b)
   const startWeekFits = (w: number) => {
     if (initialData.isDynasty || seasonWeeks == null) return true
@@ -186,6 +198,29 @@ export function PlayoffSettingsPanel({
             },
           ]}
         />
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Third-place game</SettingsSectionLabel>
+        <SettingsRadioGroup
+          name="playoff-third-place"
+          value={thirdPlace ? 'on' : 'off'}
+          disabled={disabled}
+          onChange={(v) => {
+            const on = v === 'on'
+            setThirdPlace(on)
+            debouncedSave({ thirdPlaceGameEnabled: on })
+          }}
+          options={[
+            {
+              id: 'on',
+              title: 'Play for third',
+              description: 'The two semifinal losers play during the championship week(s); the winner finishes 3rd.',
+            },
+            { id: 'off', title: 'No third-place game', description: 'Semifinal losers finish 3rd and 4th by seed.' },
+          ]}
+        />
+        <SettingsHelper>Locked while the playoffs are being played.</SettingsHelper>
       </div>
 
       <div>

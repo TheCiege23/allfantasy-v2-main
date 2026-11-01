@@ -499,11 +499,14 @@ const WAIVER_VARIANT_OVERRIDES: Partial<Record<SportType, Record<string, Partial
     REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE,
     PPR: { max_claims_per_period: 12 },
     HALF_PPR: { max_claims_per_period: 12 },
+    /*
+     * Superflex is a redraft roster shape, so it takes the redraft FAAB $100 default. Creation never
+     * stores `leagueVariant: 'SUPERFLEX'` (normalizeCreateLeaguePayload strips it); this row is what
+     * the wizard preview and LeagueCreationDefaultsLoader read. Measured 2026-10-25: no production
+     * league carries that variant, so no row-less league's fallback changes.
+     */
     SUPERFLEX: {
-      waiver_type: 'rolling',
-      faab_enabled: false,
-      FAAB_budget_default: null,
-      claim_priority_behavior: 'priority_lowest_first',
+      ...REDRAFT_FAAB_WAIVER_OVERRIDE,
       free_agent_unlock_behavior: 'after_waiver_run',
       max_claims_per_period: 12,
     },
@@ -788,6 +791,9 @@ export function getWaiverDefaults(sportType: SportType, _formatType?: string | n
   const base = WAIVER_DEFAULTS[sportType] ?? WAIVER_DEFAULTS.NFL
   const normalizedVariant = normalizeWaiverVariant(_formatType)
   const variantOverrides = WAIVER_VARIANT_OVERRIDES[sportType]?.[normalizedVariant] ?? {}
+  if (String(_formatType ?? '').trim().toLowerCase() === 'zombie') {
+    return { ...base, ...variantOverrides, sport_type: sportType, waiver_type: 'fcfs', processing_days: null, FAAB_budget_default: null, faab_enabled: false, continuous_waivers_behavior: false, free_agent_unlock_behavior: 'instant' }
+  }
   return {
     ...base,
     ...variantOverrides,

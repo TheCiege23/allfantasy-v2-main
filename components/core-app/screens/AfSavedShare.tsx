@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * "AF saved me" — a share image for a triage tip that came good: AllFantasy said start A over B, you
@@ -20,6 +23,9 @@ export type SavedTip = {
   week: number
 }
 
+/** The card's words (lib/core-app/messages/receiptsCard.ts) — `es` is the prop the Receipts card passes. */
+const savedCopy = (es: boolean) => messagesFor(receiptsCardMessages, langFromFlag(es))
+
 export function savedMargin(t: SavedTip): number {
   return Math.round((t.recommended.points - t.instead.points) * 10) / 10
 }
@@ -27,17 +33,12 @@ export function savedMargin(t: SavedTip): number {
 /** The words on the card, kept separate from the drawing so they can be tested. */
 export function savedLines(t: SavedTip, es: boolean): { headline: string; detail: string; footer: string } {
   const margin = savedMargin(t).toFixed(1)
-  return es
-    ? {
-        headline: `AllFantasy me salvó +${margin} pts`,
-        detail: `${t.recommended.name} ${t.recommended.points.toFixed(1)} vs ${t.instead.name} ${t.instead.points.toFixed(1)}`,
-        footer: `${t.leagueName} · semana ${t.week} · allfantasy.ai`,
-      }
-    : {
-        headline: `AllFantasy saved me +${margin} pts`,
-        detail: `${t.recommended.name} ${t.recommended.points.toFixed(1)} vs ${t.instead.name} ${t.instead.points.toFixed(1)}`,
-        footer: `${t.leagueName} · week ${t.week} · allfantasy.ai`,
-      }
+  const m = savedCopy(es)
+  return {
+    headline: m.savedHeadline(margin),
+    detail: m.savedDetail(t.recommended.name, t.recommended.points.toFixed(1), t.instead.name, t.instead.points.toFixed(1)),
+    footer: m.savedFooter(t.leagueName, t.week),
+  }
 }
 
 function drawCard(t: SavedTip, es: boolean): HTMLCanvasElement | null {
@@ -98,7 +99,7 @@ export function AfSavedShare({ tip, es }: { tip: SavedTip; es: boolean }) {
 
   return (
     <button type="button" className="af3a-receipt-share" onClick={share} disabled={busy}>
-      {es ? 'Compartir' : 'Share'}
+      {savedCopy(es).savedShare}
     </button>
   )
 }

@@ -42,6 +42,11 @@ export type LineupValidationContext = {
   starterSlots?: ExpandedStarterSlot[]
   /** The stored lineup this save replaces: an unchanged, carried-over slot position is not re-judged. */
   previousPlayerData?: unknown
+  /**
+   * Known experience (`SportsPlayer.yearsExp`) for players this save ADDS to the taxi squad. Lineup
+   * rows do not carry `years_exp`, so without it the taxi rookie / years rules could never fire.
+   */
+  taxiYearsExpById?: ReadonlyMap<string, number>
 }
 
 export type RosterValidationIssue = {

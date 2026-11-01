@@ -26,7 +26,14 @@ export type LeagueComposerPayload = {
     duration?: number
     mimeType?: string
   }>
-  poll?: { question: string; options: string[]; closeAt: Date; allowMultiple: boolean; anonymous?: boolean }
+  poll?: {
+    question: string
+    options: string[]
+    closeAt: Date | null
+    allowMultiple: boolean
+    anonymous?: boolean
+    resultsVisibility?: 'live' | 'after_close'
+  }
 }
 
 type ChatComposerProps = {
@@ -103,6 +110,11 @@ type ChatComposerProps = {
    * instead, so it is never cut off by the panel it was opened from.
    */
   pickerPlacement?: 'inline' | 'auto'
+  /**
+   * League chat only: offers "Predict a matchup" in the poll picker. The picker asks the server
+   * which matchups are open and hides the tab when there are none (or the league is imported).
+   */
+  predictions?: { leagueId: string; onPosted: () => void } | null
 }
 
 /** Room a picker needs above the box before it is allowed to open inline. */
@@ -181,6 +193,7 @@ export function ChatComposer({
   mentionMembers,
   testIds,
   pickerPlacement = 'inline',
+  predictions,
 }: ChatComposerProps) {
   const [text, setText] = useState('')
   /** Photos on their way up. Shown as chips so a slow upload never looks like nothing happened. */
@@ -712,6 +725,12 @@ export function ChatComposer({
     ) : activePicker === 'poll' ? (
       <PollComposer
         initial={pollDraft}
+        allowNoDeadline={chatType === 'league'}
+        predictions={predictions ?? null}
+        onPredictionPosted={() => {
+          setActivePicker(null)
+          predictions?.onPosted()
+        }}
         onCreatePoll={(p) => {
           setPollDraft(p)
           setActivePicker(null)

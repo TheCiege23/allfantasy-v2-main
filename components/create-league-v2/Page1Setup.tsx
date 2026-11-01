@@ -33,7 +33,10 @@ import {
   SelectableCard,
   Toggle,
   Segmented,
+  GlassInput,
 } from './primitives'
+import { parseSurvivorDuesUsd, SURVIVOR_DUES_OFF_APP_NOTE } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESET_IDS, SURVIVOR_TWIST_PRESETS } from '@/lib/survivor/survivorTwistPresets'
 
 // ── League type cards (12 format IDs + IDP pseudo-card) ─────────────
 
@@ -365,7 +368,11 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <PillRow
             options={teamCountOptions}
             value={state.teamCount}
-            onChange={(teamCount) => onChange({ teamCount })}
+            onChange={(teamCount) => {
+              const validTribes = getSurvivorTribeOptions(teamCount)
+              onChange({ teamCount, ...(effectiveType === 'survivor' && !validTribes.includes(state.survivorTribeCount)
+                ? { survivorTribeCount: validTribes[0] ?? 2 } : {}) })
+            }}
             accent={accent}
             ariaLabel="Number of teams"
           />
@@ -389,6 +396,54 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <p className="mt-3 text-[11px] text-white/40">
             Tribes shuffle automatically at the merge week (configurable after league creation).
           </p>
+        </GlassCard>
+      )}
+
+      {/* Survivor twists: one choice instead of every idol and Exile setting. */}
+      {isSurvivor && (
+        <GlassCard>
+          <SectionHeader title="Twists" hint="How much happens each week. Every rule can still be changed before the draft." />
+          <Segmented
+            options={SURVIVOR_TWIST_PRESET_IDS.map((id) => ({ value: id, label: SURVIVOR_TWIST_PRESETS[id].label, hint: SURVIVOR_TWIST_PRESETS[id].tagline }))}
+            value={state.survivorTwistPreset ?? SURVIVOR_TWIST_PRESET_DEFAULT}
+            onChange={(survivorTwistPreset) => onChange({ survivorTwistPreset })}
+            accent={accent}
+            ariaLabel="Survivor twists"
+          />
+          <ul className="mt-3 space-y-1 text-[11px] text-white/55" data-testid="survivor-twist-preset-bullets">
+            {SURVIVOR_TWIST_PRESETS[state.survivorTwistPreset ?? SURVIVOR_TWIST_PRESET_DEFAULT].bullets.map((bullet) => <li key={bullet}>• {bullet}</li>)}
+          </ul>
+        </GlassCard>
+      )}
+
+      {/* Survivor dues: a label only. AllFantasy takes no payments of any kind. */}
+      {isSurvivor && (
+        <GlassCard>
+          <SectionHeader title="League Dues" hint="Every league is free on AllFantasy. Mark it paid if your league collects dues." />
+          <Segmented
+            options={[
+              { value: 'free' as const, label: 'Free' },
+              { value: 'paid' as const, label: 'Paid', hint: 'Dues on LeagueSafe or FanCred' },
+            ]}
+            value={state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'}
+            onChange={(survivorEntryFeeMode) => onChange({ survivorEntryFeeMode, ...(survivorEntryFeeMode === 'free' ? { survivorDuesUsd: '' } : {}) })}
+            accent={accent}
+            ariaLabel="Survivor league dues"
+          />
+          {state.survivorEntryFeeMode === 'paid' && (
+            <div className="mt-4 max-w-[220px]">
+              <GlassInput
+                label="Dues per manager (USD)"
+                value={state.survivorDuesUsd ?? ''}
+                onChange={(survivorDuesUsd) => onChange({ survivorDuesUsd })}
+                placeholder="Optional, e.g. 25"
+                accent={accent}
+                maxLength={10}
+                error={parseSurvivorDuesUsd(state.survivorDuesUsd ?? '') === 'invalid' ? 'Enter an amount greater than zero, or leave it blank.' : null}
+              />
+            </div>
+          )}
+          <p className="mt-3 text-[11px] text-white/40">{SURVIVOR_DUES_OFF_APP_NOTE}</p>
         </GlassCard>
       )}
 

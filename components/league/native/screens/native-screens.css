@@ -260,6 +260,7 @@
 .nls-oddsbar[data-tone=warn] b { color: var(--warn); }
 .nls-oddsbar[data-tone=bad] b { color: var(--bad); }
 .nls-table-note { padding: 18px 28px 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.nls-division-head { caption-side: top; padding: 18px 28px 8px; border-top: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; text-align: left; }
 .nls-big-odds { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
 .nls-big-odds b { color: var(--good); font: 700 60px/1 var(--nl-mono); }
 .nls-big-odds span { color: var(--text2); font-size: 15px; }
@@ -346,3 +347,15 @@
 @media (prefers-reduced-motion: reduce) { .nls * { transition: none !important; animation: none !important; } }
 .nls-short { display: none; }
 @media (max-width: 767px) { .nls-long { display: none; } .nls-short { display: inline; } }
+
+/* Tap to swap: the player cell is the tap target (NativeLineupScreen `PlayerCell`). */
+.nls-tap { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; width: 100%; min-height: 44px; cursor: pointer; border-radius: 6px; }
+.nls-tap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-tap:disabled { cursor: default; }
+.nls-tap[aria-pressed=true] strong { color: var(--accent); }
+
+.nls-trade-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.nls-trade-overview>div{min-width:0;padding:16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,rgba(14,165,178,.13),var(--surface))}
+.nls-trade-overview span{display:block;color:var(--text2);font-size:12px}.nls-trade-overview strong{display:block;margin-top:7px;color:var(--text);font-size:24px;line-height:1}
+.nls-zombie-trade-note{padding:12px 14px;border:1px solid rgba(163,230,53,.3);border-radius:10px;background:rgba(54,83,20,.2);color:#ecfccb;font-size:13px}
+@media(max-width:600px){.nls-trade-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.nls-trade-overview>div{padding:12px}.nls-trade-overview strong{font-size:20px}}

@@ -6,11 +6,25 @@ import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSecti
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { playoffSeriesSportSupported, readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
+import { PlayoffSeriesLengthsCard } from '@/components/league-settings/PlayoffSeriesLengthsCard'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
+import {
+  CONSOLATION_PICK_GOES_TO_VALUES,
+  CONSOLATION_PLAYS_FOR_VALUES,
+  consolationPlaysForAppliesToDraftOrder,
+  leagueDraftOrderCarriesOver,
+  readConsolationPickGoesTo,
+  readConsolationPlaysFor,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLeagueNotes'
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
@@ -28,13 +42,59 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   const chosenStartWeek = native ? resolvePlayoffStartWeek(ctx.league).week : (ctx.league.playoffStartWeek ?? 14)
   const [playoffStartWeek, setPlayoffStartWeek] = useState(chosenStartWeek)
 
+  // The league median game itself. Its own save, so a refusal (the server locks it once the season's
+  // first week is final, lib/redraft/medianGameSwitch.ts) puts back only this switch.
+  const medianSave = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
+  const storedMedianGame = savedOr(leagueId, 'medianGame', ctx.league.medianGame === true) === true
+  const [medianGame, setMedianGame] = useState(storedMedianGame)
+  useEffect(() => setMedianGame(storedMedianGame), [storedMedianGame])
+  useEffect(() => {
+    if (medianSave.lastError && !medianSave.manual) setMedianGame(storedMedianGame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medianSave.lastError])
+  // A median of category results means nothing, so it is offered to points leagues (and to any league
+  // that already has it on, so it can be turned off).
+  const settingsObj = (ctx.league.settings ?? {}) as Record<string, unknown>
+  const pointsLeague = String(settingsObj.scoring_mode ?? settingsObj.scoringMode ?? 'points').toLowerCase() === 'points'
+  const offerMedianGame = pointsLeague || storedMedianGame
+
+  // Off unless the commissioner turned it on (lib/redraft/medianGame.ts); only offered with the median game on.
+  const storedMedianInPlayoffs = readMedianGameInPlayoffs(ctx.league.settings)
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(storedMedianInPlayoffs)
+
+  // On unless stored off (lib/playoff-runtime/thirdPlaceGame.ts); read when the bracket is generated.
+  const storedThirdPlace = readThirdPlaceGameEnabled(ctx.league.settings, ctx.league.sport)
+  const [thirdPlace, setThirdPlace] = useState(storedThirdPlace)
+
+  // What the lower bracket plays for (lib/playoff-runtime/consolationPlaysFor.ts). A league created
+  // before it moved the draft order shows "Not set" until the commissioner picks one — saving it is
+  // what opts that league in, so the stored sport default is not shown as a choice already made.
+  const storedPlaysFor = consolationPlaysForAppliesToDraftOrder(ctx.league.settings)
+    ? readConsolationPlaysFor(ctx.league.settings, ctx.league.sport, ctx.league.leagueVariant)
+    : ''
+  const savedPlaysFor = savedOr<string>(leagueId, 'consolationPlaysFor', storedPlaysFor)
+  const [playsFor, setPlaysFor] = useState(savedPlaysFor)
+  useEffect(() => setPlaysFor(savedPlaysFor), [savedPlaysFor])
+  // A redraft league starts fresh: "Draft pick" has no effect there, so it is offered only while it
+  // is the stored value, marked as having no effect. Dynasty, devy, C2C and keeper leagues get the
+  // toilet bowl choice of which finalist takes pick 1.
+  const carriesOver = leagueDraftOrderCarriesOver({ leagueType: ctx.league.leagueType, isDynasty: ctx.league.isDynasty })
+  const savedPickGoesTo = savedOr<string>(leagueId, 'consolationPickGoesTo', readConsolationPickGoesTo(ctx.league.settings))
+  const [pickGoesTo, setPickGoesTo] = useState(savedPickGoesTo)
+  useEffect(() => setPickGoesTo(savedPickGoesTo), [savedPickGoesTo])
+
   useEffect(() => {
     setPlayoffTeams(ctx.league.playoffTeams ?? 6)
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
+  useEffect(() => setMedianInPlayoffs(storedMedianInPlayoffs), [storedMedianInPlayoffs])
+  useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
-  const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts), so the
+  // playoffs start by week 25 there; the server refuses a later week.
+  const startWeekCap = maxPlayoffStartWeekFor({ leagueType: ctx.league.leagueType, sport: ctx.league.sport })
+  const startWeekMax = startWeekCap ?? Math.max(18, seasonWeeks, chosenStartWeek)
   const leagueCap = Math.min(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12, MAX_PLAYOFF_TEAMS)
   // A field whose final would land after the season's last week never completes, and the server refuses
   // it (lib/playoff-runtime/championshipLengthFit.ts) — so it is not offered. A dynasty season is sized
@@ -46,8 +106,14 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         playoffStartWeek,
         weeksPerRound: ctx.league.playoffWeeksPerRound,
         championshipLength: readChampionshipLength(ctx.league.settings),
+        seriesLengths: readPlayoffSeriesLengths(ctx.league.settings),
         leagueSize: leagueCap,
       })
+  // Best-of-N series (lib/playoff-runtime/playoffSeries.ts): native NBA / NHL / MLB redraft leagues only.
+  const offerSeries =
+    native &&
+    playoffSeriesSportSupported(ctx.league.sport) &&
+    String(ctx.league.leagueType ?? 'redraft').trim().toLowerCase() === 'redraft'
   const teamCap = Math.max(2, Math.min(leagueCap, fitCap))
 
   // A tournament conference league has no league playoffs; its fields would do nothing.
@@ -105,9 +171,139 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
             />
           </label>
         </div>
+        {offerMedianGame ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="median-game-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.medianGame')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.medianGameHelp')}</span>
+              {medianSave.lastError ? (
+                <span role="alert" className="mt-1 block text-[11px] text-red-300">{medianSave.lastError}</span>
+              ) : null}
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={medianGame}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMedianGame(v)
+                medianSave.queuePatch({ medianGame: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {medianGame ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="median-in-playoffs-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.medianPlayoffs')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.medianPlayoffsHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={medianInPlayoffs}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMedianInPlayoffs(v)
+                queuePatch({ medianGameInPlayoffs: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {native ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="third-place-game-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.thirdPlace')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">{t('lsHub.po.thirdPlaceHelp')}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={thirdPlace}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setThirdPlace(v)
+                queuePatch({ thirdPlaceGameEnabled: v })
+              }}
+            />
+          </label>
+        ) : null}
       </div>
 
+      {native ? (
+        <label className="block rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4" data-testid="consolation-plays-for">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.po.playsFor')}</span>
+          <select
+            aria-label={t('lsHub.po.playsFor')}
+            value={playsFor}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const v = e.target.value
+              if (!v) return
+              setPlaysFor(v)
+              queuePatch({ consolationPlaysFor: v })
+            }}
+            className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {playsFor === '' ? <option value="">{t('lsHub.po.playsForUnset')}</option> : null}
+            {CONSOLATION_PLAYS_FOR_VALUES.filter((v) => carriesOver || v !== 'pick' || playsFor === 'pick').map((v) => (
+              <option key={v} value={v}>{t(v === 'pick' && !carriesOver ? 'lsHub.po.playsFor.pickRedraft' : `lsHub.po.playsFor.${v}`)}</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] text-white/45" data-testid={carriesOver ? undefined : 'consolation-plays-for-redraft'}>
+            {t(carriesOver ? 'lsHub.po.playsForHelp' : 'lsHub.po.playsForRedraftHelp')}
+          </span>
+          {playsFor === '' && carriesOver ? (
+            <span className="mt-1 block text-[11px] text-white/45" data-testid="consolation-plays-for-unset">{t('lsHub.po.playsForUnsetHelp')}</span>
+          ) : null}
+        </label>
+      ) : null}
+      {native && carriesOver && playsFor === 'pick' ? (
+        <label className="block rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4" data-testid="consolation-pick-goes-to">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.po.pickGoesTo')}</span>
+          <select
+            aria-label={t('lsHub.po.pickGoesTo')}
+            value={pickGoesTo}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const v = e.target.value
+              setPickGoesTo(v)
+              queuePatch({ consolationPickGoesTo: v })
+            }}
+            className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {CONSOLATION_PICK_GOES_TO_VALUES.map((v) => (
+              <option key={v} value={v}>{t(`lsHub.po.pickGoesTo.${v}`)}</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] text-white/45">{t('lsHub.po.pickGoesToHelp')}</span>
+        </label>
+      ) : null}
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
+      {offerSeries ? (
+        <PlayoffSeriesLengthsCard
+          leagueId={leagueId}
+          settings={ctx.league.settings}
+          playoffTeams={playoffTeams}
+          playoffStartWeek={playoffStartWeek}
+          seasonWeeks={ctx.league.isDynasty ? null : seasonWeeks}
+          canEdit={canEdit}
+          hasPlan={hasAfCommissionerSub || Boolean(ctx.hasAfCommissionerSub)}
+          queuePatch={queuePatch}
+        />
+      ) : null}
       {native ? (
         <TiebreakerOrderEditor
           leagueId={leagueId}

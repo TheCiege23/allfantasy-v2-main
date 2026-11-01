@@ -1,0 +1,193 @@
+/* Redraft identity on the /core Trades and War Room screens (batch B4, 2026-10-31).
+ *
+ * Applies only inside `.af-core.af-shell[data-format=redraft]` — the root CORE-1 stamps for a native
+ * redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts). Every other league, and the draft
+ * room, never matches a rule here. Imported by the screens it styles (Trades, TradeCenter via
+ * RedraftTradeDeadlineBar, Scout, ConnectedFranchiseWarRoom), so it loads with them and nowhere else.
+ *
+ * ⚠ NO HEX, NO rgba(). Every colour is a `--rd-*` token (components/league/native/redraft-identity.css,
+ * measured by __tests__/league-media/redraftIdentityContrast.test.ts) or a /core palette token
+ * (`--good`, `--warn`, `--bad` and their `-soft`s, `--surface*`, `--line*`, `--text*`), which af-core.css
+ * defines for light, dark and AF. That is also how the Trade Center's hardcoded DARK literals are moved
+ * onto tokens for redraft: re-pointed here under the redraft root, the shared sheet left untouched.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md, af-matchup.css 2026-08-30).
+ * ⚠ TYPE FLOOR: nothing below 11px (__tests__/core-app/type-floor.test.ts). */
+
+/* The capture script reads this to prove the sheet applied — and that it did not leak (see the script). */
+.af-core.af-shell[data-format=redraft] { --rd-b4: on; }
+
+/* ── Trade deadline bar (RedraftTradeDeadlineBar) ──────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-rd-deadline {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+  padding: 14px 18px; border: 1px solid var(--rd-accent-line); border-radius: 14px;
+  background: var(--rd-surface-elev); color: var(--text2); font-size: 14px;
+}
+.af-core.af-shell[data-format=redraft] .af-rd-deadline-k {
+  color: var(--rd-accent-text); font: 700 11px/1.2 var(--font-jetbrains-mono, ui-monospace, monospace);
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.af-core.af-shell[data-format=redraft] .af-rd-deadline-v { color: var(--text); font-size: 15px; font-weight: 800; }
+.af-core.af-shell[data-format=redraft] .af-rd-deadline-meter {
+  position: relative; flex: 1 1 160px; max-width: 320px; height: 8px; margin-left: auto;
+  border-radius: 999px; background: var(--rd-track); overflow: hidden;
+}
+.af-core.af-shell[data-format=redraft] .af-rd-deadline-meter > span {
+  position: absolute; inset: 0 auto 0 0; width: var(--rd-fill, 0%); border-radius: inherit; background: var(--rd-accent);
+}
+.af-core.af-shell[data-format=redraft] .af-rd-deadline-sub { color: var(--muted); font-size: 12px; }
+/* Last week to trade: the warning tone, not the sport — a deadline about to bite is not decoration. */
+.af-core.af-shell[data-format=redraft] .af-rd-deadline[data-state=final] { border-color: var(--warn); background: var(--warn-soft); }
+.af-core.af-shell[data-format=redraft] .af-rd-deadline[data-state=final] .af-rd-deadline-meter > span { background: var(--warn); }
+.af-core.af-shell[data-format=redraft] .af-rd-deadline[data-state=final] .af-rd-deadline-k { color: var(--warn); }
+/* Passed / none: settled facts, so a plain card with no accent. */
+.af-core.af-shell[data-format=redraft] .af-rd-deadline:is([data-state=passed],[data-state=none]) { border-color: var(--line2); background: var(--surface); }
+.af-core.af-shell[data-format=redraft] .af-rd-deadline:is([data-state=passed],[data-state=none]) .af-rd-deadline-k { color: var(--muted); }
+
+/* The bar states the deadline; the old countdown chip in the context row would say it twice. The
+ * pick-trade chip (it carries a testid) is a different rule and stays. */
+.af-core.af-shell[data-format=redraft] .af-tc:has(> .af-rd-deadline) .af-tc-context .af-tc-chip--deadline:not([data-testid]) { display: none; }
+
+/* ── Trade Center: league context, chips, the hardcoded dark literals ───────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-tc {
+  /* The handoff's literals (af-trade-center.css :root of .af-tc) → the /core status palette, which
+   * af-core.css measures in light, dark and AF. Light used to keep #fbbf24 amber on white. */
+  --tc-good: var(--good);
+  --tc-warn: var(--warn);
+  --tc-bad: var(--bad);
+  --tc-grade-b: var(--good);
+  --tc-grade-d: var(--bad);
+  --tc-violet: var(--rd-accent-text);
+  --tc-orange: var(--warn);
+}
+.af-core.af-shell[data-format=redraft] .af-tc-head h1 { color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-tc-context { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.af-core.af-shell[data-format=redraft] .af-tc-chip--deadline { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+.af-core.af-shell[data-format=redraft] .af-tc-banner--blocked { border-color: var(--warn); background: var(--warn-soft); }
+.af-core.af-shell[data-format=redraft] .af-tc-banner-glyph { background: var(--warn-soft); }
+.af-core.af-shell[data-format=redraft] .af-tc-nosignal { border-color: var(--bad); background: var(--bad-soft); color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-tc-list--warn li { color: var(--text2); }
+.af-core.af-shell[data-format=redraft] .af-tc-note:is([data-tone=pick],[data-tone=leverage],[data-tone=need],[data-tone=bye]) { border-color: var(--line2); background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-tc-read:is([data-tone=contender],[data-tone=rebuilder]) { border-color: var(--line2); background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-tc-value-actions { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.af-core.af-shell[data-format=redraft] .af-tc-value-action div span,
+.af-core.af-shell[data-format=redraft] .af-tc-value-layers span { color: var(--muted); }
+.af-core.af-shell[data-format=redraft] .af-tc-value-action > b,
+.af-core.af-shell[data-format=redraft] .af-tc-incentive p,
+.af-core.af-shell[data-format=redraft] .af-tc-value-layers strong { color: var(--text2); }
+.af-core.af-shell[data-format=redraft] .af-tc-incentive,
+.af-core.af-shell[data-format=redraft] .af-tc-value-layers > div { border-color: var(--line2); background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-tc-offer-message textarea { color: var(--text); background: var(--surface2); border-color: var(--line2); }
+/* Position letters: the pastel literals are unreadable on white. One readable ink, the position still named. */
+.af-core.af-shell[data-format=redraft] .af-tc-pos[data-pos] { color: var(--text2); }
+.af-core.af-shell[data-format=redraft] .af-tc-stock[data-dir=up] { color: var(--good); }
+.af-core.af-shell[data-format=redraft] .af-tc-stock[data-dir=down] { color: var(--bad); }
+.af-core.af-shell[data-format=redraft] .af-tc-review { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); }
+.af-core.af-shell[data-format=redraft] .af-tc-share-card { background: var(--surface2); color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-tc-share-top span { color: var(--text2); }
+.af-core.af-shell[data-format=redraft] .af-tc-share-sides > div { background: var(--surface); }
+.af-core.af-shell[data-format=redraft] .af-tc-share-sides strong { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-tc-generic-error { color: var(--bad) !important; }
+.af-core.af-shell[data-format=redraft] .af-tc-generic-grades > div { background: var(--surface2); }
+
+/* ── Letter-grade blocks: offer cards (TradeInbox), the builder's verdict, completed trades ──────── */
+.af-core.af-shell[data-format=redraft] .af-tc-offer {
+  border-color: var(--rd-accent-line); background: var(--rd-surface-elev); border-radius: 14px;
+}
+.af-core.af-shell[data-format=redraft] .af-tc-offer-partner { font-weight: 800; color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-tc-offer-grade { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.af-core.af-shell[data-format=redraft] .af-tc-offer-grade strong,
+.af-core.af-shell[data-format=redraft] .af-tr-leaguegrade-letter,
+.af-core.af-shell[data-format=redraft] .af-tr-grade-badge,
+.af-core.af-shell[data-format=redraft] .af-tr-graderow-letter,
+.af-core.af-shell[data-format=redraft] .af-tr-offer-grade {
+  display: inline-grid; place-items: center; min-width: 48px; height: 44px; padding: 0 10px;
+  border: 1px solid var(--line2); border-radius: 10px; background: var(--surface2); color: var(--text);
+  font: 800 22px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+}
+.af-core.af-shell[data-format=redraft] :is(.af-tc-offer-grade[data-letter=A], .af-tc-offer-grade[data-letter=B]) strong,
+.af-core.af-shell[data-format=redraft] [data-rd-tone=good] :is(.af-tr-leaguegrade-letter, .af-tr-grade-badge, .af-tr-offer-grade),
+.af-core.af-shell[data-format=redraft] .af-tr-graderow-letter[data-rd-tone=good] {
+  border-color: var(--good); background: var(--good-soft); color: var(--good);
+}
+.af-core.af-shell[data-format=redraft] .af-tc-offer-grade[data-letter=C] strong,
+.af-core.af-shell[data-format=redraft] [data-rd-tone=warn] :is(.af-tr-leaguegrade-letter, .af-tr-grade-badge, .af-tr-offer-grade),
+.af-core.af-shell[data-format=redraft] .af-tr-graderow-letter[data-rd-tone=warn] {
+  border-color: var(--warn); background: var(--warn-soft); color: var(--warn);
+}
+.af-core.af-shell[data-format=redraft] :is(.af-tc-offer-grade[data-letter=D], .af-tc-offer-grade[data-letter=F]) strong,
+.af-core.af-shell[data-format=redraft] [data-rd-tone=bad] :is(.af-tr-leaguegrade-letter, .af-tr-grade-badge, .af-tr-offer-grade),
+.af-core.af-shell[data-format=redraft] .af-tr-graderow-letter[data-rd-tone=bad] {
+  border-color: var(--bad); background: var(--bad-soft); color: var(--bad);
+}
+/* A withheld grade is a sentence on a neutral card — never a dimmed letter. */
+.af-core.af-shell[data-format=redraft] .af-tc-offer-grade[data-letter=none] {
+  display: block; padding: 10px 12px; border: 1px dashed var(--line2); border-radius: 10px; background: var(--surface); color: var(--text2);
+}
+/* The builder's per-team verdict letters (af-trade-center.css hardcodes their fills in rgba). */
+.af-core.af-shell[data-format=redraft] .af-tc-grade:is([data-letter=A],[data-letter=B]) .af-tc-grade-letter { background: var(--good-soft); border-color: var(--good); }
+.af-core.af-shell[data-format=redraft] .af-tc-grade[data-letter=C] .af-tc-grade-letter { background: var(--warn-soft); border-color: var(--warn); }
+.af-core.af-shell[data-format=redraft] .af-tc-grade:is([data-letter=D],[data-letter=F]) .af-tc-grade-letter { background: var(--bad-soft); border-color: var(--bad); }
+
+/* Unified timeline: an open offer is the one waiting on a decision — the review state — so it carries
+ * the sport line and its status chip the warning tone; completed and closed rows keep their markers. */
+.af-core.af-shell[data-format=redraft] .af-tc-timeline-row[data-status=open] { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.af-core.af-shell[data-format=redraft] .af-tc-timeline-row[data-status=open] .af-tc-timeline-status { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+.af-core.af-shell[data-format=redraft] .af-tc-timeline-row[data-status=open] .af-tc-timeline-marker { background: var(--rd-accent); }
+
+/* ── Trades history (Trades.tsx, under the Trade Center) ────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-tr-context { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); }
+.af-core.af-shell[data-format=redraft] .af-tr-context .af-label { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-tr-history-title { color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-tr-card { border-color: var(--line2); border-top: 3px solid var(--rd-accent); }
+.af-core.af-shell[data-format=redraft] .af-tr-side { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); }
+.af-core.af-shell[data-format=redraft] .af-tr-count { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-tr-swap { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-tr-players-who[data-you=true] { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-tr-leaguegrade { display: flex; align-items: center; gap: 12px; }
+.af-core.af-shell[data-format=redraft] .af-tr-ideas { border-color: var(--rd-accent-line); }
+.af-core.af-shell[data-format=redraft] .af-tr-idea { border-color: var(--line2); background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-tr-offer { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+
+/* ── War Room: Scout ────────────────────────────────────────────────────────────────────────────── */
+/* Header line: the sport rule along the top, the room's name in the sport colour. */
+.af-core.af-shell[data-format=redraft] .af-sc-head { border-top: 3px solid var(--rd-accent); background: var(--rd-surface-elev); }
+.af-core.af-shell[data-format=redraft] .af-sc-switch { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-sc-switch:hover { border-color: var(--rd-accent); }
+/* This week's opponent: the sport, not the alarm red the default room uses. */
+.af-core.af-shell[data-format=redraft] .af-sc-vs:not([data-elimination]) { border-color: var(--rd-accent-line); background: linear-gradient(var(--rd-glow), var(--rd-glow)), var(--surface); }
+.af-core.af-shell[data-format=redraft] .af-sc-vs:not([data-elimination]) .af-sc-vs-label { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-sc-vs-v {
+  display: inline-grid; place-items: center; min-width: 40px; height: 32px; padding: 0 8px; border-radius: 999px;
+  background: var(--rd-accent); color: var(--rd-accent-ink);
+}
+.af-core.af-shell[data-format=redraft] .af-sc-vs-name { color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-sc-cta--primary { background: var(--rd-accent); border-color: var(--rd-accent); color: var(--rd-accent-ink); }
+.af-core.af-shell[data-format=redraft] .af-sc-cta:not(.af-sc-cta--primary) { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+/* Manager cards as tiles: the opponent and you carry the sport, everyone else a plain card. */
+.af-core.af-shell[data-format=redraft] .af-sc-card[data-opponent] { border-color: var(--rd-accent); box-shadow: inset 0 3px 0 var(--rd-accent); }
+.af-core.af-shell[data-format=redraft] .af-sc-card[data-you] { border: 1px solid var(--rd-accent-line); background: var(--rd-surface-elev); }
+.af-core.af-shell[data-format=redraft] .af-sc-face { background: var(--rd-accent-soft); color: var(--rd-accent-text); border-color: var(--rd-accent-line); }
+.af-core.af-shell[data-format=redraft] .af-sc-tag:not([data-sev=out]) { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-sc-facts > div { padding: 8px 10px; border-radius: 10px; background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-sc-facts dd { color: var(--text); }
+.af-core.af-shell[data-format=redraft] .af-sc-basis[data-available] { border-color: var(--rd-accent-line); background: var(--surface); }
+
+/* ── War Room: connected franchise ──────────────────────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-cwr-head { border-top: 3px solid var(--rd-accent); }
+.af-core.af-shell[data-format=redraft] .af-cwr-cta { background: var(--rd-accent); border-color: var(--rd-accent); color: var(--rd-accent-ink); }
+.af-core.af-shell[data-format=redraft] .af-cwr-add { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-cwr-scoreboard > div { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); box-shadow: inset 0 3px 0 var(--rd-accent); }
+.af-core.af-shell[data-format=redraft] .af-cwr-scoreboard strong { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-cwr-lane[data-current] { border-color: var(--rd-accent); }
+.af-core.af-shell[data-format=redraft] .af-cwr-current,
+.af-core.af-shell[data-format=redraft] .af-cwr-role { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-cwr-tools nav a { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-cwr-positions strong { color: var(--rd-accent-text); }
+.af-core.af-shell[data-format=redraft] .af-cwr-mobile-switcher button[data-current] { border-color: var(--rd-accent); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+
+@media (max-width: 720px) {
+  .af-core.af-shell[data-format=redraft] .af-rd-deadline { padding: 12px 14px; }
+  .af-core.af-shell[data-format=redraft] .af-rd-deadline-meter { flex-basis: 100%; max-width: none; margin-left: 0; }
+  .af-core.af-shell[data-format=redraft] .af-sc-vs-v { min-width: 34px; height: 28px; }
+}

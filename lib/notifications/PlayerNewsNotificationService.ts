@@ -2,6 +2,8 @@ import { planPlayerNews, markPlayerNewsTold, playerNewsDispatches, type PlayerNe
 import { statusBucket } from './playerNewsStatus'
 import type { PlayerNewsRelation } from '@/lib/notification-settings/playerNewsLevel'
 import { createTeamInjuryNewsBatch } from './teamInjuryNewsBatch'
+import { resolveLineupImpacts } from './lineupImpact'
+import { lineupImpactCopy } from './lineupImpactCopy'
 import type { DispatchNotificationParams } from './NotificationDispatcher'
 /**
  * Player News Notification Service
@@ -31,6 +33,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { newsDeliveryKey } from '@/lib/news/newsroomFilter'
 import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import {
   playerNewsContentHash,
@@ -452,7 +455,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       orderBy: { publishedAt: 'desc' },
       take: limit,
       select: {
-        id: true, sport: true, playerName: true, team: true,
+        id: true, sport: true, playerName: true, team: true, publishedAt: true,
         headline: true, body: true, impact: true,
       },
     })
@@ -492,6 +495,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
+    const deliveryKey = newsDeliveryKey(row.sport, row.headline, row.publishedAt ?? new Date())
     /*
      * ⚠ CHECKED BEFORE THE STAMP, NOT AFTER. `stamped` means "considered", and the updateMany at
      * the end writes `notificationDispatchedAt` for everything in it — so a check placed even one
@@ -590,7 +594,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       }
       if(isInjury){
         injuryBatch.add(playerNewsDispatches({userIds:cappedFans,category:'followed_teams',type:'player_injury_update',
-          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:'player-news:'+row.id,
+          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:deliveryKey,
           meta:{team:clubAbbr,teamName,followedTeam:clubAbbr,teamNews:true,injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}, teamPlan, teamInfo),async(users,failed)=>{
           recipients+=users.size;teamFollowerRecipients+=users.size
           if(users.size){await recordToldAbout([...users],story,undefined,{storyOnly:true});await markPlayerNewsTold([...users],teamSubject);notified++}
@@ -606,7 +610,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { teamName, team: clubAbbr, sport: row.sport, newsCategory: category, followedTeam: clubAbbr, teamNews: true },
       }, teamPlan, teamInfo)
       if (!teamSent) {
@@ -762,14 +766,62 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const isStarter = (id: string) => starterUsers.has(id)
 
     if (isInjury) {
+      /*
+       * Owner's rule (2026-10-25): a manager who rosters him hears about it by push and email ONLY
+       * when it changes a starting lineup — a starter ruled out (with the options), questionable
+       * (with the backup) or cleared, or a bench player back healthy who out-projects a starter
+       * (with the swap). Every other rostered manager gets the in-app bell only, kept out of the
+       * daily digest. Followers keep their own routing below. See ./lineupImpactCopy.ts.
+       */
+      const rosteredNow = new Set([...byLeague.values()].flatMap(ids => [...ids]))
+      const leaguesOf = new Map<string, { all: Set<string>; starting: Set<string> }>()
+      for (const rp of rosterPlayers) {
+        const uid = rp.roster?.ownerId, lid = rp.roster?.leagueId
+        if (!uid || !lid || !rosteredNow.has(uid)) continue
+        const entry = leaguesOf.get(uid) ?? { all: new Set<string>(), starting: new Set<string>() }
+        entry.all.add(lid)
+        if (!NON_STARTER_SLOT.test(String(rp.slotType ?? '').trim())) entry.starting.add(lid)
+        leaguesOf.set(uid, entry)
+      }
+      // A story classified "active" (activated, cleared, returns) is itself the recovery.
+      const prior = subject.bucket === 'active' ? 'out' as const : null
+      // Built here, sent with the team batch at the end of the run, so the scan never waits on a send.
+      const lineupRequests: DispatchNotificationParams[] = []
+      for (const [uid, entry] of leaguesOf) {
+        const impacts = await resolveLineupImpacts({ userId: uid, leagueIds: [...entry.all], startingLeagueIds: [...entry.starting], sport: row.sport,
+          sleeperId: binding.identity.sleeperId, playerName: row.playerName, team: playerTeam, bucket: statusBucket(subject.bucket), prior }).catch(() => [])
+        const copy = lineupImpactCopy(row.playerName, impacts)
+        if (!copy) continue
+        const impactLeagueIds = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
+        lineupRequests.push({
+          userIds: [uid], leagueIds: impactLeagueIds, leagueId: impactLeagueIds[0] ?? null,
+          // Same category as before this rule, so the person's Injury alerts switch still governs it.
+          category: 'injury_alerts',
+          type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
+          title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
+          actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
+          dedupePrefix: deliveryKey + ':lineup', skipChannels: { sms: true },
+          meta: { team: playerTeam ?? 'Players without a current team', sport: row.sport, newsCategory: category, injuryHeadline: row.headline,
+            lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id,
+            playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
+        })
+        for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
+      }
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
-        severity:'high' as const, dedupePrefix:'player-news:'+row.id,
+        severity:'high' as const, dedupePrefix:deliveryKey,
         meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
-      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts'})
+      // Rostered, no lineup change: the bell only, and not in the digest.
+      const bellOnly = { sms: true, email: true }
+      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts',skipChannels:bellOnly,meta:{...base.meta,lineupBellOnly:true}})
       if(gatedFollowersOnly.length)requests.push({...base,userIds:gatedFollowersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
       if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
-      injuryBatch.add(requests.flatMap(r=>playerNewsDispatches(r,plan,newsInfo,isStarter)),async (users,failed)=>{
+      const gated = requests.flatMap(r => playerNewsDispatches(r, plan, newsInfo, isStarter)).map(d =>
+        d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), digest: false } } } : d)
+      // `delivery` is left as the gate set it: the team batch groups one headline's rows by it.
+      const outgoing = [...lineupRequests, ...gated]
+      if (!outgoing.length) { await settle(row, 'all-suppressed'); continue }
+      injuryBatch.add(outgoing,async (users,failed)=>{
         const toldNow=[...users]
         recipients+=users.size
         followerRecipients+=gatedFollowersOnly.filter(id=>users.has(id)).length
@@ -806,7 +858,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category },
       }, plan, newsInfo, isStarter)
       if (!ok) { anyDispatchFailed = true; continue }
@@ -824,7 +876,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category, followed: true },
       }, plan, newsInfo)
       if (ok) {
@@ -843,7 +895,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a team follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: teamAbbr, sport: row.sport, newsCategory: category, followedTeam: teamAbbr },
       }, plan, newsInfo)
       if (ok) {

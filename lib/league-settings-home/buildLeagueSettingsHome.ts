@@ -4,8 +4,7 @@
  * the caller already holds (league row, roster GET, draft settings GET, guillotine summary GET),
  * so the list is testable without a browser or a database.
  *
- * A row's `target` names the sub-page that edits it. Members get the same list with every target
- * removed (values shown, no way into an editor). The Commissioner tools row is commissioner-only.
+ * A row's `target` names its sub-page. Members can open read-only history; editors remain commissioner-only.
  */
 
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
@@ -27,6 +26,8 @@ export type SettingsSubPageId =
   | 'guillotine-rules'
   | 'playoffs'
   | 'members'
+  | 'team-settings'
+  | 'previous-leagues'
   | 'co-commissioners'
   | 'divisions'
   | 'ai'
@@ -222,6 +223,7 @@ export function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'w
     const budget = Number(league.waiverBudget ?? 100)
     return `FAAB · $${budget.toLocaleString('en-US')}`
   }
+  if (type === 'fcfs') return 'Free agency · first come, first served'
   if (type === 'reverse_standings') return 'Reverse standings'
   return titleCase(type)
 }
@@ -380,6 +382,8 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const divisions = divisionCount(league.settings)
   const memberRows: SettingsHomeRow[] = [
     { id: 'managers', label: 'Managers', value: `${joined} / ${teamCount} joined`, ...edit('members') },
+    ...(canEdit ? [{ id: 'team-settings', label: 'Team settings', value: 'Names, logos and managers', target: 'team-settings' as const }] : []),
+    { id: 'previous-leagues', label: 'Previous Leagues', value: 'View history', target: 'previous-leagues' },
     {
       id: 'invite',
       label: 'Invite link',
@@ -388,7 +392,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     },
     { id: 'co-commissioners', label: 'Co-commissioners', value: coCommissioners.length ? coCommissioners.join(', ') : 'None', ...edit('co-commissioners') },
   ]
-  if (divisions > 0) memberRows.push({ id: 'divisions', label: 'Divisions', value: `${divisions} divisions`, ...edit('divisions') })
+  if (divisions > 0 || canEdit) memberRows.push({ id: 'divisions', label: 'Divisions', value: divisions > 0 ? `${divisions} divisions` : 'Off', ...edit('divisions') })
   sections.push({ id: 'members', title: 'Members', rows: memberRows })
 
   if (canEdit) {

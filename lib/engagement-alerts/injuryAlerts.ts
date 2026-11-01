@@ -6,6 +6,8 @@ import { resolvePlayerNewsIdentity, resolvePlayerNewsRecipients, FINISHED_SEASON
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { planPlayerNews, markPlayerNewsTold, type PlayerNewsSubject } from '@/lib/notifications/playerNewsGate'
 import { statusBucket, isMeaningfulStatusChange } from '@/lib/notifications/playerNewsStatus'
+import { resolveLineupImpacts } from '@/lib/notifications/lineupImpact'
+import { lineupImpactCopy, type LineupImpactKind } from '@/lib/notifications/lineupImpactCopy'
 
 export const isUnavailableStatus = (status: string) => /^(out|ir|injured reserve|inactive|suspended|out for season|ruled out)$/i.test(status.trim())
 export function importedPlayerIsStarting(data: unknown, playerId: string): boolean {
@@ -56,7 +58,8 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
   const seen = new Set<string>()
   const seenPlayers = new Set<string>()
   const batches = new Map<string, {
-    userId: string; team: string; leagueIds: string[]; lineup: boolean; starter: boolean; route: 'instant' | 'digest';
+    userId: string; team: string; leagueIds: string[]; lineup: boolean; starter: boolean;
+    impact: { title: string; body: string; kind: LineupImpactKind; fixHref: string | null } | null;
     changes: Array<{ playerName: string; status: string; key: string; receiptKey: string; subject: PlayerNewsSubject }>;
   }>()
   const observations: Array<{ stateKey: string; status: string }> = []
@@ -108,22 +111,32 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       const team = identity.currentTeam?.trim() || row.team?.trim()
       if (!team) continue
       const subject: PlayerNewsSubject = { playerKey: identity.identityId, bucket: statusBucket(status) }
+      const prior = previousStatus ? statusBucket(previousStatus) : null
       for (const [userId, leagueIds] of audience.byUser) {
-        // Starter for ANY status now, not only OUT: it decides push-now versus the daily digest.
         const starters = await startingLeagues(identity, userId, leagueIds)
         const starter = starters.length > 0
-        const lineup = starter && isUnavailableStatus(status)
-        const scopedLeagues = [...(starter ? starters : leagueIds)].sort()
+        /*
+         * Owner's rule (2026-10-25): push and email ONLY when the change affects a starting lineup — a
+         * starter ruled out (with the options), questionable (with the backup) or cleared, or a bench
+         * player back healthy who out-projects a starter (with the swap). Everything else is the
+         * in-app bell only. See lib/notifications/lineupImpactCopy.ts.
+         */
+        const impacts = await resolveLineupImpacts({ userId, leagueIds, startingLeagueIds: starters, sport, sleeperId: identity.sleeperId,
+          playerName: row.playerName, team, bucket: statusBucket(status), prior, now }).catch(() => [])
+        const impactCopy = lineupImpactCopy(row.playerName, impacts)
+        const lineup = impactCopy != null
+        const impactLeagues = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
+        const scopedLeagues = [...(lineup && impactLeagues.length ? impactLeagues : starter ? starters : leagueIds)].sort()
         const receiptKey = 'injury-team-member:v1:' + key + ':' + (lineup ? 'lineup' : 'update') + ':' + userId
         const receipt = await prisma.sportsDataCache.findUnique({ where: { cacheKey: receiptKey } })
         if ((receipt?.data as { delivered?: boolean } | null)?.delivered) continue
-        // The player-news gate: the person's level, and one alert per player and status a day across senders.
-        const plan = await planPlayerNews([userId], subject, () => (starter ? 'starter' : 'rostered'))
-        const route = plan.instant.length ? 'instant' : plan.digest.length ? 'digest' : null
-        if (!route) continue
+        // The player-news gate: Player news "Off", and one alert per player and status a day across senders.
+        const plan = await planPlayerNews([userId], subject, () => (lineup ? 'starter' : 'rostered'))
+        if (plan.suppressed.length) continue
+        // A lineup alert is one message per player; bell-only updates stay grouped by team.
         // Keep league override scopes separate so muted leagues cannot leak player updates.
-        const batchKey = JSON.stringify([userId, sport, team.toUpperCase(), lineup, starter, route, scopedLeagues])
-        const batch = batches.get(batchKey) ?? { userId, team, leagueIds: scopedLeagues, lineup, starter, route, changes: [] }
+        const batchKey = JSON.stringify([userId, sport, team.toUpperCase(), lineup, starter, scopedLeagues, lineup ? identity.identityId : null])
+        const batch = batches.get(batchKey) ?? { userId, team, leagueIds: scopedLeagues, lineup, starter, impact: impactCopy, changes: [] }
         batch.changes.push({ playerName: row.playerName, status, key, receiptKey, subject })
         batches.set(batchKey, batch)
       }
@@ -135,22 +148,22 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
       const changes = batch.changes.sort((a, b) => a.key.localeCompare(b.key))
       const digest = createHash('sha256').update(JSON.stringify([sport, batch.team.toUpperCase(), batch.leagueIds, changes.map(c => c.key)])).digest('hex')
       const sourceKey = 'injury-team:' + digest + ':' + (batch.lineup ? 'lineup' : 'update')
+      const impact = batch.impact
       const result = await dispatchNotification({
         userIds: [batch.userId], leagueIds: batch.leagueIds,
-        category: batch.lineup ? 'lineup_alerts' : 'injury_alerts',
-        type: batch.lineup ? 'injured_starter' : 'injury_update',
-        title: batch.lineup ? lineupAlertTitle(changes) : batch.team + ': injury update',
-        body: changes.map(c => c.playerName + ': ' + c.status).join('\n') +
-          (batch.lineup ? '\nStill in your starting lineup' + (batch.leagueIds.length > 1 ? ` in ${batch.leagueIds.length} leagues` : '') +
-            '. Swap in a replacement before the game locks.' : ''),
-        actionHref: '/league/' + encodeURIComponent(batch.leagueIds[0]) + '?tab=team',
-        actionLabel: batch.lineup ? 'Review lineup' : 'View team',
+        category: impact?.kind === 'starter_out' ? 'lineup_alerts' : 'injury_alerts',
+        type: impact ? (impact.kind === 'starter_out' ? 'injured_starter' : impact.kind) : 'injury_update',
+        title: impact ? impact.title : batch.team + ': injury update',
+        body: impact ? impact.body : changes.map(c => c.playerName + ': ' + c.status).join('\n'),
+        actionHref: impact?.fixHref ?? '/league/' + encodeURIComponent(batch.leagueIds[0]) + '?tab=team',
+        actionLabel: impact ? 'Review lineup' : 'View team',
         severity: changes.some(c => isUnavailableStatus(c.status)) ? 'high' : 'medium',
         dedupePrefix: sourceKey,
-        // Instant is push + bell; digest is the bell only. Never an email — the daily digest carries it.
-        skipChannels: batch.route === 'instant' ? { sms: true, email: true } : { sms: true, email: true, push: true },
+        // A lineup alert is push + email now; anything else is the bell only. Neither is in the daily digest.
+        skipChannels: impact ? { sms: true } : { sms: true, email: true },
         meta: { sport, team: batch.team, playerCount: changes.length, eventKey: digest, pushTag: sourceKey,
-          playerNews: { playerName: changes.map(c => c.playerName).join(', '), team: batch.team, status: changes.map(c => c.status).join(', '), starter: batch.starter, delivery: batch.route } },
+          ...(impact ? { lineupImpact: impact.kind } : {}),
+          playerNews: { playerName: changes.map(c => c.playerName).join(', '), team: batch.team, status: changes.map(c => c.status).join(', '), starter: batch.starter, delivery: impact ? 'instant' : 'bell', digest: false } },
       })
       delivered += result.delivered
       errors += result.failed

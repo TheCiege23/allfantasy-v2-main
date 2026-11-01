@@ -1,0 +1,39 @@
+/*
+ * Dynasty League home extras (DynastyLeagueHomeExtras.tsx). Every class here is mounted only for a
+ * dynasty league, so nothing can reach a non-dynasty League home. Colours read the Dynasty Era token
+ * contract WITH its fallback, so this looks the same whether or not the token block is present.
+ */
+.dyn-home-rafters{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 20px;padding:0 4px 14px;border-bottom:1px solid var(--dyn-rail,#1C2333);min-width:0}
+.dyn-home-pennants{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none;min-width:0}
+/* Pennant: a hanging banner with a notched foot. Gold = the viewer's title, slate = everyone else's. */
+.dyn-home-pennant{width:54px;height:84px;box-sizing:border-box;padding-top:12px;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--dyn-line,#2A3345);color:var(--dyn-text,#E8ECF2);clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);text-align:center}
+.dyn-home-pennant[data-mine=true]{background:var(--dyn-gold,#D4A24C);color:var(--dyn-ink,#0B0F17)}
+/* The current season, still open: an outline in place of a fill. */
+.dyn-home-pennant[data-open=true]{background:transparent;color:var(--dyn-faint,#9AA4B2);box-shadow:inset 0 0 0 1px var(--dyn-line,#2A3345)}
+.dyn-home-pennant-year{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:800;font-size:15px;line-height:1}
+.dyn-home-pennant-name{font-size:11px;line-height:1.15;max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dyn-text2,#C3CAD5)}
+.dyn-home-pennant[data-mine=true] .dyn-home-pennant-name{color:var(--dyn-ink,#0B0F17);font-weight:600}
+.dyn-home-pennant[data-open=true] .dyn-home-pennant-name{color:var(--dyn-faint,#9AA4B2)}
+.dyn-home-rafters-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+/* Season clock: Archivo condensed, gold-soft on a gold wash. */
+.dyn-home-mytitles{display:inline-flex;align-items:center;gap:6px;color:var(--dyn-gold-soft,#F3D79F);font-size:13px;font-weight:600}
+.dyn-home-mytitles svg{color:var(--dyn-gold,#D4A24C)}
+
+.dyn-home-total{display:flex;align-items:baseline;gap:8px;margin:0 0 12px;color:var(--dyn-faint,#9AA4B2);font-size:13px}
+.dyn-home-total strong{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:800;font-size:28px;line-height:1;color:var(--dyn-text,#E8ECF2)}
+/* Pick chips: R1 gold outline, later rounds the line colour. */
+.dyn-home-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.dyn-home-chip{display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border-radius:8px;border:1px solid var(--dyn-line,#2A3345);color:var(--dyn-text2,#C3CAD5);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;max-width:100%;overflow-wrap:anywhere}
+.dyn-home-chip[data-round="1"]{border-color:var(--dyn-gold,#D4A24C);color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-home-chip[data-more=true]{border-style:dashed;color:var(--dyn-faint,#9AA4B2)}
+
+.dyn-home-pipeline{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.dyn-home-pipeline li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.dyn-home-pipeline-detail{color:var(--dyn-text,#E8ECF2);font-size:13px;font-weight:600}
+.dyn-home-pipeline-note{flex-basis:100%;color:var(--dyn-faint,#9AA4B2);font-size:12px}
+/* Pipeline badges: Taxi teal, Devy violet, Rookie gold. */
+.dyn-home-badge{display:inline-flex;align-items:center;min-width:64px;justify-content:center;padding:3px 10px;border-radius:999px;font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.dyn-home-badge[data-kind=taxi]{background:color-mix(in srgb,var(--dyn-teal,#2DD4BF) 16%,transparent);color:#7FE9D8}
+.dyn-home-badge[data-kind=devy]{background:rgba(167,139,250,.18);color:#C4B5FD}
+.dyn-home-badge[data-kind=rookie]{background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-home-card .nl-card-label .nl-text-link{white-space:nowrap;flex-shrink:0}

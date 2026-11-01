@@ -329,7 +329,8 @@ export function ThreadPanel({
             text: t,
             votes: [] as string[],
           })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }

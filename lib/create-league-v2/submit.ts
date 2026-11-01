@@ -6,6 +6,7 @@
  *   - all other formats → POST /api/leagues (canonical preset engine + Prisma transaction)
  */
 
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT } from '@/lib/survivor/survivorTwistPresets'
 import type { CreateLeagueV2State } from './state'
 import { getDefaultKeeperSetup } from './state'
 import { getEffectiveLeagueType, isFootballLike, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
@@ -17,6 +18,7 @@ import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { getEnabledPremiumAdvancedSettings } from '@/lib/create-league-v2/simple-create'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 
 /** Execution modes must stay verbatim on the wire so persistence keeps isOffline / isAuto flags. */
 const EXECUTION_DRAFT_IDS = new Set(['offline', 'auto', 'team'])
@@ -99,9 +101,18 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       enabledPremiumAdvancedSettings.map((key) => [key, true]),
     )
   }
+  if (lt === 'guillotine' && state.guillotineBestBall === true) {
+    conceptSetup.guillotineBestBall = true
+  }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
+    conceptSetup.survivorEntryFeeMode = state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'
+    conceptSetup.survivorTwistPreset = isSurvivorTwistPresetId(state.survivorTwistPreset) ? state.survivorTwistPreset : SURVIVOR_TWIST_PRESET_DEFAULT
+    if (state.survivorEntryFeeMode === 'paid') {
+      const cents = parseSurvivorDuesUsd(state.survivorDuesUsd ?? '')
+      if (typeof cents === 'number') conceptSetup.survivorEntryFeeAmountCents = cents
+    }
   }
   if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true
@@ -123,7 +134,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     }
     conceptSetup.rookieDraftRounds = d.rookieDraftRounds
     conceptSetup.rookieDraftType = d.rookieDraftType
-    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod
+    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod
     conceptSetup.futurePicksYearsOut = d.futurePickTradeYears
     conceptSetup.regularSeasonWeeks = d.regularSeasonLength
     conceptSetup.playoffTeamCount = d.playoffTeamCount

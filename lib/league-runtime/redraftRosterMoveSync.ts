@@ -5,6 +5,7 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 import { slotTypeFor } from './redraftSlotType'
+import { isFantraxProspectId, nhlProspectRosterMeta } from '@/lib/waiver-wire/nhlProspectFreeAgency'
 
 /**
  * Carry a NATIVE roster move (waiver award, free-agent add/drop, trade) into `RedraftRosterPlayer`.
@@ -51,6 +52,12 @@ type PlayerMeta = { playerName: string; position: string; team: string | null }
 
 /** Same lookup order as `resolveNflRedraftWaiverRuntime`: our id / Sleeper id first. */
 async function resolvePlayerMeta(db: Db, sport: string, playerId: string): Promise<PlayerMeta> {
+  // An NHL Fantrax prospect (`fantrax:<id>`, lib/waiver-wire/nhlProspectFreeAgency.ts) has no
+  // SportsPlayer row; his name, position and club come from the stored Fantrax universe.
+  if (sport.toUpperCase() === 'NHL' && isFantraxProspectId(playerId)) {
+    const meta = await nhlProspectRosterMeta(db as never, playerId).catch(() => null)
+    if (meta) return meta
+  }
   const row = await db.sportsPlayer
     .findFirst({ where: { id: playerId }, select: { name: true, position: true, team: true } })
     .then((own) => own ?? findSportsPlayerByLeagueId(sport, playerId))

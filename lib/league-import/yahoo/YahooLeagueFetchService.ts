@@ -32,6 +32,13 @@ const YAHOO_LEAGUE_LIST_URL =
 const YAHOO_BENCH_POSITIONS = new Set(['BN', 'BE'])
 const YAHOO_IR_POSITIONS = new Set(['IR', 'IL', 'NA', 'DL'])
 const YAHOO_NON_STARTING_POSITIONS = new Set([...YAHOO_BENCH_POSITIONS, ...YAHOO_IR_POSITIONS])
+/**
+ * Yahoo baseball/hockey `NA` — "not active", the minor-league stash. It is in `YAHOO_IR_POSITIONS`
+ * (it is not a starting slot), but it is not an injury: for MLB/NHL the adapter carries it as the
+ * taxi squad. No Yahoo capture exists in `contracts/` to confirm the spelling, so only the exact
+ * documented `NA` is read; anything else stays where it was.
+ */
+const YAHOO_MINORS_POSITION = 'NA'
 
 /**
  * True for Yahoo's injured-reserve family, including the suffixed spellings
@@ -418,6 +425,7 @@ function createImportTeam(
     rosterPlayerIds: roster.playerIds,
     starterPlayerIds: roster.starterIds,
     reservePlayerIds: roster.reserveIds,
+    minorsPlayerIds: roster.minorsIds ?? [],
     playerMap: roster.playerMap,
     rosterFetchStatus,
   }
@@ -832,6 +840,8 @@ function parseYahooRoster(rosterData: any): {
   playerIds: string[]
   starterIds: string[]
   reserveIds: string[]
+  /** Players in Yahoo's `NA` (not active / minor league) slot. Still in `reserveIds` too; the adapter decides. */
+  minorsIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 } {
   const teamNode = rosterData?.fantasy_content?.team
@@ -841,6 +851,7 @@ function parseYahooRoster(rosterData: any): {
   const playerIds: string[] = []
   const starterIds: string[] = []
   const reserveIds: string[] = []
+  const minorsIds: string[] = []
   const playerMap: Record<string, { name: string; position: string; team: string }> = {}
 
   for (const wrapper of players) {
@@ -893,6 +904,7 @@ function parseYahooRoster(rosterData: any): {
      */
     if (isYahooReserveSlot(selectedSlot)) reserveIds.push(playerId)
     else if (isStarting) starterIds.push(playerId)
+    if (selectedSlot.toUpperCase() === YAHOO_MINORS_POSITION) minorsIds.push(playerId)
     playerMap[playerId] = {
       name: fullName,
       position,
@@ -900,7 +912,19 @@ function parseYahooRoster(rosterData: any): {
     }
   }
 
-  return { playerIds, starterIds, reserveIds, playerMap }
+  return { playerIds, starterIds, reserveIds, minorsIds, playerMap }
+}
+
+function parseYahooMatchupCategories(team: Record<string, any>): Record<string, number> | undefined {
+  const stats = getYahooCollectionItems(getYahooProperty(getYahooProperty(team, 'team_stats'), 'stats'))
+  const values: Record<string, number> = {}
+  for (const wrapper of stats) {
+    const stat = mergeYahooEntityFragments(wrapper, 'stat')
+    const id = String(stat.stat_id ?? '').trim()
+    const value = parseNumber(stat.value, null)
+    if (/^\d{1,4}$/.test(id) && value != null) values[id] = value
+  }
+  return Object.keys(values).length ? values : undefined
 }
 
 function parseYahooScoreboard(scoreboardData: any, season: number): YahooImportScheduleWeek[] {
@@ -925,6 +949,8 @@ function parseYahooScoreboard(scoreboardData: any, season: number): YahooImportS
         teamKey2: String(teams[1].team_key),
         points1: points1 ?? undefined,
         points2: points2 ?? undefined,
+        categories1: parseYahooMatchupCategories(teams[0]),
+        categories2: parseYahooMatchupCategories(teams[1]),
       }
     })
     .filter(Boolean) as YahooImportScheduleWeek['matchups']
@@ -959,6 +985,8 @@ function parseYahooTeamMatchups(matchupsData: any, season: number): YahooImportS
       teamKey2: String(teams[1].team_key),
       points1: points1 ?? undefined,
       points2: points2 ?? undefined,
+      categories1: parseYahooMatchupCategories(teams[0]),
+      categories2: parseYahooMatchupCategories(teams[1]),
     })
   }
 
@@ -1400,10 +1428,12 @@ export async function fetchYahooWeeklyMatchupsForSync(
       const weekEntries = scheduleByWeek.get(week.week)!
       for (const matchup of week.matchups) {
         const matchupKey = [matchup.teamKey1, matchup.teamKey2].sort().join('::')
-        const exists = weekEntries.some(
+        const index = weekEntries.findIndex(
           (existing) => [existing.teamKey1, existing.teamKey2].sort().join('::') === matchupKey
         )
-        if (!exists) weekEntries.push(matchup)
+        if (index < 0) weekEntries.push(matchup)
+        else if ((!weekEntries[index]!.categories1 || !weekEntries[index]!.categories2) &&
+          matchup.categories1 && matchup.categories2) weekEntries[index] = matchup
       }
     }
   }
@@ -1416,8 +1446,24 @@ export async function fetchYahooWeeklyMatchupsForSync(
   }
 }
 
+/** One authorized current-week read for a member asking Chimmy about category totals. */
+export async function fetchYahooCategoryMatchupForWeek(
+  userId: string,
+  leagueKey: string,
+  season: number,
+  week: number,
+): Promise<YahooImportScheduleWeek | null> {
+  if (!Number.isInteger(week) || week < 1 || week > 60) return null
+  const context = await loadYahooCredential(userId)
+  const data = await yahooApiFetchJson(
+    `${YAHOO_API_BASE}/league/${encodeURIComponent(leagueKey)}/scoreboard;week=${week}?format=json`, context,
+  )
+  return parseYahooScoreboard(data, season).find((entry) => entry.week === week) ?? null
+}
+
 /** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
 export { parseYahooRoster as parseYahooRosterForTest }
+export { parseYahooTeamMatchups as parseYahooTeamMatchupsForTest }
 export {
   isYahooCommissionerManager as isYahooCommissionerManagerForTest,
   isYahooHeadCommissionerManager as isYahooHeadCommissionerManagerForTest,

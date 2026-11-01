@@ -87,6 +87,9 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
+  { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
+  { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
   // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
   // links returned with season-readiness evidence, never live provider reads.
   // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
@@ -95,6 +98,9 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },
+  // Exact rehearsal origin used by the staging-only cron runner to invoke our authenticated
+  // import route. Provider reads remain inside that route's existing bounded importers.
+  { name: 'first-party', why: 'isolated Zombie rehearsal app — authenticated cron invocation', test: /^zombie-web-staging\.up\.railway\.app$/i },
   /*
    * ⚠ `cloudinary` WAS IN THIS ALTERNATION and matched api.cloudinary.com, which is an
    * upload API — lib/world-cup/worldCupChatImageUpload.ts POSTs to

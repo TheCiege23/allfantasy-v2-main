@@ -28,7 +28,10 @@ const nextConfig = {
   reactStrictMode: true,
   // The development launcher covers phone navigation during real-hit-testing E2E runs.
   // Keep runtime/build error overlays enabled; only omit the development toolbar.
-  ...(process.env.AF_PLAYWRIGHT_SERVER === '1' ? { devIndicators: false } : {}),
+  // No gzip either: the e2e browser is on localhost, and gzipping ~36MB of dev JavaScript on every
+  // draft-room load was 13% of the server's CPU in a profile taken mid-run (2026-10-29), on the
+  // same single process that answers every test's readiness probe.
+  ...(process.env.AF_PLAYWRIGHT_SERVER === '1' ? { devIndicators: false, compress: false } : {}),
   // No `X-Powered-By: Next.js` banner: it tells a scanner which advisories to try.
   poweredByHeader: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
@@ -64,6 +67,15 @@ const nextConfig = {
     // css-loader does not resolve root-relative url()s, so this is inert
     // everywhere except where it was silently wrong.
     config.resolve = { ...config.resolve, roots: [] };
+
+    // The e2e dev server keeps webpack's cache in memory only. Its filesystem cache reached 1.4GB
+    // for the server compiler in one Draft Room Regression run, and webpack writes it out about a
+    // minute after the builds go quiet. Measured 2026-10-29, that write took next-server from 7.9GB
+    // to 13.5GB in 50s with nothing compiling, and the kernel killed it mid-run (ERR_CONNECTION_REFUSED
+    // for every later test). Nothing reads that cache back: each run starts from a clean dist dir.
+    if (dev && process.env.AF_PLAYWRIGHT_SERVER === '1') {
+      config.cache = { type: 'memory' };
+    }
 
     if (!isServer) {
       config.resolve.fallback = {

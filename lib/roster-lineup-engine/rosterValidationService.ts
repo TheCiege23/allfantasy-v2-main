@@ -74,10 +74,11 @@ export function validateTaxiSectionAgainstLeague(
     const id = String(o.id ?? '').trim()
     if (!id) continue
     const y = readYearsExperience(o)
+    const who = String(o.name ?? o.playerName ?? '').trim() || `Player ${id}`
     if (!allowNonRookies && y !== null && y > 0) {
       issues.push({
         code: 'taxi_non_rookie_disallowed',
-        message: `Player ${id} is not a rookie — taxi is rookie-only in this league.`,
+        message: `${who} is not a rookie — taxi is rookie-only in this league.`,
         section: 'taxi',
         playerId: id,
       })
@@ -85,13 +86,46 @@ export function validateTaxiSectionAgainstLeague(
     if (limit != null && limit > 0 && y !== null && y > limit) {
       issues.push({
         code: 'taxi_too_experienced',
-        message: `Player ${id} exceeds ${limit} taxi experience years for this league.`,
+        message: `${who} exceeds ${limit} taxi experience years for this league.`,
         section: 'taxi',
         playerId: id,
       })
     }
   }
   return issues
+}
+
+/** Taxi player ids in a stored or proposed roster payload. */
+export function taxiPlayerIds(playerData: unknown): string[] {
+  if (playerData == null) return []
+  return getNormalizedLineupSections(playerData)
+    .taxi.map((row) => String((row as Record<string, unknown>).id ?? '').trim())
+    .filter(Boolean)
+}
+
+/**
+ * The taxi rookie / years rules for players this save moves ONTO the taxi squad, judged on the
+ * experience on file (`ctx.taxiYearsExpById`) because lineup rows carry none. Only new arrivals are
+ * judged: a player already on the squad is grandfathered, so a league that tightens its rule, or a
+ * roster carried in from an import, never blocks a manager's ordinary lineup save. A row that carries
+ * its own `years_exp` is left to `validateTaxiSectionAgainstLeague`, so nothing is reported twice.
+ */
+export function validateNewTaxiPlayersByKnownExperience(
+  ctx: Pick<LineupValidationContext, 'league' | 'previousPlayerData' | 'taxiYearsExpById'>,
+  playerData: unknown,
+): RosterValidationIssue[] {
+  const known = ctx.taxiYearsExpById
+  if (!known || known.size === 0 || (ctx.league.taxiSlots ?? 0) <= 0) return []
+  const already = new Set(taxiPlayerIds(ctx.previousPlayerData))
+  const rows = getNormalizedLineupSections(playerData)
+    .taxi.map((row) => row as Record<string, unknown>)
+    .filter((o) => {
+      const id = String(o.id ?? '').trim()
+      return id && !already.has(id) && readYearsExperience(o) === null && known.has(id)
+    })
+    .map((o) => ({ id: String(o.id).trim(), name: o.name ?? o.playerName, years_exp: known.get(String(o.id).trim())! }))
+  if (rows.length === 0) return []
+  return validateTaxiSectionAgainstLeague(ctx.league, { lineup_sections: { taxi: rows } })
 }
 
 /** Devy slots: flag when row explicitly marks player as no longer devy-eligible. */
@@ -236,6 +270,7 @@ export function validateCanonicalRosterPayload(
   }
 
   issues.push(...validateTaxiSectionAgainstLeague(ctx.league, playerData))
+  issues.push(...validateNewTaxiPlayersByKnownExperience(ctx, playerData))
   issues.push(...validateDevySectionAgainstLeague(ctx.league, playerData))
 
   return {

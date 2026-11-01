@@ -23,21 +23,29 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
       expect(result.ok, JSON.stringify(result)).toBe(true)
     } finally { vi.useRealTimers() }
   })
-  it('offers new Survivor creation for NBA, NFL and NHL only, across both wizard paths, and refuses paid pilot requests', () => {
-    // Owner's calls, 2026-10-22: NFL, then NHL, open alongside NBA. MLB has no season calendar yet.
-    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL', 'NHL'])
-    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL', 'NHL'])
-    for (const sport of ['NBA', 'NFL', 'NHL'] as const) expect(getAllowedLeagueTypesForSport(sport)).toContain('survivor')
-    for (const sport of ['MLB', 'NCAAF'] as const) {
+  it('offers new Survivor creation for NBA, NFL, NHL and MLB only, across both wizard paths, and takes paid as a label only', () => {
+    // Owner's calls: NFL, then NHL, open alongside NBA (2026-10-22); MLB on its 2027 calendar (2026-10-27).
+    expect(getAllowedSportsForLeagueType('survivor')).toEqual(['NBA', 'NFL', 'NHL', 'MLB'])
+    expect(LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedSportsByConcept.survivor).toEqual(['NBA', 'NFL', 'NHL', 'MLB'])
+    for (const sport of ['NBA', 'NFL', 'NHL', 'MLB'] as const) expect(getAllowedLeagueTypesForSport(sport)).toContain('survivor')
+    for (const sport of ['NCAAF', 'SOCCER'] as const) {
       expect(getAllowedLeagueTypesForSport(sport)).not.toContain('survivor')
       expect(getAllowedSportsForType('survivor')).not.toContain(sport)
     }
-    const paid = validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount: 16,
-      draftType: 'snake', leagueName: 'Paid pilot', conceptSetup: { survivor_entry_fee_mode: 'paid' } })
-    expect(paid.ok).toBe(false)
-    if (!paid.ok) expect(paid.error).toContain('free')
+    // Owner's call, 2026-10-25: every league is free; "paid" only labels dues collected off the app.
+    const base = { concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount: 16, draftType: 'snake', leagueName: 'Paid league' } as const
+    vi.useFakeTimers(); vi.setSystemTime(now)
+    try {
+      for (const conceptSetup of [{ survivor_entry_fee_mode: 'paid' }, { survivorEntryFeeMode: 'paid', survivorEntryFeeAmountCents: 2500 }]) {
+        const r = validateCreatePayload({ ...base, conceptSetup })
+        expect(r.ok, JSON.stringify(r)).toBe(true)
+      }
+      const bad = validateCreatePayload({ ...base, conceptSetup: { survivorEntryFeeMode: 'paid', survivorEntryFeeAmountCents: -5 } })
+      expect(bad.ok).toBe(false)
+      if (!bad.ok) expect(bad.error).toContain('dues amount')
+    } finally { vi.useRealTimers() }
   })
-  it.each(['NBA', 'NHL'])('%s uses its real positions and points scoring through both preset layers', sport => {
+  it.each(['NBA', 'NHL', 'MLB'])('%s uses its real positions and points scoring through both preset layers', sport => {
     const c = getSurvivorDefaultContract({ sport, teamCount: 20 })!
     const f = getLeagueDefaults({ sport, format: 'survivor', draftType: 'snake', managerCount: 20, scoringPreset: sport.toLowerCase() + '_points' })
     expect(c.playerPoolRules.sport).toBe(sport)

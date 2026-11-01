@@ -5,8 +5,11 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from '@/lib/waiver-wire'
 import { getPendingClaims, getProcessedClaimsAndTransactions } from '@/lib/waiver-wire'
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
-import { setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
+import { refreshLeagueWaiverNextRunAt, setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
 import { waiverSettingsRequestSchema } from '@/lib/waiver-wire/settings-request'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { waiverRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -52,7 +55,33 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
 
   const parsed = waiverSettingsRequestSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid waiver settings', details: parsed.error.flatten() }, { status: 400 })
+  // Read before the write for the "What changed" card; a failed read only drops the card.
+  let before: Awaited<ReturnType<typeof getEffectiveLeagueWaiverSettings>> | null = null
+  try {
+    before = (await getEffectiveLeagueWaiverSettings(params.leagueId)) ?? null
+  } catch {
+    before = null
+  }
   const settings = await upsertLeagueWaiverSettings(params.leagueId, parsed.data)
+  // The league home's "What changed" card: the waiver rules the popup reads from these settings.
+  if (before) {
+    try {
+      const after = await getEffectiveLeagueWaiverSettings(params.leagueId)
+      await publishRuleChangesEvent({
+        leagueId: params.leagueId,
+        actorUserId: userId,
+        section: 'waivers',
+        changes: diffRuleSnapshots(waiverRulesFromEffective(before), waiverRulesFromEffective(after)),
+      })
+    } catch (e) {
+      console.warn('[commissioner/waivers] change card', e instanceof Error ? e.message : 'unknown error')
+    }
+  }
+  // The free-agency mode moves a daily sport's run days (lib/waiver-wire/daily-sport-waiver-runs.ts):
+  // reschedule now rather than at the next run under the old days.
+  if (parsed.data.waiverEngineConfig?.free_agency_mode !== undefined) {
+    await refreshLeagueWaiverNextRunAt(params.leagueId).catch((e) => console.warn('[commissioner/waivers] next run refresh', e))
+  }
   return NextResponse.json(settings)
 }
 

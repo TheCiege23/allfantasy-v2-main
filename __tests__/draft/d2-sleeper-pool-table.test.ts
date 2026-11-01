@@ -22,13 +22,13 @@ function read(rel: string): string {
 }
 
 describe('D.2 — SLEEPER_POOL_TABLE_COLUMNS spec', () => {
-  it('declares the 18 columns the user requested (RK, PLAYER, ADP, AI ADP, BYE, PTS, AVG, …)', () => {
+  it('declares the 18 columns the user requested (RK, PLAYER, ADP, AF ADP, BYE, PTS, AVG, …)', () => {
     const labels = SLEEPER_POOL_TABLE_COLUMNS.map((c) => c.label)
     expect(labels).toEqual([
       'RK',
       'PLAYER',
       'ADP',
-      'AI ADP',
+      'AF ADP',
       'BYE',
       'PTS',
       'AVG',
@@ -65,9 +65,9 @@ describe('D.2 — SLEEPER_POOL_TABLE_COLUMNS spec', () => {
     expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThan(80)
   })
 
-  it('includes ADP, AI ADP, and projection columns (the data E.2.7 unlocked)', () => {
+  it('includes ADP, AF ADP, and projection columns (the data E.2.7 unlocked)', () => {
     const keys = SLEEPER_POOL_TABLE_COLUMNS.map((c) => c.key)
-    for (const k of ['adp', 'aiAdp', 'pts', 'avg']) {
+    for (const k of ['adp', 'afAdp', 'pts', 'avg']) {
       expect(keys).toContain(k)
     }
   })
@@ -162,8 +162,9 @@ describe('D.2 — PlayerPanel poolLayout integration', () => {
     expect(src).toMatch(/poolLayout\?: 'auto' \| 'card' \| 'sleeper_table'/)
   })
 
-  it('defaults to the table for NFL when poolLayout is auto', () => {
-    expect(src).toMatch(/poolLayout === 'auto' && sport === 'NFL'/)
+  it('defaults to the table for every sport when poolLayout is auto (NFL-only until 2026-10-28)', () => {
+    expect(src).toMatch(/poolLayout === 'sleeper_table' \|\| poolLayout === 'auto'\)\)/)
+    expect(src).not.toMatch(/poolLayout === 'auto' && sport === 'NFL'/)
   })
 
   it('always uses the table when poolLayout === sleeper_table (explicit opt-in)', () => {

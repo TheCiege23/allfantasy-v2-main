@@ -60,7 +60,8 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     matchup_length: 1,
     total_rounds: 3,
     consolation_bracket_enabled: false,
-    third_place_game_enabled: false,
+    // On for every sport's new leagues: the semifinal losers play for third in the final's weeks.
+    third_place_game_enabled: true,
     toilet_bowl_enabled: false,
     championship_length: 2,
     reseed_behavior: 'fixed_bracket',

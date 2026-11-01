@@ -8,13 +8,31 @@ import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWo
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
+import { SupportModal } from '@/components/core-app/support/SupportModal'
+import { SupportCrestWidget } from '@/components/support/SupportCrestWidget'
+import { LeagueTabs } from '@/components/core-app/LeagueTabs'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
+import GlobalTopNav from '@/components/shared/GlobalTopNav'
 const league = { id: 'mobile-preview', name: 'Sunday Night Dynasty', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 12, format: 'redraft', scoring: 'PPR', status: 'pre_draft', settings: {} } as UserLeague
 const tabs = ['native_home','roster','matchups','waivers','trades','draft','standings','league_chat','settings'].map(id => ({id,label:id}))
 export default function Preview() {
   const [tab,setTab] = useState('native_home')
   const [draftTab,setDraftTab] = useState<MobileDraftTab>('board')
-  const search = useSearchParams()
-  if (search.get('screen') === 'draft') return <><DraftRoomShell
+  const [supportOpen, setSupportOpen] = useState(false)
+  // useSearchParams() is typed `| null` in this Next.js setup; read the param once.
+  const screen = useSearchParams()?.get('screen') ?? null
+  if (screen === 'navigation') return <GlobalTopNav isAuthenticated userLabel="Layout preview" />
+  if (screen === 'support') return <div data-testid="mobile-support-preview">
+    <div className="af-core p-4">
+      <button className="af-btn" onClick={() => setSupportOpen(true)}>Preview core support</button>
+      <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} defaultEmail="preview@example.com" />
+      <LeagueTabs leagueId="mobile-preview" leagueName={league.name} activeKey="moves" compact platform="sleeper" />
+      <ImportedLeagueQuickActions leagueId="mobile-preview" leagueName={league.name} platform="Sleeper" canRemove />
+      <div style={{ height: 1800 }}>This week</div>
+    </div>
+    <SupportCrestWidget defaultEmail="preview@example.com" />
+  </div>
+  if (screen === 'draft') return <><DraftRoomShell
     topBar={<DraftTopBar leagueName={league.name} sport="NFL" draftType="snake" teamCount={12} rounds={15} currentManagerOnClock="Midnight Routes" pickLabel="1.01" overallPickNumber={1} timerStatus="paused" timerRemainingSeconds={60} isCommissioner draftStatus="paused" backHref="/dev/league-mobile-preview" onResume={() => {}} onToggleAutoPick={() => {}} onOpenDraftRoomSettings={() => {}} onResync={() => {}} />}
     managerStrip={null} mobileTab={draftTab} onMobileTabChange={setDraftTab}
     draftBoard={<div style={{width:1200,display:'grid',gridTemplateColumns:'repeat(12, 1fr)',gap:8}}>{Array.from({length:60},(_,i)=><div key={i} className="h-20 rounded-xl border border-cyan-400/20 bg-cyan-950/20 p-3 text-xs">{Math.floor(i/12)+1}.{i%12+1}<p className="mt-2 text-white/50">Waiting</p></div>)}</div>}

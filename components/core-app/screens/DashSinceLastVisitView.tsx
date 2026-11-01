@@ -4,8 +4,10 @@ import Link from 'next/link'
 import type { BriefHandoff, BriefStanding, SinceLastVisitBrief } from '@/lib/core-app/sinceLastVisit'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { alertGroupText, briefTradeSummaryText, handoffText } from '@/lib/core-app/homeBandsCopy'
+import { dashSinceLastVisitMessages } from '@/lib/core-app/messages/dashSinceLastVisit'
 
 /**
  * The words of DashSinceLastVisit, in the reader's language (2026-10-04).
@@ -45,31 +47,28 @@ export type SinceLastVisitViewProps = {
   comparisonPending: boolean
 }
 
-function spanText(s: BriefSpan, es: boolean): string {
-  if (!es) return `${s.n}${s.unit}`
-  return `${s.n} ${s.unit === 'm' ? 'min' : s.unit}`
+type SinceLastVisitMessages = typeof dashSinceLastVisitMessages.en
+
+function spanText(s: BriefSpan, m: SinceLastVisitMessages): string {
+  return m.span(s.n, s.unit)
 }
 
-function statusText(status: string | null, language: string): string {
-  if (status == null) return language === 'es' ? 'sin designación' : 'no designation'
+function statusText(status: string | null, language: string, m: SinceLastVisitMessages): string {
+  if (status == null) return m.noDesignation
   return coreUiCopy(status, language)
 }
 
-function resultText(s: BriefStanding, es: boolean): string {
+function resultText(s: BriefStanding, m: SinceLastVisitMessages): string {
   const parts: string[] = []
   const games = s.won + s.lost + s.tied
   if (games > 0) {
     const tie = s.tied > 0 ? `–${s.tied}` : ''
     const record = `${s.wins}–${s.losses}${s.ties > 0 ? `–${s.ties}` : ''}`
-    parts.push(es ? `quedó ${s.won}–${s.lost}${tie}, ahora ${record}` : `went ${s.won}–${s.lost}${tie}, now ${record}`)
+    parts.push(m.went(s.won, s.lost, tie, record))
   }
   if (s.rank != null && s.previousRank != null && s.rank !== s.previousRank) {
     const up = s.rank < s.previousRank
-    parts.push(
-      es
-        ? `${up ? 'sube' : 'baja'} al #${s.rank} (antes #${s.previousRank})`
-        : `${up ? 'up' : 'down'} to #${s.rank} (was #${s.previousRank})`,
-    )
+    parts.push(m.moved(up, s.rank, s.previousRank))
   }
   return parts.join(', ')
 }
@@ -89,18 +88,16 @@ function Handoff({ handoff, language }: { handoff: BriefHandoff; language: strin
 export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
   const { when, tradeReach, trades, injuries, injuryCount, anyFollowedOnly, standings, alerts, comparisonPending } = props
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const title = es ? 'Desde tu última visita' : 'Since your last visit'
-  const whenText =
-    when.kind === 'week' ? (es ? 'últimos 7 días' : 'last 7 days') : es ? `desde hace ${spanText(when.span, true)}` : `since ${spanText(when.span, false)} ago`
-  const reachText = tradeReach ? (es ? `llega ${spanText(tradeReach, true)} más atrás` : `reaches ${spanText(tradeReach, false)} further back`) : null
+  const m = useMessages(dashSinceLastVisitMessages)
+  const whenText = when.kind === 'week' ? m.lastWeek : m.since(spanText(when.span, m))
+  const reachText = tradeReach ? m.reaches(spanText(tradeReach, m)) : null
   const one = trades.count === 1 && !trades.atLeast
 
   return (
-    <section className="af-core af-brief" aria-label={title}>
+    <section className="af-core af-brief" aria-label={m.title}>
       <details open>
         <summary className="af-brief-head">
-          <span className="af-label af-brief-kicker">{title}</span>
+          <span className="af-label af-brief-kicker">{m.title}</span>
           {/* Inside the <summary> on purpose: a button there opens its popover without toggling the details. */}
           <TopicTip topic="sinceLastVisit" />
           <span className="af-brief-when af-num">{whenText}</span>
@@ -111,7 +108,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
             <li className="af-brief-row" data-kind="trades">
               <span className="af-brief-what">
                 {trades.atLeast ? `${trades.count}+` : trades.count}{' '}
-                {es ? (one ? 'intercambio nuevo' : 'intercambios nuevos') : one ? 'new trade' : 'new trades'}
+                {one ? m.newTrade : m.newTrades}
                 {reachText ? <span className="af-brief-reach"> ({reachText})</span> : null}
               </span>
               <ul className="af-brief-sub">
@@ -120,7 +117,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
                     <Link href={t.href} className="af-brief-link">
                       {t.leagueName}
                     </Link>
-                    <span className="af-brief-detail"> — {es ? (briefTradeSummaryText(t.parts) ?? t.summary) : t.summary}</span>
+                    <span className="af-brief-detail"> — {m.tradeSummary(t.summary, briefTradeSummaryText(t.parts))}</span>
                     {t.handoff ? <Handoff handoff={t.handoff} language={language} /> : null}
                   </li>
                 ))}
@@ -131,13 +128,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
           {injuryCount > 0 ? (
             <li className="af-brief-row" data-kind="injuries">
               <span className="af-brief-what">
-                {es
-                  ? `${injuryCount} ${injuryCount === 1 ? 'cambio de lesión' : 'cambios de lesión'} ${
-                      anyFollowedOnly ? 'en tus plantillas y jugadores que sigues' : 'en tus plantillas'
-                    }`
-                  : `${injuryCount} injury change${injuryCount === 1 ? '' : 's'} ${
-                      anyFollowedOnly ? 'on your rosters and players you follow' : 'on your rosters'
-                    }`}
+                {m.injuryChanges(injuryCount, anyFollowedOnly)}
               </span>
               <ul className="af-brief-sub">
                 {injuries.map((i) => (
@@ -146,23 +137,15 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
                     {i.position ? <span className="af-brief-pos af-num"> {i.position}</span> : null}
                     <span className="af-brief-detail">
                       {' '}
-                      {statusText(i.from, language)} → <b>{statusText(i.to, language)}</b> ·{' '}
+                      {statusText(i.from, language, m)} → <b>{statusText(i.to, language, m)}</b> ·{' '}
                       {/* A followed player on none of your rosters has no league to name (2026-09-14). */}
-                      {i.leagues.length === 0
-                        ? es
-                          ? 'Siguiendo'
-                          : 'Following'
-                        : i.leagues.length === 1
-                          ? i.leagues[0]
-                          : es
-                            ? `${i.leagues.length} de tus ligas`
-                            : `${i.leagues.length} of your leagues`}
+                      {i.leagues.length === 0 ? m.following : i.leagues.length === 1 ? i.leagues[0] : m.ofYourLeagues(i.leagues.length)}
                     </span>
                     {i.handoff ? <Handoff handoff={i.handoff} language={language} /> : null}
                   </li>
                 ))}
                 {injuryCount > injuries.length ? (
-                  <li className="af-brief-more">{es ? `+${injuryCount - injuries.length} más` : `+${injuryCount - injuries.length} more`}</li>
+                  <li className="af-brief-more">{m.more(injuryCount - injuries.length)}</li>
                 ) : null}
               </ul>
             </li>
@@ -171,9 +154,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
           {standings.length > 0 ? (
             <li className="af-brief-row" data-kind="standings">
               <span className="af-brief-what">
-                {es
-                  ? `Resultados en ${standings.length} ${standings.length === 1 ? 'liga' : 'ligas'}`
-                  : `Results in ${standings.length} league${standings.length === 1 ? '' : 's'}`}
+                {m.results(standings.length)}
               </span>
               <ul className="af-brief-sub">
                 {standings.map((s) => (
@@ -181,7 +162,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
                     <Link href={s.href} className="af-brief-link">
                       {s.standing.leagueName}
                     </Link>
-                    <span className="af-brief-detail"> — {resultText(s.standing, es)}</span>
+                    <span className="af-brief-detail"> — {resultText(s.standing, m)}</span>
                   </li>
                 ))}
               </ul>
@@ -191,16 +172,14 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
           {alerts.total > 0 ? (
             <li className="af-brief-row" data-kind="alerts">
               <span className="af-brief-what">
-                {es
-                  ? `${alerts.total} ${alerts.total === 1 ? 'alerta sin leer' : 'alertas sin leer'}`
-                  : `${alerts.total} unread alert${alerts.total === 1 ? '' : 's'}`}
+                {m.unreadAlerts(alerts.total)}
               </span>
               <span className="af-brief-detail">
                 {' '}
                 {alerts.groups.map((g) => `${g.count} ${alertGroupText(g.type, g.label, language)}`).join(', ')}
               </span>{' '}
               <Link href="/core/notifications" className="af-brief-link">
-                {es ? 'Abrir alertas' : 'Open alerts'}
+                {m.openAlerts}
               </Link>
             </li>
           ) : null}
@@ -208,9 +187,7 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
 
         {comparisonPending ? (
           <p className="af-brief-note">
-            {es
-              ? 'Los cambios de lesiones y clasificaciones aparecen desde tu próxima visita: es la primera vez que tenemos una referencia con la que comparar.'
-              : 'Injury and standings changes appear from your next visit — this is the first time we have a picture to compare against.'}
+            {m.comparisonPending}
           </p>
         ) : null}
       </details>

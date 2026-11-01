@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { shareCardImage } from '@/components/decide/shareCard'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { shareMomentMessages } from '@/lib/core-app/messages/shareMoment'
 
 /**
  * Share a moment as an image (shareable moments, 2026-09-14): fetches the auth-gated card PNG and
@@ -23,7 +24,7 @@ export function ShareMomentButton({
   title: string
   label?: string
 }) {
-  const es = useOptionalLanguage().language === 'es'
+  const m = useMessages(shareMomentMessages)
   const [state, setState] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
   return (
     <button
@@ -36,14 +37,14 @@ export function ShareMomentButton({
       }}
     >
       {state === 'working'
-        ? es ? 'Creando tarjeta…' : 'Building card…'
+        ? m.building
         : state === 'downloaded'
-          ? es ? 'Tarjeta guardada ✓' : 'Card saved ✓'
+          ? m.saved
           : state === 'shared'
-            ? es ? 'Compartida ✓' : 'Shared ✓'
+            ? m.shared
             : state === 'failed'
-              ? es ? 'Reintentar' : 'Retry share'
-              : label ?? (es ? 'Compartir' : 'Share')}
+              ? m.retry
+              : label ?? m.share}
     </button>
   )
 }

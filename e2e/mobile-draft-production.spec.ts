@@ -1,4 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+
+// See the helper: dev-mode CSP reports otherwise saturate the shared `next dev`.
+test.beforeEach(async ({ context }) => {
+  await answerCspReportsInBrowser(context)
+})
 
 test.describe('@mock-draft-room mobile production mock room', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true })
@@ -19,7 +25,8 @@ test.describe('@mock-draft-room mobile production mock room', () => {
 
   async function players(page: Page) {
     await page.getByRole('button', { name: 'Players', exact: true }).tap()
-    return page.getByRole('dialog', { name: 'Players', exact: true })
+    // The tray is a non-modal region over the board (DraftMobileTray), not a dialog.
+    return page.getByRole('region', { name: 'Players', exact: true })
   }
 
   test('manual picks and off-turn touch queue survive reload; drawers remain reachable', async ({ page }, testInfo) => {
@@ -45,7 +52,7 @@ test.describe('@mock-draft-room mobile production mock room', () => {
     await restored.getByRole('button', { name: 'Close', exact: true }).tap()
     for (const name of ['Roster', 'Chat']) {
       await page.getByRole('button', { name, exact: true }).tap()
-      const panel = page.getByRole('dialog')
+      const panel = page.getByRole('region', { name: name === 'Roster' ? 'Current Roster' : 'Draft Chat', exact: true })
       await expect(panel).toBeVisible()
       if (name === 'Chat') {
         await panel.getByTestId('mock-draft-chat-input').fill('How is my NBA roster?')

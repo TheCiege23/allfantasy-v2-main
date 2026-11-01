@@ -10,7 +10,7 @@
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { applyLineupPick, playerEligibleForSlot, type RosterLineupLists } from '@/lib/league/lineup-swap'
 
-export type LineupSpot = { kind: 'starter'; slotIndex: number } | { kind: 'bench' } | { kind: 'ir' }
+export type LineupSpot = { kind: 'starter'; slotIndex: number } | { kind: 'bench' } | { kind: 'ir' } | { kind: 'taxi' }
 
 export type LineupMoveContext = {
   lists: RosterLineupLists
@@ -20,8 +20,13 @@ export type LineupMoveContext = {
   lockReason?: (playerId: string) => string | undefined
   /** Whether this player's injury designation qualifies for IR under the league's rules. */
   canIr: (playerId: string) => boolean
+  /**
+   * Whether this player may sit on the taxi squad (rookie-only / experience rules). Omitted means the
+   * screen does not know, and the save route's taxi validation decides.
+   */
+  canTaxi?: (playerId: string) => boolean
   /** Section capacities when the server reported them; a missing limit is left to the server. */
-  limits?: { bench?: number | null; ir?: number | null } | null
+  limits?: { bench?: number | null; ir?: number | null; taxi?: number | null } | null
 }
 
 /** `noop` marks a drop back where the player already is: not an error, nothing to say. */
@@ -33,6 +38,7 @@ export function locatePlayer(lists: RosterLineupLists, playerId: string): Lineup
   if (si >= 0) return { kind: 'starter', slotIndex: si }
   if (lists.bench.includes(playerId)) return { kind: 'bench' }
   if (lists.ir.includes(playerId)) return { kind: 'ir' }
+  if (lists.taxi.includes(playerId)) return { kind: 'taxi' }
   return null
 }
 
@@ -52,6 +58,7 @@ function lift(l: RosterLineupLists, id: string): RosterLineupLists {
   n.starters = n.starters.map((x) => (x === id ? '' : x))
   n.bench = n.bench.filter((x) => x !== id)
   n.ir = n.ir.filter((x) => x !== id)
+  n.taxi = n.taxi.filter((x) => x !== id)
   return n
 }
 
@@ -68,6 +75,9 @@ export function resolveLineupMove(ctx: LineupMoveContext, playerId: string, targ
     const slot = slots[target.slotIndex]
     if (!slot) return { ok: false, reason: 'That slot does not exist.' }
     if (from.kind === 'ir') return { ok: false, reason: 'Move him from IR to the bench first.' }
+    // Promoting off the taxi squad lands on the bench; going straight in would also bench the
+    // occupant and could overfill the bench in one move.
+    if (from.kind === 'taxi') return { ok: false, reason: 'Move him from the taxi squad to the bench first.' }
     if (!playerEligibleForSlot(slot, ctx.positionOf(playerId))) return { ok: false, reason: `Not eligible for ${slot.label}.` }
     const occupant = lists.starters[target.slotIndex] ?? ''
     if (occupant && ctx.isLocked(occupant)) return { ok: false, reason: lockedMsg(ctx, occupant) }
@@ -87,6 +97,16 @@ export function resolveLineupMove(ctx: LineupMoveContext, playerId: string, targ
     if (max != null && count(lists.bench) >= max) return { ok: false, reason: 'Your bench is full.' }
     const n = lift(lists, playerId)
     n.bench.push(playerId)
+    return { ok: true, next: n }
+  }
+
+  if (target.kind === 'taxi') {
+    const maxTaxi = ctx.limits?.taxi
+    if (maxTaxi != null && maxTaxi <= 0) return { ok: false, reason: 'This league has no taxi squad.' }
+    if (ctx.canTaxi && !ctx.canTaxi(playerId)) return { ok: false, reason: 'This player is not eligible for the taxi squad.' }
+    if (maxTaxi != null && count(lists.taxi) >= maxTaxi) return { ok: false, reason: 'Your taxi squad is full.' }
+    const n = lift(lists, playerId)
+    n.taxi.push(playerId)
     return { ok: true, next: n }
   }
 
@@ -150,4 +170,72 @@ export function seatStartersInSlots(
     out[open] = ids[k].id
   }
   return out
+}
+
+/**
+ * Starters with no game this week: a bye week matching the lineup's week, or an opponent the feed
+ * reports as `BYE`. The same rule `lib/redraft/lineupValidation.ts` flags as `starter_on_bye`, shown
+ * on the lineup screen before lock so a manager can still bench them. Unknown bye data is not a bye.
+ */
+export function startersOnBye(
+  starters: string[],
+  playerOf: (playerId: string) => { byeWeek?: number | null; opponent?: string | null } | undefined,
+  week: number | null | undefined,
+): string[] {
+  return starters.filter((id) => {
+    if (!id) return false
+    const p = playerOf(id)
+    if (!p) return false
+    if (String(p.opponent ?? '').trim().toUpperCase() === 'BYE') return true
+    return week != null && p.byeWeek != null && Number(p.byeWeek) === Number(week)
+  })
+}
+
+/**
+ * Tap to swap (Sleeper style): tap a player or a starting slot, then tap where he goes or who he
+ * swaps with. A tap names a starting SLOT (its occupant, if any, comes with it), a player off the
+ * starting lineup, or a whole section. This only turns two taps into the one move
+ * `resolveLineupMove` already decides, so tap, drag and the Move list can never disagree.
+ *
+ *   slot  → slot      the first slot's player moves there (a starter↔starter swap when it is filled);
+ *                     tapping an EMPTY slot first brings the second slot's player into it
+ *   slot  → player    the player comes into the slot, and its occupant goes to the bench
+ *   slot  → section   the slot's player goes to the bench / IR / taxi squad
+ *   player → slot     the player comes into the slot
+ *   player → player   the first player moves to the second one's section (bench ↔ IR / taxi)
+ *   player → section  the player goes to that section
+ *
+ * `null` means the two taps make no move (an empty slot then a section, two bench players): the screen
+ * just lets go of the first tap.
+ */
+export type LineupTap =
+  | { kind: 'slot'; slotIndex: number }
+  | { kind: 'player'; playerId: string }
+  | { kind: 'section'; section: 'bench' | 'ir' | 'taxi' }
+
+export function resolveLineupTap(
+  lists: RosterLineupLists,
+  first: LineupTap,
+  second: LineupTap,
+): { playerId: string; target: LineupSpot } | null {
+  if (first.kind === 'section') return null
+  if (first.kind === 'slot') {
+    const occupant = lists.starters[first.slotIndex] ?? ''
+    if (second.kind === 'slot') {
+      if (second.slotIndex === first.slotIndex) return null
+      if (occupant) return { playerId: occupant, target: { kind: 'starter', slotIndex: second.slotIndex } }
+      const other = lists.starters[second.slotIndex] ?? ''
+      return other ? { playerId: other, target: { kind: 'starter', slotIndex: first.slotIndex } } : null
+    }
+    if (second.kind === 'player') return { playerId: second.playerId, target: { kind: 'starter', slotIndex: first.slotIndex } }
+    return occupant ? { playerId: occupant, target: { kind: second.section } } : null
+  }
+  if (second.kind === 'slot') return { playerId: first.playerId, target: { kind: 'starter', slotIndex: second.slotIndex } }
+  if (second.kind === 'section') return { playerId: first.playerId, target: { kind: second.section } }
+  if (second.playerId === first.playerId) return null
+  const there = locatePlayer(lists, second.playerId)
+  if (!there || there.kind === 'starter') return null
+  const here = locatePlayer(lists, first.playerId)
+  if (here && here.kind === there.kind) return null
+  return { playerId: first.playerId, target: there }
 }

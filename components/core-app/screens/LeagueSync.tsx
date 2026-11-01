@@ -2,8 +2,10 @@ import Link from 'next/link'
 import SyncNowButton from '../SyncNowButton'
 import SyncPauseButton from '../SyncPauseButton'
 import RemoveLeagueButton from '../RemoveLeagueButton'
+import ConfirmGuillyButton from '../ConfirmGuillyButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 38a·10 — is THIS league fresh, and what did we actually read.
@@ -31,7 +33,7 @@ function fmtDate(d: Date | string | null): string {
   if (!d) return '—'
   const date = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  return date.toLocaleDateString(getAppIntlLocale(), { month: 'short', year: 'numeric' })
 }
 
 export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
@@ -104,7 +106,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-alert" data-tone="bad">
           <span className="af-label">Last run never finished</span>
           <p>
-            The collector started at {new Date(orphanedRun.startedAt).toLocaleString()} and never
+            The collector started at {new Date(orphanedRun.startedAt).toLocaleString(getAppIntlLocale())} and never
             reported a result — no rows read, no rows written, no completion. That is a job that was
             killed mid-run, not one that ran and found nothing. Anything below dated before then is
             the last good read, not the current state.
@@ -122,7 +124,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-alert" data-tone="warn" data-testid="league-sync-provider-gone">
           <span className="af-label">{platformLabel} no longer has this league</span>
           <p>
-            When we last asked {platformLabel} ({new Date(providerGone.checkedAt).toLocaleString()}), it
+            When we last asked {platformLabel} ({new Date(providerGone.checkedAt).toLocaleString(getAppIntlLocale())}), it
             said this league does not exist. That usually means it was deleted, or the commissioner
             started a new season under a new league ID. Nothing on this page is being refreshed until
             that changes. We check again once a day on our own; "Sync this league" above checks now.
@@ -217,6 +219,8 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </ul>
       </section>
 
+      {data.guilly ? <GuillyCheck guilly={data.guilly} platform={league.platform} leagueId={league.id} canConfirm={data.guillyCanConfirm === true} /> : null}
+
       <p className="af-sy-foot">
         AllFantasy is read-only on {league.platform === 'manual' ? 'your platform' : league.platform}
         . We never change a lineup, accept a trade or post a message — every change is still made
@@ -237,6 +241,70 @@ const PLATFORM_NAMES: Record<string, string> = {
 
 function platformName(platform: string): string {
   return PLATFORM_NAMES[platform] ?? (platform === 'manual' ? 'your platform' : platform)
+}
+
+/**
+ * An imported Guilly league's chops, as we read them from its scores, and every place that reading is in
+ * doubt (lib/guillotine/importedGuillyHealth.ts). The provider decides its chops; this says how far our
+ * picture of them can be trusted.
+ */
+function GuillyCheck({ guilly, platform, leagueId, canConfirm }: {
+  guilly: NonNullable<Extract<LeagueSyncResult, { available: true }>['guilly']>
+  platform: string
+  leagueId: string
+  /** The viewer is the commissioner and the format is still a guess (lib/core-app/leagueSync.ts). */
+  canConfirm: boolean
+}) {
+  const name = (id: string) => guilly.teamNames[id] ?? `Team ${id}`
+  const names = (ids: string[] | undefined) => (ids ?? []).map(name).join(', ')
+  return (
+    <section className="af-sy-panel" data-testid="league-sync-guilly">
+      <header className="af-sy-panel-head">
+        <h2 className="af-label">Guilly chops</h2>
+        <span className="af-sy-panel-note" data-testid="league-sync-guilly-status">
+          {guilly.status === 'ok' ? 'Looks right' : 'Needs a look'}
+          {guilly.teamsAlive != null ? ` · ${guilly.teamsAlive} alive` : ''}
+        </span>
+      </header>
+      <ul className="af-sy-rows">
+        <li className="af-sy-row" data-kind="by-design">
+          <span className="af-sy-row-mark" aria-hidden>×</span>
+          <span className="af-sy-row-text">
+            <span className="af-sy-row-label">Chops come from {platformName(platform)}</span>
+            <span className="af-sy-row-note">AllFantasy never chops this league; we read who went from its weekly scores.</span>
+          </span>
+          <span className="af-sy-row-state">{guilly.chops.length === 0 ? 'none yet' : `${guilly.chops.reduce((n, c) => n + c.rosterIds.length, 0)} read`}</span>
+        </li>
+        {guilly.chops.map((c) => (
+          <li key={`chop-${c.week}`} className="af-sy-row" data-kind="fresh" data-testid={`league-sync-guilly-chop-${c.week}`}>
+            <span className="af-sy-row-mark" aria-hidden>●</span>
+            <span className="af-sy-row-text">
+              <span className="af-sy-row-label">Week {c.week}</span>
+              <span className="af-sy-row-note">{names(c.rosterIds)}</span>
+            </span>
+            <span className="af-sy-row-state">chopped</span>
+          </li>
+        ))}
+        {guilly.findings.map((f, i) => (
+          <li key={`${f.code}-${i}`} className="af-sy-row" data-kind={f.severity === 'attention' ? 'stale' : 'never'} data-testid={`league-sync-guilly-${f.code}`}>
+            <span className="af-sy-row-mark" aria-hidden>{f.severity === 'attention' ? '!' : 'i'}</span>
+            <span className="af-sy-row-text">
+              <span className="af-sy-row-label">{f.text}</span>
+              {f.rosterIds?.length ? <span className="af-sy-row-note">{names(f.rosterIds)}</span> : null}
+              {f.code === 'unconfirmed_format' ? (
+                canConfirm ? (
+                  <ConfirmGuillyButton leagueId={leagueId} />
+                ) : (
+                  <span className="af-sy-row-note" data-testid="league-sync-guilly-ask-commissioner">Only the commissioner can confirm the league type.</span>
+                )
+              ) : null}
+            </span>
+            <span className="af-sy-row-state">{f.severity === 'attention' ? 'check' : 'note'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }
 
 function DataRow({ row }: { row: SyncDataRow }) {

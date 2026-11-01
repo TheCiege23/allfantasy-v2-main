@@ -3,7 +3,7 @@
  * Safe to import from client components: no prisma, no node built-ins.
  */
 
-export const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ'] as const
+export const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ', 'recap'] as const
 export type ShareMomentType = (typeof SHARE_MOMENT_TYPES)[number]
 
 export const SHARE_CARD_FORMATS = ['post', 'story', 'link'] as const
@@ -14,6 +14,19 @@ export const SHARE_CARD_SIZES: Record<ShareCardFormat, { width: number; height: 
   post: { width: 1080, height: 1350 },
   story: { width: 1080, height: 1920 },
   link: { width: 1200, height: 630 },
+}
+
+/**
+ * The week recap's id is fixed by its council, so the Torch Ceremony post in league chat can carry
+ * the card picture the moment it is written, before the recap row itself is captured.
+ */
+export function recapMomentId(councilId: string): string {
+  return `recap-${councilId}`
+}
+
+/** The council behind a recap id, or null for any other moment id. */
+export function councilIdOfRecapMoment(momentId: string): string | null {
+  return momentId.startsWith('recap-') && momentId.length > 6 ? momentId.slice(6) : null
 }
 
 export function isShareMomentType(value: unknown): value is ShareMomentType {
@@ -62,6 +75,14 @@ export interface ShareMomentPayload {
   tokens?: number | null
   exileWeeks?: number | null
   rejoinWeek?: number | null
+  /**
+   * recap: the league's week after Tribal Council, posted to league chat and offered to every member.
+   * It names the manager voted out (product call, 2026-10-31: the whole league sees the vote-off) with
+   * the public tally and where they go next; `displayName` is that manager. No ballot, no voter.
+   */
+  remaining?: number | null
+  onExile?: number | null
+  merged?: boolean
 }
 
 export interface ShareMomentRecord {

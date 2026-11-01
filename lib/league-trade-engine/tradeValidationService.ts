@@ -4,7 +4,8 @@
 
 import type { League, Roster } from '@prisma/client'
 import { extractDraftPicksFromPlayerData } from '@/lib/dispersal-draft/assetPoolBuilder'
-import { getRosterPlayerIds, getRosterSize } from '@/lib/waiver-wire/roster-utils'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { countTowardRosterLimit, leagueRosterLimit, uncountedPlayerIds } from '@/lib/league/rosterLimit'
 import {
   isPastTradeDeadline,
   resolveLeagueTradeSettings,
@@ -275,11 +276,16 @@ export function validateTradeAssets(params: {
     }
   }
 
-  const max = league.rosterSize ?? 999
-  const counts = new Map(participants.map((r) => [r.id, getRosterSize(r.playerData)]))
+  // The same limit waivers and the draft use (lib/league/rosterLimit.ts): a player in an uncounted
+  // spot (IR / taxi; IR too on an import) is not counted — he arrives on the bench, and leaving from
+  // one of those spots frees nothing, so the sender's count only drops for a player who counted.
+  const { limit: max, counts: rosterCounts } = leagueRosterLimit(league, 999)
+  const counts = new Map(participants.map((r) => [r.id, countTowardRosterLimit(r.playerData, rosterCounts)]))
+  const uncountedByRoster = new Map(participants.map((r) => [r.id, uncountedPlayerIds(r.playerData, rosterCounts)]))
   for (const a of assets) {
     if (a.itemType === 'player' && a.itemReference) {
-      counts.set(a.fromRosterId, (counts.get(a.fromRosterId) ?? 0) - 1)
+      const leavesUncounted = uncountedByRoster.get(a.fromRosterId)?.has(String(a.itemReference))
+      if (!leavesUncounted) counts.set(a.fromRosterId, (counts.get(a.fromRosterId) ?? 0) - 1)
       counts.set(a.toRosterId, (counts.get(a.toRosterId) ?? 0) + 1)
     }
   }

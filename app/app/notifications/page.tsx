@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { FinalScoreLogos } from "@/components/notifications/FinalScoreLogos"
 import {
   Bell,
   Check,
@@ -179,6 +180,7 @@ export default function NotificationsPage() {
                             <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                               {n.title}
                             </p>
+                            <FinalScoreLogos type={n.type} meta={n.meta} />
                             {n.body && (
                               <p className="mt-0.5 text-xs" style={{ color: "var(--muted2)" }}>
                                 {n.body}

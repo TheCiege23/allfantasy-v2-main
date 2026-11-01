@@ -21,6 +21,8 @@ export type SurvivorIdolExpiryMode = 'merge' | 'players_left' | 'week'
 export const SURVIVOR_IDOL_EXPIRY_MODES = ['merge', 'players_left', 'week'] as const
 /** Shot in the Dark: one safe draw in this many (owner's call, 2026-10-20; default 1 in 6). */
 export const SURVIVOR_SHOT_IN_THE_DARK_ODDS = [4, 5, 6] as const
+/** Longest idol play cutoff a commissioner can set, in hours before votes close. */
+export const SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS = 72
 export type SurvivorShotInTheDarkOdds = (typeof SURVIVOR_SHOT_IN_THE_DARK_ODDS)[number]
 
 export interface SurvivorFoundationSettings {
@@ -70,6 +72,8 @@ export interface SurvivorFoundationSettings {
   idolExpiryMode: SurvivorIdolExpiryMode
   /** `week` mode: the last scoring week an idol may be played. */
   idolExpiryWeek: number
+  /** Hours before votes close after which no idol can be played; 0 = right up to the close. Votes still run to the close. */
+  idolPlayCutoffHours: number
   shotInTheDarkOdds: SurvivorShotInTheDarkOdds
   idolCount: number
   idolsEnabled: boolean
@@ -92,6 +96,11 @@ export interface SurvivorFoundationSettings {
    * instead of the moment. Share cards still work inside the league.
    */
   publicMomentPages: boolean
+  /**
+   * The public watch page (/l/<league>/watch): anyone with the link can follow the season, with
+   * display names only. Off by default; the commissioner opts in.
+   */
+  spectatorPageEnabled: boolean
 }
 
 type SettingsRecord = Record<string, unknown>
@@ -142,6 +151,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   idolInvalidRemainingPlayers: 4,
   idolExpiryMode: 'players_left',
   idolExpiryWeek: 10,
+  idolPlayCutoffHours: 0,
   shotInTheDarkOdds: 6,
   idolCount: 7,
   idolsEnabled: true,
@@ -159,6 +169,7 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   conductPolicy: 'game_deception_allowed_platform_abuse_banned',
   shareCardsEnabled: true,
   publicMomentPages: true,
+  spectatorPageEnabled: false,
 }
 
 function readNumber(input: SettingsRecord, keys: string[], fallback: number): number {
@@ -337,6 +348,7 @@ export function normalizeSurvivorFoundationSettings(
     ),
     idolExpiryMode: normalizeIdolExpiryMode(readString(s, ['idolExpiryMode'], base.idolExpiryMode)),
     idolExpiryWeek: clampInt(readNumber(s, ['idolExpiryWeek'], base.idolExpiryWeek), 1, 52),
+    idolPlayCutoffHours: clampInt(readNumber(s, ['idolPlayCutoffHours'], base.idolPlayCutoffHours), 0, SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS),
     shotInTheDarkOdds: normalizeShotOdds(readNumber(s, ['shotInTheDarkOdds'], base.shotInTheDarkOdds)),
     idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
@@ -354,6 +366,7 @@ export function normalizeSurvivorFoundationSettings(
     conductPolicy: readString(s, ['conductPolicy'], base.conductPolicy) as SurvivorConductPolicy,
     shareCardsEnabled: readBoolean(s, ['shareCardsEnabled'], base.shareCardsEnabled),
     publicMomentPages: readBoolean(s, ['publicMomentPages'], base.publicMomentPages),
+    spectatorPageEnabled: readBoolean(s, ['spectatorPageEnabled'], base.spectatorPageEnabled),
   }
 }
 

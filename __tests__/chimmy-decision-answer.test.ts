@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ access: vi.fn(), start: vi.fn(), waiver: vi.fn(), trade: vi.fn(), lineup: vi.fn(), target: vi.fn(), finder: vi.fn(), pending: vi.fn() }))
+const h = vi.hoisted(() => ({ access: vi.fn(), start: vi.fn(), waiver: vi.fn(), trade: vi.fn(), lineup: vi.fn(), target: vi.fn(), finder: vi.fn(), pending: vi.fn(), otherSport: vi.fn(), baseline: vi.fn() }))
 vi.mock('@/lib/chimmy/chimmy-league-snapshot', () => ({ loadLeagueGroundingForUser: h.access }))
 vi.mock('@/lib/chimmy/lineupScenarioGrounding', () => ({ buildStartSitScenario: h.start, buildWaiverScenario: h.waiver }))
 vi.mock('@/lib/chimmy/tradeScenarioGrounding', () => ({ buildTradeScenario: h.trade }))
 vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimization: h.lineup, singleSwapCall: () => null }))
+vi.mock('@/lib/chimmy/otherSportStartSit', () => ({ buildOtherSportStartSit: h.otherSport }))
+vi.mock('@/lib/chimmy/lineupOptimizerOtherSports', () => ({ buildBaselineLineupContext: h.baseline }))
 vi.mock('@/lib/chimmy/tradeTargetVerdict', () => ({ buildTradeTargetVerdict: h.target }))
 vi.mock('@/lib/chimmy/tradeFinderGrounding', () => ({ buildTradeFinder: h.finder, readTradeFinderPosition: (word: string) => word?.toUpperCase() ?? null }))
 
@@ -84,6 +86,21 @@ describe('shared consequential-answer contract', () => {
     expect(out?.startCalls?.[0]).toMatchObject({ leagueId: 'authorized-league', season: 2026, week: 4, rec: { key: 'a', name: 'Chase' }, alt: { key: 'b', name: 'Jefferson' } })
     expect(decisionAnswerMeta(out!)).not.toHaveProperty('answer')
   })
+  it('routes a non-NFL two-player choice to league-scored current-season form', async () => {
+    h.start.mockResolvedValue({ kind: 'start_sit', status: 'unresolved', reason: 'sport_not_supported', detail: 'NFL-only weekly feed' })
+    h.otherSport.mockResolvedValue({ ready: true, text: 'Lean Home Star from this league-scored recent form.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I start Home Star or Away Star?', leagueId: 'l1', userId: 'u1' })
+    expect(h.otherSport).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', players: ['Home Star', 'Away Star'] })
+    expect(out).toMatchObject({ status: 'ready', sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
+  })
+  it('keeps a non-NFL whole-lineup baseline free and labelled when weekly league projections are absent', async () => {
+    h.lineup.mockResolvedValue({ status: 'unresolved', reason: 'sport_not_supported', detail: 'NFL-only weekly feed' })
+    h.baseline.mockResolvedValue('NBA standard per-game baseline for this roster.')
+    const out = await prepareChimmyDecisionAnswer({ question: 'Who should I start in my lineup?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'league_scored_weekly_projection_unavailable' } })
+    expect(out?.answer).toContain('standard per-game baseline')
+    expect(out?.answer).toContain('not charged')
+  })
   it('does not sell an ungraded trade with no computed impact as a ready answer', async () => {
     h.trade.mockResolvedValue({ status: 'ready', value: { grade: null, withheld: 'Values missing.' }, lineup: null })
     const out = await prepareChimmyDecisionAnswer({ question: 'Grade this trade: Chase for Jefferson', leagueId: 'l1', userId: 'u1' })
@@ -110,18 +127,40 @@ describe('shared consequential-answer contract', () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'Should I pick up Jaylen Warren?', leagueId: 'l1', userId: 'u1' })
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'add_rostered' } })
   })
-  it('still asks a trade question to name its sides', async () => {
+  /*
+   * It used to refuse ("Name what you give and receive"), and so did every follow-up that said
+   * "trade" — including the owner's critique of the ideas Chimmy had just given (2026-10-31). The
+   * engine resolved no move, so the full answer path, which reads the conversation, takes it.
+   */
+  it('hands an unnamed trade question to the full answer', async () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'Should I make a trade?', leagueId: 'l1', userId: 'u1' })
-    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'decision_inputs_required' } })
-    expect(out?.answer).toContain('Name what you give and receive')
+    expect(out).toBeNull()
+    expect(h.trade).toHaveBeenCalled()
+  })
+  it('lets a correction of earlier trade ideas use the conversation instead of an unnamed-offer gate', async () => {
+    const out = await prepareChimmyDecisionAnswer({ question: 'in these trade I am giving up scoring players and u didnt consider my 1st round pick', leagueId: 'l1', userId: 'u1' })
+    expect(out).toBeNull()
+    expect(h.trade).not.toHaveBeenCalled()
   })
   it('keeps trade discovery available with engine-generated offers and explicit limits', async () => {
-    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })
+    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, pickNote: null, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })
     const out = await prepareChimmyDecisionAnswer({ question: 'Find trade ideas for WR', leagueId: 'l1', userId: 'u1' })
-    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: 'WR' })
+    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: 'WR', goal: null, includePicks: false, requiresPicks: false })
     expect(out?.answer).toContain('give Chase, receive Jefferson')
     expect(out?.answer).toContain('not completed trade verdicts')
     expect(out?.status).toBe('ready')
+  })
+  it('passes a win-now, pick-using ask to the verified finder and shows the weekly gain', async () => {
+    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'Fitty SF' }, pickNote: 'only verified owned picks are included', projectionWeek: { season: '2026', week: 9 },
+      ideas: [{ partnerTeam: 'OTFBackpack', give: [{ name: 'Tyjae Spears' }, { name: '2027 2nd' }], get: [{ name: 'Mike Evans' }], giveTotal: 3100, getTotal: 3150,
+        fairness: 'balanced', why: [], sendable: true, projectedLineupBefore: 100, projectedLineupAfter: 106, projectedLineupDelta: 6 }] })
+    const out = await prepareChimmyDecisionAnswer({ question: 'find me 3 win now trades using my draft picks and a lesser player in versuz', leagueId: 'l1', userId: 'u1' })
+    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: null, goal: 'win_now', includePicks: true, requiresPicks: true })
+    expect(out?.answer).toContain('Win-now trade ideas for Fitty SF')
+    expect(out?.answer).toContain('give Tyjae Spears, 2027 2nd, receive Mike Evans')
+    expect(out?.answer).toContain('projected starters 100.0 before, 106.0 after (+6.0)')
+    expect(out?.answer).toContain('Draft picks: only verified owned picks are included.')
+    expect(out?.answer).toContain('Only 1 supported pick offer')
   })
 })
 

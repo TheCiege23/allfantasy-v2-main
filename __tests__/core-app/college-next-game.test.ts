@@ -79,3 +79,26 @@ describe('buildNextGameMap default fold is unchanged for the NFL', () => {
     expect(out.get('KC')).toMatchObject({ opponent: 'SF', home: false })
   })
 })
+
+describe('🛑 a USF starter gets his game when a club row shares the school name', () => {
+  it('joins "University of South Florida" to USF vs UAB despite SOUTH FLORIDA STARS', () => {
+    /*
+     * Production, 2026-10-30: Keshaun Singleton (USF) showed no kickoff and no lock the day
+     * before USF hosted UAB. The directory's unclassified "SOUTH FLORIDA STARS" lists
+     * "SOUTH FLORIDA" as an alternate name, so the alias was dropped and neither the roster
+     * nor the feeds could be resolved to USF.
+     */
+    const ix = buildCollegeTeamIndex([
+      { id: 58, school: 'South Florida', mascot: 'Bulls', abbreviation: 'USF', alternateNames: ['USF', 'South Florida'], classification: 'fbs' },
+      { id: 3198, school: 'SOUTH FLORIDA STARS', mascot: 'STARS', abbreviation: 'SFX', alternateNames: ['SFX', 'SOUTH FLORIDA'], classification: null },
+      { id: 5, school: 'UAB', mascot: 'Blazers', abbreviation: 'UAB', alternateNames: ['Alabama-Birmingham', 'UAB'], classification: 'fbs' },
+    ])
+    const at = new Date('2026-10-31T16:00:00Z')
+    const out = collegeFixturesByPlayerTeam(
+      [row('SOUTH FLORIDA', 'UAB', at), row('South Florida', 'UAB', at)],
+      ['University of South Florida'],
+      ix,
+    )
+    expect(out.get('University of South Florida')).toMatchObject({ team: 'South Florida', opponent: 'UAB', home: true, at })
+  })
+})

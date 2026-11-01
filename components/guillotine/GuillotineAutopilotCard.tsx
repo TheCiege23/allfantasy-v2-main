@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Axe, Bot, CheckCircle2, Lock, Megaphone, Sparkles, Trophy, Users } from 'lucide-react'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { GuillotineChopPreview } from './GuillotineChopPreview'
 
 /**
  * "AF runs this league for you" — the native league home's answer to *why this app and not a
@@ -16,8 +17,9 @@ import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
  * link into League Settings, with the AF Commissioner extras marked rather than hidden.
  */
 
-/** NFL and NBA hold guillotine waiver claims for a blind auction (lib/redraft/waiverEngine.ts). */
-const BLIND_WAIVER_SPORTS = new Set(['NFL', 'NBA'])
+/** Sports whose guillotine waiver claims are held for a blind auction — mirrors BLIND_WAIVER_GUILLOTINE_SPORTS
+ *  in lib/guillotine/blindWaiverCutoff.ts (a server module, so it is not imported here). */
+const BLIND_WAIVER_SPORTS = new Set(['NFL', 'NBA', 'MLB', 'NHL'])
 
 type SummaryConfig = {
   eliminationStartWeek?: number
@@ -75,7 +77,7 @@ export function GuillotineAutopilotCard({
         const locked = d?.code === 'feature_not_entitled'
         setRecapState({
           busy: false,
-          message: locked ? 'Chimmy recaps are part of a paid AllFantasy plan.' : (d?.error ?? 'Could not post the recap.'),
+          message: locked ? 'Chimmy recaps come with AF Pro or AF Commissioner.' : (d?.error ?? 'Could not post the recap.'),
           upgrade: locked ? (typeof d?.upgradePath === 'string' && d.upgradePath.startsWith('/') ? d.upgradePath : '/upgrade') : null,
         })
         return
@@ -192,6 +194,7 @@ export function GuillotineAutopilotCard({
               {recapState.upgrade ? <> <a href={recapState.upgrade} className="font-semibold underline">Upgrade</a></> : null}
             </p>
           ) : null}
+          <GuillotineChopPreview leagueId={leagueId} />
         </div>
       ) : null}
 

@@ -301,18 +301,24 @@ export async function POST(req: NextRequest) {
         leagues: await markPreviouslyDeleted(
           auth.userId,
           'fantrax',
-          mine.data.map((league) => ({
-            sourceId: league.teamNames[0]
-              ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
-              : `fantrax-league:${league.leagueId}`,
-            name: league.leagueName,
-            sport: null,
-            season: null,
-            totalTeams: null,
-            /* Carried separately from `sourceId` on purpose: the sourceId embeds the
-               team name, so it is not the id a tombstone is keyed on. */
-            fantraxLeagueId: league.leagueId,
-          })),
+          /* ⚠ ONE ENTRY PER TEAM, NOT PER LEAGUE. A manager can own two teams in one Fantrax
+             league, and `getLeagues` names both; taking `teamNames[0]` silently hid the second,
+             with no way to import it. Each team imports as its own copy of the league (the
+             import is keyed per team), so each is offered, named after its team. */
+          mine.data.flatMap((league) => {
+            const entry = (teamName: string | null) => ({
+              sourceId: teamName ? `fantrax-league:${league.leagueId}|${teamName}` : `fantrax-league:${league.leagueId}`,
+              name: teamName && league.teamNames.length > 1 ? `${league.leagueName} — ${teamName}` : league.leagueName,
+              sport: null,
+              season: null,
+              totalTeams: null,
+              /* Carried separately from `sourceId` on purpose: the sourceId embeds the
+                 team name, so it is not the id a tombstone is keyed on. */
+              fantraxLeagueId: league.leagueId,
+            })
+            const teams = [...new Set(league.teamNames.map((t) => t.trim()).filter(Boolean))]
+            return teams.length ? teams.map(entry) : [entry(null)]
+          }),
           (league) => league.fantraxLeagueId,
         ),
       })

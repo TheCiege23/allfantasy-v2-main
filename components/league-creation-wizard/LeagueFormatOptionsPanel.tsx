@@ -16,7 +16,7 @@ import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mod
 import { FEEDER_LEAGUES_BY_POOL, TOURNAMENT_TEAMS_PER_LEAGUE } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 import { StepHeader } from './StepHelp'
 import { ZOMBIE_UNIVERSE_TIER_LABELS } from '@/lib/zombie/zombie-universe-tier'
-import { SURVIVOR_PAID_CREATION_ENABLED } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_DUES_OFF_APP_NOTE } from '@/lib/survivor/survivorCreationAvailability'
 
 const CHECKBOX_CLASS = 'mt-0.5 shrink-0 size-5 rounded border border-white/30 bg-[#020817] accent-cyan-400'
 
@@ -183,18 +183,14 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 {sportBrandLabel(sport)} {survivorSeasonPhrase(sport)} into phases; choose tribe identities below and let the
                 app label them. Exile Island is provisioned after create.
               </p>
-              <p className="mt-2 max-w-[60ch] text-xs leading-relaxed text-amber-200/85">
-                NBA Survivor is in preview. Invite friends to explore and test the league; unattended full-season hosting
-                is still being certified.
-              </p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-white/85">League buy-in</Label>
-            <p className="text-[11px] text-white/45">Pilot leagues are free. Paid entry can be added after full-season hosting is certified.</p>
+            <Label className="text-white/85">League dues</Label>
+            <p className="text-[11px] text-white/45">{SURVIVOR_DUES_OFF_APP_NOTE}</p>
             <div className="flex flex-wrap gap-2">
-              {(SURVIVOR_PAID_CREATION_ENABLED ? ['free', 'paid'] as const : ['free'] as const).map((mode) => {
+              {(['free', 'paid'] as const).map((mode) => {
                 const active = (v.survivorEntryFeeMode ?? 'free') === mode
                 return (
                   <button
@@ -218,9 +214,9 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 )
               })}
             </div>
-            {SURVIVOR_PAID_CREATION_ENABLED && (v.survivorEntryFeeMode ?? 'free') === 'paid' && (
+            {(v.survivorEntryFeeMode ?? 'free') === 'paid' && (
               <div className="space-y-1.5 pt-1">
-                <Label className="text-white/80">Buy-in per manager (USD)</Label>
+                <Label className="text-white/80">Dues per manager (USD, optional)</Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -240,7 +236,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                   className="max-w-[220px] border-white/15 bg-[#050f1f]/90 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                   data-testid="wizard-survivor-fee-amount"
                 />
-                <p className="text-[11px] text-white/45">You can adjust payment collection and rules later in league settings.</p>
+                <p className="text-[11px] text-white/45">For your records only. Mark managers paid later in League Dues.</p>
               </div>
             )}
           </div>

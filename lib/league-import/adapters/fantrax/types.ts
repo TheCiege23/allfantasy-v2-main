@@ -36,7 +36,7 @@ export interface FantraxImportTeam {
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
   reservePlayerIds: string[]
-  /** NBA/NHL minor-league stash, carried as the taxi squad. Absent or empty for every other sport. */
+  /** NBA/NHL/MLB minor-league stash, carried as the taxi squad. Absent or empty for every other sport. */
   taxiPlayerIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
@@ -88,6 +88,18 @@ export interface FantraxImportPayload {
   schedule: FantraxImportScheduleWeek[]
   transactions: FantraxImportTransaction[]
   draftPicks: FantraxImportDraftPick[]
+  /**
+   * Where `draftPicks` and `transactions` came from, so coverage can say so. Absent on payloads built
+   * before this existed (and in tests), which reads as "export only".
+   */
+  historySources?: {
+    /** `draftPicks` is the stored Fantrax draft board (real player ids), not export pick events. */
+    draftBoard: boolean
+    /** Rows read from an uploaded transaction export. */
+    exportTransactions: number
+    /** Rows inferred by comparing rosters between refreshes (`status` inferred / suspected). */
+    derivedTransactions: number
+  }
   playerMap: Record<string, { name: string; position: string; team: string }>
   previousSeasons: Array<{
     season: string

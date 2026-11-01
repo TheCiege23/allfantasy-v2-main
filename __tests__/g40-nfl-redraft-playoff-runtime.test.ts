@@ -105,26 +105,25 @@ function withBracket(state: NflRedraftPlayoffRuntimeState): NflRedraftPlayoffRun
   return { ...state, bracket: generated.bracket }
 }
 
-function scoreActiveRound(state: NflRedraftPlayoffRuntimeState, baseScore: number): NflRedraftPlayoffRuntimeState {
+function scoreActiveRound(
+  state: NflRedraftPlayoffRuntimeState,
+  baseScore: number,
+  options: { consolation?: boolean } = {},
+): NflRedraftPlayoffRuntimeState {
+  const score = <T extends { bye: boolean }>(matchup: T, index: number) =>
+    matchup.bye ? matchup : { ...matchup, homeScore: baseScore + index, awayScore: baseScore - 8 - index, status: 'final' as const }
+  const active = state.bracket.rounds.find((round) => round.status === 'active')
   return {
     ...state,
     bracket: {
       ...state.bracket,
       rounds: state.bracket.rounds.map((round) =>
-        round.status === 'active'
-          ? {
-              ...round,
-              matchups: round.matchups.map((matchup, index) =>
-                matchup.bye
-                  ? matchup
-                  : {
-                      ...matchup,
-                      homeScore: baseScore + index,
-                      awayScore: baseScore - 8 - index,
-                      status: 'final',
-                    },
-              ),
-            }
+        round.status === 'active' ? { ...round, matchups: round.matchups.map(score) } : round,
+      ),
+      // The lower bracket plays alongside the championship round of the same number.
+      consolationRounds: state.bracket.consolationRounds.map((round) =>
+        options.consolation !== false && active && round.roundNumber === active.roundNumber
+          ? { ...round, matchups: round.matchups.map(score) }
           : round,
       ),
     },
@@ -185,6 +184,16 @@ describe('G40 canonical NFL redraft playoff runtime', () => {
     expect(semifinal.ok).toBe(true)
     if (!semifinal.ok) return
     expect(semifinal.state.bracket.rounds[2]?.status).toBe('active')
+
+    // Positive control: the consolation final is played with the championship, and the season does
+    // not finalize until it is decided.
+    const titleOnly = advanceNflRedraftPlayoffRound({
+      state: scoreActiveRound(semifinal.state, 140, { consolation: false }),
+      actorUserId: 'commissioner',
+    })
+    expect(titleOnly.ok).toBe(true)
+    if (!titleOnly.ok) return
+    expect(finalizeNflRedraftPlayoffChampion({ state: titleOnly.state }).ok).toBe(false)
 
     const championship = advanceNflRedraftPlayoffRound({
       state: scoreActiveRound(semifinal.state, 140),

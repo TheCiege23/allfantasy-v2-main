@@ -6,6 +6,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
 import type { PartnerRanking, PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * "Who should I trade with" — item #8, on the Trade Center.
@@ -82,7 +83,7 @@ export function suggestionToPickedAssets(
 }
 
 function money(n: number): string {
-  return Math.round(n).toLocaleString('en-US')
+  return Math.round(n).toLocaleString(getAppIntlLocale())
 }
 
 export function TradePartnerSuggestions(props: {

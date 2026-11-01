@@ -54,6 +54,29 @@ export type AttentionSignalType =
   /** Live-career plan, phase 4: what winning a live league would mean for the career — read off
    * the Career screen's own stakes (`careerMilestones.ts`), never re-derived. */
   | 'career_title_stake'
+  /** Survivor leagues (`survivorPrizeSignals.ts`): the manager's OWN reward state from the Survivor
+   * reward ledger — a choice to make, a free trade held, a prize pending or just won. */
+  | 'survivor_reward'
+  /** Survivor finale (`survivorFinaleSignals.ts`): a jury question window closing, an answer or a
+   * closing speech owed, or a Tribal ballot due — read off the league's own Survivor state. */
+  | 'survivor_jury_question_window'
+  | 'survivor_finalist_answer_due'
+  | 'survivor_closing_speech'
+  | 'survivor_votes_due'
+  /** Survivor challenges (`survivorChallengeSignals.ts`): a commissioner challenge locks soon and the
+   * manager (or their tribe) has not answered, or the manager just won one. */
+  | 'survivor_challenge_due'
+  | 'survivor_challenge_won'
+  /** Survivor governance (`survivorSignals.ts`): the cross-tribe trade window or weekly freeze closing
+   * soon, the castaway's own conduct strikes, and a tribe swap this week — read off persisted league
+   * settings and audit rows, never inferred. */
+  | 'survivor_trade_window'
+  | 'survivor_conduct_strike'
+  | 'survivor_tribe_swap'
+  /** Exile Island and the side games (`survivorSideGameSignals.ts`): a Survivor Pool or Token Pool pick
+   * due, an auction closing, the token shop open to the manager's balance, Exile team bids closing —
+   * read off the manager's own side-game view, never inferred. */
+  | 'survivor_side_game'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -64,6 +87,11 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
+  /** Survivor leagues: the format's own persisted state, read for one manager — the reward ledger
+   * (`lib/survivor/survivorRewardEngine.ts`); jury Q&A, closing speeches and council ballots; challenges;
+   * governance settings, conduct-strike audit rows and sealed swaps (`survivorSignals.ts`); and the side
+   * games — pool picks, auctions, the token shop and Exile team bids (`survivorSideGameSignals.ts`). */
+  | 'survivor'
 
 export interface DecisionOsAttentionSignal {
   /** Stable and deterministic — the same underlying condition always produces the same id, so a

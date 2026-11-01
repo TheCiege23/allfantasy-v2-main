@@ -25,6 +25,9 @@ export type RedraftSeasonClient = {
   sport: string
   season: number
   currentWeek: number
+  /** RedraftSeason.totalWeeks — the route returns the whole row, so these two are always present. */
+  totalWeeks?: number
+  playoffStartWeek?: number
   status: string
   rosters: RedraftRosterRow[]
 }
@@ -129,11 +132,18 @@ export type RedraftTradeProposal = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: the teams beyond proposer and receiver. Empty or absent for two teams. */
+  additionalRosterIds?: string[]
+  /** Multi-team trades: the non-proposer teams that have accepted so far. */
+  acceptedRosterIds?: string[]
   status: string
   vetoMode: string
   vetoThreshold: number | null
   reason: string | null
+  /** Before acceptance: the offer's deadline. After it: the end of the review window. */
   expiresAt: string | null
+  /** Set when the receiver accepted; the trade is then in review (lib/redraft/tradeReviewWindow.ts). */
+  acceptedAt?: string | null
   createdAt: string
   assets: Array<{
     id: string
@@ -254,6 +264,8 @@ export type TradePartnerMatch = {
   mySurpluses: string[]
   matchScore: number
   matchReasons: string[]
+  /** `matchReasons` as codes, in the same order (`MatchReasonCode`); absent from an older server. */
+  matchReasonCodes?: Array<{ code: string; params?: Record<string, string> }>
   warningFlags: string[]
 }
 export type TradePackageAsset = { kind: 'player' | 'faab'; playerId?: string; playerName?: string; position?: string; faabAmount?: number; value: number | null }
@@ -366,6 +378,13 @@ const jsonHeaders: JsonHeaders = {
   'Content-Type': 'application/json',
 }
 
+/**
+ * The error a failed request throws: the server's English `message`, plus the stable `code` it sent
+ * (null when it sent none) and the HTTP `status`, so a panel can say it in the reader's language
+ * (`lib/trade-center/serverTextI18n.ts`). Still an `Error`; every existing `e.message` reads the same.
+ */
+export type RedraftRequestError = Error & { code: string | null; status: number }
+
 async function parseJson<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as T | null
   if (!res.ok) {
@@ -373,7 +392,9 @@ async function parseJson<T>(res: Response): Promise<T> {
       body && typeof body === 'object' && 'error' in body
         ? String((body as { error?: unknown }).error ?? `Request failed (${res.status})`)
         : `Request failed (${res.status})`
-    throw new Error(msg)
+    const sent = body && typeof body === 'object' ? (body as { code?: unknown }).code : null
+    const code = typeof sent === 'string' ? sent : null
+    throw Object.assign(new Error(msg), { code, status: res.status }) as RedraftRequestError
   }
   return (body ?? {}) as T
 }
@@ -611,6 +632,8 @@ export async function createTradeProposal(payload: {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: up to two more teams. Omit (or leave empty) for a two-team trade. */
+  additionalRosterIds?: string[]
   reason?: string
   assets?: RedraftTradeAssetInput[]
 }) {
@@ -630,6 +653,7 @@ export async function createTradeProposal(payload: {
     seasonId: payload.seasonId,
     proposerRosterId: payload.proposerRosterId,
     receiverRosterId: payload.receiverRosterId,
+    ...(payload.additionalRosterIds?.length ? { additionalRosterIds: payload.additionalRosterIds } : {}),
     reason: payload.reason,
   }
   const res = await fetch('/api/redraft/trade-proposals', {
@@ -664,7 +688,12 @@ export async function submitTradeVote(payload: {
     headers: jsonHeaders,
     body: JSON.stringify(payload),
   })
-  return parseJson<{ proposal: RedraftTradeProposal; resolved: boolean }>(res)
+  return parseJson<{
+    proposal: RedraftTradeProposal
+    resolved: boolean
+    /** Multi-team trades: the teams still to accept after this one did. */
+    awaitingAcceptance?: string[]
+  }>(res)
 }
 
 export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string; reviewId?: string | null }) {

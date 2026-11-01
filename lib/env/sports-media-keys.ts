@@ -16,6 +16,8 @@ export function getTheSportsDbApiKey(): string | null {
   return readTrimmedEnv([
     'THESPORTSDB_API_KEY',
     'thesportsdb_api_key',
+    'THESPORTS_API_KEY',
+    'thesports_api_key',
     'THEAUDIODB_API_KEY',
     'theaudiodb_api_key',
   ])

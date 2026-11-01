@@ -53,7 +53,7 @@ describe('G32 NFL redraft league home contracts', () => {
     expect(translations.en['lsHub.tab.commissioner']).toBe('Commissioner Intelligence')
     expect(translations.en['lsHub.tab.ai']).toBe('League Helper')
     expect(settingsNav).toContain("label: 'Commissioner Intelligence'")
-    expect(settingsNav).toContain("label: '🤖 League Guide'")
+    expect(settingsNav).toContain("label: 'League Guide'")
     expect(modalPanel).toContain('title="Commissioner Intelligence"')
     expect(compactTab).toContain("t('lsHub.ai.intro')")
     expect(translations.en['lsHub.ai.intro']).toContain('Control League Helper settings')
@@ -75,7 +75,8 @@ describe('G32 NFL redraft league home contracts', () => {
     expect(executePatch).toContain('requestedPremiumCommissionerKeys')
     expect(executePatch).toContain("'aiWaiverSuggestions'")
     expect(executePatch).toContain("'aiQueueSuggestions'")
-    expect(executePatch).toContain('commissioner_ai_tools')
+    // The save and the page use the one shared AF Commissioner check, so they cannot disagree.
+    expect(executePatch).toContain('hasAfCommissionerPlan')
     expect(executePatch).toContain('AF Commissioner or AF Supreme is required')
     // The live entitlement, through the one shared AF Commissioner check (which resolves it).
     expect(settingsRoute).toContain('hasAfCommissionerPlan')

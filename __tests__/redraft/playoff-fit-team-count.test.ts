@@ -44,7 +44,8 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
 import { lastWeekOfPlayoffRound, readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { playoffFitOverflow, playoffFitOverflowMessage } from '@/lib/playoff-runtime/championshipLengthFit'
-import { fittedPlayoffStartWeek, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
+import { fittedPlayoffStartWeek, maxPlayoffTeamsThatFit, playoffBracketWeeks } from '@/lib/playoff-runtime/playoffFit'
+import { MAX_PLAYOFF_START_WEEK, cappedSeasonWeeks } from '@/lib/redraft/regularSeasonCap'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
 import { readStandingsRules } from '@/lib/core-app/standingsModel'
@@ -97,10 +98,10 @@ function buildTx() {
   }
 }
 
-async function createRedraft(sport: (typeof SPORTS)[number], teamCount: number) {
+async function createRedraft(sport: (typeof SPORTS)[number], teamCount: number, concept = 'redraft') {
   const tx = buildTx()
   const body = {
-    concept: 'redraft', sport, teamCount, draftType: 'snake', scoringPreset: PRESET[sport],
+    concept, sport, teamCount, draftType: 'snake', scoringPreset: PRESET[sport],
     leagueName: 'Fit League', language: 'en', tradeReviewMode: 'commissioner',
   } as any
   const engine = runPresetEngine({ ...body, commissionerId: 'u1' })
@@ -136,11 +137,18 @@ describe.each(SPORTS)('%s redraft creation — the bracket fits the season at ev
     expect(s.playoffSettings.firstRoundByes).toBe(gap(teams))
 
     // The final lands in exactly the season's last week — and the season creation sizes is that one.
+    // At most a 24-week regular season (lib/redraft/regularSeasonCap.ts): an NHL bracket under six
+    // teams starts in week 25 and the league's season ends with its final, a week or two early.
+    const leagueSeason = cappedSeasonWeeks(seasonWeeks, playoffBracketWeeks({
+      teams, weeksPerRound: data.playoffWeeksPerRound, championshipLength: readChampionshipLength(s),
+    }))
+    if (sport !== 'NHL' || teams >= 6) expect(leagueSeason).toBe(seasonWeeks)
     const createdWeeks = resolveCreatedSeasonWeeks(
-      { settings: s, dynastyConfig: null, playoffTeams: teams, playoffWeeksPerRound: data.playoffWeeksPerRound },
+      { settings: s, dynastyConfig: null, playoffTeams: teams, playoffWeeksPerRound: data.playoffWeeksPerRound, leagueType: data.leagueType, sport },
       seasonWeeks,
     )
-    expect(createdWeeks).toBe(seasonWeeks)
+    expect(createdWeeks).toBe(leagueSeason)
+    expect(start).toBeLessThanOrEqual(MAX_PLAYOFF_START_WEEK)
     expect(start).toBeGreaterThanOrEqual(2)
     expect(start).toBeLessThanOrEqual(createdWeeks) // so ensureRedraftSeason keeps it
     const finalWeek = lastWeekOfPlayoffRound({
@@ -150,7 +158,7 @@ describe.each(SPORTS)('%s redraft creation — the bracket fits the season at ev
       finalRoundNumber: rounds(teams),
       championshipLength: readChampionshipLength(s),
     })
-    expect(finalWeek).toBe(seasonWeeks)
+    expect(finalWeek).toBe(leagueSeason)
 
     // Every JSON copy says what the columns say.
     expect(s.playoff_team_count).toBe(teams)
@@ -162,7 +170,7 @@ describe.each(SPORTS)('%s redraft creation — the bracket fits the season at ev
     expect(s.playoffSettings.playoff_start_week).toBe(start)
     expect(s.foundation_defaults.playoff.playoffTeams).toBe(teams)
     expect(s.foundation_defaults.playoff.playoffStartWeek).toBe(start)
-    expect(s.foundation_defaults.playoff.championshipWeek).toBe(seasonWeeks)
+    expect(s.foundation_defaults.playoff.championshipWeek).toBe(leagueSeason)
     expect(s.foundation_defaults.schedule.playoff_transition_point).toBe(start)
 
     // …so the standings / Season Outlook reader shows the bracket the runtime plays.
@@ -325,5 +333,102 @@ describe('a pre-draft resize re-derives untouched playoff defaults and keeps a c
     expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 12, newSize: 10, playoffTeams: 8, playoffStartWeek: 14 })).toBeNull()
     expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 12, newSize: 6, playoffTeams: 8, playoffStartWeek: 14 }))
       .toEqual({ playoffTeams: 6 })
+  })
+})
+
+/*
+ * Keeper leagues play the same season (no dynasty config, so the sport's default length) and had the
+ * same unplayed last week: a 4-team NFL keeper bracket started in week 15 and finished in 16 of 17,
+ * while its JSON said 6 teams / 2 byes beside a column of 4, and a 6-team keeper league sent all six.
+ * They now take redraft's field (4 under ten teams, 6 from ten), start week and one shape.
+ */
+const ALL_TEAM_COUNTS = Array.from({ length: 17 }, (_, i) => i + 4)
+
+describe.each(SPORTS)('%s keeper creation — the bracket fits the season at every team count', (sport) => {
+  const seasonWeeks = tryGetSportConfig(sport)!.defaultSeasonWeeks
+
+  it.each(ALL_TEAM_COUNTS)('%i teams', async (teamCount) => {
+    const data = await createRedraft(sport, teamCount, 'keeper')
+    expect(data.leagueType).toBe('keeper')
+    const s = data.settings as Obj
+    const teams = data.playoffTeams as number
+    const start = data.playoffStartWeek as number
+
+    // The redraft field: 4 under ten managers, 6 from ten — not everyone makes it from six teams up.
+    expect(teams).toBe(teamCount >= 10 ? 6 : 4)
+    if (teamCount >= 6) expect(teams).toBeLessThan(teamCount)
+
+    const leagueSeason = cappedSeasonWeeks(seasonWeeks, playoffBracketWeeks({
+      teams, weeksPerRound: data.playoffWeeksPerRound, championshipLength: readChampionshipLength(s),
+    }))
+    const createdWeeks = resolveCreatedSeasonWeeks(
+      { settings: s, dynastyConfig: null, playoffTeams: teams, playoffWeeksPerRound: data.playoffWeeksPerRound, leagueType: 'keeper', sport },
+      seasonWeeks,
+    )
+    expect(createdWeeks).toBe(leagueSeason)
+    expect(start).toBe(Math.min(MAX_PLAYOFF_START_WEEK, fittedPlayoffStartWeek({ teams, weeksPerRound: data.playoffWeeksPerRound, championshipLength: readChampionshipLength(s) ?? undefined, seasonWeeks })!))
+    const finalWeek = lastWeekOfPlayoffRound({
+      playoffStartWeek: start,
+      roundNumber: rounds(teams),
+      weeksPerRound: data.playoffWeeksPerRound,
+      finalRoundNumber: rounds(teams),
+      championshipLength: readChampionshipLength(s),
+    })
+    expect(finalWeek).toBe(leagueSeason)
+
+    for (const block of [s.playoff_structure, s.playoffSettings]) {
+      expect(block.playoff_team_count).toBe(teams)
+      expect(block.first_round_byes).toBe(gap(teams))
+      expect(block.total_rounds).toBe(rounds(teams))
+      expect(block.playoff_start_week).toBe(start)
+    }
+    expect(s.playoff_team_count).toBe(teams)
+    expect(s.playoffSettings.playoffTeams).toBe(teams)
+    expect(s.playoffSettings.playoffStartWeek).toBe(start)
+    expect(s.foundation_defaults.playoff.playoffTeams).toBe(teams)
+    expect(s.foundation_defaults.playoff.playoffStartWeek).toBe(start)
+    expect(s.foundation_defaults.schedule.playoff_transition_point).toBe(start)
+    expect(readPlayoffFormat(s, teamCount, teams)).toMatchObject({ playoffTeams: teams, byeTeams: gap(teams) })
+  })
+})
+
+describe('a keeper settings change is checked against the season too', () => {
+  it('a 12-team NFL keeper field from week 15 is refused, naming the 8 that fit', async () => {
+    const keeper = { id: 'K', sport: 'NFL', leagueType: 'keeper', settings: {}, leagueSize: 12, playoffTeams: 6, playoffStartWeek: 15, playoffWeeksPerRound: 1, dynastyConfig: null }
+    const prisma = {
+      redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
+      redraftPlayoffRound: { findFirst: vi.fn().mockResolvedValue(null) },
+      league: { findUnique: vi.fn().mockResolvedValue({ dynastyConfig: null }) },
+    } as any
+    expect(await playoffFitOverflow({ league: keeper, change: { playoffTeams: 12 } }, { prisma })).toMatchObject({ lastPlayoffWeek: 18, maxPlayoffTeams: 8 })
+  })
+})
+
+describe('a keeper pre-draft resize re-derives the untouched default start week', () => {
+  const base = { leagueType: 'keeper', settings: {}, weeksPerRound: 1 }
+
+  it('NFL keeper created before this change at 8 (6 from 15) cut to 4 → 4 from 16', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 8, newSize: 4, playoffTeams: 6, playoffStartWeek: 15 }))
+      .toEqual({ playoffTeams: 4, playoffStartWeek: 16 })
+  })
+
+  it('NBA keeper created before this change at 8 (the registry\'s 6 from 23) grown to 9 → the redraft rule, 4 from 24', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NBA', oldSize: 8, newSize: 9, playoffTeams: 6, playoffStartWeek: 23 }))
+      .toEqual({ playoffTeams: 4, playoffStartWeek: 24 })
+  })
+
+  it('NFL keeper created today at 8 (4 from 16) grown to 12 → 6 from 15', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 8, newSize: 12, playoffTeams: 4, playoffStartWeek: 16 }))
+      .toEqual({ playoffTeams: 6, playoffStartWeek: 15 })
+  })
+
+  // 4 from 25, not 26: a 24-week regular season at most (lib/redraft/regularSeasonCap.ts).
+  it('NHL keeper created today at 4 (4 from 25) grown to 12 → 6 from 25', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NHL', oldSize: 4, newSize: 12, playoffTeams: 4, playoffStartWeek: 25, championshipLength: 2 }))
+      .toEqual({ playoffTeams: 6, playoffStartWeek: 25 })
+  })
+
+  it('a keeper commissioner\'s own bracket is kept', () => {
+    expect(resizedPlayoffColumns({ ...base, sport: 'NFL', oldSize: 12, newSize: 10, playoffTeams: 8, playoffStartWeek: 14 })).toBeNull()
   })
 })

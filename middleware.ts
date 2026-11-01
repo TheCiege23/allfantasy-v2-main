@@ -1076,7 +1076,6 @@ const BASELINE_SECURITY_HEADERS: Record<string, string> = {
   "Strict-Transport-Security": "max-age=31536000",
   "X-Frame-Options": "DENY",
   "Content-Security-Policy": "frame-ancestors 'none'",
-  "Content-Security-Policy-Report-Only": CSP_REPORT_ONLY_POLICY,
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   // The app uses the microphone (voice input); camera and geolocation are unused.
@@ -1087,6 +1086,10 @@ function applyBaselineSecurityHeaders<T extends Response>(response: T): T {
   for (const [key, value] of Object.entries(BASELINE_SECURITY_HEADERS)) {
     // Never overwrite a header a route set on purpose (e.g. its own CSP).
     if (!response.headers.has(key)) response.headers.set(key, value)
+  }
+  // Next dev's evaluated bundles generate a flood of reports; production still measures the policy.
+  if (process.env.NODE_ENV !== 'development' && !response.headers.has('Content-Security-Policy-Report-Only')) {
+    response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY_POLICY)
   }
   return response
 }

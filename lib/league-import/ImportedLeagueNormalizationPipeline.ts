@@ -38,7 +38,7 @@ import {
   FleaflickerImportUnavailableError,
 } from './fleaflicker/FleaflickerLeagueFetchService'
 import { runImportNormalizationPipeline } from './ImportNormalizationPipeline'
-import { checkImportSportSupported } from './provider-ui-config'
+import { checkImportSportRunnable, checkImportSportSupported } from './provider-ui-config'
 import type { ImportProvider, NormalizedImportResult } from './types'
 
 export interface ImportedLeagueNormalizationInput {
@@ -244,12 +244,19 @@ export async function runImportedLeagueNormalizationPipeline(
       raw: payload,
     })
     /*
-     * Enforced for Yahoo only for now. Sleeper and Fleaflicker list NFL but their single-league
-     * imports have accepted other sports until today; refusing those is an owner decision, so
-     * live importers keep their current behaviour. Yahoo is not live yet.
+     * Yahoo is held to its listed sports. The live importers keep the sports they already accept and
+     * refuse only a sport AllFantasy does not run, or a league that does not say (owner, 2026-10-25).
+     * Sleeper's mapper fills a missing sport with NFL, so its RAW sport is what is checked for that.
+     * A refresh of an already-imported league is never gated: it must keep syncing.
      */
-    if (provider === 'yahoo' && !refreshOfImportedLeague) {
-      const sportCheck = checkImportSportSupported(provider, normalized.league?.sport)
+    if (!refreshOfImportedLeague) {
+      const sportCheck =
+        provider === 'yahoo'
+          ? checkImportSportSupported(provider, normalized.league?.sport)
+          : checkImportSportRunnable(
+              provider,
+              provider === 'sleeper' && !sleeperRawSport(payload) ? null : normalized.league?.sport,
+            )
       if (!sportCheck.ok) {
         return { success: false, error: sportCheck.message, code: 'UNSUPPORTED_SPORT' }
       }
@@ -336,4 +343,10 @@ export async function runImportedLeagueNormalizationPipeline(
     const message = e instanceof Error ? e.message : 'Import normalization failed'
     return { success: false, error: message, code: 'NORMALIZATION_FAILED' }
   }
+}
+
+/** The sport Sleeper itself sent (`nfl`, `nba`, `lol`…), before the mapper defaults a missing one. */
+function sleeperRawSport(payload: unknown): string | null {
+  const league = (payload as { league?: { sport?: unknown } } | null | undefined)?.league
+  return typeof league?.sport === 'string' && league.sport.trim() ? league.sport.trim() : null
 }

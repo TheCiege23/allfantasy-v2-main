@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * Matchup simulation API — deterministic, lineup-aware simulation output with optional AI overlays.
  *
@@ -53,7 +54,7 @@ type MatchupRequestBody = {
   deterministicSeed?: string
 }
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   let body: MatchupRequestBody = {}
   try {
     body = await req.json().catch(() => ({}))
@@ -212,7 +213,8 @@ export async function POST(req: NextRequest) {
 
       if (providerInsights) {
         responseBody.providerInsights = providerInsights
-      }
+        if (!providerInsights.aiUsed) paidToolNotDelivered()
+      } else { paidToolNotDelivered() }
     }
     if (tokenFallbackSpend) {
       responseBody.tokenFallbackSpend = tokenFallbackSpend
@@ -251,3 +253,5 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

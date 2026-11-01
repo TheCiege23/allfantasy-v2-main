@@ -1,3 +1,5 @@
+import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
+import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * Dynasty settings service: effective settings, presets, upsert config, draft order audit.
  */
@@ -20,7 +22,38 @@ import type {
   DynastyDraftOrderAuditEntryDto,
 } from './types'
 import type { SportType } from '@/lib/multi-sport/sport-types'
-import { describeRookieDraftWindow, readRookieDraftCalendarSettings } from './rookieDraftCalendar'
+import {
+  describeRookieDraftWindow,
+  readExplicitAutoOpen,
+  readRookieDraftCalendarSettings,
+  resolveRookieDraftAutoOpen,
+} from './rookieDraftCalendar'
+import { commissionerHasRookieDraftAutoOpenPlan } from './rookieDraftAutoOpenPlan'
+
+/**
+ * What the scheduled opener will do for this league's rookie draft. The offseason "began" when next
+ * season's setup shell was created; with none yet, the next offseason has not begun and will begin
+ * after now.
+ */
+async function resolveEffectiveRookieDraftAutoOpen(leagueId: string, commissionerUserId: string | null, settings: unknown) {
+  if (readExplicitAutoOpen(settings) !== null) {
+    return resolveRookieDraftAutoOpen({ settings, commissionerPlan: false, offseasonStartedAt: new Date() })
+  }
+  // A display hint: a failed lookup shows the free default rather than failing the settings read.
+  try {
+    const [commissionerPlan, shell] = await Promise.all([
+      commissionerHasRookieDraftAutoOpenPlan(commissionerUserId),
+      prisma.redraftSeason.findFirst({
+        where: { leagueId, status: 'setup' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+    ])
+    return resolveRookieDraftAutoOpen({ settings, commissionerPlan, offseasonStartedAt: shell?.createdAt ?? new Date() })
+  } catch {
+    return resolveRookieDraftAutoOpen({ settings, commissionerPlan: false, offseasonStartedAt: new Date() })
+  }
+}
 
 /**
  * Get effective dynasty settings for a league (roster, scoring, playoff, rookie draft).
@@ -37,6 +70,7 @@ export async function getEffectiveDynastySettings(
       sport: true,
       settings: true,
       dynastyConfig: true,
+      userId: true,
     },
   })
   if (!league) return null
@@ -89,6 +123,7 @@ export async function getEffectiveDynastySettings(
 
   const config = league.dynastyConfig
   const rookieCalendar = readRookieDraftCalendarSettings(settings)
+  const rookieAutoOpen = await resolveEffectiveRookieDraftAutoOpen(league.id, league.userId, settings)
 
   return {
     leagueSize: league.leagueSize ?? null,
@@ -97,10 +132,11 @@ export async function getEffectiveDynastySettings(
     playoffTeamCount,
     playoffStructure,
     regularSeasonWeeks,
-    rookiePickOrderMethod: config?.rookiePickOrderMethod ?? 'max_pf',
+    rookiePickOrderMethod: normalizeRookieOrderMethod(config?.rookiePickOrderMethod ?? 'max_pf'),
     useMaxPfForNonPlayoff: config?.useMaxPfForNonPlayoff ?? true,
     rookieDraftRounds: config?.rookieDraftRounds ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS,
     rookieDraftType: config?.rookieDraftType ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_TYPE,
+    rookieAuction: readRookieAuctionSettings(settings),
     divisionsEnabled: config?.divisionsEnabled ?? false,
     tradeDeadlineWeek: config?.tradeDeadlineWeek ?? null,
     waiverTypeRecommended: config?.waiverTypeRecommended ?? 'faab',
@@ -115,8 +151,10 @@ export async function getEffectiveDynastySettings(
     taxiScoringOn: config?.taxiScoringOn ?? false,
     taxiDeadlineWeek: config?.taxiDeadlineWeek ?? null,
     taxiPromotionDeadlineWeek: config?.taxiPromotionDeadlineWeek ?? null,
-    rookieDraftAutoOpen: rookieCalendar.autoOpen,
+    rookieDraftAutoOpen: rookieAutoOpen.autoOpen,
+    rookieDraftAutoOpenSource: rookieAutoOpen.source,
     rookieDraftCustomOpenDate: rookieCalendar.customOpenDate,
+    rookieDraftAutoStartDays: rookieCalendar.autoStartDays,
     rookieDraftWindowLabel: describeRookieDraftWindow(league.sport as string | null),
   }
 }

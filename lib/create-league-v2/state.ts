@@ -5,6 +5,7 @@
  * On submit, translates into `POST /api/leagues` (canonical) or `POST /api/tournament/create`.
  */
 
+import { SURVIVOR_TWIST_PRESET_DEFAULT, type SurvivorTwistPresetId } from '@/lib/survivor/survivorTwistPresets'
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import {
@@ -45,7 +46,7 @@ export type SoccerPipeline = 'mls' | 'euro'
 export type LeaguePrivacy = 'public' | 'private'
 
 export type DynastyDraftMode = 'scheduled' | 'offline'
-export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'commissioner'
+export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'weighted_lottery' | 'commissioner'
 export type DynastyVisibility = 'public' | 'private'
 export type DynastyMonetization = 'free' | 'paid'
 
@@ -92,7 +93,7 @@ export interface DynastySetupState {
   taxiAllowNonRookies: boolean
   taxiAllowMoveOutAfterDeadline: boolean
   rookieDraftRounds: number
-  rookieDraftType: 'linear' | 'snake'
+  rookieDraftType: 'linear' | 'snake' | 'auction'
   rookieDraftOrderMethod: DynastyRookieOrderMethod
   futurePickTradeYears: number
   /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */
@@ -158,6 +159,12 @@ export interface CreateLeagueV2State {
   survivorTribeCount: number
   /** Whether the creator occupies one of the Survivor cast seats. */
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
+  /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
+  survivorEntryFeeMode: 'free' | 'paid'
+  /** Survivor-only: how many twists (idols, Exile, surprise tribes). See lib/survivor/survivorTwistPresets. */
+  survivorTwistPreset: SurvivorTwistPresetId
+  /** Survivor-only: optional dues per manager as typed (USD), shown in League Dues. */
+  survivorDuesUsd: string
   draftType: WizardDraftType
   /** Third-round reversal — snake drafts only. */
   thirdRoundReversal: boolean
@@ -168,6 +175,8 @@ export interface CreateLeagueV2State {
   privacy: LeaguePrivacy
   /** Every team also plays the week's median score (`League.medianGame`). */
   medianGame: boolean
+  /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  guillotineBestBall: boolean
   draftDate: string
   draftTime: string
   /**
@@ -349,6 +358,9 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
+  survivorEntryFeeMode: 'free',
+  survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
+  survivorDuesUsd: '',
   draftType: 'snake',
   thirdRoundReversal: false,
   name: '',
@@ -356,6 +368,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   description: '',
   privacy: 'private',
   medianGame: false,
+  guillotineBestBall: false,
   draftDate: '',
   draftTime: '',
   draftScheduleLater: false,

@@ -76,6 +76,8 @@ export type LeagueFacts = {
   playoffTeams: number | null
   playoffStartWeek: number | null
   medianGame: boolean
+  /** `settings.median_game_in_playoffs` (lib/redraft/medianGame.ts); absent or false = regular season only. */
+  medianGameInPlayoffs?: boolean
   irSlots: number | null
   taxiSlots: number | null
   keeperCount: number | null
@@ -131,7 +133,11 @@ export function buildConstitution(f: LeagueFacts, a: ConstitutionAnswers): Const
     n(f.irSlots) ? `${plural(n(f.irSlots)!, 'injured reserve slot')}.` : null,
     n(f.taxiSlots) ? `${plural(n(f.taxiSlots)!, 'taxi squad slot')}.` : null,
     scoringLine(f.scoring),
-    f.medianGame ? 'Each week every team also plays the league median: beating it counts as a win.' : null,
+    f.medianGame
+      ? f.medianGameInPlayoffs
+        ? 'Each week, playoffs included, every team also plays the league median: beating it counts as a win on the season record. Playoff games themselves are decided by score alone.'
+        : 'Each regular-season week every team also plays the league median: beating it counts as a win. Playoff weeks are win or go home, with no median game.'
+      : null,
   ].filter(Boolean)
   s.push({ id: 'rosters', title: 'Article 2 — Rosters and scoring', body: roster.join('\n') })
 

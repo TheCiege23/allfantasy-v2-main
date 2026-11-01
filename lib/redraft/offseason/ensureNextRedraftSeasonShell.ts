@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { scheduleDivisionsForRosters } from '@/lib/league/divisions/leagueDivisions'
 
 export type NextRedraftSeasonShell = { id: string; season: number }
 
@@ -89,6 +90,7 @@ export async function ensureNextRedraftSeasonShell(
     })
 
     const rosters: { id: string }[] = []
+    const rosterTeam: Array<{ rosterId: string; ids: string[] }> = []
     for (const t of shells) {
       const r = await tx.redraftRoster.create({
         data: {
@@ -101,14 +103,21 @@ export async function ensureNextRedraftSeasonShell(
         },
       })
       rosters.push({ id: r.id })
+      // An orphan team's owner id is `roster:<externalId or team id>`; either form names its team.
+      rosterTeam.push({ rosterId: r.id, ids: [t.ownerId, t.ownerId.startsWith('roster:') ? t.ownerId.slice('roster:'.length) : null].filter((v): v is string => Boolean(v)) })
     }
 
+    const divisions = scheduleDivisionsForRosters(league.settings, league.teams, rosterTeam)
     const slots = generateSchedule(
       rosters,
       completedSeason.totalWeeks,
       completedSeason.playoffStartWeek,
       completedSeason.sport,
-      { medianGame: completedSeason.medianGame },
+      {
+        medianGame: completedSeason.medianGame,
+        divisionByRoster: divisions?.byRoster ?? null,
+        divisionRivalsTwice: divisions?.rivalsTwice === true,
+      },
     )
     for (const s of slots) {
       if (s.type === 'median') continue

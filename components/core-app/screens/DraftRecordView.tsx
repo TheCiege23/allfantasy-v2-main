@@ -1,6 +1,8 @@
 'use client'
 
 import { formatRecordValue, recordLabel, slotName, slotRank } from '@/lib/draft-archive/recordLabels'
+import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * One archived Draft HQ record, readable (2026-10-07). Replaces `<pre>{JSON.stringify(…)}</pre>`:
@@ -30,9 +32,9 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 function Value({ value, fieldKey, language, depth }: { value: unknown; fieldKey: string; language: string; depth: number }) {
-  const es = language === 'es'
+  const m = messagesFor(draftScreensMessages, language)
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="af-record-empty">{es ? 'No hay registros' : 'None recorded'}</span>
+    if (value.length === 0) return <span className="af-record-empty">{m.recordNoneRecorded}</span>
     if (value.every((v) => !isPlainObject(v) && !Array.isArray(v))) {
       return <span>{value.map((v) => formatRecordValue(fieldKey, v, language)).join(', ')}</span>
     }
@@ -49,7 +51,7 @@ function Value({ value, fieldKey, language, depth }: { value: unknown; fieldKey:
   }
   if (isPlainObject(value)) {
     const entries = Object.entries(value)
-    if (entries.length === 0) return <span className="af-record-empty">{es ? 'No hay registros' : 'None recorded'}</span>
+    if (entries.length === 0) return <span className="af-record-empty">{m.recordNoneRecorded}</span>
     if (depth >= MAX_DEPTH) return <span>{entries.map(([k, v]) => `${recordLabel(k, language)}: ${formatRecordValue(k, v, language)}`).join(' · ')}</span>
     const slots = entries.filter(([k, v]) => /^slots_/.test(k) && typeof v === 'number')
     const rest = entries.filter(([k, v]) => !(/^slots_/.test(k) && typeof v === 'number'))
@@ -57,7 +59,7 @@ function Value({ value, fieldKey, language, depth }: { value: unknown; fieldKey:
       <dl className="af-record-dl">
         {slots.length > 0 ? (
           <div>
-            <dt>{es ? 'Puestos de la alineación' : 'Lineup slots'}</dt>
+            <dt>{m.recordLineupSlots}</dt>
             <dd>
               {slots
                 .filter(([, v]) => (v as number) > 0)

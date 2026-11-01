@@ -87,7 +87,9 @@ type Row = { id: string; leagueId: string | null; body: string | null; title: st
 
 function toItem(row: Row, leagueNames: Map<string, string>): DigestItem | null {
   const pn = (row.meta as { playerNews?: Record<string, unknown> } | null)?.playerNews
-  if (!pn) return null
+  // A lineup alert already went out by push and email, and injury news that changes no lineup is
+  // bell-only (lib/notifications/lineupImpactCopy.ts): neither belongs in the digest.
+  if (!pn || pn.digest === false) return null
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
   return {
     leagueId: row.leagueId,

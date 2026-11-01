@@ -7,8 +7,12 @@ import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
 import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import { useEffect, useId, useState } from 'react'
+import { Fragment, useEffect, useId, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
+/* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
+import '@/components/core-app/af-core-redraft-myteam.css'
+import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
+import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/lib/core-app/lineupCheck'
@@ -28,6 +32,12 @@ import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { useMessages } from '@/components/i18n/useMessages'
+import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
+
+type MyTeamScreenMessages = typeof myTeamScreenMessages extends Catalog<infer M> ? M : never
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -44,13 +54,11 @@ function Unavailable({ reason }: { reason: string }) {
  * no name to print), so without this line an ESPN bench of unmatched ids read as an empty bench.
  */
 function UnidentifiedNote({ count }: { count: number }) {
-  const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamScreenMessages)
   if (count <= 0) return null
   return (
     <p className="af-mt-footnote af-mt-unidentified">
-      {language === 'es'
-        ? `${count} ${count === 1 ? 'jugador más' : 'jugadores más'} en esta lista no ${count === 1 ? 'coincide' : 'coinciden'} con nadie en nuestros datos, así que no se muestra${count === 1 ? '' : 'n'}. Siguen en tu plantilla.`
-        : `${count} more ${count === 1 ? 'player' : 'players'} on this list could not be matched to anyone we hold, so ${count === 1 ? 'is' : 'are'} not shown. ${count === 1 ? 'He is' : 'They are'} still on your roster.`}
+      {m.unidentifiedNote(count)}
     </p>
   )
 }
@@ -88,6 +96,7 @@ function LockCountdown({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const { lockTimeLocale } = messagesFor(myTeamScreenMessages, language)
   const [now, setNow] = useState<number>(() => asOf ?? Date.now())
   /*
    * ⚠ THE LOCK TIME WAS ALWAYS PRINTED IN UTC — a Sunday 1pm Eastern kickoff read "17:00 UTC".
@@ -99,7 +108,7 @@ function LockCountdown({
   useEffect(() => {
     try {
       setLocalTime(
-        new Intl.DateTimeFormat(language === 'es' ? 'es' : undefined, {
+        new Intl.DateTimeFormat(lockTimeLocale || undefined, {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
@@ -111,7 +120,7 @@ function LockCountdown({
     } catch {
       setLocalTime(null)
     }
-  }, [atMs, language])
+  }, [atMs, lockTimeLocale])
 
   useEffect(() => {
     setNow(Date.now())
@@ -216,7 +225,8 @@ function posGroup(label: string | null | undefined): string {
  */
 function GameContext({ text }: { text: string | null }) {
   const { language } = useOptionalLanguage()
-  if (!text) return <>{language === 'es' ? 'no se encontró partido esta semana' : 'no game found for this week'}</>
+  const m = useMessages(myTeamScreenMessages)
+  if (!text) return <>{m.noGameThisWeek}</>
   const at = text.indexOf(' · ')
   if (at < 0) return <>{kickoffText(text, language)}</>
   return (
@@ -298,7 +308,7 @@ function VenueMark({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   if (weather?.indoors || indoors === true) {
     return (
       <span
@@ -316,10 +326,10 @@ function VenueMark({
     const bits = [
       weather.temperatureF != null ? `${Math.round(weather.temperatureF)}°F` : null,
       weather.windSpeedMph != null && weather.windSpeedMph >= 8
-        ? es ? `viento de ${Math.round(weather.windSpeedMph)} mph` : `${Math.round(weather.windSpeedMph)} mph wind`
+        ? m.windMph(weather.windSpeedMph)
         : null,
       weather.precipChancePct != null && weather.precipChancePct >= 20
-        ? es ? `${Math.round(weather.precipChancePct)}% de lluvia` : `${Math.round(weather.precipChancePct)}% precip`
+        ? m.precipPct(weather.precipChancePct)
         : null,
       weather.conditionLabel,
     ].filter(Boolean)
@@ -355,14 +365,6 @@ function VenueMark({
   return null
 }
 
-/** "2nd", or «2.º» in Spanish — it sits inside Spanish sentences too ("terminó 2.º de 12"). */
-function ordinal(n: number, es = false): string {
-  if (es) return `${n}.º`
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
-}
-
 /**
  * The line under the roster rank.
  *
@@ -371,28 +373,23 @@ function ordinal(n: number, es = false): string {
  * names its comparison; a letter invents a scale and hides its inputs. When
  * coverage is partial that is stated here rather than folded into the number.
  */
-function gradeSubtitle(g: RosterGrade, es = false): string {
+function gradeSubtitle(g: RosterGrade, language: string | null | undefined): string {
+  const m = messagesFor(myTeamScreenMessages, language)
   const parts: string[] = []
   const vsMedian = g.value - g.median
   parts.push(
     Math.abs(vsMedian) < g.median * 0.03
-      ? es ? 'justo en la mediana de la liga' : 'right on the league median'
-      : es
-        ? `${Math.abs(vsMedian).toLocaleString('es')} ${vsMedian > 0 ? 'por encima' : 'por debajo'} de la mediana`
-        : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
+      ? m.rightOnMedian
+      : m.vsMedian(m.vsMedianAmount(Math.abs(vsMedian)), vsMedian > 0),
   )
   if (g.strongest) {
-    parts.push(es
-      ? `${g.strongest.position} es tu mejor posición (${ordinal(g.strongest.rank, true)})`
-      : `${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
+    parts.push(m.bestPosition(g.strongest.position, g.strongest.rank))
   }
   if (g.weakest && g.weakest.position !== g.strongest?.position) {
-    parts.push(es
-      ? `${g.weakest.position} la más débil (${ordinal(g.weakest.rank, true)})`
-      : `${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
+    parts.push(m.thinnestPosition(g.weakest.position, g.weakest.rank))
   }
   if (g.pricedPlayers < g.totalPlayers) {
-    parts.push(es ? `valorados ${g.pricedPlayers} de tus ${g.totalPlayers}` : `priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
+    parts.push(m.pricedOf(g.pricedPlayers, g.totalPlayers))
   }
   /*
    * WHICH CLAIM THIS RANK IS MAKING. Repriced under your league's scoring is a
@@ -401,9 +398,7 @@ function gradeSubtitle(g: RosterGrade, es = false): string {
    * are reading. Both are honest; presenting them identically would not be.
    */
   parts.push(
-    g.basis.leagueScored
-      ? es ? 'valorado con tu puntuación' : 'valued under your scoring'
-      : es ? 'precios de mercado, sin ajustar a tu puntuación' : 'market prices, not adjusted for your scoring',
+    g.basis.leagueScored ? m.valuedUnderScoring : m.marketPricesUnadjusted,
   )
   return parts.join(' · ')
 }
@@ -430,42 +425,37 @@ const ACTIVITY_TAG: Record<string, string> = { trade: 'TRADE', waiver: 'CLAIM', 
  * name. A bid shows only when the provider recorded one — null is unknown, never $0.
  */
 function TeamActivityCard({ activity, myTeamName }: { activity: NonNullable<MyTeamData['teamActivity']>; myTeamName: string | null }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   return (
-    <section className="af-frame af-mt-moves" aria-label={es ? 'Tus movimientos recientes' : 'Your recent moves'}>
-      <h2 className="af-label">{es ? 'Tus movimientos recientes' : 'Your recent moves'}</h2>
+    <section className="af-frame af-mt-moves" aria-label={m.recentMoves}>
+      <h2 className="af-label">{m.recentMoves}</h2>
       {activity.items.length === 0 ? (
         <p className="af-mt-moves-note">
-          {es ? 'No hay movimientos tuyos en la actividad registrada.' : 'No moves by you in the activity we hold.'}
-          {activity.feedNewest
-            ? es
-              ? ` Actividad de la liga registrada hasta el ${shortDate(activity.feedNewest)}.`
-              : ` League activity on file through ${shortDate(activity.feedNewest)}.`
-            : ''}
+          {m.noMovesByYou}
+          {activity.feedNewest ? m.activityThrough(shortDate(activity.feedNewest)) : ''}
         </p>
       ) : (
         <ul className="af-mt-moves-list">
-          {activity.items.map((m) => {
-            const partners = m.kind === 'trade' ? m.involvedTeams.filter((t) => t !== myTeamName) : []
+          {activity.items.map((move) => {
+            const partners = move.kind === 'trade' ? move.involvedTeams.filter((t) => t !== myTeamName) : []
             return (
-              <li key={m.id} data-kind={m.kind}>
+              <li key={move.id} data-kind={move.kind}>
                 <div className="af-mt-moves-head">
-                  <span className="af-mt-moves-tag">{ACTIVITY_TAG[m.kind] ?? m.kind}</span>
-                  <span className="af-mt-moves-date af-num">{shortDate(m.occurredAt)}</span>
+                  <span className="af-mt-moves-tag">{ACTIVITY_TAG[move.kind] ?? move.kind}</span>
+                  <span className="af-mt-moves-date af-num">{shortDate(move.occurredAt)}</span>
                   {partners.length ? (
-                    <span className="af-mt-moves-meta">{es ? 'con' : 'with'} {partners.join(', ')}</span>
+                    <span className="af-mt-moves-meta">{m.tradedWith} {partners.join(', ')}</span>
                   ) : null}
-                  {m.bid != null ? <span className="af-mt-moves-bid af-num">${m.bid}</span> : null}
+                  {move.bid != null ? <span className="af-mt-moves-bid af-num">${move.bid}</span> : null}
                 </div>
                 <div className="af-mt-moves-body">
-                  {m.adds.map((p) => (
+                  {move.adds.map((p) => (
                     <span key={`a${p.id}`} className="af-mt-moves-add">+ {p.label}</span>
                   ))}
-                  {m.drops.map((p) => (
+                  {move.drops.map((p) => (
                     <span key={`d${p.id}`} className="af-mt-moves-drop">− {p.label}</span>
                   ))}
-                  {m.picks.map((pk) => (
+                  {move.picks.map((pk) => (
                     <span key={`p${pk}`} className="af-mt-moves-meta">{pk}</span>
                   ))}
                 </div>
@@ -479,12 +469,11 @@ function TeamActivityCard({ activity, myTeamName }: { activity: NonNullable<MyTe
 }
 
 function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const positions = grade.positions ?? []
   return (
-    <section className="af-frame af-mt-posstr" aria-label={es ? 'Fuerza por posición' : 'Positional strength'}>
-      <h2 className="af-label">{es ? 'Fuerza por posición' : 'Positional strength'}</h2>
+    <section className="af-frame af-mt-posstr" aria-label={m.positionalStrength}>
+      <h2 className="af-label">{m.positionalStrength}</h2>
       <ul className="af-mt-posstr-list">
         {positions.map((p) => {
           // 1 of 12 fills the bar; 12 of 12 leaves a sliver, so last place is still visible.
@@ -497,11 +486,11 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
                 <span style={{ width: `${pct}%` }} />
               </span>
               <span className="af-mt-posstr-rank af-num">
-                {ordinal(p.rank, es)} {es ? 'de' : 'of'} {p.outOf}
+                {m.ordinal(p.rank)} {m.of} {p.outOf}
               </span>
               {p.median != null ? (
                 <span className="af-mt-posstr-meta">
-                  {p.value.toLocaleString()} {es ? 'vs mediana' : 'vs median'} {p.median.toLocaleString()}
+                  {p.value.toLocaleString(getAppIntlLocale())} {m.vsMedianLabel} {p.median.toLocaleString(getAppIntlLocale())}
                 </span>
               ) : null}
             </li>
@@ -509,13 +498,7 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
         })}
       </ul>
       <p className="af-mt-posstr-note">
-        {grade.basis.leagueScored
-          ? es
-            ? 'Valor de plantilla con la puntuación de tu liga, contra los demás equipos de esta liga.'
-            : 'Roster value priced under your league’s scoring, against the other teams in this league.'
-          : es
-            ? 'Valor de plantilla con precios de mercado PPR de 12 equipos, contra los demás equipos de esta liga.'
-            : 'Roster value at 12-team PPR market prices, against the other teams in this league.'}
+        {grade.basis.leagueScored ? m.posStrNoteLeagueScored : m.posStrNoteMarket}
       </p>
     </section>
   )
@@ -529,11 +512,11 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
  */
 function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast']> }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   if (!forecast.available) {
     return (
       <p className="af-mt-mu-win" data-available="false">
-        {es ? 'Sin probabilidad de victoria' : 'No win probability'} — {myTeamCardReasonText(forecast.reason, language)}.
+        {m.noWinProbability} — {myTeamCardReasonText(forecast.reason, language)}.
       </p>
     )
   }
@@ -543,15 +526,13 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
   return (
     <p className="af-mt-mu-win" data-available="true" data-favoured={pct >= 50}>
       <span className="af-mt-mu-win-pct af-num">{pct}%</span>{' '}
-      {es ? 'probabilidad de ganar' : 'to win'}
+      {m.toWin}
       <span className="af-mt-mu-win-meta">
         {' · '}
-        {es ? 'margen proyectado' : 'projected margin'} <span className="af-num">{marginText}</span>
+        {m.projectedMargin} <span className="af-num">{marginText}</span>
         {' · '}
-        {es ? 'confianza' : 'confidence'}{' '}
-        {es
-          ? ({ HIGH: 'alta', MEDIUM: 'media', LOW: 'baja', INSUFFICIENT: 'insuficiente' } as Record<string, string>)[forecast.confidence] ?? forecast.confidence
-          : forecast.confidence.toLowerCase()}
+        {m.confidence}{' '}
+        {m.confidenceLevel(forecast.confidence)}
       </span>
     </p>
   )
@@ -561,6 +542,7 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
 function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(myTeamScreenMessages)
   return (
     <div className="af-mt-mu-side">
       <div className="af-mt-mu-who">
@@ -591,7 +573,7 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       */}
       {side.projected != null && side.projectedFrom < side.starterCount ? (
         <div className="af-mt-mu-cov">
-          {language === 'es' ? `con ${side.projectedFrom} de ${side.starterCount}` : `from ${side.projectedFrom} of ${side.starterCount}`}
+          {m.projectedFromOf(side.projectedFrom, side.starterCount)}
         </div>
       ) : null}
     </div>
@@ -606,27 +588,24 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
  * of coverage — and "you are favoured by 12" is exactly the sentence someone
  * would act on.
  */
-function edge(m: NextMatchup, bestBall: boolean, es = false): string | null {
-  const you = m.you
-  const them = m.opponent
+function edge(nm: NextMatchup, bestBall: boolean, m: MyTeamScreenMessages): string | null {
+  const you = nm.you
+  const them = nm.opponent
   if (!them || you.projected == null || them.projected == null) return null
   if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
 
   const diff = Math.round((you.projected - them.projected) * 10) / 10
   const by = Math.abs(diff).toFixed(1)
   if (bestBall) {
-    return es
-      ? `Los titulares mostrados proyectan ${by} ${diff >= 0 ? 'a favor' : 'en contra'}; no incluye los reemplazos elegibles del banquillo de Best Ball.`
-      : `Listed starters project ${by} ${diff >= 0 ? 'ahead' : 'behind'}; eligible Best Ball bench replacements are not included.`
+    return m.edgeBestBall(by, diff >= 0)
   }
-  if (Math.abs(diff) < 3) return es ? 'Proyección a menos de tres puntos: es una moneda al aire.' : 'Projected within three points — this is a coin flip.'
-  return diff > 0
-    ? es ? `Tienes una ventaja proyectada de ${by}.` : `You are projected ahead by ${by}.`
-    : es ? `Tienes una desventaja proyectada de ${by}.` : `You are projected behind by ${by}.`
+  if (Math.abs(diff) < 3) return m.edgeCoinFlip
+  return diff > 0 ? m.edgeAhead(by) : m.edgeBehind(by)
 }
 
 function PlayerCell({ player }: { player: LineupPlayer }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamScreenMessages)
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([])
   const imageUrl = player.imageUrl && player.imageUrl !== failedImageUrl ? player.imageUrl : null
@@ -699,7 +678,27 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
               className="af-mt-bye"
               title={coreUiCopy('His team is not playing this week. A starter on bye is a guaranteed zero.', language)}
             >
-              {language === 'es' ? 'DESCANSO' : 'BYE'}
+              {m.byeTag}
+            </span>
+          ) : noGameBadge(player.noGamePeriod) ? (
+            /*
+             * NBA / NHL / MLB: his team's slate for the period was read and holds no game — an off day in
+             * a daily-lineup league, an idle week in a weekly one. A bye's class, because it is the same
+             * fact for the period (a starter here scores nothing); `data-kind` lets the redraft sheet tell
+             * the two apart. Never shown when the slate was not read (myTeamDailySport.ts).
+             */
+            <span
+              className="af-mt-bye"
+              data-kind={noGameBadge(player.noGamePeriod)}
+              data-testid="my-team-no-game"
+              title={coreUiCopy(
+                player.noGamePeriod === 'day'
+                  ? 'His team has no game today. A starter with no game scores nothing for the day.'
+                  : 'His team has no games this week. A starter with no games scores nothing this week.',
+                language,
+              )}
+            >
+              {coreUiCopy(player.noGamePeriod === 'day' ? 'Off day' : 'No games', language)}
             </span>
           ) : null}
         </div>
@@ -725,44 +724,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
   )
 }
 
-/**
- * The designation, in the shorthand managers actually use.
- *
- * THE FULL WORDS WERE THE WIDEST THING ON THE ROW. "NO DESIGNATION" is fourteen
- * characters carrying one bit of information, and it sat mid-row pushing every
- * number around it. Nobody says "questionable" out loud.
- *
- * The full word survives as the title and the aria-label, so nothing is lost
- * for anyone who does not know the shorthand or is using a screen reader.
- */
-function abbreviate(status: string): { short: string; tone: string; full: string } {
-  const t = status.trim().toLowerCase()
-  if (t.includes('did not practice') || t === 'dnp') return { short: 'DNP', tone: 'warn', full: status }
-  if (t.includes('injured reserve') || t === 'ir') return { short: 'IR', tone: 'bad', full: status }
-  if (t.includes('suspend')) return { short: 'SUS', tone: 'bad', full: status }
-  if (t.includes('pup')) return { short: 'PUP', tone: 'bad', full: status }
-  if (t.includes('doubt')) return { short: 'D', tone: 'bad', full: status }
-  if (t.includes('question')) return { short: 'Q', tone: 'warn', full: status }
-  if (t.includes('out')) return { short: 'O', tone: 'bad', full: status }
-  if (t.includes('probable')) return { short: 'P', tone: 'ok', full: status }
-  /* ⚠ BEFORE 'active', WHICH IT CONTAINS. "Inactive" used to fall through to the
-     line below and render as a green H for Healthy. */
-  if (t.includes('inactive')) return { short: 'INA', tone: 'bad', full: status }
-  if (t.includes('active') || t.includes('healthy')) return { short: 'H', tone: 'ok', full: 'Healthy' }
-  /* An unfamiliar designation is shown as-is rather than given an invented
-     letter, because a wrong abbreviation is worse than a long one. */
-  return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
-}
-
-/**
- * The status in Spanish, by its abbreviation — the same words as `RosterKey`. `full` is the
- * provider's own text ("Questionable"), so without this a screen reader said English in Spanish.
- * An unfamiliar designation keeps the provider's text, as `abbreviate` does.
- */
-const STATUS_ES: Record<string, string> = {
-  H: 'sano', Q: 'dudoso', D: 'poco probable', O: 'fuera', IR: 'reserva de lesionados', DNP: 'no entrenó',
-  P: 'probable', SUS: 'suspendido', PUP: 'no apto físicamente', INA: 'inactivo',
-}
+/* The designation's shorthand moved to lib/core-app/myTeamStatusShorthand.ts (tested there). */
 
 function StatusChip({ status }: { status: string | null }) {
   const { language } = useOptionalLanguage()
@@ -778,8 +740,8 @@ function StatusChip({ status }: { status: string | null }) {
       </span>
     )
   }
-  const { short, tone, full: provider } = abbreviate(status)
-  const full = language === 'es' ? STATUS_ES[short] ?? provider : provider
+  const { short, tone, full: provider } = statusShorthand(status)
+  const full = messagesFor(myTeamScreenMessages, language).statusFull(short, provider)
   return (
     <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
       {short}
@@ -880,8 +842,8 @@ const MATCHUP_COVERAGE_EXPLAINER =
 
 /** The two market columns' headings, per language — one source for the header and the key. */
 export const MARKET_COLUMN_LABELS = {
-  en: { own: 'OWN', start: 'START' },
-  es: { own: 'PROP.', start: 'TIT.' },
+  en: { own: myTeamScreenMessages.en.marketOwn, start: myTeamScreenMessages.en.marketStart },
+  es: { own: messagesFor(myTeamScreenMessages, 'es').marketOwn, start: messagesFor(myTeamScreenMessages, 'es').marketStart },
 } as const
 
 /** What OWN and START are — the two market columns the explainer used to leave to a hover title. */
@@ -892,6 +854,7 @@ const MARKET_COLUMNS_EXPLAINER =
 function ProjHeader() {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(myTeamScreenMessages)
   return (
     <div className="af-mt-projhead">
       {/*
@@ -925,13 +888,13 @@ function ProjHeader() {
         55 (2026-10-03). The "?" above and the key below spell both out.
       */}
       <span className="af-label" title={copy('Share of AllFantasy leagues rostering this player')}>
-        {MARKET_COLUMN_LABELS[language === 'es' ? 'es' : 'en'].own}
+        {m.marketOwn}
       </span>
       <span
         className="af-label"
         title={copy('Of the leagues rostering him, how many start him this week')}
       >
-        {MARKET_COLUMN_LABELS[language === 'es' ? 'es' : 'en'].start}
+        {m.marketStart}
       </span>
     </div>
   )
@@ -949,21 +912,15 @@ function ProjHeader() {
 function RosterKey() {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const es = language === 'es'
-  const items: Array<[string, string]> = es
-    ? [
-        ['H', 'sano'], ['Q', 'dudoso'], ['D', 'poco probable'], ['O', 'fuera'], ['IR', 'reserva de lesionados'],
-        ['DNP', 'no entrenó'], ['—', 'sin designación reportada, que no es lo mismo que confirmado sano'],
-        ['⌂', 'estadio techado: el clima no cuenta'], ['☀ ☁', 'pronóstico al inicio del partido'],
-      ]
-    : [
-        ['H', 'healthy'], ['Q', 'questionable'], ['D', 'doubtful'], ['O', 'out'], ['IR', 'injured reserve'],
-        ['DNP', 'did not practice'], ['—', 'no designation reported, which is not the same as confirmed healthy'],
-        ['⌂', 'roofed stadium: weather is not a factor'], ['☀ ☁', 'forecast at kickoff'],
-      ]
+  const m = useMessages(myTeamScreenMessages)
+  const items: Array<[string, string]> = [
+    ['H', m.keyHealthy], ['Q', m.keyQuestionable], ['D', m.keyDoubtful], ['O', m.keyOut], ['IR', m.keyInjuredReserve],
+    ['DNP', m.keyDidNotPractice], ['—', m.keyNoDesignation],
+    ['⌂', m.keyRoofed], ['☀ ☁', m.keyForecast],
+  ]
   return (
     <details className="af-mt-key">
-      <summary>{es ? 'Qué significan las abreviaturas' : 'What the abbreviations mean'}</summary>
+      <summary>{m.abbreviationsSummary}</summary>
       <dl>
         {items.map(([k, v]) => (
           <div key={k}>
@@ -976,11 +933,9 @@ function RosterKey() {
           <dd>{copy(AF_PTS_EXPLAINER)}</dd>
         </div>
         <div>
-          <dt>{MARKET_COLUMN_LABELS[es ? 'es' : 'en'].own} · {MARKET_COLUMN_LABELS[es ? 'es' : 'en'].start}</dt>
+          <dt>{m.marketOwn} · {m.marketStart}</dt>
           <dd>
-            {es
-              ? 'propiedad y titular: cuántas ligas de AllFantasy lo tienen, y de esas cuántas lo alinean esta semana (en pantallas anchas)'
-              : 'how many AllFantasy leagues roster him, and of those how many start him this week (wide screens)'}
+            {m.keyMarketColumns}
           </dd>
         </div>
       </dl>
@@ -997,9 +952,7 @@ function RosterKey() {
  * different and much weaker statement than "we checked and he is the play".
  * Saying so out loud is the whole value of running the check every week.
  */
-const CHECK_TAG: Record<LineupCheckItem['kind'], string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
-/** The same tags in Spanish — Q stays Q, as in the abbreviation key. */
-const CHECK_TAG_ES: Record<LineupCheckItem['kind'], string> = { out: 'FUERA', bye: 'DESCANSO', empty: 'VACÍO', swap: 'CAMBIO', questionable: 'Q' }
+/* The lineup-check tags (OUT, BYE, …, and their Spanish) are `checkTag` in myTeamScreen.ts. */
 
 /**
  * Draft capital and lineup age, side by side — the two facts that decide a dynasty team's next
@@ -1008,16 +961,16 @@ const CHECK_TAG_ES: Record<LineupCheckItem['kind'], string> = { out: 'FUERA', by
  */
 function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const { picks, ages } = outlook
   return (
-    <section className="af-frame af-mt-dynasty" aria-label={es ? 'Panorama dinastía' : 'Dynasty outlook'}>
-      <h2 className="af-label">{es ? 'Panorama dinastía' : 'Dynasty outlook'}</h2>
+    <section className="af-frame af-mt-dynasty" aria-label={m.dynastyOutlook}>
+      <h2 className="af-label">{m.dynastyOutlook}</h2>
 
-      <h3 className="af-mt-dynasty-h">{es ? 'Selecciones de draft' : 'Draft capital'}</h3>
+      <h3 className="af-mt-dynasty-h">{m.draftCapital}</h3>
       {picks.available ? (
         picks.bySeason.length === 0 ? (
-          <p className="af-mt-dynasty-note">{es ? 'No tienes selecciones en los próximos drafts.' : 'You hold no picks in the upcoming drafts.'}</p>
+          <p className="af-mt-dynasty-note">{m.noPicks}</p>
         ) : (
           <>
             <ul className="af-mt-dynasty-picks">
@@ -1026,7 +979,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
                   <span className="af-mt-dynasty-season af-num">{s.season}</span>
                   <span className="af-mt-dynasty-list">
                     {s.picks
-                      .map((p) => (p.fromTeamName ? `${p.label} (${es ? 'vía' : 'via'} ${myTeamReasonText(p.fromTeamName, language)})` : p.label))
+                      .map((p) => (p.fromTeamName ? `${p.label} (${m.pickVia} ${myTeamReasonText(p.fromTeamName, language)})` : p.label))
                       .join(' · ')}
                   </span>
                 </li>
@@ -1034,9 +987,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
             </ul>
             {picks.coverage === 'traded_only' ? (
               <p className="af-mt-dynasty-note">
-                {es
-                  ? 'Solo se listan las selecciones que cambiaron de manos: el tamaño del draft de esta liga no está registrado.'
-                  : 'Only picks that changed hands are listed — this league’s draft size is not on file.'}
+                {m.tradedPicksOnly}
               </p>
             ) : null}
           </>
@@ -1045,21 +996,21 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
         <p className="af-mt-dynasty-note">{myTeamReasonText(picks.reason, language)}.</p>
       )}
 
-      <h3 className="af-mt-dynasty-h">{es ? 'Edad de la alineación' : 'Lineup age'}</h3>
+      <h3 className="af-mt-dynasty-h">{m.lineupAge}</h3>
       {ages.available ? (
         <>
           <p className="af-mt-dynasty-line">
-            {es ? 'Edad mediana de titulares' : 'Starters’ median age'}{' '}
+            {m.startersMedianAge}{' '}
             <span className="af-num af-mt-dynasty-num">{ages.medianStarterAge}</span>
             {ages.known < ages.total ? (
-              <span className="af-mt-dynasty-note"> ({ages.known} {es ? 'de' : 'of'} {ages.total} {es ? 'con edad registrada' : 'with an age on file'})</span>
+              <span className="af-mt-dynasty-note"> ({ages.known} {m.of} {ages.total} {m.withAgeOnFile})</span>
             ) : null}
             {' · '}
-            <span className="af-num">{ages.youngCore}</span> {es ? 'jugadores de 24 años o menos' : 'players 24 or younger'}
+            <span className="af-num">{ages.youngCore}</span> {m.youngCore}
           </p>
           {ages.aging.length === 0 ? (
             <p className="af-mt-dynasty-note">
-              {es ? 'Ningún titular ha pasado la edad en que su posición suele declinar.' : 'No starter is past the age his position usually declines.'}
+              {m.noAgingStarters}
             </p>
           ) : (
             <ul className="af-mt-dynasty-aging">
@@ -1067,7 +1018,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
                 <li key={a.sleeperId}>
                   <span className="af-mt-dynasty-name">{a.name}</span>{' '}
                   <span className="af-mt-dynasty-note">
-                    {a.position} · {a.age} — {es ? `los ${a.position} suelen declinar desde los ${a.threshold}` : `${a.position}s usually decline from ${a.threshold}`}
+                    {a.position} · {a.age} — {m.agingDecline(a.position, a.threshold)}
                   </span>
                 </li>
               ))}
@@ -1108,8 +1059,7 @@ type WaiverBoardPayload = {
  * screen, which carries bids, priority and the run clock.
  */
 function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const holes = check.items.filter((i) => (i.kind === 'out' || i.kind === 'bye' || i.kind === 'empty') && !i.replacement)
   const unavailable = check.items
     .filter((i) => (i.kind === 'out' || i.kind === 'bye') && i.playerId)
@@ -1141,12 +1091,12 @@ function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: stri
   const picks = current?.data?.state === 'ok' ? current.data.candidates : []
   return (
     <div className="af-mt-check-fa" aria-live="polite">
-      <span className="af-label">{es ? 'Agentes libres que entrarían' : 'Free agents who would start'}</span>
+      <span className="af-label">{m.faTitle}</span>
       {!current ? (
-        <p className="af-mt-check-fa-note">{es ? 'Revisando agentes libres…' : 'Checking free agents…'}</p>
+        <p className="af-mt-check-fa-note">{m.faChecking}</p>
       ) : picks.length === 0 ? (
         <p className="af-mt-check-fa-note">
-          {es ? 'Ningún agente libre mejora tu alineación esta semana.' : 'No free agent improves your lineup this week.'}
+          {m.faNone}
         </p>
       ) : (
         <ul className="af-mt-check-fa-list">
@@ -1159,7 +1109,7 @@ function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: stri
               <span className="af-mt-check-fa-gain af-num">+{c.gain.toFixed(1)} pts</span>
               {c.displaces ? (
                 <span className="af-mt-check-fa-meta">
-                  {es ? `reemplaza a ${c.displaces.name}` : `replaces ${c.displaces.name}`}
+                  {m.faReplaces(c.displaces.name)}
                 </span>
               ) : null}
             </li>
@@ -1167,29 +1117,27 @@ function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: stri
         </ul>
       )}
       <Link className="af-mt-check-fa-link" href={waiversHref}>
-        {es ? 'Ver todas las altas, ofertas y prioridad' : 'See every add, bids and priority'}
+        {m.faSeeAll}
       </Link>
     </div>
   )
 }
 
-function checkLine(item: LineupCheckItem, es: boolean): string {
+function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
   const r = item.replacement
   const pts = (n: number) => n.toFixed(1)
-  const start = r ? (es ? ` — revisa a ${r.name} (${pts(r.projected)})` : ` — review ${r.name} (${pts(r.projected)})`) : es ? ' — busca un reemplazo' : ' — find a replacement'
+  const start = r ? m.checkReview(r.name, pts(r.projected)) : m.checkFindReplacement
   switch (item.kind) {
     case 'out':
-      return (es ? `${item.name} está descartado` : `${item.name} is ruled out`) + start
+      return m.checkRuledOut(item.name) + start
     case 'bye':
-      return (es ? `${item.name} descansa esta semana` : `${item.name} is on bye`) + start
+      return m.checkOnBye(item.name) + start
     case 'empty':
-      return es ? `El puesto ${item.slotLabel} está vacío` : `${item.slotLabel} is empty`
+      return m.checkEmpty(item.slotLabel)
     case 'swap':
-      return es
-        ? `Compara a ${r!.name} con ${item.name} (+${pts(r!.gain ?? 0)})`
-        : `Compare ${r!.name} with ${item.name} (+${pts(r!.gain ?? 0)})`
+      return m.checkCompare(r!.name, item.name, pts(r!.gain ?? 0))
     case 'questionable':
-      return es ? `${item.name} es duda — ten un suplente listo` : `${item.name} is questionable — have a backup ready`
+      return m.checkQuestionable(item.name)
   }
 }
 
@@ -1198,24 +1146,17 @@ function checkLine(item: LineupCheckItem, es: boolean): string {
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
 function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
-  const lockedNote = check.locked
-    ? es
-      ? ` ${check.locked} ${check.locked === 1 ? 'titular ya llegó al inicio del partido' : 'titulares ya llegaron al inicio del partido'}.`
-      : ` ${check.locked} ${check.locked === 1 ? 'starter has' : 'starters have'} reached kickoff; confirm individual locks on your platform.`
-    : ''
+  const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
-    <section className="af-frame af-mt-check" aria-label={es ? 'Revisión de alineación' : 'Lineup check'} data-clear={check.items.length === 0 && !check.unresolved}>
-      <h2 className="af-label">{es ? 'Revisión de alineación' : 'Lineup check'}</h2>
-      {check.unresolved ? <p role="status">{es ? `${check.unresolved} puesto(s) ocupado(s) no pudieron revisarse porque no identificamos al jugador.` : `${check.unresolved} filled slot(s) could not be checked because the player identity is unresolved.`}</p> : null}
-      <p className="af-mt-footnote">{es ? 'Estas son opciones para revisar. Confirma elegibilidad, cierres y AutoSubs en tu plataforma antes de cambiar la alineación.' : 'These are candidates for review. Confirm eligibility, locks, and AutoSubs on your platform before changing the lineup.'}</p>
+    <section className="af-frame af-mt-check" aria-label={m.lineupCheck} data-clear={check.items.length === 0 && !check.unresolved}>
+      <h2 className="af-label">{m.lineupCheck}</h2>
+      {check.unresolved ? <p role="status">{m.unresolvedSlots(check.unresolved)}</p> : null}
+      <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>
       {check.items.length === 0 ? (
         <p className="af-mt-check-clear">
-          {es
-            ? `No se identificaron problemas entre los titulares que pudimos revisar. Confirma las noticias y las reglas en tu plataforma.`
-            : `No issues were identified among the starters we could check. Confirm current news and rules on your platform.`}
+          {m.lineupCheckClear}
           {lockedNote}
         </p>
       ) : (
@@ -1224,9 +1165,9 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
             {check.items.map((item) => (
               <li key={`${item.kind}-${item.anchor}`} data-kind={item.kind}>
                 <a href={`#${item.anchor}`} className="af-mt-check-item">
-                  <span className="af-mt-check-tag">{(es ? CHECK_TAG_ES : CHECK_TAG)[item.kind]}</span>
+                  <span className="af-mt-check-tag">{m.checkTag(item.kind)}</span>
                   <span className="af-mt-check-slot af-num">{item.slotLabel}</span>
-                  <span className="af-mt-check-text">{checkLine(item, es)}</span>
+                  <span className="af-mt-check-text">{checkLine(item, m)}</span>
                 </a>
               </li>
             ))}
@@ -1235,7 +1176,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
           <FreeAgentFill check={check} leagueId={leagueId} />
           {certain && fixHref ? (
             <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
-              {es ? `Corregir en ${platform}` : `Fix in ${platform}`}
+              {m.fixInPlatform(platform)}
             </a>
           ) : null}
         </>
@@ -1244,60 +1185,46 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
   )
 }
 
+/**
+ * A catalog sentence with `{token}` placeholders, each replaced by its node. The bench-check
+ * sentences put the bench name in a <strong> and both projections in number spans, and the two
+ * languages order those pieces differently — so the order lives in the catalog, not here.
+ */
+function fillTokens(template: string, nodes: Record<string, React.ReactNode>): React.ReactNode[] {
+  return template.split(/\{(\w+)\}/).map((part, i) =>
+    i % 2 === 1 ? <Fragment key={i}>{nodes[part]}</Fragment> : part,
+  )
+}
+
 function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
   const gap = check.benchProjected - check.starterProjected
-  const es = useOptionalLanguage().language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
-      <span className="af-label af-mt-bench-check-tag">{es ? 'Revisión del banquillo' : 'Bench check'}</span>
+      <span className="af-label af-mt-bench-check-tag">{m.benchCheck}</span>
       <span className="af-mt-bench-check-text">
-        {es ? (
-          /* The same two numbers and the same threshold, in Spanish word order. */
-          <>
-            <strong>{check.benchName}</strong> (suplente) proyecta{' '}
-            <span className="af-num">{check.benchProjected.toFixed(1)}</span> frente a los{' '}
-            <span className="af-num">{check.starterProjected.toFixed(1)}</span> de {check.starterName}
-            {check.verdict === 'swap'
-              ? ': la mejor opción esta semana.'
-              : `: dentro del margen de ${BENCH_SWAP_POINTS} puntos que estas proyecciones pueden distinguir, así que tu titular está bien así.`}
-          </>
-        ) : check.verdict === 'swap' ? (
-          <>
-            <strong>{check.benchName}</strong> (bench) projects{' '}
-            <span className="af-num">{check.benchProjected.toFixed(1)}</span> against{' '}
-            {check.starterName}&rsquo;s{' '}
-            <span className="af-num">{check.starterProjected.toFixed(1)}</span> — the stronger
-            play this week.
-          </>
-        ) : (
-          <>
-            {/*
-              ⚠ NAMES THE GAP AND THE THRESHOLD. "Too close to call" with no
-              numbers reads as a hedge; with them it is a statement the reader
-              can check, and can disagree with.
-            */}
-            <strong>{check.benchName}</strong> (bench) projects{' '}
-            <span className="af-num">{check.benchProjected.toFixed(1)}</span> against{' '}
-            {check.starterName}&rsquo;s{' '}
-            <span className="af-num">{check.starterProjected.toFixed(1)}</span> — inside the{' '}
-            {BENCH_SWAP_POINTS}-point margin these projections can actually tell apart, so your
-            starter is fine as-is.
-          </>
-        )}
+        {/*
+          ⚠ NAMES THE GAP AND THE THRESHOLD. "Too close to call" with no
+          numbers reads as a hedge; with them it is a statement the reader
+          can check, and can disagree with. The same two numbers and the same
+          threshold in Spanish, in Spanish word order.
+        */}
+        {fillTokens(check.verdict === 'swap' ? m.benchCheckSwap : m.benchCheckHold(BENCH_SWAP_POINTS), {
+          bench: <strong>{check.benchName}</strong>,
+          benchPts: <span className="af-num">{check.benchProjected.toFixed(1)}</span>,
+          starter: check.starterName,
+          starterPts: <span className="af-num">{check.starterProjected.toFixed(1)}</span>,
+        })}
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
         tab: 'chimmy', leagueId,
         // No internal system names in text the user sends as their own question — see
         // LineupIntelligenceActions for the same correction.
         // In the reader's language too: it lands in their own composer as the question they send.
-        prefill: es
-          ? `¿Debería poner de titular a ${check.benchName} en lugar de ${check.starterName} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`
-          : `Should I start ${check.benchName} instead of ${check.starterName} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
-      } }))}>{es ? 'Preguntar a Chimmy por este cambio' : 'Ask Chimmy about this swap'}</button>
+        prefill: m.benchAskPrefill(check.benchName, check.starterName),
+      } }))}>{m.benchAskChimmy}</button>
       <span className="af-mt-bench-caveat">
-        {es
-          ? 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.'
-          : 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.'}
+        {m.benchCaveat}
       </span>
     </div>
   )
@@ -1311,8 +1238,11 @@ function SlotRow({
   anchor,
   automatic,
   sourceHref,
+  sport,
 }: {
   slot: LineupSlot
+  /** The league's sport, for the redraft position chip (an empty slot has no player to read it from). */
+  sport?: string | null
   automatic?: boolean
   sourceHref?: string
   anchor?: string
@@ -1330,7 +1260,11 @@ function SlotRow({
       wearing a name.
     */
     <li id={anchor} className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true} data-game={slot.player?.gameDay?.state}>
-      <span className="af-mt-slot af-num" data-pos={posGroup(slot.slotLabel)}>
+      <span
+        className="af-mt-slot af-num"
+        data-pos={posGroup(slot.slotLabel)}
+        data-rd-pos={redraftCorePosTone(slot.player?.sport ?? sport, slot.slotLabel) ?? undefined}
+      >
         {slot.slotLabel}
       </span>
 
@@ -1405,6 +1339,7 @@ function BenchRow({
       <span
         className="af-mt-slot af-num"
         data-pos={posGroup(player.position ?? slotLabel)}
+        data-rd-pos={redraftCorePosTone(player.sport, player.position ?? slotLabel) ?? undefined}
       >
         {slotLabel}
       </span>
@@ -1429,28 +1364,21 @@ function BenchRow({
  * every time the two differed (audit, 2026-10-02, live on KBFL).
  */
 function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   if (!tenure) {
     return (
       <span
         className="af-mt-taxi-years af-mt-taxi-years--none"
-        title={es
-          ? 'Hace falta el límite de años de taxi de la liga y su historial de plantillas a fin de temporada. Falta uno de los dos, así que no vamos a adivinar.'
-          : "This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess."}
+        title={m.taxiUnknownTitle}
       >
-        {es ? 'años restantes desconocidos' : 'years left unknown'}
+        {m.taxiUnknown}
       </span>
     )
   }
   const n = tenure.yearsRemaining
   return (
     <span className="af-mt-taxi-years af-num" data-last={n <= 1}>
-      {n === 0
-        ? es ? 'sin años de taxi' : 'no taxi years left'
-        : es
-          ? `${n === 1 ? 'queda 1 año' : `quedan ${n} años`} de ${tenure.yearsAllowed}`
-          : `${n} ${n === 1 ? 'year' : 'years'} left of ${tenure.yearsAllowed}`}
+      {n === 0 ? m.taxiNone : m.taxiYearsLeft(n, tenure.yearsAllowed)}
     </span>
   )
 }
@@ -1469,7 +1397,7 @@ function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
 function OffseasonView({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const id = encodeURIComponent(data.league.id)
   const dynasty = data.dynasty != null || String(data.league.format ?? '').toLowerCase() === 'dynasty'
   const phase = data.preDraft ? 'predraft' : data.eliminated ? 'eliminated' : 'complete'
@@ -1485,13 +1413,13 @@ function OffseasonView({ data }: MyTeamProps) {
    * header). A finished season's rank is the final standing, which is worth saying.
    */
   const standing = team && team.recordKnown
-    ? `${team.record}${team.rank != null && phase === 'complete' ? (es ? ` · terminó ${ordinal(team.rank, true)} de ${team.teamCount}` : ` · finished ${ordinal(team.rank)} of ${team.teamCount}`) : ''}`
+    ? `${team.record}${team.rank != null && phase === 'complete' ? m.finishedRank(team.rank, team.teamCount) : ''}`
     : null
   const actions: Array<{ href: string; label: string; primary?: boolean }> = []
-  if (phase === 'predraft') actions.push({ href: `/core/draft-hq?league=${id}`, label: es ? 'Abrir Draft HQ' : 'Open Draft HQ', primary: true })
+  if (phase === 'predraft') actions.push({ href: `/core/draft-hq?league=${id}`, label: m.openDraftHq, primary: true })
   if (phase !== 'predraft' && dynasty) {
-    actions.push({ href: `/core/draft-hq?league=${id}`, label: es ? 'Planear el draft de novatos' : 'Plan your rookie draft', primary: true })
-    actions.push({ href: `/core/trades?league=${id}`, label: es ? 'Centro de intercambios' : 'Trade center' })
+    actions.push({ href: `/core/draft-hq?league=${id}`, label: m.planRookieDraft, primary: true })
+    actions.push({ href: `/core/trades?league=${id}`, label: m.tradeCenter })
   }
   actions.push({ href: `/core?league=${id}`, label: copy('Open league overview'), primary: actions.length === 0 })
   const showStrength = grade != null && (grade.positions?.length ?? 0) > 1
@@ -1512,12 +1440,12 @@ function OffseasonView({ data }: MyTeamProps) {
             {grade ? (
               <span className="af-mt-off-team-meta">
                 {' · '}
-                {es ? 'valor de plantilla' : 'roster value'} {ordinal(grade.rank, es)} {es ? 'de' : 'of'} {grade.outOf}
+                {m.rosterValue} {m.ordinal(grade.rank)} {m.of} {grade.outOf}
               </span>
             ) : null}
           </p>
         ) : null}
-        <nav className="af-mt-off-actions" aria-label={es ? 'Siguientes pasos' : 'Next steps'}>
+        <nav className="af-mt-off-actions" aria-label={m.nextSteps}>
           {actions.map((a) => (
             <a key={a.href + a.label} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'} href={a.href}>
               {a.label}
@@ -1561,10 +1489,34 @@ const COMPARE_KEY = 'af-mt-compare'
  * time — and read after mount, because the server cannot see it and first paint must match.
  * No button at all when there is nothing to compare against.
  */
+/**
+ * The period this lineup was priced for, when the daily-sport outlook priced one: "Today · Thu, Oct 30"
+ * in a daily-lineup league, "Week 5 slate" in a weekly NBA / NHL / MLB one. One day, not a picker —
+ * the loader prices one period and no other day reaches this page (redraftCoreMyTeam.ts).
+ */
+function LineupPeriodChip({ period }: { period: MyTeamData['lineupPeriod'] }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const label = lineupPeriodLabel(period, getAppIntlLocale())
+  if (!period || !label) return null
+  return (
+    <span className="af-mt-period" data-kind={period.kind} data-testid="my-team-lineup-period">
+      {period.kind === 'day' ? (
+        <>
+          <span className="af-mt-period-tag">{copy('Today')}</span>
+          <time dateTime={period.day ?? undefined}>{label}</time>
+        </>
+      ) : (
+        <span className="af-mt-period-tag">{copy('Week')} {label}</span>
+      )}
+    </span>
+  )
+}
+
 function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; bestBall: boolean }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const [compare, setCompare] = useState(false)
   useEffect(() => {
     try {
@@ -1609,7 +1561,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
             aria-controls={`${engineId} ${standardId}`}
             onClick={toggle}
           >
-            {compare ? (es ? 'Ocultar comparación' : 'Hide comparison') : (es ? 'Comparar proyecciones' : 'Compare projections')}
+            {compare ? m.hideComparison : m.compareProjections}
           </button>
         ) : null}
       </div>
@@ -1653,7 +1605,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const es = language === 'es'
+  const m = useMessages(myTeamScreenMessages)
   const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
@@ -1686,6 +1638,7 @@ export function MyTeam({ data }: MyTeamProps) {
   // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
+  const footballScoring = ['NFL', 'NCAAF'].includes((data.league.sport ?? '').toUpperCase())
 
   if (data.preDraft || data.eliminated || data.completed) return <OffseasonView data={data} />
 
@@ -1758,8 +1711,8 @@ export function MyTeam({ data }: MyTeamProps) {
                   standing. Shown only once the record is.
                 */}
                 {data.team.data.rank != null && data.team.data.recordKnown
-                  ? ` · ${data.team.data.rank} ${es ? 'de' : 'of'} ${data.team.data.teamCount}`
-                  : ` · ${data.team.data.teamCount} ${es ? 'equipos' : 'teams'}`}
+                  ? ` · ${data.team.data.rank} ${m.of} ${data.team.data.teamCount}`
+                  : ` · ${data.team.data.teamCount} ${m.teams}`}
               </div>
             </div>
 
@@ -1819,12 +1772,12 @@ export function MyTeam({ data }: MyTeamProps) {
               {data.rosterGrade.available ? (
                 <div className="af-mt-tile af-mt-tile--grade">
                   <div className="af-mt-tile-value af-num">
-                    {ordinal(data.rosterGrade.data.rank, language === 'es')}
+                    {m.ordinal(data.rosterGrade.data.rank)}
                     <span className="af-mt-grade-of"> {copy('of')} {data.rosterGrade.data.outOf}</span>
                   </div>
                   <div className="af-label">{copy('Roster value in this league')}</div>
                   <div className="af-mt-tile-why">
-                    {gradeSubtitle(data.rosterGrade.data, language === 'es')}
+                    {gradeSubtitle(data.rosterGrade.data, language)}
                   </div>
                 </div>
               ) : (
@@ -1856,9 +1809,7 @@ export function MyTeam({ data }: MyTeamProps) {
           <div className="af-mt-lock" data-urgent={false} data-locked={false}>
             <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
             <span className="af-mt-lock-note">
-              {language === 'es'
-                ? `El próximo partido registrado de tus titulares es en ${data.lock.data.daysAway} días${data.lock.data.week != null ? ` (semana ${data.lock.data.week})` : ''}. Es demasiado pronto para una hora de cierre; probablemente aún falta el calendario de esta semana.`
-                : `The next game we hold for your starters is ${data.lock.data.daysAway} days away${data.lock.data.week != null ? ` (week ${data.lock.data.week})` : ''}. That is further out than a lineup lock should be, so this week's schedule probably has not been ingested yet rather than your lineup being safe for ${data.lock.data.daysAway} days.`}
+              {m.distantLock(data.lock.data.daysAway, data.lock.data.week)}
             </span>
           </div>
         ) : (
@@ -1886,51 +1837,37 @@ export function MyTeam({ data }: MyTeamProps) {
             <span className="af-label">{copy('Lineup decision')}</span>
             <h2 id="af-mt-decision-title">
               {decisionStarted
-                ? (language === 'es' ? `Revisa el cierre de ${decisionSlot?.player?.name}` : `Review ${decisionSlot?.player?.name}'s lock`)
+                ? m.decisionReviewLock(decisionSlot?.player?.name)
                 : decisionSlot?.empty
-                ? es ? `Cubre tu posición ${decisionSlot.slotLabel}` : `Fill your ${decisionSlot.slotLabel} slot`
+                ? m.decisionFillSlot(decisionSlot.slotLabel)
                 : decisionSlot?.player?.ruledOut
-                  ? es ? `Reemplaza a ${decisionSlot.player.name}` : `Replace ${decisionSlot.player.name}`
+                  ? m.decisionReplace(decisionSlot.player.name)
                   : decisionSlot?.player?.onBye
-                    ? es ? `Cubre la semana de descanso de ${decisionSlot.player.name}` : `Cover ${decisionSlot.player.name}'s bye`
+                    ? m.decisionCoverBye(decisionSlot.player.name)
                     : decisionSlot?.benchCheck?.verdict === 'swap'
-                      ? es
-                        ? `Revisa ${decisionSlot.benchCheck.starterName} frente a ${decisionSlot.benchCheck.benchName}`
-                        : `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
+                      ? m.decisionReviewSwap(decisionSlot.benchCheck.starterName, decisionSlot.benchCheck.benchName)
                       : copy('Review your starting lineup')}
             </h2>
             <p>
               {decisionStarted || replacementStarted
-                ? (language === 'es'
-                  ? 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.'
-                  : 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.')
+                ? m.decisionKickoffReached
                 : decisionSlot?.empty
                 ? copy('This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.')
                 : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
-                  ? es
-                    ? `${decisionSlot.player.name} está ${decisionSlot.player.onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`
-                    : `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
+                  ? m.decisionOutOrBye(decisionSlot.player.name, decisionSlot.player.onBye)
                   : decisionSlot?.benchCheck?.verdict === 'swap'
                     ? leagueDelta != null && leagueDelta > 0
-                      ? es
-                        ? `${decisionSlot.benchCheck.benchName} proyecta ${leagueDelta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`
-                        : `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
+                      ? m.decisionBenchProjectsMore(decisionSlot.benchCheck.benchName, leagueDelta)
                       : leagueDelta != null
-                        ? (language === 'es'
-                          ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
-                          : "This league's scoring does not favor the bench option. These projections do not support a swap.")
-                        : (language === 'es'
-                          ? 'La comparación sugiere una revisión, pero no se pudo confirmar la identidad o las proyecciones de esta liga. Actualiza antes de considerar un cambio.'
-                          : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
+                        ? m.decisionScoringDisfavors
+                        : m.decisionUnconfirmed
                     : data.starters.available
                       ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
                       : myTeamReasonText(data.starters.reason, language)}
             </p>
             <small>
               {proj
-                ? es
-                  ? `Semana ${proj.week} · ${proj.afProjected} de ${proj.projected + proj.unprojected} titulares valorados para esta liga`
-                  : `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league`
+                ? m.decisionCoverage(proj.week, proj.afProjected, proj.projected + proj.unprojected)
                 : copy('Projection coverage unavailable')}
             </small>
           </div>
@@ -1999,8 +1936,8 @@ export function MyTeam({ data }: MyTeamProps) {
               </div>
             )}
           </div>
-          {edge(data.nextMatchup.data, bestBall) ? (
-            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall, language === 'es')}</p>
+          {edge(data.nextMatchup.data, bestBall, m) ? (
+            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall, m)}</p>
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">
@@ -2039,7 +1976,11 @@ export function MyTeam({ data }: MyTeamProps) {
       {proj ? (
         <section className="af-frame af-mt-basis">
           <div className="af-mt-basis-text">
-            {data.projectionBasis.scoringKnown ? (
+            {data.projectionBasis.scoringKnown && !footballScoring ? (
+              <p className="af-mt-basis-lead">
+                {copy('This league’s scoring rules are saved. Projection totals appear when a compatible player stat feed is available.')}
+              </p>
+            ) : data.projectionBasis.scoringKnown ? (
               data.projectionBasis.notes.length > 0 ? (
                 <>
                   <p className="af-mt-basis-lead">
@@ -2063,9 +2004,7 @@ export function MyTeam({ data }: MyTeamProps) {
             )}
             {proj.afTotal != null && proj.afProjected < proj.projected ? (
               <p className="af-mt-basis-cov">
-                {language === 'es'
-                  ? `El total de tu liga incluye ${proj.afProjected} de ${proj.projected} titulares con proyección, así que puede parecer bajo frente al estándar.`
-                  : `Your league’s total is built from ${proj.afProjected} of ${proj.projected} priced starters, so it reads low next to the standard one.`}
+                {m.basisCoverage(proj.afProjected, proj.projected)}
               </p>
             ) : null}
           </div>
@@ -2101,10 +2040,11 @@ export function MyTeam({ data }: MyTeamProps) {
       <section id="af-mt-starters" className="af-frame af-mt-section">
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
+          <LineupPeriodChip period={data.lineupPeriod} />
           <span className="af-mt-section-note">
-            {data.nativeLineup ? (language === 'es' ? 'Liga nativa AllFantasy. Guarda cambios válidos en Decisiones de plantilla; se aplican las reglas y cierres del servidor.' : 'Native AllFantasy lineup. Save eligible changes in Roster decisions; server rules and locks apply.') : bestBall
-              ? language === 'es' ? `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.` : `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.`
-              : language === 'es' ? `Alineación de ${platform}. Para cambiarla, abre ${platform}; AllFantasy solo la consulta.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
+            {data.nativeLineup ? m.startersNoteNative : bestBall
+              ? m.startersNoteBestBall(platform)
+              : m.startersNoteImported(platform)}
           </span>
           <ProjHeader />
         </header>
@@ -2124,6 +2064,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 platform={platform}
                 leagueId={data.league.id}
                 sourceLink={data.league.sourceLink}
+                sport={data.league.sport}
               />
             ))}
           </ul>
@@ -2209,12 +2150,8 @@ export function MyTeam({ data }: MyTeamProps) {
       {data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
         <p className="af-mt-footnote">
           {data.projections.data.unprojected === 0
-            ? language === 'es' ? `Los ${data.projections.data.projected} titulares tienen proyección · ${data.projections.data.season}, semana ${data.projections.data.week}` : `All ${data.projections.data.projected} starters projected · ${data.projections.data.season} week ${data.projections.data.week}`
-            : language === 'es' ? `Total estándar calculado con ${data.projections.data.projected} de ${data.projections.data.projected + data.projections.data.unprojected} titulares; ${data.projections.data.unprojected} sin proyección, así que puede parecer bajo.` : `Standard total built from ${data.projections.data.projected} of ${
-                data.projections.data.projected + data.projections.data.unprojected
-              } starters — ${data.projections.data.unprojected} ${
-                data.projections.data.unprojected === 1 ? 'has' : 'have'
-              } no projection on file, so it reads low.`}
+            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
+            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
         </p>
       ) : (
         <p className="af-mt-footnote">

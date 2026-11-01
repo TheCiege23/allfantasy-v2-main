@@ -428,6 +428,15 @@ function extractProviderStatNames(scoringSettings: unknown): Map<string, string>
   return out
 }
 
+/**
+ * A provider-captured rulebook (ESPN / Yahoo / MFL) translated into Sleeper's key vocabulary, or
+ * null when nothing translated (Sleeper and Fantrax rules already use that vocabulary). Exported for
+ * the native-league scoring carry-over (`importedNflScoring`).
+ */
+export function providerScoringRulesInSleeperKeys(s: Record<string, unknown>): Record<string, unknown> | null {
+  return bridgeProviderScoringRules(s)
+}
+
 function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, unknown> | null {
   const snapshot = s.scoringSettings
   const rules =
@@ -516,5 +525,12 @@ export function extractScoringSettings(
   const scoring = s.scoring_settings ?? s.scoringSettings
   if (!scoring || typeof scoring !== 'object') return null
   const rec = scoring as Record<string, unknown>
+  // Imported Fantrax leagues store the actual stat weights under `rules` alongside
+  // provider metadata. Passing the wrapper through makes a saved NBA rulebook look
+  // like missing scoring to every projection and matchup reader.
+  if (rec.rules && typeof rec.rules === 'object' && !Array.isArray(rec.rules)) {
+    const rules = rec.rules as Record<string, unknown>
+    return Object.values(rules).some((value) => readNumber(value) != null) ? rules : null
+  }
   return Object.keys(rec).length > 0 ? rec : null
 }

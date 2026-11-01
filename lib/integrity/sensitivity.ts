@@ -88,6 +88,17 @@ export const TANKING_BENCH_GAP_POINTS: Record<IntegritySensitivity, number> = {
  * the same constants the engine scans with, so it cannot drift into a claim the
  * product does not honour.
  */
+/**
+ * Daily-lineup leagues (NBA, NHL, MLB): idle starts in one week — a starter whose team had no game
+ * that day while an eligible bench player's did (lib/integrity/dailySportTankingSignals.ts) — before
+ * the week counts as a suspicious lineup pattern. One is carelessness, so even High needs two.
+ */
+export const TANKING_IDLE_STARTS_PER_WEEK: Record<IntegritySensitivity, number> = {
+  low: 6,
+  medium: 4,
+  high: 2,
+}
+
 export function describeCollusionSensitivity(level: IntegritySensitivity): string {
   const floor = COLLUSION_MIN_SEVERITY[level]
   if (floor === 'high') return 'Low flags a trade only for a heavily lopsided value gap or, in a one-season league, a tanking signal.'
@@ -100,5 +111,9 @@ export function describeCollusionSensitivity(level: IntegritySensitivity): strin
 export function describeTankingSensitivity(level: IntegritySensitivity): string {
   const pts = TANKING_BENCH_GAP_POINTS[level]
   const label = level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Medium'
-  return `${label} counts a slot as suspicious once a bench option out-projects the starter by ${pts} points.`
+  const idle = TANKING_IDLE_STARTS_PER_WEEK[level]
+  return (
+    `${label} counts a slot as suspicious once a bench option out-projects the starter by ${pts} points. ` +
+    `In a daily-lineup NBA, NHL or MLB league, a week counts once ${idle} starters sat idle while a bench player at their spot had a game.`
+  )
 }

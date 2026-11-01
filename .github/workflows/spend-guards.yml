@@ -1,20 +1,16 @@
 name: Spend guards
 
-# Builds are ~100% of this project's Vercel bill: the 2026-08-27 invoice was
-# $101.40, of which $100.90 was Build CPU Minutes (qty 34,338) and $0.50 was
-# everything else. `vercel.json` was `{}` until 979ae7cf4 added the gate that
-# skips non-production branches. Restoring `{}` restores the burn and NOTHING
-# FAILS — the only signal is a bill four weeks later. This is that signal.
+# Guards that fail a PR when a spend protection is silently removed.
 #
-# The usual way it breaks is not malice: any worktree branched before 979ae7cf4
-# still has the old `{}` on disk, and committing that copy reverts the gate
-# silently. Two protections were removed exactly that way on 2026-08-27 alone.
+# The Vercel build-gate check that used to run here was retired 2026-10-29 along
+# with vercel.json itself: production moved to Railway on 2026-09-02, the Vercel
+# account is blocked, and there is no Vercel bill left for the gate to protect.
 
 on:
   pull_request:
     # No `branches:` filter, matching cron-budget.yml and i18n-placeholder-parity:
     # filtering PR runs to main silently skipped every stacked PR, and a stale
-    # vercel.json is precisely the kind of change that arrives on one.
+    # guard regression is precisely the kind of change that arrives on one.
   # No push-to-main run, as of 2026-10-02. This check already passed on the PR's merge result, and a
   # rebase-merge cannot change its verdict; re-running it after every merge only queued another job
   # ahead of PR CI on the ~20 runner slots the account has. ts-error-ratchet.yml and unit-tests.yml
@@ -52,12 +48,7 @@ jobs:
         with:
           node-version: lts/*
 
-      # No `npm ci`. The check reads vercel.json with the Node standard library
-      # and has no dependencies, so installing would be most of the runtime for
-      # nothing — same reasoning as cron-budget.yml.
-      - name: Check the Vercel build gate is intact
-        run: node scripts/check-vercel-build-gate.mjs
-
-      # Separate step so the log says WHICH guard broke without reading the diff.
+      # No `npm ci`. The check uses only the Node standard library, so installing
+      # would be most of the runtime for nothing — same reasoning as cron-budget.yml.
       - name: Check no AI provider boundary lost its spend guard
         run: node scripts/check-ai-spend-guard-count.mjs

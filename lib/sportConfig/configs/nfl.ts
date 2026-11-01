@@ -1,4 +1,5 @@
 import type { ScoringCategory, ScoringPreset, SportConfigFull } from '../types'
+import { NFL_EXTRA_STATS } from '@/lib/scoring-runtime/nflExtraStatKeys'
 
 const NFL_SCORING_BASE: ScoringCategory[] = [
   { key: 'pass_yds', label: 'Passing Yards', defaultPoints: 0.04, isToggleable: false, group: 'passing', sport: 'NFL', unit: 'per_yard' },
@@ -113,6 +114,19 @@ const NFL_SCORING_BASE: ScoringCategory[] = [
   { key: 'def_ya_350_399', label: 'DST Yards Allowed: 350–399', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 350, tierMax: 399 },
   { key: 'def_ya_400_449', label: 'DST Yards Allowed: 400–449', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 400, tierMax: 449 },
   { key: 'def_ya_450_plus', label: 'DST Yards Allowed: 450+', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 450 },
+
+  // Scored from the provider's own count; all 0 by default, so a league that sets none of them
+  // scores exactly as it did before they existed. See lib/scoring-runtime/nflExtraStatKeys.ts.
+  ...NFL_EXTRA_STATS.map((s): ScoringCategory => ({
+    key: s.key,
+    label: s.label,
+    defaultPoints: 0,
+    isToggleable: true,
+    group: s.group,
+    sport: 'NFL',
+    ...(s.key === 'kr_yd' || s.key === 'pr_yd' || s.per === 'yard' ? { unit: 'per_yard' as const } : {}),
+    ...(s.requiresToggle ? { requiresToggle: s.requiresToggle } : {}),
+  })),
 ]
 
 function nflPreset(name: string, recPoints: number): ScoringPreset {

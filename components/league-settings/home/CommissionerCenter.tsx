@@ -4,12 +4,15 @@ import '@/components/core-app/af-core.css'
 import '@/components/league/league-admin.css'
 import './league-settings-home.css'
 import './commissioner-center.css'
+// Redraft-only rules, all scoped under the workspace's data-format=redraft stamp (A5).
+import './redraft-settings.css'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
 import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
+import type { RedraftSettingsView } from '@/lib/league-media/redraftSettings'
 
 /**
  * Commissioner center (native league handoff, Commissioner.png), the desktop layout of the League
@@ -35,6 +38,8 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
       { id: 'general', label: 'General' },
       { id: 'format', label: 'League format' },
       { id: 'members', label: 'Managers & invites' },
+      { id: 'team-settings', label: 'Team settings' },
+      { id: 'previous-leagues', label: 'Previous Leagues' },
       { id: 'co-commissioners', label: 'Co-commissioners' },
       { id: 'divisions', label: 'Divisions' },
     ],
@@ -119,6 +124,7 @@ export function CommissionerCenter({
   managers,
   onSubPageClosed,
   header,
+  redraft = null,
 }: {
   leagueName?: string | null
   sections: SettingsHomeSection[]
@@ -132,6 +138,8 @@ export function CommissionerCenter({
   onSubPageClosed?: (id: SettingsSubPageId) => void
   /** Drawn above the sections (the pre-draft setup card); given a way to open a section. */
   header?: (openSection: (id: SettingsSubPageId) => void) => ReactNode
+  /** Native redraft leagues only (lib/league-media/redraftSettings.ts); null renders the default layout. */
+  redraft?: RedraftSettingsView | null
 }) {
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
@@ -149,7 +157,7 @@ export function CommissionerCenter({
   const pct = managers.total > 0 ? Math.min(100, Math.round((managers.joined / managers.total) * 100)) : 0
 
   return (
-    <div className="af-core lsh-root cc-root" data-testid="commissioner-center">
+    <div className="af-core lsh-root cc-root" data-testid="commissioner-center" data-rd-settings={redraft ? 'true' : undefined} data-rd-sport={redraft?.sport}>
       <header className="cc-head">
         {onExit ? (
           <button type="button" className="cc-back" onClick={() => { if (confirmDiscardIfDirty(saveScope.ref.current)) onExit() }} data-testid="cc-back">
@@ -174,6 +182,7 @@ export function CommissionerCenter({
                   aria-current={open === item.id ? 'page' : undefined}
                   onClick={() => select(item.id)}
                   data-testid={`cc-nav-${item.id}`}
+                  data-rd-stage={redraft?.subPages[item.id]?.stage}
                 >
                   {item.label}
                 </button>
@@ -184,7 +193,10 @@ export function CommissionerCenter({
 
         <div className="cc-pane" ref={pane}>
           <section className="cc-card" aria-labelledby="cc-pane-title" data-testid="cc-pane" data-subpage={open}>
-            <p className="cc-label">{groups.find(g => g.items.some(i => i.id === open))?.title ?? 'Settings'}</p>
+            <p className="cc-label">
+              {groups.find(g => g.items.some(i => i.id === open))?.title ?? 'Settings'}
+              {redraft?.subPages[open] ? <span className="cc-rd-when" data-testid="cc-rd-when"> · {redraft.subPages[open]?.when}</span> : null}
+            </p>
             <h2 id="cc-pane-title">{sub?.title ?? 'Settings'}</h2>
             <div className="cc-pane-body af-league-admin">
               {sub ? (

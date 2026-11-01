@@ -68,6 +68,7 @@ vi.mock('@/lib/league-creation/warmLeagueSportsData', () => ({
 
 import { runLeagueBootstrap } from '@/lib/league-creation/LeagueBootstrapOrchestrator'
 import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
+import { importedNflScoring } from '@/lib/league-creation/canonical/importedNflScoring'
 
 async function createAndScoreTwoReceptions(sport: 'NFL' | 'NCAAF', scoringPresetId: string) {
   row.current = { sport, scoringPresetId, settings: {} }
@@ -90,6 +91,23 @@ describe('bootstrap seeds the scoring the manager chose', () => {
 
   it('NFL Half PPR still scores 0.5', async () => {
     expect(await createAndScoreTwoReceptions('NFL', 'fb_half_ppr')).toBe(1)
+  })
+
+  it('NFL carried over from an import keeps the imported rules, not the preset picked in the wizard', async () => {
+    const imported = importedNflScoring({ scoringSettings: { format: 'points', rules: { rec: 0.25, rec_yd: 0.1, bonus_rec_te: 0.5 } } })!
+    row.current = {
+      sport: 'NFL',
+      scoringPresetId: 'fb_ppr',
+      settings: {
+        importCarryover: { sourceLeagueId: 'src' },
+        nfl_scoring_config: { presetKey: 'custom', source: 'IMPORTED_MAPPED', rules: imported.rules },
+        sportConfig: { enableTEPremium: true },
+      },
+    }
+    await runLeagueBootstrap('league-1', 'NFL' as never)
+    expect(await calculateScoreFromSportConfig('league-1', 'wr-1', 1, { rec: 2 }, 'WR')).toBe(0.5)
+    expect(await calculateScoreFromSportConfig('league-1', 'te-1', 1, { rec: 2 }, 'TE')).toBe(1.5)
+    expect(row.current.settings.nfl_scoring_config).toMatchObject({ source: 'IMPORTED_MAPPED' })
   })
 
   it('NCAAF half PPR scores 0.5, not the full-PPR scorer default', async () => {

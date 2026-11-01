@@ -50,7 +50,8 @@ vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({
     tradeReviewMode: 'commissioner',
     tradeDeadlineWeek: null,
     tradeReviewHours: 48,
-    vetoThresholdPercent: 50,
+    vetoRule: { mode: 'count', value: 4 },
+    vetoThresholdPercent: null,
     processingDelayHours: 0,
     tradesAllowed: true,
     faabTradingAllowed: true,
@@ -110,6 +111,10 @@ describe('an offer lands in the DM', () => {
     await call.load()
     expect(h.loadNative).toHaveBeenCalledWith('new-trade')
     expect(h.postStatus).not.toHaveBeenCalled()
+    // The league's veto rule rides with the trade (lib/league-trade-engine/vetoRule.ts).
+    const created = h.tradeCreate.mock.calls[0][0] as { data: { metadata: { vetoRule?: unknown }; vetoThresholdPercent: unknown } }
+    expect(created.data.metadata.vetoRule).toEqual({ mode: 'count', value: 4 })
+    expect(created.data.vetoThresholdPercent).toBeNull()
   })
 
   it('🛑 a counter first closes the parent’s card ("countered"), THEN posts the new offer', async () => {

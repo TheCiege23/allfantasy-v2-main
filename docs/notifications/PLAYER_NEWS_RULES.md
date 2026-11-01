@@ -58,3 +58,28 @@ the default.
 Player-news senders send no instant email any more. The one exception is the game-day
 injured-starter email from the sweep, which has per-league fix links. It is limited to one per
 person per day, and later sweeps that day send only a push and a bell entry.
+
+## 6. Injuries reach your phone and inbox only when they change a lineup
+
+Added 2026-10-25 at the owner's request. Both injury senders, the injury sync
+(`engagement-alerts/injuryAlerts`) and the news feed (`PlayerNewsNotificationService`), ask
+`lib/notifications/lineupImpact.ts` what a change means for each league that rosters the player. The
+rules and the wording are in `lib/notifications/lineupImpactCopy.ts`.
+
+| Change | What you get | Channels |
+|---|---|---|
+| Starter ruled out (Out, IR, suspended) | Your options: the bench player to start, or the free agent to add if nobody on the bench can (AF Pro player depth), or "check free agents" | Push + email now |
+| Starter turns questionable or doubtful | Keep him in, and who to start if he is ruled out | Push + email now |
+| Starter cleared after being questionable, doubtful or out | He is cleared and stays in | Push + email now |
+| Bench player back healthy who out-projects a starter | Start him over that starter, with the projected gain | Push + email now |
+| Anything else (a bench player hurt, or healthy but not good enough to start) | — | In-app bell only, not in the daily digest |
+
+- **Who to swap and the numbers** come from the Player Finder's league-scored picker
+  (`core-app/playerImpact` + `leagueCall`). That picker covers NFL players with a Sleeper id. For other
+  sports, a starter still gets the alert without a named backup, and a healthy bench player is never
+  told to start, because that needs projections.
+- **Nothing is sent once the game has kicked off**, because no lineup can change then.
+- **One alert per player, per status, per day** still applies across both senders and every league.
+- **Player news "Off"** still silences all of it.
+- **Followers and team followers** keep their own routing from section 1.
+

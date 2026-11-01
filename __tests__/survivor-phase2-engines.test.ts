@@ -33,7 +33,8 @@ describe('rocksEngine determinism', () => {
 
 // ── Token shop catalog ────────────────────────────────────────────────────────
 describe('token shop catalog', () => {
-  it('buy_clue costs 2 tokens and is available', async () => {
+  // Behaviour (nothing is for sale until it delivers) is in survivor-token-shop-unbuilt.test.ts.
+  it('the token shop route module loads', async () => {
     const mod = await import('../server/api-route-modules/league-survivor/token-shop/route') as any
     // token-shop route exports TOKEN_SHOP_CATALOG via a named export (or we parse it from GET)
     // Smoke: the module loads without error

@@ -6,6 +6,7 @@ import {
   removePlayerFromRosterData,
   rosterContainsPlayer,
 } from './roster-utils'
+import { countTowardRosterLimit, importedIrOverflow, leagueRosterLimit } from '@/lib/league/rosterLimit'
 import { onWaiverRunComplete } from './run-hooks'
 import { getSpecialtySpecByVariant } from '@/lib/specialty-league/registry'
 import { isWaiverFrozenForRoster } from '@/lib/survivor/SurvivorEffectEngine'
@@ -23,6 +24,19 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
+import { loadWaiverRunPhaseGate } from './season-phase-gate'
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
+import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
+import {
+  isFantraxProspectId,
+  resolveNhlProspectClaimAward,
+  type ProspectFreeAgencyLeague,
+} from './nhlProspectFreeAgency'
+
+/** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
+export type WaiverRunSkipReason = 'league_moves_locked'
 
 type ClaimRow = {
   id: string
@@ -56,7 +70,12 @@ function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
 
 export async function processWaiverClaimsForLeague(
   leagueId: string,
-  opts?: { processedByUserId?: string | null; runType?: string; idempotencyKey?: string | null }
+  opts?: {
+    processedByUserId?: string | null
+    runType?: string
+    idempotencyKey?: string | null
+    onSkip?: (reason: WaiverRunSkipReason) => void
+  }
 ): Promise<ProcessedClaimResult[]> {
   if (opts?.idempotencyKey != null) {
     logEngineInvariantOptional(assertNonEmptyIdempotencyKey(opts.idempotencyKey), 'waiver_process.idempotency_key', {
@@ -87,11 +106,21 @@ export async function processWaiverClaimsForLeague(
   const locked = await getLeagueWaiverState(leagueId).catch(() => null)
   if (locked?.processingLocked) return []
 
+  // 🛑 The commissioner's "Lock all roster moves" (`League.lockAllMoves`), re-read when the run executes:
+  // a claim filed before the lock went on must not settle while it is on. Nothing is touched — no run
+  // row, no claim update — so every claim stays pending and the first run after the lift settles it.
+  // A commissioner's manual run is exempt, like `commissionerOverride` in the waiver and trade runtimes.
+  if (opts?.runType !== 'manual' && (await isRedraftLeagueMovesLocked(leagueId))) {
+    console.info(`[waiver-process] league ${leagueId} skipped: the commissioner has locked all roster moves; pending claims stay pending`)
+    opts?.onSkip?.('league_moves_locked')
+    return []
+  }
+
   const [effectiveSettings, league, pendingClaims, allRosters, leagueTeams] = await Promise.all([
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, sport: true, settings: true, timezone: true },
+      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -154,13 +183,58 @@ export async function processWaiverClaimsForLeague(
     for (const id of ids) rosteredByPlayer.set(id, r.id)
   }
 
-  const ordered = orderClaimsForProcessing(
-    pendingClaims as ClaimRow[],
+  // Guilly blind FAAB auction (lib/guillotine/blindWaiverCutoff.ts): inside the window, claims made since
+  // it opened wait for the run so every bid on a chopped roster competes together. A manual
+  // commissioner run is not held.
+  const blindCutoff = opts?.runType === 'manual' ? null : await guillotineClaimsCutoff(leagueId, new Date(), league)
+  const dueClaims = blindCutoff
+    ? (pendingClaims as Array<ClaimRow & { createdAt: Date | string }>).filter((c) => new Date(c.createdAt) < blindCutoff)
+    : (pendingClaims as ClaimRow[])
+
+  const orderedAll = orderClaimsForProcessing(
+    dueClaims as ClaimRow[],
     waiverType,
     rankByPlatformUserId,
     tiebreakRule,
   )
 
+  if (orderedAll.length === 0) {
+    return []
+  }
+
+  // Season phase (season-phase-policy.ts): in a closed or first-come offseason, with rosters locked
+  // for the playoffs, or for a team out of the title bracket under the alive-only rule, a claim fails
+  // with the reason. Read once per run; an unreadable phase keeps the regular season's rules.
+  const phaseRefusal = await loadWaiverRunPhaseGate(leagueId).catch(() => (): string | null => null)
+  // A dropped player on waivers (dropped-player-waivers.ts) cannot go back to the team that dropped
+  // him: that claim fails. Every other claim on him waits — it stays pending, untouched, until the
+  // first run after his hold ends, and there competes with the other claims on him in the order
+  // above, like any claim. An unreadable hold processes nothing this run rather than run a held
+  // player's claims early; they are all still pending for the next one.
+  const runAt = new Date()
+  const holdPolicy = droppedPlayerHoldPolicy({
+    normalizedWaiverType: configuredWaiverType,
+    waiverHours: league.waiverHours,
+    waiverEngineConfig: effectiveSettings.waiverEngineConfig,
+    sport: league.sport ? String(league.sport) : null,
+  })
+  let dropHolds: Map<string, DroppedPlayerHold> = new Map()
+  if (maxHoldHours(holdPolicy) > 0) {
+    try {
+      dropHolds = await loadDroppedPlayerHolds(leagueId, holdPolicy, {
+        now: runAt,
+        playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
+      })
+    } catch (err) {
+      console.warn('[waiver-wire] dropped-player holds unreadable; waiver run deferred', { leagueId, err })
+      return []
+    }
+  }
+  const ordered = orderedAll.filter((c) => {
+    const hold = dropHolds.get(String(c.addPlayerId))
+    return !(hold && hold.until > runAt && hold.droppedByRosterId !== c.rosterId)
+  })
+  const deferredHeldClaimCount = orderedAll.length - ordered.length
   if (ordered.length === 0) {
     return []
   }
@@ -173,6 +247,7 @@ export async function processWaiverClaimsForLeague(
       processedByUserId: opts?.processedByUserId ?? null,
       metadata: {
         claimCount: ordered.length,
+        ...(deferredHeldClaimCount > 0 ? { deferredHeldClaimCount } : {}),
         ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
       },
     },
@@ -181,7 +256,18 @@ export async function processWaiverClaimsForLeague(
   const waiverRunStartedAt = Date.now()
 
   const results: ProcessedClaimResult[] = []
-  const rosterSize = league.rosterSize ?? 20
+  // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
+  const rosterLimit = leagueRosterLimit(league, 20)
+  const { limit: rosterSize, counts: rosterCounts } = rosterLimit
+  // An imported roster over the provider's IR spots is reported once per run, never refused.
+  const irOverflowReported = new Set<string>()
+  // NHL dynasty `fantrax:` claims only (nhlProspectFreeAgency.ts, AWARD TIME): the league fields the
+  // rule needs, read once and only when such a claim is reached, so every other run reads nothing new.
+  let prospectLeague: Promise<ProspectFreeAgencyLeague | null> | null = null
+  const loadProspectLeague = () =>
+    (prospectLeague ??= (prisma as any).league
+      .findUnique({ where: { id: leagueId }, select: { sport: true, isDynasty: true, leagueType: true } })
+      .catch(() => null) as Promise<ProspectFreeAgencyLeague | null>)
   const resultRows: Array<{
     claimId: string | null
     rosterId: string
@@ -256,9 +342,19 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
-    const currentPlayerIds = getRosterPlayerIds(roster.playerData)
-    const addId = claim.addPlayerId
+    const phaseBlock = phaseRefusal(claim.rosterId)
+    if (phaseBlock) {
+      await pushFail(phaseBlock)
+      continue
+    }
+
+    let addId = claim.addPlayerId
     const dropId = claim.dropPlayerId
+
+    if (dropHolds.get(String(addId))?.droppedByRosterId === claim.rosterId) {
+      await pushFail(DROPPER_RECLAIM_MESSAGE)
+      continue
+    }
 
     const ownerRosterId = rosteredByPlayer.get(addId)
     if (ownerRosterId) {
@@ -270,7 +366,36 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
-    const needDrop = currentPlayerIds.length >= rosterSize && !dropId
+    // A `fantrax:` prospect claim: the submit-time rule again, now (nhlProspectFreeAgency.ts, AWARD
+    // TIME). He may have been linked to an NHL identity since — then he is awarded under his pro id,
+    // or fails if that man is on a roster already. Every other claim skips this block entirely.
+    let prospectAliases: string[] = []
+    let claimedProspectId: string | null = null
+    if (isFantraxProspectId(addId)) {
+      const decision = await resolveNhlProspectClaimAward(
+        prisma as never,
+        await loadProspectLeague(),
+        addId,
+        claim.rosterId,
+        rosteredByPlayer,
+      )
+      if (decision.kind === 'fail') {
+        await pushFail(decision.message, decision.extra)
+        continue
+      }
+      prospectAliases = decision.aliases
+      if (decision.playerId !== addId) {
+        claimedProspectId = addId
+        addId = decision.playerId
+      }
+    }
+
+    const irOverflow = irOverflowReported.has(claim.rosterId) ? null : importedIrOverflow(roster.playerData, rosterLimit)
+    if (irOverflow) {
+      irOverflowReported.add(claim.rosterId)
+      console.warn(`[waiver-process] league ${leagueId} roster ${claim.rosterId}: IR holds ${irOverflow.held} players against ${irOverflow.slots} imported IR spots (not enforced)`)
+    }
+    const needDrop = countTowardRosterLimit(roster.playerData, rosterCounts) >= rosterSize && !dropId
     if (needDrop) {
       await pushFail('Roster full; no drop specified')
       continue
@@ -394,7 +519,14 @@ export async function processWaiverClaimsForLeague(
       ...redraftMoveWrites,
     ])
 
+    // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
+    if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
+      await copyGenericFaabToRedraft(prisma, [claim.rosterId])
+    }
+
     rosteredByPlayer.set(addId, claim.rosterId)
+    // A prospect award: every id he is known by, so a later claim in this run on any of them fails.
+    for (const alias of prospectAliases) rosteredByPlayer.set(alias, claim.rosterId)
     if (dropId) rosteredByPlayer.delete(dropId)
 
     if (newWaiverPriority != null) {
@@ -412,6 +544,8 @@ export async function processWaiverClaimsForLeague(
       priorityAfter: priorityAfter ?? null,
       rosterApplied: true,
       resultType: 'awarded',
+      // Awarded under his pro id: the claim row keeps the `fantrax:` id it was filed with.
+      ...(claimedProspectId ? { metadata: { claimedPlayerId: claimedProspectId } } : {}),
     })
 
     const uid = roster.platformUserId?.trim()
@@ -529,6 +663,20 @@ export async function processWaiverClaimsForLeague(
 }
 
 /** Exported for deterministic unit tests (FAAB / priority / rolling tie-breaks). */
+/**
+ * Reverse standings: the WORST team claims first. `LeagueTeam.currentRank` 1 is first place
+ * (standings are read `orderBy currentRank asc`), so the highest rank number goes first. A team
+ * with no rank yet goes after every ranked team rather than ahead of them.
+ */
+function worstStandingFirst(a: ClaimRow, b: ClaimRow, rankByPlatformUserId: Map<string, number>): number {
+  const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '')
+  const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '')
+  if (rankA === rankB) return 0
+  if (rankA == null) return 1
+  if (rankB == null) return -1
+  return rankB - rankA
+}
+
 export function orderClaimsForProcessing(
   claims: ClaimRow[],
   waiverType: string,
@@ -542,9 +690,8 @@ export function orderClaimsForProcessing(
       if (bidB !== bidA) return bidB - bidA
       const tb = tiebreakRule
       if (tb === 'reverse_standings' || tb === 'reverse_standings_order') {
-        const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-        const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-        if (rankA !== rankB) return rankA - rankB
+        const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+        if (byStanding !== 0) return byStanding
       }
       if (tb === 'earliest_claim' || tb === 'earliest_claim_timestamp') {
         const ta = (a as any).createdAt
@@ -562,9 +709,8 @@ export function orderClaimsForProcessing(
 
   if (waiverType === 'reverse_standings') {
     return [...claims].sort((a, b) => {
-      const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '') ?? 999
-      const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '') ?? 999
-      if (rankA !== rankB) return rankA - rankB
+      const byStanding = worstStandingFirst(a, b, rankByPlatformUserId)
+      if (byStanding !== 0) return byStanding
       return a.priorityOrder - b.priorityOrder
     })
   }

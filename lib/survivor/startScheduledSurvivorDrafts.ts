@@ -6,7 +6,6 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { withControlLock } from '@/lib/draft/draftLock'
 import { startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
-import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { enqueueNotification } from './notificationEngine'
 import {
   holdGuillotineScheduledDraft,
@@ -16,6 +15,7 @@ import {
 } from '@/lib/guillotine/lateStartSeats'
 import { getSurvivorDraftStartReadiness } from './survivorDraftStartReadiness'
 import { notifySurvivorCommissionerOnce, SURVIVOR_SEATS_ALERT_LEAD_MS } from './survivorCommissionerAlerts'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export interface ScheduledSurvivorDraftSummary {
   scanned: number
@@ -93,17 +93,19 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
       } else if (locked.value.ok) {
         summary.started++
-        // A manual start notifies from the controls route; a scheduled one has no caller to do it.
-        await notifyDraftStartingSoon(leagueId).catch(() => {})
+        // startDraftSession sends the lifecycle alert for manual and scheduled starts.
       } else if (locked.value.reason === 'SURVIVOR_CAST_INCOMPLETE') {
         // A commissioner can claim the remaining seats and the next tick retries.
         summary.skipped++
         await noticeCastIncompleteOnce(leagueId, locked.value.error).catch(() => {})
       } else {
-        summary.errors.push({ leagueId, error: locked.value.error ?? locked.value.reason })
+        const failure = locked.value.error ?? locked.value.reason
+        summary.errors.push({ leagueId, error: failure })
+        reportSurvivorAutomationError(new Error(`Scheduled Survivor draft did not start: ${failure}`), { job: 'draft_start', leagueId })
       }
     } catch (error) {
       summary.errors.push({ leagueId, error: error instanceof Error ? error.message : String(error) })
+      reportSurvivorAutomationError(error, { job: 'draft_start', leagueId })
     }
   }
   // After the due drafts: a seat warning for tomorrow's drafts never delays today's start.

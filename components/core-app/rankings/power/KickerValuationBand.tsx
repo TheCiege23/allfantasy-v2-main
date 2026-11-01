@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * How this league priced its kickers, from `meta.kickerValuation` on the rankings engine.
@@ -58,7 +59,7 @@ export function KickerValuationBand({
       </div>
       <div className="mt-1 text-sm text-white/60">
         {tInterpolate("powerRankingsPage.position.kickerEach", {
-          value: valuation.value.toLocaleString(),
+          value: valuation.value.toLocaleString(getAppIntlLocale()),
         })}
       </div>
       <p className="mt-2 text-xs leading-5 text-white/45">

@@ -60,6 +60,9 @@ export function readDraftPoll(
     closedByHand: metadata.closed === true,
     allowMultiple: false,
     anonymous: false,
+    resultsAfterClose: false,
+    resultsHidden: false,
+    prediction: null,
   }
 }
 

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { computeExileBossScore, settleExileBossWeek } from './exileBoss'
-import { readSurvivorLateSeasonSettings, type SurvivorLateSeasonSettings } from './lateSeasonSettings'
+import { effectiveExileBossMode, readSurvivorLateSeasonSettings, type SurvivorLateSeasonSettings } from './lateSeasonSettings'
 
 /** Default conversion: 1 token → $5 FAAB on main league roster (Int field). */
 const TOKEN_TO_FAAB = 5
@@ -164,8 +164,9 @@ export async function scoreExileWeek(leagueId: string, week: number): Promise<bo
     const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_results_finalized' }, select: { id: true, data: true } })
     if (!finalized) return false
     const proof = finalized.data as { source?: string; userIds?: string[] } | null
-    const leagueRow = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true, settings: true } })
-    const late = readSurvivorLateSeasonSettings(leagueRow?.settings)
+    const leagueRow = await tx.league.findUnique({ where: { id: leagueId }, select: { survivorTokenCap: true, settings: true, sport: true } })
+    const stored = readSurvivorLateSeasonSettings(leagueRow?.settings)
+    const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, leagueRow?.sport) }
     if (island.bossWinsEnabled && late.exileBossMode !== 'chimmy_roster') {
       return settleScoreBossWeek(tx, { leagueId, week, islandId: island.id, islandWeek: island.currentWeek, wipeOnLoss: island.bossTokenResetOnWin,
         tokenCap: leagueRow?.survivorTokenCap ?? null, proof, late })
@@ -318,6 +319,12 @@ export async function processReturnFromExile(
   const week = opts?.week ?? 0
   const mode = opts?.conversionMode ?? 'faab'
   const tokens = top.tokenBalance
+  // The commissioner's rate (League.settings.survivorSideGames.exileTokenFaabRate) replaces the
+  // hard-coded $5 once set; left at 0 the legacy league keeps its $5, exactly as before.
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const { readSurvivorSideGameSettings } = await import('./survivorSideGameSettings')
+  const setRate = readSurvivorSideGameSettings(leagueRow?.settings).exileTokenFaabRate
+  const faabPerToken = setRate > 0 ? setRate : TOKEN_TO_FAAB
 
   if (tokens > 0 && mode === 'faab') {
     const roster = await prisma.roster.findFirst({
@@ -327,7 +334,7 @@ export async function processReturnFromExile(
     if (roster) {
       await prisma.roster.update({
         where: { id: roster.id },
-        data: { faabRemaining: (roster.faabRemaining ?? 0) + tokens * TOKEN_TO_FAAB },
+        data: { faabRemaining: (roster.faabRemaining ?? 0) + tokens * faabPerToken },
       })
     }
     await logSurvivorAuditEntry({
@@ -341,7 +348,7 @@ export async function processReturnFromExile(
         tokenBalance: tokens,
         converted: true,
         conversion: 'faab',
-        faabPerToken: TOKEN_TO_FAAB,
+        faabPerToken,
       },
       isVisibleToPublic: false,
     })

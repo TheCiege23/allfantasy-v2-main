@@ -82,8 +82,12 @@ beforeEach(() => {
   mockLeagueFindMany.mockResolvedValue(LEAGUES)
   mockTeamFindMany.mockResolvedValue(TEAMS)
   mockRosterFindMany.mockResolvedValue(ROSTERS)
-  mockSportsPlayerFindMany.mockImplementation(async (args: { where: { sleeperId: { in: string[] } } }) =>
-    args.where.sleeperId.in.filter((id) => KNOWN.has(id)).map((id) => ({ sleeperId: id })),
+  // Every known id is an NFL player; a read scoped to another sport finds none of them.
+  type Where = { sport?: string; sleeperId?: { in: string[] }; OR?: Where[] }
+  const ids = (w: Where): string[] =>
+    w.OR ? w.OR.flatMap(ids) : w.sport != null && w.sport !== 'NFL' ? [] : w.sleeperId?.in ?? []
+  mockSportsPlayerFindMany.mockImplementation(async (args: { where: Where }) =>
+    [...new Set(ids(args.where))].filter((id) => KNOWN.has(id)).map((id) => ({ sleeperId: id, sport: 'NFL' })),
   )
   // The catalog's own order: alphabetical, which is exactly the problem.
   mockSearchPlayers.mockResolvedValue([KINCAID, KINCHENS, SUAMATAIA, NO_ID, SKINNER])

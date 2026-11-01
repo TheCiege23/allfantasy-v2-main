@@ -16,6 +16,7 @@ import {
   buildNflRedraftGameContextFromWire,
   type NflRedraftGameContext,
 } from '@/lib/player-data/nflRedraftGameContext'
+import { AF_FORM_PROJECTION_LABEL, AF_FORM_PROJECTION_SOURCE } from '@/lib/projections/dailySportFormLabels'
 
 export type WaiverPlayerAdapted = UnifiedPlayerWireDto & {
   /** Convenience for rows/cards */
@@ -27,6 +28,8 @@ export type WaiverPlayerAdapted = UnifiedPlayerWireDto & {
   displayAdp: number | null
   displayAiAdp: number | null
   displayByeWeek: number | null
+  /** NBA / NHL / MLB: "C12" — rank within position by season points in the league's scoring. */
+  displayPositionRank: string | null
   displayOpponent: string | null
   displayKickoffTime: string | null
   displayGameStatus: string | null
@@ -247,6 +250,7 @@ export function adaptWaiverWirePlayer(
           : row.product?.byeWeek != null && Number.isFinite(Number(row.product.byeWeek))
             ? Number(row.product.byeWeek)
             : null,
+    displayPositionRank: row.positionRankLabel ?? null,
     displayOpponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? null,
     displayKickoffTime: gameContext?.kickoffTimeIso ?? null,
     displayGameStatus: gameContext?.gameStatus ?? null,
@@ -254,11 +258,15 @@ export function adaptWaiverWirePlayer(
     canonicalPlayerMetadata: metadata,
     canonicalPlayerIntelligence: intelligence,
     canonicalGameContext: gameContext,
-    projectionSourceLabel: formatSourceLabel(
-      'Projection',
-      intelligence?.projection.source ?? canonical?.currentProjection.source ?? row.projectionsSource,
-      'Fallback projection',
-    ),
+    // The daily-sport AF projection names itself exactly (dailySportForm.ts): it is recent form, not a feed.
+    projectionSourceLabel:
+      !intelligence && !canonical && row.projectionsSource === AF_FORM_PROJECTION_SOURCE
+        ? AF_FORM_PROJECTION_LABEL
+        : formatSourceLabel(
+            'Projection',
+            intelligence?.projection.source ?? canonical?.currentProjection.source ?? row.projectionsSource,
+            'Fallback projection',
+          ),
     adpSourceLabel: intelligence?.ranking.adp != null || row.adp != null ? 'Provider ADP' : 'Missing ADP',
     statsSourceLabel: formatSourceLabel('Stats', row.statsSource, 'Missing stats'),
     dataQualityLabels: buildDataQualityLabels(row),

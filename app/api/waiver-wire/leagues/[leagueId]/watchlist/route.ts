@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -12,7 +13,7 @@ async function requireMember(leagueId: string, userId: string): Promise<boolean>
     prisma.league.findFirst({ where: { id: leagueId, userId }, select: { id: true } }),
     prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
   ])
-  return Boolean(owner || roster)
+  return Boolean(owner || roster || await acceptedCoOwnerRosterId(leagueId, userId))
 }
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {

@@ -119,6 +119,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
    * remainder, so its own per-feed cadence gating is what limits work, which is
    * what that gating was written to do.
    */
+  const sleeperRowsOnly = url.searchParams.get("sleeperRows") === "1"
   const intelOnly = url.searchParams.get("intel") === "1"
 
   const sports = sportParam
@@ -159,6 +160,14 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       })
     }
 
+    if (sleeperRowsOnly) {
+      if (intelOnly || sports?.length !== 1 || sports[0] !== 'NFL') {
+        return NextResponse.json({ ok: false, error: 'sleeperRows requires sport=NFL and cannot combine with intel.' }, { status: 400 })
+      }
+      const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+      const result = await refreshSleeperPlayerRows({ sport: 'NFL', limit: 1500, isExhausted: () => budget.exhausted() })
+      return NextResponse.json({ ok: !result.feedUnavailable, sleeperRows: result, durationMs: Date.now() - startedAt })
+    }
     if (intelOnly) {
       /*
        * Heartbeat, not a table probe — and the distinction is the whole point.
@@ -355,10 +364,11 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           'skipped' in r
             ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
             : {
-                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0),
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0),
                 warnings: [
                   ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
                   ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
+                  ...(r.rosters && (r.rosters.rosterSnapshotsRejected ?? 0) > 0 ? [`${r.rosters.rosterSnapshotsRejected} roster snapshots rejected`] : []),
                 ],
                 metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
               },

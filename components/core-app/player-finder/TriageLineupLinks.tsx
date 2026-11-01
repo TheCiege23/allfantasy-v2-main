@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 
 import type { TriageLeague } from '@/lib/core-app/gameDayTriage'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
 
 /**
  * One "open lineup" button per league a flagged starter starts in, on the game-day
@@ -58,8 +59,7 @@ export function TriageLineupLinks({
   /** His game has kicked off: nothing can move, so no buttons. */
   locked: boolean
 }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(coreTriageMessages)
   const [opened, setOpened] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     setOpened(readOpened(weekKey))
@@ -83,7 +83,7 @@ export function TriageLineupLinks({
   }
 
   return (
-    <ul className="af-pf-triage-leagues" aria-label={es ? `Abrir las alineaciones de ${playerName}` : `Open ${playerName}'s lineups`}>
+    <ul className="af-pf-triage-leagues" aria-label={m.triageLinksAria(playerName)}>
       {leagues.map((l) => {
         const link = lineupLink({
           id: l.leagueId,
@@ -115,11 +115,7 @@ export function TriageLineupLinks({
               href={link.href}
               {...(link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               onClick={() => mark(l.leagueId)}
-              aria-label={
-                es
-                  ? `${done ? 'Abierta: ' : ''}${l.leagueName}: abrir ${landsEs} en ${link.platformLabel}`
-                  : `${done ? 'Opened: ' : ''}${l.leagueName} — open the ${lands} on ${link.platformLabel}`
-              }
+              aria-label={m.triageLinksOpen(done, l.leagueName, lands, landsEs, link.platformLabel)}
             >
               <span className="af-pf-triage-lg-check" aria-hidden>
                 {done ? '✓' : ''}
@@ -127,7 +123,7 @@ export function TriageLineupLinks({
               <span className="af-pf-triage-lg-name">{l.leagueName}</span>
               <span className="af-pf-triage-lg-where">
                 {platform}
-                {lands === 'lineup' ? '' : ` · ${es ? landsEs : lands}`}
+                {lands === 'lineup' ? '' : ` · ${m.triageLinksLands(lands, landsEs)}`}
                 {link.external ? ' ↗' : ''}
               </span>
             </a>
