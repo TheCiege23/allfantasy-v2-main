@@ -11,7 +11,6 @@ import { runShuffle } from '@/lib/survivor/SurvivorTribeShuffleEngine'
 import { overrideTribalResult, readTribalOverrideTarget } from '@/lib/survivor/survivorTribalOverride'
 import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
-import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
 import { maybeTriggerSurvivorTribeShuffleRecommendation } from '@/lib/survivor/SurvivorSitOutEngine'
@@ -31,6 +30,22 @@ import {
   validateSurvivorFinaleSettingsPatch,
 } from '@/lib/survivor/survivorFinaleSettings'
 import { ensureJuryVotingOpen, openJuryVoting } from '@/lib/survivor/juryEngine'
+import { removeSurvivorPlayer } from '@/lib/survivor/survivorRemovePlayer'
+import { readScheduledSwap } from '@/lib/survivor/survivorGovernanceSettings'
+import { loadSurvivorGovernanceView, saveSurvivorGovernanceSettings, setSurvivorCastawayExperience } from '@/lib/survivor/survivorGovernanceService'
+import { issueSurvivorConductStrike, revokeSurvivorConductStrike } from '@/lib/survivor/survivorConductService'
+import { sealCommissionerTribeSwap } from '@/lib/survivor/survivorScheduledSwaps'
+import {
+  createSurvivorAuction,
+  grantSurvivorAuctionCash,
+  loadSurvivorSideGameAdminView,
+  reviveSurvivorPoolEntry,
+  saveSurvivorSideGameSettings,
+  setSurvivorAuctionStatus,
+  settleSideGamePicksForGame,
+  paySurvivorPoolPrize,
+} from '@/lib/survivor/survivorSideGameService'
+import { loadSideGameLeague } from '@/lib/survivor/survivorSideGameStore'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,6 +124,19 @@ export async function GET(req: NextRequest) {
       jurySessionStatus: session?.status ?? null,
       councilOpen: Boolean(openCouncil),
     })
+  }
+
+  if (type === 'side_games') {
+    // Exile Island and the side games: settings, locks, the week's games, pool standings, auctions
+    // with their bids (commissioner only), pending shop deliveries, auction cash. Commissioner only.
+    const view = await loadSurvivorSideGameAdminView(leagueId)
+    if (!view) return NextResponse.json({ error: 'Not a Survivor league.' }, { status: 404 })
+    return NextResponse.json(view)
+  }
+
+  if (type === 'governance') {
+    // Settings, every castaway's strikes and experience, and the swap schedule. Commissioner only.
+    return NextResponse.json(await loadSurvivorGovernanceView(leagueId))
   }
 
   if (type === 'state') {
@@ -490,50 +518,126 @@ export async function POST(req: NextRequest) {
     const targetUserId = typeof body.userId === 'string' ? body.userId : ''
     const reason = typeof body.reason === 'string' ? body.reason : 'removed'
     if (!targetUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
-
-    // Clear only the ballots this manager cast or received. Everyone else's stand; anyone whose vote
-    // named them can vote again before the deadline.
-    const openCouncil = await prisma.survivorTribalCouncil.findFirst({
-      where: { leagueId, status: 'voting_open' },
-      select: { id: true },
-    })
-    if (openCouncil) {
-      await prisma.survivorVote.deleteMany({ where: { councilId: openCouncil.id, OR: [{ voterUserId: targetUserId }, { targetUserId }] } })
-    }
-
-    await prisma.survivorIdol.updateMany({
-      where: { leagueId, currentOwnerUserId: targetUserId, isUsed: false },
-      data: { status: 'expired', expiredAt: new Date() },
-    })
-
-    const r0 = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: targetUserId },
-      select: { id: true },
-    })
-    if (r0) {
-      // The commissioner removing them is never told about their own action.
-      await voidPendingRedraftTradesForRoster(leagueId, r0.id, { actorUserId: userId }).catch(() => {})
-    }
-
-    await prisma.survivorPlayer.updateMany({
-      where: { leagueId, userId: targetUserId },
-      data: { playerState: 'eliminated' },
-    })
-
-    await log('remove_player', reason, { targetUserId, newState: { playerState: 'eliminated' } })
-    // A quit can leave a tribe short, exactly like a vote-out: raise the same redraw recommendation.
-    const removedWeek = (await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } }))?.currentWeek
-    if (removedWeek) await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, removedWeek).catch(() => {})
-
-    await enqueueNotification(leagueId, 'phase_change', {
-      recipientRole: 'all',
-      title: 'League update',
-      body: 'A player has been removed from the season.',
-      isSpoilerSafe: true,
-      urgency: 'high',
-    })
-
+    // The same removal the conduct-strike limit uses (lib/survivor/survivorRemovePlayer.ts).
+    await removeSurvivorPlayer(leagueId, { targetUserId, commissionerId: userId, reason })
     return NextResponse.json({ ok: true })
+  }
+
+  // Survivor governance (lib/survivor/survivorGovernanceSettings.ts): extra swaps, alliances, conduct
+  // strikes, trade rules, Rooks vs Vets, the week-1 window and tribe emoji. Validated against the
+  // season's locks; one object under League.settings.survivorGovernance.
+  if (action === 'governance_settings') {
+    const result = await saveSurvivorGovernanceSettings(leagueId, body.settings)
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+    await log('governance_settings', 'Updated Survivor governance settings', { newState: result.patch as object })
+    return NextResponse.json({ ok: true, settings: result.settings })
+  }
+
+  if (action === 'issue_strike' || action === 'revoke_strike') {
+    const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : ''
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (!targetUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    const result = action === 'issue_strike'
+      ? await issueSurvivorConductStrike(leagueId, { targetUserId, reason, actorUserId: userId })
+      : await revokeSurvivorConductStrike(leagueId, { targetUserId, reason, actorUserId: userId, strikeId: typeof body.strikeId === 'string' ? body.strikeId : null })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log(action, reason || action, { targetUserId, newState: { strikes: result.activeStrikes, removed: 'removed' in result ? result.removed : false } as object })
+    return NextResponse.json(result)
+  }
+
+  if (action === 'set_experience') {
+    const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : ''
+    const experience = body.experience
+    if (!targetUserId || (experience !== 'rookie' && experience !== 'veteran' && experience !== null)) {
+      return NextResponse.json({ error: 'userId and experience (rookie, veteran or null to clear) required' }, { status: 400 })
+    }
+    const result = await setSurvivorCastawayExperience(leagueId, targetUserId, experience as 'rookie' | 'veteran' | null)
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+    await log('set_experience', `Marked ${experience ?? 'auto'}`, { targetUserId, newState: { experience } as object })
+    return NextResponse.json({ ok: true, settings: result.settings })
+  }
+
+  if (action === 'swap_now') {
+    const swap = readScheduledSwap({ ...(body.swap && typeof body.swap === 'object' ? body.swap as object : {}), week: 1 })
+    if (!swap) return NextResponse.json({ error: 'Choose a valid swap: a type, plus 2-5 tribes for a resize or a pattern of letters A-E.' }, { status: 400 })
+    const result = await sealCommissionerTribeSwap(leagueId, swap, userId)
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log('swap_now', `Sealed a ${swap.mode} swap`, { newState: { swapId: result.swapId, mode: swap.mode, revealAt: result.revealAt } as object })
+    return NextResponse.json(result)
+  }
+
+  // Exile Island and the side games (lib/survivor/survivorSideGameSettings.ts): token → FAAB, Exile
+  // slots and team bids, secrecy, the Token Pool, the shop, the Survivor Pool, auctions. One object
+  // under League.settings.survivorSideGames, validated against the season's locks.
+  if (action === 'side_games_settings') {
+    const result = await saveSurvivorSideGameSettings(leagueId, body.settings)
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+    await log('side_games_settings', 'Updated Exile and side-game settings', { newState: result.patch as object })
+    return NextResponse.json({ ok: true, settings: result.settings, locked: result.locked })
+  }
+
+  // Start / stop the Token Pool any time (open picks still settle).
+  if (action === 'token_pool_toggle') {
+    if (typeof body.open !== 'boolean') return NextResponse.json({ error: 'open (true or false) required' }, { status: 400 })
+    const result = await saveSurvivorSideGameSettings(leagueId, { tokenPoolOpen: body.open })
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+    await log('token_pool_toggle', body.open ? 'Opened the Token Pool' : 'Closed the Token Pool', { newState: { open: body.open } })
+    return NextResponse.json({ ok: true, settings: result.settings })
+  }
+
+  // The settle override: the commissioner names a game's winner (or a tie) and every open Token Pool
+  // and/or Survivor Pool pick on it settles now, exactly as the stored final would have settled it.
+  if (action === 'side_game_settle') {
+    const week = typeof body.week === 'number' && Number.isInteger(body.week) && body.week >= 1 ? body.week : 0
+    const gameKey = typeof body.gameKey === 'string' ? body.gameKey.trim().slice(0, 120) : ''
+    const winnerKey = typeof body.winnerKey === 'string' ? body.winnerKey.trim().slice(0, 60) : ''
+    const which = body.game === 'token_pool' || body.game === 'pool' ? body.game : 'both'
+    if (!week || !gameKey || !winnerKey) return NextResponse.json({ error: 'week, gameKey and winnerKey (a team key or "tie") required' }, { status: 400 })
+    const [away, home] = gameKey.split('@')
+    if (winnerKey !== 'tie' && winnerKey !== away && winnerKey !== home) return NextResponse.json({ error: 'The winner must be one of the two teams in that game, or "tie".' }, { status: 400 })
+    const league = await loadSideGameLeague(prisma, leagueId)
+    if (!league) return NextResponse.json({ error: 'Not a Survivor league.' }, { status: 404 })
+    const result = await settleSideGamePicksForGame({ league, week, gameKey, winnerKey, by: 'commissioner', actorUserId: userId, which })
+    for (const prize of result.prizes) await paySurvivorPoolPrize(league, prize.userId, prize.week)
+    await log('side_game_settle', `Settled ${gameKey} (week ${week}) as ${winnerKey}`, { week, newState: { gameKey, winnerKey, which, ...result } as object })
+    return NextResponse.json({ ok: true, ...result })
+  }
+
+  if (action === 'auction_create') {
+    const result = await createSurvivorAuction({ leagueId, actorUserId: userId, input: body.auction })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log('auction_create', 'Scheduled an auction', { newState: { auctionId: result.auctionId } })
+    return NextResponse.json(result)
+  }
+
+  if (action === 'auction_status') {
+    const auctionId = typeof body.auctionId === 'string' ? body.auctionId.trim() : ''
+    const status = body.status === 'open' || body.status === 'closed' || body.status === 'cancelled' ? body.status : null
+    if (!auctionId || !status) return NextResponse.json({ error: 'auctionId and status (open, closed or cancelled) required' }, { status: 400 })
+    const result = await setSurvivorAuctionStatus({ leagueId, actorUserId: userId, auctionId, status })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log('auction_status', `Auction ${status}`, { newState: { auctionId, status } })
+    return NextResponse.json(result)
+  }
+
+  if (action === 'pool_grant_revive') {
+    const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    const count = typeof body.count === 'number' && Number.isInteger(body.count) && body.count >= 1 && body.count <= 5 ? body.count : 0
+    if (!targetUserId || !count) return NextResponse.json({ error: 'targetUserId and count (1-5) required' }, { status: 400 })
+    const result = await reviveSurvivorPoolEntry({ leagueId, userId: targetUserId, actorUserId: userId, grant: count })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log('pool_grant_revive', `Granted ${count} Survivor Pool revive(s)`, { targetUserId, newState: { count } })
+    return NextResponse.json(result)
+  }
+
+  if (action === 'auction_cash_grant') {
+    const rosterId = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
+    const amount = typeof body.amount === 'number' ? body.amount : NaN
+    if (!rosterId || !Number.isInteger(amount)) return NextResponse.json({ error: 'rosterId and a whole amount required' }, { status: 400 })
+    const result = await grantSurvivorAuctionCash({ leagueId, actorUserId: userId, rosterId, amount, reason: typeof body.reason === 'string' ? body.reason : undefined })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    await log('auction_cash_grant', `Adjusted auction cash by ${amount}`, { newState: { rosterId, amount } })
+    return NextResponse.json(result)
   }
 
   if (action === 'pause_season' || action === 'resume_season') {

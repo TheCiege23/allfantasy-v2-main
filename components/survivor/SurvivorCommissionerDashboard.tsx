@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ScanEye,
   Send,
+  Gavel,
 } from 'lucide-react'
 import { SurvivorIslandAmbient } from '@/components/survivor/SurvivorIslandAmbient'
 import {
@@ -36,6 +37,8 @@ import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleCont
 import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
+import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
+import { SurvivorSideGamesHubPanel } from '@/components/survivor/SurvivorSideGamesHubPanel'
 import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
@@ -50,6 +53,7 @@ type TabId =
   | 'operations'
   | 'tribes'
   | 'tribal'
+  | 'governance'
   | 'minigames'
   | 'exile'
   | 'jury'
@@ -65,6 +69,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'operations', label: 'Operations', icon: <Scale className="h-4 w-4" /> },
   { id: 'tribes', label: 'Tribes', icon: <Users className="h-4 w-4" /> },
   { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
+  { id: 'governance', label: 'Rules & conduct', icon: <Gavel className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
@@ -616,6 +621,12 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             </div>
           )}
 
+          {tab === 'governance' && (
+            <WarRoomPanel title="Rules & conduct" subtitle="Conduct strikes, Rooks vs Vets and tribe swaps.">
+              <SurvivorGovernanceHubPanel leagueId={leagueId} />
+            </WarRoomPanel>
+          )}
+
           {tab === 'minigames' && (
             <WarRoomPanel
               title="Mini games"
@@ -633,6 +644,9 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               <Link href={`${base}/exile`} className="text-emerald-300 hover:text-emerald-200">
                 Exile dashboard →
               </Link>
+              <div className="mt-4">
+                <SurvivorSideGamesHubPanel leagueId={leagueId} />
+              </div>
             </WarRoomPanel>
           )}
 

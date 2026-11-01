@@ -6,10 +6,12 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-const src = vi.hoisted(() => ({ rewards: vi.fn(), finale: vi.fn(), challenges: vi.fn() }))
+const src = vi.hoisted(() => ({ rewards: vi.fn(), governance: vi.fn(), finale: vi.fn(), challenges: vi.fn(), sideGames: vi.fn() }))
 vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({ loadSurvivorDecisionSignals: src.rewards }))
 vi.mock('@/lib/survivor/survivorFinaleSignalsLoader', () => ({ loadSurvivorFinaleSignals: src.finale }))
 vi.mock('@/lib/survivor/survivorChallengeSignalsLoader', () => ({ loadSurvivorChallengeSignals: src.challenges }))
+vi.mock('@/lib/survivor/survivorDecisionSignalInput', () => ({ loadSurvivorAttentionSignals: src.governance }))
+vi.mock('@/lib/survivor/survivorSideGameSignalInput', () => ({ loadSurvivorSideGameSignals: src.sideGames }))
 
 import { loadSurvivorFormatSignals } from '@/lib/survivor/survivorFormatSignals'
 import { chimmyWeeklyReportBody } from '@/lib/survivor/chimmyWeeklyReport'
@@ -18,12 +20,18 @@ import { realGameSettingsFromForm, SURVIVOR_CHALLENGE_SETTING_DEFAULTS, type Sur
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 
 describe('loadSurvivorFormatSignals', () => {
-  it('concatenates every source; a throwing source costs only itself', async () => {
+  it('concatenates every source (A rewards, C governance, B finale, D challenges, E side games); a throwing source costs only itself; a duplicate id appears once', async () => {
     src.rewards.mockResolvedValue([{ id: 'r' }])
+    src.governance.mockResolvedValue([{ id: 'g' }, { id: 'r' }])
     src.finale.mockRejectedValue(new Error('boom'))
     src.challenges.mockResolvedValue([{ id: 'c' }])
+    src.sideGames.mockImplementation(() => { throw new Error('sync boom') })
     const out = await loadSurvivorFormatSignals({ userId: 'u', leagueIds: ['L'], now: new Date() })
-    expect(out.map((s) => s.id)).toEqual(['r', 'c'])
+    expect(out.map((s) => s.id)).toEqual(['r', 'g', 'c'])
+    src.sideGames.mockResolvedValue([{ id: 's' }])
+    src.finale.mockResolvedValue([{ id: 'f' }])
+    const all = await loadSurvivorFormatSignals({ userId: 'u', leagueIds: ['L'], now: new Date() })
+    expect(all.map((s) => s.id)).toEqual(['r', 'g', 'f', 'c', 's'])
     expect(await loadSurvivorFormatSignals({ userId: 'u', leagueIds: [], now: new Date() })).toEqual([])
   })
 })

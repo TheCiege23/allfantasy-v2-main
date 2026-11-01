@@ -48,6 +48,9 @@ import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
+import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
@@ -218,6 +221,13 @@ export async function GET(
   for (const r of rosters) {
     const teamId = map.rosterIdToTeamId.get(r.id)
     rosterDisplayNames[r.id] = teamId ? teamNameById[teamId] ?? r.id : r.id
+  }
+  // The commissioner's "tribe emoji in names" (display only; stored team names never change). Before
+  // the merge each castaway shows their current tribe's emoji; after it, nobody has a tribe to show.
+  if (readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged) {
+    const tribeByRoster = new Map<string, { name: string; catalogId: string | null }>()
+    for (const tribe of tribesRaw) for (const member of tribe.members) tribeByRoster.set(member.rosterId, { name: tribe.name, catalogId: tribe.catalogId ?? null })
+    Object.assign(rosterDisplayNames, decorateNamesWithTribeEmoji(rosterDisplayNames, tribeByRoster, true))
   }
 
   let myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[] = []
@@ -415,6 +425,13 @@ export async function GET(
     })),
     jury: jury.map((j) => ({ rosterId: j.rosterId, votedOutWeek: j.votedOutWeek })),
     exileLeagueId,
+    // Exile secrecy (League.settings.survivorSideGames.hideExileMembership): screens drop "on Exile"
+    // labels for a viewer who may not know. Token balances below are already the viewer's own only.
+    exileMembershipHidden: !canSeeExileMembership({
+      hidden: exileMembershipHidden(leagueSettingsRow?.settings),
+      viewerState: myExileStatus ? 'exile' : null,
+      nonPlayingCommissioner: privacy.decisions.canSeeHiddenIdolAssignments,
+    }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null
       return {

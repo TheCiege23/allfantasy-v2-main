@@ -55,6 +55,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     return 'opening_started'
   }
   const week = game.currentWeek
+  // A sealed swap (scheduled or the commissioner's) is revealed at the lineup lock it names, so the
+  // week's scores land on the new tribes. No-op when nothing is sealed or it is not yet due.
+  {
+    const { revealDueTribeSwap } = await import('./tribeSwapService')
+    await revealDueTribeSwap(leagueId, { now }).catch(error => {
+      console.warn('[survivor] tribe swap reveal failed', error instanceof Error ? error.message : error)
+    })
+  }
   if (week > plan.endWeek || week > calendarWeek) return 'awaiting_calendar'
   const kind = plannedWeekKind(plan, week)
   if (kind === 'outside') return 'outside_plan'
@@ -98,6 +106,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     const { runChallengeBuilderStep } = await import('./survivorChallengeBuilder')
     await runChallengeBuilderStep(leagueId, now).catch(error => {
       console.warn('[survivor] challenge builder step failed', error instanceof Error ? error.message : error)
+    })
+  }
+  // Exile Island and the side games (survivorSideGameRunner.ts): Exile team bids, Token Pool and
+  // Survivor Pool settlement from stored finals, Auction Week, shop deliveries, the return's FAAB, and
+  // Chimmy's picks and bids for the seats it runs. Idempotent and best-effort: never holds up the island.
+  {
+    const { runSurvivorSideGameStep } = await import('./survivorSideGameRunner')
+    await runSurvivorSideGameStep(leagueId, week, now).catch(error => {
+      console.warn('[survivor] side-game step failed', error instanceof Error ? error.message : error)
     })
   }
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
@@ -259,6 +276,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     await postChimmyWeekLines(leagueId, week)
   }
   await dissolveSurpriseTribes(leagueId, week)
+  // The commissioner's scheduled swaps beyond the setup screen's one (more tribes, back to the
+  // originals, a custom pattern): sealed as this week closes, revealed at the next lineup lock.
+  // Best-effort and idempotent; a swap that cannot be drawn is recorded and the week still advances.
+  {
+    const { ensureScheduledTribeSwap } = await import('./survivorScheduledSwaps')
+    await ensureScheduledTribeSwap(leagueId, week, now).catch(error => {
+      console.warn('[survivor] scheduled tribe swap failed', error instanceof Error ? error.message : error)
+    })
+  }
   await advanceWeek(leagueId)
   return 'week_advanced'
 }

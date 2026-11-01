@@ -24,6 +24,10 @@ export async function canSendToChannel(
   const state = player?.playerState ?? 'unknown'
 
   if (type === 'tribe') {
+    // A NON-playing host is added to every huddle (survivorTribeChatProvisioning) and has no active
+    // player row, so the active-player rule below made them read-only in a chat they host. The host
+    // posts; a playing commissioner is a manager like any other and falls through to that rule.
+    if (state !== 'active' && await isNonPlayingHost(leagueId, userId)) return { allowed: true }
     if (state !== 'active' || player?.canAccessTribeChat === false) {
       await logDeny(leagueId, userId, 'tribe_access_revoked')
       return { allowed: false, reason: 'tribe_access_revoked' }
@@ -79,6 +83,13 @@ export async function canSendToChannel(
   }
 
   return { allowed: true }
+}
+
+/** The league commissioner (or a host-mode co-commissioner) who is not playing this season. */
+async function isNonPlayingHost(leagueId: string, userId: string): Promise<boolean> {
+  const { resolveSurvivorAccessContext } = await import('./survivorAccessControl')
+  const access = await resolveSurvivorAccessContext(leagueId, userId).catch(() => null)
+  return Boolean(access?.isNonParticipatingCommissionerHost)
 }
 
 async function logDeny(leagueId: string, userId: string, reason: string): Promise<void> {

@@ -6,7 +6,11 @@ const mocks = vi.hoisted(() => ({
   resolveManagerCommandCenterSnapshot: vi.fn(),
   leagueSettingsCount: vi.fn(),
   loadCareerDecisionInput: vi.fn(),
-  loadSurvivorFormatSignals: vi.fn(async () => []),
+  loadSurvivorDecisionSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorAttentionSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorFinaleSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorChallengeSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorSideGameSignals: vi.fn(async () => [] as unknown[]),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -25,10 +29,26 @@ vi.mock('@/lib/decision-os/managerCommandCenter', async () => {
 vi.mock('@/lib/core-app/careerDecisionInput', () => ({
   loadCareerDecisionInput: mocks.loadCareerDecisionInput,
 }))
-// Survivor format signals (rewards + finale/Tribal + challenges): ONE loader, started beside the
-// snapshot and handed over as a single promise like career.
-vi.mock('@/lib/survivor/survivorFormatSignals', () => ({
-  loadSurvivorFormatSignals: mocks.loadSurvivorFormatSignals,
+// Survivor format signals: ONE loader (`loadSurvivorFormatSignals`, real here), started beside the
+// snapshot and handed over as a single promise like career. Its five SOURCES are mocked, so this
+// test proves every source reaches the one argument and none reaches Prisma.
+vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({
+  loadSurvivorDecisionSignals: mocks.loadSurvivorDecisionSignals,
+}))
+// Survivor governance signals: the SAME format-signal argument as the reward signals, not a sixth one.
+vi.mock('@/lib/survivor/survivorDecisionSignalInput', () => ({
+  loadSurvivorAttentionSignals: mocks.loadSurvivorAttentionSignals,
+}))
+// Finale / Tribal deadlines and open challenges: the same argument.
+vi.mock('@/lib/survivor/survivorFinaleSignalsLoader', () => ({
+  loadSurvivorFinaleSignals: mocks.loadSurvivorFinaleSignals,
+}))
+vi.mock('@/lib/survivor/survivorChallengeSignalsLoader', () => ({
+  loadSurvivorChallengeSignals: mocks.loadSurvivorChallengeSignals,
+}))
+// Side-game signals (pool pick due, auction closing, shop open): the same argument again.
+vi.mock('@/lib/survivor/survivorSideGameSignalInput', () => ({
+  loadSurvivorSideGameSignals: mocks.loadSurvivorSideGameSignals,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
@@ -89,7 +109,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
       ['league-1', 'league-2', 'league-3'],
       expect.any(Date),
       expect.any(Promise),
-      // ONE Survivor format-signals promise (rewards + finale/Tribal + challenges), like the career read.
+      // ONE Survivor format-signals promise (rewards + governance + finale/Tribal + challenges + side games), like the career read.
       expect.any(Promise),
     )
     // The career read gets the SAME rows the league ids came from — no second list read.
@@ -151,5 +171,43 @@ describe('GET /api/decision-os/manager-command-center', () => {
     expect(body.totalLeagues).toBe(0)
     expect(body.draftsApproachingCount).toBe(0)
     expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise), expect.any(Promise))
+  })
+
+  it('folds every Survivor signal source into the ONE format-signal argument, and a failing source hides no other', async () => {
+    mocks.getServerSession.mockResolvedValueOnce({ user: { id: 'user-1' } })
+    mocks.getDashboardLeagueListForUser.mockResolvedValueOnce({ leagues: [{ id: 'league-1' }], sleeperUserId: null })
+    mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ totalLeagues: 1 }))
+    mocks.leagueSettingsCount.mockResolvedValueOnce(0)
+    const reward = { id: 'survivor_reward:league-1:r1', leagueId: 'league-1' }
+    const governance = { id: 'survivor_trade_window:league-1:3', leagueId: 'league-1' }
+    mocks.loadSurvivorDecisionSignals.mockResolvedValueOnce([reward])
+    mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance, reward])
+    const sideGame = { id: 'survivor_side_game:league-1:pool_pick:3', leagueId: 'league-1' }
+    mocks.loadSurvivorSideGameSignals.mockResolvedValueOnce([sideGame])
+    const finale = { id: 'survivor_finale:league-1:jury_vote', leagueId: 'league-1' }
+    mocks.loadSurvivorFinaleSignals.mockResolvedValueOnce([finale])
+    const challenge = { id: 'survivor_challenge:league-1:c1', leagueId: 'league-1' }
+    mocks.loadSurvivorChallengeSignals.mockResolvedValueOnce([challenge, governance])
+
+    const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
+    await GET()
+
+    const call = mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)!
+    expect(call).toHaveLength(5)
+    // All five sources (A rewards, C governance, B finale, D challenges, E side games) reach the one
+    // argument, and a duplicate id across sources is admitted once.
+    await expect(call[4]).resolves.toEqual([reward, governance, finale, challenge, sideGame])
+
+    mocks.getServerSession.mockResolvedValueOnce({ user: { id: 'user-1' } })
+    mocks.getDashboardLeagueListForUser.mockResolvedValueOnce({ leagues: [{ id: 'league-1' }], sleeperUserId: null })
+    mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ totalLeagues: 1 }))
+    mocks.leagueSettingsCount.mockResolvedValueOnce(0)
+    mocks.loadSurvivorDecisionSignals.mockRejectedValueOnce(new Error('ledger down'))
+    mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance])
+    mocks.loadSurvivorSideGameSignals.mockRejectedValueOnce(new Error('side games down'))
+    mocks.loadSurvivorFinaleSignals.mockImplementationOnce(() => { throw new Error('finale threw synchronously') })
+    mocks.loadSurvivorChallengeSignals.mockResolvedValueOnce([challenge])
+    await GET()
+    await expect(mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)![4]).resolves.toEqual([governance, challenge])
   })
 })
