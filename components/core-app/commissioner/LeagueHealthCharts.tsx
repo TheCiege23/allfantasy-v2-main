@@ -14,6 +14,7 @@
 
 import { useId, useMemo, useState } from 'react'
 import { messagesFor } from '@/lib/i18n/messages'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import { commissionerHealthChartsMessages } from '@/lib/core-app/messages/commissionerHealthCharts'
 import { pie3dGeometry, lastWeeks, type ManagerActivity, type MixSlice, type MoveKind, type WeekPoint } from '@/lib/core-app/commissioner/healthCharts'
 
@@ -226,7 +227,7 @@ function ManagerActivityChart({ rows, reason, m, language }: { rows: ManagerActi
   const at = hover != null && rows ? rows[hover] : null
   const dateFmt = useMemo(() => {
     try {
-      return new Intl.DateTimeFormat(language === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric' })
+      return new Intl.DateTimeFormat(coreLocale(language).usLocale, { month: 'short', day: 'numeric' })
     } catch {
       return null
     }

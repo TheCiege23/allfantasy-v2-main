@@ -2584,7 +2584,7 @@ button.af-ch-os-chip {
   margin: 6px 34px 0 0;
   padding: 0;
   display: flex;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 .af-ch-lh-axis li {
@@ -2645,7 +2645,7 @@ button.af-ch-os-chip {
   flex: none;
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text);
   background: var(--chip);
