@@ -21,6 +21,7 @@ import { useNbaCupLiveView } from "./useNbaCupLiveView"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
 import "../bracket-experience.css"
 import "./pool-dashboard.css"
+import BracketCoachPanel from "./BracketCoachPanel"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -390,6 +391,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         </section>
 
         {rollingCup ? <NbaCupTournamentPanel series={series} season={safeChallenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
+        <BracketCoachPanel view={view} />
 
         {canSyncPlayoffPool ? (
           <section
