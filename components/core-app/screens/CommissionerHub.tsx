@@ -31,6 +31,8 @@ import {
   AuditTimeline,
   AuditTimelineFallback,
   ChartsFallback,
+  HealthBreakdown,
+  HealthBreakdownStatic,
   OperationalCharts,
   RecentChanges,
   RecentChangesFallback,
@@ -405,7 +407,19 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
         data-ring={healthRing == null ? undefined : 'true'}
       >
-        <HealthPanel data={data} language={language} />
+        <HealthPanel
+          data={data}
+          language={language}
+          breakdown={
+            activity ? (
+              <Suspense fallback={<HealthBreakdownStatic data={data} reason="loading" language={language} />}>
+                <HealthBreakdown data={data} activity={activity} language={language} />
+              </Suspense>
+            ) : (
+              <HealthBreakdownStatic data={data} reason="locked" language={language} />
+            )
+          }
+        />
       </div>
 
       {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}

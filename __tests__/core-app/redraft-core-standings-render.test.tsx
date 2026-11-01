@@ -21,6 +21,8 @@ vi.mock('@/components/core-app/commissioner/HubReports', () => ({
   RecentChangesFallback: () => null,
   AuditTimeline: () => null,
   AuditTimelineFallback: () => null,
+  HealthBreakdown: () => null,
+  HealthBreakdownStatic: () => null,
 }))
 vi.mock('@/components/commish/BroadcastModal', () => ({ default: () => null }))
 vi.mock('@/components/core-app/commissioner/GuidedWorkflows', () => ({ GuidedWorkflows: () => null }))
