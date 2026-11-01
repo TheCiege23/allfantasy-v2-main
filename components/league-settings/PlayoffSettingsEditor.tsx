@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Lock, Trophy, ChevronRight, AlertTriangle, Check } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useSaveScopeParticipant } from '@/components/league-settings/home/SettingsSaveScope'
 
 interface PlayoffStageOption {
   id: string
@@ -113,7 +114,8 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
     })
   }, [isPremium])
 
-  const save = useCallback(async () => {
+  /** Resolves true when the stages saved. */
+  const save = useCallback(async (): Promise<boolean> => {
     setSaving(true)
     setError(null)
     setSuccess(false)
@@ -124,19 +126,23 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
         body: JSON.stringify({ includedStages: [...pendingStages] }),
       })
       const data = await res.json()
-      if (data.error === 'premiumRequired') { setGateOpen(true); return }
-      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
+      if (data.error === 'premiumRequired') { setGateOpen(true); return false }
+      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return false }
       setConfig(data.config)
       setPreview(null)
       setSuccess(true)
-    } catch { setError(t('lsEd.requestFailed')) }
+      return true
+    } catch { setError(t('lsEd.requestFailed')); return false }
     finally { setSaving(false) }
   }, [leagueId, pendingStages])
+
+  const hasChanges = Boolean(config && JSON.stringify([...pendingStages].sort()) !== JSON.stringify([...config.includedStages].sort()))
+  // On a League Settings page the page's "Save changes" bar saves the stages with everything else.
+  const inSaveBar = useSaveScopeParticipant(hasChanges, save)
 
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.po.loading')}</div>
 
   const startWeekReadOnly = typeof playoffStartWeek === 'number' && playoffStartWeek > 0
-  const hasChanges = config && JSON.stringify([...pendingStages].sort()) !== JSON.stringify([...config.includedStages].sort())
 
   return (
     <div className="space-y-6">
@@ -251,13 +257,13 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
 
       {/* Save */}
       {error && <div className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
-      {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.po.saved')}</div>}
+      {success && !inSaveBar && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.po.saved')}</div>}
 
-      {hasChanges && (
+      {hasChanges && !inSaveBar && (
         <button
           type="button"
           disabled={saving}
-          onClick={save}
+          onClick={() => void save()}
           className="rounded-lg border border-amber-500/30 bg-amber-600/20 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-600/30 disabled:opacity-50"
         >
           {saving ? t('lsEd.saving') : t('lsEd.po.save')}

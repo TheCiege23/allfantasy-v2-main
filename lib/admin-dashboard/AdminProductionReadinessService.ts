@@ -202,6 +202,14 @@ const ENV_REQUIREMENTS: EnvRequirement[] = [
     allOf: ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"],
     note: "Used by rich media upload flows where enabled.",
   },
+  {
+    id: "google-play-reports",
+    category: "Platform",
+    label: "Google Play install reports",
+    severity: "optional",
+    allOf: ["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "GOOGLE_PLAY_REPORTS_BUCKET"],
+    note: "Shows Google Play download counts on the admin dashboard. The service account needs Play Console access to bulk reports.",
+  },
 ]
 
 function present(name: string): boolean {

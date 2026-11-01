@@ -62,9 +62,9 @@ describe('resolveLeagueIntroFormatKey', () => {
 describe('league type media (poster / video assets)', () => {
   it('redraft uses redraft intro + redraft art, not guillotine or another format’s image', () => {
     const m = getLeagueTypeMedia('redraft')
-    expect(m.introVideo).toBe('/media/league-intros/redraft-league-intro.mp4')
+    expect(m.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(m.thumbnail).toBe('/images/league-types/redraft.png')
-    expect(m.defaultLeagueImageUrl).toBe('/images/league-types/redraft.png')
+    expect(m.defaultLeagueImageUrl).toBe('/af-robot-king.png')
     expect(m.thumbnail).not.toMatch(/guillotine/i)
   })
 
@@ -81,7 +81,7 @@ describe('league type media (poster / video assets)', () => {
   it('unknown key falls back to redraft media bundle (neutral poster)', () => {
     const m = getLeagueTypeMedia('definitely_not_a_format')
     expect(m.key).toBe('definitely_not_a_format')
-    expect(m.introVideo).toBe('/media/league-intros/redraft-league-intro.mp4')
+    expect(m.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(m.thumbnail).toBe('/images/league-types/redraft.png')
   })
 })
@@ -96,7 +96,7 @@ describe('intro video selection via getFormatIntroMetadata', () => {
       }),
       leagueVariant: 'guillotine',
     })
-    expect(meta.introVideo).toBe('/media/league-intros/redraft-league-intro.mp4')
+    expect(meta.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(meta.thumbnail).toBe('/images/league-types/redraft.png')
     expect(meta.title).toContain('Redraft')
   })
@@ -129,7 +129,7 @@ describe('intro video selection via getFormatIntroMetadata', () => {
       }),
       leagueVariant: 'fb_half_ppr',
     })
-    expect(meta.introVideo).toBe('/media/league-intros/redraft-league-intro.mp4')
+    expect(meta.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
   })
 
   it('unknown intro format key falls back to redraft media', () => {
@@ -140,7 +140,7 @@ describe('intro video selection via getFormatIntroMetadata', () => {
         settings: {},
       }),
     })
-    expect(meta.introVideo).toBe('/media/league-intros/redraft-league-intro.mp4')
+    expect(meta.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(meta.thumbnail).toBe('/images/league-types/redraft.png')
   })
 })
@@ -157,7 +157,7 @@ describe('canonical concept / draft media resolution', () => {
     ).toBe('redraft')
   })
 
-  it('resolveLeagueCardTypeKey: My Leagues fallback art for redraft is redraft.png path', () => {
+  it('resolveLeagueCardTypeKey: My Leagues fallback art for redraft is the robot king', () => {
     const url = getLeagueTypeMedia(
       resolveLeagueCardTypeKey({
         leagueType: 'redraft',
@@ -166,7 +166,7 @@ describe('canonical concept / draft media resolution', () => {
         isDynasty: false,
       }),
     ).defaultLeagueImageUrl
-    expect(url).toBe('/images/league-types/redraft.png')
+    expect(url).toBe('/af-robot-king.png')
     expect(url).not.toMatch(/guillotine/i)
   })
 

@@ -83,7 +83,7 @@ function triageRow(over: Partial<TriageBookRow> = {}): TriageBookRow {
     imageUrl: null,
     leagues: [
       { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyjae Spears', position: 'RB' }, { name: 'Zach Charbonnet', position: 'RB' }] },
-      { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
+      { id: 'l2', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
       { id: 'l3', name: 'Work League', platform: 'espn', imageUrl: null, slot: 'ir' },
       { id: 'l4', name: 'Taxi Squad', platform: 'sleeper', imageUrl: null, slot: 'taxi' },
       ...Array.from({ length: 4 }, (_, i) => ({ id: `x${i}`, name: `Extra ${i}`, platform: 'sleeper', imageUrl: null, slot: null })),
@@ -365,7 +365,7 @@ const D_NOW = new Date('2026-08-24T20:00:00Z')
 function draft(over: Partial<DraftHqAllRow> = {}): DraftHqAllRow {
   return {
     leagueId: 'l1',
-    leagueName: 'Guillotine League 26',
+    leagueName: 'Guilly League 26',
     platform: 'sleeper',
     imageUrl: null,
     phase: 'live',
@@ -415,6 +415,13 @@ describe('Drafts on the clock (DashDraftsBand)', () => {
     const out = en(<DashDraftsBand data={{ rows: [draft(), draft({ leagueId: 'l2', rawStatus: 'paused', pickExpiresAt: null })] } as never} now={D_NOW} />)
     for (const s of ['Drafts on the clock', '2 drafts live now', 'DRAFTING', 'PAUSED', 'Your slot 4 · 22 picks made', '45 min on the pick clock', 'On the clock — no pick timer reported', 'Open draft room'])
       expect(out).toContain(s)
+  })
+
+  it('"Open draft room" goes to the live room, not back to Draft HQ', () => {
+    lang.language = 'en'
+    const { container } = render(<DashDraftsBand data={{ rows: [draft()] } as never} now={D_NOW} />)
+    const open = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Open draft room')
+    expect(open?.getAttribute('href')).toBe('/league/l1/draft')
   })
 })
 

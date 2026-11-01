@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getRookieDraftOrderConfig, computeRookieDraftOrder } from '@/lib/league/rookieDraftOrder'
 import { buildRosterIdResolver } from '@/lib/league/league-settings-draft-sync'
 import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderService'
+import { isRedraftPickLeague } from '@/lib/league-trade-engine/redraftDraftPicks'
 
 export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -25,6 +26,20 @@ export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displa
 export async function resolveRookieDraftSlotOrderForLeague(
   leagueId: string,
 ): Promise<RookieDraftSlotOrderEntry[] | null> {
+  // A redraft league starts each season fresh: last season's finish never seats its next draft,
+  // whatever rookie-order setting is stored (both routes that save one can be reached by API).
+  const kind = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { isDynasty: true, leagueType: true, leagueVariant: true },
+  })
+  if (!kind) return null
+  if (
+    isRedraftPickLeague({ leagueType: kind.leagueType, isDynasty: kind.isDynasty }) &&
+    isRedraftPickLeague({ leagueType: kind.leagueVariant })
+  ) {
+    return null
+  }
+
   // The live order (AF Commissioner automation, `lib/rookie-order/`) wins when it is on and has a
   // saved final order; otherwise the older worst-to-first / reverse-PF setting below applies.
   const live = await resolveLiveRookieDraftSlots(leagueId)

@@ -1,0 +1,20 @@
+.card { border: 1px solid rgba(94,234,212,.24); border-radius: 16px; padding: 16px; background: rgba(15,23,42,.42); color: inherit; max-width: 100%; }
+.label { color: #5eead4; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.summary { font-size: 14px; line-height: 1.65; margin: 8px 0 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.title { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
+.sections { display: grid; gap: 10px; list-style: none; padding: 0; margin: 0 0 14px; }
+.sections li { border: 1px solid rgba(148,163,184,.18); border-radius: 10px; padding: 12px; overflow: hidden; }
+.sections strong { display: block; font-size: 12px; }
+.sections span { display: block; font-size: 12px; line-height: 1.5; opacity: .75; margin-top: 4px; }
+.placeholder { display: grid; gap: 5px; margin-top: 10px; filter: blur(3px); user-select: none; pointer-events: none; }
+.placeholder i { display: block; height: 5px; border-radius: 5px; background: rgba(148,163,184,.18); width: 92%; }
+.placeholder i:nth-child(2) { width: 74%; }
+.placeholder i:nth-child(3) { width: 83%; }
+.price { font-size: 13px; font-weight: 650; margin: 12px 0 4px; }
+.note { font-size: 12px; line-height: 1.5; opacity: .75; margin: 6px 0; }
+.note a { text-decoration: underline; color: #5eead4; }
+.notice { font-size: 12px; line-height: 1.5; color: #fbbf24; margin: 10px 0; }
+.unlock { min-height: 44px; border: 1px solid rgba(94,234,212,.4); background: rgba(20,184,166,.15); color: inherit; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 650; cursor: pointer; margin-top: 10px; width: 100%; }
+.unlock:hover:not(:disabled) { background: rgba(20,184,166,.25); }
+.unlock:focus-visible { outline: 2px solid #5eead4; outline-offset: 3px; }
+.unlock:disabled { cursor: default; opacity: .5; }

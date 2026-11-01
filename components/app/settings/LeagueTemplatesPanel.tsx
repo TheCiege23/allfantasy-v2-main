@@ -90,6 +90,36 @@ export default function LeagueTemplatesPanel({ leagueId }: { leagueId: string })
     router.push(`/create-league?template=${templateId}`);
   };
 
+  // Rule templates library: share a template so other commissioners can start leagues from it.
+  const isShared = (t: TemplateRow) => Boolean((t.payload as unknown as { share?: { public?: boolean } })?.share?.public);
+  const handleShare = async (t: TemplateRow) => {
+    const next = !isShared(t);
+    const res = await fetch(`/api/leagues/templates/${t.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public: next }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? 'Failed to update sharing');
+      return;
+    }
+    setTemplates((prev) =>
+      prev.map((row) =>
+        row.id === t.id
+          ? { ...row, payload: { ...(row.payload as object), share: { ...((row.payload as unknown as { share?: object })?.share ?? {}), public: next } } as unknown as LeagueTemplatePayload }
+          : row
+      )
+    );
+    if (next) {
+      const link = `${window.location.origin}/create-league?template=${t.id}`;
+      await navigator.clipboard?.writeText(link).catch(() => {});
+      toast.success('Shared — it is in the template library, and the link is copied');
+    } else {
+      toast.success('No longer shared');
+    }
+  };
+
   return (
     <div className="space-y-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <h3 className="text-base font-semibold text-white">League templates</h3>
@@ -126,7 +156,12 @@ export default function LeagueTemplatesPanel({ leagueId }: { leagueId: string })
       </div>
 
       <div>
-        <h4 className="mb-2 text-sm font-medium text-white/90">My templates</h4>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h4 className="text-sm font-medium text-white/90">My templates</h4>
+          <a href="/league-templates" className="text-xs font-semibold text-purple-300 hover:text-purple-200">
+            Browse shared templates
+          </a>
+        </div>
         {loading ? (
           <p className="text-sm text-white/50">Loading…</p>
         ) : templates.length === 0 ? (
@@ -146,6 +181,15 @@ export default function LeagueTemplatesPanel({ leagueId }: { leagueId: string })
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-white/20 text-white/80"
+                    onClick={() => handleShare(t)}
+                    data-testid={`commissioner-template-share-${t.id}`}
+                  >
+                    {isShared(t) ? 'Shared' : 'Share'}
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

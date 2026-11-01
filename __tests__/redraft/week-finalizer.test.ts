@@ -549,6 +549,7 @@ describe('finalizeCompletedWeeksForSeason', () => {
           // Weeks 2 and 4 still open; week 2 appears twice and must be visited once.
           return [{ week: 4 }, { week: 2 }, { week: 2 }]
         }),
+        findFirst: vi.fn(async () => null),
       },
       redraftSeason: { findFirst: vi.fn(async () => null) },
     } as any
@@ -567,6 +568,46 @@ describe('finalizeCompletedWeeksForSeason', () => {
     expect(result.results.map((r) => r.week)).toEqual([2, 4])
     expect(result.finalized).toBe(0)
     expect(result.refusals.season_not_found).toBe(2)
+  })
+
+  /*
+   * A week still refusing when it ages out of the lookback was never looked at again, and one open
+   * week blocks `advance_week` for good — the live NHL season's week 1 was about to do exactly that.
+   */
+  it('also sweeps the single OLDEST open week behind the window, and only that one', async () => {
+    const findFirst = vi.fn(async () => ({ week: 1 }))
+    const prisma = {
+      redraftMatchup: { findMany: vi.fn(async () => [{ week: 3 }]), findFirst },
+      redraftSeason: { findFirst: vi.fn(async () => null) },
+    } as any
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 5 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any },
+    )
+
+    expect(findFirst.mock.calls[0]).toEqual([
+      {
+        where: { seasonId: 'season-1', week: { lt: 2 }, status: { not: 'final' }, awayRosterId: { not: null } },
+        orderBy: { week: 'asc' },
+        select: { week: true },
+      },
+    ])
+    expect(result.results.map((r) => r.week)).toEqual([1, 3])
+  })
+
+  it('does not look behind a window that already starts at week 1', async () => {
+    const findFirst = vi.fn(async () => ({ week: 1 }))
+    const prisma = {
+      redraftMatchup: { findMany: vi.fn(async () => [{ week: 2 }]), findFirst },
+      redraftSeason: { findFirst: vi.fn(async () => null) },
+    } as any
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 4 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any },
+    )
+    expect(findFirst).not.toHaveBeenCalled()
+    expect(result.results.map((r) => r.week)).toEqual([2])
   })
 })
 

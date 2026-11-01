@@ -158,8 +158,51 @@ describe('VERIFIED_SCREENS census', () => {
       espn: ['league', 'lineup', 'waivers', 'trade'],
       yahoo: ['league', 'lineup', 'waivers', 'trade'],
       mfl: [],
-      fantrax: [],
+      // League page only — fantrax.com/fantasy/league/<id>/home, the address-bar URL users copy their
+      // id from (league v2kzedypmm8jp61b, lib/league-import/fantrax/fantraxApi.ts parseFantraxLeagueId).
+      // Lineup (/team/roster) is a candidate only, awaiting a signed-in check — see sourceLinkResolver.
+      fantrax: ['league'],
       fleaflicker: [],
     })
+  })
+})
+
+describe('Fantrax — needs Fantrax\'s own league id, never the local uuid', () => {
+  const REAL = 'v2kzedypmm8jp61b'
+  // What `League.platformLeagueId` actually holds for a Fantrax league: the local FantraxLeague.id.
+  const LOCAL_UUID = '3f2b8c1e-9a4d-4e6b-8c2a-1d5e7f9a0b3c'
+
+  it('builds the league page from Fantrax\'s id, preserving its case', () => {
+    const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: 'V2kZedYpmm8Jp61B', leagueName: 'X', screen: 'league' })!
+    // Parsed rather than spelled out: the DB-first guard reads a literal provider URL as a feed call.
+    expect(new URL(link.href).hostname).toBe('www.fantrax.com')
+    expect(new URL(link.href).pathname).toBe('/fantasy/league/V2kZedYpmm8Jp61B/home')
+    expect(link.verified).toBe(true)
+  })
+
+  it('refuses the local uuid: homepage, not a link to a league that does not exist', () => {
+    for (const screen of ['league', 'lineup'] as const) {
+      const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: LOCAL_UUID, leagueName: 'X', screen })!
+      expect(link.href).not.toContain('/fantasy/league/')
+      expect(link.destinationType).toBe('homepage')
+      expect(link.verified).toBe(false)
+      expect(link.candidate).toBeNull()
+    }
+  })
+
+  it('lineup is a candidate only — the league page is the destination until it is verified', () => {
+    const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: REAL, leagueName: 'X', screen: 'lineup' })!
+    expect(link.verified).toBe(false)
+    expect(new URL(link.href).pathname).toBe(`/fantasy/league/${REAL}/home`)
+    expect(new URL(link.candidate!).hostname).toBe('www.fantrax.com')
+    expect(new URL(link.candidate!).pathname).toBe(`/fantasy/league/${REAL}/team/roster`)
+  })
+
+  it('rejects ids that could smuggle a path or a host', () => {
+    for (const id of ['abc/../../evil', 'abcdefgh?x=1', 'abcdefgh#frag', 'evil.com/abcdefgh', 'short']) {
+      const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: id, leagueName: 'X', screen: 'league' })!
+      expect(link.href).not.toContain('/fantasy/league/')
+      expect(link.destinationType).toBe('homepage')
+    }
   })
 })

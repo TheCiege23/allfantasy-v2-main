@@ -50,12 +50,17 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
    */
   const providerIds = [...identities.values()].map((p) => p.rollingInsightsId).filter((id): id is string => !!id)
   const cfbdIds = [...identities.values()].map((p) => p.cfbdId).filter((id): id is string => !!id)
-  const images = providerIds.length || cfbdIds.length ? await prisma.sportsPlayer.findMany({
+  /* NFL identity rows are Sleeper-keyed: the face is on `SportsPlayer.sleeperId`, never `externalId`
+     (the same portrait bridge `resolveProviderRosterPlayers` uses). */
+  const sleeperIds = [...new Set([...identities.values()].map((p) => p.sleeperId).filter((id): id is string => !!id))]
+  const images = providerIds.length || cfbdIds.length || sleeperIds.length ? await prisma.sportsPlayer.findMany({
     where: { sport: normalizedSport, OR: [
       { source: 'cfbd', externalId: { in: cfbdIds } },
       { source: 'rolling_insights', externalId: { in: providerIds } },
+      ...(sleeperIds.length ? [{ sleeperId: { in: sleeperIds }, imageUrl: { not: null } }] : []),
     ] },
-    select: { externalId: true, source: true, imageUrl: true },
+    select: { externalId: true, source: true, imageUrl: true, sleeperId: true },
+    orderBy: { fetchedAt: 'desc' },
   }).catch(() => []) : []
   return records.map((r, i) => {
     const p = identities.get(ids[i]) ?? null
@@ -67,7 +72,8 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
       position, team: school?.school ?? team,
       imageUrl: asHeadshotUrl(field(r.imageUrl))
         ?? asHeadshotUrl(images.find((img) => img.source === 'cfbd' && img.externalId === p?.cfbdId)?.imageUrl)
-        ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl),
+        ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl)
+        ?? (p?.sleeperId ? asHeadshotUrl(images.find((img) => img.sleeperId === p.sleeperId && img.imageUrl)?.imageUrl) : null),
       logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team) }
   })
 }

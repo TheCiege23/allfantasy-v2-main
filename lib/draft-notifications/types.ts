@@ -5,6 +5,12 @@
 
 export const DRAFT_NOTIFICATION_EVENT_TYPES = [
   'draft_on_the_clock',
+  'draft_three_picks_away',
+  'draft_two_picks_away',
+  'draft_next_pick',
+  'draft_time_set',
+  'draft_started',
+  'draft_ended',
   'draft_approaching_timeout',
   'draft_auto_pick_fired',
   'draft_queue_player_unavailable',
@@ -37,6 +43,9 @@ export interface DraftNotificationPayload {
   displayName?: string
   playerName?: string
   source?: string
+  /** Stable identity for this draft event, independent of the producing system. */
+  eventKey?: string
+  draftTime?: string
   tradeProposalId?: string
   /** For auction_outbid: previous bid amount. */
   previousBid?: number

@@ -1,9 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
-import { useMemo, useState } from 'react'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { Fragment, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import { leagueSportCounts, leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
@@ -181,10 +184,22 @@ export function MyLeaguesV4({
   }, [history, showHistory, platform, q])
 
   const tiers: MyLeaguesTier[] = ['needs', 'playing', 'quiet']
-  const byTier = useMemo(() => {
+  /*
+   * Each Exile Island rides under its Survivor league, in that league's tier, joined by ↕ — it is
+   * part of that game, not a league of its own. An island whose league is filtered out keeps its
+   * own place.
+   */
+  const { byTier, islandsOf } = useMemo(() => {
+    const present = new Set(filtered.map((l) => l.id))
+    const islandsOf = new Map<string, MyLeaguesLeague[]>()
+    for (const l of filtered) {
+      if (!l.exileOf || l.exileOf === l.id || !present.has(l.exileOf)) continue
+      islandsOf.set(l.exileOf, [...(islandsOf.get(l.exileOf) ?? []), l])
+    }
+    const paired = new Set([...islandsOf.values()].flat().map((l) => l.id))
     const map: Record<MyLeaguesTier, MyLeaguesLeague[]> = { needs: [], playing: [], quiet: [] }
-    for (const l of groupLeagueHubs(filtered)) map[l.tier].push(l)
-    return map
+    for (const l of groupLeagueHubs(filtered.filter((row) => !paired.has(row.id)))) map[l.tier].push(l)
+    return { byTier: map, islandsOf }
   }, [filtered])
 
   const nothingMatches = filtered.length === 0 && filteredHistory.length === 0
@@ -426,15 +441,27 @@ export function MyLeaguesV4({
           <section key={tier} className="af-ml-tier" id={meta.anchor} data-tier={tier}>
             <div className="af-ml-tier-head">
               <h2 className="af-ml-tier-title">
-                {copy(meta.title)} <span className="af-ml-tier-n af-num">{all.length}</span>
+                {copy(meta.title)} <span className="af-ml-tier-n af-num">{all.reduce((n, l) => n + 1 + (islandsOf.get(l.id)?.length ?? 0), 0)}</span>
               </h2>
               <p className="af-ml-tier-blurb">{meta.blurb}</p>
             </div>
 
             <div className="af-ml-grid" data-tier={tier} data-view={view}>
-              {shown.map((l) => (
-                <LeagueCard key={l.id} league={l} tier={tier} view={view} />
-              ))}
+              {shown.map((l) => {
+                const islands = islandsOf.get(l.id)
+                if (!islands) return <LeagueCard key={l.id} league={l} tier={tier} view={view} />
+                return (
+                  <div key={l.id} className="af-ml-exile-pair" data-testid="leagues-exile-pair">
+                    <LeagueCard league={l} tier={tier} view={view} />
+                    {islands.map((island) => (
+                      <Fragment key={island.id}>
+                        <div className="af-ml-exile-link" title={`${copy('Exile Island for')} ${l.name}`} aria-hidden>↕</div>
+                        <LeagueCard league={island} tier={tier} view={view} exile />
+                      </Fragment>
+                    ))}
+                  </div>
+                )
+              })}
 
               {/*
                 ⚠ THE OVERFLOW TILE IS A BUTTON THAT EXPANDS, NOT A DEAD COUNT.
@@ -558,28 +585,31 @@ function LeagueCard({
   league,
   tier,
   view,
+  exile = false,
 }: {
   league: MyLeaguesLeague
   tier: MyLeaguesTier
   view: ViewMode
+  /** An Exile Island drawn under its Survivor league: named "Exile Island", full name in the title. */
+  exile?: boolean
 }) {
+  const m = useMessages(coreWidgetsMessages)
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const chips = league.chips ?? []
   const tone = league.priority === 'urgent' ? 'bad' : league.reason ? 'warn' : null
   const dashboardLabel = league.actionLabel && league.actionLabel !== 'Open league'
     ? league.actionLabel
-    : es ? 'Panel de la liga' : 'League dashboard'
+    : m.myLeaguesDashboard
 
   return (
-    <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view}>
+    <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view} data-exile={exile ? 'true' : undefined}>
       <div className="af-ml-card-top">
         <span className="af-ml-tile" data-platform={String(league.platform).toLowerCase()} aria-hidden>
           {initials(league.name)}
         </span>
         <div className="af-ml-card-id">
           <h3 className="af-ml-card-name" title={league.name}>
-            {league.hub?.name ?? league.name}
+            {exile ? coreUiCopy('Exile Island', language) : league.hub?.name ?? league.name}
           </h3>
           <p className="af-ml-card-meta">
             <span className="af-ml-sport">{leagueSportLabel(leagueSportKey(league.sport), { short: true })}</span>
@@ -588,6 +618,11 @@ function LeagueCard({
             {league.formatLabel ? ` · ${league.formatLabel}` : null}
           </p>
         </div>
+        {league.audience ? (
+          <span className="af-ml-audience" data-audience={league.audience} data-testid="ml-league-audience">
+            {coreUiCopy(league.audience === 'public' ? 'PUBLIC' : 'PRIVATE', language)}
+          </span>
+        ) : null}
         {league.isCommissioner ? <span className="af-ml-role">COMMISH</span> : null}
       </div>
 
@@ -623,12 +658,9 @@ function LeagueCard({
       ) : null}
 
       <div className="af-ml-card-actions">
-        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        <Link href={league.hub?.href ?? (isNativePlatform(league.platform) ? leagueEntryHref(league) : league.href)} className="af-ml-open">
+          {league.hub ? m.myLeaguesOpenHub : isNativePlatform(league.platform) ? m.myLeaguesOpenLeague : dashboardLabel}
         </Link>
-        {!league.hub ? (
-          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
-        ) : null}
       </div>
     </article>
   )

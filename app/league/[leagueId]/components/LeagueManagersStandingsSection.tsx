@@ -88,7 +88,7 @@ function subtitleForTeam(
   return ''
 }
 
-type Tier = 'chop_zone' | 'danger' | 'safe'
+type Tier = 'chop_zone' | 'danger' | 'safe' | 'chopped'
 
 function guillotineOrderedTeams(
   teams: LeagueTeamSlot[],
@@ -98,7 +98,7 @@ function guillotineOrderedTeams(
 ): LeagueTeamSlot[] {
   const base = sortTeamsForManagerListing(teams, league, snapshot)
   const idx = new Map(base.map((t, i) => [t.id, i]))
-  const order: Record<Tier, number> = { chop_zone: 0, danger: 1, safe: 2 }
+  const order: Record<Tier, number> = { chop_zone: 0, danger: 1, safe: 2, chopped: 3 }
   return [...teams].sort((a, b) => {
     const ta = dangerByTeamId[a.id] ?? 'safe'
     const tb = dangerByTeamId[b.id] ?? 'safe'
@@ -122,6 +122,9 @@ function guillotineBadge(tier: Tier | undefined): { label: string; className: st
       label: 'In danger',
       className: 'border-amber-500/40 bg-amber-500/12 text-amber-100',
     }
+  }
+  if (tier === 'chopped') {
+    return { label: 'Chopped', className: 'border-white/15 bg-white/[0.04] text-white/50' }
   }
   return { label: 'Safe', className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100/90' }
 }
@@ -152,7 +155,7 @@ export function LeagueManagersStandingsSection({
 
   const heading = useMemo(() => {
     if (preDraft) return 'Team'
-    if (standingsPresentation.mode === 'guillotine') return 'Standings · Guillotine'
+    if (standingsPresentation.mode === 'guillotine') return 'Standings · Guilly'
     if (standingsPresentation.mode === 'survivor') return 'Standings · Tribes'
     if (standingsPresentation.mode === 'divisions') return 'Standings · Divisions'
     return 'Standings'

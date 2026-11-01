@@ -1,0 +1,123 @@
+/**
+ * Copy for the bracket pool dashboard (/brackets/leagues/[id]).
+ *
+ * ⚠ THE ENGLISH STRINGS ARE THE ONES THE DASHBOARD SHIPPED WITH, VERBATIM.
+ * Tests and commissioner muscle memory both key on them
+ * (`playoff-dashboard-shell.test.tsx` asserts a dozen), so translating the
+ * page must not reword it. Spanish is the only other selectable language
+ * (lib/i18n/constants.ts SELECTABLE_LANGUAGES).
+ */
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+const en = {
+  allBrackets: "All brackets",
+  refresh: "Refresh",
+  sportName: { nba: "NBA Playoffs", nhl: "NHL Playoffs", mlb: "MLB Postseason", ncaaf: "College Football Playoff", nba_cup: "NBA Cup", nfl: "NFL Playoffs" } as Record<string, string>,
+  poolSeason: (sport: string, year: number) => `${sport} pool · ${year}`,
+  brackets: (n: number) => plural(n, "bracket", "brackets"),
+  participants: (n: number) => plural(n, "participant", "participants"),
+  gamesOrSeries: (n: number, single: boolean) => `${n} ${single ? "games" : "series"}`,
+  rollingLock: "Join anytime · Each game locks at tipoff",
+  fixedLock: "Finalized picks lock at the first game",
+  testMode: "Test mode",
+  cupTemplate: "NBA Cup teams and game times update automatically. Pick remaining group games now; knockout matchups open as qualifiers are confirmed. Games already started earn no late points.",
+  singleTemplate: "Official teams and game times must be published by an admin before picks open.",
+  nflTemplate: "NFL playoff teams are set from the final regular-season standings, and Wild Card times from the NFL schedule. Picks open when both are in, and the bracket locks at the first Wild Card kickoff.",
+  seriesTemplate: "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks.",
+  yourBracket: "Your bracket",
+  poolDetails: "Pool Details",
+  visibility: "Visibility", maxUsers: "Max Users", perUser: "Brackets per User", scoring: "Scoring Style", lockRule: "Lock Rule", inviteCode: "Invite Code",
+  visibilityValue: { public: "Public", private: "Private" } as Record<string, string>,
+  createFirst: "Create Your First Bracket", entryClosed: "Bracket entry closed", limitReached: "Bracket limit reached",
+  viewEdit: "View/Edit Bracket", complete: "Complete Bracket", createAnother: "Create Another Bracket", invite: "Invite", commissionerTools: "Commissioner Tools",
+  tournamentUsage: (used: number, limit: number) => `${used} of ${limit} brackets used across this tournament.`,
+  proNote: " AF Pro includes five brackets per tournament.",
+  noPrizesShort: " AllFantasy offers no prizes or gambling; paid plans only allow extra brackets.",
+  closedFirstGame: "Bracket entry closed when the first game began.",
+  tournamentLimit: (limit: number | null) => `Tournament bracket limit reached (${limit}).`,
+  leagueLimit: (n: number) => `This league allows up to ${n} brackets per person.`,
+  invitePanel: "Invite Panel", shareLink: "Share this link:", copyInvite: "Copy invite link",
+  inviteMemberTitle: "Invite", inviteMemberBody: "Only the pool commissioner can copy and share the invite link. Ask your commissioner for the invite link or code.",
+  participantsTitle: "Participants", entriesCount: (n: number) => `${n} entries`,
+  myEntries: "My Brackets / Entries", noEntries: "You have not created a bracket in this pool yet.",
+  picksOf: (n: number, total: number) => `${n}/${total} picks`, finalized: "Finalized", completeStatus: "Complete", draft: "Draft",
+  raceEyebrow: "Your league race", ofFinalized: (n: number) => `of ${n} finalized brackets`,
+  bestBracket: (name: string, pts: number, potential: number, correct: number) => `Best bracket: ${name} · ${pts} points · ${potential} potential · ${correct} correct`,
+  joinBoard: "Finish your picks to join the board",
+  joinRolling: "Finalize your upcoming game picks to join the race. Missed games earn zero points.",
+  joinFixed: "Finalize before the first game to see your rank and nearby competitors.",
+  shareYours: "Share your bracket", copyLeagueInvite: "Copy league invite", closest: "Closest competitors", pts: (n: number) => `${n} pts`,
+  leaderboard: "Leaderboard", universalBoard: "View universal board →",
+  boardSingle: "Finalized brackets only. Potential is the highest score still reachable from saved picks.",
+  boardScored: "Scored leaderboard from completed series results.",
+  boardPicks: "Pick-count leaderboard until series results sync.",
+  noBoard: "No leaderboard entries yet.",
+  rowSingle: (pts: number, potential: number, correct: number) => `${pts} pts · ${potential} potential · ${correct} correct`,
+  rowScored: (pts: number, correct: number, resolved: number, picks: number) => `${pts} pts · ${correct}/${resolved} correct · ${picks} picks`,
+  rowPicks: (picks: number) => `${picks} picks`,
+  disclaimer: "AllFantasy offers no prizes, gambling, betting, entry fees, or in-app payouts. Paid subscriptions only increase the number of brackets you can create. Commissioners manage any external arrangements independently under applicable AllFantasy terms.",
+  inviteCopied: "Invite link copied", inviteCopyFailed: "Could not copy invite link",
+  bestCopied: "Read-only bracket link copied. Private leagues require membership to view it.", bestCopyFailed: "Could not copy bracket link",
+  perUserLimit: (n: number) => `This pool allows ${n} brackets per user.`, created: (n: number) => `Bracket ${n} created.`, createFailed: "Unable to create entry",
+  bracketN: (n: number) => `Bracket ${n}`,
+}
+
+type Copy = typeof en
+
+const es: Copy = {
+  allBrackets: "Todos los cuadros",
+  refresh: "Actualizar",
+  sportName: { nba: "Playoffs de la NBA", nhl: "Playoffs de la NHL", mlb: "Postemporada de la MLB", ncaaf: "Playoff de fútbol universitario", nba_cup: "NBA Cup", nfl: "Playoffs de la NFL" },
+  poolSeason: (sport, year) => `Liga de ${sport} · ${year}`,
+  brackets: (n) => plural(n, "cuadro", "cuadros"),
+  participants: (n) => plural(n, "participante", "participantes"),
+  gamesOrSeries: (n, single) => `${n} ${single ? "partidos" : "series"}`,
+  rollingLock: "Únete cuando quieras · Cada partido cierra al inicio",
+  fixedLock: "Las selecciones finalizadas cierran con el primer partido",
+  testMode: "Modo de prueba",
+  cupTemplate: "Los equipos y horarios de la NBA Cup se actualizan solos. Elige ya los partidos de grupos restantes; las eliminatorias abren cuando se confirman los clasificados. Los partidos ya iniciados no suman puntos tardíos.",
+  singleTemplate: "Un administrador debe publicar los equipos y horarios oficiales antes de abrir las selecciones.",
+  nflTemplate: "Los equipos de playoffs de la NFL salen de la clasificación final de la temporada regular, y los horarios de comodines del calendario de la NFL. Las selecciones abren cuando estén ambos, y el cuadro cierra con la primera patada inicial de comodines.",
+  seriesTemplate: "Se muestran equipos de plantilla hasta que se sincronicen las series. La sincronización de equipos y horarios no importa ganadores. La de resultados puntúa las selecciones finalizadas.",
+  yourBracket: "Tu cuadro",
+  poolDetails: "Detalles de la liga",
+  visibility: "Visibilidad", maxUsers: "Usuarios máximos", perUser: "Cuadros por usuario", scoring: "Puntuación", lockRule: "Regla de cierre", inviteCode: "Código de invitación",
+  visibilityValue: { public: "Pública", private: "Privada" },
+  createFirst: "Crea tu primer cuadro", entryClosed: "Inscripción cerrada", limitReached: "Límite de cuadros alcanzado",
+  viewEdit: "Ver/editar cuadro", complete: "Completar cuadro", createAnother: "Crear otro cuadro", invite: "Invitar", commissionerTools: "Herramientas del comisionado",
+  tournamentUsage: (used, limit) => `${used} de ${limit} cuadros usados en este torneo.`,
+  proNote: " AF Pro incluye cinco cuadros por torneo.",
+  noPrizesShort: " AllFantasy no ofrece premios ni apuestas; los planes de pago solo permiten más cuadros.",
+  closedFirstGame: "La inscripción cerró cuando empezó el primer partido.",
+  tournamentLimit: (limit) => `Límite de cuadros del torneo alcanzado (${limit}).`,
+  leagueLimit: (n) => `Esta liga permite hasta ${n} cuadros por persona.`,
+  invitePanel: "Invitaciones", shareLink: "Comparte este enlace:", copyInvite: "Copiar enlace de invitación",
+  inviteMemberTitle: "Invitar", inviteMemberBody: "Solo el comisionado puede copiar y compartir el enlace de invitación. Pídele el enlace o el código.",
+  participantsTitle: "Participantes", entriesCount: (n) => `${n} ${n === 1 ? "cuadro" : "cuadros"}`,
+  myEntries: "Mis cuadros", noEntries: "Aún no has creado un cuadro en esta liga.",
+  picksOf: (n, total) => `${n}/${total} selecciones`, finalized: "Finalizado", completeStatus: "Completo", draft: "Borrador",
+  raceEyebrow: "Tu carrera en la liga", ofFinalized: (n) => `de ${n} cuadros finalizados`,
+  bestBracket: (name, pts, potential, correct) => `Mejor cuadro: ${name} · ${pts} puntos · ${potential} posibles · ${correct} aciertos`,
+  joinBoard: "Termina tus selecciones para entrar en la clasificación",
+  joinRolling: "Finaliza las selecciones de los próximos partidos para competir. Los partidos omitidos valen cero.",
+  joinFixed: "Finaliza antes del primer partido para ver tu posición y tus rivales cercanos.",
+  shareYours: "Compartir tu cuadro", copyLeagueInvite: "Copiar invitación", closest: "Rivales más cercanos", pts: (n) => `${n} pts`,
+  leaderboard: "Clasificación", universalBoard: "Ver clasificación general →",
+  boardSingle: "Solo cuadros finalizados. Los puntos posibles son el máximo aún alcanzable con las selecciones guardadas.",
+  boardScored: "Clasificación según los resultados de las series terminadas.",
+  boardPicks: "Clasificación por selecciones hasta que se sincronicen los resultados.",
+  noBoard: "Aún no hay cuadros en la clasificación.",
+  rowSingle: (pts, potential, correct) => `${pts} pts · ${potential} posibles · ${correct} aciertos`,
+  rowScored: (pts, correct, resolved, picks) => `${pts} pts · ${correct}/${resolved} aciertos · ${picks} selecciones`,
+  rowPicks: (picks) => `${picks} selecciones`,
+  disclaimer: "AllFantasy no ofrece premios, apuestas, juegos de azar, cuotas de entrada ni pagos dentro de la app. Las suscripciones solo aumentan cuántos cuadros puedes crear. Los comisionados gestionan cualquier acuerdo externo por su cuenta, según los términos de AllFantasy.",
+  inviteCopied: "Enlace de invitación copiado", inviteCopyFailed: "No se pudo copiar el enlace de invitación",
+  bestCopied: "Enlace de solo lectura copiado. Las ligas privadas requieren ser miembro para verlo.", bestCopyFailed: "No se pudo copiar el enlace del cuadro",
+  perUserLimit: (n) => `Esta liga permite ${n} cuadros por usuario.`, created: (n) => `Cuadro ${n} creado.`, createFailed: "No se pudo crear el cuadro",
+  bracketN: (n) => `Cuadro ${n}`,
+}
+
+export function poolDashboardCopy(language?: string | null): Copy {
+  return language?.startsWith("es") ? es : en
+}

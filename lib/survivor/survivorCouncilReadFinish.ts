@@ -2,6 +2,7 @@ import 'server-only'
 
 import { publishCouncilVerdictIfComplete } from './survivorVoteTallyService'
 import { resolveElimination, type EliminationOutcome } from './survivorEliminationService'
+import { postSurvivorEpisodeRecap } from './episodeRecap'
 
 export type FinishReadOutcome =
   | { ok: true; complete: false }
@@ -18,5 +19,13 @@ export async function finishCouncilReadIfComplete(leagueId: string, councilId: s
   if (!verdict.ok) return verdict
   if (!verdict.complete) return { ok: true, complete: false }
   if (verdict.isTie || !verdict.eliminatedUserId) return { ok: true, complete: true, elimination: null }
-  return { ok: true, complete: true, elimination: await resolveElimination(leagueId, councilId, actorUserId) }
+  const elimination = await resolveElimination(leagueId, councilId, actorUserId)
+  // Episode recap (paid, opt-in): once, on the call that actually resolved the elimination. Never
+  // allowed to fail or hold up the elimination — it has its own timeout and swallows its errors.
+  if (elimination.ok && !elimination.alreadyResolved) {
+    await postSurvivorEpisodeRecap({ leagueId, councilId, outcome: elimination.outcome }).catch((e) => {
+      console.error('[survivor episode recap]', leagueId, councilId, e instanceof Error ? e.message : 'unknown error')
+    })
+  }
+  return { ok: true, complete: true, elimination }
 }

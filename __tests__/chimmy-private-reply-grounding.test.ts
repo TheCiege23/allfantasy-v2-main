@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   prepareChimmyDecisionAnswer: vi.fn(),
   recordChatStartSitAdvice: vi.fn(),
   readPlan: vi.fn(),
+  readAnswer: vi.fn(),
   takePlan: vi.fn(),
   releasePlan: vi.fn(),
   runLoop: vi.fn(),
@@ -16,6 +17,7 @@ const h = vi.hoisted(() => ({
 /* Default: no plan includes Chimmy, so every existing case below takes the quick, grounded path. */
 vi.mock('@/lib/chimmy/planAllowance', () => ({
   readChimmyPlanAllowance: h.readPlan,
+  readChimmyAnswerAllowance: h.readAnswer,
   takeChimmyPlanAllowance: h.takePlan,
   releaseChimmyPlanAllowance: h.releasePlan,
 }))
@@ -53,6 +55,7 @@ beforeEach(() => {
   h.buildLeagueStandingsContext.mockResolvedValue('STANDINGS: Casey 5-1')
   h.buildHeadToHeadGrounding.mockResolvedValue({ text: 'H2H: Casey 3-1 vs Jordan', managers: 2, source: 'sleeper' })
   h.readPlan.mockResolvedValue(null)
+  h.readAnswer.mockResolvedValue({ kind: 'free', planName: 'Free Chimmy', limit: 2, used: 0, remaining: 2, resetsAt: '2026-10-26T00:00:00.000Z' })
   h.takePlan.mockImplementation(async ({ state }: { state: unknown }) => state)
   h.releasePlan.mockResolvedValue(true)
   h.runLoop.mockResolvedValue({ text: 'From the tool loop.', toolsUsed: ['get_my_roster'], turns: 2 })
@@ -93,12 +96,26 @@ describe('🛑 @chimmy in a chat runs the SAME assistant as the panel for a plan
     expect(out).toBe('Start Kelce.')
   })
 
-  it('allowance used up (or no plan): no tool loop, the quick grounded answer as before', async () => {
+  it('does not make an unmetered fallback call after the daily allowance is used', async () => {
     h.readPlan.mockResolvedValue({ ...PLAN, used: 100, remaining: 0 })
-    await generateChimmyPrivateReply('@chimmy hi', { leagueId: 'l1', userId: 'u1' })
+    h.readAnswer.mockResolvedValue({ ...PLAN, used: 100, remaining: 0 })
+    const answer = await generateChimmyPrivateReply('@chimmy hi', { leagueId: 'l1', userId: 'u1' })
     expect(h.runLoop).not.toHaveBeenCalled()
     expect(h.takePlan).not.toHaveBeenCalled()
-    expect(h.openaiChatText).toHaveBeenCalledTimes(1)
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+    expect(answer).toContain('included Chimmy answers are used')
+  })
+
+  it('counts a free private reply against the same daily allowance', async () => {
+    await generateChimmyPrivateReply('@chimmy hi', { userId: 'u1' })
+    expect(h.takePlan).toHaveBeenCalledWith({ userId: 'u1', state: expect.objectContaining({ kind: 'free', limit: 2 }) })
+    expect(h.openaiChatText).toHaveBeenCalledOnce()
+  })
+
+  it('returns the free private reply allowance when the model fails', async () => {
+    h.openaiChatText.mockRejectedValue(new Error('provider down'))
+    await generateChimmyPrivateReply('@chimmy hi', { userId: 'u1' })
+    expect(h.releasePlan).toHaveBeenCalledWith({ userId: 'u1', state: expect.objectContaining({ kind: 'free' }) })
   })
 })
 
@@ -152,10 +169,15 @@ describe('generateChimmyPrivateReply grounding', () => {
    * gap in confidently.
    */
   it('says there is no league when there is no league', async () => {
-    await generateChimmyPrivateReply('@chimmy hi', {})
+    await generateChimmyPrivateReply('@chimmy hi', { userId: 'u1' })
 
     expect(systemPrompt()).toMatch(/not attached to a league/i)
     expect(h.buildLeagueStandingsContext).not.toHaveBeenCalled()
+  })
+
+  it('does not run a model for an unsigned-in requester', async () => {
+    expect(await generateChimmyPrivateReply('@chimmy hi', {})).toContain('Sign in')
+    expect(h.openaiChatText).not.toHaveBeenCalled()
   })
 
   /* Grounding a league somebody is not in would leak another league's data. */

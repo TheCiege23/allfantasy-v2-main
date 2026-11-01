@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { roundOneHypeLine } from '@/lib/draft-room/roundOneHypeLine'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -18,21 +20,29 @@ export type DraftRoundOneAnnouncementOverlayProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   leagueName?: string
   sportLabel?: string
+  /** League format (e.g. 'survivor'): the island gets its own line under the pick. */
+  formatType?: string | null
   /** Queue: first item is visible */
   queue: RoundOneAnnouncementItem[]
   onDismissFront: () => void
+  /** Dynasty rooms: vault ground and trophy-gold accents instead of the default violet. */
+  dynastySkin?: boolean
 }
 
 export function DraftRoundOneAnnouncementOverlay({
   presentationVariant = 'default',
   leagueName,
   sportLabel,
+  formatType,
   queue,
   onDismissFront,
+  dynastySkin = false,
 }: DraftRoundOneAnnouncementOverlayProps) {
   const rs = presentationVariant === 'redraft_snake'
+  const dyn = dynastySkin && !rs
   const current = queue[0]
   const [entered, setEntered] = useState(false)
+  const { t: tl, tInterpolate } = useOptionalLanguage()
 
   useEffect(() => {
     if (!current || current.pick.round === 1) return
@@ -75,20 +85,13 @@ export function DraftRoundOneAnnouncementOverlay({
   if (!current || current.pick.round !== 1) return null
 
   const { pick, headshotUrl, teamLogoUrl } = current
-  const mgr = pick.displayName ?? 'Draft board'
-  const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}Round 1 · Pick ${pick.slot} · #${pick.overall} overall`
-  const hypeLine = (() => {
-    const pos = String(pick.position ?? '').toUpperCase()
-    if (pos === 'QB') return 'Commanding the board early with a field general.'
-    if (pos === 'RB') return 'Ground game priority set for the draft room.'
-    if (pos === 'WR') return 'A high-upside target just came off the board.'
-    if (pos === 'TE') return 'Securing a mismatch creator in Round 1.'
-    return 'Opening statement pick locked in.'
-  })()
+  const mgr = pick.displayName ?? tl('draftRoom.roundOne.draftBoard')
+  const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}${tInterpolate('draftRoom.roundOne.subtitle', { slot: pick.slot, overall: pick.overall })}`
+  const hypeLine = roundOneHypeLine({ sport: sportLabel, position: pick.position, formatType }, tl)
   const chips = [
-    `Pick ${pick.pickLabel}`,
-    `Overall #${pick.overall}`,
-    pick.byeWeek != null ? `Bye ${pick.byeWeek}` : null,
+    tInterpolate('draftRoom.roundOne.chipPick', { label: pick.pickLabel }),
+    tInterpolate('draftRoom.roundOne.chipOverall', { overall: pick.overall }),
+    pick.byeWeek != null ? tInterpolate('draftRoom.roundOne.chipBye', { week: pick.byeWeek }) : null,
     pick.amount != null ? `$${pick.amount}` : null,
   ].filter((v): v is string => Boolean(v))
 
@@ -99,8 +102,9 @@ export function DraftRoundOneAnnouncementOverlay({
       } transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none`}
       role="dialog"
       aria-modal="true"
-      aria-label="Round one pick announcement"
+      aria-label={tl('draftRoom.roundOne.dialogAria')}
       data-testid="draft-round-one-announcement"
+      data-dynasty-skin={dyn ? 'true' : undefined}
       onClick={onDismissFront}
     >
       <div
@@ -111,12 +115,14 @@ export function DraftRoundOneAnnouncementOverlay({
           className={`absolute inset-0 ${
             rs
               ? 'bg-[linear-gradient(135deg,rgba(8,47,73,0.94),rgba(15,23,42,0.96))]'
-              : 'bg-[linear-gradient(135deg,rgba(13,24,41,0.94),rgba(7,15,28,0.96))]'
+              : dyn
+                ? 'bg-[linear-gradient(135deg,var(--dyn-vault,#121826),var(--dyn-ink,#0B0F17))]'
+                : 'bg-[linear-gradient(135deg,rgba(13,24,41,0.94),rgba(7,15,28,0.96))]'
           }`}
         />
         <div
           className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl ${
-            rs ? 'bg-cyan-400/25' : 'bg-violet-500/20'
+            rs ? 'bg-cyan-400/25' : dyn ? 'bg-[rgba(212,162,76,0.22)]' : 'bg-violet-500/20'
           }`}
         />
         <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
@@ -151,24 +157,24 @@ export function DraftRoundOneAnnouncementOverlay({
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : 'text-violet-300'}`} />
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
+                <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : dyn ? 'text-[var(--dyn-gold,#D4A24C)]' : 'text-violet-300'}`} />
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">{tl('draftRoom.roundOne.selection')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={onDismissFront}
                   className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
-                  aria-label="Skip announcement"
+                  aria-label={tl('draftRoom.roundOne.skipAria')}
                   data-testid="draft-round-one-announcement-skip"
                 >
-                  Skip
+                  {tl('draftRoom.roundOne.skip')}
                 </button>
                 <button
                   type="button"
                   onClick={onDismissFront}
                   className="rounded-lg border border-white/10 bg-black/30 p-1.5 text-white/55 transition hover:bg-white/10 hover:text-white"
-                  aria-label="Dismiss announcement"
+                  aria-label={tl('draftRoom.roundOne.dismissAria')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -203,7 +209,7 @@ export function DraftRoundOneAnnouncementOverlay({
 
         {queue.length > 1 ? (
           <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[11px] font-medium text-white/40">
-            +{queue.length - 1} more Round 1 pick{queue.length > 2 ? 's' : ''} queued
+            {tInterpolate(queue.length > 2 ? 'draftRoom.roundOne.queuedMany' : 'draftRoom.roundOne.queuedOne', { count: queue.length - 1 })}
           </div>
         ) : null}
       </div>

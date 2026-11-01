@@ -1,9 +1,13 @@
+import { requireQuotedChimmyReceipt } from '@/lib/chimmy/quotedReceiptGuard'
+import { asksForFreeSummary, gateAnalysisAccess, usesAnalysisPreview } from '@/lib/chimmy/analysisAccess'
+import { analysisSummaryFromAnswer, buildFreeAnalysisSummary } from '@/lib/chimmy/deepAnalysisPreview'
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
 import { FUN_MODE_DIRECTIVE, isFunModeTone } from '@/lib/chimmy/funMode'
 import { extractChimmyGifMood, resolveChimmyGif } from '@/lib/chimmy/chimmyGif'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
+import { priorConversationTurns } from '@/lib/chimmy-chat/conversation-context'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
 import { compoundDecision } from '@/lib/chimmy/decisionClauses'
@@ -88,6 +92,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildC2CContextForChimmy } from '@/lib/merged-devy-c2c/ai/c2cContextForChimmy'
 import { buildSalaryCapContextForChimmy } from '@/lib/salary-cap/ai/salaryCapContextForChimmy'
 import { buildDynastyContextForChimmy } from '@/lib/dynasty-core/dynastyContextForChimmy'
+import { buildRuleChangesContextForChimmy } from '@/lib/league-rules-explainer/awarenessService'
 import { buildDynastyWarRoomContextForChimmy } from '@/lib/dynasty-war-room/dynastyChimmyGrounding'
 import { buildKeeperContextForChimmy } from '@/lib/keeper-war-room/keeperChimmyGrounding'
 import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBallChimmyGrounding'
@@ -139,7 +144,8 @@ import { settleUndeliveredChimmyAnswer } from '@/lib/chimmy/settleDelivery'
 import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
 import {
   planAllowanceMeta,
-  readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
+  ChimmyAllowanceUnavailableError,
   releaseChimmyPlanAllowance,
   takeChimmyPlanAllowance,
   type ChimmyPlanAllowanceMeta,
@@ -164,7 +170,6 @@ import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-event
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
 import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE, isOwnRosterInjuryQuestion } from '@/lib/ai/deterministic'
 import { isScopedRosterReviewQuestion } from '@/lib/chimmy/rosterReviewIntent'
-import { grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
 /** Provenance for an answer that came from the web, not from our rows. */
 const LIVE_SEARCH_SOURCE = 'live_web_search' as const
@@ -205,7 +210,6 @@ import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnal
 import { getAiMemory } from '@/lib/ai-memory/ai-memory-store'
 import { COACHING_PROFILE_KEY, mergeCoachingProfiles } from '@/lib/chimmy-personalization/remembered'
 import {
-  appendOrchestrationFooterIfMissing,
   buildOrchestrationMeta,
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
@@ -384,6 +388,9 @@ const ChimmyFormSchema = z.object({
     return value.trim()
   }, z.string().max(MAX_MESSAGE_CHARS)),
   confirmTokenSpend: booleanFormField,
+  analysisUnlock: booleanFormField,
+  analysisPreviewVersion: optionalTrimmedStringField(8),
+  tokenQuote: optionalTrimmedStringField(2048),
   conversationId: optionalTrimmedStringField(MAX_GENERIC_FIELD_CHARS),
   sessionId: optionalTrimmedStringField(MAX_GENERIC_FIELD_CHARS),
   privateMode: booleanFormField,
@@ -1188,11 +1195,29 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
  * of the handler's thirty-odd returns, so a return added later cannot escape the count. The handler
  * fills in what only it knows as it learns it.
  */
+/**
+ * Which providers a tool-loop answer touched: the one that answered `ok`, any that could not start
+ * before it `failed` (so a dead key shows in the answer's provider status, not only in logs), the
+ * rest `skipped`.
+ */
+function toolLoopProviderStatus(loop: { provider?: string; failedOver?: string[] }): Record<string, string> {
+  const name = (p: string) => (p === 'claude' ? 'anthropic' : p)
+  const status: Record<string, string> = { anthropic: 'skipped', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+  for (const p of loop.failedOver ?? []) status[name(p)] = 'failed'
+  status[name(loop.provider ?? 'grok')] = 'ok'
+  return status
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const execute = async (requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext, parsedRequest?: NextRequest) => {
     const question = newQuestionTelemetry()
     const started = Date.now()
-    const res = await handleChimmyPost(parsedRequest ?? req, question, requestReceipt)
+    const res = await handleChimmyPost(parsedRequest ?? req, question, requestReceipt).catch(error => {
+      if (error instanceof ChimmyAllowanceUnavailableError) {
+        return NextResponse.json({ error: error.message, code: 'chimmy_allowance_unavailable' }, { status: 503 })
+      }
+      throw error
+    })
     void recordChimmyQuestion(question, res, Date.now() - started)
     return res
   }
@@ -1220,7 +1245,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let planAllowanceRead: Promise<ChimmyPlanAllowanceState | null> | null = null
   const readPlanAllowance = (): Promise<ChimmyPlanAllowanceState | null> =>
     (planAllowanceRead ??= userId
-      ? readChimmyPlanAllowance({ userId, email: userEmail }).catch(() => null)
+      ? readChimmyAnswerAllowance({ userId, email: userEmail })
       : Promise.resolve(null))
 
   const limitRes = requestReceipt ? null : await runAiProtection(req, {
@@ -1276,6 +1301,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const parseResult = ChimmyFormSchema.safeParse({
     message: formData.get('message'),
     confirmTokenSpend: formData.get('confirmTokenSpend'),
+    analysisUnlock: formData.get('analysisUnlock'),
+    analysisPreviewVersion: formData.get('analysisPreviewVersion'),
+    tokenQuote: formData.get('tokenQuote'),
     conversationId: formData.get('conversationId'),
     sessionId: formData.get('sessionId'),
     privateMode: formData.get('privateMode'),
@@ -1318,6 +1346,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const {
     message,
     confirmTokenSpend,
+    analysisUnlock,
     conversationId: explicitConversationId,
     sessionId: rawSessionId,
     privateMode,
@@ -1377,12 +1406,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * import slice, which undercounts every ESPN, Yahoo, Fantrax, MFL and Fleaflicker season.
    */
   const careerGroundingBlock = coreSurface === 'career' && userId ? await loadCareerGroundingBlock(userId) : null
-  const selectedAssistantMode = normalizeChimmyAssistantMode(
+  const requestedAssistantMode = normalizeChimmyAssistantMode(
     mode ?? assistantMode ?? strategyMode ?? riskMode
   )
+  const selectedAssistantMode = analysisUnlock && requestedAssistantMode === 'fast_take' ? 'deep_analysis' : requestedAssistantMode
+  const analysisContract = usesAnalysisPreview(formData)
+  const freeSummaryRequested = asksForFreeSummary(formData, selectedAssistantMode)
   let leagueId = requestedLeagueId ?? null
   let leagueNameHint = requestedLeagueNameHint ?? null
-  const conversation = markEarlierImageTurns(parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS))
+  const conversation = markEarlierImageTurns(priorConversationTurns(parsedConversation, message, MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
 
   const initialIntent = classifyPecrIntent(message)
@@ -1626,10 +1658,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     return NextResponse.json(buildLeagueGroundingErrorPayload(), { status: 412 })
   }
 
-  const staleness = buildChimmyStalenessWarning({
+  /*
+   * ⚠ NO LEAGUE IN SCOPE, NO LEAGUE DATA TO BE STALE. A null `lastSyncedAt` reads as "timestamp
+   * unavailable", and the prompt says to always repeat the warning — so "Explain PPR scoring" with no
+   * league selected (2026-10-31) was told twice that its league data might be stale.
+   */
+  const freshness = buildChimmyStalenessWarning({
     lastSyncedAt: leagueSnapshot?.lastSyncedAt ?? null,
     intent: initialIntent,
   })
+  const staleness = leagueSnapshot ? freshness : { ...freshness, warning: null }
   const sourceReferences = buildChimmySourceReferences({
     leagueId: leagueId ?? null,
     intent: initialIntent,
@@ -1673,19 +1711,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       },
     })
   }
-
-  /*
-   * ⚠ THE FREE FLOOR IS TOPPED UP HERE, AHEAD OF EVERY SPEND CHECK IN THIS
-   * ROUTE — and the position is the point. TWO paths price the balance: the
-   * live-search fallback a few lines below, and the main spend ~500 lines down.
-   * Granting before the later one but after the earlier one would refuse a user
-   * who is, moments later, able to pay. I made exactly that mistake first.
-   *
-   * A free account starts at zero and every Chimmy message costs 10, so the
-   * first question anybody ever asked failed on insufficient balance. Two a day
-   * was the intended free tier and had never been implemented.
-   */
-  await grantDailyFreeTokens(userId).catch(() => null)
 
   const requestLocale = resolveLanguage(req.cookies.get('af_lang')?.value)
   /*
@@ -1747,37 +1772,56 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * into a new confirmation prompt would be a worse surprise than a refusal.
        */
       const spendService = new TokenSpendService()
-      const preview = userId
-        ? await spendService
-            .previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
-            .catch(() => null)
-        : null
-
-      const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
-      /*
-       * A plan that includes Chimmy covers this search too, consent or not — there is nothing to
-       * consent to when no tokens move. The allowance is TAKEN only once a sourced answer exists,
-       * on the same "pay for an answer, never for a refusal" rule as the charge below.
-       */
       const searchPlan = await readPlanAllowance()
       const planCoversSearch = Boolean(searchPlan && searchPlan.remaining > 0)
+      let preview = null as TokenSpendPreview | null
+      let searchQuotedCost: number | undefined
+      const searchAccess = async (forcePreview = false, exhausted = false) => {
+        const plan = searchPlan ? planAllowanceMeta(exhausted ? { ...searchPlan, used: searchPlan.limit, remaining: 0 } : searchPlan, false) : null
+        try {
+          const gate = await gateAnalysisAccess({ userId, form: formData, mode: selectedAssistantMode, plan,
+            summary: buildFreeAnalysisSummary({ question: message, leagueName: leagueSnapshot?.name }),
+            previewSpend: () => spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail),
+            forcePreview, hasReceipt: Boolean(requestReceipt) })
+          if (!gate.allowed) return NextResponse.json(gate.payload, { status: gate.status, headers: { 'Cache-Control': 'private, no-store' } })
+          preview = gate.tokenPreview
+          searchQuotedCost = gate.expectedTokenCost
+          return null
+        } catch { return NextResponse.json({ error: 'Unable to check the token price. Please try again.', code: 'token_preview_unavailable' }, { status: 503 }) }
+      }
+      if (analysisContract) {
+        const blocked = await searchAccess()
+        if (blocked) return blocked
+      } else {
+        preview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail).catch(() => null)
+        if (preview?.tokenCost === 0) searchQuotedCost = 0
+        else if (requestReceipt) {
+          const blocked = await searchAccess()
+          if (blocked) return blocked
+        }
+      }
+      const mayCharge = Boolean(confirmTokenSpend && preview?.canSpend)
+      const searchIncluded = planCoversSearch && searchPlan
+        ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
+        : null
+      if ((analysisContract || requestReceipt) && planCoversSearch && !searchIncluded) {
+        const blocked = await searchAccess(true, true)
+        if (blocked) return blocked
+      }
 
-      if (mayCharge || planCoversSearch) {
+      if (mayCharge && !searchIncluded) {
+        const blocked = requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)
+        if (blocked) return blocked
+      }
+      if (mayCharge || searchIncluded) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
         if (searched) {
-        /*
-         * The answer exists, so the search has already been paid for upstream.
-         * If the charge now fails — a balance race against the preview above —
-         * we serve it anyway with tokenSpend null rather than eat the provider
-         * cost AND withhold the answer. Losing the fee is bad; losing the fee
-         * and the answer is worse.
-         */
-        const searchIncluded =
-          planCoversSearch && searchPlan && userId
-            ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
-            : null
+        /* Paid search requires a durable receipt and verified quote. Failed or
+         * ambiguous debits are reconciled before extra detail is released. */
+        let searchChargeFailed = false
+        let searchPriceChanged = false
         const ledger = searchIncluded || !mayCharge
           ? null
           : await (async () => {
@@ -1790,6 +1834,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 confirmed: confirmTokenSpend,
                 sourceType: 'chimmy_chat',
                 sourceId: conversationId,
+                ...(searchQuotedCost !== undefined ? { expectedTokenCost: searchQuotedCost } : {}),
                 description: 'Chimmy live web search answer',
                 metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
                 userEmail,
@@ -1798,8 +1843,18 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                   assertWithinTransaction: async tx => receipts.assertReceiptTokenSpend(tx, requestReceipt),
                 } : {}),
               })
-              .catch(() => null)
+              .catch(error => { searchChargeFailed = Boolean(analysisContract || requestReceipt); searchPriceChanged = error instanceof Error && error.name === 'TokenSpendPriceChangedError'; return null })
             })()
+        if (searchChargeFailed) {
+          // No paid answer crosses the boundary when its debit failed; the receipt releases any ambiguous charge.
+          if (searchPriceChanged) {
+            const blocked = await searchAccess(true, true)
+            if (blocked) return blocked
+          }
+          // Ambiguous failures are terminal for this receipt. Reusing a refunded
+          // debit's idempotency key for another unlock could otherwise grant it free.
+          return NextResponse.json({ error: 'Unable to unlock this analysis. Please retry with a new question.', code: 'chimmy_unlock_failed' }, { status: 503 })
+        }
         const searchPlanMeta: ChimmyPlanAllowanceMeta | null = searchIncluded
           ? planAllowanceMeta(searchIncluded, true)
           : searchPlan
@@ -1848,6 +1903,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         })
         }
         /* Nothing sourced came back. Fall through to the honest refusal. */
+        if (searchIncluded) await releaseChimmyPlanAllowance({ userId, state: searchIncluded })
       }
       /*
        * Not chargeable — anonymous, unconfirmed, or out of balance. We do NOT
@@ -1946,6 +2002,24 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     overallLastSyncedAt: string | null
     perSource: Record<string, string | null>
   } | null = null
+
+  // Preview an attachment before buying image interpretation. Included Deep
+  // turns and a signed unlock continue into the existing vision path.
+  if (hasImage && analysisContract) {
+    const imagePlan = await readPlanAllowance()
+    if (freeSummaryRequested || !imagePlan || imagePlan.remaining <= 0) {
+      try {
+        const imageAccess = await gateAnalysisAccess({ userId, form: formData, mode: selectedAssistantMode,
+          plan: imagePlan ? planAllowanceMeta(imagePlan, false) : null,
+          summary: buildFreeAnalysisSummary({ question: message, leagueName: leagueSnapshot?.name }) + ' The uploaded screenshot has not been interpreted in this free summary.',
+          previewSpend: () => new TokenSpendService().previewSpend(userId, 'ai_chimmy_chat_message', userEmail),
+          hasReceipt: Boolean(requestReceipt) })
+        if (!imageAccess.allowed) return NextResponse.json(imageAccess.payload, { status: imageAccess.status, headers: { 'Cache-Control': 'private, no-store' } })
+      } catch {
+        return NextResponse.json({ error: 'Unable to check the token price. Please try again.', code: 'token_preview_unavailable' }, { status: 503 })
+      }
+    }
+  }
 
   const screenshotTask: Promise<string | undefined> =
     hasImage && imageFile
@@ -2443,7 +2517,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   ]
     .concat(
       staleness.warning
-        ? [`## DATA FRESHNESS\n${staleness.warning}\nAlways include this warning when answering.`]
+        ? [`## DATA FRESHNESS\n${staleness.warning}\nThe route appends this warning once; do not repeat it in your prose.`]
         : [],
       sourceReferences.length > 0
         ? [
@@ -2697,15 +2771,28 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * the outer reads to `null` for good, and every `tokenPreview.ruleCode` below becomes `never`.
    */
   let tokenPreview = null as TokenSpendPreview | null
-  let tokenPreviewFailed = false as boolean
+  let quotedTokenCost: number | undefined
+  let previewEngineAnswer: string | null = null
   /** The token preflight: preview the price, and ask for consent when the rule needs it. */
   /*
    * `plan` rides the 409 so the drawer can tell a subscriber whose day's answers are used from an
    * account with no plan — it decides whether an out-of-tokens card offers AF Pro or only tokens.
    */
-  const runTokenGate = async (plan: ChimmyPlanAllowanceMeta | null): Promise<NextResponse | null> => {
+  const runTokenGate = async (plan: ChimmyPlanAllowanceMeta | null, forcePreview = false, notice?: string): Promise<NextResponse | null> => {
     try {
-      tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+      if (!analysisContract) {
+        tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+        if (tokenPreview.tokenCost === 0) { quotedTokenCost = 0; return null }
+      }
+      if (analysisContract || requestReceipt) {
+        const gate = await gateAnalysisAccess({ userId, form: formData, mode: selectedAssistantMode, plan,
+          summary: buildFreeAnalysisSummary({ question: message, leagueName: leagueSnapshot?.name, engineAnswer: previewEngineAnswer }),
+          previewSpend: () => !analysisContract && tokenPreview ? Promise.resolve(tokenPreview) : spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail), forcePreview, notice, hasReceipt: Boolean(requestReceipt) })
+        if (!gate.allowed) return NextResponse.json(gate.payload, { status: gate.status, headers: { 'Cache-Control': 'private, no-store' } })
+        tokenPreview = gate.tokenPreview
+        quotedTokenCost = gate.expectedTokenCost
+        return null
+      }
     } catch (error) {
       if (error instanceof TokenSpendRuleNotFoundError) {
         return NextResponse.json(
@@ -2716,13 +2803,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           { status: 500 }
         )
       }
-      tokenPreviewFailed = true
       console.error(
-        '[api/chat/chimmy] Token preview failed, continuing without preflight:',
+        '[api/chat/chimmy] Token preview failed:',
         error instanceof Error ? error.message : error
       )
+      return NextResponse.json(
+        { error: 'Unable to check the token price. Please try again.', code: 'token_preview_unavailable' },
+        { status: 503 }
+      )
     }
-    if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
+    if (tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
       return NextResponse.json(
         {
           error: 'Token spend confirmation required before sending to Chimmy.',
@@ -2749,10 +2839,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const exhaustedPlanMeta: ChimmyPlanAllowanceMeta | null = planState
     ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
     : null
-  if (!planCovers) {
-    const blocked = await runTokenGate(exhaustedPlanMeta)
-    if (blocked) return blocked
-  }
 
   /*
    * ── 🛑 "SHOULD I TRADE FOR X?" IS DECIDED BY CODE, NOT BY A MODEL ─────────────────────────────
@@ -2766,12 +2852,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * /core player card shows, plus this week's lineup under the league's own scoring — and the
    * route returns its sentences as written. No model runs on this path.
    *
-   * ⚠ COMPUTED AFTER THE CONFIRMATION CHECK, BEFORE THE CHARGE, AND CHARGED ONLY WHEN IT DECIDES.
-   *   - After the 409: the /core drawer sends every paid question unconfirmed first and retries with
-   *     consent, so a verdict computed above the check would be computed twice per question.
-   *   - Before the charge: a name that is not on a roster, or on two, is an honest "I could not
-   *     tell" and costs nothing — the same deal the live-search fallback makes: you pay for an
-   *     answer, never for us saying we have none. A decided verdict is charged below like any other.
+   * Computed before the new preview gate so a free summary can use the engine's
+   * actual conclusion. Missing evidence remains free; a decided extended report
+   * uses the allowance or quoted debit below before the full response is sent.
    *
    * 🛑 `leagueSnapshot.id` ONLY. The verdict reads every roster in the league.
    *
@@ -2864,6 +2947,20 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         dataSources: decisionAnswer.sources } })
   }
 
+  previewEngineAnswer = tradeTargetResult?.status === 'decided'
+    ? renderTradeTargetVerdict(tradeTargetResult.verdict)
+    : decisionAnswer?.status === 'ready' ? decisionAnswer.answer : null
+  // A short complete engine result has no extra detail to sell. Return it without consuming an answer.
+  if (analysisContract && previewEngineAnswer && (freeSummaryRequested || !planCovers) &&
+      previewEngineAnswer.length <= analysisSummaryFromAnswer(previewEngineAnswer).length + 80) {
+    return NextResponse.json({ response: previewEngineAnswer, result: previewEngineAnswer, source: 'chimmy_free_summary', sessionId,
+      meta: { free: true, tokenSpend: null, mode: 'fast_take', planAllowance: planState ? planAllowanceMeta(planState, false) : null } })
+  }
+  if (!planCovers || freeSummaryRequested) {
+    const blocked = await runTokenGate(freeSummaryRequested && planState ? planAllowanceMeta(planState, false) : exhaustedPlanMeta)
+    if (blocked) return blocked
+  }
+
   /*
    * The included answer, when the plan covers this turn. Taken atomically: if another request took
    * the last one since the read above, this turn falls back to the token preflight it skipped —
@@ -2884,7 +2981,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded ? planAllowanceMeta(planIncluded, true) : exhaustedPlanMeta
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
-  if (!planIncluded && !tokenPreviewFailed) {
+  if (!planIncluded) {
+    const blocked = requireQuotedChimmyReceipt(requestReceipt, quotedTokenCost)
+    if (blocked) return blocked
     try {
       const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
       if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)
@@ -2892,6 +2991,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         userId,
         ruleCode: 'ai_chimmy_chat_message',
         confirmed: confirmTokenSpend,
+        ...(quotedTokenCost !== undefined ? { expectedTokenCost: quotedTokenCost } : {}),
         sourceType: 'chimmy_chat',
         sourceId: conversationId,
         description: 'Chimmy chat message',
@@ -2912,7 +3012,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         balanceAfter: ledger.balanceAfter,
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'TokenSpendPriceChangedError') {
+        return await runTokenGate(exhaustedPlanMeta, true, 'The price changed. Review the updated price before unlocking.')
+          ?? NextResponse.json({ error: 'Unable to refresh the token price.' }, { status: 503 })
+      }
       if (error instanceof TokenInsufficientBalanceError) {
+        if (analysisContract) return await runTokenGate(exhaustedPlanMeta, true, 'Your balance changed. Review the available unlock options below.')
+          ?? NextResponse.json({ error: 'Unable to refresh the token price.' }, { status: 503 })
         return NextResponse.json(
           {
             error: 'Insufficient token balance',
@@ -3062,7 +3168,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3290,10 +3396,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                   ...(settlement.refund ? { refunded: true, refundReason: settlement.refund.reason } : {}),
                 }
               : undefined,
-          providerStatus:
-            loop.provider === 'claude'
-              ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
-              : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          providerStatus: toolLoopProviderStatus(loop),
           /* The model that actually answered — the one thing a quality complaint needs first. */
           ...(loop.model ? { model: loop.model } : {}),
           /*
@@ -3630,6 +3733,26 @@ ${legacyEnrichmentContext}`
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${salaryCapCtx}`
                   : salaryCapCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              // "What changed in my league?" — the same changes and sentences as the league home's card.
+              const ruleChangesCtx = await buildRuleChangesContextForChimmy(leagueSnapshot.id, planInput.userId)
+              if (ruleChangesCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${ruleChangesCtx}`
+                  : ruleChangesCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              // "What does AllFantasy do in my league?" / "Why did my lineup change?" — the automations,
+              // from the same views the Commissioner Hub and the lineup screen show (phase 12).
+              const { buildAutomationContextForChimmy } = await import('@/lib/commissioner-hub/automationChimmyContextService')
+              const automationCtx = await buildAutomationContextForChimmy(leagueSnapshot.id, planInput.userId)
+              if (automationCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${automationCtx}`
+                  : automationCtx
               }
             } catch { /* non-fatal */ }
             try {
@@ -4215,10 +4338,12 @@ ${describedTradeCtx}`
     if (chimmySportDigestFreshness) {
       dataSources.push('sports_digest_db')
     }
-    const displayExplanation = appendOrchestrationFooterIfMissing(
-      pecrOutput.sanitizedAiExplanation || '',
-      chimmyOrchestrationMeta
-    )
+    /*
+     * No routing footer. One was appended to every reply that skipped the five required headings —
+     * "Intent: … (~62% route match)", "Routing note: …" — so dropping the headings from the prompt
+     * would have put the classifier's score under every answer instead of inside some of them.
+     */
+    const displayExplanation = (pecrOutput.sanitizedAiExplanation || '').trim()
     const displayWithStaleness = staleness.warning
       ? `${displayExplanation}\n\nData freshness: ${staleness.warning}`
       : displayExplanation

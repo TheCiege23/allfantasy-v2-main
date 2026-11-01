@@ -3,7 +3,8 @@
  *      there. FREE: any commissioner can calculate it on demand. `?nonPlayoff=&playoff=&withinRound=`
  *      previews other settings without saving them.
  * PUT: Turn automation on/off and save the ordering settings. AF COMMISSIONER: with automation on,
- *      the final order is saved when the title game is decided and seats the next rookie draft.
+ *      the final order is saved when the title game is decided and seats the next rookie draft, and
+ *      `roundNotices: { notify, chat }` choose who hears about each playoff round's locked picks.
  *
  * See docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.1 and lib/rookie-order/.
  */
@@ -13,6 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import {
   isLeagueEntitledToLiveRookieOrder,
   parseRookieOrderConfig,
@@ -20,6 +22,7 @@ import {
   refreshLiveRookieOrder,
   saveLiveRookieOrderSettings,
 } from '@/lib/rookie-order/liveRookieOrderService'
+import { parseRoundNoticeSettings } from '@/lib/rookie-order/roundNotices'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +88,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
 
   const before = readLiveRookieOrderSettings(league.settings)
   const config = parseRookieOrderConfig(body.config ?? body)
-  const saved = await saveLiveRookieOrderSettings(a.leagueId, { enabled, config, season: league.season })
+  const roundNotices = parseRoundNoticeSettings(body.roundNotices, before.roundNotices)
+  const saved = await saveLiveRookieOrderSettings(a.leagueId, { enabled, config, season: league.season, roundNotices })
 
   const changes: { field: string; oldValue: string; newValue: string }[] = []
   if (before.enabled !== enabled) {
@@ -96,9 +100,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
       changes.push({ field: `Rookie order: ${key}`, oldValue: before.config[key], newValue: config[key] })
     }
   }
+  const onOff = (v: boolean) => (v ? 'On' : 'Off')
+  if (before.roundNotices.notify !== roundNotices.notify) {
+    changes.push({ field: 'Rookie order: notify after each playoff round', oldValue: onOff(before.roundNotices.notify), newValue: onOff(roundNotices.notify) })
+  }
+  if (before.roundNotices.chat !== roundNotices.chat) {
+    changes.push({ field: 'Rookie order: post updates in league chat', oldValue: onOff(before.roundNotices.chat), newValue: onOff(roundNotices.chat) })
+  }
   if (changes.length > 0) {
     await notifyCommissionerChange(a.leagueId, a.userId, 'Rookie Draft Settings', changes).catch(() => {})
   }
+
+  // The popup's rookie order follows this setting; members get a "What changed" card when it moves.
+  await publishRookieDraftOrderChange({ leagueId: a.leagueId, actorUserId: a.userId, settingsBefore: league.settings })
 
   return NextResponse.json({ ok: true, settings: saved })
 }

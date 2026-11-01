@@ -18,13 +18,16 @@ import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } fro
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
+import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { sendChopZoneWarningsForSeason } from '@/lib/guillotine/chopAlerts'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
 import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 import { processDueSurvivorNotifications } from '@/lib/survivor/notificationEngine'
+import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -231,6 +234,8 @@ async function runRedraftReconciliation() {
   let playoffMatchupsScored = 0
   let playoffFailed = 0
   const playoffOutcomes: Record<string, number> = {}
+  let statCorrectionFailed = 0
+  const statCorrectionOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
     // A finished contest needs no provider fetch or live-season calendar to repair its archive.
@@ -286,7 +291,7 @@ async function runRedraftReconciliation() {
           },
         )
         playoffOutcomes[playoff.outcome] = (playoffOutcomes[playoff.outcome] ?? 0) + 1
-        playoffMatchupsScored += playoff.matchupsScored
+        playoffMatchupsScored += playoff.matchupsScored + (playoff.lowerBracket?.matchupsScored ?? 0)
       } catch {
         playoffFailed += 1
       }
@@ -383,6 +388,18 @@ async function runRedraftReconciliation() {
     }
 
     /*
+     * Stat corrections for the latest SEALED week: compared and shown to the commissioner, never
+     * applied. Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
+     * provider pull per week, and only for a few days after the seal.
+     */
+    try {
+      const outcome = await checkStatCorrectionsForSeason(season.id)
+      statCorrectionOutcomes[outcome] = (statCorrectionOutcomes[outcome] ?? 0) + 1
+    } catch {
+      statCorrectionFailed += 1
+    }
+
+    /*
      * A native guillotine league chops its lowest team once each finished week. It runs after the
      * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
      * even when this tick's sync failed. One chop per week, guarded inside.
@@ -395,7 +412,7 @@ async function runRedraftReconciliation() {
     }
     try {
       const guillotine = await runNativeGuillotineWeek(
-        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
+        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek, currentWeekComplete: resolved.sportWeekComplete },
         {
           syncWeekStats: async ({ seasonId, week }) => {
             await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
@@ -406,6 +423,19 @@ async function runRedraftReconciliation() {
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
       }
       if (guillotine.outcome === 'chopped') guillotineChops += 1
+      /*
+       * The chop-zone warning (lib/guillotine/chopAlerts.ts): the week being played is the next one to
+       * chop, so about a day before its last game the teams at the bottom are told. Once a week, claimed
+       * inside; every other tick stops at one indexed read.
+       */
+      if (guillotine.outcome === 'waiting' && guillotine.reason === 'week_in_progress' && guillotine.week === resolved.fantasyWeek) {
+        try {
+          const warning = await sendChopZoneWarningsForSeason({ seasonId: season.id, week: guillotine.week })
+          if (warning.outcome === 'sent') guillotineOutcomes.chop_zone_warning = (guillotineOutcomes.chop_zone_warning ?? 0) + 1
+        } catch {
+          guillotineOutcomes.chop_zone_warning_failed = (guillotineOutcomes.chop_zone_warning_failed ?? 0) + 1
+        }
+      }
     } catch {
       guillotineFailed += 1
     }
@@ -429,6 +459,8 @@ async function runRedraftReconciliation() {
     playoffMatchupsScored,
     playoffFailed,
     playoffOutcomes,
+    statCorrectionFailed,
+    statCorrectionOutcomes,
   }
 }
 
@@ -518,14 +550,23 @@ export async function GET(request: Request) {
       // Plan progression uses only scores already sealed by a prior reconciliation.
       // Run its bounded batch before the large redraft sweep so a long provider
       // pass cannot starve Survivor for the entire season.
-      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => ({
-        considered: 0, failed: 1,
-        outcomes: { batch_error: 1 },
-        error: error instanceof Error ? error.message : String(error),
-      }))
-      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(() => ({ considered: 0, failed: 1, outcomes: { batch_error: 1 } }))
+      const survivorSeason = await runPlannedSurvivorSeasonBatch().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'season_batch' })
+        return {
+          considered: 0, failed: 1,
+          outcomes: { batch_error: 1 },
+          error: error instanceof Error ? error.message : String(error),
+        }
+      })
+      const survivorSitOuts = await runNbaTribeSitOutDeadlineBatch().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'sit_out_batch' })
+        return { considered: 0, failed: 1, outcomes: { batch_error: 1 } }
+      })
       // After the season step, so councils it just opened send their notices this tick.
-      const survivorNotifications = await processDueSurvivorNotifications().catch(() => ({ leagues: 0, sent: 0, failed: 1 }))
+      const survivorNotifications = await processDueSurvivorNotifications().catch(error => {
+        reportSurvivorAutomationError(error, { job: 'notifications' })
+        return { leagues: 0, sent: 0, failed: 1 }
+      })
       const redraft = await runRedraftReconciliation()
       return { ...legacy, redraft, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
     },

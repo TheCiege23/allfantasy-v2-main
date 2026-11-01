@@ -6,12 +6,35 @@ import { toast } from 'sonner'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import WaiverClaimDrawer from '@/components/waiver-wire/WaiverClaimDrawer'
+import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { waiverPositionMatches } from '@/lib/waiver-wire/SportWaiverResolver'
-import { isImmediateAddAllowedToday, type DailyPolicySnapshot } from '@/lib/waiver-wire/immediate-add-policy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useNhlProspectSearch } from '@/components/waiver-wire/useNhlProspectSearch'
+import {
+  isNhlProspectWireRow,
+  mergeProspectSearchRows,
+  parseNhlProspectListMeta,
+  placeProspectsAfterPlayers,
+  type NhlProspectListMeta,
+} from '@/lib/waiver-wire/prospectFreeAgentDisplay'
+import { confirmLineupWarning, isLineupWarningResponse } from '@/lib/waiver-wire/lineup-warning-prompt'
+import {
+  claimProcessesAfterDate,
+  isImmediateAddAllowedToday,
+  onWaiversUntilLabel,
+  phaseMoveBlockReason,
+  playerWaiverHoldUntil,
+  type DailyPolicySnapshot,
+} from '@/lib/waiver-wire/immediate-add-policy'
+import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
+import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
 /**
  * Players & waivers — handoff §3, `Waivers.png` / `MobileWaivers.png`.
@@ -29,6 +52,7 @@ type Settings = {
   tiebreakRule?: string | null
   instantFaAfterClear?: boolean
   dailyPolicy?: DailyPolicySnapshot | null
+  phasePolicy?: WaiverPhasePolicy | null
 }
 type Claim = { id: string; addPlayerId: string; dropPlayerId: string | null; faabBid: number | null; priorityOrder: number; status: string }
 type Tx = { id: string; addPlayerId: string; dropPlayerId: string | null; faabSpent: number | null; processedAt: string; roster?: { id: string } | null }
@@ -59,6 +83,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const id = encodeURIComponent(league.id)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [players, setPlayers] = useState<UnifiedPlayerWireDto[]>([])
+  // NHL dynasty only: Fantrax prospects that exist vs. those the list carries (null elsewhere).
+  const [prospectMeta, setProspectMeta] = useState<NhlProspectListMeta | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<Tx[]>([])
   const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null })
@@ -126,6 +152,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       const wj = await w.json().catch(() => null)
       setSettings(s.ok ? sj : null)
       setPlayers(p.ok && Array.isArray(pj?.players) ? pj.players : [])
+      setProspectMeta(p.ok ? parseNhlProspectListMeta(pj?.nhlProspects) : null)
       if (!p.ok) setError('We could not load the player pool.')
       const nr = stj?.state?.nextRunAt
       setNextRunAt(typeof nr === 'string' ? nr : null)
@@ -143,7 +170,12 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   }, [load])
 
   const faabMode = String(settings?.waiverType ?? '').toLowerCase() === 'faab'
+  // Redraft (lib/league-media/redraftIdentity.ts): claim type + FAAB budget header and claim states.
+  const rd = useRedraftScreen(league)
   const immediate = isImmediateAddAllowedToday(settings)
+  // The season phase (offseason / playoffs rules): why moves are limited, and whether none are open.
+  const phaseReason = phaseMoveBlockReason(settings)
+  const movesClosed = !settings || Boolean(settings.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
   const trend = useMemo(() => waiverTrendByPlayer(history, claims), [history, claims])
   const claimedIds = useMemo(() => new Set(claims.map((c) => c.addPlayerId)), [claims])
   const positions = useMemo(() => {
@@ -151,6 +183,10 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     if (known) return known
     return Array.from(new Set(players.map((p) => String(p.position ?? '').toUpperCase()).filter(Boolean))).slice(0, 8)
   }, [settings?.sport, league.sport, players])
+  const { language, t: tr, tInterpolate } = useOptionalLanguage()
+  // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
+  const prospectSearchRows = useNhlProspectSearch<UnifiedPlayerWireDto>(league.id, prospectMeta, q)
+  const allPlayers = useMemo(() => mergeProspectSearchRows(players, prospectSearchRows), [players, prospectSearchRows])
   const nameOf = useCallback(
     (pid: string | null) => {
       if (!pid) return null
@@ -160,7 +196,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   )
 
   const list = useMemo(() => {
-    let rows = players
+    let rows = allPlayers
     if (tab === 'watchlist') rows = rows.filter((p) => watch.includes(p.id))
     if (tab === 'claims') rows = rows.filter((p) => claimedIds.has(p.id))
     if (pos !== 'ALL') rows = rows.filter((p) => waiverPositionMatches(p.position, pos))
@@ -168,8 +204,12 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     if (needle) rows = rows.filter((p) => p.name.toLowerCase().includes(needle) || String(p.team ?? '').toLowerCase().includes(needle))
     if (tab === 'trending') rows = [...rows].sort((a, b) => (trend.get(b.id) ?? 0) - (trend.get(a.id) ?? 0))
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
-    return rows.slice(0, 120)
-  }, [players, tab, watch, claimedIds, pos, q, trend])
+    // Prospects have no projection: after every real player (lib/waiver-wire/prospectFreeAgentDisplay.ts).
+    return (tab === 'trending' ? rows : placeProspectsAfterPlayers(rows, 'projection')).slice(0, 120)
+  }, [allPlayers, tab, watch, claimedIds, pos, q, trend])
+  const listHasProspects = list.some((p) => isNhlProspectWireRow(p))
+  // The waiver wire's own display adapter: canonical photo / crest, and the season stat line.
+  const shown = useMemo(() => list.map((p) => ({ p, a: adaptWaiverWirePlayer(p) })), [list])
 
   const toggleWatch = (pid: string) => {
     const was = watch.includes(pid)
@@ -194,12 +234,20 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const addDrop = async (player: UnifiedPlayerWireDto, dropPlayerId: string | null) => {
     setBusy(player.id)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${id}/add-drop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addPlayerId: player.id, dropPlayerId }),
-      })
-      const j = await res.json().catch(() => ({}))
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${id}/add-drop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addPlayerId: player.id, dropPlayerId, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+        })
+      let res = await send(false)
+      let j = await res.json().catch(() => ({}))
+      if (isLineupWarningResponse(j)) {
+        // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+        if (!confirmLineupWarning(j, tInterpolate)) return
+        res = await send(true)
+        j = await res.json().catch(() => ({}))
+      }
       if (res.ok && j?.ok) {
         setDrawer(null)
         toast.success(dropPlayerId ? `Added ${player.name} and dropped a player.` : `Added ${player.name}.`, { description: j?.writeAuthority?.copy?.detail || undefined })
@@ -229,12 +277,19 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const submitClaim = async (player: UnifiedPlayerWireDto, opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null }) => {
     setBusy(player.id)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${id}/claims`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addPlayerId: player.id, ...opts }),
-      })
-      const j = await res.json().catch(() => ({}))
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${id}/claims`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addPlayerId: player.id, ...opts, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+        })
+      let res = await send(false)
+      let j = await res.json().catch(() => ({}))
+      if (isLineupWarningResponse(j)) {
+        if (!confirmLineupWarning(j, tInterpolate)) return
+        res = await send(true)
+        j = await res.json().catch(() => ({}))
+      }
       if (!res.ok) {
         toast.error(j?.error ?? 'Failed to submit waiver claim')
         return
@@ -249,7 +304,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   }
 
   const onAdd = (player: UnifiedPlayerWireDto) => {
-    if (!immediate) return setDrawer({ player, immediate: false })
+    // A player still on waivers after a drop needs a claim even when free agents are instant adds.
+    if (!immediate || playerWaiverHoldUntil(player, settings)) return setDrawer({ player, immediate: false })
     const open = roster.capacity == null ? true : roster.ids.length < roster.capacity
     if (open) void addDrop(player, null)
     else setDrawer({ player, immediate: true })
@@ -283,12 +339,25 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const lastRunOthers = history.filter((t) => !(roster.id && t.roster?.id === roster.id)).length
 
   return (
-    <div className="nls" data-testid="native-waivers-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-waivers-screen" data-rd-screen={rd ? 'waivers' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Players`} title="Players & waivers">
-        {runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
-        {faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
-        {roster.priority != null ? <span className="nls-chip">Priority {roster.priority} of {league.teamCount}</span> : null}
+        {/* Redraft carries these in the header strip below instead. */}
+        {!rd && runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
+        {!rd && faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
+        {!rd && roster.priority != null ? <span className="nls-chip">Priority {roster.priority} of {league.teamCount}</span> : null}
       </ScreenHead>
+
+      {rd && settings ? (
+        <RedraftWaiverHeader
+          claimType={waiverClaimTypeLabel(settings.waiverType)}
+          faab={faabMode ? faabMeter(roster.faab, settings.faabBudget) : null}
+          faabRemaining={faabMode ? roster.faab : null}
+          runLabel={runLabel}
+          priority={roster.priority}
+          teamCount={league.teamCount}
+        />
+      ) : null}
 
       <div className="nls-toolbar">
         <Segmented label="Player list" value={tab} onChange={setTab} options={[{ id: 'available', label: 'Available' }, { id: 'watchlist', label: 'Watchlist' }, { id: 'trending', label: 'Trending' }, { id: 'claims', label: 'My claims' }]} />
@@ -297,6 +366,17 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       </div>
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
+      {phaseReason ? (
+        <p className="nls-muted" role="status" data-testid="native-waivers-phase-reason">{phaseReason}</p>
+      ) : null}
+      {listHasProspects ? (
+        <p className="nls-muted" data-testid="native-waivers-prospect-sort-note">{tr('waiverWire.prospects.sortNote')}</p>
+      ) : null}
+      {prospectMeta && prospectMeta.total > prospectMeta.listed ? (
+        <p className="nls-muted" data-testid="native-waivers-prospect-search-hint">
+          {tInterpolate('waiverWire.prospects.searchHint', { listed: prospectMeta.listed, total: prospectMeta.total })}
+        </p>
+      ) : null}
 
       <div className="nls-cols">
         <section className="nls-card nls-card-flush" aria-label="Players" aria-busy={loading}>
@@ -315,18 +395,31 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => {
+                {shown.map(({ p, a }) => {
                   const t = trend.get(p.id) ?? 0
                   const pct = rosteredPct(p)
                   const claimed = claimedIds.has(p.id)
+                  const holdUntil = playerWaiverHoldUntil(p, settings)
+                  const rowImmediate = immediate && !holdUntil
                   return (
                     <tr key={p.id}>
                       <td data-align="left">
                         <div className="nls-pcell">
+                          <PlayerHeadshot playerId={p.id} playerName={p.name} headshotUrl={a.displayHeadshotUrl} position={p.position} team={p.team} sport={p.sport || league.sport} size={36} />
                           <PosPill label={p.position} />
                           <div className="nls-player">
                             <strong>{p.name}<InjuryFlag status={p.injuryStatus} /></strong>
-                            <small>{p.team ?? 'FA'}{p.product?.byeWeek ? ` · Bye ${p.product.byeWeek}` : ''}</small>
+                            <small>
+                              {a.displayTeamLogoUrl ? <FallbackImg src={a.displayTeamLogoUrl} alt="" width={14} height={14} className="nls-team-logo" fallback={null} data-testid="waiver-team-logo" /> : null}
+                              {p.team ?? (isNhlProspectWireRow(p) ? tr('draftRoom.pool.prospectUnsigned') : 'FA')}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
+                              {isNhlProspectWireRow(p) ? (
+                                <span className="nls-chip" data-tone="accent" title={tr('draftRoom.pool.prospectTooltip')} data-testid={`native-waivers-prospect-badge-${p.id}`}>
+                                  {tr('draftRoom.pool.prospectBadge')}
+                                </span>
+                              ) : null}
+                            </small>
+                            {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
+                            {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />
@@ -337,14 +430,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                       <td>{fmt1(p.projectedPoints)}</td>
                       <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
-                        {immediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
+                        {rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
                       <td>
                         {claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
-                          <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id} onClick={() => onAdd(p)}>
-                            {immediate ? 'Add' : 'Claim'}
+                          <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id || movesClosed} title={movesClosed ? phaseReason ?? undefined : undefined} onClick={() => onAdd(p)}>
+                            {rowImmediate ? 'Add' : 'Claim'}
                           </button>
                         )}
                       </td>
@@ -365,13 +458,22 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                 {[...claims].sort((a, b) => a.priorityOrder - b.priorityOrder).map((c, i) => {
                   const addName = nameOf(c.addPlayerId) ?? 'Player'
                   const dropName = nameOf(c.dropPlayerId)
+                  // A claim on a player still on waivers after a drop runs at the first waiver run after he clears.
+                  const holdUntil = playerWaiverHoldUntil(players.find((p) => p.id === c.addPlayerId), settings)
                   const draft = bidDrafts[c.id] ?? (c.faabBid != null ? String(c.faabBid) : '')
+                  const state = rd ? claimStatusLabel(c.status) : null
                   return (
                     <li key={c.id} className="nls-claim">
                       <span className="nls-claim-order">{i + 1}</span>
                       <div>
                         <strong>Add {addName}</strong>
                         <small>{dropName ? `Drop ${dropName}` : c.dropPlayerId ? 'Drop a rostered player' : 'No drop'}</small>
+                        {state ? <span className="nls-chip" data-tone={state.tone === 'neutral' ? undefined : state.tone} data-testid={`native-waivers-claim-state-${c.id}`}>{state.label}</span> : null}
+                        {holdUntil ? (
+                          <small data-hold data-testid={`native-waivers-claim-hold-${c.id}`}>
+                            {tInterpolate('waiverClaim.processesAfter', { date: claimProcessesAfterDate(holdUntil, language) })}
+                          </small>
+                        ) : null}
                       </div>
                       <button type="button" className="nls-iconbtn" aria-label={`Cancel claim for ${addName}`} onClick={() => void cancelClaim(c.id)}>
                         <X size={16} aria-hidden />
@@ -435,5 +537,6 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         }}
       />
     </div>
+    </RedraftScreen>
   )
 }

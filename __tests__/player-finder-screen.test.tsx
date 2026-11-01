@@ -168,9 +168,13 @@ const LEAGUE_VIEW: PlayerLeagueView = {
   coverage: { sampled: 12, matched: 12, fraction: 1, usable: true },
 }
 
+// Pinned before the fixture's Sunday 1:00pm ET kickoffs. Left to the real clock, every swap and
+// IR move locks once those games start (2026-10-25 17:00Z) and the move order changes under the test.
+const CORE_NOW = '2026-10-25T16:18:00.000Z'
+
 function renderCore(extra: Partial<React.ComponentProps<typeof PlayerFinder>> = {}) {
   return render(
-    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} {...extra} />,
+    <PlayerFinder query="Dalton Kincaid" matches={[DETAIL.player]} detail={DETAIL} leagueCount={6} nowIso={CORE_NOW} {...extra} />,
   )
 }
 

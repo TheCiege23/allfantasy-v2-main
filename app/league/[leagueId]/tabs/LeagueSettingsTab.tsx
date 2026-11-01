@@ -18,11 +18,15 @@ import { getUpgradeUrlWithHighlightForFeature } from '@/lib/subscription/feature
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { DraftOrderSlotRow } from '@/lib/draft/pick-order'
 import { pickTimerSecondsFromLeagueSettings } from '@/lib/league/league-settings-pick-timer'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { COMMON_TIMEZONES, formatInTz, isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { DraftOrderList } from './settings/DraftOrderList'
 import { KeeperModal } from './settings/KeeperModal'
 import { ResetDraftModal } from './settings/ResetDraftModal'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AlertTriangle, ClipboardList, Lock, Users } from 'lucide-react'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import '@/components/dynasty/dynasty-details.css'
 import {
   DangerButton,
   Input,
@@ -252,6 +256,8 @@ export function LeagueSettingsTab({
 
   const s = data?.settings as RawSettings | null
   const league = data?.league
+  // Dynasty only: lucide icons in place of the emoji below; every other league keeps them.
+  const dynastyEra = league ? usesDynastyBackground(league) : false
 
   const patch = useCallback(
     async (partial: Record<string, unknown>) => {
@@ -471,7 +477,7 @@ export function LeagueSettingsTab({
           data-testid="league-settings-view-only-banner"
         >
           <span className="text-[16px] text-amber-400" aria-hidden>
-            🔒
+            {dynastyEra ? <Lock className="h-4 w-4" /> : '🔒'}
           </span>
           <p className="text-[12px] text-amber-300/80">{t('league.draftSettings.viewOnlyBanner')}</p>
         </div>
@@ -559,12 +565,19 @@ export function LeagueSettingsTab({
         title="Automation"
         description="Control how the draft handles timers, pauses, and auto-picks."
       >
-        <SettingsRow
-          label="Autostart Draft"
-          description="Draft begins automatically at the scheduled time."
-          faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
-          control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
-        />
+        {/* Native redraft drafts start at their time whatever this says, so it is hidden for them. */}
+        {startsAtScheduledTimeRegardlessOfAutostart(league) ? (
+          <p className="border-b border-white/[0.04] py-2 text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+            {t('draft.autostartScheduledNote')}
+          </p>
+        ) : (
+          <SettingsRow
+            label="Autostart Draft"
+            description="Draft begins automatically at the scheduled time."
+            faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
+            control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
+          />
+        )}
         <SettingsRow
           label="Slow Draft Auto-Pause"
           description="Pause the draft daily during a quiet window."
@@ -884,7 +897,13 @@ export function LeagueSettingsTab({
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-sm font-bold text-white">🏈 Dispersal Draft</h4>
+              {dynastyEra ? (
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-white">
+                  <Users className="dyd-gold-icon h-4 w-4" aria-hidden /> Dispersal Draft
+                </h4>
+              ) : (
+                <h4 className="text-sm font-bold text-white">🏈 Dispersal Draft</h4>
+              )}
               <p className="text-xs text-white/50 mt-0.5">
                 For orphaned teams or league downsizing. Pool assets and draft them among new managers.
               </p>
@@ -1024,7 +1043,14 @@ export function LeagueSettingsTab({
             onClick={() => setKeeperOpen(true)}
             className="mt-2 rounded-xl border border-[#ff3d81]/30 bg-transparent px-4 py-2 text-[12px] font-semibold text-[#ff3d81] hover:bg-[#ff3d81]/10"
           >
-            📋 Set Keeper / Dynasty Players
+            {dynastyEra ? (
+              <>
+                <ClipboardList className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+                Set Keeper / Dynasty Players
+              </>
+            ) : (
+              '📋 Set Keeper / Dynasty Players'
+            )}
           </button>
         )}
       </SettingsSection>
@@ -1235,7 +1261,11 @@ export function LeagueSettingsTab({
           {isHeadCommissioner ? (
             <div className="rounded-xl border border-red-500/15 bg-red-500/[0.06] p-4">
               <div className="flex items-start gap-3">
-                <span className="text-[20px]">⚠️</span>
+                {dynastyEra ? (
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" aria-hidden />
+                ) : (
+                  <span className="text-[20px]">⚠️</span>
+                )}
                 <div>
                   <p className="mb-1 text-[14px] font-bold text-red-400">Reset Draft</p>
                   <p className="mb-4 text-[12px] text-white/50">

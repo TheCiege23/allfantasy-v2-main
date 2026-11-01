@@ -14,6 +14,23 @@ const cards = (b: Awaited<ReturnType<typeof getWeekBoard>>) => [...b.coinFlips, 
 beforeEach(() => { vi.resetAllMocks(); for (const fn of Object.values(h)) fn.mockResolvedValue([]) })
 describe('weekly format capabilities', () => {
   it.each([['roto','roto'], ['h2h_category','categories'], ['season_points','season-points'], ['h2h_points','head-to-head']])('dispatches %s without inventing an elimination', (mode, expected) => expect(weeklyFormat({ settings: { scoring_mode: mode } })).toBe(expected))
+  /* A Fantrax import stores its scoring type only under `fantrax_settings.scoringSystem.type`
+     (FantraxLeagueFetchService → settings.raw). H2H points is the captured value; the category and
+     roto spellings are not captured (contracts/fantrax/GAPS.md F-07), so the match is on the word. */
+  it.each([['ROTISSERIE','roto'], ['HEAD_TO_HEAD_CATEGORIES','categories'], ['HEAD_TO_HEAD_POINTS_BASED','head-to-head']])('reads a Fantrax %s league from its stored scoring system', (type, expected) =>
+    expect(weeklyFormat({ settings: { scoring: type, fantrax_settings: { scoringSystem: { type } } } })).toBe(expected))
+  /* A Yahoo import stores Yahoo's own `scoring_type` only inside the raw `yahoo_settings` block
+     (YahooAdapter → settings.yahoo_settings), as an object or as Yahoo's array of fragments. The values
+     the repo evidences: 'head' is head-to-head CATEGORIES, 'headpoint' head-to-head points
+     (decision-os categoryLeagueReason and its test), 'roto' rotisserie. */
+  it.each([
+    [{ scoring_type: 'head' }, 'categories'],
+    [{ scoring_type: 'headpoint' }, 'head-to-head'],
+    [{ scoring_type: 'roto' }, 'roto'],
+    [[{ draft_type: 'live' }, { scoring_type: 'head' }], 'categories'],
+    [[{ draft_type: 'live' }, { scoring_type: 'roto' }], 'roto'],
+  ])('reads a Yahoo league from its stored scoring_type %j', (yahoo_settings, expected) =>
+    expect(weeklyFormat({ settings: { yahoo_settings } })).toBe(expected))
   it('requires stated survival rules, regardless of a league name or missing pairs', () => { expect(weeklyFormat({ leagueType: 'redraft' })).toBe('head-to-head'); expect(weeklyFormat({ leagueType: 'guillotine' })).toBe('elimination') })
   it('qualifies external IDs by provider and native IDs by league', () => {
     expect(weeklyScopeKey({ id:'A', platform:'espn', platformLeagueId:'123' })).not.toBe(weeklyScopeKey({ id:'B', platform:'yahoo', platformLeagueId:'123' }))

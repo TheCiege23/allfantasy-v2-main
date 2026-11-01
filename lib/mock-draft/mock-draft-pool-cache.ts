@@ -7,6 +7,7 @@ import { injuryCoverageFor, resolveInjuryFacts } from '@/lib/injuries/injuryRead
 import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
+import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
 import { prisma } from '@/lib/prisma'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -56,9 +57,9 @@ function normalizeCacheText(value: string | null | undefined): string {
     .replace(/^-+|-+$/g, '')
 }
 
-function normalizeLimit(value: number | null | undefined): number {
+function normalizeLimit(value: number | null | undefined, sport?: string | null): number {
   if (!Number.isFinite(Number(value))) return 300
-  return Math.min(Math.max(Number(value), 1), 500)
+  return Math.min(Math.max(Number(value), 1), normalizeToSupportedSport(sport) === 'NBA' ? 1000 : 500)
 }
 
 function normalizeTeamCount(value: number | null | undefined): number {
@@ -108,7 +109,7 @@ export function buildMockDraftPoolCacheKey(params: MockDraftPoolRequest): string
   const teamCount = normalizeTeamCount(params.teamCount)
   const season = buildDateBucket(params.season)
   const scoringHash = buildScoringHash(params.scoring)
-  return `mock:${buildScope(params)}:${sport}:${season}:${type}:${pool}:${draftType}:score:${scoringHash}:teams:${teamCount}:limit:${normalizeLimit(params.limit)}`
+  return `mock:${buildScope(params)}:${sport}:${season}:${type}:${pool}:${draftType}:score:${scoringHash}:teams:${teamCount}:limit:${normalizeLimit(params.limit, params.sport)}${sport === 'nba' ? ':verified-roster-v2' : ''}`
 }
 
 function logMockPool(message: string, details: Record<string, unknown>): void {
@@ -117,7 +118,7 @@ function logMockPool(message: string, details: Record<string, unknown>): void {
 
 async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockDraftPoolPayload> {
   const action = params.action || 'live'
-  const limit = normalizeLimit(params.limit)
+  const limit = normalizeLimit(params.limit, params.sport)
   const sport = normalizeToSupportedSport(params.sport || DEFAULT_SPORT)
   const type: MockDraftPoolType = params.type === 'dynasty' ? 'dynasty' : 'redraft'
   const pool = params.pool || 'all'
@@ -164,6 +165,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
       sport,
       leagueId: params.leagueId,
       limit,
+      format: type,
     })
     const raw = players.map((player) => ({
       name: player.name,
@@ -383,7 +385,19 @@ export async function getCachedMockDraftPool(params: MockDraftPoolRequest): Prom
 
   logMockPool('cache miss', { cacheKey })
   const rebuildStartedAt = Date.now()
-  const payload = await buildMockPoolPayload(params)
+  const built = await buildMockPoolPayload(params)
+  // AF ADP beside market ADP, computed once per cached pool (see mockPoolAfAdp.ts).
+  const payload: MockDraftPoolPayload = {
+    ...built,
+    entries: await attachAfAdpToMockPool(built.entries, {
+      sport: normalizeToSupportedSport(params.sport || DEFAULT_SPORT),
+      season: params.season,
+      scoring: params.scoring,
+      isDynasty: params.type === 'dynasty',
+      teamCount: normalizeTeamCount(params.teamCount) || null,
+      draftType: params.draftType,
+    }),
+  }
   logMockPool('rebuild complete', { cacheKey, durationMs: Date.now() - rebuildStartedAt })
 
   if (draftPoolCacheModel?.upsert) {

@@ -7263,13 +7263,13 @@ function AFLegacyContent() {
                                 </span>
                               </div>
                               <p className="text-xs text-white/50 mb-4">
-                                Specialty formats like Guillotine, Best Ball, and Survivor are tracked separately because their unique rules create skewed records.
+                                Specialty formats like Guilly, Best Ball, and Survivor are tracked separately because their unique rules create skewed records.
                               </p>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 {specialtyStats.by_format?.guillotine && (
                                   <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-center">
                                     <div className="text-xl mb-1">🔪</div>
-                                    <div className="text-xs text-rose-300 font-medium mb-1">Guillotine</div>
+                                    <div className="text-xs text-rose-300 font-medium mb-1">Guilly</div>
                                     <div className="text-sm text-white">{specialtyStats.by_format.guillotine.leagues} leagues</div>
                                   </div>
                                 )}

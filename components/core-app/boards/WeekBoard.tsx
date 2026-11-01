@@ -31,6 +31,9 @@ import {
 import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { weekBoardMessages } from '@/lib/core-app/messages/weekBoard'
 
 /** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
@@ -95,7 +98,7 @@ function pctLabel(pct: number | null): string {
  */
 function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?: WeekLineups | null }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const msg = useMessages(weekBoardMessages)
   const { m } = row
   const abs = Math.abs(row.margin).toFixed(1)
   const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
@@ -106,10 +109,10 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
    */
   const live = m.live
   const result = live?.final ? (live.margin > 0 ? 'won' : live.margin < 0 ? 'lost' : 'tied') : null
-  const valueSub = live ? coreUiCopy(result ?? 'so far', language) : es ? `${win}% de ganar` : `${win}% to win`
-  const valueLabel = es
-    ? live ? `${sign}${abs} en el marcador, ${live.you.toFixed(1)} a ${live.them.toFixed(1)}${result ? ` — ${coreUiCopy(result, language)}` : ' hasta ahora'}` : `${sign}${abs} de diferencia histórica estimada, ${win}% de ganar según el historial`
-    : live ? `${sign}${abs} on the scoreboard, ${live.you.toFixed(1)} to ${live.them.toFixed(1)}${result ? ` — you ${result}` : ' so far'}` : `${sign}${abs} historical scoring estimate, ${win}% to win`
+  const valueSub = live ? coreUiCopy(result ?? 'so far', language) : msg.winChance(win)
+  const valueLabel = live
+    ? msg.liveValueLabel({ sign, abs, you: live.you, them: live.them, result, resultLocalized: result ? coreUiCopy(result, language) : null })
+    : msg.estimateValueLabel(sign, abs, win)
   return (
     <li>
       <Link className="af-bd-row" href={m.href}>
@@ -117,7 +120,7 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
         <LeagueCrest imageUrl={m.leagueImageUrl} name={m.leagueName} platform={m.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{m.leagueName}</span>
-          <span className="af-bd-sub">{m.season} · {es ? 'Período' : 'Period'} {m.week}</span>
+          <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>
           <span className="af-bd-sub">
             {/*
               ⚠ NEVER AN INVENTED MANAGER. `WeekOpponent.name` is null when no
@@ -127,8 +130,8 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
               home and Matchup board print (`rosterLabel`).
             */}
             {`${coreUiCopy('vs', language)} ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
-            {row.playoffPct != null ? es ? ` · ${pctLabel(row.playoffPct)} de entrar en playoffs${row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT ? ' · pocas probabilidades' : ''}` : ` · ${pctLabel(row.playoffPct)} playoff odds${row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT ? ' · long shot' : ''}` : ''}
-            {m.elimination ? es ? ' · se elimina la puntuación más baja' : ' · lowest score is eliminated' : ''}
+            {row.playoffPct != null ? msg.playoffOddsSuffix(pctLabel(row.playoffPct), row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT) : ''}
+            {m.elimination ? msg.lowestEliminated : ''}
           </span>
           <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />
         </span>
@@ -190,7 +193,7 @@ export function WeekBoard({
   priorityLeagueIds = [],
 }: WeekBoardProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const msg = useMessages(weekBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const pctByLeague = new Map<string, number>()
   if (outlook) {
@@ -263,7 +266,7 @@ export function WeekBoard({
     return (
       <div className="af-bd">
         <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
-        <BoardHead eyebrow={copy('Core · Your week')} title={copy('Your week')} blurb={es ? 'Tus prioridades primero; después, enfrentamientos ajustados dentro de la puntuación de cada liga. Todas las ligas siguen disponibles.' : 'Your priorities first, then close matchups within each league’s scoring. Every league stays available.'} />
+        <BoardHead eyebrow={copy('Core · Your week')} title={copy('Your week')} blurb={msg.blurb} />
         <NoLeaguesYet what={copy("Once one is, this board shows the leagues you lead and trail in this week's matchups.")} language={language} />
       </div>
     )
@@ -275,7 +278,7 @@ export function WeekBoard({
       <BoardHead
         eyebrow={copy('Core · Your week')}
         title={copy('Your week')}
-        blurb={es ? 'Tus prioridades primero; después, enfrentamientos ajustados dentro de la puntuación de cada liga. Todas las ligas siguen disponibles.' : 'Your priorities first, then close matchups within each league’s scoring. Every league stays available.'}
+        blurb={msg.blurb}
       />
 
       <div
@@ -283,18 +286,18 @@ export function WeekBoard({
         data-stack={columnsTooUneven(leading.length, trailing.length) || undefined}
       >
         <Column
-          label={es ? 'Por delante · primeras 5' : 'Leading · first 5'}
+          label={msg.leadingLabel}
           rows={leading}
           ahead
-          quiet={es ? 'Ninguna liga está por delante en el marcador o la estimación histórica disponible.' : 'No league is ahead on its available scoreboard or historical estimate.'}
+          quiet={msg.leadingQuiet}
           lineups={lineups}
         />
         <Column
-          label={es ? 'Por detrás · primeras 5' : 'Trailing · first 5'}
+          label={msg.trailingLabel}
           rows={trailing}
           ahead={false}
           lineups={lineups}
-          quiet={es ? 'Ninguna liga está por detrás en sus datos disponibles.' : 'No league is behind on its available data.'}
+          quiet={msg.trailingQuiet}
         />
       </div>
 
@@ -334,7 +337,7 @@ export function WeekBoard({
             label={copy('On the schedule · not enough history to call')}
             count={
               unprojected.length > UNPROJECTED_SHOWN
-                ? es ? `${UNPROJECTED_SHOWN} de ${unprojected.length}` : `${UNPROJECTED_SHOWN} of ${unprojected.length}`
+                ? msg.shownOf(UNPROJECTED_SHOWN, unprojected.length)
                 : `${unprojected.length}`
             }
           />
@@ -350,18 +353,18 @@ export function WeekBoard({
                   />
                   <span className="af-bd-league">
                     <span className="af-bd-name">{m.leagueName}</span>
-                    <span className="af-bd-sub">{m.season} · {es ? 'Período' : 'Period'} {m.week}</span>
+                    <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>
                     <span className="af-bd-sub">
                       {/* Same rule as MatchRow: a real name, else the roster's own "Team N". */}
                       {`${copy('vs')} ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
-                      {m.elimination ? es ? ' · se elimina la puntuación más baja' : ' · lowest score is eliminated' : ''}
+                      {m.elimination ? msg.lowestEliminated : ''}
                       {/*
                         The averages behind the value column, so the number is
                         readable rather than asserted. Only when form exists —
                         see the value column below for why the two cases differ.
                       */}
                       {m.form
-                        ? es ? ` · ${m.form.you.toFixed(1)} a ${m.form.them.toFixed(1)} por semana` : ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
+                        ? msg.formPerWeek(m.form.you, m.form.them)
                         : ''}
                     </span>
                   </span>
@@ -385,20 +388,20 @@ export function WeekBoard({
                     <span
                       className="af-bd-val af-bd-val--form"
                       data-tone={m.form.margin >= 0 ? 'up' : 'down'}
-                      aria-label={es ? `Promedias ${m.form.you.toFixed(1)} puntos por semana frente a ${m.form.them.toFixed(1)} de tu rival, durante ${m.form.weeks} semanas puntuadas; es una tendencia, no una proyección` : `You have averaged ${m.form.you.toFixed(1)} points a week to their ${m.form.them.toFixed(1)}, over ${m.form.weeks} scored ${m.form.weeks === 1 ? 'week' : 'weeks'} — form so far, not a projection`}
+                      aria-label={msg.formAria(m.form.you, m.form.them, m.form.weeks)}
                     >
                       <span className="af-num" aria-hidden>
                         {m.form.margin >= 0 ? '+' : '−'}
                         {Math.abs(m.form.margin).toFixed(1)}
                       </span>
                       <span className="af-bd-val-sub" aria-hidden>
-                        {copy('so far')} · {m.form.weeks}{es ? ' sem.' : 'wk'}
+                        {copy('so far')} · {m.form.weeks}{msg.formWeeksAbbrev}
                       </span>
                     </span>
                   ) : (
                     <span
                       className="af-bd-val af-bd-val--seed"
-                      aria-label={es ? `${m.yourSampleWeeks} de ${MIN_WEEKS_FOR_PROJECTION} semanas completas necesarias para pronosticar este enfrentamiento` : `${m.yourSampleWeeks} of ${MIN_WEEKS_FOR_PROJECTION} completed weeks needed to project this matchup`}
+                      aria-label={msg.sampleAria(m.yourSampleWeeks, MIN_WEEKS_FOR_PROJECTION)}
                     >
                       <span aria-hidden>
                         {m.yourSampleWeeks}/{MIN_WEEKS_FOR_PROJECTION}
@@ -446,13 +449,11 @@ export function WeekBoard({
                   />
                   <span className="af-bd-league">
                     <span className="af-bd-name">{e.leagueName}</span>
-                    <span className="af-bd-sub">{e.season} · {es ? 'Período' : 'Period'} {e.week}</span>
+                    <span className="af-bd-sub">{e.season} · {msg.period} {e.week}</span>
                     <span className="af-bd-sub">
                       {e.fieldSize === 0
                         ? copy('no scores in yet this week')
-                        : es
-                          ? `${e.rank != null ? `${e.rank}.º de ${e.fieldSize}` : `${e.fieldSize} con puntos`}${e.cutLine != null ? ` · corte ${e.cutLine.toFixed(1)}` : ''}`
-                          : `${e.rank != null ? `${e.rank} of ${e.fieldSize}` : `${e.fieldSize} scored`}${e.cutLine != null ? ` · cut line ${e.cutLine.toFixed(1)}` : ''}`}
+                        : msg.elimSummary(e.rank, e.fieldSize, e.cutLine)}
                     </span>
                   </span>
                   {/*
@@ -478,19 +479,6 @@ export function WeekBoard({
                     */
                     const badge = settleBadge(e.settle)
                     const settle = e.settle
-                    const spanishBadge = es && settle ? (() => {
-                      switch (settle.verdict) {
-                        case 'safe': return { sub: 'decidido', aria: 'A salvo esta semana: tus titulares y suficientes equipos por debajo ya terminaron' }
-                        case 'chopped': return { sub: 'decidido', aria: 'Todos los equipos terminaron y el tuyo quedó eliminado esta semana' }
-                        case 'no_chop': return { sub: 'sin eliminación esta semana', aria: 'Nadie queda eliminado esta semana' }
-                        case 'open': {
-                          const pending = settle.yourUpcoming + settle.yourLive
-                          if (pending > 0) return { sub: `${pending} por jugar`, aria: `${pending} de tus titulares aún deben terminar` }
-                          if (settle.cutLinePending) return { sub: 'el último equipo sigue jugando', aria: `Tus titulares terminaron; al equipo más bajo le faltan ${settle.cutLinePending} por terminar` }
-                          return null
-                        }
-                      }
-                    })() : null
                     const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
                     return (
                       <span
@@ -498,17 +486,15 @@ export function WeekBoard({
                         data-tone={badge?.tone ?? (e.onTheBlock ? 'down' : 'up')}
                         data-settled={badge?.sub === 'decided' ? 'true' : undefined}
                         aria-label={
-                          (es
-                            ? e.onTheBlock ? `Tus ${e.yourScore?.toFixed(1)} puntos son la puntuación más baja entre ${e.fieldSize} equipos; por ahora quedas eliminado` : `Tus ${e.yourScore?.toFixed(1)} puntos están ${margin.toFixed(1)} por encima del corte de ${e.cutLine?.toFixed(1)}`
-                            : e.onTheBlock ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize} — you are the one eliminated as it stands` : `Your ${e.yourScore?.toFixed(1)} is ${margin.toFixed(1)} points clear of the cut line of ${e.cutLine?.toFixed(1)}`) +
-                          (badge ? `. ${spanishBadge?.aria ?? badge.aria}` : '')
+                          msg.elimAria({ onTheBlock: e.onTheBlock, yourScore: e.yourScore, fieldSize: e.fieldSize, margin, cutLine: e.cutLine }) +
+                          (badge && settle ? `. ${msg.settleAria(settle, badge.aria)}` : '')
                         }
                       >
                         <span className="af-num" aria-hidden>
                           {badge?.label ? copy(badge.label) : e.onTheBlock ? copy('OUT') : `+${margin.toFixed(1)}`}
                         </span>
                         <span className="af-bd-val-sub" aria-hidden>
-                          {spanishBadge?.sub ?? copy(badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear'))}
+                          {badge && settle ? msg.settleSub(settle, copy(badge.sub)) : copy(e.onTheBlock ? 'on the block' : 'clear')}
                         </span>
                       </span>
                     )
@@ -531,11 +517,11 @@ export function WeekBoard({
           ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
                a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
                on 40,396 roster-weeks." on production, 2026-09-28. */
-            `${copy(board.model.basis)} ${es ? 'Modelo ajustado con' : 'Fitted on'} ${board.model.sampleSize.toLocaleString()} ${es ? 'semanas de equipos.' : 'roster-weeks.'}`
+            `${copy(board.model.basis)} ${msg.fittedOn(board.model.sampleSize.toLocaleString(getAppIntlLocale()))}`
           : copy(board.model.basis)}{' '}
         {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
         {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
-        {es ? ' Las probabilidades bajas no ocultan ligas ni prueban una eliminación matemática. Los márgenes de deportes distintos no se comparan entre sí.' : ' Low playoff odds never hide leagues or prove mathematical elimination. Point margins from different sports are not compared with each other.'}
+        {msg.lowOddsNote}
       </p>
 
       {/*
@@ -554,10 +540,10 @@ export function WeekBoard({
             when the section showed all of them.
           */}
           {unprojected.length > UNPROJECTED_SHOWN
-            ? es ? `${unprojected.length - UNPROJECTED_SHOWN} más no tienen pronóstico porque faltan semanas completas de uno o ambos equipos. ` : `${unprojected.length - UNPROJECTED_SHOWN} more could not be projected either — too few completed weeks on one side or the other. `
+            ? msg.unprojectedMore(unprojected.length - UNPROJECTED_SHOWN)
             : ''}
           {board.withoutSchedule > 0
-            ? es ? `${board.withoutSchedule} no tienen calendario esta semana.` : `${board.withoutSchedule} carry no schedule for this week at all.`
+            ? msg.withoutSchedule(board.withoutSchedule)
             : ''}
         </p>
       ) : null}

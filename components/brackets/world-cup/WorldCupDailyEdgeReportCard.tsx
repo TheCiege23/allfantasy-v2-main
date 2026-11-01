@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
+
 /**
  * WorldCupDailyEdgeReportCard
  *
@@ -280,7 +282,7 @@ function FeedbackRow({
     setState("submitting")
     trackEdgeReportFeedbackClicked({ challengeId, rating, reason: reason ?? null })
     try {
-      await fetch("/api/ai/feedback", {
+      await paidToolFetch("/api/ai/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -584,7 +586,7 @@ export default function WorldCupDailyEdgeReportCard({
     async (requiresConfirm: boolean): Promise<void> => {
       setCoachingState("loading")
       try {
-        const res = await fetch(`/api/brackets/world-cup/${challengeId}/edge-report`, {
+        const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/edge-report`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ confirmedTokenSpend: requiresConfirm }),

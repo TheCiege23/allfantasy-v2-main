@@ -24,6 +24,7 @@ const h = vi.hoisted(() => {
     }),
     lineup: vi.fn(),
     trade: vi.fn(),
+    automation: vi.fn(),
     audit: vi.fn(async () => ({ id: 'audit-1' })),
   }
 })
@@ -34,6 +35,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/server/services/auditService', () => ({ logAction: h.audit }))
 vi.mock('@/lib/chimmy/actions/lineupAction', () => ({ executeLineupAction: h.lineup }))
 vi.mock('@/lib/chimmy/actions/tradeAction', () => ({ executeTradeAction: h.trade }))
+vi.mock('@/lib/chimmy/actions/automationAction', () => ({ executeAutomationAction: h.automation }))
 
 import { confirmChimmyAction } from '@/lib/chimmy/actions/confirmAction'
 import { signChimmyActionToken } from '@/lib/chimmy/actions/actionToken'
@@ -70,6 +72,21 @@ afterEach(() => {
 })
 
 describe('confirmChimmyAction', () => {
+  it('runs an automation card once through its executor', async () => {
+    h.automation.mockResolvedValue({ ok: true, message: 'Saved — 3 automation settings changed.' })
+    const token = signChimmyActionToken({
+      userId: 'u1',
+      leagueId: 'L1',
+      now: NOW,
+      spec: { kind: 'automation', change: { type: 'preset', preset: 'recommended' }, expectedKeys: ['fill_empty_starters'] },
+    })!.token
+    expect(await confirmChimmyAction({ token, userId: 'u1', now: NOW })).toMatchObject({ ok: true, status: 'executed', kind: 'automation' })
+    expect(await confirmChimmyAction({ token, userId: 'u1', now: NOW })).toMatchObject({ ok: true, status: 'already_executed' })
+    expect(h.automation).toHaveBeenCalledTimes(1)
+    expect(h.lineup).not.toHaveBeenCalled()
+    expect(h.trade).not.toHaveBeenCalled()
+  })
+
   it('runs a valid lineup card once and logs it to the league audit trail', async () => {
     const r = await confirmChimmyAction({ token: lineupToken(), userId: 'u1', now: NOW })
     expect(r).toMatchObject({ ok: true, status: 'executed', kind: 'lineup' })

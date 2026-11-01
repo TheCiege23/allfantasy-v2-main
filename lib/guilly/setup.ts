@@ -56,7 +56,7 @@ export const GUILLY_DEFAULTS: GuillySetupState = {
  */
 export const GUILLY_UNSUPPORTED = {
   doubleChop: 'Double-chop weeks need a per-week chop count. GuillotineLeagueConfig.teamsPerChop is one number for the whole season.',
-  bestball: 'Guillotine weekly scoring (scoreRosterForWeek) treats a league as best ball only via bestBallMode / a best-ball variant, which a guillotine league never has, and there is no daily NBA auto-lineup.',
+  bestball: 'Guilly weekly scoring (scoreRosterForWeek) treats a league as best ball only via bestBallMode / a best-ball variant, which a Guilly league never has, and there is no daily NBA auto-lineup.',
   auctionBudget: 'League creation fixes the auction budget at $200 per team (createCanonicalLeagueInTransaction); other budgets need a create-time setting.',
   freeAgency: 'Releasing chopped rosters straight to free agency is rosterReleaseTiming "immediate", but no route sets it; creation always writes "next_waiver_run" (blind FAAB).',
 } as const

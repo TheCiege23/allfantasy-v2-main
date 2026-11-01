@@ -26,7 +26,7 @@ import { BASELINE_BASIS, baselineAvailable, baselineFor, loadBaselineIndex, type
  */
 
 /** Slot label → positions that may fill it, per sport. Unknown labels block, as in the NFL fill. */
-const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
+export const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
   NBA: {
     PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'],
     G: ['PG', 'SG'], F: ['SF', 'PF'], 'G/F': ['PG', 'SG', 'SF', 'PF'], 'F/C': ['SF', 'PF', 'C'],
@@ -46,6 +46,10 @@ const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
   NCAAF: {
     QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], DEF: ['DEF'], DST: ['DST', 'DEF'],
     FLEX: ['RB', 'WR', 'TE'], SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'], SUPERFLEX: ['QB', 'RB', 'WR', 'TE'],
+  },
+  SOCCER: {
+    GK: ['GK', 'G'], DEF: ['DEF', 'D'], MID: ['MID', 'M'], FWD: ['FWD', 'F', 'ST'],
+    UTIL: ['DEF', 'D', 'MID', 'M', 'FWD', 'F', 'ST'], FLEX: ['DEF', 'D', 'MID', 'M', 'FWD', 'F', 'ST'],
   },
 }
 ELIGIBILITY.NCAAB = ELIGIBILITY.NBA!

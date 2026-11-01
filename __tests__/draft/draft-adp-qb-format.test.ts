@@ -1,3 +1,6 @@
+import { dbFirstMode } from '@/lib/db-first-mode'
+const readOnlyImporter = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/workers/adp-importer', () => ({ runAdpImporter: readOnlyImporter }))
 /**
  * A 1QB league and a superflex league read different ADP boards.
  *
@@ -11,6 +14,7 @@ type AdpRow = { playerName: string; position: string; team: string; source: stri
 
 const state = vi.hoisted(() => ({
   rows: [] as AdpRow[],
+  caches: [] as Array<{ cacheKey: string; data: { meta: { endDate: string } } }>,
   slots: [] as Array<{ slotName: string; starterCount: number }>,
 }))
 
@@ -21,14 +25,21 @@ function matchesScoring(row: AdpRow, scoring: { in?: string[]; notIn?: string[] 
   return true
 }
 
+type Where = { scoring?: { in?: string[]; notIn?: string[] }; season?: number; source?: { notIn:string[] }; createdAt?: { gte:Date }; AND?: Array<{ OR: Array<{ source: string | { not: string }; scoring?: { in: string[] } }> }> }
+function matchesProviderScope(row: AdpRow, where: Where): boolean {
+  return !where.AND || where.AND.every(group => group.OR.some(clause =>
+    (typeof clause.source === 'string' ? row.source === clause.source : row.source !== clause.source.not) &&
+    (!clause.scoring || clause.scoring.in.includes(row.scoring))))
+}
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    sportsDataCache: { findMany: vi.fn(async () => state.caches) },
     adpDataRecord: {
-      findFirst: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] }; season?: number; source?: { notIn:string[] }; createdAt?: { gte:Date } } }) =>
-        state.rows.some((r) => matchesScoring(r, where.scoring) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)) ? { season: 2026, week: 1 } : null,
+      findFirst: vi.fn(async ({ where }: { where: Where }) =>
+        state.rows.some((r) => matchesScoring(r, where.scoring) && matchesProviderScope(r, where) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)) ? { season: 2026, week: 1 } : null,
       ),
-      findMany: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] }; season?: number; source?: { notIn:string[] }; createdAt?: { gte:Date } } }) =>
-        state.rows.filter((r) => matchesScoring(r, where.scoring) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)),
+      findMany: vi.fn(async ({ where }: { where: Where }) =>
+        state.rows.filter((r) => matchesScoring(r, where.scoring) && matchesProviderScope(r, where) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)),
       ),
     },
   },
@@ -45,6 +56,7 @@ import {
 } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 
 beforeEach(() => {
+  state.caches = []
   state.rows = [
     { playerName: 'Josh Allen', position: 'QB', team: 'BUF', source: 'sleeper', adp: 18.7, scoring: 'standard' },
     { playerName: 'Josh Allen', position: 'QB', team: 'BUF', source: 'sleeper', adp: 1.2, scoring: '2qb' },
@@ -145,5 +157,35 @@ describe('non-football leagues read the one board when their own scoring has non
     state.rows = [{ playerName: 'Josh Allen', position: 'QB', team: 'BUF', source: 'sleeper', adp: 18.7, scoring: 'standard', season: 2026 }]
     const rows = await loadLatestAveragedAdpRowsFromDb('NFL' as never, 'redraft', false, { season: 2026, scoring: 'ppr' })
     expect(rows).toEqual([])
+  })
+})
+
+
+describe('read-only market lookup for mock pools', () => {
+  it('returns missing data without triggering a live importer', async () => {
+    state.rows = []
+    readOnlyImporter.mockClear()
+    const previous = { useDbCacheOnly: dbFirstMode.useDbCacheOnly, disableLiveApiOnPageLoad: dbFirstMode.disableLiveApiOnPageLoad, disableAdpLiveMergeOnPageLoad: dbFirstMode.disableAdpLiveMergeOnPageLoad }
+    Object.assign(dbFirstMode, { useDbCacheOnly: false, disableLiveApiOnPageLoad: false, disableAdpLiveMergeOnPageLoad: false })
+    try {
+      expect(await loadLatestAveragedAdpRowsFromDb('NBA', 'redraft', false, { season: 2026, scoring: 'Points' }, { allowLiveImport: false })).toEqual([])
+      expect(readOnlyImporter).not.toHaveBeenCalled()
+    } finally { Object.assign(dbFirstMode, previous) }
+  })
+})
+
+describe('FFC sample freshness on a current-season pool read', () => {
+  it('rejects recently downloaded rows whose actual sample is old or undated', async () => {
+    state.rows = [{ playerName: 'Market Player', position: 'RB', team: 'TEST', source: 'ffc', adp: 8, scoring: 'ppr', createdAt: new Date() }]
+    state.caches = [{ cacheKey: 'ffc-adp-ppr-12-2026', data: { meta: { endDate: '2026-09-14' } } }]
+    expect(await loadLatestAveragedAdpRowsFromDb('NFL', 'redraft', false, { season: 2026, scoring: 'ppr' }, { allowLiveImport: false })).toEqual([])
+    state.caches = []
+    expect(await loadLatestAveragedAdpRowsFromDb('NFL', 'redraft', false, { season: 2026, scoring: 'ppr' }, { allowLiveImport: false })).toEqual([])
+  })
+  it('permits a dated current FFC board while preserving exact scoring', async () => {
+    state.rows = [{ playerName: 'Market Player', position: 'RB', team: 'TEST', source: 'ffc', adp: 8, scoring: 'ppr', createdAt: new Date() }]
+    state.caches = [{ cacheKey: 'ffc-adp-ppr-12-2026', data: { meta: { endDate: new Date().toISOString().slice(0,10) } } }]
+    expect((await loadLatestAveragedAdpRowsFromDb('NFL', 'redraft', false, { season: 2026, scoring: 'ppr' }, { allowLiveImport: false }))[0]?.adp).toBe(8)
+    expect(await loadLatestAveragedAdpRowsFromDb('NFL', 'redraft', false, { season: 2026, scoring: 'half_ppr' }, { allowLiveImport: false })).toEqual([])
   })
 })

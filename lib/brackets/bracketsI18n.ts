@@ -264,7 +264,7 @@ const EN: BracketsDictionary = {
     "Stanley Cup bracket pool. Pick every series.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Wild Card to Super Bowl bracket pool. Opens in January.",
+    "Wild Card to Super Bowl bracket pool. Create one now; picks open when the field is set in January.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Pick every postseason series, Wild Card to World Series.",
@@ -273,7 +273,10 @@ const EN: BracketsDictionary = {
     "NCAA tournament bracket pool. Coming next spring.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "College Football Playoff bracket pool. Opens in December.",
+    "Pick all 11 College Football Playoff games with your league.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pick the seven-game knockout bracket with your league.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, and Copa América brackets. Coming soon.",
@@ -337,12 +340,14 @@ const EN: BracketsDictionary = {
   "brk.hub.howItWorks.step4Body":
     "Follow live standings, flex on your crew with share cards, and let AI analyze what made your bracket unique.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "MLB & NHL brackets open now",
+  "brk.hub.v3.openBadge": "Bracket leagues open now",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Bracket Challenge",
-  "brk.hub.v3.subtitle": "Pick every series, run a pool with your friends, and climb the leaderboard as the postseason plays out.",
+  "brk.hub.v3.subtitle": "Pick every matchup, invite friends, and climb the leaderboard as games are decided.",
   "brk.hub.v3.cta.mlb": "MLB Postseason Bracket",
   "brk.hub.v3.cta.nhl": "NHL Playoff Bracket",
+  "brk.hub.v3.cta.cfp": "CFP Bracket League",
+  "brk.hub.v3.cta.nbaCup": "NBA Cup Bracket League",
   "brk.hub.v3.upNext.title": "Up next",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · December",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · January",
@@ -503,7 +508,7 @@ const ES: BracketsDictionary = {
     "Grupo de bracket de la Copa Stanley. Elige cada serie.",
   "brk.hub.sports.sport.nflPlayoffs": "Playoffs NFL",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Grupo de bracket del Wild Card al Super Bowl. Abre en enero.",
+    "Grupo de bracket del Wild Card al Super Bowl. Créalo ya; las selecciones abren cuando se define el cuadro en enero.",
   "brk.hub.sports.sport.mlbPostseason": "Postemporada MLB",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Elige cada serie de la postemporada, del Wild Card a la Serie Mundial.",
@@ -512,7 +517,10 @@ const ES: BracketsDictionary = {
     "Grupo bracket del torneo NCAA. Llega la próxima primavera.",
   "brk.hub.sports.sport.collegeFootball": "Fútbol americano universitario",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Grupo de bracket del Playoff de fútbol americano universitario. Abre en diciembre.",
+    "Pronostica los 11 partidos del College Football Playoff con tu grupo.",
+  "brk.hub.sports.sport.nbaCup": "Copa NBA",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pronostica los siete partidos eliminatorios con tu grupo.",
   "brk.hub.sports.sport.soccer": "Fútbol",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Eurocopa y Copa América. Próximamente.",
@@ -578,12 +586,14 @@ const ES: BracketsDictionary = {
   "brk.hub.howItWorks.step4Body":
     "Sigue las tablas en vivo, presume con tarjetas de tu bracket y deja que la IA analice qué hace especial tu bracket.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Brackets de MLB y NHL abiertos ya",
+  "brk.hub.v3.openBadge": "Ligas de brackets abiertas",
   "brk.hub.v3.titleLine1": "AF Playoffs",
   "brk.hub.v3.titleLine2": "Desafío de Brackets",
-  "brk.hub.v3.subtitle": "Elige cada serie, crea un grupo con tus amigos y sube en la clasificación a medida que avanza la postemporada.",
+  "brk.hub.v3.subtitle": "Elige cada enfrentamiento, invita a tus amigos y sube en la clasificación a medida que se deciden los partidos.",
   "brk.hub.v3.cta.mlb": "Bracket de la postemporada MLB",
   "brk.hub.v3.cta.nhl": "Bracket de playoffs NHL",
+  "brk.hub.v3.cta.cfp": "Liga de bracket CFP",
+  "brk.hub.v3.cta.nbaCup": "Liga de bracket Copa NBA",
   "brk.hub.v3.upNext.title": "A continuación",
   "brk.hub.v3.upNext.ncaaf": "Playoff de fútbol americano universitario · diciembre",
   "brk.hub.v3.upNext.nfl": "Playoffs de la NFL · enero",
@@ -744,7 +754,7 @@ const ZH: BracketsDictionary = {
     "史丹利盃對戰群組。預測每一輪系列賽。",
   "brk.hub.sports.sport.nflPlayoffs": "NFL 季後賽",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "從外卡賽到超級盃的對戰群組。1 月開放。",
+    "從外卡賽到超級盃的對戰群組。現在即可建立；1 月確定參賽隊伍後開放選擇。",
   "brk.hub.sports.sport.mlbPostseason": "MLB 季後賽",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "預測每一輪季後賽系列賽，從外卡賽到世界大賽。",
@@ -753,7 +763,10 @@ const ZH: BracketsDictionary = {
     "NCAA 錦標賽對戰群組。明年春天推出。",
   "brk.hub.sports.sport.collegeFootball": "大學美式足球",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "大學美式足球季後賽對戰群組。12 月開放。",
+    "與聯盟一起預測大學美式足球季後賽的 11 場比賽。",
+  "brk.hub.sports.sport.nbaCup": "NBA 盃",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "與聯盟一起預測七場淘汰賽。",
   "brk.hub.sports.sport.soccer": "足球",
   "brk.hub.sports.sport.soccer.desc":
     "歐冠、歐錦賽與美洲盃對戰群組。即將推出。",
@@ -818,12 +831,14 @@ const ZH: BracketsDictionary = {
   "brk.hub.howItWorks.step4Body":
     "追蹤即時排名、用分享圖卡向朋友炫耀，並讓 AI 分析你的對戰表有何獨特之處。",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "MLB 與 NHL 對戰表現已開放",
+  "brk.hub.v3.openBadge": "對戰表聯盟現已開放",
   "brk.hub.v3.titleLine1": "AF 季後賽",
   "brk.hub.v3.titleLine2": "對戰挑戰",
-  "brk.hub.v3.subtitle": "預測每一輪系列賽，與朋友組成群組，隨季後賽進行在排行榜上攀升。",
+  "brk.hub.v3.subtitle": "預測每場對戰、邀請朋友，並隨賽果揭曉在排行榜上攀升。",
   "brk.hub.v3.cta.mlb": "MLB 季後賽對戰表",
   "brk.hub.v3.cta.nhl": "NHL 季後賽對戰表",
+  "brk.hub.v3.cta.cfp": "大學美式足球季後賽對戰表聯盟",
+  "brk.hub.v3.cta.nbaCup": "NBA 盃對戰表聯盟",
   "brk.hub.v3.upNext.title": "接下來",
   "brk.hub.v3.upNext.ncaaf": "大學美式足球季後賽 · 12 月",
   "brk.hub.v3.upNext.nfl": "NFL 季後賽 · 1 月",
@@ -986,7 +1001,7 @@ const FIL: BracketsDictionary = {
     "Bracket pool ng Stanley Cup. Piliin ang bawat serye.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Bracket pool mula Wild Card hanggang Super Bowl. Magbubukas sa Enero.",
+    "Bracket pool mula Wild Card hanggang Super Bowl. Gumawa na ngayon; magbubukas ang picks kapag naitakda ang field sa Enero.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Piliin ang bawat serye ng postseason, mula Wild Card hanggang World Series.",
@@ -995,7 +1010,10 @@ const FIL: BracketsDictionary = {
     "NCAA tournament bracket pool. Darating sa susunod na tagsibol.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Bracket pool ng College Football Playoff. Magbubukas sa Disyembre.",
+    "Piliin ang mananalo sa 11 laro ng College Football Playoff kasama ang liga.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Piliin ang mananalo sa pitong knockout game kasama ang liga.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, at Copa América brackets. Malapit na.",
@@ -1061,12 +1079,14 @@ const FIL: BracketsDictionary = {
   "brk.hub.howItWorks.step4Body":
     "Sundan ang live standings, ipagmalaki sa iyong barkada gamit ang share cards, at hayaang suriin ng AI ang unique ng iyong bracket.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Bukas na ang MLB at NHL brackets",
+  "brk.hub.v3.openBadge": "Bukas na ang bracket leagues",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Bracket Challenge",
-  "brk.hub.v3.subtitle": "Piliin ang bawat serye, gumawa ng pool kasama ang iyong mga kaibigan, at umakyat sa leaderboard habang tumatakbo ang postseason.",
+  "brk.hub.v3.subtitle": "Piliin ang mananalo sa bawat laban, mag-imbita ng mga kaibigan, at umakyat sa leaderboard habang natatapos ang mga laro.",
   "brk.hub.v3.cta.mlb": "MLB Postseason Bracket",
   "brk.hub.v3.cta.nhl": "NHL Playoff Bracket",
+  "brk.hub.v3.cta.cfp": "CFP Bracket League",
+  "brk.hub.v3.cta.nbaCup": "NBA Cup Bracket League",
   "brk.hub.v3.upNext.title": "Susunod",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · Disyembre",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · Enero",
@@ -1229,7 +1249,7 @@ const VI: BracketsDictionary = {
     "Nhóm bracket Stanley Cup. Dự đoán từng loạt đấu.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Nhóm bracket từ Wild Card đến Super Bowl. Mở vào tháng 1.",
+    "Nhóm bracket từ Wild Card đến Super Bowl. Tạo ngay; lựa chọn mở khi danh sách đội được xác định vào tháng 1.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Dự đoán từng loạt đấu hậu mùa giải, từ Wild Card đến World Series.",
@@ -1238,7 +1258,10 @@ const VI: BracketsDictionary = {
     "Pool bracket giải NCAA. Sẽ có vào mùa xuân năm sau.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Nhóm bracket College Football Playoff. Mở vào tháng 12.",
+    "Dự đoán 11 trận College Football Playoff cùng giải đấu của bạn.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Dự đoán bảy trận loại trực tiếp cùng giải đấu của bạn.",
   "brk.hub.sports.sport.soccer": "Bóng đá",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros và Copa América. Sắp có.",
@@ -1304,12 +1327,14 @@ const VI: BracketsDictionary = {
   "brk.hub.howItWorks.step4Body":
     "Theo dõi bảng xếp hạng trực tiếp, khoe với bạn bè bằng thẻ chia sẻ, và để AI phân tích điều gì làm bracket của bạn trở nên đặc biệt.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Bracket MLB và NHL đã mở",
+  "brk.hub.v3.openBadge": "Giải bracket hiện đã mở",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Thử thách Bracket",
-  "brk.hub.v3.subtitle": "Dự đoán từng loạt đấu, lập nhóm cùng bạn bè và leo bảng xếp hạng khi mùa playoff diễn ra.",
+  "brk.hub.v3.subtitle": "Chọn đội thắng ở từng trận, mời bạn bè và leo bảng xếp hạng khi các trận đấu kết thúc.",
   "brk.hub.v3.cta.mlb": "Bracket hậu mùa giải MLB",
   "brk.hub.v3.cta.nhl": "Bracket playoff NHL",
+  "brk.hub.v3.cta.cfp": "Giải bracket CFP",
+  "brk.hub.v3.cta.nbaCup": "Giải bracket NBA Cup",
   "brk.hub.v3.upNext.title": "Sắp tới",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · Tháng 12",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · Tháng 1",

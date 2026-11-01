@@ -172,6 +172,8 @@ export interface WizardAutomationSettings {
   draftNotificationsEnabled: boolean
   autopickFromQueueEnabled: boolean
   slowDraftRemindersEnabled: boolean
+  /** Dynasty leagues: how much AllFantasy runs (./selfRunningPreset.ts). Absent reads as recommended. */
+  selfRunningPreset?: 'hands_on' | 'recommended' | 'run_it'
 }
 
 export interface WizardPrivacySettings {
@@ -384,6 +386,7 @@ export const DEFAULT_AUTOMATION_SETTINGS: WizardAutomationSettings = {
   draftNotificationsEnabled: true,
   autopickFromQueueEnabled: true,
   slowDraftRemindersEnabled: true,
+  selfRunningPreset: 'recommended',
 }
 
 export const DEFAULT_PRIVACY_SETTINGS: WizardPrivacySettings = {

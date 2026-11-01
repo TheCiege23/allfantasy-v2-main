@@ -486,6 +486,17 @@ export type DevyContextSlice = {
 }
 
 /** Final aggregated bundle handed to consumers (chat route, debug endpoints). */
+/**
+ * The commissioner tools as the viewer may see them (LeagueOfficeContextProvider): weekly prizes,
+ * trades in review, stat corrections, inactive manager mode, the latest league log. Prompt-ready
+ * prose. Null outside leagues AllFantasy runs, or when there is nothing to say.
+ */
+export type LeagueOfficeContextSlice = {
+  leagueId: string
+  viewerRole: 'commissioner' | 'member'
+  summary: string
+}
+
 export type ChimmyContextBundle = {
   user: UserContextSlice | null
   aiAccess: SubscriptionContextSlice | null
@@ -502,6 +513,8 @@ export type ChimmyContextBundle = {
   replayInsights: ReplayInsightSlice | null
   /** Devy/college prospect board. Null when the pool is empty or unrankable. */
   devy: DevyContextSlice | null
+  /** The commissioner tools as this viewer may see them. Null outside native leagues. */
+  leagueOffice: LeagueOfficeContextSlice | null
   /** Future memory retrieval hook (vector store). Phase 2A: []. */
   memoryRefs: MemoryRef[]
   /** Provenance: which providers ran, succeeded, failed, were cached. */

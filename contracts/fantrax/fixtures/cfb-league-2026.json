@@ -1,0 +1,1602 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-30T18:33:16Z",
+    "source": "https://www.fantrax.com/fxea/general/{getLeagueInfo,getTeamRosters,getStandings}?leagueId=<withheld>",
+    "note": "One of the owner's own leagues, captured with the owner's consent by contracts/fantrax/scripts/probe.sh. No credentials (fxea/general is unauthenticated). League id and name, team ids and names replaced with placeholders; URL paths withheld (host and extension kept); playerInfo trimmed to 1 entry; rosterItems trimmed to 2 per team.",
+    "pictureKeys": []
+  },
+  "counts": {
+    "teams": 12,
+    "poolSize": 4962
+  },
+  "info": {
+    "matchups": [
+      {
+        "period": 1,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            },
+            "home": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            },
+            "home": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            }
+          }
+        ]
+      },
+      {
+        "period": 2,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            },
+            "home": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            },
+            "home": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            },
+            "home": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            }
+          }
+        ]
+      },
+      {
+        "period": 3,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            },
+            "home": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            },
+            "home": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            }
+          }
+        ]
+      },
+      {
+        "period": 4,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            },
+            "home": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            },
+            "home": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            },
+            "home": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            }
+          }
+        ]
+      },
+      {
+        "period": 5,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            },
+            "home": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            },
+            "home": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          }
+        ]
+      },
+      {
+        "period": 6,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            },
+            "home": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            },
+            "home": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            },
+            "home": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          }
+        ]
+      },
+      {
+        "period": 7,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            },
+            "home": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            },
+            "home": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            },
+            "home": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            },
+            "home": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          }
+        ]
+      },
+      {
+        "period": 8,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            },
+            "home": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            },
+            "home": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            },
+            "home": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            },
+            "home": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          }
+        ]
+      },
+      {
+        "period": 9,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            },
+            "home": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            },
+            "home": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            },
+            "home": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            },
+            "home": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            },
+            "home": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          }
+        ]
+      },
+      {
+        "period": 10,
+        "matchupList": [
+          {
+            "away": {
+              "name": "Team 12",
+              "id": "team12",
+              "shortName": "T12"
+            },
+            "home": {
+              "name": "Team 02",
+              "id": "team02",
+              "shortName": "T02"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 09",
+              "id": "team09",
+              "shortName": "T09"
+            },
+            "home": {
+              "name": "Team 08",
+              "id": "team08",
+              "shortName": "T08"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 11",
+              "id": "team11",
+              "shortName": "Team 11"
+            },
+            "home": {
+              "name": "Team 01",
+              "id": "team01",
+              "shortName": "T01"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 05",
+              "id": "team05",
+              "shortName": "T05"
+            },
+            "home": {
+              "name": "Team 03",
+              "id": "team03",
+              "shortName": "T03"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 06",
+              "id": "team06",
+              "shortName": "T06"
+            },
+            "home": {
+              "name": "Team 04",
+              "id": "team04",
+              "shortName": "T04"
+            }
+          },
+          {
+            "away": {
+              "name": "Team 07",
+              "id": "team07",
+              "shortName": "T07"
+            },
+            "home": {
+              "name": "Team 10",
+              "id": "team10",
+              "shortName": "Team 10"
+            }
+          }
+        ]
+      },
+      {
+        "period": 11,
+        "matchupList": [
+          {
+            "away": {
+              "bye": true
+            },
+            "home": {
+              "seed": 1
+            }
+          },
+          {
+            "away": {
+              "seed": 5
+            },
+            "home": {
+              "seed": 4
+            }
+          },
+          {
+            "away": {
+              "bye": true
+            },
+            "home": {
+              "seed": 2
+            }
+          },
+          {
+            "away": {
+              "seed": 6
+            },
+            "home": {
+              "seed": 3
+            }
+          }
+        ]
+      },
+      {
+        "period": 12,
+        "matchupList": [
+          {
+            "away": {
+              "TBD": true
+            },
+            "home": {
+              "TBD": true
+            }
+          },
+          {
+            "away": {
+              "TBD": true
+            },
+            "home": {
+              "TBD": true
+            }
+          }
+        ]
+      },
+      {
+        "period": 13,
+        "matchupList": [
+          {
+            "away": {
+              "TBD": true
+            },
+            "home": {
+              "TBD": true
+            }
+          }
+        ]
+      }
+    ],
+    "rosterInfo": {
+      "positionConstraints": {
+        "RB": {
+          "maxActive": 2
+        },
+        "QB": {
+          "maxActive": 1
+        },
+        "TE": {
+          "maxActive": 1
+        },
+        "SFX": {
+          "maxActive": 1
+        },
+        "WR": {
+          "maxActive": 2
+        },
+        "RWT": {
+          "maxActive": 3
+        }
+      },
+      "maxTotalPlayers": 39,
+      "maxTotalActivePlayers": 10,
+      "maxTotalReservePlayers": 25
+    },
+    "endDate": "2026-11-30",
+    "playerInfo": {
+      "063yf": {
+        "eligiblePos": "RWT,SFX,WR",
+        "status": "FA"
+      }
+    },
+    "poolSettings": {
+      "duplicatePlayerType": "NONE",
+      "playerSourceType": "ALL_TEAMS"
+    },
+    "rosterPeriods": [
+      {
+        "number": 1,
+        "endDate": "2026-09-08T11:59:59.0-0400",
+        "startDate": "2026-09-01T12:00:00.0-0400"
+      },
+      {
+        "number": 2,
+        "endDate": "2026-09-15T11:59:59.0-0400",
+        "startDate": "2026-09-08T12:00:00.0-0400"
+      },
+      {
+        "number": 3,
+        "endDate": "2026-09-22T11:59:59.0-0400",
+        "startDate": "2026-09-15T12:00:00.0-0400"
+      },
+      {
+        "number": 4,
+        "endDate": "2026-09-29T11:59:59.0-0400",
+        "startDate": "2026-09-22T12:00:00.0-0400"
+      },
+      {
+        "number": 5,
+        "endDate": "2026-10-06T19:59:59.0-0400",
+        "startDate": "2026-09-29T12:00:00.0-0400"
+      },
+      {
+        "number": 6,
+        "endDate": "2026-10-13T18:59:59.0-0400",
+        "startDate": "2026-10-06T20:00:00.0-0400"
+      },
+      {
+        "number": 7,
+        "endDate": "2026-10-20T18:59:59.0-0400",
+        "startDate": "2026-10-13T19:00:00.0-0400"
+      },
+      {
+        "number": 8,
+        "endDate": "2026-10-27T18:59:59.0-0400",
+        "startDate": "2026-10-20T19:00:00.0-0400"
+      },
+      {
+        "number": 9,
+        "endDate": "2026-11-03T18:59:59.0-0500",
+        "startDate": "2026-10-27T19:00:00.0-0400"
+      },
+      {
+        "number": 10,
+        "endDate": "2026-11-10T18:59:59.0-0500",
+        "startDate": "2026-11-03T19:00:00.0-0500"
+      },
+      {
+        "number": 11,
+        "endDate": "2026-11-17T18:59:59.0-0500",
+        "startDate": "2026-11-10T19:00:00.0-0500"
+      },
+      {
+        "number": 12,
+        "endDate": "2026-11-24T12:59:59.0-0500",
+        "startDate": "2026-11-17T19:00:00.0-0500"
+      },
+      {
+        "number": 13,
+        "endDate": "2026-12-01T11:59:59.0-0500",
+        "startDate": "2026-11-24T13:00:00.0-0500"
+      }
+    ],
+    "scoringPeriods": [
+      {
+        "number": 1,
+        "endDate": "2026-09-08T11:59:59.0-0400",
+        "startDate": "2026-09-01T12:00:00.0-0400"
+      },
+      {
+        "number": 2,
+        "endDate": "2026-09-15T11:59:59.0-0400",
+        "startDate": "2026-09-08T12:00:00.0-0400"
+      },
+      {
+        "number": 3,
+        "endDate": "2026-09-22T11:59:59.0-0400",
+        "startDate": "2026-09-15T12:00:00.0-0400"
+      },
+      {
+        "number": 4,
+        "endDate": "2026-09-29T11:59:59.0-0400",
+        "startDate": "2026-09-22T12:00:00.0-0400"
+      },
+      {
+        "number": 5,
+        "endDate": "2026-10-06T19:59:59.0-0400",
+        "startDate": "2026-09-29T12:00:00.0-0400"
+      },
+      {
+        "number": 6,
+        "endDate": "2026-10-13T18:59:59.0-0400",
+        "startDate": "2026-10-06T20:00:00.0-0400"
+      },
+      {
+        "number": 7,
+        "endDate": "2026-10-20T18:59:59.0-0400",
+        "startDate": "2026-10-13T19:00:00.0-0400"
+      },
+      {
+        "number": 8,
+        "endDate": "2026-10-27T18:59:59.0-0400",
+        "startDate": "2026-10-20T19:00:00.0-0400"
+      },
+      {
+        "number": 9,
+        "endDate": "2026-11-03T18:59:59.0-0500",
+        "startDate": "2026-10-27T19:00:00.0-0400"
+      },
+      {
+        "number": 10,
+        "endDate": "2026-11-10T18:59:59.0-0500",
+        "startDate": "2026-11-03T19:00:00.0-0500"
+      },
+      {
+        "number": 11,
+        "endDate": "2026-11-17T18:59:59.0-0500",
+        "startDate": "2026-11-10T19:00:00.0-0500"
+      },
+      {
+        "number": 12,
+        "endDate": "2026-11-24T12:59:59.0-0500",
+        "startDate": "2026-11-17T19:00:00.0-0500"
+      },
+      {
+        "number": 13,
+        "endDate": "2026-12-01T11:59:59.0-0500",
+        "startDate": "2026-11-24T13:00:00.0-0500"
+      }
+    ],
+    "teamInfo": {
+      "team07": {
+        "name": "Team 07",
+        "id": "team07"
+      },
+      "team12": {
+        "name": "Team 12",
+        "id": "team12"
+      },
+      "team08": {
+        "name": "Team 08",
+        "id": "team08"
+      },
+      "team06": {
+        "name": "Team 06",
+        "id": "team06"
+      },
+      "team02": {
+        "name": "Team 02",
+        "id": "team02"
+      },
+      "team10": {
+        "name": "Team 10",
+        "id": "team10"
+      },
+      "team01": {
+        "name": "Team 01",
+        "id": "team01"
+      },
+      "team03": {
+        "name": "Team 03",
+        "id": "team03"
+      },
+      "team09": {
+        "name": "Team 09",
+        "id": "team09"
+      },
+      "team05": {
+        "name": "Team 05",
+        "id": "team05"
+      },
+      "team04": {
+        "name": "Team 04",
+        "id": "team04"
+      },
+      "team11": {
+        "name": "Team 11",
+        "id": "team11"
+      }
+    },
+    "draftType": "snake",
+    "draftSettings": {
+      "draftType": "snake"
+    },
+    "leagueName": "League",
+    "ppr": true,
+    "leagueHistoryId": "<withheld>",
+    "scoringSystem": {
+      "scoringCategories": {
+        "OFFENSE": {
+          "TD": {
+            "Default": "points6"
+          },
+          "REC": {
+            "TE": "points1.5",
+            "Default": "points1"
+          },
+          "2RR": {
+            "Default": "points2"
+          },
+          "RtT": {
+            "Default": "points6"
+          },
+          "YDS": {
+            "Default": "points0.1"
+          },
+          "FRTD": {
+            "Default": "points6"
+          }
+        }
+      },
+      "scoringCategorySettings": [
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS_OFFENSE",
+                "name": "Fumbles Recovered for Touchdowns - Offense",
+                "id": "2701",
+                "shortName": "FRTD"
+              },
+              "points": 6
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PASSING_TOUCHDOWNS",
+                "name": "Passing Touchdowns",
+                "id": "2860",
+                "shortName": "TD"
+              },
+              "points": 6
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PASSING_YARDS",
+                "name": "Passing Yards",
+                "id": "2870",
+                "shortName": "YDS"
+              },
+              "points": 0.04
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEIVING_TOUCHDOWNS",
+                "name": "Receiving Touchdowns",
+                "id": "2880",
+                "shortName": "TD"
+              },
+              "points": 6
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEIVING_YARDS",
+                "name": "Receiving Yards",
+                "id": "2890",
+                "shortName": "YDS"
+              },
+              "points": 0.1
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEPTIONS",
+                "name": "Receptions",
+                "id": "2900",
+                "shortName": "REC"
+              },
+              "points": 1
+            },
+            {
+              "position": {
+                "code": "TIGHT_END",
+                "name": "Tight End",
+                "id": "157",
+                "shortName": "TE"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEPTIONS",
+                "name": "Receptions",
+                "id": "2900",
+                "shortName": "REC"
+              },
+              "points": 1.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RUSHING_TOUCHDOWNS",
+                "name": "Rushing Touchdowns",
+                "id": "3040",
+                "shortName": "TD"
+              },
+              "points": 6
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RUSHING_YARDS",
+                "name": "Rushing Yards",
+                "id": "3050",
+                "shortName": "YDS"
+              },
+              "points": 0.1
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES",
+                "name": "Two Point Conversion Rushes & Receptions",
+                "id": "3147",
+                "shortName": "2RR"
+              },
+              "points": 2
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RETURN_TOUCHDOWNS",
+                "name": "Kickoff/Punt Return Touchdowns",
+                "id": "3217",
+                "shortName": "RtT"
+              },
+              "points": 6
+            }
+          ],
+          "group": {
+            "code": "FOOTBALL_OFFENSE",
+            "name": "Offense",
+            "id": "1010",
+            "shortName": "Off"
+          }
+        }
+      ],
+      "type": "HEAD_TO_HEAD_POINTS_BASED"
+    },
+    "seasonYear": 2026,
+    "startDate": "2026-09-01",
+    "playoffs": {
+      "lastRegularSeasonPeriod": 10,
+      "numPlayoffTeams": 6,
+      "firstPlayoffPeriod": 11,
+      "mergePlayoffPeriods": false,
+      "used": true
+    }
+  },
+  "rosters": {
+    "period": 9,
+    "rosters": {
+      "team07": {
+        "teamName": "Team 07",
+        "rosterItems": [
+          {
+            "id": "05z2o",
+            "position": "RWT",
+            "status": "ACTIVE"
+          },
+          {
+            "id": "068eh",
+            "position": "WR",
+            "status": "ACTIVE"
+          }
+        ]
+      },
+      "team12": {
+        "teamName": "Team 12",
+        "rosterItems": [
+          {
+            "id": "06jly",
+            "position": "WR",
+            "status": "RESERVE"
+          },
+          {
+            "id": "05ywp",
+            "position": "WR",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team08": {
+        "teamName": "Team 08",
+        "rosterItems": [
+          {
+            "id": "069o8",
+            "position": "QB",
+            "status": "ACTIVE"
+          },
+          {
+            "id": "06tga",
+            "position": "WR",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team06": {
+        "teamName": "Team 06",
+        "rosterItems": [
+          {
+            "id": "06982",
+            "position": "RB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "06bfm",
+            "position": "RB",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team02": {
+        "teamName": "Team 02",
+        "rosterItems": [
+          {
+            "id": "06in7",
+            "position": "RB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "069tn",
+            "position": "QB",
+            "status": "ACTIVE"
+          }
+        ]
+      },
+      "team10": {
+        "teamName": "Team 10",
+        "rosterItems": [
+          {
+            "id": "06k5m",
+            "position": "RB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "069b6",
+            "position": "RB",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team01": {
+        "teamName": "Team 01",
+        "rosterItems": [
+          {
+            "id": "0739l",
+            "position": "WR",
+            "status": "RESERVE"
+          },
+          {
+            "id": "05yxc",
+            "position": "RB",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team03": {
+        "teamName": "Team 03",
+        "rosterItems": [
+          {
+            "id": "06c5v",
+            "position": "QB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "06s1s",
+            "position": "WR",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team09": {
+        "teamName": "Team 09",
+        "rosterItems": [
+          {
+            "id": "06ug1",
+            "position": "WR",
+            "status": "RESERVE"
+          },
+          {
+            "id": "074eq",
+            "position": "WR",
+            "status": "RESERVE"
+          }
+        ]
+      },
+      "team05": {
+        "teamName": "Team 05",
+        "rosterItems": [
+          {
+            "id": "06kta",
+            "position": "TE",
+            "status": "RESERVE"
+          },
+          {
+            "id": "068ja",
+            "position": "RWT",
+            "status": "ACTIVE"
+          }
+        ]
+      },
+      "team04": {
+        "teamName": "Team 04",
+        "rosterItems": [
+          {
+            "id": "07462",
+            "position": "RB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "06khx",
+            "position": "RWT",
+            "status": "ACTIVE"
+          }
+        ]
+      },
+      "team11": {
+        "teamName": "Team 11",
+        "rosterItems": [
+          {
+            "id": "075pg",
+            "position": "RB",
+            "status": "RESERVE"
+          },
+          {
+            "id": "06pjw",
+            "position": "RWT",
+            "status": "ACTIVE"
+          }
+        ]
+      }
+    }
+  },
+  "standings": [
+    {
+      "teamName": "Team 02",
+      "totalPointsFor": 1572.48,
+      "teamId": "team02",
+      "gamesBack": 0,
+      "rank": 1,
+      "points": "7-1-0",
+      "winPercentage": 0.875
+    },
+    {
+      "teamName": "Team 05",
+      "totalPointsFor": 1669.84,
+      "teamId": "team05",
+      "gamesBack": 1,
+      "rank": 2,
+      "points": "6-2-0",
+      "winPercentage": 0.75
+    },
+    {
+      "teamName": "Team 06",
+      "totalPointsFor": 1553.9,
+      "teamId": "team06",
+      "gamesBack": 1,
+      "rank": 3,
+      "points": "6-2-0",
+      "winPercentage": 0.75
+    },
+    {
+      "teamName": "Team 04",
+      "totalPointsFor": 1370.14,
+      "teamId": "team04",
+      "gamesBack": 1,
+      "rank": 4,
+      "points": "6-2-0",
+      "winPercentage": 0.75
+    },
+    {
+      "teamName": "Team 01",
+      "totalPointsFor": 1439.16,
+      "teamId": "team01",
+      "gamesBack": 2,
+      "rank": 5,
+      "points": "5-3-0",
+      "winPercentage": 0.625
+    },
+    {
+      "teamName": "Team 07",
+      "totalPointsFor": 1462.42,
+      "teamId": "team07",
+      "gamesBack": 3,
+      "rank": 6,
+      "points": "4-4-0",
+      "winPercentage": 0.5
+    },
+    {
+      "teamName": "Team 08",
+      "totalPointsFor": 1199.04,
+      "teamId": "team08",
+      "gamesBack": 3,
+      "rank": 7,
+      "points": "4-4-0",
+      "winPercentage": 0.5
+    },
+    {
+      "teamName": "Team 12",
+      "totalPointsFor": 1288.68,
+      "teamId": "team12",
+      "gamesBack": 4,
+      "rank": 8,
+      "points": "3-5-0",
+      "winPercentage": 0.375
+    },
+    {
+      "teamName": "Team 11",
+      "totalPointsFor": 1308.08,
+      "teamId": "team11",
+      "gamesBack": 5,
+      "rank": 9,
+      "points": "2-6-0",
+      "winPercentage": 0.25
+    },
+    {
+      "teamName": "Team 10",
+      "totalPointsFor": 1264.36,
+      "teamId": "team10",
+      "gamesBack": 5,
+      "rank": 10,
+      "points": "2-6-0",
+      "winPercentage": 0.25
+    },
+    {
+      "teamName": "Team 03",
+      "totalPointsFor": 1220.24,
+      "teamId": "team03",
+      "gamesBack": 5,
+      "rank": 11,
+      "points": "2-6-0",
+      "winPercentage": 0.25
+    },
+    {
+      "teamName": "Team 09",
+      "totalPointsFor": 1074.62,
+      "teamId": "team09",
+      "gamesBack": 6,
+      "rank": 12,
+      "points": "1-7-0",
+      "winPercentage": 0.125
+    }
+  ]
+}

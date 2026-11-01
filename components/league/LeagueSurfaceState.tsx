@@ -56,7 +56,7 @@ export function LeagueSurfaceState({
             ? 'border-rose-300/25 bg-rose-500/10 text-rose-200'
             : kind === 'permission'
               ? 'border-amber-300/25 bg-amber-500/10 text-amber-100'
-              : 'border-cyan-300/20 bg-cyan-500/10 text-cyan-100',
+              : 'border-cyan-300/20 bg-cyan-500/10 text-[var(--badge-text-cyan)]',
         )}
         aria-hidden
       >
@@ -68,7 +68,7 @@ export function LeagueSurfaceState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 text-sm font-bold text-cyan-100 transition hover:bg-cyan-500/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 text-sm font-bold text-[var(--badge-text-cyan)] transition hover:bg-cyan-500/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
         >
           <RefreshCw className="h-4 w-4" aria-hidden />
           {actionLabel}

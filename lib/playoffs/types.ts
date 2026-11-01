@@ -5,14 +5,36 @@
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
  *
- * ⚠ `ncaaf` (the College Football Playoff) IS IN THE SAME STATE, ON PURPOSE.
- * Its template, round keys and single-game wording are modelled; the create
- * API does not accept it yet. Its seeds come from an ADMIN entry after
- * Selection Sunday (owner call, 2026-10-01: no feed carries the committee's
- * seeds) and its results from a scheduled DB-first writer — open creation in
- * the change that lands both.
+ * CFP retains its published field and first-game lock. NBA Cup uses scheduled
+ * provider ingestion for Group Play and confirmed knockout matchups, with each
+ * game locking at tipoff. Both sports have their own persisted round keys.
+ *
+ * NFL is a single-game bracket like the CFP (one lock, at the first Wild Card
+ * kickoff), seeded from standings and fed by the ESPN postseason scoreboard;
+ * its divisional round reseeds (lib/playoffs/nflPlayoffs.ts).
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
+
+/** Persisted challenge summaries returned by the authenticated list endpoint. */
+export type PlayoffChallengeListItem = {
+  challengeId: string
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+  seasonYear: number
+  participantCount: number
+  entryCount: number
+  inviteCode: string
+  config?: PlayoffChallengeConfig | null
+}
+
+export type PlayoffCreateResponse = {
+  challengeId: string
+  entryId: string | null
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+}
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -102,6 +124,15 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  // NFL playoffs — single games; the divisional round reseeds.
+  | "nfl_wild_card"
+  | "nfl_divisional"
+  | "nfl_conference"
+  | "nfl_super_bowl"
+  | "cup_group_play"
+  | "cup_quarterfinals"
+  | "cup_semifinals"
+  | "cup_championship"
 
 export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
@@ -118,9 +149,19 @@ export type PlayoffSeriesSlot = "home" | "away"
  * conferences in its draw — seeds are national — so its halves are named by
  * position: the 1/4 side (`upper`) and the 2/3 side (`lower`).
  */
-export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
+export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "afc" | "nfc" | "finals"
+
+export type BracketTeamProfile = {
+  won: number | null
+  lost: number | null
+  winPercentage: number | null
+  plusMinus: number | null
+  seasonReview: string
+  source: "cached_standings"
+}
 
 export type PlayoffChallengeView = {
+  participants?: Array<{ userId: string; displayName: string; entryCount: number }>
   challenge: {
     id: string
     name: string
@@ -136,17 +177,24 @@ export type PlayoffChallengeView = {
     maxParticipants?: number
     scoringStyle?: string
     lockRule?: string
+    firstGameStartsAt?: string | null
     config?: PlayoffChallengeConfig | null
     createdAt: string
     updatedAt: string
   }
   viewerUserId?: string | null
+  viewerTournamentBracketLimit?: number | null
+  viewerTournamentBracketUsed?: number | null
   activeEntry: {
     id: string
     name: string
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    tiebreakerTotalScore?: number | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
@@ -158,12 +206,19 @@ export type PlayoffChallengeView = {
     userId: string
     pickCount: number
     isComplete: boolean
+    finalizedAt?: string | null
+    rank?: number | null
+    potentialTotal?: number
     totalScore?: number
     correctPicks?: number
     resolvedPicks?: number
     createdAt: string
   }>
   series: PlayoffSeriesView[]
+  teamProfiles?: Record<string, BracketTeamProfile>
+  /** Published-team crest URLs, resolved from ingested team rows at request time. */
+  teamLogos?: Record<string, string>
+  nbaCupLastSyncedAt?: string | null
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null
@@ -204,6 +259,8 @@ export type PlayoffSeriesView = {
   bestOf: number
   status: PlayoffSeriesStatus
   startsAt: string | null
+  gameLabel?: string | null
+  location?: string | null
   homeTeamWins?: number
   awayTeamWins?: number
   seriesSummary?: string | null

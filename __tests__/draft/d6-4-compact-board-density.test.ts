@@ -10,7 +10,7 @@
  *   3. Manager avatar inner circle shrank: h-8 w-8 / sm:h-9 sm:w-9.
  *   4. Manager slot min-width tightened: min-w-[56px] / sm:min-w-[64px].
  *   5. Manager label column narrowed: w-[62px] / sm:w-[70px].
- *   6. Board cell height reduced: h-[42px] / sm:h-[44px].
+ *   6. Board cell height: h-[56px] / sm:h-[60px] (was 42/44px — raised for readability).
  *   7. data-testid="draft-manager-strip" wrapper is present.
  *   8. Amber glow (draft-live-current-pick) class on current-pick cell.
  */
@@ -26,6 +26,7 @@ function read(rel: string): string {
 
 const stripSrc = read('components/app/draft-room/DraftManagerStrip.tsx')
 const cellSrc = read('components/app/draft-room/DraftBoardCell.tsx')
+const boardSrc = read('components/app/draft-room/DraftBoard.tsx')
 
 // ---------------------------------------------------------------------------
 // 1. Strip outer wrapper — compact padding
@@ -113,25 +114,25 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 // 6. DraftBoardCell height — tighter tiles
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — compact height (Commit 21)', () => {
-  it('cell base height is h-[42px] (reduced from h-[44px])', () => {
-    expect(cellSrc).toMatch(/h-\[42px\]/)
+describe('DraftBoardCell — Sleeper-style tiles (2026-10-28)', () => {
+  // Matched to Sleeper's board at the user's request: short, wide, flat tiles across the full
+  // width, solid position colours once filled. (A square-tile version shipped first and was
+  // replaced the same day.)
+  it('tiles are short and wide: a fixed 50px height, full column width', () => {
+    expect(cellSrc).toMatch(/flex h-\[50px\] w-full flex-col/)
+    expect(cellSrc).not.toMatch(/aspect-square/)
   })
 
-  it('cell min-height is min-h-[42px]', () => {
-    expect(cellSrc).toMatch(/min-h-\[42px\]/)
+  it('board columns fill the width with a 84px floor, and gaps are 2px', () => {
+    // Phones cap the track via --af-board-col-max (2026-10-29); md+ leaves it unset, so 1fr fills.
+    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, var\(--af-board-col-max, 1fr\)\)'/)
+    expect(boardSrc).toMatch(/grid gap-\[2px\]/)
   })
 
-  it('cell sm height is sm:h-[44px] (reduced from sm:h-[46px])', () => {
-    expect(cellSrc).toMatch(/sm:h-\[44px\]/)
-  })
-
-  it('cell sm min-height is sm:min-h-[44px]', () => {
-    expect(cellSrc).toMatch(/sm:min-h-\[44px\]/)
-  })
-
-  it('old h-[44px] base height is gone', () => {
-    expect(cellSrc).not.toMatch(/flex h-\[44px\] min-h-\[44px\]/)
+  it('filled tiles are solid position colours with dark text', () => {
+    expect(cellSrc).toMatch(/positionTintHex\(pick\.position\)/)
+    expect(cellSrc).toMatch(/\{ backgroundColor: fillHex \}/)
+    expect(cellSrc).toMatch(/text-\[#14172a\]/)
   })
 })
 

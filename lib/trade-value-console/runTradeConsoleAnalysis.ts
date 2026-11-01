@@ -425,7 +425,14 @@ export async function runTradeConsoleAnalysis(
           sport: effectiveSport,
           league:
             leagueRow && consoleLeagueType && input.leagueId
-              ? { id: input.leagueId.trim(), settings: leagueRow.settings, leagueType: consoleLeagueType.type, leagueSize: leagueRow.leagueSize ?? null }
+              ? {
+                  id: input.leagueId.trim(),
+                  settings: leagueRow.settings,
+                  leagueType: consoleLeagueType.type,
+                  leagueSize: leagueRow.leagueSize ?? null,
+                  season: leagueRow.season ?? null,
+                  status: leagueRow.status ?? null,
+                }
               : null,
           // The open analyzer's scoring choice (points, 9-cat, 8-cat); a league is scored by its own settings.
           format: input.scoringFormat ?? null,

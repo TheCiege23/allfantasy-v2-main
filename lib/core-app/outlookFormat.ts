@@ -9,9 +9,10 @@
  * and `playoff_structure`. So every league was simulated with the six-team default — including a
  * 16-team league whose field is eight — and the page printed "top 6 make it" beside it.
  *
- * ⚠ THE `League.playoffTeams` COLUMN IS NOT READ, ON PURPOSE. It defaults to 4 in the schema and no
- * importer sets it, so on an imported league it is a default that looks like a fact
- * (`career.ts` records the same trap). Same for `playoffStartWeek`, which defaults to 14.
+ * ⚠ THE `League.playoffTeams` COLUMN IS NOT READ FOR AN IMPORTED LEAGUE, ON PURPOSE. It defaults to 4
+ * in the schema and no importer sets it, so there it is a default that looks like a fact (`career.ts`
+ * records the same trap). Same for `playoffStartWeek`, which defaults to 14. A NATIVE league's column
+ * is the one its playoff runtime plays, and callers pass it as `nativePlayoffTeams`.
  *
  * Every value here says where it came from, because the assumptions panel prints it.
  */
@@ -51,7 +52,16 @@ function firstNum(...values: unknown[]): number | null {
   return null
 }
 
-export function readPlayoffFormat(settings: unknown, teamCount: number): PlayoffFormat {
+export function readPlayoffFormat(
+  settings: unknown,
+  teamCount: number,
+  /**
+   * A NATIVE league's `League.playoffTeams` column — pass it only for an AllFantasy-run league (see the
+   * header: on an import it is a schema default). It is what that league's playoff runtime plays, and
+   * it outranks the JSON: creation used to store the registry's 6 beside a column clamped to 4.
+   */
+  nativePlayoffTeams?: number | null,
+): PlayoffFormat {
   const s = asObj(settings) ?? {}
   const blocks = [s.playoffSettings, s.playoff_settings, s.playoff_structure, s.playoff].map(asObj).filter(
     (b): b is Obj => b != null,
@@ -70,6 +80,7 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
    * both; the flat 6 is the import default.
    */
   const declared = firstNum(
+    nativePlayoffTeams != null && nativePlayoffTeams >= 2 && nativePlayoffTeams <= teamCount ? nativePlayoffTeams : null,
     asObj(s.playoffSettings)?.playoffTeams,
     s.playoff_teams,
     s.playoff_team_count,

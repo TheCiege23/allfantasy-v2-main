@@ -1,3 +1,6 @@
+import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { prisma } from '@/lib/prisma'
 import {
   suggestLeagueType,
@@ -159,7 +162,7 @@ export type ConfirmResult =
   | { ok: true; state: LeagueTypeState }
   | {
       ok: false
-      reason: 'not-found' | 'invalid-type' | 'invalid-base-format' | 'write-failed'
+      reason: 'not-found' | 'invalid-type' | 'invalid-base-format' | 'write-failed' | 'structure-locked'
     }
 
 /**
@@ -214,10 +217,21 @@ export async function confirmLeagueType(input: {
   try {
     const existing = await prisma.league.findUnique({
       where: { id: input.leagueId },
-      select: { settings: true },
+      select: { settings: true, platform: true, leagueType: true, leagueVariant: true, isDynasty: true, guillotineMode: true, survivorMode: true, bestBallMode: true },
     })
+    const nextType = leagueTypeColumnFor(input.type, baseFormat)
+    const native = existing?.platform != null && isNativePlatform(existing.platform)
+    const runtime = native ? nativeFormatPatch(nextType, existing?.settings) : null
+    const changesRuntime = runtime && existing && (existing.leagueType !== nextType ||
+      existing.leagueVariant !== runtime.leagueVariant || existing.isDynasty !== runtime.isDynasty ||
+      existing.guillotineMode !== runtime.guillotineMode || existing.survivorMode !== runtime.survivorMode ||
+      existing.bestBallMode !== runtime.bestBallMode)
+    if (changesRuntime && await structuralSettingsLockReason(input.leagueId)) {
+      return { ok: false, reason: 'structure-locked' }
+    }
     const merged = {
       ...((existing?.settings as Record<string, unknown> | null) ?? {}),
+      ...(runtime?.settings ?? {}),
       [KEY]: confirmation,
     }
     /*
@@ -228,7 +242,7 @@ export async function confirmLeagueType(input: {
      */
     await prisma.league.update({
       where: { id: input.leagueId },
-      data: { settings: merged as never, leagueType: leagueTypeColumnFor(input.type, baseFormat) },
+      data: { ...runtime, settings: merged as never, leagueType: nextType },
     })
   } catch {
     return { ok: false, reason: 'write-failed' }

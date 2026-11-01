@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-draft-hq.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { DraftPreparation } from './DraftPreparation'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
@@ -9,6 +10,9 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { draftHqUiCopy } from '@/lib/core-app/draftHqUiCopy'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens'
 
 /**
  * Screen 8 — Draft HQ.
@@ -41,9 +45,19 @@ const STATUS_TONE: Record<string, string> = {
   completed: 'done',
 }
 
+const LIVE_STATUSES = new Set(['in_progress', 'paused'])
+
+/** The board-head link into the live draft room. Exported for tests. */
+export function draftRoomCtaLabel(status: string): string {
+  if (LIVE_STATUSES.has(status)) return 'Join live draft'
+  if (status === 'completed') return 'Open draft board'
+  return 'Enter draft room'
+}
+
 export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => draftHqUiCopy(value, language)
+  const m = useMessages(draftScreensMessages)
   return (
     <div className="af-dh">
       {/* ── Board settings ──────────────────────────────────────────── */}
@@ -58,6 +72,16 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
               >
                 {copy(data.session.data.status.replace(/_/g, ' '))}
               </span>
+              {/* A plain anchor, not next/link: a full navigation always lands even when
+                  a deploy has rotated the client chunks under an open tab (Android PWA). */}
+              <a
+                className="af-dh-enter"
+                href={draftRoomHref(data.league.id)}
+                data-testid="draft-hq-enter-room"
+                data-live={LIVE_STATUSES.has(data.session.data.status) ? 'true' : 'false'}
+              >
+                {copy(draftRoomCtaLabel(data.session.data.status))}
+              </a>
             </div>
 
             <div className="af-dh-facts">
@@ -89,7 +113,11 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
         )}
       </section>
 
-      {data.preparation && <DraftPreparation data={data.preparation} leagueId={data.league.id} />}
+      {data.preparation && <DraftPreparation
+          data={data.preparation}
+          leagueId={data.league.id}
+          draftComplete={data.session.available && data.session.data.status === 'completed'}
+        />}
 
       {/* ── Pick inventory ──────────────────────────────────────────── */}
       {/*
@@ -231,16 +259,12 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
             */}
             {data.grades.data.partial ? (
               <p className="af-dh-grade-partial">
-                {language === 'es'
-                  ? `La temporada ${data.grades.data.season} sigue en curso; estas calificaciones cambiarán cuando se sumen puntos.`
-                  : `The ${data.grades.data.season} season is still being played, so these grades will move as the points come in.`}
+                {m.hqSeasonInProgress(data.grades.data.season)}
               </p>
             ) : null}
             {data.grades.data.gradedPicks < data.grades.data.totalPicks ? (
               <p className="af-dh-grade-partial">
-                {language === 'es'
-                  ? `${data.grades.data.totalPicks - data.grades.data.gradedPicks} de ${data.grades.data.totalPicks} selecciones no pudieron calificarse; estas letras solo cubren las demás.`
-                  : `${data.grades.data.totalPicks - data.grades.data.gradedPicks} of ${data.grades.data.totalPicks} picks could not be graded, so these letters cover only the ones that could.`}
+                {m.hqUngradedPicks(data.grades.data.totalPicks - data.grades.data.gradedPicks, data.grades.data.totalPicks)}
               </p>
             ) : null}
 
@@ -363,9 +387,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
         {data.lottery.available ? (
           <>
             <p className="af-dh-lottery-rule">
-              {language === 'es'
-                ? `Probabilidad de obtener la selección #1. Se sortean las primeras ${data.lottery.data.pickCount} selecciones; las demás siguen ${copy(data.lottery.data.fallbackOrder)}.`
-                : `Odds of landing the #1 pick. The first ${data.lottery.data.pickCount} picks are drawn; the rest follow in ${data.lottery.data.fallbackOrder}.`}
+              {m.hqLotteryRule(data.lottery.data.pickCount, data.lottery.data.fallbackOrder)}
               {data.lottery.data.alreadyRunAt ? ` ${copy('This league has already run its lottery.')}` : ''}
             </p>
             <table className="af-dh-lottery" data-testid="draft-hq-lottery">
@@ -433,13 +455,9 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
             <>
               <p className="af-dh-unavailable">
                 {data.keepers.data.source === 'imported'
-                  ? language === 'es'
-                    ? `Conservados en tu draft ${data.keepers.data.season ?? 'anterior'}, según Sleeper`
-                    : `kept in your ${data.keepers.data.season ?? 'last'} draft, as Sleeper recorded it`
+                  ? m.hqKeptImported(data.keepers.data.season)
                   : data.keepers.data.maxKeepers != null
-                    ? language === 'es'
-                      ? `Declarados para este draft · máximo ${data.keepers.data.maxKeepers}`
-                      : `declared for this draft · up to ${data.keepers.data.maxKeepers} allowed`
+                    ? m.hqKeepersDeclared(data.keepers.data.maxKeepers)
                     : copy('declared for this draft')}
               </p>
               <ul className="af-dh-made" data-testid="draft-hq-keepers">

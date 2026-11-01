@@ -44,7 +44,7 @@ export async function materializeRedraftSeasonForImportedLeague(
   if (!league) return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'LEAGUE_NOT_FOUND' }
 
   const sport = normalizeToSupportedSport(league.sport)
-  if (sport !== 'NFL' && sport !== 'NCAAF') {
+  if (sport !== 'NFL' && sport !== 'NCAAF' && sport !== 'NBA') {
     return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'UNSUPPORTED_SPORT' }
   }
   const seasonYear = league.season ?? new Date().getFullYear()

@@ -77,6 +77,8 @@ export interface SurvivorFoundationState {
   leagueId: string
   phase: string
   currentWeek: number
+  /** The league's sport, so settings screens can show sport-only rules (NBA weekly scoring). */
+  sport?: string
   settings: SurvivorAccessContext['settings']
   access: {
     role: SurvivorAccessContext['role']
@@ -366,6 +368,7 @@ export async function buildSurvivorStateForUser(
     leagueId,
     phase: gameState?.phase ?? league.survivorPhase ?? 'setup',
     currentWeek: gameState?.currentWeek ?? 0,
+    sport: String(league.sport ?? 'NFL').toUpperCase(),
     settings: access.settings,
     access: {
       role: access.role,

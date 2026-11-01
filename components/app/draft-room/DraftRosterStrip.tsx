@@ -20,6 +20,7 @@
 
 import React, { useMemo } from 'react'
 import { Users } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { PlayerAvatar } from './PlayerAvatar'
 
 export interface DraftRosterStripPick {
@@ -45,7 +46,12 @@ export interface DraftRosterStripProps {
   benchSlots?: number | null
   taxiSlots?: number | null
   devySlots?: number | null
-  /** When true, taxi section renders even if no picks routed there yet. */
+  /**
+   * When true, the Taxi section renders even if no picks routed there. With no taxi picks it
+   * shows one honest line instead of empty slots: a draft never assigns taxi (no taxi-rounds
+   * setting, no taxi column on DraftPick, and post-draft assignment writes `taxi: []`), so
+   * placeholders read as "you have not drafted a taxi player yet", which no draft can change.
+   */
   isDynasty?: boolean
   /** Optional label for the focused team — shown in the section header. */
   teamLabel?: string | null
@@ -231,43 +237,67 @@ export function DraftRosterStrip({
     [devyCapacity, devyPicks],
   )
 
+  const { t } = useOptionalLanguage()
   const showTaxi = isDynasty || taxiCapacity > 0 || taxiPicks.length > 0
   const showDevy = devyCapacity > 0 || devyPicks.length > 0
+  const taxiNote =
+    taxiCapacity > 0
+      ? t(taxiCapacity === 1 ? 'draftRoom.rosterStrip.taxiAfterDraftSpotsOne' : 'draftRoom.rosterStrip.taxiAfterDraftSpots').replace(
+          '{{count}}',
+          String(taxiCapacity),
+        )
+      : t('draftRoom.rosterStrip.taxiAfterDraft')
 
   return (
     <section
       className="border-t border-white/8 bg-[#050c1d] px-3 py-2"
       data-testid="draft-roster-strip"
-      aria-label="Roster strip"
+      aria-label={t('draftRoom.rosterStrip.aria')}
     >
       <div className="mb-1.5 flex items-center gap-1.5">
         <Users className="h-3 w-3 text-cyan-300/80" aria-hidden />
         <p className="text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">
-          Roster
+          {t('draftRoom.rosterStrip.roster')}
           {teamLabel ? <span className="ml-1 text-white/55">· {teamLabel}</span> : null}
           {sport ? <span className="ml-1 text-white/30">· {sport}</span> : null}
         </p>
       </div>
 
-      <RosterSection title="Starters" slots={starterSlotList} emptyHint="No starter slots configured." />
+      <RosterSection
+        id="starters"
+        title={t('draftRoom.rosterStrip.starters')}
+        slots={starterSlotList}
+        emptyHint={t('draftRoom.rosterStrip.noStarterSlots')}
+        emptySlotLabel={t('draftRoom.rosterStrip.emptySlot')}
+      />
 
       {benchSlotList.length > 0 ? (
-        <RosterSection title="Bench" slots={benchSlotList} emptyHint={null} />
+        <RosterSection
+          id="bench"
+          title={t('draftRoom.rosterStrip.bench')}
+          slots={benchSlotList}
+          emptyHint={null}
+          emptySlotLabel={t('draftRoom.rosterStrip.emptySlot')}
+        />
       ) : null}
 
       {showTaxi ? (
         <RosterSection
-          title="Taxi"
-          slots={taxiSlotList.length > 0 ? taxiSlotList : [{ key: 'TX', label: 'TX1', pick: null }]}
-          emptyHint="No taxi picks yet."
+          id="taxi"
+          title={t('draftRoom.rosterStrip.taxi')}
+          slots={taxiPicks.length > 0 ? taxiSlotList : []}
+          emptyHint={taxiNote}
+          emptySlotLabel={t('draftRoom.rosterStrip.emptySlot')}
         />
       ) : null}
 
       {showDevy ? (
         <RosterSection
-          title="Devy"
+          id="devy"
+          title={t('draftRoom.rosterStrip.devy')}
           slots={devySlotList.length > 0 ? devySlotList : [{ key: 'DV', label: 'DV1', pick: null }]}
-          emptyHint="No devy picks yet."
+          emptyHint={t('draftRoom.rosterStrip.noDevyPicks')}
+          emptySlotLabel={t('draftRoom.rosterStrip.emptySlot')}
         />
       ) : null}
     </section>
@@ -275,23 +305,28 @@ export function DraftRosterStrip({
 }
 
 function RosterSection({
+  id,
   title,
   slots,
   emptyHint,
+  emptySlotLabel,
 }: {
+  /** Stable, untranslated section id — keeps test ids identical in every language. */
+  id: string
   title: string
   slots: Slot[]
   emptyHint: string | null
+  emptySlotLabel: string
 }) {
   if (slots.length === 0 && emptyHint === null) return null
   return (
     <div
       className="mb-1.5 last:mb-0"
-      data-testid={`draft-roster-strip-section-${title.toLowerCase()}`}
+      data-testid={`draft-roster-strip-section-${id}`}
     >
       <p className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-white/38">{title}</p>
       {slots.length === 0 ? (
-        <p className="text-[11px] text-white/30">{emptyHint}</p>
+        <p className="text-[11px] text-white/55" data-testid={`draft-roster-strip-empty-${id}`}>{emptyHint}</p>
       ) : (
         <ul className="space-y-0.5">
           {slots.map((slot, idx) => {
@@ -300,7 +335,7 @@ function RosterSection({
               : colorForPosition(slot.label)
             return (
               <li
-                key={`${title}-${idx}-${slot.label}`}
+                key={`${id}-${idx}-${slot.label}`}
                 className={`flex items-center gap-2 rounded border px-1.5 py-1 text-[11px] ${tone.border} ${tone.bg}`}
               >
                 <span
@@ -317,7 +352,7 @@ function RosterSection({
                       position={slot.pick.position}
                       displayName={slot.pick.playerName}
                       size={22}
-                      testIdBase={`draft-roster-strip-avatar-${title}-${idx}`}
+                      testIdBase={`draft-roster-strip-avatar-${id}-${idx}`}
                     />
                     <span className="min-w-0 flex-1 truncate font-medium text-white/88">
                       {slot.pick.playerName}
@@ -327,7 +362,7 @@ function RosterSection({
                     </span>
                   </>
                 ) : (
-                  <span className="italic text-white/28">Empty</span>
+                  <span className="italic text-white/28">{emptySlotLabel}</span>
                 )}
               </li>
             )

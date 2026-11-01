@@ -1,6 +1,7 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { cfpSeedMapByHalf, readCfpSeeds } from "./cfpSeeds"
+import { nbaCupSeedMap, readNbaCupField } from "./nbaCupSeeds"
 import type { PlayoffSport } from "./types"
 
 /**
@@ -25,6 +26,10 @@ const CONFERENCE_FROM_GROUP: Array<{ match: RegExp; conference: string }> = [
   { match: /^national league/i, conference: "nl" },
   { match: /^eastern/i, conference: "east" },
   { match: /^western/i, conference: "west" },
+  // NFL: ESPN files teams under the conference ("American Football Conference") or a
+  // division within it ("AFC East"); both start with the conference. contracts/espn/GAPS.md P-02.
+  { match: /^(american football conference|afc\b)/i, conference: "afc" },
+  { match: /^(national football conference|nfc\b)/i, conference: "nfc" },
 ]
 
 /**
@@ -37,7 +42,7 @@ const CONFERENCE_FROM_GROUP: Array<{ match: RegExp; conference: string }> = [
  * alone, which is what makes this safe to run on every cron fire.
  */
 // `CFP<n>` is the College Football Playoff's national seed slot (buildCfpTemplate).
-const SEED_PLACEHOLDER = /^(AL|NL|EAST|WEST|CFP)(\d+)$/i
+const SEED_PLACEHOLDER = /^(AL|NL|EAST|WEST|CFP|AFC|NFC)(\d+)$/i
 
 export type PlayoffSeedField = {
   sport: PlayoffSport
@@ -85,6 +90,7 @@ const REGULAR_SEASON_GAMES: Record<string, number> = {
   mlb: 162,
   nba: 82,
   nhl: 82,
+  nfl: 17,
 }
 
 /**
@@ -95,6 +101,15 @@ const REGULAR_SEASON_GAMES: Record<string, number> = {
  * nine-games-remaining case above.
  */
 const SEASON_COMPLETE_TOLERANCE = 2
+
+/**
+ * 🛑 ZERO FOR THE NFL. Two games is 12% of a 17-game season: after week 17 every club has
+ * played 16, and a tolerance of two would declare the field final with a week still to play —
+ * the permanent mis-seed this check exists to prevent. NFL games are not cancelled the way MLB
+ * games are; the one modern exception (2022, Bills-Bengals) would only delay seeding, and
+ * "late" is recoverable where "wrong" is not.
+ */
+const SEASON_COMPLETE_TOLERANCE_BY_SPORT: Record<string, number> = { nfl: 0 }
 
 function conferenceOf(group: unknown): string | null {
   const value = String(group ?? "").trim()
@@ -163,6 +178,20 @@ export async function resolvePlayoffSeedField(
     }
   }
 
+  if (sport === "nba_cup") {
+    const season = Number(seasonYear)
+    const field = await readNbaCupField(season)
+    if (!field) warnings.push(`no NBA Cup knockout field saved for ${season}`)
+    return {
+      sport, season: String(season),
+      seeds: field ? nbaCupSeedMap(field) : new Map(),
+      rowsRead: field ? 8 : 0,
+      isFinal: Boolean(field),
+      minGamesPlayed: null,
+      warnings,
+    }
+  }
+
   // NBA/NHL are keyed by season START year; see splitYearSeasonStart for why it is derived.
   const season =
     sport === "nba" || sport === "nhl"
@@ -214,6 +243,28 @@ export async function resolvePlayoffSeedField(
     warnings.push(`no standings rows cached under "${prefix}" — has import-standings run for ${sport}?`)
   }
 
+  /*
+   * 🛑 NFL: THE FIELD IS SEVEN A CONFERENCE AND NOTHING ELSE COUNTS. ESPN's NFL standings carry
+   * `playoffSeed` 1-16 per conference, but the writer stores `position = playoffSeed ?? rank`
+   * (lib/standings/espnStandings.ts), so a row missing `playoffSeed` would silently arrive as a
+   * league rank (contracts/espn/GAPS.md P-02). Keep seeds 1-7 only, and refuse the field unless
+   * both conferences have exactly those seven — a duplicate or a gap means the feed is not a
+   * playoff field, and seeding from it would be permanent.
+   */
+  let nflFieldIncomplete = false
+  if (sport === "nfl") {
+    for (const conf of ["afc", "nfc"]) {
+      const bucket = seeds.get(conf) ?? new Map<number, string>()
+      for (const seed of [...bucket.keys()]) if (seed > 7) bucket.delete(seed)
+      seeds.set(conf, bucket)
+      const complete = [1, 2, 3, 4, 5, 6, 7].every((n) => bucket.has(n)) && new Set(bucket.values()).size === 7
+      if (!complete) {
+        nflFieldIncomplete = true
+        warnings.push(`NFL ${conf.toUpperCase()} field incomplete: seeds ${[...bucket.keys()].sort((a, b) => a - b).join(",") || "none"} of 1-7`)
+      }
+    }
+  }
+
   const minGamesPlayed = gamesPlayed.length > 0 ? Math.min(...gamesPlayed) : null
   const required = REGULAR_SEASON_GAMES[String(sport).toLowerCase()]
   /*
@@ -223,7 +274,8 @@ export async function resolvePlayoffSeedField(
    * is added to REGULAR_SEASON_GAMES deliberately, never by defaulting.
    */
   const isFinal =
-    required != null && minGamesPlayed != null && minGamesPlayed >= required - SEASON_COMPLETE_TOLERANCE
+    required != null && minGamesPlayed != null && minGamesPlayed >= required - (SEASON_COMPLETE_TOLERANCE_BY_SPORT[String(sport).toLowerCase()] ?? SEASON_COMPLETE_TOLERANCE) &&
+    !nflFieldIncomplete
 
   if (!isFinal && rows.length > 0) {
     warnings.push(

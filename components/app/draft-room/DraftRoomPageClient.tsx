@@ -28,6 +28,8 @@ import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueu
 import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
+import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
+import { DraftDecisionOsCard } from '@/components/app/draft-room/DraftDecisionOsCard'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
 import { DraftHelperCopilot } from '@/components/app/draft-room/DraftHelperCopilot'
@@ -36,7 +38,9 @@ import { calculateDraftHelperBadgeCount, hasDraftHelperContent } from '@/lib/dra
 import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState'
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
-import { DraftRightDockTabs } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
+import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
 import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
@@ -45,10 +49,12 @@ import {
 } from '@/components/app/draft-room/ResultsRosterPanel'
 import { DraftRosterStrip } from '@/components/app/draft-room/DraftRosterStrip'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
+import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
 import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { LiveDraftStatusColumn } from '@/components/draft/live/LiveDraftStatusColumn'
 
@@ -84,7 +90,8 @@ import { buildDraftSummaryForAI, buildLiveDraftBrainPayload, canAddToQueue, getD
 import { computeTeamNeeds, detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
 import type { LiveDraftBrainEnvelope } from '@/lib/live-draft-brain/schemas'
 import { IdpDraftExplainerCard } from '@/components/idp/IdpDraftExplainerCard'
-import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
+import { paidToolFetch, approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
+import { tokenConfirmationMessage } from '@/lib/tokens/clientTokenConfirm'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { computePicksUntilViewerTurn } from '@/lib/draft-room/computePicksUntilViewer'
@@ -100,14 +107,22 @@ import { LEAGUE_DRAFT_ROOM_REVALIDATE } from '@/lib/draft-room/emitLeagueDraftRo
 import { filterPlayersAvailableForDraftAi } from '@/lib/draft-room/availableForDraftAi'
 import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-audit'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
-import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
-import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
-import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
+import { computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
 import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
 import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
 import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  formatDynastyDraftKindLabel,
+  formatRookieAuctionPolicyNote,
+  normalizeDraftSeasonYear,
+  readRookieAuctionPolicyNote,
+  resolveDynastyDraftKind,
+  roomAnnouncesRoundOne,
+  shouldDefaultRookiesOnly,
+} from '@/lib/draft-room/dynastyDraftIdentity'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
@@ -268,7 +283,6 @@ export function DraftRoomPageClient({
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
-  type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -354,6 +368,8 @@ export function DraftRoomPageClient({
       acceptConfidenceMin: number
     }
   } | null>(null)
+  /** Teams a commissioner handed to Chimmy (active AI manager assignments), for every member's room. */
+  const [chimmyManagedRosterIds, setChimmyManagedRosterIds] = useState<string[]>([])
   /** Prisma AI opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
   const [aiOpponentRosterIds, setAiOpponentRosterIds] = useState<string[]>([])
   /** Draft roster id → AI archetype label for manager strip badges. */
@@ -412,6 +428,39 @@ export function DraftRoomPageClient({
     sendProductAnalyticsBeacon(DRAFT_ROOM.MOBILE_TAB, { tab, leagueId })
     setMobileTabState(tab)
   }, [leagueId])
+  /*
+   * Chimmy lives in a different place at each breakpoint: the phone tray's AI tab, the AI tab of
+   * the bottom dock below xl, and the right dock's Chimmy tab at xl+. Every "Ask Chimmy" button
+   * opens the ONE that is on screen: both layouts are always mounted and hidden by CSS, so opening
+   * all three mounted two invisible chats beside the visible one (see lib/draft-room/chimmySurface).
+   * These buttons used to call setMobileTab('helper') alone while no helper panel was mounted, so
+   * they did nothing anywhere.
+   */
+  const [rightDockOpenRequest, setRightDockOpenRequest] =
+    useState<{ tab: DraftRightDockTab; key: number } | null>(null)
+  const [dockChimmyOpen, setDockChimmyOpen] = useState(false)
+  const openChimmy = useCallback(() => {
+    const surface = currentChimmySurface()
+    if (surface === 'right_dock') {
+      setRightDockOpenRequest((prev) => ({ tab: 'chimmy', key: (prev?.key ?? 0) + 1 }))
+    } else if (surface === 'bottom_dock') {
+      setCenterDockTab('ai')
+      setDockChimmyOpen(true)
+    } else {
+      setMobileTab('helper')
+    }
+  }, [setMobileTab])
+  /*
+   * Warm the commissioner control center's chunk once the room is up. It is a lazy client chunk, so
+   * its first open waited on the network — behind whatever else the room had in flight. Opening the
+   * draft assistant fires about a dozen requests (Chimmy chat, entitlements, providers), and in the
+   * mobile Draft Room Regression run the control center then never finished loading. Warming it
+   * here makes the commissioner's first open instant and independent of that burst.
+   */
+  useEffect(() => {
+    if (!isCommissioner) return
+    void import('@/components/app/draft-room/CommissionerControlCenterModal').catch(() => {})
+  }, [isCommissioner])
   const [aiReorderLoading, setAiReorderLoading] = useState(false)
   const [aiReorderExplanation, setAiReorderExplanation] = useState<string | null>(null)
   const [aiReorderExecutionMode, setAiReorderExecutionMode] = useState<string | null>(null)
@@ -490,6 +539,8 @@ export function DraftRoomPageClient({
     }
   } | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<DraftRoomChromeTeam[]>([])
+  /** `League.season` from /api/league/settings — the rookie class year of a dynasty rookie draft. */
+  const [leagueSeasonYear, setLeagueSeasonYear] = useState<number | null>(null)
   const [rosterConfig, setRosterConfig] = useState<{
     starterSlots: Record<string, number>
     benchSlots: number
@@ -572,7 +623,7 @@ export function DraftRoomPageClient({
         : ''
     return `${session.version}-${session.picks.length}-${traded}-${session.updatedAt}${onClock}`
   }, [session, currentPick])
-  /** Fallback when Chimmy SSE has not emitted (no roster yet) or intel is idle — drives RedraftPlanningRibbon. */
+  /** Fallback when Chimmy SSE has not emitted (no roster yet) or intel is idle: picks until the viewer's turn. */
   const ribbonPicksUntilUser = useMemo(() => {
     if (draftIntel?.picksUntilUser != null) return draftIntel.picksUntilUser
     if (!session || (session.status !== 'in_progress' && session.status !== 'paused')) return null
@@ -625,6 +676,10 @@ export function DraftRoomPageClient({
             /* Provenance travels with the value so the cell can say projected vs measured. */
             aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
             aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
+            afAdp: e.afAdp ?? null,
+            afAdpContributions: e.afAdpContributions ?? null,
+            afAdpImportedSampleSize: e.afAdpImportedSampleSize ?? null,
+            afAdpOwnSampleSize: e.afAdpOwnSampleSize ?? null,
             display: e.display ?? null,
             isDevy: e.isDevy,
             school: e.school ?? null,
@@ -634,6 +689,7 @@ export function DraftRoomPageClient({
             graduatedToNFL: e.graduatedToNFL,
             poolType: e.poolType,
             nflDraftProjectionSplits: e.nflDraftProjectionSplits ?? null,
+            ...(e.prospectSource === 'fantrax' ? { prospectSource: 'fantrax' as const } : {}),
           }
         })
       : rawEntries.map((e: any) => {
@@ -659,6 +715,10 @@ export function DraftRoomPageClient({
             /* Provenance travels with the value so the cell can say projected vs measured. */
             aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
             aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
+            afAdp: e.afAdp ?? null,
+            afAdpContributions: e.afAdpContributions ?? null,
+            afAdpImportedSampleSize: e.afAdpImportedSampleSize ?? null,
+            afAdpOwnSampleSize: e.afAdpOwnSampleSize ?? null,
           }
         })
   }, [draftPool, draftData, aiAdpLookupMaps, draftUISettings?.aiAdpEnabled, useAllFantasyAdp])
@@ -670,6 +730,11 @@ export function DraftRoomPageClient({
   )
   const boardAdpDeltaByOverall = useMemo(
     () => buildAdpDeltaByOverall(session?.picks ?? [], buildAdpLookup(players)),
+    [session?.picks, players],
+  )
+  // Picks saved without a photo (auto / AI picks outside the NFL) take the pool's headshot.
+  const boardPicks = useMemo(
+    () => fillPickHeadshotsFromPool(session?.picks ?? [], players),
     [session?.picks, players],
   )
 
@@ -759,7 +824,9 @@ export function DraftRoomPageClient({
       return
     }
 
-    const rsRoom = presentationVariant === 'redraft_snake' && !isDynasty
+    // Redraft snake rooms and every non-auction dynasty room announce round 1 (see
+    // `roomAnnouncesRoundOne` for why dynasty lost it and gets it back).
+    const rsRoom = roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session.draftType })
     const visualsOn = draftUISettings?.roundOnePickAnnouncementEnabled !== false
 
     for (const p of picks) {
@@ -779,6 +846,7 @@ export function DraftRoomPageClient({
     players,
     presentationVariant,
     isDynasty,
+    session?.draftType,
     draftUISettings?.roundOnePickAnnouncementEnabled,
   ])
 
@@ -1231,6 +1299,11 @@ export function DraftRoomPageClient({
         } else {
           setCommissionerAiDraft(null)
         }
+        setChimmyManagedRosterIds(
+          Array.isArray(data.chimmyManagedRosterIds)
+            ? data.chimmyManagedRosterIds.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
+        )
         // Phase 3b — perf: ai-opponents/summary takes ~70s on cold load
         // (calls AI provider). DON'T await it — fire-and-forget and let the
         // panel re-render when it lands. Initialize to empty so consumers
@@ -1324,6 +1397,7 @@ export function DraftRoomPageClient({
       } else {
         setLeagueTeams([])
       }
+      setLeagueSeasonYear(settingsRes.ok ? normalizeDraftSeasonYear(settingsJson?.league?.season) : null)
 
       if (privacyRes.ok) {
         setInviteLink(resolveInviteLink(privacyJson))
@@ -1818,7 +1892,7 @@ export function DraftRoomPageClient({
         return null
       })()
       const requestRecommendation = async (confirmTokenSpendForFallback: boolean) => {
-        const res = await fetch('/api/draft/recommend', {
+        const res = await paidToolFetch('/api/draft/recommend', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1852,7 +1926,7 @@ export function DraftRoomPageClient({
         data?.code === 'token_confirmation_required' &&
         typeof data?.preview?.ruleCode === 'string'
       ) {
-        const confirmation = await confirmTokenSpend(data.preview.ruleCode)
+        const confirmation = { confirmed: window.confirm(tokenConfirmationMessage(data)) && approvePaidToolQuote(data) }
         if (!confirmation.confirmed) {
           setLiveBrainEnvelope(await brainPromise)
           setRecommendationError('Token confirmation cancelled. Draft AI explanation was not unlocked.')
@@ -3071,6 +3145,11 @@ export function DraftRoomPageClient({
         // bye-week clusters in the focus team's drafted starters.
         byeWeek: (p as { byeWeek?: number | null }).byeWeek ?? null,
         isDevy: devyRoundsSet.has(p.round) || c2cCollegeRoundsSet.has(p.round),
+        // ⚠ No `isTaxi` on purpose: nothing in a draft knows a pick is a taxi pick. There is no
+        // taxi-rounds setting, `DraftPick` has no taxi column or metadata, and post-draft roster
+        // assignment (`buildLineupSectionsFromPicks`) always writes `taxi: []` — managers move
+        // players to taxi on the roster afterwards. So the strip's Taxi section shows its slots
+        // empty rather than guessing from rookie status.
       })),
       teamCount: session?.teamCount ?? 0,
       rounds: session?.rounds ?? 0,
@@ -3137,35 +3216,23 @@ export function DraftRoomPageClient({
     [session?.picks, currentUserRosterId],
   )
 
-  const redraftRibbonOnDeck = useMemo(() => {
-    if (!session) return []
-    if (session.status === 'pre_draft') {
-      const order = session.slotOrder ?? []
-      return order.slice(0, 4).map((s) => ({
-        slot: s.slot,
-        displayName: s.displayName?.trim() ? s.displayName : `Team ${s.slot}`,
-      }))
-    }
-    if (!currentPick || (session.status !== 'in_progress' && session.status !== 'paused')) return []
-    const total = session.rounds * session.teamCount
-    const next = currentPick.overall + 1
-    if (next > total) return []
-    return getUpcomingPickOwners(
-      next,
-      4,
-      session.teamCount,
-      session.draftType,
-      session.thirdRoundReversal,
-      session.slotOrder,
-      total,
-    )
-  }, [session, currentPick])
-
-  const redraftBackToBackSoon = useMemo(
-    () =>
-      session ? detectSnakeBackToBackSoon(session as DraftSessionSnapshot, currentUserRosterId ?? null) : false,
-    [session, currentUserRosterId],
+  const { t: tRoom } = useOptionalLanguage()
+  /*
+   * Dynasty identity for the top bar and the pool. Dynasty rooms stay OFF the `redraft_snake`
+   * variant on purpose: that variant also switches on this-season-only behaviour — redraft
+   * starter hints, the copilot insight card, and a Chimmy scope line that says "not dynasty
+   * stash, devy, or multi-year planning". Dynasty gets a skin instead, never those semantics.
+   */
+  const dynastyDraftKind = resolveDynastyDraftKind(session?.draftModeLabel, isDynasty)
+  const dynastyDraftKindLabel = useMemo(
+    () => formatDynastyDraftKindLabel(dynastyDraftKind, leagueSeasonYear, tRoom),
+    [dynastyDraftKind, leagueSeasonYear, tRoom],
   )
+  const rookieAuctionNote = useMemo(
+    () => (isDynasty ? formatRookieAuctionPolicyNote(readRookieAuctionPolicyNote(session), tRoom) : null),
+    [isDynasty, session, tRoom],
+  )
+  const defaultRookiesOnly = isDynasty && shouldDefaultRookiesOnly(session?.draftModeLabel)
 
   const redraftStarterHints = useMemo(
     () =>
@@ -3190,6 +3257,53 @@ export function DraftRoomPageClient({
   const isOrphanOnClock = Boolean(
     currentPick?.rosterId && Array.isArray(orphanRosterIds) && orphanRosterIds.includes(currentPick.rosterId) && aiManagerEnabled
   )
+  /*
+   * Chimmy AI manager slot on the clock. Every open room asks the server for Chimmy's pick after
+   * CHIMMY_PICK_DELAY_MS; the server re-checks the assignment and the pick number, so exactly one
+   * request lands and the rest come back as stale. Before this, a Chimmy-managed team only picked
+   * when the commissioner pressed "Run AI pick" or its whole timer ran out.
+   */
+  const chimmyOnClock = Boolean(
+    isOrphanOnClock &&
+      session?.status === 'in_progress' &&
+      currentPick?.rosterId &&
+      chimmyManagedRosterIds.includes(currentPick.rosterId),
+  )
+  const chimmyOnClockOverall = chimmyOnClock ? currentPick?.overall ?? null : null
+  useEffect(() => {
+    if (chimmyOnClockOverall == null) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const requestPick = async (attempt: number) => {
+      if (cancelled) return
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/chimmy-manager-pick`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedOverall: chimmyOnClockOverall }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok && data.session) {
+          setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
+          void fetchDraftPool()
+        } else if (data?.retry && attempt < 2) {
+          // This room's clock ran ahead of the server's; ask again shortly.
+          timer = setTimeout(() => void requestPick(attempt + 1), 1500)
+        }
+        // Any other refusal (another room's request won, or Chimmy no longer manages the team) is
+        // expected; the board updates through the normal session refresh.
+      } catch {
+        /* network blip — the pick timer remains the backstop */
+      }
+    }
+    // A little jitter so a full room does not hit the server in the same millisecond.
+    timer = setTimeout(() => void requestPick(0), CHIMMY_PICK_DELAY_MS + Math.floor(Math.random() * 600))
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [chimmyOnClockOverall, leagueId, fetchDraftPool])
   const autoPickEnabled = draftUISettings?.autoPickEnabled ?? false
   const chimmyHeadlineSummary = (draftAssistantContext?.headlines ?? [])
     .slice(0, 2)
@@ -3774,6 +3888,8 @@ export function DraftRoomPageClient({
         loadingMessage={poolLoadingMessage}
         poolError={poolError}
         rookieFilterState={draftPool?.rookieFilterState}
+        isDynasty={isDynasty}
+        defaultRookiesOnly={defaultRookiesOnly}
         useAiAdp={draftUISettings?.aiAdpEnabled ?? false}
         aiAdpUnavailable={aiAdpUnavailable}
         aiAdpUnavailableMessage={leagueAiAdp?.message ?? null}
@@ -3852,6 +3968,8 @@ export function DraftRoomPageClient({
       poolLoadingMessage,
       poolError,
       draftPool?.rookieFilterState,
+      isDynasty,
+      defaultRookiesOnly,
       draftUISettings?.aiAdpEnabled,
       aiAdpUnavailable,
       leagueAiAdp?.message,
@@ -3965,19 +4083,21 @@ export function DraftRoomPageClient({
       }, {})
 
       return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg border border-white/[0.06] bg-[linear-gradient(180deg,rgba(13,20,40,0.95),rgba(8,14,28,0.95))] p-1.5' : ''}`}>
+        <details className="rounded-xl border border-white/10 bg-[#0a1425]" data-testid="draft-queue-intelligence">
+          <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-cyan-100">Draft intelligence</summary>
         {hasDraftHelperData ? (
           <button
             type="button"
             onClick={() => floatingHelperState.setVisible(true)}
             data-testid="draft-helper-docked-trigger"
-            className="flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-[linear-gradient(90deg,rgba(13,20,40,0.96),rgba(16,26,48,0.96))] px-2.5 py-1.5 text-left text-xs text-cyan-50 hover:bg-[linear-gradient(90deg,rgba(24,36,64,0.98),rgba(16,26,48,0.98))]"
+            className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-[#151b2e] px-2.5 py-1.5 text-left text-xs text-white hover:bg-[#1d2236]"
           >
             <span>
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">Draft intelligence</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b91a7]">Draft intelligence</span>
               <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and AI context</span>
             </span>
             {draftHelperBadgeCount > 0 ? (
-              <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#14172a]">
                 {draftHelperBadgeCount}
               </span>
             ) : null}
@@ -3987,7 +4107,7 @@ export function DraftRoomPageClient({
           loading={draftIntelLoading}
           headline={draftIntel?.headline ?? null}
           picksUntilUser={ribbonPicksUntilUser}
-          onClock={draftIntel?.status === 'on_clock' || isCurrentUserOnClock}
+          onClock={session?.status === 'in_progress' && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock)}
           queue={draftIntelQueue}
           canDraft={Boolean(canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock))}
           onDraftTopChoice={
@@ -3996,6 +4116,7 @@ export function DraftRoomPageClient({
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
           onAddIntelSuggestion={presentationVariant === 'redraft_snake' ? handleAddIntelQueueSuggestion : undefined}
         />
+        </details>
         <QueuePanel
           queue={queueFiltered}
           playerMetaById={queuePlayerMetaById}
@@ -4029,6 +4150,7 @@ export function DraftRoomPageClient({
       leftAtPick,
       presentationVariant,
       draftIntelLoading,
+      session?.status,
       draftIntel?.headline,
       ribbonPicksUntilUser,
       draftIntel?.status,
@@ -4070,7 +4192,7 @@ export function DraftRoomPageClient({
         leagueChatSync={chatSyncActive}
         isCommissioner={isCommissioner}
         onBroadcast={isCommissioner ? handleBroadcastOpen : undefined}
-        onAiSuggestionClick={() => setMobileTab('helper')}
+        onAiSuggestionClick={openChimmy}
         onReconnect={handleChatReconnect}
         onRefreshChat={fetchChat}
         currentUserId={viewerAppUserId}
@@ -4388,7 +4510,7 @@ export function DraftRoomPageClient({
           <button
             type="button"
             data-testid="draft-mobile-quick-helper"
-            onClick={() => setMobileTab('helper')}
+            onClick={openChimmy}
             className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             AI helper
@@ -4516,6 +4638,66 @@ export function DraftRoomPageClient({
       : (requestedOrphanDrafterMode === 'ai' && !resolvedOrphanAiProviderAvailable ? 'cpu' : requestedOrphanDrafterMode)
   const orphanDrafterFallbackActive =
     requestedOrphanDrafterMode === 'ai' && effectiveOrphanDrafterMode === 'cpu'
+  /*
+   * The draft assistant: the room's recommendation (from /api/draft/recommend), its reasoning, and
+   * Chimmy chat pre-filled with this draft's context. DraftHelperPanel was built for exactly this
+   * and imported here, but never rendered — so the phone's AI tab was hidden and every "Ask Chimmy"
+   * button opened nothing.
+   */
+  /*
+   * Decision OS sits on top of the assistant: the `manager.draft.pick` decision — the same engine's
+   * top choice, checked against the live pick rules — refetched as the board moves.
+   */
+  const helperPanelNode = (
+    <>
+    <DraftDecisionOsCard
+      leagueId={leagueId}
+      refreshKey={`${currentPick?.overall ?? 'none'}:${session.status}:${session.picks?.length ?? 0}`}
+    />
+    <DraftHelperPanel
+      loading={recommendationLoading}
+      error={recommendationError}
+      recommendation={recommendationResult?.recommendation ?? null}
+      alternatives={recommendationResult?.alternatives ?? []}
+      reachWarning={recommendationResult?.reachWarning ?? null}
+      valueWarning={recommendationResult?.valueWarning ?? null}
+      scarcityInsight={recommendationResult?.scarcityInsight ?? null}
+      stackInsight={recommendationResult?.stackInsight ?? null}
+      correlationInsight={recommendationResult?.correlationInsight ?? null}
+      formatInsight={recommendationResult?.formatInsight ?? null}
+      byeNote={recommendationResult?.byeNote ?? null}
+      explanation={recommendationResult?.explanation ?? ''}
+      evidence={recommendationResult?.evidence ?? []}
+      caveats={recommendationResult?.caveats ?? []}
+      uncertainty={recommendationResult?.uncertainty ?? null}
+      executionMode={recommendationResult?.execution?.mode ?? null}
+      sport={effectiveDraftSport}
+      round={currentPick?.round ?? 1}
+      pick={currentPick?.slot ?? 1}
+      leagueId={leagueId}
+      leagueName={leagueName}
+      rosterSlots={effectiveRosterSlots}
+      queueLength={queueFiltered.length}
+      onRefresh={fetchRecommendation}
+      liveBrain={liveBrainEnvelope}
+      draftSessionId={session.id}
+      chimmyInitialPrompt={chimmyDraftPrompt}
+      chimmyToolSummary={chimmyToolSummary}
+      aiFeatureStatus={{
+        chimmyReady: hasAiAccess && resolvedOrphanAiProviderAvailable,
+        liveBrainReady: Boolean(liveBrainEnvelope),
+        aiAdpEnabled: Boolean(draftUISettings?.aiAdpEnabled),
+        queueReorderEnabled: Boolean(draftUISettings?.aiQueueReorderEnabled),
+        draftExplanationEnabled: draftAiExplanationEnabled,
+        orphanAiEnabled: Boolean(draftUISettings?.orphanTeamAiManagerEnabled),
+        commissionerAiManagersCount: (commissionerAiDraft?.assignedAiTeams ?? []).filter((team) => team.active)
+          .length,
+      }}
+      presentationVariant={presentationVariant}
+      userOnTheClock={isCurrentUserOnClock}
+    />
+    </>
+  )
   const keeperPanel = showKeeperPanel ? (
     <KeeperPanel
       leagueId={leagueId}
@@ -4590,11 +4772,14 @@ export function DraftRoomPageClient({
         </div>
       </div>
     ) : null}
-    {presentationVariant === 'redraft_snake' && !isDynasty ? (
+    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
+    {roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session?.draftType }) ? (
       <DraftRoundOneAnnouncementOverlay
-        presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+        presentationVariant={presentationVariant === 'redraft_snake' && !isDynasty ? 'redraft_snake' : 'default'}
+        dynastySkin={isDynasty}
         leagueName={leagueName}
         sportLabel={typeof sport === 'string' ? sport.toUpperCase() : ''}
+        formatType={formatType}
         queue={roundOneAnnouncementQueue}
         onDismissFront={dismissRoundOneAnnouncement}
       />
@@ -4637,7 +4822,8 @@ export function DraftRoomPageClient({
     ) : null}
     <DraftRoomShell
       layout="premium"
-      surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+      playerSpacePriority={session.draftType !== 'auction'}
+      surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : isDynasty ? 'dynasty' : 'default'}
       // D.6 — War Room moved out of the left aside. teamPanel=null collapses the
       // aside; the WarRoomPopup below renders the same DraftTeamPanel content as
       // a floating bottom-right popup with notification badge.
@@ -4647,7 +4833,9 @@ export function DraftRoomPageClient({
           className={
             presentationVariant === 'redraft_snake'
               ? 'flex h-full min-h-0 flex-col bg-[radial-gradient(ellipse_100%_80%_at_50%_-10%,rgba(34,211,238,0.06),transparent),linear-gradient(180deg,#071826_0%,#050c18_50%,#040a14_100%)]'
-              : 'flex h-full min-h-0 flex-col bg-[#060d1e]'
+              : isDynasty
+                ? 'flex h-full min-h-0 flex-col bg-[var(--dyn-ink,#0B0F17)]'
+                : 'flex h-full min-h-0 flex-col bg-[#060d1e]'
           }
         >
           <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
@@ -4716,100 +4904,27 @@ export function DraftRoomPageClient({
                     <DraftTeamPanel {...draftTeamPanelProps} />
                   </div>
                 }
+                chimmyBody={
+                  <div className="h-full min-h-0 overflow-auto px-1 py-1" data-testid="draft-right-dock-chimmy-body">
+                    {helperPanelNode}
+                  </div>
+                }
+                openTabRequest={rightDockOpenRequest}
                 chatBody={<div className="flex h-full min-h-0 flex-col overflow-hidden">{chatPanelNode}</div>}
-                queueCount={draftIntel?.queue?.length ?? 0}
+                queueCount={queueFiltered.length}
                 defaultTab="queue"
               />
             </div>
 
             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
-                <div
-                  className={`grid ${
-                    (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 2
-                      ? 'grid-cols-5'
-                      : (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 1
-                        ? 'grid-cols-4'
-                        : 'grid-cols-3'
-                  } gap-1 border-b px-2 py-1.5 ${
-                    presentationVariant === 'redraft_snake'
-                      ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(5,12,24,0.98))] shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]'
-                      : 'border-white/8 bg-[#0a1228]'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('queue')}
-                    data-testid="draft-bottom-tab-queue"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'queue'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Queue
-                  </button>
-                  {session.draftType !== 'auction' ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('intel')}
-                      data-testid="draft-bottom-tab-intel"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'intel'
-                          ? presentationVariant === 'redraft_snake'
-                            ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                            : 'bg-white/12 text-cyan-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Intel
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('chat')}
-                    data-testid="draft-bottom-tab-chat"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'chat'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('ai')}
-                    data-testid="draft-bottom-tab-ai"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'ai'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-violet-500/30 to-fuchsia-500/15 text-violet-50 shadow-[0_0_22px_rgba(167,139,250,0.2)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    AF Legacy
-                  </button>
-                  {isCommissioner ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('commish')}
-                      data-testid="draft-bottom-tab-commish"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'commish'
-                          ? 'bg-white/12 text-amber-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Commish Edit
-                    </button>
-                  ) : null}
-                </div>
+                <DraftCenterDockTabBar
+                  active={centerDockTab}
+                  onSelect={setCenterDockTab}
+                  showIntel={session.draftType !== 'auction'}
+                  showCommish={isCommissioner}
+                  redraftSnake={presentationVariant === 'redraft_snake'}
+                />
 
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (
@@ -4944,7 +5059,7 @@ export function DraftRoomPageClient({
                           </p>
                           <button
                             type="button"
-                            onClick={() => setMobileTab('helper')}
+                            onClick={openChimmy}
                             className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
                             data-testid="draft-bottom-ai-open-helper"
                           >
@@ -4958,6 +5073,22 @@ export function DraftRoomPageClient({
                           </p>
                         </div>
                       )}
+                      {dockChimmyOpen && hasAiAccess ? (
+                        <div className="mt-3 border-t border-white/10 pt-3" data-testid="draft-bottom-ai-chimmy">
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200/90">Chimmy</p>
+                            <button
+                              type="button"
+                              onClick={() => setDockChimmyOpen(false)}
+                              className="text-[11px] text-white/50 hover:text-white/80"
+                              data-testid="draft-bottom-ai-chimmy-close"
+                            >
+                              Hide
+                            </button>
+                          </div>
+                          {helperPanelNode}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -5167,6 +5298,7 @@ export function DraftRoomPageClient({
             commissionerLoading={commissionerLoading}
             isReconnecting={connectionDegraded}
             isOrphanOnClock={isOrphanOnClock}
+            chimmyManagerOnClock={chimmyOnClock}
             orphanDrafterMode={effectiveOrphanDrafterMode}
             orphanDrafterRequestedMode={requestedOrphanDrafterMode}
             orphanFallbackActive={orphanDrafterFallbackActive}
@@ -5195,6 +5327,9 @@ export function DraftRoomPageClient({
             aiRecommendationOverlay={showAiOverlays ? recommendationOverlaySummary : null}
             showAiOverlays={showAiOverlays}
             poolReadiness={poolReadiness}
+            dynastySkin={isDynasty}
+            dynastyDraftKindLabel={dynastyDraftKindLabel}
+            rookieAuctionNote={rookieAuctionNote}
           />
           <AutopickMeToggle
             viewerAutopick={session.viewerAutopick}
@@ -5209,39 +5344,10 @@ export function DraftRoomPageClient({
           className="flex min-h-0 flex-col gap-1.5 p-1.5 lg:gap-2.5 lg:p-2.5"
           style={draftBoardSurfaceStyle}
         >
-          {/*
-            Full-width chrome stays above the lg:flex-row (LiveDraftStatusColumn + board).
-            Mount for pre_draft too on redraft_snake so Start does not jump the board stack height.
-          */}
-          {presentationVariant === 'redraft_snake' && !isDynasty && !isDraftCompleted ? (
-            <div className="w-full shrink-0">
-              <RedraftPlanningRibbon
-                preDraft={session.status === 'pre_draft'}
-                survivor={formatType === 'SURVIVOR'}
-                picksUntilUser={ribbonPicksUntilUser}
-                userOnClock={isCurrentUserOnClock}
-                onDeck={redraftRibbonOnDeck}
-                thirdRoundReversal={session.thirdRoundReversal}
-                backToBackSoon={redraftBackToBackSoon}
-                viewerRosterMissing={
-                  (session.status === 'in_progress' || session.status === 'paused') &&
-                  !(session as DraftSessionSnapshot & { currentUserRosterId?: string }).currentUserRosterId
-                }
-              />
-            </div>
-          ) : null}
-          {session.draftType !== 'auction' ? (
-            <DraftPulseStrip
-              picks={session.picks ?? []}
-              pool={players}
-              available={pulseAvailablePlayers}
-              teamCount={safeBoardTeamCount}
-              currentOverall={currentPick?.overall ?? null}
-              viewerRosterId={currentUserRosterId ?? null}
-              sport={effectiveDraftSport}
-              formatPickLabel={(overall) => formatPickLabel(overall, safeBoardTeamCount)}
-            />
-          ) : null}
+          {/* Two strips used to sit above the board: "Your pick in ~N / Next up" (RedraftPlanningRibbon)
+              and Recent picks / Position run / Your picks vs ADP (DraftPulseStrip). Both removed at the
+              user's request (2026-10-29) to match Sleeper, which shows nothing between the top bar and
+              the board. The top bar already shows the pick on the clock. */}
           {draftUISettings?.executionMode === 'offline' ? (
             <div
               className="w-full shrink-0 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
@@ -5324,7 +5430,7 @@ export function DraftRoomPageClient({
               ) : null}
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
-                  picks={session.picks ?? []}
+                  picks={boardPicks}
                   slotOrder={slotOrder}
                   tradedPicks={(session as any).tradedPicks ?? []}
                   teamCount={safeBoardTeamCount}
@@ -5390,7 +5496,7 @@ export function DraftRoomPageClient({
       // non-premium desktop layout) shows the recap, report card and share instead.
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
-      helperPanel={undefined}
+      helperPanel={helperPanelNode}
       intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
       chatPanel={chatPanelNode}
       rosterPanel={rosterPanel}
@@ -5504,6 +5610,9 @@ export function DraftRoomPageClient({
             loading={commissionerLoading}
             commissionerAiDraft={commissionerAiDraft ?? undefined}
             onSaveCommissionerAiDraft={handleSaveCommissionerAiDraft}
+            teamNameByRosterId={Object.fromEntries(
+              (session?.slotOrder ?? []).map((entry) => [entry.rosterId, `${entry.displayName} (slot ${entry.slot})`]),
+            )}
           />
         </div>
       </div>

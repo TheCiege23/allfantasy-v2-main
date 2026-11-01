@@ -270,7 +270,7 @@ export function guillotineBasis(ctx: GuillotineContext): string {
       ? ` An NBA week is about ${round1(ctx.gamesPerWeek)} games a team (the games left over the ${ctx.weeksLeft} chop weeks left), so a player’s points a week are his points a game times that.`
       : ''
   return (
-    `Guillotine value: projected points per week above the free agent a team can still add for the same starting slot ` +
+    `Guilly value: projected points per week above the free agent a team can still add for the same starting slot ` +
     `in this league’s lineup (${ctx.lineupLabel}) once every live team has claimed one, scored on this league’s rules, ` +
     `over the ${round1(weeks)} weeks a team can expect to survive with ${ctx.teamsAlive} of ${ctx.startingTeams} teams left ` +
     `(an even chance of the chop each week). FAAB is worth its share of the $${Math.round(ctx.liveFaab).toLocaleString('en-US')} ` +
@@ -290,14 +290,14 @@ export function gradeGuillotineDeal(args: {
   const basis = guillotineBasis(ctx)
   const weeks = ctx.survival[0] ?? 0
   if (!(weeks > 0)) {
-    return { graded: false, reason: 'This guillotine league has no chop left to play, so there is nothing to grade this deal on.', basis }
+    return { graded: false, reason: 'This Guilly league has no chop left to play, so there is nothing to grade this deal on.', basis }
   }
   const index = indexBoard(ctx.board)
   const price = (assets: readonly TradeAssetInput[], side: 'give' | 'get'): { lines: TradeGradeLine[]; total: number } | { withheld: string } => {
     const lines: TradeGradeLine[] = []
     let total = 0
     for (const asset of assets) {
-      if (asset.kind === 'pick') return { withheld: 'Draft picks are not priced in a guillotine league — every roster is gone by next season. This deal is not graded.' }
+      if (asset.kind === 'pick') return { withheld: 'Draft picks are not priced in a Guilly league — every roster is gone by next season. This deal is not graded.' }
       if (asset.kind === 'faab') {
         const value = faabWorth(asset.amount, ctx)
         if (value == null) return { withheld: 'No live team’s FAAB balance is on file, so FAAB in this deal cannot be priced. This deal is not graded.' }

@@ -15,15 +15,15 @@
  * simply add a comparable body for nothing. Only genuinely scarce players move
  * the needle, and FAAB does not exist to be valued.
  *
- * ⚠ THE COUNTERPARTY POOL SHRINKS AND NEVER GROWS. Zombie teams cannot trade.
- * Every infection permanently removes a trading partner, and being infected
- * removes YOUR ability to trade for the rest of the season. The right time to
- * make a deal is always earlier than it feels.
+ * ⚠ TRADE ELIGIBILITY DEPENDS ON ROLE AND LEAGUE SETTINGS. Whisperers never
+ * trade. Commissioners may block Zombie trades, while a serum revival can
+ * return a Zombie to Survivor status. Count the eligible partners now rather
+ * than assuming every infection permanently removes one.
  *
  * ⚠ SERUMS AND WEAPONS ARE ASSETS WITH PUBLISHED POINT VALUES, and they price
  * exactly rather than approximately — see below.
  *
- * ⚠ AND A LOPSIDED TRADE CAN BE REVERSED. Two thirds of an eight-hour league
+ * ⚠ AND A LOPSIDED TRADE CAN BE REVERSED. 75% of voters in an eight-hour league
  * poll undoes it. The commissioner's own reasoning: "a lopsided trade can have
  * a HUGE effect on league results with roster size as small as it is." A deal
  * that grades as one-sided here is not just bad value, it is at real risk of
@@ -141,51 +141,46 @@ export function serumValue(args: {
     oddsOfUse,
     basis:
       zombieCount === 0
-        ? 'A serum is +10 against a Zombie, and there are none yet. It is worth nothing this week and more every week the Horde grows.'
+        ? 'A serum is +10 against a Zombie, and there are none yet. It is worth nothing this week; its value depends on how many Zombies remain when you use it.'
         : `${zombieCount} of ${teamCount} teams are infected, so a serum is roughly ${Math.round(
             oddsOfUse * 100,
           )}% likely to find a Zombie opponent — about ${
             Math.round(expectedPoints * 10) / 10
-          } expected points, rising every week the Horde grows.`,
+          } expected points at the current Horde size.`,
   }
 }
 
 /**
- * How many managers you can still legally trade with, and what that is worth
- * knowing.
- *
- * ⚠ THIS ONLY EVER GOES DOWN. Zombies cannot trade, infection is permanent
- * within a season, and the moment you are infected you cannot trade either. So
- * the option to make a deal is a wasting asset held by both sides at once, and
- * "we can always do this later" is false in a way it is not in any other format.
+ * How many managers a Survivor can trade with under the current league settings.
+ * Whisperers may trade. Zombies cannot trade, and
+ * serum revival can return a Zombie to the Survivor pool.
  */
 export function tradeWindow(args: {
   survivors: number
-  /** Whether the Whisperer is still uninfected — they can trade. */
-  whispererActive: boolean
+  whisperers?: number
+  zombies?: number
   teamCount: number
+  zombieTradeBlocked?: boolean
 }): { partners: number; basis: string } | null {
-  const { survivors, teamCount } = args
-  if (teamCount < 2 || survivors < 0 || survivors > teamCount) return null
+  const { survivors, whisperers = 0, zombies = 0, teamCount } = args
+  if (teamCount < 2 || survivors < 0 || zombies < 0 || whisperers < 0 || survivors + zombies + whisperers > teamCount) return null
 
-  /* Everyone who can legally trade, minus yourself. */
-  const partners = Math.max(0, survivors + (args.whispererActive ? 1 : 0) - 1)
+  /* The viewer is a Survivor, so exclude their own team. */
+  const partners = Math.max(0, survivors - 1 + whisperers)
+  const roleRule = 'Survivors and Whisperers may trade. Zombies cannot trade.'
 
   return {
     partners,
-    basis:
-      partners === 0
-        ? 'There is nobody left in this league who can legally trade. Zombies cannot make deals, and the Horde has everyone.'
-        : `${partners} team${
-            partners === 1 ? '' : 's'
-          } in this league can still legally trade — Zombies cannot. That number only ever falls, and it reaches zero for you the week you are infected, so a deal you are considering for "later" may not have a later.`,
+    basis: partners === 0
+      ? `There is nobody eligible to trade with a Survivor right now. ${roleRule}`
+      : `${partners} manager${partners === 1 ? '' : 's'} can trade with a Survivor right now. ${roleRule} Infections can close the window, and serum revivals can reopen it.`,
   }
 }
 
 /**
  * Whether this deal is lopsided enough to be at real risk of reversal.
  *
- * ⚠ NOT A FAIRNESS OPINION, A PROCEDURAL WARNING. Two thirds of an eight-hour
+ * ⚠ NOT A FAIRNESS OPINION, A PROCEDURAL WARNING. 75% of voters in an eight-hour
  * league poll reverses a trade here, and the commissioner's stated reason is
  * that small rosters magnify a one-sided deal. A manager should know before
  * agreeing that the trade may simply not stand — that is different information
@@ -201,7 +196,7 @@ export function vetoRiskNote(args: {
   if (Math.abs(args.percentDiff) < VETO_RISK_PCT) return null
   return `This deal is about ${Math.abs(
     Math.round(args.percentDiff),
-  )}% one-sided. In this league a trade the commissioner flags goes to an eight-hour poll and two thirds can reverse it — small rosters make a lopsided deal matter more here, so expect scrutiny even if both managers are happy.`
+  )}% one-sided. In this league a trade the commissioner flags goes to an eight-hour poll and 75% of voters can reverse it — small rosters make a lopsided deal matter more here, so expect scrutiny even if both managers are happy.`
 }
 
 /**

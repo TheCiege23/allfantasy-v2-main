@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TIEBREAK_RULES, WAIVER_TYPES } from './types'
+import { FAAB_ROLLOVER_RULES, FREE_AGENCY_MODES } from './hub-waiver-options'
 
 const integer = z.number().int().min(0).max(2_147_483_647)
 const days = z.array(z.number().int().min(0).max(7)).max(7)
@@ -26,6 +27,7 @@ const engine = z.object({
   max_claims_per_period: integer.optional(), max_adds_per_week: integer.optional(), max_drops_per_week: integer.optional(),
   commissioner_can_override: z.boolean().optional(), offseason_waiver_rules: text.optional(), playoff_waiver_rules: text.optional(),
   undroppable_player_ids: z.array(text).max(1000).optional(), allow_zero_faab_bid: z.boolean().optional(),
+  free_agency_mode: z.enum(FREE_AGENCY_MODES).optional(), faab_rollover_rule: z.enum(FAAB_ROLLOVER_RULES).optional(),
 }).passthrough()
 
 /** Partial overrides: omitted fields retain existing settings; null clears nullable fields. */

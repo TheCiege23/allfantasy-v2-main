@@ -27,27 +27,38 @@ const h2hGames = async () => [
   { week: 3, type: 'regular', homeRosterId: 'h2h-winner', awayRosterId: 'more-points', homeScore: 120, awayScore: 100, status: 'final' },
 ]
 
+/*
+ * Points for decides before head-to-head (owner, 2026-10-20), so the head-to-head cases use two teams
+ * level on record AND points. The winner of their meeting sorts LAST alphabetically, so the name
+ * fallback cannot produce the head-to-head answer by luck.
+ */
+const levelSeason = { ...season, rosters: [roster('more-points', 9, 5, 1500), roster('h2h-winner', 9, 5, 1500), roster('c', 5, 9, 1400), roster('d', 4, 10, 1300)] }
+const moreWinsMeeting = async () => [
+  { week: 3, type: 'regular', homeRosterId: 'more-points', awayRosterId: 'h2h-winner', homeScore: 120, awayScore: 100, status: 'final' },
+]
+
 describe('playoff resolver feeds regular-season results to the head-to-head tiebreaker', () => {
-  it('seeds the head-to-head winner first between equal records', async () => {
+  it('seeds the head-to-head winner first between equal records and points', async () => {
     const resolved = await resolveNflRedraftPlayoffRuntime(
-      { preloadedSeason: season as never },
-      { loadRules: async () => rulesWith('standard_standings') as never, loadRegularSeasonMatchups: h2hGames },
+      { preloadedSeason: levelSeason as never },
+      { loadRules: async () => rulesWith('standard_standings') as never, loadRegularSeasonMatchups: moreWinsMeeting },
     )
     expect(resolved.ok).toBe(true)
     if (!resolved.ok) return
-    expect(resolved.state.seeds.map((row) => row.rosterId)).toEqual(['h2h-winner', 'more-points'])
+    expect(resolved.state.seeds.map((row) => row.rosterId)).toEqual(['more-points', 'h2h-winner'])
     expect(resolved.regularSeasonMatchups).toHaveLength(1)
   })
 
-  it('degrades to no head-to-head (points decide) when the results cannot be read', async () => {
+  it('degrades to no head-to-head when the results cannot be read', async () => {
     // Default loader against a prisma mock with no redraftMatchup delegate: it throws inside and
-    // must return [] rather than failing the resolve.
+    // must return [] rather than failing the resolve. Level on points too, so with no head-to-head
+    // the name order decides — the opposite of the result above.
     const resolved = await resolveNflRedraftPlayoffRuntime(
-      { preloadedSeason: season as never },
+      { preloadedSeason: levelSeason as never },
       { loadRules: async () => rulesWith('standard_standings') as never },
     )
     expect(resolved.ok).toBe(true)
-    if (resolved.ok) expect(resolved.state.seeds.map((row) => row.rosterId)).toEqual(['more-points', 'h2h-winner'])
+    if (resolved.ok) expect(resolved.state.seeds.map((row) => row.rosterId)).toEqual(['h2h-winner', 'more-points'])
   })
 
   it('keeps a points-only league on points', async () => {

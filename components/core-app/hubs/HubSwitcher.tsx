@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { HubFormat } from '@/lib/core-app/formatHubs'
+import { hubCopy, hubTab } from '@/lib/core-app/formatHubCopy'
 
 /**
  * The pill row above every commissioner hub: "All leagues" first, then the six
@@ -14,7 +15,7 @@ export const HUB_TABS: Record<HubFormat, string> = {
   tournament: 'Tournament',
   survivor: 'Survivor',
   c2c: 'C2C',
-  guillotine: 'Guillotine',
+  guillotine: 'Guilly',
   efl: 'EFL Dynasty',
 }
 
@@ -24,17 +25,20 @@ export function HubSwitcher({
   current,
   counts,
   runCount = null,
+  language = 'en',
 }: {
   current: HubFormat | 'all'
   /** Leagues of each format the reader is in. */
   counts: Record<HubFormat, number>
   /** Leagues the reader runs, for the "All leagues" pill. Null leaves the count off. */
   runCount?: number | null
+  /** No hooks here (server and client screens both draw it), so the caller passes the language. */
+  language?: string
 }) {
   return (
-    <nav className="afh-switch" aria-label="Commissioner hubs">
+    <nav className="afh-switch" aria-label={hubCopy('Commissioner hubs', language)}>
       <Link href="/core/commissioner" aria-current={current === 'all' ? 'page' : undefined}>
-        All leagues{runCount != null && runCount > 0 ? ` · ${runCount}` : ''}
+        {hubCopy('All leagues', language)}{runCount != null && runCount > 0 ? ` · ${runCount}` : ''}
       </Link>
       {ORDER.map((f) => (
         <Link
@@ -48,7 +52,7 @@ export function HubSwitcher({
            */
           data-empty={counts[f] > 0 || f === current ? undefined : 'true'}
         >
-          {HUB_TABS[f]}
+          {hubTab(f, HUB_TABS[f], language)}
           {counts[f] > 0 && f !== current ? ` · ${counts[f]}` : ''}
         </Link>
       ))}

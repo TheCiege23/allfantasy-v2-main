@@ -70,6 +70,11 @@ describe('tool specs', () => {
        */
       'find_league_by_name',
       /*
+       * Find a League search: public listings with open seats, the same discovery read the page
+       * uses. Reads no league of the user's and takes no id — only their words.
+       */
+      'find_open_leagues',
+      /*
        * Reads the user's OWN team, resolved through LeagueTeam.claimedByUserId
        * from the session — no id crosses the model boundary. Read-only, and it
        * returns roster facts with no projections attached.
@@ -167,6 +172,10 @@ describe('tool specs', () => {
       'evaluate_waiver_move',
       'get_playoff_outlook',
       'get_my_matchup',
+      /* Current fantasy score in the session's selected league; read-only and membership scoped. */
+      'get_live_fantasy_matchup',
+      /* Played fantasy results from the signed-in manager's claimed team across stored seasons. */
+      'get_fantasy_matchup_history',
       /*
        * League chat and the waiver wire (2026-09-25). Both SELECT-only and gated on the proven
        * league: the chat tool reads ONLY the public league channel of `LeagueChatMessage` (never a
@@ -183,6 +192,7 @@ describe('tool specs', () => {
        */
       'propose_lineup_change',
       'propose_trade',
+      'propose_automation_change',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

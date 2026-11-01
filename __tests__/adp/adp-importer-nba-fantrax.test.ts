@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   findMany: vi.fn(),
   createMany: vi.fn(),
-  loadFantraxNbaAdp: vi.fn(),
+  loadFantraxAdp: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -21,7 +21,7 @@ vi.mock('@/lib/prisma', () => ({
     aiAdpSnapshot: { findMany: vi.fn(async () => []) },
   },
 }))
-vi.mock('@/lib/adp/fantraxNbaAdp', () => ({ loadFantraxNbaAdp: h.loadFantraxNbaAdp }))
+vi.mock('@/lib/adp/fantraxNbaAdp', () => ({ loadFantraxAdp: h.loadFantraxAdp }))
 vi.mock('@/lib/ai-adp-engine/aiAdpConsumerFlag', () => ({ isAiAdpConsumerEnabled: () => false }))
 vi.mock('@/lib/adp-data', () => ({ fetchAllFFCFormats: vi.fn() }))
 vi.mock('@/lib/multi-platform-adp', () => ({ loadMultiPlatformADP: vi.fn() }))
@@ -49,13 +49,13 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.findMany.mockResolvedValue([])
   h.createMany.mockImplementation(async ({ data }: { data: unknown[] }) => ({ count: data.length }))
-  h.loadFantraxNbaAdp.mockResolvedValue(loaded)
+  h.loadFantraxAdp.mockResolvedValue(loaded)
 })
 
 describe('runAdpImporter — NBA from Fantrax', () => {
   it('without allowProviderFetch it never calls Fantrax and writes nothing for NBA', async () => {
     const r = await runAdpImporter({ sports: ['NBA'] })
-    expect(h.loadFantraxNbaAdp).not.toHaveBeenCalled()
+    expect(h.loadFantraxAdp).not.toHaveBeenCalled()
     expect(h.createMany).not.toHaveBeenCalled()
     expect(r.fantraxNba).toBeNull()
   })
@@ -63,7 +63,7 @@ describe('runAdpImporter — NBA from Fantrax', () => {
   it('with allowProviderFetch it writes one redraft/standard fantrax row per matched player, in OUR position', async () => {
     const r = await runAdpImporter({ sports: ['NBA'], allowProviderFetch: true })
 
-    expect(h.loadFantraxNbaAdp).toHaveBeenCalledTimes(1)
+    expect(h.loadFantraxAdp).toHaveBeenCalledTimes(1)
     expect(providerRows()).toHaveLength(2)
     expect(providerRows()[0]).toMatchObject({
       sport: 'NBA',
@@ -100,21 +100,62 @@ describe('runAdpImporter — NBA from Fantrax', () => {
   })
 
   it('a Fantrax failure is reported, not thrown, and writes nothing', async () => {
-    h.loadFantraxNbaAdp.mockResolvedValue({ ok: false, reason: 'Fantrax returned no ADP for NBA' })
+    h.loadFantraxAdp.mockResolvedValue({ ok: false, reason: 'Fantrax returned no ADP for NBA' })
     const r = await runAdpImporter({ sports: ['NBA'], allowProviderFetch: true })
     expect(r.fantraxNba).toEqual({ ok: false, reason: 'Fantrax returned no ADP for NBA' })
     expect(h.createMany).not.toHaveBeenCalled()
   })
 
   it('a thrown error from the loader is caught and reported the same way', async () => {
-    h.loadFantraxNbaAdp.mockRejectedValue(new Error('socket hang up'))
+    h.loadFantraxAdp.mockRejectedValue(new Error('socket hang up'))
     const r = await runAdpImporter({ sports: ['NBA'], allowProviderFetch: true })
     expect(r.fantraxNba).toEqual({ ok: false, reason: 'socket hang up' })
   })
 
-  it('[control] another non-NFL sport is untouched by the flag', async () => {
-    const r = await runAdpImporter({ sports: ['NHL'], allowProviderFetch: true })
-    expect(h.loadFantraxNbaAdp).not.toHaveBeenCalled()
+  it('[control] a non-Fantrax non-NFL sport is untouched by the flag', async () => {
+    const r = await runAdpImporter({ sports: ['NCAAB'], allowProviderFetch: true })
+    expect(h.loadFantraxAdp).not.toHaveBeenCalled()
     expect(r.fantraxNba).toBeNull()
+    expect(r.fantraxBySport).toEqual({})
+  })
+})
+
+describe('runAdpImporter — MLB and NHL from Fantrax', () => {
+  const mlbLoad = {
+    ok: true as const,
+    priced: 600,
+    result: {
+      matched: [{ identityId: 'id-judge', playerName: 'Aaron Judge', position: 'OF', team: 'NYY', adp: 1.8 }],
+      ambiguous: [],
+      unmatched: [],
+      duplicates: 0,
+    },
+  }
+
+  it.each(['MLB', 'NHL'])('%s writes fantrax rows keyed by its own sport, only with allowProviderFetch', async (sport) => {
+    h.loadFantraxAdp.mockResolvedValue(mlbLoad)
+    const without = await runAdpImporter({ sports: [sport] })
+    expect(h.loadFantraxAdp).not.toHaveBeenCalled()
+    expect(without.fantraxBySport).toEqual({})
+
+    const r = await runAdpImporter({ sports: [sport], allowProviderFetch: true })
+    expect(h.loadFantraxAdp).toHaveBeenCalledWith(sport)
+    expect(providerRows()[0]).toMatchObject({
+      sport,
+      format: 'redraft',
+      scoring: 'standard',
+      source: 'fantrax',
+      playerId: `${sport}:af:id-judge`,
+      adp: 1.8,
+    })
+    expect(r.fantraxBySport[sport]).toMatchObject({ ok: true, matched: 1 })
+    // The NBA-only field stays NBA-only.
+    expect(r.fantraxNba).toBeNull()
+  })
+
+  it('a failed MLB feed is reported per sport', async () => {
+    h.loadFantraxAdp.mockResolvedValue({ ok: false, reason: 'Fantrax returned no ADP for MLB' })
+    const r = await runAdpImporter({ sports: ['MLB'], allowProviderFetch: true })
+    expect(r.fantraxBySport.MLB).toEqual({ ok: false, reason: 'Fantrax returned no ADP for MLB' })
   })
 })

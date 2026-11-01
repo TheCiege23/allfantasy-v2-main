@@ -127,6 +127,7 @@ export async function getLineupEfficiency(args: {
     settings: unknown
     leagueType?: string | null
     bestBallMode?: boolean | null
+    sport?: string | null
   }
   season: number
   throughWeek: number
@@ -163,7 +164,8 @@ export async function getLineupEfficiency(args: {
   const ids = [...new Set(rows.map((r) => r.playerId))]
   const identities = composePlayerIdentities(
     await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: ids } },
+      // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
+      where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: ids } },
       select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),
   )

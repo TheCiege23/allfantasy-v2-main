@@ -186,6 +186,11 @@ export function PlayoffSettingsPanel(props: {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
+          <span className="block text-xs text-white/50">
+            Draft pick (dynasty and keeper leagues): next season, the consolation winner picks first among non-playoff
+            teams; in a toilet bowl, last place (the final&apos;s loser) picks first unless the commissioner chooses the
+            final&apos;s winner. Everyone else follows in reverse standings. A redraft league starts fresh, so it has no effect there.
+          </span>
         </label>
       </div>
 

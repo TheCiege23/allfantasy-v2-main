@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { openCommissionerControls } from './helpers/commissioner-controls'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -32,6 +34,9 @@ test.beforeEach(async ({ page, context }) => {
       await route.abort('blockedbyclient').catch(() => null)
     })
   }
+
+  // The CSP reports were what starved the dev server, not the tests: see the helper.
+  await answerCspReportsInBrowser(context)
 
   await page.addInitScript(() => {
     try {
@@ -460,6 +465,38 @@ async function mockDraftRoomApis(
       orphanDrafterMode: settings.orphanDrafterMode,
     }
   }
+
+  // The trade builder only offers rounds this endpoint lists, so without it the offer form reads
+  // "No tradable picks". Built with the route's own helper from the same mock state as the session.
+  await page.route(`**/api/leagues/*/draft/trade-builder/inventory**`, async (route) => {
+    const teamCount = slotOrder.length
+    const ownedBy = (ownerRosterId: string) =>
+      computeUpcomingOwnedPicks({
+        totalPicks: teamCount * 4,
+        pickedOverall: new Set(state.picks.map((pick) => Number(pick.overall))),
+        teamCount,
+        draftType: 'snake',
+        thirdRoundReversal: false,
+        slotOrder,
+        tradedPicks: state.tradedPicks,
+        ownerRosterId,
+      })
+    const byRosterId = Object.fromEntries(slotOrder.map((entry) => [entry.rosterId, ownedBy(entry.rosterId)]))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        draftInProgress: state.sessionStatus === 'in_progress',
+        draftType: 'snake',
+        rounds: 4,
+        teamCount,
+        thirdRoundReversal: false,
+        myRosterId: 'roster-2',
+        mine: byRosterId['roster-2'],
+        byRosterId,
+      }),
+    })
+  })
 
   await page.route(`**/api/leagues/*/draft/session**`, async (route) => {
     if (route.request().method() === 'GET') {
@@ -1557,59 +1594,63 @@ test.describe('@draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-board-cell-8')).toContainText(/2\.4|Alpha/)
 
     await openDraftTradesPanel(page)
-    let tradeWorkflowRan = false
     const tradeOfferToggle = page.getByTestId('draft-trade-offer-toggle')
-    if (await tradeOfferToggle.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      tradeWorkflowRan = true
-      await tradeOfferToggle.click()
-      await page.getByTestId('draft-trade-offer-receiver').selectOption('roster-3')
-      await page.getByTestId('draft-trade-offer-give-round').selectOption('2')
-      await page.getByTestId('draft-trade-offer-receive-round').selectOption('3')
-      await page.getByTestId('draft-trade-send-offer').click()
-      await expect.poll(() => mocks.getTradeOfferRequests().length).toBeGreaterThan(0)
+    /*
+     * Always run. This was `if (toggle visible within 5s)`, so which path ran depended on how fast
+     * the server was: on a loaded one it was skipped, and the steps below had gone stale unseen
+     * (a <select> that became a manager menu, a new Pending offers tab, an unmocked inventory).
+     */
+    await expect(tradeOfferToggle).toBeVisible({ timeout: 30_000 })
+    await tradeOfferToggle.click()
+    // The partner field is a searchable menu of managers now, not a <select>: pick Gamma (roster-3).
+    // Menu rows read "<name> Slot <n>"; the field itself never shows a slot, so this can't match it.
+    const partnerPicker = page.getByTestId('draft-trade-offer-receiver')
+    await partnerPicker.click()
+    await partnerPicker.locator('..').getByRole('button', { name: /Gamma.*Slot 3/ }).click()
+    await expect(partnerPicker).toContainText('Gamma')
+    await page.getByTestId('draft-trade-offer-give-round').selectOption('2')
+    await page.getByTestId('draft-trade-offer-receive-round').selectOption('3')
+    await page.getByTestId('draft-trade-send-offer').click()
+    await expect.poll(() => mocks.getTradeOfferRequests().length).toBeGreaterThan(0)
 
-      await page.getByTestId('draft-trade-review-tp-1').click()
-      await expect(page.getByTestId('draft-trade-review-panel-tp-1')).toBeVisible()
-      await page.getByTestId('draft-trade-ai-review-tp-1').click()
-      await expect(page.getByText(/Private review context/i)).toBeVisible()
-      await expect(page.getByText(/Counter ideas/i).first()).toBeVisible()
-      expect(mocks.getTradeReviewRequests()).toContain('tp-1')
+    // Offers live on their own tab now; the builder above is the "Compose offer" tab.
+    const pendingOffersTab = page.getByTestId('draft-trade-panel-overlay').getByRole('button', { name: /^Pending offers/ })
+    await pendingOffersTab.click()
+    await page.getByTestId('draft-trade-review-tp-1').click()
+    await expect(page.getByTestId('draft-trade-review-panel-tp-1')).toBeVisible()
+    await page.getByTestId('draft-trade-ai-review-tp-1').click()
+    await expect(
+      page.getByTestId('draft-trade-review-panel-tp-1').getByText('Private review', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText(/Counter ideas/i).first()).toBeVisible()
+    expect(mocks.getTradeReviewRequests()).toContain('tp-1')
 
-      await page.getByTestId('draft-trade-review-tp-2').click()
-      await page.getByTestId('draft-trade-counter-tp-2').click()
-      await page.getByTestId('draft-trade-review-tp-3').click()
-      await page.getByTestId('draft-trade-reject-tp-3').click()
-      await page.getByTestId('draft-trade-review-tp-1').click()
-      await page.getByTestId('draft-trade-accept-tp-1').click()
-    }
+    await page.getByTestId('draft-trade-review-tp-2').click()
+    await page.getByTestId('draft-trade-counter-tp-2').click()
+    await page.getByTestId('draft-trade-review-tp-3').click()
+    await page.getByTestId('draft-trade-reject-tp-3').click()
+    await page.getByTestId('draft-trade-review-tp-1').click()
+    await page.getByTestId('draft-trade-accept-tp-1').click()
+    /*
+     * Close with the panel's own button, once. The loop this replaces also pressed Escape (the panel
+     * has no Escape handler) and then clicked draft-open-trades-button, which only ever OPENS it — so
+     * when the Close click landed but had not re-rendered within 250ms, the next pass reopened the
+     * panel and the assertion below failed with the overlay visible.
+     */
     const tradeOverlay = page.getByTestId('draft-trade-panel-overlay')
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (!(await tradeOverlay.isVisible().catch(() => false))) break
-      await page.keyboard.press('Escape').catch(() => null)
-      if (await tradeOverlay.isVisible().catch(() => false)) {
-        await tradeOverlay
-          .getByRole('button', { name: 'Close' })
-          .first()
-          .click({ force: true, noWaitAfter: true, timeout: 2_000 })
-          .catch(() => null)
-      }
-      if (await tradeOverlay.isVisible().catch(() => false)) {
-        await page.getByTestId('draft-open-trades-button').first().click({ force: true, noWaitAfter: true, timeout: 2_000 }).catch(() => null)
-      }
-      await page.waitForTimeout(250)
+    if (await tradeOverlay.isVisible().catch(() => false)) {
+      await tradeOverlay.getByRole('button', { name: 'Close draft trades' }).click()
     }
     await expect(tradeOverlay).not.toBeVisible({ timeout: 10_000 })
 
-    if (tradeWorkflowRan) {
-      await desktop.getByTestId('draft-board-round-selector').selectOption('2')
-      await expect(desktop.getByTestId('draft-board-cell-8')).toContainText('Beta')
-      await desktop.getByTestId('draft-board-round-selector').selectOption('3')
-      await expect(desktop.getByTestId('draft-board-cell-10')).toContainText('Alpha')
-      const tradeRespondActions = mocks.getTradeRespondRequests().map((entry) => entry.action)
-      expect(tradeRespondActions).toContain('accept')
-      expect(tradeRespondActions).toContain('reject')
-      expect(tradeRespondActions).toContain('counter')
-    }
+    await desktop.getByTestId('draft-board-round-selector').selectOption('2')
+    await expect(desktop.getByTestId('draft-board-cell-8')).toContainText('Beta')
+    await desktop.getByTestId('draft-board-round-selector').selectOption('3')
+    await expect(desktop.getByTestId('draft-board-cell-10')).toContainText('Alpha')
+    const tradeRespondActions = mocks.getTradeRespondRequests().map((entry) => entry.action)
+    expect(tradeRespondActions).toContain('accept')
+    expect(tradeRespondActions).toContain('reject')
+    expect(tradeRespondActions).toContain('counter')
 
     /*
      * The draft chat composer is the shared chat composer now: GIF opens GIF search (through
@@ -1851,7 +1892,11 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelPanel = page.locator('[data-testid="draft-intel-queue-panel"]:visible').first()
+    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
+    await expect(intelligenceDetails).toBeVisible()
+    await expect(intelligenceDetails).not.toHaveAttribute('open', '')
+    await intelligenceDetails.locator('summary').click()
+    const intelPanel = intelligenceDetails.getByTestId('draft-intel-queue-panel')
     await expect(intelPanel).toBeVisible()
     const intelHeadline = page.locator('[data-testid="draft-intel-headline"]:visible').first()
     if (!(await intelHeadline.isVisible({ timeout: 1_000 }).catch(() => false))) {
@@ -1926,7 +1971,7 @@ test.describe('@draft-room click audit', () => {
     await expect(page.getByTestId('post-draft-share-error')).toHaveCount(0)
   })
 
-  test('mobile navigation between board and player/queue/chat works', async ({ page }) => {
+  test('mobile navigation between board and player/queue/chat works', async ({ page, browserName }, testInfo) => {
     const leagueId = createLeagueId('e2e-draft-room-mobile')
     await mockDraftRoomApis(page, leagueId)
 
@@ -1934,27 +1979,53 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
     const mobile = page.getByTestId('draft-mobile-layout')
+    await expect(page.getByTestId('draft-mobile-quick-dock')).toHaveCount(0)
+    await page.getByTestId('draft-mobile-more').click()
     await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
 
-    // Helper: click a mobile tab by its testid via JS to bypass fixed-overlay intercepts
+    // Dismiss the on-turn suggestion with its real button before scrolling the board underneath it.
+    const turnAlert = page.getByTestId('draft-youre-up-alert')
+    if (await turnAlert.isVisible()) await page.getByTestId('draft-youre-up-dismiss').click()
+    if (browserName === 'chromium') {
+      // Real Chromium touch input: horizontal board scrolling must not change tabs.
+      const boardScroll = mobile.getByTestId('draft-board-grid').locator('..')
+      await boardScroll.scrollIntoViewIfNeeded()
+      const box = await boardScroll.boundingBox()
+      expect(box).not.toBeNull()
+      const touch = await page.context().newCDPSession(page)
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+      const y = box!.y + Math.min(85, box!.height / 2)
+      const startX = box!.x + Math.min(270, box!.width - 20)
+      await expect.poll(() => boardScroll.evaluate((el, point) => el.contains(document.elementFromPoint(point.x, point.y)), { x: startX, y })).toBe(true)
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y }] })
+      for (let step = 1; step <= 8; step++) {
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: startX - step * 24, y }] })
+        await page.waitForTimeout(16) // Model a finger moving over successive animation frames.
+      }
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await expect.poll(() => boardScroll.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+      await expect(page.getByTestId('draft-mobile-content')).toHaveAttribute('data-active-tab', 'board')
+      await touch.detach()
+    }
+
+    // Use real hit testing so overlays cannot hide an unreachable mobile control.
     async function mobileTabClick(testId: string) {
-      await page.evaluate((tid) => {
-        const el = document.querySelector(`[data-testid="${tid}"]`) as HTMLElement | null
-        el?.click()
-      }, testId)
+      await page.getByTestId(testId).click()
     }
 
     await mobileTabClick('draft-mobile-tab-players')
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
+    await page.getByTestId('draft-mobile-more').click()
     const helperTab = page.getByTestId('draft-mobile-tab-helper')
     const helperWarRoomToggle = mobile.getByTestId('draft-open-war-room-button').first()
     const helperUpgradeLink = mobile.getByTestId('locked-feature-upgrade-link').first()
     const helperLoadingState = mobile.getByText(/Checking premium access|Loading monetization details/i).first()
     const helperTabVisible = await helperTab.isVisible({ timeout: 2_000 }).catch(() => false)
     if (helperTabVisible) {
-      await helperTab.evaluate((el: HTMLElement) => el.click())
+      await helperTab.click()
       await expect
         .poll(
           async () =>
@@ -1985,17 +2056,24 @@ test.describe('@draft-room click audit', () => {
     const quickHelperBtn = page.getByTestId('draft-mobile-quick-helper')
     if (await quickHelperBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await mobileTabClick('draft-mobile-tab-board')
-      await quickHelperBtn.click({ force: true }).catch(() => null)
+      await quickHelperBtn.click()
     }
     await openCommissionerControls(page)
     const commissionerClose = page.getByTestId('draft-commissioner-close')
-    if (await commissionerClose.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await commissionerClose.click().catch(() => null)
-    } else {
-      await page.keyboard.press('Escape').catch(() => null)
-    }
+    // The control center is a lazy client chunk; await its real controls after the overlay opens.
+    await expect(commissionerClose).toBeVisible({ timeout: 30_000 })
+    const closeBounds = await commissionerClose.boundingBox()
+    expect(closeBounds).not.toBeNull()
+    expect(closeBounds!.width).toBeGreaterThanOrEqual(44)
+    expect(closeBounds!.height).toBeGreaterThanOrEqual(44)
+    expect(closeBounds!.x).toBeGreaterThanOrEqual(0)
+    expect(closeBounds!.x + closeBounds!.width).toBeLessThanOrEqual(390)
+    await page.screenshot({ path: testInfo.outputPath('mobile-commissioner-controls.png') })
+    await commissionerClose.click()
+    await expect(page.getByTestId('draft-commissioner-overlay')).toBeHidden()
     await mobileTabClick('draft-mobile-tab-board')
     await expect(mobile.getByTestId('draft-board')).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('mobile-live-board.png') })
   })
 })
 
@@ -2089,4 +2167,31 @@ test.describe('@draft-room single-board regression', () => {
     expect(draftRoomUrlPathKey(page.url())).toBe(pathKey)
     await assertSingleDraftBoard(page)
   })
+})
+
+
+test('@draft-room NBA player cards survive mobile resize, search and queue', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.setViewportSize({ width: 360, height: 844 })
+  await page.goto('/e2e/draft-player-measurement')
+  const search = page.getByTestId('draft-player-search-input')
+  await expect(search).toBeVisible()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  await page.getByTestId('draft-player-load-more').click()
+  await expect(page.getByTestId('draft-player-load-more')).toHaveText(/100 of 562/)
+  for (const width of [412, 360, 412]) {
+    await page.setViewportSize({ width, height: 844 })
+    await search.fill('Jokic')
+    const row = page.getByTestId('draft-player-card-0')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
+    await search.fill('')
+    await expect(row).toContainText('Nikola Jokic')
+    await expect(page.getByTestId('draft-player-load-more')).toHaveText(/50 of 562/)
+  }
+  await search.fill('Jokic')
+  await page.getByTestId('draft-player-card-0').getByRole('button', { name: /queue/i }).click()
+  await expect(page.getByTestId('measurement-queue')).toHaveText('Nikola Jokic')
+  expect(errors).toEqual([])
 })

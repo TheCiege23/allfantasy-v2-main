@@ -32,6 +32,13 @@ const YAHOO_LEAGUE_LIST_URL =
 const YAHOO_BENCH_POSITIONS = new Set(['BN', 'BE'])
 const YAHOO_IR_POSITIONS = new Set(['IR', 'IL', 'NA', 'DL'])
 const YAHOO_NON_STARTING_POSITIONS = new Set([...YAHOO_BENCH_POSITIONS, ...YAHOO_IR_POSITIONS])
+/**
+ * Yahoo baseball/hockey `NA` — "not active", the minor-league stash. It is in `YAHOO_IR_POSITIONS`
+ * (it is not a starting slot), but it is not an injury: for MLB/NHL the adapter carries it as the
+ * taxi squad. No Yahoo capture exists in `contracts/` to confirm the spelling, so only the exact
+ * documented `NA` is read; anything else stays where it was.
+ */
+const YAHOO_MINORS_POSITION = 'NA'
 
 /**
  * True for Yahoo's injured-reserve family, including the suffixed spellings
@@ -240,6 +247,139 @@ function inferSportFromYahooUrl(url: string | null | undefined): string | null {
   return null
 }
 
+/** Yahoo's game codes for the four sports this importer's discovery asks for. */
+const YAHOO_GAME_CODE_SPORT: Record<string, string> = { nfl: 'NFL', nba: 'NBA', mlb: 'MLB', nhl: 'NHL' }
+
+function sportFromYahooGameCode(code: unknown): string | null {
+  if (typeof code !== 'string') return null
+  return YAHOO_GAME_CODE_SPORT[code.trim().toLowerCase()] ?? null
+}
+
+/**
+ * The league's sport, from the first source that names one — or `null`.
+ *
+ * 🛑 THIS USED TO END IN `?? 'NFL'`. A league whose sport could not be read was
+ * imported as football: a basketball league with a key we were handed directly
+ * (`418.l.123`, which skips the league list) and a URL we did not recognise became
+ * an NFL league with NBA players in it. `null` lets the caller refuse instead.
+ *
+ * Sources, most to least direct:
+ *   1. the account's league list (`games;game_keys=…`, game `code`) — only present when
+ *      the input was resolved through that list;
+ *   2. the league resource's own `game_code` — relied on from Yahoo's documented league
+ *      metadata, NOT from a captured response (there is no Yahoo contract or fixture);
+ *   3. a league key whose game part is a code (`nfl.l.123`) rather than a numeric game id;
+ *   4. the league URL's subdomain (`football.fantasysports.yahoo.com`).
+ */
+export function resolveYahooLeagueSport(args: {
+  listedSport: string | null
+  leagueNode: Record<string, any> | null | undefined
+  leagueKey: string
+}): string | null {
+  const listed = args.listedSport?.trim().toUpperCase()
+  if (listed) return listed
+  const fromGameCode = sportFromYahooGameCode(args.leagueNode?.game_code)
+  if (fromGameCode) return fromGameCode
+  const fromKey = sportFromYahooGameCode(String(args.leagueKey ?? '').split('.l.')[0])
+  if (fromKey) return fromKey
+  return inferSportFromYahooUrl(typeof args.leagueNode?.url === 'string' ? args.leagueNode.url : null)
+}
+
+/** Thrown when a Yahoo league's sport cannot be read from anything Yahoo returned. */
+export class YahooImportUnknownSportError extends Error {}
+
+/** Yahoo's `count` per transactions page. */
+export const YAHOO_TRANSACTIONS_PAGE_SIZE = 100
+/** Hard stop: 20 pages × 100 = 2,000 transactions, far beyond a normal season's log. */
+export const YAHOO_TRANSACTIONS_MAX_PAGES = 20
+
+export type YahooTransactionPagesResult = {
+  transactions: YahooImportTransaction[]
+  pagesFetched: number
+  /** True when the page bound was reached on a full page, so more may exist. */
+  truncatedAtBound: boolean
+  /** True when a page after the first failed; the earlier pages are kept. */
+  stoppedOnError: boolean
+}
+
+/**
+ * Read a Yahoo transactions collection page by page with `;start=N;count=M`.
+ *
+ * ⚠ IT USED TO BE ONE `count=100` REQUEST, so a league with 101+ transactions kept only
+ * the first page — no warning, and the missing trades were simply never graded.
+ *
+ * Stops at the first SHORT page (fewer than `pageSize` items), which is how a Yahoo
+ * collection signals its end, and never fetches more than `maxPages` pages.
+ * ⚠ Unproven against real Yahoo data: if Yahoo caps `count` below the requested size,
+ * the first page is short and paging stops there — no worse than the single request it
+ * replaces, but not a full read either.
+ *
+ * Pure apart from `fetchPage`, so it is unit-tested with stubbed pages. The first page's
+ * error propagates (the caller already treats a failed transactions read as "none"); a
+ * later page's error stops paging and keeps what was read, flagged `stoppedOnError`.
+ * Transactions are de-duplicated by id, because a transaction landing between two page
+ * reads shifts every later offset by one.
+ */
+export async function fetchYahooTransactionPages(
+  fetchPage: (start: number, count: number) => Promise<unknown>,
+  options: { pageSize?: number; maxPages?: number } = {},
+): Promise<YahooTransactionPagesResult> {
+  const pageSize = Math.max(1, Math.floor(options.pageSize ?? YAHOO_TRANSACTIONS_PAGE_SIZE))
+  const maxPages = Math.max(1, Math.floor(options.maxPages ?? YAHOO_TRANSACTIONS_MAX_PAGES))
+  const seen = new Set<string>()
+  const transactions: YahooImportTransaction[] = []
+  let pagesFetched = 0
+  let truncatedAtBound = false
+  let stoppedOnError = false
+
+  for (let page = 0; page < maxPages; page++) {
+    let data: unknown
+    try {
+      data = await fetchPage(page * pageSize, pageSize)
+    } catch (error) {
+      if (page === 0) throw error
+      stoppedOnError = true
+      break
+    }
+    pagesFetched++
+    const items = parseYahooTransactions(data)
+    for (const t of items) {
+      if (seen.has(t.transactionId)) continue
+      seen.add(t.transactionId)
+      transactions.push(t)
+    }
+    if (items.length < pageSize) break
+    if (page === maxPages - 1) truncatedAtBound = true
+  }
+
+  return { transactions, pagesFetched, truncatedAtBound, stoppedOnError }
+}
+
+function yahooTransactionsUrl(leagueKey: string, filters: string, start: number, count: number): string {
+  return `${YAHOO_API_BASE}/league/${leagueKey}/transactions;${filters};start=${start};count=${count}?format=json`
+}
+
+async function fetchAllYahooTransactions(
+  leagueKey: string,
+  filters: string,
+  context: YahooApiFetchContext,
+): Promise<YahooImportTransaction[]> {
+  const result = await fetchYahooTransactionPages((start, count) =>
+    yahooApiFetchJson(yahooTransactionsUrl(leagueKey, filters, start, count), context),
+  )
+  if (result.truncatedAtBound || result.stoppedOnError) {
+    /* Counts only — league keys are the user's data. */
+    console.warn(
+      '[Yahoo transactions] incomplete read: pages=%d kept=%d truncated=%s stoppedOnError=%s',
+      result.pagesFetched,
+      result.transactions.length,
+      result.truncatedAtBound,
+      result.stoppedOnError,
+    )
+  }
+  return result.transactions
+}
+
 function buildManagerIdentity(source: unknown, fallback: string): {
   managerId: string
   managerGuid: string | null
@@ -285,6 +425,7 @@ function createImportTeam(
     rosterPlayerIds: roster.playerIds,
     starterPlayerIds: roster.starterIds,
     reservePlayerIds: roster.reserveIds,
+    minorsPlayerIds: roster.minorsIds ?? [],
     playerMap: roster.playerMap,
     rosterFetchStatus,
   }
@@ -334,15 +475,15 @@ export async function fetchYahooActivityForSync(
   const context = await loadYahooCredential(userId)
   const resolved = await resolveYahooLeagueLookup(leagueKeyOrId, context)
   const leagueKey = resolved.leagueKey
-  const [teamsData, transactionsData] = await Promise.all([
+  const [teamsData, transactions] = await Promise.all([
     yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/teams?format=json`, context),
-    yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/transactions;types=add,drop,trade;count=100?format=json`, context),
+    fetchAllYahooTransactions(leagueKey, 'types=add,drop,trade', context),
   ])
   const teams = [...parseYahooTeamsMetadata(teamsData).entries()].map(([teamKey, meta]) => ({
     teamKey,
     managerKey: meta.managerGuid || meta.managerId || teamKey,
   }))
-  return { leagueKey, teams, transactions: parseYahooTransactions(transactionsData) }
+  return { leagueKey, teams, transactions }
 }
 
 export async function fetchYahooPendingTrades(
@@ -375,11 +516,11 @@ export async function fetchYahooPendingTrades(
      * blaming the provider for our own malformed request.
      */
     const resolved = await resolveYahooLeagueLookup(leagueKey, context)
-    const data = await yahooApiFetchJson(
-      `${YAHOO_API_BASE}/league/${resolved.leagueKey}/transactions;types=pending_trade;team_key=${encodeURIComponent(teamKey)};count=100?format=json`,
+    const all = await fetchAllYahooTransactions(
+      resolved.leagueKey,
+      `types=pending_trade;team_key=${encodeURIComponent(teamKey)}`,
       context,
     )
-    const all = parseYahooTransactions(data)
     /*
      * Yahoo's own vocabulary for an open offer. Matched case-insensitively and
      * against every spelling seen, because a status we do not recognise must
@@ -699,6 +840,8 @@ function parseYahooRoster(rosterData: any): {
   playerIds: string[]
   starterIds: string[]
   reserveIds: string[]
+  /** Players in Yahoo's `NA` (not active / minor league) slot. Still in `reserveIds` too; the adapter decides. */
+  minorsIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 } {
   const teamNode = rosterData?.fantasy_content?.team
@@ -708,6 +851,7 @@ function parseYahooRoster(rosterData: any): {
   const playerIds: string[] = []
   const starterIds: string[] = []
   const reserveIds: string[] = []
+  const minorsIds: string[] = []
   const playerMap: Record<string, { name: string; position: string; team: string }> = {}
 
   for (const wrapper of players) {
@@ -760,6 +904,7 @@ function parseYahooRoster(rosterData: any): {
      */
     if (isYahooReserveSlot(selectedSlot)) reserveIds.push(playerId)
     else if (isStarting) starterIds.push(playerId)
+    if (selectedSlot.toUpperCase() === YAHOO_MINORS_POSITION) minorsIds.push(playerId)
     playerMap[playerId] = {
       name: fullName,
       position,
@@ -767,7 +912,19 @@ function parseYahooRoster(rosterData: any): {
     }
   }
 
-  return { playerIds, starterIds, reserveIds, playerMap }
+  return { playerIds, starterIds, reserveIds, minorsIds, playerMap }
+}
+
+function parseYahooMatchupCategories(team: Record<string, any>): Record<string, number> | undefined {
+  const stats = getYahooCollectionItems(getYahooProperty(getYahooProperty(team, 'team_stats'), 'stats'))
+  const values: Record<string, number> = {}
+  for (const wrapper of stats) {
+    const stat = mergeYahooEntityFragments(wrapper, 'stat')
+    const id = String(stat.stat_id ?? '').trim()
+    const value = parseNumber(stat.value, null)
+    if (/^\d{1,4}$/.test(id) && value != null) values[id] = value
+  }
+  return Object.keys(values).length ? values : undefined
 }
 
 function parseYahooScoreboard(scoreboardData: any, season: number): YahooImportScheduleWeek[] {
@@ -792,6 +949,8 @@ function parseYahooScoreboard(scoreboardData: any, season: number): YahooImportS
         teamKey2: String(teams[1].team_key),
         points1: points1 ?? undefined,
         points2: points2 ?? undefined,
+        categories1: parseYahooMatchupCategories(teams[0]),
+        categories2: parseYahooMatchupCategories(teams[1]),
       }
     })
     .filter(Boolean) as YahooImportScheduleWeek['matchups']
@@ -826,6 +985,8 @@ function parseYahooTeamMatchups(matchupsData: any, season: number): YahooImportS
       teamKey2: String(teams[1].team_key),
       points1: points1 ?? undefined,
       points2: points2 ?? undefined,
+      categories1: parseYahooMatchupCategories(teams[0]),
+      categories2: parseYahooMatchupCategories(teams[1]),
     })
   }
 
@@ -993,28 +1154,34 @@ export async function fetchYahooLeagueForImport(
     throw error
   }
 
+  const leagueNode = mergeYahooEntityFragments({ league: metadataData?.fantasy_content?.league }, 'league')
+  const sport = resolveYahooLeagueSport({
+    listedSport: resolvedLeague.sport,
+    leagueNode,
+    leagueKey: String(leagueNode?.league_key ?? leagueKey),
+  })
+  /* Resolved BEFORE the six reads below, so a league we will refuse costs no further Yahoo calls. */
+  if (!sport) {
+    throw new YahooImportUnknownSportError(
+      'Yahoo did not say which sport this league is, so it was not imported rather than guessed. Nothing was saved.'
+    )
+  }
+
   const [settingsResult, standingsResult, teamsResult, scoreboardResult, transactionsResult, draftResultsResult] =
     await Promise.allSettled([
       yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/settings?format=json`, context),
       yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/standings?format=json`, context),
       yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/teams?format=json`, context),
       yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/scoreboard?format=json`, context),
-      yahooApiFetchJson(
-        `${YAHOO_API_BASE}/league/${leagueKey}/transactions;types=add,drop,trade;count=100?format=json`,
-        context
-      ),
+      fetchAllYahooTransactions(leagueKey, 'types=add,drop,trade', context),
       yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/draftresults?format=json`, context),
     ])
 
-  const leagueNode = mergeYahooEntityFragments({ league: metadataData?.fantasy_content?.league }, 'league')
   const league: YahooImportLeague = {
     leagueKey: String(leagueNode?.league_key ?? leagueKey),
     leagueId: String(leagueNode?.league_id ?? leagueKey.split('.l.')[1] ?? leagueKey),
     name: String(leagueNode?.name ?? 'Yahoo League'),
-    sport:
-      resolvedLeague.sport ??
-      inferSportFromYahooUrl(typeof leagueNode?.url === 'string' ? leagueNode.url : null) ??
-      'NFL',
+    sport,
     season: parseNumber(leagueNode?.season, resolvedLeague.season),
     numTeams: parseNumber(leagueNode?.num_teams, 0) ?? 0,
     draftStatus: typeof leagueNode?.draft_status === 'string' ? leagueNode.draft_status : null,
@@ -1177,7 +1344,7 @@ export async function fetchYahooLeagueForImport(
   )
 
   const transactions =
-    transactionsResult.status === 'fulfilled' ? parseYahooTransactions(transactionsResult.value) : []
+    transactionsResult.status === 'fulfilled' ? transactionsResult.value : []
   const draftPicks =
     draftResultsResult.status === 'fulfilled' ? parseYahooDraftResults(draftResultsResult.value) : []
   const previousSeasons = await discoverYahooPreviousSeasons(league, context)
@@ -1261,10 +1428,12 @@ export async function fetchYahooWeeklyMatchupsForSync(
       const weekEntries = scheduleByWeek.get(week.week)!
       for (const matchup of week.matchups) {
         const matchupKey = [matchup.teamKey1, matchup.teamKey2].sort().join('::')
-        const exists = weekEntries.some(
+        const index = weekEntries.findIndex(
           (existing) => [existing.teamKey1, existing.teamKey2].sort().join('::') === matchupKey
         )
-        if (!exists) weekEntries.push(matchup)
+        if (index < 0) weekEntries.push(matchup)
+        else if ((!weekEntries[index]!.categories1 || !weekEntries[index]!.categories2) &&
+          matchup.categories1 && matchup.categories2) weekEntries[index] = matchup
       }
     }
   }
@@ -1277,8 +1446,24 @@ export async function fetchYahooWeeklyMatchupsForSync(
   }
 }
 
+/** One authorized current-week read for a member asking Chimmy about category totals. */
+export async function fetchYahooCategoryMatchupForWeek(
+  userId: string,
+  leagueKey: string,
+  season: number,
+  week: number,
+): Promise<YahooImportScheduleWeek | null> {
+  if (!Number.isInteger(week) || week < 1 || week > 60) return null
+  const context = await loadYahooCredential(userId)
+  const data = await yahooApiFetchJson(
+    `${YAHOO_API_BASE}/league/${encodeURIComponent(leagueKey)}/scoreboard;week=${week}?format=json`, context,
+  )
+  return parseYahooScoreboard(data, season).find((entry) => entry.week === week) ?? null
+}
+
 /** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
 export { parseYahooRoster as parseYahooRosterForTest }
+export { parseYahooTeamMatchups as parseYahooTeamMatchupsForTest }
 export {
   isYahooCommissionerManager as isYahooCommissionerManagerForTest,
   isYahooHeadCommissionerManager as isYahooHeadCommissionerManagerForTest,

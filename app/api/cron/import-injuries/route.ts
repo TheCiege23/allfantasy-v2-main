@@ -32,6 +32,7 @@ import { espnHasInjuryFeed, syncEspnInjuriesToDb } from "@/lib/injuries/espnInju
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { getApiSportsKey, syncAPISportsInjuriesToDb } from "@/lib/api-sports"
 import { recordInjurySyncDeferred, recordInjurySyncRun } from "@/lib/injuries/injurySyncState"
+import { notifySyncedInjuries } from "@/lib/engagement-alerts/injuryAlerts"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { inNflInjuryGameWindow } from "@/lib/injuries/injuryGameWindow"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
@@ -325,9 +326,17 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
       error: [...result.errors, ...espn.errors, ...apiSports.errors][0] ?? null,
     })
 
+    const notifications = !failed && !noCoverage
+      ? await notifySyncedInjuries(sport).catch(e => {
+          console.error('[cron/import-injuries] notification delivery failed', sport, e)
+          return { delivered: 0, errors: 1 }
+        })
+      : { delivered: 0, errors: 0 }
+
     return {
       body: {
         ok: !failed,
+        notifications,
         sport,
         season: season ?? "current",
         source: providerLabel,

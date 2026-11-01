@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react'
 import { positionTone, slotPillLabel } from '@/lib/league/native/nativeScreenModels'
+import { redraftPositionTone } from '@/lib/league-media/redraftScreens'
+import { useRedraftScreenContext } from './RedraftScreenParts'
 import './native-screens.css'
 
 export function ScreenHead({ eyebrow, title, sub, children }: { eyebrow: string; title: string; sub?: ReactNode; children?: ReactNode }) {
@@ -29,10 +31,16 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
   )
 }
 
-/** Position pill. `tone` defaults to the position of `label`, so a FLEX slot can still be coloured by its player. */
+/**
+ * Position pill. `tone` defaults to the position of `label`, so a FLEX slot can still be coloured by its player.
+ * Inside a redraft screen the colour is read per SPORT (`redraftPositionTone`: a C is a centre in the NBA and
+ * NHL but a catcher in MLB), as `data-rd-pos`; every other format keeps the football-only `data-tone`.
+ */
 export function PosPill({ label, tone }: { label: string | null | undefined; tone?: string | null }) {
+  const rd = useRedraftScreenContext()
+  const rdTone = rd ? redraftPositionTone(rd.sport, tone ?? label) : null
   return (
-    <span className="nls-pos" data-tone={positionTone(tone ?? label)}>
+    <span className="nls-pos" data-tone={positionTone(tone ?? label)} data-rd-pos={rdTone ?? undefined}>
       {slotPillLabel(label)}
     </span>
   )

@@ -360,9 +360,15 @@ function leagueBlock(
       ? `WEEK ${lb.week} in ${lb.leagueName} (${live.final ? 'FINAL' : 'in progress'}), from the scoreboard on file. Repeat these numbers:`
       : `THIS WEEK in ${lb.leagueName} (week ${lb.week}), from AllFantasy's week model — team-level averages, not player projections. Repeat these numbers:`,
   ]
-  if (!lb.yours) {
+  // An odd-team league's extra matchup (lib/redraft/oddTeamExtraMatchupRules.ts): the leftover team's
+  // game this week, or a second one for the chosen team. Real, recorded, and to be repeated as is.
+  const extra = lb.extraMatchup ?? null
+  if (!lb.yours && extra) {
+    lines.push(`- ${extra.line}. This is their game this week, in place of a bye; repeat the team and the scores as given.`)
+  } else if (!lb.yours) {
     lines.push('- They have no game this week (a bye, or their team is not matched). Say so.')
   } else {
+    if (extra) lines.push(`- Also this week: ${extra.line}.`)
     lines.push(`- ${matchupLine(lb.yours, lineups?.get(lb.yours.leagueId))}`)
     if (lb.yours.live?.final) {
       const rec = next ? lb.records[next.opponentRosterId] : undefined

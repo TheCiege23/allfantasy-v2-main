@@ -14,6 +14,7 @@ type Props = {
   rounds: PlayoffRoundKey[]
   series: PlayoffSeriesView[]
   picks: PlayoffPickView[]
+  sport?: string
   onPick?: (seriesId: string, teamName: string) => void
   locked?: boolean
   savingSeriesIds?: Set<string>
@@ -44,6 +45,14 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   cfp_quarterfinals: "Quarterfinals",
   cfp_semifinals: "Semifinals",
   cfp_championship: "National Championship",
+  cup_group_play: "NBA Cup Group Play",
+  cup_quarterfinals: "NBA Cup Quarterfinals",
+  cup_semifinals: "NBA Cup Semifinals",
+  cup_championship: "NBA Cup Championship",
+  nfl_wild_card: "Wild Card",
+  nfl_divisional: "Divisional Round",
+  nfl_conference: "Conference Championship",
+  nfl_super_bowl: "Super Bowl",
 }
 
 /**
@@ -64,6 +73,7 @@ function conferenceLabel(series: PlayoffSeriesView): string {
   if (series.conference === "finals") {
     if (series.round === "world_series") return "World Series"
     if (series.round === "cfp_championship") return "National Championship"
+    if (series.round === "cup_championship") return "NBA Cup Championship"
     return "Cup Finals"
   }
   return `${series.conference.toUpperCase()} Conference`
@@ -182,6 +192,7 @@ export default function PlayoffBracketBoard({
   rounds,
   series,
   picks,
+  sport,
   onPick,
   locked = false,
   savingSeriesIds,
@@ -215,11 +226,11 @@ export default function PlayoffBracketBoard({
                   const pick = getPickForSeries(picks, item.id)
                   const unresolved = !isPlayoffSeriesResolved(item)
                   const unresolvedMessage = officialBracketMode ? PLAYOFF_OFFICIAL_MATCHUP_TBD_MESSAGE : PLAYOFF_UNRESOLVED_SERIES_MESSAGE
-                  const lockedReason = locked ? `${matchupNoun(item)} already started/locked` : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
+                  const lockedReason = locked ? (onPick ? `${matchupNoun(item)} already started/locked` : "Read-only bracket. Picks reveal as games begin.") : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
                   const isSaving = savingSeriesIds?.has(item.id) ?? false
                   const isSaved = savedSeriesIds?.has(item.id) ?? false
                   const isNext = nextSeriesId === item.id
-                  const pickResult = getPlayoffPickResult(item, pick)
+                  const pickResult = getPlayoffPickResult(item, pick, sport)
                   const seriesCardBorderClass = getSeriesCardBorderClass(showPickResults, pickResult.status, isNext)
                   const advancedFrom = item.sourceSeriesHome || item.sourceSeriesAway
                     ? projectionMode === "user_projection"
@@ -236,11 +247,12 @@ export default function PlayoffBracketBoard({
                       className={`rounded-xl border bg-white p-3 shadow-sm ${seriesCardBorderClass}`}
                     >
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <span>S{item.seriesNumber}</span>
+                        <span>{item.gameLabel || `S${item.seriesNumber}`}</span>
                         <span>
                           {isSaving ? "Saving..." : isSaved ? "Saved" : formatLabel(item.bestOf)}
                         </span>
                       </div>
+                      {item.startsAt && <p className="mb-2 text-[11px] font-semibold text-slate-500">{new Date(item.startsAt).toLocaleString()} · {item.venue || "Venue TBA"}{item.location ? ` · ${item.location}` : ""}</p>}
                       {unresolved ? (
                         <p
                           data-testid={`playoff-series-disabled-reason-${item.id}`}
@@ -299,7 +311,7 @@ export default function PlayoffBracketBoard({
                       </div>
                       <div className="mt-2 space-y-1 rounded-lg bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
                         <p data-testid={`playoff-series-summary-${item.id}`}>
-                          {item.seriesSummary || `${matchupNoun(item)} starts TBD`}
+                          {item.seriesSummary || (item.startsAt ? `${matchupNoun(item)} scheduled` : `${matchupNoun(item)} starts TBD`)}
                         </p>
                         {item.liveStatus ? (
                           <p data-testid={`playoff-series-live-${item.id}`} className="text-emerald-700">

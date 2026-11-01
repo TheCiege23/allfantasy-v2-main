@@ -507,7 +507,7 @@ describe('the league-in-context card, in Spanish', () => {
     lang.language = 'es'
     const { container } = render(<LeagueOwnershipCard view={VIEW} playerName="Dalton Kincaid" />)
     const out = expectSpanish(container, 'other')
-    expect(out).toContain('guillotina')
+    expect(out).toContain('Guilly')
     expect(out).toContain('tashaR · 4-2 · comisionado')
     expect(out).toContain('LO ALINEAN DE TITULAR')
     expect(out).toContain('Intercambiar por Kincaid →')

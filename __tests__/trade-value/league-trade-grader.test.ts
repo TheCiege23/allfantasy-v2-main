@@ -344,7 +344,7 @@ describe('P0 package and team-direction regression through the shared league gra
     expect([shared.letter, shared.partnerLetter]).toEqual(['B', 'D'])
   })
 
-  it('grades a guillotine league on points over the free level and FAAB’s purchasing power, never the market chart (2026-10-11)', async () => {
+  it('grades a Guilly league on points over the free level and FAAB’s purchasing power, never the market chart (2026-10-11)', async () => {
     h.leagueType = 'guillotine'
     const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
     const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
@@ -353,11 +353,11 @@ describe('P0 package and team-direction regression through the shared league gra
       ['Puka Nacua', 8, 'guillotine_points'],
       ['$50 FAAB', 10, 'guillotine_faab'],
     ])
-    expect(view.basis).toMatch(/^Guillotine value/)
+    expect(view.basis).toMatch(/^Guilly value/)
     expect(view.leagueType).toMatchObject({ type: 'guillotine' })
   })
 
-  it('grades an NBA guillotine league on the guillotine basis too — ahead of the NBA whole-season points grade', async () => {
+  it('grades an NBA Guilly league on the guillotine basis too — ahead of the NBA whole-season points grade', async () => {
     h.leagueType = 'guillotine'
     h.sport = 'NBA'
     const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })

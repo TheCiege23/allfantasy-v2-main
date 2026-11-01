@@ -3,6 +3,8 @@ import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { isTribeHex, readTribeSlots, tribeCatalogIdFor, tribeCrestUrl, SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { loadCastawayExperienceFlags } from './survivorExperienceService'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -24,6 +26,14 @@ export interface SurvivorTribeProvisioningOptions {
   tribeMeta?: Record<number, { name?: string; colorHex?: string; logoUrl?: string }> | null
   /** Allow re-assignment over an already-locked set (reset path). */
   allowReassign?: boolean
+  /**
+   * The cast to assign instead of the league's active SurvivorPlayer rows. Used by the pre-draft
+   * tribe lock, when the cast is the claimed rosters (userId + Roster id) and no SurvivorPlayer
+   * rows exist yet. Membership is keyed by roster id, so a seat that changes hands keeps its tribe.
+   */
+  participants?: AssignmentParticipant[]
+  /** Pre-draft lock: write tribes and members only; the game state stays `pre_draft`. */
+  preDraft?: boolean
   actorUserId?: string
   db?: Prisma.TransactionClient
 }
@@ -62,6 +72,21 @@ async function loadActiveParticipants(leagueId: string, db: Prisma.TransactionCl
   }))
 }
 
+/** The tribe/cast counts the game state carries from assignment on; `pre_merge` starts here. */
+async function syncTribeGameState(tx: Prisma.TransactionClient, leagueId: string, tribeCount: number, participantCount: number): Promise<void> {
+  await tx.survivorGameState.upsert({
+    where: { leagueId },
+    create: {
+      leagueId,
+      phase: 'pre_merge',
+      activeTribeCount: tribeCount,
+      activePlayerCount: participantCount,
+      preMergeStartedAt: new Date(),
+    },
+    update: { activeTribeCount: tribeCount, activePlayerCount: participantCount },
+  })
+}
+
 export async function getTribeAssignmentStatus(
   leagueId: string,
   db: Prisma.TransactionClient = prisma,
@@ -87,11 +112,15 @@ export async function assignSurvivorTribes(
       select: { id: true, slotIndex: true, name: true, members: { select: { id: true } } },
       orderBy: { slotIndex: 'asc' },
     })
+    const rows = tribes as Array<{ id: string; slotIndex: number; name: string; members: unknown[] }>
+    // Tribes written before the draft (the locked plan) reach here on the post-draft run: the
+    // counts the create path would have stamped still need to land on the game state.
+    if (!opts.preDraft) await syncTribeGameState(db, leagueId, rows.length, rows.reduce((n, t) => n + t.members.length, 0))
     return {
       ok: true,
       created: false,
       alreadyAssigned: true,
-      tribes: (tribes as Array<{ id: string; slotIndex: number; name: string; members: unknown[] }>).map((t) => ({
+      tribes: rows.map((t) => ({
         id: t.id,
         slotIndex: t.slotIndex,
         name: t.name,
@@ -108,8 +137,15 @@ export async function assignSurvivorTribes(
   const slots = readTribeSlots(snapshot, settings.defaultTeamCount, tribeCount)
   // Legacy leagues without explicit slot choices retain balanced assignments.
   const configured = snapshot.survivorTribeSlots != null || (snapshot.survivorFoundationSettings as Record<string, unknown> | undefined)?.survivorTribeSlots != null
-  const participants = await loadActiveParticipants(leagueId, db)
+  const participants = opts.participants ?? await loadActiveParticipants(leagueId, db)
+  // Rooks vs Vets (lib/survivor/survivorGovernanceSettings.ts): a random draw that splits new and
+  // returning castaways into separate tribes. Only the random formation splits.
+  const governance = readSurvivorGovernanceSettings(snapshot)
+  const experience = (opts.mode ?? 'random') === 'random' && governance.tribeSplit === 'rooks_vs_vets'
+    ? await loadCastawayExperienceFlags(leagueId, participants.map((p) => p.userId), governance.experienceOverrides, db, { crossLeague: governance.experienceCrossLeague })
+    : null
   const assignment = computeTribeAssignment({
+    experience,
     participants,
     tribeCount,
     capacities: configured ? slots.map(slot => slot.managerCount) : null,
@@ -169,8 +205,10 @@ export async function assignSurvivorTribes(
       for (const userId of tribe.memberUserIds) {
         const rosterId = rosterByUser.get(userId) ?? userId
         await tx.survivorTribeMember.create({ data: { tribeId: row.id, rosterId } })
-        await tx.survivorPlayer.update({
-          where: { leagueId_userId: { leagueId, userId } },
+        // updateMany: before the draft there is no SurvivorPlayer row to link yet; the post-draft
+        // cast reconciliation links it from the member rows (survivorDraftParticipants.ts).
+        await tx.survivorPlayer.updateMany({
+          where: { leagueId, userId },
           data: { tribeId: row.id, canAccessTribeChat: true },
         })
       }
@@ -189,23 +227,14 @@ export async function assignSurvivorTribes(
           tribeCount,
           participantCount: participants.length,
           sizes: assignment.tribes.map((t) => t.memberUserIds.length),
+          preDraft: Boolean(opts.preDraft),
         },
         isVisibleToCommissioner: true,
         isVisibleToPublic: true,
       },
     })
 
-    await tx.survivorGameState.upsert({
-      where: { leagueId },
-      create: {
-        leagueId,
-        phase: 'pre_merge',
-        activeTribeCount: tribeCount,
-        activePlayerCount: participants.length,
-        preMergeStartedAt: new Date(),
-      },
-      update: { activeTribeCount: tribeCount, activePlayerCount: participants.length },
-    })
+    if (!opts.preDraft) await syncTribeGameState(tx, leagueId, tribeCount, participants.length)
   }
   await write(db)
 

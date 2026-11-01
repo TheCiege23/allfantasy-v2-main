@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/commissioner-workspace/operationalTasks',()=>({readOperationalTasks:vi.fn(async()=>[])}))
+vi.mock('@/lib/lineup-integrity/lineupIntegrityService',()=>({readLineupIntegrityTasks:vi.fn(async()=>[])}))
 vi.mock('@/lib/commissioner-workspace/rosterReads',()=>({readOrphanTeamCounts:vi.fn(async()=>({orphanCount:0,totalTeams:12,ownedTeamNames:[]}))}))
 
 /**

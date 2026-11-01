@@ -1,5 +1,6 @@
 import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { noEliminationWeeksFor, spreadEliminationWeeks } from '@/lib/survivor/survivorEliminationSchedule'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -32,6 +33,10 @@ import { finishCouncilReadIfComplete } from '@/lib/survivor/survivorCouncilReadF
 import { sendPushToUser } from '@/lib/push-notifications'
 import { getStealThreePreview, playStealThree } from '@/lib/survivor/survivorStealThree'
 import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/survivor/survivorNbaWeeklyScoring'
+import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
+import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch, survivorTwistIdolConfig } from '@/lib/survivor/survivorTwistPresets'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -110,7 +115,7 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   if (settings.defaultTeamCount !== previousSettings.defaultTeamCount) return NextResponse.json({ error: 'Choose league size during creation. Changing it here would leave draft seats and rosters inconsistent.' }, { status: 409 })
   if (settings.tribeCount !== previousSettings.tribeCount || JSON.stringify(settings.survivorTribeSlots) !== JSON.stringify(previousSettings.survivorTribeSlots)) return NextResponse.json({ error: 'Use Tribe identities and capacities to save tribe structure together.' }, { status: 409 })
   const exileChanged = settings.exileIslandEnabled !== previousSettings.exileIslandEnabled || settings.exileReturnWeek !== previousSettings.exileReturnWeek || settings.exileReturnTokens !== previousSettings.exileReturnTokens
-  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset', 'shareCardsEnabled', 'publicMomentPages'])
+  const mutableAfterDraft = new Set(['tribalCouncilDay', 'tribalCouncilTime', 'voteOpenOffset', 'voteCloseOffset', 'shareCardsEnabled', 'publicMomentPages', 'spectatorPageEnabled'])
   const lockedRuleChanged = Object.keys(settings).some(key => !mutableAfterDraft.has(key) &&
     JSON.stringify(settings[key as keyof typeof settings]) !== JSON.stringify(previousSettings[key as keyof typeof previousSettings]))
   if (lockedRuleChanged && await prisma.draftSession.findFirst({ where: { leagueId, status: { in: ['in_progress', 'paused', 'completed'] } }, select: { id: true } })) {
@@ -122,13 +127,14 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord, user
   let planPatch: JsonRecord = {}
   if (exileChanged && savedPlan) {
     if (settings.exileIslandEnabled && (settings.exileReturnWeek <= savedPlan.startWeek || settings.exileReturnWeek >= savedPlan.endWeek - 1)) return NextResponse.json({ error: 'Return week must follow the opening week and leave an elimination before the finale.' }, { status: 422 })
-    const count = savedPlan.castSize - 3 + (settings.exileIslandEnabled ? 1 : 0)
-    const available = savedPlan.endWeek - savedPlan.startWeek - 1
-    if (count > available) return NextResponse.json({ error: 'This season has no room for an Exile return. Choose a later finale or smaller cast before drafting.' }, { status: 422 })
-    const eliminationWeeks = Array.from({ length: count }, (_, i) => savedPlan.startWeek + Math.ceil((i + 1) * available / count))
+    // Same spacing the plan builder uses, so a saved plan always validates: one council per period,
+    // two in some periods when the season is short. The finalist count is the saved one, not 3.
+    const count = savedPlan.castSize - savedPlan.finalistCount + (settings.exileIslandEnabled ? 1 : 0)
+    const eliminationWeeks = spreadEliminationWeeks(savedPlan.startWeek, savedPlan.endWeek, count)
+    if (!eliminationWeeks) return NextResponse.json({ error: 'This season has no room for an Exile return. Choose a later finale or smaller cast before drafting.' }, { status: 422 })
     const { exileReturnWeek: _oldWeek, exileReturnSlots: _oldSlots, ...basePlan } = savedPlan
     planPatch = { survivor_full_season_plan: { ...basePlan, ...(settings.exileIslandEnabled ? { exileReturnWeek: settings.exileReturnWeek, exileReturnSlots: 1 } : {}), eliminationWeeks,
-      noEliminationWeeks: Array.from({ length: savedPlan.endWeek - savedPlan.startWeek }, (_, i) => savedPlan.startWeek + i).filter(week => !eliminationWeeks.includes(week)) } }
+      noEliminationWeeks: noEliminationWeeksFor(savedPlan.startWeek, savedPlan.endWeek, eliminationWeeks) } }
   }
 
   await prisma.league.update({
@@ -256,6 +262,25 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       }, userId)
     }
     return updateFoundationSettings(leagueId, body, userId)
+  }
+
+  if (action === 'apply-twist-preset') {
+    if (!access.decisions.canUpdateSettings) {
+      return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+    }
+    const preset = body.preset
+    if (!isSurvivorTwistPresetId(preset)) return NextResponse.json({ error: 'Choose Simple, Classic or Full twists.' }, { status: 400 })
+    if (await isSurvivorDraftStarted(leagueId)) return NextResponse.json({ error: 'Twists lock when the draft starts.' }, { status: 409 })
+    const tribeCount = access.settings.tribeCount
+    // Idols first: if the idol setup refuses, nothing else has changed.
+    const currentIdol = (await getSurvivorIdolSetupView(leagueId, { isCommissioner: true })).config
+    const idol = await saveSurvivorIdolConfig(leagueId, { ...currentIdol, ...survivorTwistIdolConfig(preset, tribeCount) })
+    if (!idol.ok && idol.code !== 'not_migrated') return NextResponse.json({ error: idol.error }, { status: idol.status })
+    const saved = await updateFoundationSettings(leagueId, { settings: survivorTwistFoundationPatch(preset, tribeCount) }, userId)
+    if (!saved.ok) return saved
+    const after = await readLeagueSettings(leagueId)
+    await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...(after ?? {}), [SURVIVOR_TWIST_PRESET_SETTING]: preset } as Prisma.InputJsonValue } })
+    return NextResponse.json({ ok: true, preset })
   }
 
   if (action === 'audit-log') {
@@ -442,7 +467,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       const votes = await prisma.survivorVote.findMany({ where: { councilId }, select: { voterUserId: true, voterRosterId: true, doesNotCount: true } })
       const voted = new Set(votes.filter(v => !v.doesNotCount).map(v => v.voterUserId ?? ctx.rosterToUser[v.voterRosterId]))
       // Reconstruct attendance after elimination, without deriving it from secret idol effects.
-      const attendees = await prisma.survivorPlayer.findMany({ where: { leagueId, ...(ctx.council.attendingTribeId ? { tribeId: ctx.council.attendingTribeId } : {}), OR: [{ playerState: 'active' }, { eliminatedWeek: { gte: ctx.council.week } }] }, select: { userId: true, displayName: true } })
+      // On a double-elimination week, whoever an earlier council that week voted out did not attend this one.
+      const earlierOut = await prisma.survivorTribalCouncil.findMany({ where: { leagueId, week: ctx.council.week, councilNumber: { lt: ctx.council.councilNumber }, eliminatedUserId: { not: null } }, select: { eliminatedUserId: true } })
+      const earlierOutIds = new Set(earlierOut.map(row => row.eliminatedUserId))
+      const attendees = (await prisma.survivorPlayer.findMany({ where: { leagueId, ...(ctx.council.attendingTribeId ? { tribeId: ctx.council.attendingTribeId } : {}), OR: [{ playerState: 'active' }, { eliminatedWeek: { gte: ctx.council.week } }] }, select: { userId: true, displayName: true } }))
+        .filter(player => !earlierOutIds.has(player.userId))
       const voterIds = attendees.map(player => player.userId).filter(id => ctx.council.phase !== 'revote' || !ctx.council.tiePlayerIds.includes(id))
       const names = new Map(attendees.map(player => [player.userId, player.displayName]))
       const nudges = await prisma.survivorCommissionerAction.findMany({ where: { leagueId, actionType: 'council_vote_nudge', week: ctx.council.week, description: councilId }, select: { targetUserId: true } })
@@ -498,10 +527,10 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
         const voted = await tx.survivorVote.findFirst({ where: { councilId, voterUserId: targetUserId, doesNotCount: false }, select: { id: true } })
         if (voted) return false
         await tx.survivorCommissionerAction.create({ data: { leagueId, commissionerId: userId, week: ctx.council.week, actionType: 'council_vote_nudge', targetUserId, description: councilId } })
-        await tx.platformNotification.create({ data: { userId: targetUserId, type: 'survivor:vote_nudge', title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', severity: 'medium', productType: 'sports', meta: { leagueId, councilId, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
+        if (!isSeatPlaceholderUserId(targetUserId)) await tx.platformNotification.create({ data: { userId: targetUserId, type: 'survivor:vote_nudge', title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', severity: 'medium', productType: 'sports', meta: { leagueId, councilId, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
         return true
       })
-      if (outcome) await sendPushToUser(targetUserId, { title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', href: `/survivor/${leagueId}/tribal` }).catch(() => [])
+      if (outcome && !isSeatPlaceholderUserId(targetUserId)) await sendPushToUser(targetUserId, { title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', href: `/survivor/${leagueId}/tribal` }).catch(() => [])
       return NextResponse.json(outcome ? { ok: true, sent: true } : { ok: false, error: 'Reminder already sent or voting unavailable' }, { status: outcome ? 200 : 429 })
     }
     const deadline = await prisma.$transaction(async tx => {
@@ -536,7 +565,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       const current = await tx.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId, phase: 'revote', isRevealed: true, isTie: true, tiePhase: 'commissioner_tiebreak_required' }, select: { id: true } })
       if (!current) return false
       await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { eliminatedUserId, eliminatedRosterId: player.redraftRosterId, eliminatedName: player.displayName, isTie: false, tiePhase: 'commissioner_resolved', status: 'revealed' } })
-      await tx.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe revote and finalized season points were tied. The independent commissioner selected ${player.displayName}. The choice is in the public audit.` } })
+      await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\nThe revote and finalized season points were tied. The independent commissioner selected ${player.displayName}. The choice is in the public audit.` } })
       await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'tribal', action: 'exact_tie_commissioner_decision', actorUserId: userId, targetUserId: eliminatedUserId, relatedEntityId: councilId, relatedEntityType: 'council', data: { candidates: council.tiePlayerIds }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
       return true
     })

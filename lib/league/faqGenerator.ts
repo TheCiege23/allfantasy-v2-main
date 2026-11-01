@@ -218,12 +218,12 @@ export async function generateAndPinGuillotineFAQ(leagueId: string): Promise<voi
   const teamCount = league._count?.teams ?? 17
 
   const faq = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 ${league.name ?? 'League'} — GUILLOTINE RULES FAQ
-${sport} Guillotine League · ${teamCount} Teams
+📋 ${league.name ?? 'League'} — GUILLY RULES FAQ
+${sport} Guilly League · ${teamCount} Teams
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📌 FORMAT
-This is a GUILLOTINE league. The lowest-scoring team each week is ELIMINATED.
+This is a GUILLY league. The lowest-scoring team each week is ELIMINATED.
 Their entire roster is released to waivers. Last team standing wins.
 
 📌 HOW IT WORKS
@@ -249,7 +249,7 @@ Hoard FAAB for when elite players get released.
 Roster construction evolves as teams shrink and talent concentrates.
 
 📌 NO TRADES
-Trades are typically disabled in guillotine leagues.
+Trades are typically disabled in Guilly leagues.
 The waiver system is the primary roster-building mechanism.
 
 📌 @CHIMMY
@@ -262,7 +262,7 @@ Tag @Chimmy in chat for:
 Questions? Ask your commissioner or @Chimmy.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
-  await upsertPinnedFaq(leagueId, league.userId, faq, 'Guillotine Rules FAQ')
+  await upsertPinnedFaq(leagueId, league.userId, faq, 'Guilly Rules FAQ')
 }
 
 // ============================================================================

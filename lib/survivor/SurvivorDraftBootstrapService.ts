@@ -140,29 +140,28 @@ export async function runSurvivorPostDraftBootstrap(
           where: { leagueId, status: 'hidden', isUsed: false, currentOwnerUserId: { not: null } },
           select: { currentOwnerUserId: true, powerLabel: true, powerType: true, powerDesc: true },
         })
+        // The private Chimmy note lives in league chat (visible only to the holder), the same row the
+        // native path writes. This used to target a `chimmy:<userId>` SurvivorChatChannel that was never
+        // created, so the foreign key refused it and the catch hid the failure.
+        const owner = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
         for (const idol of assignedIdols) {
           if (idol.currentOwnerUserId) {
             await notifyIdolAssigned(leagueId, idol.currentOwnerUserId).catch(() => {})
-            // Also send a private Chimmy chat message with idol details
-            await (prisma as any).survivorChatMessage.create({
+            if (!owner?.userId) continue
+            await prisma.leagueChatMessage.create({
               data: {
                 leagueId,
-                channelId: `chimmy:${idol.currentOwnerUserId}`,
-                channelType: 'private_ai',
-                senderUserId: 'system',
-                senderName: '@Chimmy',
-                senderIsHost: true,
-                isSystemMessage: true,
-                content: `You have been secretly assigned: **${idol.powerLabel ?? idol.powerType}**\n\n${idol.powerDesc ?? 'Use it wisely.'}\n\nThis power is hidden from other players. To play it, message me during Elimination Council.`,
-                contentType: 'card',
-                cardData: {
-                  type: 'idol_assigned',
-                  powerType: idol.powerType,
-                  powerLabel: idol.powerLabel,
-                  powerDesc: idol.powerDesc,
-                },
+                userId: owner.userId,
+                message: `@Chimmy: You have been secretly assigned ${idol.powerLabel ?? idol.powerType}. ${idol.powerDesc ?? 'Use it wisely.'} This power is hidden from other players. To play it, message me during Elimination Council.`,
+                type: 'system',
+                isPrivate: true,
+                visibleToUserId: idol.currentOwnerUserId,
+                messageSubtype: 'chimmy_private',
+                metadata: { chimmyPrivateReply: true, survivorIdolReveal: true, powerType: idol.powerType, powerLabel: idol.powerLabel ?? null },
               },
-            }).catch(() => {})
+            }).catch((error: unknown) => {
+              console.warn('[Survivor] Idol assignment note could not be posted', { leagueId, error: error instanceof Error ? error.message : String(error) })
+            })
           }
         }
       } else if (idolResult.error !== 'Idols already assigned') {

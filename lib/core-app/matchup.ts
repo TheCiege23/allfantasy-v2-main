@@ -12,12 +12,14 @@ import { currentScheduledLeagueWeek, leagueWeekProgress } from './leagueWeekProg
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { forecastSidesFor, projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
-import { BEST_BALL_REASON, matchupStarted, STATES_UNKNOWN_REASON } from './matchupForecast'
+import { BEST_BALL_REASON, matchupStarted, SCORING_TYPE_REASON, STATES_UNKNOWN_REASON } from './matchupForecast'
+import { weeklyFormat } from './weeklyCapabilities'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
@@ -25,6 +27,9 @@ import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -208,6 +213,11 @@ export type MatchupData = {
     id: string
     name: string
     platform: string
+    /**
+     * The league's sport as stored (`NFL`, `NBA`, …), so the board can read a slot label under the
+     * right sport — "C" is a centre in the NBA and a catcher in MLB. Null when the row has none.
+     */
+    sport?: string | null
     bestBall?: boolean
     /** The league crest, when the platform published one. */
     logoUrl: string | null
@@ -237,6 +247,11 @@ export type MatchupData = {
     elimination?: EliminationFormat | null
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
+  /**
+   * An odd-team native league's extra matchup involving your team this week — the game the leftover
+   * team plays instead of a bye. "Extra matchup vs <team> (last week's top scorer)". Null otherwise.
+   */
+  extraMatchup?: ExtraMatchupView | null
   /**
    * The two managers, available as soon as both rosters are identified — scored
    * week or not. `sides` below stays the SCORE, and stays unavailable until
@@ -365,22 +380,84 @@ export async function getMatchupData(
   ctx?: LeagueContext | null,
 ): Promise<MatchupData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  const data = await buildMatchupData(lc, userId, weekParam)
+  if (!data) return data
+  return withExtraMatchupOpponent(data, await nativeExtraMatchup(lc, userId, weekParam))
+}
+
+/**
+ * An odd-team native league's extra matchup for your team this week, if it has one — read from the
+ * leftover team's bye row, where the week-open hook fixed it (lib/redraft/oddTeamExtraMatchup.ts).
+ *
+ * ⚠ READ FROM THE NATIVE SEASON, NOT FROM `data.week`. This screen's week comes from `WeeklyMatchup`,
+ * which only importers write, so for a native league `data.week` is unavailable and keying on it would
+ * never find the pick. The week is the one asked for, else the season's current week. Null for every
+ * imported league, and on any failure.
+ */
+async function nativeExtraMatchup(lc: LeagueContext, userId: string, weekParam: number | null | undefined): Promise<ExtraMatchupView | null> {
+  try {
+    const league = await lc.league()
+    if (!league || !isNativePlatform(league.platform)) return null
+    const season = await prisma.redraftSeason.findFirst({
+      where: { leagueId: league.id },
+      orderBy: { season: 'desc' },
+      select: { id: true, currentWeek: true },
+    })
+    if (!season) return null
+    const week = weekParam ?? season.currentWeek
+    if (!(week >= 1)) return null
+    const roster = await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
+    if (!roster) return null
+    return await readExtraMatchupViewForSeason({ seasonId: season.id, week, redraftRosterId: roster.id })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The leftover team's "opponent" is the chosen team: name it, and its score, wherever this screen's
+ * consumers (the matchup screen, the league home card, the live strip) would otherwise print
+ * "Opponent not identified" for a bye.
+ */
+function withExtraMatchupOpponent(data: MatchupData, extra: ExtraMatchupView | null): MatchupData {
+  if (!extra || extra.role !== 'leftover') return { ...data, extraMatchup: extra }
+  const opponent = { teamName: extra.teamName, ownerName: '', record: null, isYou: false as const, avatarUrl: null }
+  return {
+    ...data,
+    extraMatchup: extra,
+    teams: data.teams.available
+      ? { available: true, data: { ...data.teams.data, opponent: { ...data.teams.data.opponent, ...opponent } } }
+      : data.teams,
+    sides: data.sides.available && extra.theirScore != null
+      ? { available: true, data: { ...data.sides.data, opponent: { ...data.sides.data.opponent, ...opponent, points: extra.theirScore } } }
+      : data.sides,
+  }
+}
+
+async function buildMatchupData(
+  lc: LeagueContext,
+  userId: string,
+  weekParam?: number | null,
+): Promise<MatchupData | null> {
   const league = await lc.league()
   if (!league) return null
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
   const sport = league.sport ?? null
+  /* Fantrax's real league id, for the "Open in Fantrax" link — `platformLeagueId` is our own snapshot uuid there. */
+  const linkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
 
   const base = {
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),
       platform,
+      sport,
       bestBall: league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings),
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({
         platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
+        sourceLeagueId: linkLeagueId,
         leagueName: leagueDisplayName(league.name),
         season: league.season,
         action: 'matchup',
@@ -473,7 +550,7 @@ export async function getMatchupData(
   if (base.league.elimination) {
     const noOpponent = {
       available: false as const,
-      reason: 'a guillotine league is scored against the whole field each week, so there is no single opponent',
+      reason: 'a Guilly league is scored against the whole field each week, so there is no single opponent',
     }
     return { ...base, week: noOpponent, teams: noOpponent, sides: noOpponent }
   }
@@ -673,7 +750,10 @@ export async function getMatchupData(
     scoreIds.length
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: lookupIds } },
+            // Scoped to the league's sport: Sleeper's NFL and NBA pools reuse the same ids, so an
+            // unscoped join named an NFL player in an NBA cell. Unknown sport reads as NFL, as the
+            // fixture query below does.
+            where: { sport: String(sport ?? 'NFL').toUpperCase(), sleeperId: { in: lookupIds } },
             // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
             // club fold, and omitting it would silently leave every club unfolded.
             select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
@@ -796,7 +876,17 @@ export async function getMatchupData(
       })()
     : null
 
-  const projectedFinal: MatchupData['projectedFinal'] = bestBall
+  /*
+   * 🛑 A CATEGORY OR ROTO LEAGUE IS NOT WON ON THIS WEEK'S FANTASY POINTS, so neither number below means
+   * anything there. The format is `weeklyFormat`'s, the rule the week board and Season Outlook already
+   * apply; this screen handed those leagues a projected final and a win chance anyway.
+   */
+  const format = weeklyFormat(league)
+  const scoringTypeRefusal = format === 'categories' || format === 'roto' ? { available: false as const, reason: SCORING_TYPE_REASON } : null
+
+  const projectedFinal: MatchupData['projectedFinal'] = scoringTypeRefusal
+    ? scoringTypeRefusal
+    : bestBall
     ? bestBallFinal ?? { available: false, reason: 'both full rosters could not be verified' }
     : forecastReason ? { available: false, reason: forecastReason } : !anyProjected
     ? {
@@ -824,7 +914,9 @@ export async function getMatchupData(
       })()
 
   /* Every refusal — best ball, unknown states after kickoff, unattributed points, unpriced starters — is the shared rule's. */
-  const winProbability: MatchupData['winProbability'] = sideProjections
+  const winProbability: MatchupData['winProbability'] = scoringTypeRefusal
+    ? scoringTypeRefusal
+    : sideProjections
     ? (() => {
         const result = winProbabilityFor(sideProjections, live, { states, bestBall })
         if (result.available) result.data.detail = `${base.yetToPlay.reason} · ${result.data.detail.replace(/starters? still to play/, 'starters with scoring remaining')}`
@@ -841,10 +933,17 @@ export async function getMatchupData(
   const gameStateOf = (entry: { playerId: string; unavailable?: Unavailable | null }): StarterGameState =>
     entry.unavailable ? 'final' : states.get(entry.playerId) ?? 'unknown'
 
+  /*
+   * 🛑 THE SAME REFUSAL REACHES EVERY STARTER'S CELL. Withholding the projected final while each cell
+   * still carried a points projection put the same meaningless claim on screen one row down. The
+   * lineup — who starts where — is still shown; only the points projections are withheld.
+   */
+  const withholdPointsProjections = scoringTypeRefusal != null
   const cellFor = (
-    entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
+    raw: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
   ): MatchupPlayerCell | null => {
-    if (!entry) return null
+    if (!raw) return null
+    const entry = withholdPointsProjections ? { ...raw, projected: null, afEngine: null } : raw
     if (entry.playerId === EMPTY_SLOT) {
       return {
         playerId: entry.playerId,
@@ -969,8 +1068,10 @@ export async function getMatchupData(
          * fully named and wholly unpriced is exactly as unusable as one that is
          * nameless — and says so, rather than going quiet.
          */
-        priced: lineups.data.filter((s) => s.you && !s.you.empty && s.you.projected != null)
-          .length,
+        priced: withholdPointsProjections
+          // Withheld by scoring type, not unpriceable — the "nobody could be priced" note would mislead.
+          ? lineups.data.filter((s) => s.you && !s.you.empty && s.you.name != null).length
+          : lineups.data.filter((s) => s.you && !s.you.empty && s.you.projected != null).length,
       })
     : null
 
@@ -984,7 +1085,10 @@ export async function getMatchupData(
       }
     : {
         available: false,
-        reason: lineupIds.length
+        reason: withholdPointsProjections
+          // The columns carry no projection in this league, so "each column is a projection" would be false.
+          ? SCORING_TYPE_REASON
+          : lineupIds.length
           ? `no per-player scoring has been ingested for ${latest.seasonYear} week ${latest.week}, so each column below is a projection priced under this league's rules — not a live score`
           : 'we could not match both sides of this matchup to an imported roster',
       }

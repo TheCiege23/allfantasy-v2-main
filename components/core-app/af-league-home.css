@@ -1545,3 +1545,86 @@
 .af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
 .af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
 @media (max-width:800px) { .af-lh-week-summary-grid { grid-template-columns:1fr; } .af-lh-week-summary { padding:14px; } }
+
+
+/* Shared league overview density follows the core scoreboard and cards. */
+.af-core .af-lh { min-width: 0; }
+.af-core .af-lh :is(.af-card, .af-lh-card) { border-radius: 16px; box-shadow: none; }
+.af-core .af-lh :is(h1, h2, h3) { letter-spacing: -.025em; }
+@media (max-width: 720px) {
+  .af-core .af-lh :is(.af-card, .af-lh-card) { padding: 14px; border-radius: 14px; }
+  .af-core .af-lh :is(input, select, textarea) { font-size: 16px; }
+  .af-core .af-lh .af-btn { min-height: 44px; }
+}
+
+/* Prediction Leaderboard (components/core-app/PredictionLeaderboard.tsx). */
+.af-lh-predictions-empty { margin: 6px 0 0; font-size: 12px; color: var(--faint); }
+.af-lh-predictions-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
+.af-lh-predictions-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint); padding: 4px 6px; }
+.af-lh-predictions-table td { padding: 5px 6px; border-top: 1px solid var(--line); }
+.af-lh-predictions-table tr[data-me='true'] td { color: var(--accent); font-weight: 600; }
+.af-lh-team-directory { margin-bottom: 16px; }
+.af-lh-team-directory summary { cursor: pointer; font-weight: 700; }
+.af-lh-team-directory p { color: var(--text2); font-size: 13px; margin: 12px 0; }
+.af-lh-team-directory ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 14px 0 0; }
+.af-lh-team-directory li { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.af-lh-team-directory li strong { overflow-wrap: anywhere; font-size: 13px; }
+.af-lh-team-directory li span, .af-lh-team-directory li small { color: var(--text2); font-size: 12px; }
+
+.af-lh-side:empty { display: none; }
+.af-lh-grid:has(> .af-lh-side:empty) { grid-template-columns: minmax(0, 1fr); }
+
+/*
+ * ── KPI row + "Needs your attention" (home redesign, 2026-11-01) ──────────
+ * ⚠ APPENDED AT TOP LEVEL, with its own @media at the end — never inside an
+ * earlier query (see the notes above on mid-@media edits). Tokens only.
+ */
+.af-lh-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.af-lh-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-lh-kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-lh-kpi-sub {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.af-lh-kpi-sub[data-trend='up'] { color: var(--good); }
+.af-lh-kpi-sub[data-trend='down'] { color: var(--bad); }
+.af-lh-kpi--link { min-height: 44px; transition: border-color 120ms ease; }
+.af-lh-kpi--link:hover,
+.af-lh-kpi--link:focus-visible { border-color: var(--accent); }
+.af-lh-kpi--link[data-deadline-state='closed'] .af-lh-kpi-value { color: var(--muted); }
+
+.af-lh-attention { display: flex; flex-direction: column; gap: 8px; }
+.af-lh-attention-title { margin: 0; }
+.af-lh-attention-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.af-lh-attention .af-lh-urgent-cta { min-height: 44px; }
+.af-lh-urgent--minor { padding: 12px 14px; }
+.af-lh-urgent--minor .af-lh-urgent-title { font-size: 14px; }
+
+@media (max-width: 720px) {
+  /* Two tiles a row on a phone; a lone fourth tile spans rather than sitting half-empty. */
+  .af-lh-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .af-lh-kpi { padding: 12px; }
+  .af-lh-kpi-value { font-size: 20px; }
+  .af-lh-kpis > .af-lh-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
