@@ -158,7 +158,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         <div><span>On the block</span><strong>{block.length}</strong></div>
         <div><span>Recent trades</span><strong>{recent.length}</strong></div>
       </section> : null}
-      {isZombieLeagueLike(league) ? <p className="nls-zombie-trade-note">Whisperers cannot trade players. Zombie trading follows your league rules.</p> : null}
+      {isZombieLeagueLike(league) ? <p className="nls-zombie-trade-note">Survivors and Whisperers may trade. Zombies cannot trade.</p> : null}
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {actionErr ? <p className="nls-error" role="alert">{actionErr}</p> : null}
       {loading && !panel ? <p className="nls-empty" role="status">Loading trades…</p> : null}

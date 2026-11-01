@@ -47,7 +47,7 @@ export default async function ZombieCommissionerDashboardPage(props: { params: P
         </header>
         <div className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-[12px] text-white/45">
           Use <span className="text-white/70">Settings → Zombie</span> for Whisperers, combat, items,
-          payments and weekly automation. Whisperers can never trade.
+          payments and weekly automation. Survivors and Whisperers may trade; Zombies cannot.
         </div>
         <ZombieSetupPanel leagueId={leagueId} canEdit={leagueOwner} />
         {league.zombieLeague.universeId && <ZombieUniversePanel leagueId={leagueId} canEdit={universeOwner} />}

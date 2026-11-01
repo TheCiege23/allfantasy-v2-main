@@ -147,7 +147,7 @@ export function ZombieHowItWorks({ zombie: z }: { zombie: ZombieJoinPreview }) {
     [
       'maul',
       'Every point counts',
-      `Your weekly score banks as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${z.maulingMargin}+ and ${pct(z.maulShare)} goes, by ${z.bashingMargin}+ and ${pct(z.bashShare)}.`,
+      'Survivor wins earn 2, 4 or 6 winnings units by opponent. Zombies and Whisperers can take accumulated winnings. Bashings and maulings can take all the loser holds.',
     ],
     ['serum', 'Come back', `Collect ${z.reviveSerums} serums and a Zombie returns as a Survivor.`],
   ]

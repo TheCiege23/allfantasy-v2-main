@@ -72,6 +72,10 @@ export async function PATCH(req: Request) {
     }
   }
 
+  if (body.zombieTradeBlocked === false) {
+    return NextResponse.json({ error: 'The 2025 Zombie rules prohibit Zombie trades.' }, { status: 400 })
+  }
+
   const competitiveKeys = [
     'experienceMode', 'whispererCount', 'whispererSelectionMode', 'whispererSelection',
     'whispererAmbushCount', 'ambushCountPerWeek', 'ambushRemapMatchup',
@@ -266,7 +270,7 @@ export async function PATCH(req: Request) {
     ...(bool('ambushRemapMatchup') !== undefined ? { ambushRemapMatchup: bool('ambushRemapMatchup') } : {}),
     ...(bool('noWaiverFreeAgency') !== undefined ? { noWaiverFreeAgency: bool('noWaiverFreeAgency') } : {}),
     ...(bool('statCorrectionReversal') !== undefined ? { statCorrectionReversal: bool('statCorrectionReversal') } : {}),
-    ...(bool('zombieTradeBlocked') !== undefined ? { zombieTradeBlocked: bool('zombieTradeBlocked') } : {}),
+    ...(body.zombieTradeBlocked !== undefined ? { zombieTradeBlocked: true } : {}),
     ...(num('dangerousDropThreshold') !== undefined ? { dangerousDropThreshold: num('dangerousDropThreshold') } : {}),
     ...(experienceModePatch !== undefined ? zombieExperienceDefaults(experienceModePatch) : {}),
   }

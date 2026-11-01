@@ -49,6 +49,9 @@ export async function runWeeklyResolution(
   const existing = await prisma.zombieWeeklyResolution.findUnique({
     where: { zombieLeagueId_week: { zombieLeagueId, week } },
   })
+  if (existing?.status === 'review_required') {
+    return { resolution: existing, skipped: true, reason: 'winnings_policy_review_required' }
+  }
   if (existing?.status === 'complete' && existing.resolvedAt) {
     if (!opts?.force) return { resolution: existing }
     // A completed week has already moved roles, items and winnings. Running the ordinary
@@ -124,9 +127,28 @@ export async function runWeeklyResolution(
 
   // A completed week can only be replayed from the state before its first side effect.
   // Capture once. A retry of an already-resolving week must never replace the original snapshot.
-  const settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
-    ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport)
-    : null
+  let settlementSnapshot: Awaited<ReturnType<typeof captureZombieSettlementSnapshot>> | null = null
+  try {
+    settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
+      ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport, week, z.season)
+      : null
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith('ZOMBIE_WINNINGS_')) throw error
+    const held = await prisma.zombieWeeklyResolution.upsert({
+      where: { zombieLeagueId_week: { zombieLeagueId, week } },
+      create: { zombieLeagueId, week, status: 'review_required', matchupResults: [], newZombies: [] },
+      update: { status: 'review_required' },
+    })
+    const marked = await prisma.zombieWeeklyResolution.updateMany({
+      where: { zombieLeagueId, week, requiresStatCorrection: false },
+      data: { requiresStatCorrection: true },
+    })
+    if (marked.count) await notifyCommissioner(z.leagueId, 'commissioner_override_required',
+      `Week ${week} winnings policy needs review`,
+      'Winnings need review of the saved policy, roles, matchup or opening balances before the 2025 rules settle this week.',
+      { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    return { resolution: held, skipped: true, reason: 'winnings_policy_review_required' }
+  }
   if (existing?.status === 'pending' && settlementSnapshot) {
     await prisma.zombieWeeklyResolution.updateMany({
       where: { id: existing.id, status: 'pending' },
@@ -181,7 +203,7 @@ export async function runWeeklyResolution(
   await autoReviveEligibleZombies(z.leagueId, week)
   // Bank the week and move what infections, maulings and bashings take. Before this existed nothing
   // wrote the winnings the sum below reads. See lib/zombie/weeklyWinningsEngine.ts.
-  await settleWeeklyWinnings({
+  const winnings = await settleWeeklyWinnings({
     zombieLeagueId,
     leagueId: z.leagueId,
     season: z.season,
@@ -302,6 +324,10 @@ export async function runWeeklyResolution(
       hordeSize,
       survivorCount,
       resolvedAt: new Date(),
+      ...(winnings?.distribution ? {
+        winningsDistribution: toPrismaJsonInput(winnings.distribution),
+        weeklyWinningsPool: Math.round(Object.values(winnings.distribution).reduce((sum, n) => sum + n, 0) * 100) / 100,
+      } : {}),
     },
   })
 

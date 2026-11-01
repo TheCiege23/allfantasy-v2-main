@@ -495,7 +495,7 @@ export async function selectSecondWhisperer(zombieLeagueId: string, mode: string
   })
   await notifyZombiePlayer(userId, 'whisperer_selected', "You're a Whisperer", {
     severity: 'high',
-    body: 'You are the second Whisperer. Your ambush balance is independent, and you can never trade players.',
+    body: 'You are the second Whisperer. Your ambush balance is independent. Survivors and Whisperers may trade; Zombies cannot.',
     meta: { leagueId: z.leagueId },
   }).catch(() => {})
   return { whispererRecordId: record.id, rosterId: picked.rosterId }

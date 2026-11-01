@@ -1,9 +1,12 @@
+import { loadNativeWeekResults } from './ZombieInfectionEngine'
+import { beta2025ContextFromSnapshot, computeBeta2025Winnings } from './beta2025Winnings'
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 
 export type ZombieSettlementSnapshotV1 = {
   version: 1
   capturedAt: string
+  winnings?: { policy: 'beta_2025'; openingByRoster: Record<string, number> }
   owners: Array<{ rosterId: string; userId: string | null }>
   teams: Array<{
     id: string; rosterId: string; status: string
@@ -44,7 +47,15 @@ export async function captureZombieSettlementSnapshot(
   leagueId: string,
   zombieLeagueId: string,
   sport: string,
+  week: number,
+  season: number,
 ): Promise<ZombieSettlementSnapshotV1> {
+  const priorWinnings = await prisma.zombieWeeklyWinnings.findMany({
+    where: { leagueId, week: { lt: week } }, select: { rosterId: true, amount: true, source: true },
+  })
+  if (priorWinnings.some(row => row.source !== 'weekly_settlement_2025')) {
+    throw new Error('ZOMBIE_WINNINGS_POLICY_REVIEW_REQUIRED')
+  }
   const [owners, teams, items, whisperer, coWhisperers, config, rules] = await Promise.all([
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
     prisma.zombieLeagueTeam.findMany({
@@ -91,8 +102,12 @@ export async function captureZombieSettlementSnapshot(
     }),
     getZombieRulesForSport(sport),
   ])
-  return {
+  const openingByRoster = Object.fromEntries(teams.map(team => [team.rosterId, 0]))
+  for (const row of priorWinnings) openingByRoster[row.rosterId] = Math.round(((openingByRoster[row.rosterId] ?? 0) + row.amount) * 100) / 100
+  if (Object.values(openingByRoster).some(n => !Number.isFinite(n) || n < 0)) throw new Error('ZOMBIE_WINNINGS_INVALID_BALANCE')
+  const snapshot: ZombieSettlementSnapshotV1 = {
     version: 1,
+    winnings: { policy: 'beta_2025', openingByRoster },
     capturedAt: new Date().toISOString(),
     owners: owners.map(owner => ({ rosterId: owner.id, userId: owner.platformUserId })),
     teams: teams.map(team => ({ ...team, revivedAt: team.revivedAt?.toISOString() ?? null })),
@@ -101,13 +116,17 @@ export async function captureZombieSettlementSnapshot(
     coWhisperers,
     config,
     rules: {
-      bashingThreshold: rules.bashingThreshold,
-      maulingThreshold: rules.maulingThreshold,
+      bashingThreshold: sport.toUpperCase() === 'NFL' ? 60 : rules.bashingThreshold,
+      maulingThreshold: sport.toUpperCase() === 'NFL' ? 60 : rules.maulingThreshold,
       weaponAxeMargin: rules.weaponAxeMargin,
       weaponShieldThreshold: rules.weaponShieldThreshold,
       weaponAmbushThreshold: rules.weaponAmbushThreshold,
     },
   }
+  const results = await loadNativeWeekResults(leagueId, week, season)
+  // Validate roles, balances, pairings and thresholds before any infection or item side effect.
+  if (results) computeBeta2025Winnings(results, beta2025ContextFromSnapshot(snapshot)!, snapshot.rules)
+  return snapshot
 }
 
 export function parseZombieSettlementSnapshot(value: unknown): ZombieSettlementSnapshotV1 | null {

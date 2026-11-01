@@ -150,7 +150,7 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
       const leader = leaders[0]
       const owner = leader ? await prisma.roster.findUnique({ where: { id: leader.rosterId }, select: { platformUserId: true } }) : null
       sectionMoney = leader && owner?.platformUserId
-        ? `🏅 OUTBREAK POINTS\n${await nameForUser( owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} points.`
+        ? `${leader.source === 'weekly_settlement_2025' ? '🏅 WEEKLY WINNINGS' : '🏅 OUTBREAK POINTS'}\n${await nameForUser( owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} ${leader.source === 'weekly_settlement_2025' ? 'winnings units' : 'points'}.`
         : '🏅 OUTBREAK POINTS\nWeekly points are pending.'
     }
   }

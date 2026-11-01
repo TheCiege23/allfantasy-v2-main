@@ -158,12 +158,12 @@ describe('tradeWindow: current eligible partners', () => {
     // minus yourself, means five legal partners.
     const w = tradeWindow({ survivors: 6, teamCount: 20 })!
     expect(w.partners).toBe(5)
-    expect(w.basis).toContain('Whisperers never trade')
+    expect(w.basis).toContain('Whisperers may trade')
   })
 
-  it('counts Zombies only when their league permits trading', () => {
+  it('counts eligible Whisperers and excludes Zombies even with an old saved switch', () => {
     expect(tradeWindow({ survivors: 6, zombies: 5, teamCount: 20, zombieTradeBlocked: true })!.partners).toBe(5)
-    expect(tradeWindow({ survivors: 6, zombies: 5, teamCount: 20, zombieTradeBlocked: false })!.partners).toBe(10)
+    expect(tradeWindow({ survivors: 6, whisperers: 1, zombies: 5, teamCount: 20, zombieTradeBlocked: false })!.partners).toBe(6)
   })
 
   it('allows the Survivor partner pool to grow after a serum revival', () => {
@@ -188,7 +188,7 @@ describe('vetoRiskNote: procedural, not a fairness opinion', () => {
      * more actionable.
      */
     const n = vetoRiskNote({ percentDiff: 45 })!
-    expect(n).toContain('two thirds can reverse it')
+    expect(n).toContain('75% of voters can reverse it')
   })
 
   it('stays quiet on a close deal', () => {
@@ -221,7 +221,7 @@ describe('the zombie model is actually reachable', () => {
      */
     const r = readFormatRules({ leagueType: 'zombie' })
     expect(r.futurePicksTradeable).toBe(true)
-    expect(r.notes.join(' ')).toContain('Whisperers never trade')
+    expect(r.notes.join(' ')).toContain('Whisperers may trade')
   })
 
   it('says replacement is close to free, because there are no waivers', () => {

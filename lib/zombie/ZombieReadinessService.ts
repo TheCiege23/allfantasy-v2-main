@@ -82,6 +82,6 @@ async function leagueReadiness(leagueId: string, now: Date): Promise<ZombieLeagu
   checks.push({id:'settlement',label:'Weekly settlement',status:pending||missing?'attention':z.currentWeek===0?'waiting':'ready',
     detail:pending||missing?pending+' settlements or corrections need review; '+missing+' earlier scoring weeks have no settlement.':z.currentWeek===0?'Season has not started.':'No saved settlement is pending or flagged for correction. Verify the scoring calendar for missing weeks.'})
   checks.push({id:'updates',label:'Weekly chat updates',status:z.weeklyUpdateAutoPost&&!z.weeklyUpdateApproval?'ready':'attention',
-    detail:z.weeklyUpdateAutoPost?(z.weeklyUpdateApproval?'Commissioner approval is required before posting.':'Automatic posting enabled.'):'Automatic posting is off. Whisperers can never trade.'})
+    detail:z.weeklyUpdateAutoPost?(z.weeklyUpdateApproval?'Commissioner approval is required before posting.':'Automatic posting enabled.'):'Automatic posting is off. Survivors and Whisperers may trade; Zombies cannot.'})
   return {leagueId,name:z.name||league.name||'Zombie League',sport:z.sport,season:z.season,week:z.currentWeek,checks}
 }

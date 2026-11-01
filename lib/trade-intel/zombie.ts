@@ -23,7 +23,7 @@
  * ⚠ SERUMS AND WEAPONS ARE ASSETS WITH PUBLISHED POINT VALUES, and they price
  * exactly rather than approximately — see below.
  *
- * ⚠ AND A LOPSIDED TRADE CAN BE REVERSED. Two thirds of an eight-hour league
+ * ⚠ AND A LOPSIDED TRADE CAN BE REVERSED. 75% of voters in an eight-hour league
  * poll undoes it. The commissioner's own reasoning: "a lopsided trade can have
  * a HUGE effect on league results with roster size as small as it is." A deal
  * that grades as one-sided here is not just bad value, it is at real risk of
@@ -152,38 +152,35 @@ export function serumValue(args: {
 
 /**
  * How many managers a Survivor can trade with under the current league settings.
- * Whisperers never trade. Zombie trades depend on the commissioner setting, and
+ * Whisperers may trade. Zombies cannot trade, and
  * serum revival can return a Zombie to the Survivor pool.
  */
 export function tradeWindow(args: {
   survivors: number
+  whisperers?: number
   zombies?: number
   teamCount: number
   zombieTradeBlocked?: boolean
 }): { partners: number; basis: string } | null {
-  const { survivors, zombies = 0, teamCount, zombieTradeBlocked = true } = args
-  if (teamCount < 2 || survivors < 0 || zombies < 0 || survivors + zombies > teamCount) return null
+  const { survivors, whisperers = 0, zombies = 0, teamCount } = args
+  if (teamCount < 2 || survivors < 0 || zombies < 0 || whisperers < 0 || survivors + zombies + whisperers > teamCount) return null
 
   /* The viewer is a Survivor, so exclude their own team. */
-  const partners = Math.max(0, survivors - 1 + (zombieTradeBlocked ? 0 : zombies))
-  const roleRule = zombieTradeBlocked
-    ? 'Whisperers never trade, and Zombie trading is blocked in this league.'
-    : 'Whisperers never trade; this league allows Zombie trading.'
+  const partners = Math.max(0, survivors - 1 + whisperers)
+  const roleRule = 'Survivors and Whisperers may trade. Zombies cannot trade.'
 
   return {
     partners,
     basis: partners === 0
       ? `There is nobody eligible to trade with a Survivor right now. ${roleRule}`
-      : `${partners} manager${partners === 1 ? '' : 's'} can trade with a Survivor right now. ${roleRule} ${zombieTradeBlocked
-          ? 'Infections can close the window, and serum revivals can reopen it.'
-          : 'Check roles and settings again before waiting on a deal.'}`,
+      : `${partners} manager${partners === 1 ? '' : 's'} can trade with a Survivor right now. ${roleRule} Infections can close the window, and serum revivals can reopen it.`,
   }
 }
 
 /**
  * Whether this deal is lopsided enough to be at real risk of reversal.
  *
- * ⚠ NOT A FAIRNESS OPINION, A PROCEDURAL WARNING. Two thirds of an eight-hour
+ * ⚠ NOT A FAIRNESS OPINION, A PROCEDURAL WARNING. 75% of voters in an eight-hour
  * league poll reverses a trade here, and the commissioner's stated reason is
  * that small rosters magnify a one-sided deal. A manager should know before
  * agreeing that the trade may simply not stand — that is different information
@@ -199,7 +196,7 @@ export function vetoRiskNote(args: {
   if (Math.abs(args.percentDiff) < VETO_RISK_PCT) return null
   return `This deal is about ${Math.abs(
     Math.round(args.percentDiff),
-  )}% one-sided. In this league a trade the commissioner flags goes to an eight-hour poll and two thirds can reverse it — small rosters make a lopsided deal matter more here, so expect scrutiny even if both managers are happy.`
+  )}% one-sided. In this league a trade the commissioner flags goes to an eight-hour poll and 75% of voters can reverse it — small rosters make a lopsided deal matter more here, so expect scrutiny even if both managers are happy.`
 }
 
 /**

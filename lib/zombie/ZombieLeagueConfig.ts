@@ -76,7 +76,7 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
       ambushRemapMatchup: row.ambushRemapMatchup,
       noWaiverFreeAgency: row.noWaiverFreeAgency,
       statCorrectionReversal: row.statCorrectionReversal,
-      zombieTradeBlocked: row.zombieTradeBlocked,
+      zombieTradeBlocked: true,
       dangerousDropThreshold: row.dangerousDropThreshold,
     }
   }
@@ -150,7 +150,7 @@ export async function upsertZombieLeagueConfig(
       ambushRemapMatchup: input.ambushRemapMatchup ?? true,
       noWaiverFreeAgency: input.noWaiverFreeAgency ?? true,
       statCorrectionReversal: input.statCorrectionReversal ?? false,
-      zombieTradeBlocked: input.zombieTradeBlocked ?? true,
+      zombieTradeBlocked: true,
       dangerousDropThreshold: input.dangerousDropThreshold ?? null,
     },
     update: {
@@ -170,7 +170,7 @@ export async function upsertZombieLeagueConfig(
       ...(input.ambushRemapMatchup !== undefined && { ambushRemapMatchup: input.ambushRemapMatchup }),
       ...(input.noWaiverFreeAgency !== undefined && { noWaiverFreeAgency: input.noWaiverFreeAgency }),
       ...(input.statCorrectionReversal !== undefined && { statCorrectionReversal: input.statCorrectionReversal }),
-      ...(input.zombieTradeBlocked !== undefined && { zombieTradeBlocked: input.zombieTradeBlocked }),
+      zombieTradeBlocked: true,
       ...(input.dangerousDropThreshold !== undefined && { dangerousDropThreshold: input.dangerousDropThreshold }),
     },
   })

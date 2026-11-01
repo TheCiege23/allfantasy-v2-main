@@ -166,3 +166,11 @@ describe('outcome-changing correction transaction', () => {
     expect(h.db.zombieTeamItem.deleteMany).not.toHaveBeenCalled()
   })
 })
+
+it('requires explicit review for a winner-changing correction under 2025 item and loot rules', async () => {
+  const result = await reconcileOutcomeChangingCorrection({ ...input, previous: {
+    ...previous, settlementSnapshot: { ...snapshot, winnings: { policy: 'beta_2025', openingByRoster: { z: 20, h: 30 } } },
+  } as never })
+  expect(result).toBeNull()
+  expect(h.db.$transaction).not.toHaveBeenCalled()
+})

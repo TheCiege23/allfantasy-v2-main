@@ -3,9 +3,6 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { DEFAULT_ENGINE_WEAPONS, getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
-import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsShares'
-
-const pct = (share: number) => `${Math.round(share * 100)}%`
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -42,8 +39,8 @@ function buildSections(
   const scoring = tpl?.scoringWindowDesc ?? cfg.scoringWindow
   const lock = tpl?.lineupLockDesc ?? cfg.lockRule
   const edge = tpl?.edgeCaseNotes ?? cfg.edgeCases
-  const bashThresh = tpl?.bashingThreshold ?? cfg.bashingThreshold
-  const maulThresh = tpl?.maulingThreshold ?? cfg.maulingThreshold
+  const bashThresh = sport === 'NFL' ? 60 : tpl?.bashingThreshold ?? cfg.bashingThreshold
+  const maulThresh = sport === 'NFL' ? 60 : tpl?.maulingThreshold ?? cfg.maulingThreshold
   // The numbers getZombieRulesForSport hands the engine (weaponEngine, serumEngine), so the page and the
   // engine cannot disagree.
   const weapons = cfg.engineWeapons ?? DEFAULT_ENGINE_WEAPONS
@@ -77,8 +74,8 @@ function buildSections(
     '- The week settles after final counted scores and the correction window.',
     '',
     mode === 'paid'
-      ? 'PAID: An infected Survivor\'s whole week of winnings goes to the team that infected them.'
-      : `FREE: An infected Survivor's whole week of ${freeCurrency} goes to the team that infected them (symbolic).`,
+      ? 'PAID: A Survivor defeated by a Zombie or Whisperer loses accumulated winnings to that opponent.'
+      : `FREE: A Survivor defeated by a Zombie or Whisperer loses accumulated ${freeCurrency} to that opponent (symbolic).`,
   ].join('\n')
 
   const sectionScoring = [
@@ -98,8 +95,8 @@ function buildSections(
     'Bashing result: The loser receives a public "Bashed" marker for the week.',
     '',
     mode === 'paid'
-      ? `PAID: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's winnings to the winner.`
-      : `FREE: The loser hands ${pct(BASH_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner (symbolic).`,
+      ? 'PAID: A Survivor bashing an opponent takes all accumulated winnings, plus the normal win award.'
+      : `FREE: A Survivor bashing an opponent takes accumulated ${freeCurrency}, plus the normal win award (symbolic).`,
   ].join('\n')
 
   const sectionMauling = [
@@ -108,8 +105,8 @@ function buildSections(
     'Mauling result: The loser receives a public "Mauled" marker for the week.',
     '',
     mode === 'paid'
-      ? `PAID: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's winnings to the winner — double a Bashing.`
-      : `FREE: The loser hands ${pct(MAUL_TRANSFER_SHARE)} of their week's ${freeCurrency} to the winner — double a Bashing (symbolic).`,
+      ? 'PAID: A Zombie mauling an opponent takes all accumulated winnings.'
+      : `FREE: A Zombie mauling an opponent takes all accumulated ${freeCurrency} (symbolic).`,
   ].join('\n')
 
   let sectionWinnings = ''
@@ -131,6 +128,8 @@ function buildSections(
       'All rewards are symbolic — no real money is involved.',
     ].join('\n')
   }
+
+  sectionWinnings += '\n\n2025 WEEKLY WINNINGS\nSurvivor beats Survivor: 2; Zombie: 4; Whisperer: 6.\nZombie beats Survivor or Whisperer: takes all accumulated winnings.\nZombie beats Zombie: takes the rounded-up winning margin, capped at the losing balance.\nWhisperer beats Survivor or Zombie: takes all accumulated winnings.\nBashings and maulings take all accumulated winnings; a Survivor also receives the normal win award.\nTies create no win award or transfer.'
 
   const sectionPaidVsFree =
     mode === 'paid'
@@ -175,7 +174,7 @@ function buildSections(
     'THE WHISPERER',
     `${z.whispererCount === 2 ? 'Two teams are' : 'One team is'} secretly (or publicly) designated as ${z.whispererCount === 2 ? 'Whisperers' : 'the Whisperer'} at the start of the season.`,
     infectionLossToWhisperer ? 'The Whisperer infects Survivors it beats when the week settles, and leads the Horde.' : 'The Whisperer leads the Horde; automatic infection on its wins is disabled.',
-    'Whisperers cannot trade players at any time.',
+    'Survivors and Whisperers may trade; Zombies cannot.',
     `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
   ].join('\n')
 
@@ -299,9 +298,10 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
   return doc
 }
 
-function whispererRulesWithTradeLock(section: string): string {
-  const rule = 'Whisperers cannot trade players at any time.'
-  return section.includes(rule) ? section : `${section}\n${rule}`
+function whispererRulesWithTradePolicy(section: string): string {
+  const rule = 'Survivors and Whisperers may trade; Zombies cannot.'
+  const current = section.replaceAll('Whisperers cannot trade players at any time.', '').trim()
+  return current.includes(rule) ? current : `${current}\n${rule}`
 }
 
 export function getRulesDocAsHtml(doc: ZombieRulesDocument): string {
@@ -312,7 +312,7 @@ export function getRulesDocAsHtml(doc: ZombieRulesDocument): string {
   ${doc.isPaid ? '<p class="zombie-rules-paid-badge mb-4 inline-block rounded-lg bg-amber-500/15 px-3 py-1 text-[12px] font-bold text-amber-200/90">PAID LEAGUE</p>' : '<p class="zombie-rules-threshold-badge mb-4 inline-block rounded-lg bg-sky-500/15 px-3 py-1 text-[12px] font-bold text-sky-200/80">FREE LEAGUE</p>'}
   ${sec('🧟', 'Overview', doc.sectionOverview)}
   ${sec('🩸', 'Infection', doc.sectionInfection)}
-  ${sec('🎭', 'The Whisperer', whispererRulesWithTradeLock(doc.sectionWhisperer))}
+  ${sec('🎭', 'The Whisperer', whispererRulesWithTradePolicy(doc.sectionWhisperer))}
   ${sec('🧍', 'Survivors', doc.sectionSurvivor)}
   ${sec('🧟', 'The Horde', doc.sectionZombie)}
   ${sec('📊', 'Scoring', doc.sectionScoring)}
@@ -334,7 +334,7 @@ export function getRulesDocAsText(doc: ZombieRulesDocument): string {
   const parts = [
     doc.sectionOverview,
     doc.sectionInfection,
-    whispererRulesWithTradeLock(doc.sectionWhisperer),
+    whispererRulesWithTradePolicy(doc.sectionWhisperer),
     doc.sectionSurvivor,
     doc.sectionZombie,
     doc.sectionScoring,

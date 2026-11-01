@@ -111,7 +111,7 @@ export function ZombieWhispererPanel({
 
       <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
         <p className="font-semibold text-white">Permanent trade rule</p>
-        <p className="mt-1 text-white/65">Whisperers cannot trade players at any point in the season.</p>
+        <p className="mt-1 text-white/65">Survivors and Whisperers may trade; Zombies cannot.</p>
       </div>
 
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">

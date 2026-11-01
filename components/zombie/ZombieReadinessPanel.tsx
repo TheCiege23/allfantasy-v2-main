@@ -18,7 +18,7 @@ export function ZombieReadinessPanel({leagueId,universeId}:{leagueId?:string;uni
   return <section aria-label="Zombie commissioner readiness" className="rounded-2xl border border-cyan-500/25 bg-slate-950/60 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-cyan-100">Survival readiness</h2>
       <button type="button" disabled={busy} onClick={()=>setRevision(v=>v+1)} className="min-h-[44px] rounded-lg border border-white/20 px-4 disabled:opacity-50">{busy?'Checking…':'Refresh checks'}</button></div>
-    <p className="mt-2 text-xs text-white/65">Saved league checks help prepare the next step. Live scoring and physical-device acceptance need their own rehearsal. Whisperers can never trade.</p>
+    <p className="mt-2 text-xs text-white/65">Saved league checks help prepare the next step. Live scoring and physical-device acceptance need their own rehearsal. Survivors and Whisperers may trade; Zombies cannot.</p>
     {error&&<p role="alert" className="mt-3 text-amber-200">{error}</p>}
     {report&&<div aria-live="polite" className="mt-3 space-y-4">
       <p className="text-xs text-white/50">Checked {new Date(report.checkedAt).toLocaleString()}</p>

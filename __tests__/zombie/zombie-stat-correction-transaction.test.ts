@@ -39,6 +39,8 @@ const rules = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  current.homeScore = 91
+  ;(previous as unknown as { settlementSnapshot?: unknown }).settlementSnapshot = undefined
   h.matchupFindMany.mockResolvedValue([current])
   h.resolutionFindFirst.mockResolvedValue(null)
   h.native.mockResolvedValue([{ matchupId: 'matchup-1', homeRosterId: 'a', awayRosterId: 'b', homeScore: 91, awayScore: 85, final: true }])
@@ -81,6 +83,27 @@ describe('transactional Zombie score correction', () => {
     expect(h.announcementUpsert).toHaveBeenCalledTimes(1)
     expect(h.chatUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ zombieWeeklyAnnouncementId: 'announcement-1' }),
+    }))
+  })
+
+  it('recalculates rounded Zombie loot from the sealed opening balances, retaining the 2025 source', async () => {
+    current.homeScore = 92.21
+    h.native.mockResolvedValue([{ matchupId: 'matchup-1', homeRosterId: 'a', awayRosterId: 'b', homeScore: 92.21, awayScore: 85, final: true }])
+    ;(previous as unknown as { settlementSnapshot: unknown }).settlementSnapshot = {
+      version: 1, capturedAt: '2026-10-09T00:00:00Z', owners: [], items: [], coWhisperers: [],
+      teams: [{ id: 'ta', rosterId: 'a', status: 'Zombie' }, { id: 'tb', rosterId: 'b', status: 'Zombie' }],
+      rules, winnings: { policy: 'beta_2025', openingByRoster: { a: 20, b: 30 } },
+    }
+    const result = await reconcileScoreOnlyCorrection({
+      zombieLeagueId: 'z1', leagueId: 'L1', seasonId: 's1', season: 2026,
+      sport: 'NFL', week: 1, ownerUserId: 'owner', previous,
+    })
+    expect(result?.requiresStatCorrection).toBe(false)
+    expect(h.ledgerUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ rosterId: 'a', amount: 8, source: 'weekly_settlement_2025' }),
+    }))
+    expect(h.ledgerUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ rosterId: 'b', amount: -8, source: 'weekly_settlement_2025' }),
     }))
   })
 

@@ -28,7 +28,7 @@ vi.mock('@/lib/prisma', () => {
         },
       },
     )
-  const db = new Proxy({}, { get: (_t, prop: string) => prop === '$transaction' ? async (callback: (tx: unknown) => Promise<unknown>) => callback(db) : model(prop) })
+  const db = new Proxy({}, { get: (_t, prop: string) => prop === '$queryRaw' ? async () => [] : prop === '$transaction' ? async (callback: (tx: unknown) => Promise<unknown>) => callback(db) : model(prop) })
   return { prisma: db }
 })
 
@@ -166,7 +166,7 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
   /** A zombie league whose resolving week has every matchup final, scheduled through `lastScheduledWeek`. */
   function arrange(currentWeek: number, totalWeeks = 17, lastScheduledWeek = totalWeeks) {
     overrides.set('zombieLeague.findUnique', async () => ({
-      id: 'z1', leagueId: 'L1', season: 2026, currentWeek, totalWeeks, universeId: null, league: {},
+      id: 'z1', leagueId: 'L1', sport: 'NFL', season: 2026, currentWeek, totalWeeks, universeId: null, league: {},
     }))
     overrides.set('redraftSeason.findFirst', async () => ({ id: 's1' }))
     overrides.set('redraftMatchup.findMany', async () => [
@@ -189,6 +189,16 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
       expect(leagueUpdate().data.currentWeek).toBe(4)
     })
   }
+
+  it('holds a league with an old-policy winnings ledger before weekly side effects', async () => {
+    arrange(3)
+    overrides.set('zombieWeeklyWinnings.findMany', async () => [{ rosterId: 'a', amount: 100, source: 'weekly_settlement' }])
+    const result = await runWeeklyResolution('z1', 3)
+    expect(result).toMatchObject({ skipped: true, reason: 'winnings_policy_review_required' })
+    expect(argsOf('zombieWeeklyResolution.upsert')[0].create).toMatchObject({ status: 'review_required' })
+    expect(argsOf('zombieLeague.update')).toEqual([])
+    expect(argsOf('zombieWeeklyWinnings.upsert')).toEqual([])
+  })
 
   it('points the league at the week after the one it resolved', async () => {
     arrange(3)
@@ -248,7 +258,7 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
    * 🛑 Weekly winnings were never written for a native league. A resolved week now banks each team's
    * score in the ledger — here an NBA 1,000 v 850 win, a bashing (150 ≥ 128), moves 25% of the loser's week.
    */
-  it('a resolved week banks winnings in the ledger', async () => {
+  it('a resolved week records the 2025 award and cumulative loot rather than fantasy scores', async () => {
     overrides.set('zombieLeague.findUnique', async () => ({
       id: 'z1', leagueId: 'L1', season: 2026, sport: 'NBA', currentWeek: 5, totalWeeks: 19, universeId: null, league: {},
     }))
@@ -262,10 +272,20 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
       { id: 'R2', platformUserId: 'u2', redraftRosterId: 'r2' },
     ])
 
+    let savedSnapshot: unknown
+    overrides.set('zombieLeagueTeam.findMany', async () => [
+      { id: 't1', rosterId: 'R1', status: 'Survivor' }, { id: 't2', rosterId: 'R2', status: 'Survivor' },
+    ])
+    overrides.set('zombieWeeklyWinnings.findMany', async () => [{ rosterId: 'R2', amount: 10, source: 'weekly_settlement_2025' }])
+    overrides.set('zombieWeeklyResolution.upsert', async (args: any) => {
+      savedSnapshot = args.create.settlementSnapshot
+      return { id: 'resolution', settlementSnapshot: savedSnapshot }
+    })
+    overrides.set('zombieWeeklyResolution.findUnique', async () => savedSnapshot ? { settlementSnapshot: savedSnapshot } : null)
     await runWeeklyResolution('z1', 5)
 
     const ledger = argsOf('zombieWeeklyWinnings.upsert').map((a) => [a.create.rosterId, a.create.amount])
-    expect(ledger).toEqual([['R1', 1212.5], ['R2', 637.5]])
+    expect(ledger).toEqual([['R1', 12], ['R2', -10]])
   })
 })
 

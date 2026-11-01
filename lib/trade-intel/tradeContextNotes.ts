@@ -580,7 +580,7 @@ async function zombieNotesFor(
       where: { leagueId }, select: { zombieTradeBlocked: true },
     }).catch(() => null)
     const window = tradeWindow({
-      survivors, zombies, teamCount: teams.length,
+      survivors, zombies, whisperers: teams.filter(t => norm(t) === 'whisperer').length, teamCount: teams.length,
       zombieTradeBlocked: config?.zombieTradeBlocked ?? false,
     })
     if (window) notes.push(window.basis)

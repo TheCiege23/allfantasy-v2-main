@@ -185,7 +185,7 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       const victim = winner === threat!.homeRosterId ? threat!.awayRosterId! : threat!.homeRosterId
       await prisma.zombieLeagueTeam.update({ where: { id: teamFor(winner).id }, data: { status: 'Zombie' } })
       const primary = teams.find(t => t.status === 'Whisperer')!
-      expect(await getZombieTradeRestriction(leagueId, [primary.rosterId])).toBe('whisperer_trade_blocked')
+      expect(await getZombieTradeRestriction(leagueId, [primary.rosterId])).toBeNull()
       const inventory = await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy inventory', 1)
       expect(inventory.ok).toBe(true)
       expect(inventory.privateMessage).toContain('Inventory')

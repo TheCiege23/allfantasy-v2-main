@@ -6,6 +6,7 @@ import { SettingsSection, SettingsRow } from '@/app/league/[leagueId]/tabs/setti
 type CombatRules = {
   bashingThreshold: number
   maulingThreshold: number
+  winningsPolicy?: 'beta_2025' | 'legacy_score'
   bashShare: number
   maulShare: number
 }
@@ -40,11 +41,11 @@ export function ZombieCombatPanel({ leagueId }: { leagueId: string; canEdit: boo
         <>
           <SettingsSection id="zm-bash" title="Bashing">
             <SettingsRow label="Winning margin" control={<strong>{rules.bashingThreshold}+ points</strong>} />
-            <SettingsRow label="Winnings transfer" control={<strong>{Math.round(rules.bashShare * 100)}%</strong>} />
+            <SettingsRow label="Winnings transfer" control={<strong>{rules.winningsPolicy === 'beta_2025' ? 'All accumulated winnings' : `${Math.round(rules.bashShare * 100)}%`}</strong>} />
           </SettingsSection>
           <SettingsSection id="zm-maul" title="Mauling">
             <SettingsRow label="Winning margin" control={<strong>{rules.maulingThreshold}+ points</strong>} />
-            <SettingsRow label="Winnings transfer" control={<strong>{Math.round(rules.maulShare * 100)}%</strong>} />
+            <SettingsRow label="Winnings transfer" control={<strong>{rules.winningsPolicy === 'beta_2025' ? 'All accumulated winnings' : `${Math.round(rules.maulShare * 100)}%`}</strong>} />
           </SettingsSection>
           <p className="text-[11px] text-white/55">Combat margins are sport rules and are shown for reference.</p>
         </>

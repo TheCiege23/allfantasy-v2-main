@@ -442,7 +442,9 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
               {[
                 'Managers start as Survivors or Whisperers.',
                 `Lose to the Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn into a Zombie.`,
-                rules
+                rules?.winningsPolicy === 'beta_2025'
+                  ? 'Survivor wins earn 2, 4 or 6 winnings units by opponent. Loot is taken from accumulated winnings.'
+                  : rules
                   ? `You bank your score every week as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${fmt(rules.maulingMargin)}+ and ${pct(rules.maulShare)} of it goes, by ${fmt(rules.bashingMargin)}+ and ${pct(rules.bashShare)}.`
                   : 'You bank your score every week as Outbreak Points.',
                 `A serum registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`,

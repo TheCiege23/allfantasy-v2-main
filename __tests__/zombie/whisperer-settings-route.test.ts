@@ -171,3 +171,10 @@ describe('commissioner Zombie rule persistence contract', () => {
     expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
   })
 })
+
+it('rejects attempts to re-enable Zombie trading under the 2025 rules', async () => {
+  const { PATCH } = await import('@/app/api/zombie/settings/route')
+  const response = await PATCH(patch({ zombieTradeBlocked: false }))
+  expect(response.status).toBe(400)
+  expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+})

@@ -6,6 +6,7 @@
  * cannot show a number the settlement did not pay. Pure apart from that import.
  */
 import { computeWeeklyWinnings, type InfectionPair } from '@/lib/zombie/weeklyWinningsEngine'
+import type { Beta2025WinningsContext } from './beta2025Winnings'
 import type { NativeWeekResult } from '@/lib/zombie/ZombieInfectionEngine'
 
 export type ZombieOutcomeKind = 'infection' | 'mauling' | 'bashing'
@@ -29,6 +30,9 @@ export type ZombieMatchupView = {
   outcome: { kind: ZombieOutcomeKind; final: boolean } | null
   /** Final only: the points the engine moved. */
   transfer: { fromRosterId: string; toRosterId: string; amount: number } | null
+  winningsPolicy?: 'beta_2025' | 'legacy_score'
+  winningsHidden?: boolean
+  winAward?: number
   mySide: 'home' | 'away' | null
 }
 
@@ -45,10 +49,17 @@ export function buildZombieMatchups(input: {
   infected: readonly InfectionPair[]
   rules: { bashingThreshold: number; maulingThreshold: number }
   lossToZombieInfects: boolean
+  hideWinningsOf?: (rosterId: string) => boolean
+  winningsContext?: Beta2025WinningsContext
+  winningsRules?: { bashingThreshold: number; maulingThreshold: number }
+  winningsPolicy?: 'beta_2025' | 'legacy_score'
   myRosterId?: string | null
 }): ZombieMatchupView[] {
   const results = (input.results ?? []).filter((r) => r.homeRosterId && r.awayRosterId)
-  const { transfers } = computeWeeklyWinnings([...results], [...input.infected], input.rules)
+  const computed = input.winningsPolicy === 'beta_2025' && !input.winningsContext
+    ? { transfers: [], netByRoster: new Map<string, number>() }
+    : computeWeeklyWinnings([...results], [...input.infected], input.winningsRules ?? input.rules, input.winningsContext)
+  const { transfers } = computed
   const transferOf = new Map(transfers.map((t) => [t.matchupId, t]))
 
   return results.map((r) => {
@@ -65,9 +76,10 @@ export function buildZombieMatchups(input: {
       else if (human(away.status) && infects(home.status, input.lossToZombieInfects)) atRisk = 'away'
     }
 
-    const t = r.final ? transferOf.get(r.matchupId) : undefined
+    const hiddenWinnings = input.hideWinningsOf?.(homeId) || input.hideWinningsOf?.(awayId)
+    const t = r.final && !hiddenWinnings ? transferOf.get(r.matchupId) : undefined
     let outcome: ZombieMatchupView['outcome'] = null
-    if (t) outcome = { kind: t.kind, final: true }
+    if (t && t.kind !== 'weekly_loot') outcome = { kind: t.kind, final: true }
     else if (!r.final && leader) {
       if (margin >= input.rules.maulingThreshold) outcome = { kind: 'mauling', final: false }
       else if (margin >= input.rules.bashingThreshold) outcome = { kind: 'bashing', final: false }
@@ -83,6 +95,9 @@ export function buildZombieMatchups(input: {
       atRisk,
       outcome,
       transfer: t ? { fromRosterId: t.fromRosterId, toRosterId: t.toRosterId, amount: t.amount } : null,
+      ...(hiddenWinnings ? { winningsHidden: true } : {}),
+      ...(input.winningsPolicy ? { winningsPolicy: input.winningsPolicy } : {}),
+      ...(input.winningsContext && r.final && !hiddenWinnings ? { winAward: Math.max(0, (computed.netByRoster.get(leader === 'home' ? homeId : awayId) ?? 0) - (t?.amount ?? 0)) } : {}),
       mySide: input.myRosterId === homeId ? 'home' : input.myRosterId === awayId ? 'away' : null,
     }
   })

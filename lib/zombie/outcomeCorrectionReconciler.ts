@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { loadNativeWeekResults } from '@/lib/zombie/ZombieInfectionEngine'
+import { beta2025ContextFromSnapshot } from './beta2025Winnings'
 import { computeWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { parseZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
 import { planZombieOutcomeReplay } from '@/lib/zombie/outcomeCorrectionPlanner'
@@ -26,6 +27,9 @@ export async function reconcileOutcomeChangingCorrection(input: {
   previous: ZombieWeeklyResolution
 }): Promise<ZombieWeeklyResolution | null> {
   const { zombieLeagueId, leagueId, seasonId, season, week, ownerUserId, experienceMode, previous } = input
+  // A changed winner can alter 2025 cumulative loot and item ownership. The old replay
+  // planner models infection shields; route this to explicit review until that planner is aligned.
+  if (beta2025ContextFromSnapshot(previous.settlementSnapshot)) return null
   const snapshot = parseZombieSettlementSnapshot(previous.settlementSnapshot)
   if (!snapshot || !snapshot.config || !previous.resolvedAt) return null
   const [matchups, results, newer] = await Promise.all([

@@ -57,26 +57,10 @@ describe('zombie trade block', () => {
     })
   })
 
-  it('blocks a Whisperer before any infection', async () => {
+  it('allows a Whisperer and Survivor to trade under the 2025 rules', async () => {
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Whisperer' }])
-    const result = await assertRosterTransactionsAllowed({
-      leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade',
-    })
-    expect(result).toEqual({
-      ok: false,
-      error: 'Whisperers cannot trade in this league.',
-      code: 'ZOMBIE_TRADE_BLOCKED',
-    })
-    expect(db.zombieLeagueConfig.findUnique).not.toHaveBeenCalled()
-  })
-
-  it('blocks Whisperers even when the commissioner allows Zombie trades', async () => {
-    db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: false })
-    db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Whisperer' }])
-    const result = await assertRosterTransactionsAllowed({
-      leagueId: 'L1', league, rosterIds: ['a'], userId: 'u', kind: 'trade',
-    })
-    expect(result).toMatchObject({ ok: false, code: 'ZOMBIE_TRADE_BLOCKED' })
+    await expect(assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a','b'], userId: 'u', kind: 'trade' }))
+      .resolves.toEqual({ ok: true })
   })
 
   it('lets two Humans trade', async () => {
@@ -86,12 +70,12 @@ describe('zombie trade block', () => {
     ).resolves.toEqual({ ok: true })
   })
 
-  it('lets a Zombie trade only when the commissioner turns the Zombie block off', async () => {
+  it('blocks a Zombie even when an old saved setting allowed trades', async () => {
     db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: false })
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Zombie' }])
     await expect(
       assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }),
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toMatchObject({ ok: false, code: 'ZOMBIE_TRADE_BLOCKED' })
   })
 
   it('does not touch waiver claims — Zombies keep claiming players', async () => {
@@ -124,9 +108,9 @@ describe('bash/maul thresholds fall back to the sport, not to NFL', () => {
     expect([r.bashingThreshold, r.maulingThreshold]).toEqual([128, 211])
   })
 
-  it('[control] NFL keeps 30/50', async () => {
+  it('NFL uses the 2025 60-point combat thresholds', async () => {
     const r = await getZombieRulesForSport('NFL')
-    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([30, 50])
+    expect([r.bashingThreshold, r.maulingThreshold]).toEqual([60, 60])
   })
 
   it('[control] a seeded rules-template row still wins', async () => {

@@ -27,19 +27,23 @@ const base = {
 } as unknown as ZombieRulesDocument
 
 describe('Zombie rules rendering', () => {
-  it('shows the permanent Whisperer trade rule in an older stored document', () => {
+  it('shows the approved 2025 trade policy in an older stored document', () => {
     const html = getRulesDocAsHtml(base)
-    expect(html).toContain('Whisperers cannot trade players at any time.')
+    expect(html).toContain('Survivors and Whisperers may trade; Zombies cannot.')
     expect(html).toContain('<span aria-hidden="true">🎭</span> The Whisperer')
-    expect(getRulesDocAsText(base)).toContain('Whisperers cannot trade players at any time.')
+    expect(getRulesDocAsText(base)).toContain('Survivors and Whisperers may trade; Zombies cannot.')
+  })
+
+  it('removes the retired Whisperer prohibition from an old document', () => {
+    expect(getRulesDocAsText({ ...base, sectionWhisperer: 'Whisperers cannot trade players at any time.' })).not.toContain('Whisperers cannot trade')
   })
 
   it('does not duplicate the rule in a newly generated document', () => {
     const doc = {
       ...base,
-      sectionWhisperer: 'The Whisperer leads the Horde.\nWhisperers cannot trade players at any time.',
+      sectionWhisperer: 'The Whisperer leads the Horde.\nSurvivors and Whisperers may trade; Zombies cannot.',
     } as ZombieRulesDocument
     const rendered = getRulesDocAsText(doc)
-    expect(rendered.match(/Whisperers cannot trade players at any time\./g)).toHaveLength(1)
+    expect(rendered.match(/Survivors and Whisperers may trade; Zombies cannot\./g)).toHaveLength(1)
   })
 })

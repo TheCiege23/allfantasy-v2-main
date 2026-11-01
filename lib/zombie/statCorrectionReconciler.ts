@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { loadNativeWeekResults } from '@/lib/zombie/ZombieInfectionEngine'
+import { beta2025ContextFromSnapshot, BETA_2025_WINNINGS_SOURCE } from './beta2025Winnings'
+import { parseZombieSettlementSnapshot } from './weeklySettlementSnapshot'
 import { computeWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { getZombieRulesForSport, type ZombieRulesResolved } from '@/lib/zombie/zombieRules'
 
@@ -75,13 +77,17 @@ export async function reconcileScoreOnlyCorrection(input: {
   previous: ZombieWeeklyResolution
 }): Promise<ZombieWeeklyResolution | null> {
   const { zombieLeagueId, leagueId, seasonId, season, sport, week, ownerUserId, previous } = input
-  const [matchups, weekResults, rules, newer] = await Promise.all([
+  const [matchups, weekResults, currentRules, newer] = await Promise.all([
     prisma.redraftMatchup.findMany({ where: { seasonId, week }, select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true } }),
     loadNativeWeekResults(leagueId, week, season),
     getZombieRulesForSport(sport),
     prisma.zombieWeeklyResolution.findFirst({ where: { zombieLeagueId, week: { gt: week }, status: 'complete' }, select: { id: true } }),
   ])
   if (newer || !weekResults || weekResults.length !== matchups.length || weekResults.some(row => !row.final)) return null
+  const sealed = parseZombieSettlementSnapshot(previous.settlementSnapshot)
+  const context = beta2025ContextFromSnapshot(previous.settlementSnapshot)
+  const rules = sealed ? { ...currentRules, ...sealed.rules } : currentRules
+  const source = context ? BETA_2025_WINNINGS_SOURCE : 'weekly_settlement'
   const oldRows = oldScoreRows(previous)
   if (!scoreOnlyCorrectionIsSafe(oldRows, matchups, rules)) return null
 
@@ -117,12 +123,12 @@ export async function reconcileScoreOnlyCorrection(input: {
         return victimRosterId && infectorRosterId ? [{ victimRosterId, infectorRosterId }] : []
       })
       if (infected.length !== infectionEvents.length) return null
-      const { netByRoster, transfers } = computeWeeklyWinnings(weekResults, infected, rules)
+      const { netByRoster, transfers } = computeWeeklyWinnings(weekResults, infected, rules, context)
       for (const [rosterId, amount] of netByRoster) {
         await tx.zombieWeeklyWinnings.upsert({
           where: { leagueId_rosterId_week: { leagueId, rosterId, week } },
-          create: { leagueId, zombieLeagueId, rosterId, week, amount, source: 'weekly_settlement' },
-          update: { amount, source: 'weekly_settlement' },
+          create: { leagueId, zombieLeagueId, rosterId, week, amount, source },
+          update: { amount, source },
         })
       }
       const ledger = await tx.zombieWeeklyWinnings.findMany({ where: { leagueId }, select: { rosterId: true, amount: true } })
@@ -134,7 +140,7 @@ export async function reconcileScoreOnlyCorrection(input: {
           data: { weeklyWinnings, totalWinnings: Math.round((totals.get(rosterId) ?? 0) * 100) / 100 },
         })
       }
-      const transferByPair = new Map(transfers.filter(row => row.kind === 'infection').map(row => [key(row.fromRosterId, row.toRosterId), row]))
+      const transferByPair = new Map(transfers.map(row => [key(row.fromRosterId, row.toRosterId), row]))
       for (const event of infectionEvents) {
         const victim = byUser.get(event.victimUserId)!
         const infector = byUser.get(event.infectorUserId)!
