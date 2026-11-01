@@ -84,6 +84,13 @@ export const survivorFinaleMessages = defineMessages({
     loadingControls: 'Loading finale rules…',
     councilOpenNote: 'A Tribal Council is open: sealed immunity and the vote due time are locked until it finishes.',
     openJury: 'Open Jury chamber',
+    ruleJuryStep: 'One more to the jury after the last immunity',
+    ruleJuryStepHelp: 'After the final immunity (closest without going over), whoever finishes furthest from the target joins the jury instead of going to a Tribal. The immunity winner is safe. Locks once the finale starts.',
+    ruleJuryStepCount: 'How many join the jury',
+    ruleJuryStepCountHelp: 'The bottom of the final immunity ranking. Not answering ranks last.',
+    juryStepLockedNote: 'The finale has started, so the final jury step is locked.',
+    ownRoleJuror: 'You are on the jury: you can change the windows, but you see only what a juror sees.',
+    ownRoleFinalist: 'You are a finalist: you can change the windows, but you see only what a finalist sees.',
   },
   es: {
     qaTitle: 'Preguntas del jurado',
@@ -167,6 +174,13 @@ export const survivorFinaleMessages = defineMessages({
     loadingControls: 'Cargando las reglas de la final…',
     councilOpenNote: 'Hay un Consejo Tribal abierto: la inmunidad sellada y la hora límite de los votos están bloqueadas hasta que termine.',
     openJury: 'Abrir la sala del jurado',
+    ruleJuryStep: 'Una persona más al jurado tras la última inmunidad',
+    ruleJuryStepHelp: 'Tras la inmunidad final (lo más cerca sin pasarse), quien quede más lejos del objetivo se une al jurado en lugar de ir a un Consejo Tribal. Quien gana la inmunidad está a salvo. Se bloquea cuando empieza la final.',
+    ruleJuryStepCount: 'Cuántos se unen al jurado',
+    ruleJuryStepCountHelp: 'Los últimos de la clasificación de la inmunidad final. No responder te deja último.',
+    juryStepLockedNote: 'La final ya empezó, así que el paso final del jurado está bloqueado.',
+    ownRoleJuror: 'Estás en el jurado: puedes cambiar los plazos, pero solo ves lo que ve un miembro del jurado.',
+    ownRoleFinalist: 'Eres finalista: puedes cambiar los plazos, pero solo ves lo que ve un finalista.',
   },
 })
 

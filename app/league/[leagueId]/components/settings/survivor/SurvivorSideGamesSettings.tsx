@@ -7,7 +7,10 @@ import {
   exileSlotLabel,
   normalizeExileSlotToken,
   readSurvivorSideGameSettings,
+  SIDE_GAME_DISADVANTAGE_KINDS,
+  SURVIVOR_POOL_CONFERENCES,
   SURVIVOR_SIDE_GAME_DEFAULTS,
+  type SideGameDisadvantageKind,
   type SideGamePrizeKind,
   type SurvivorSideGameKey,
   type SurvivorSideGameSettings,
@@ -15,7 +18,14 @@ import {
 import { SURVIVOR_GOVERNANCE_DAYS } from '@/lib/survivor/survivorGovernanceSettings'
 import { formatWeekRulesText, parseWeekRulesText, survivorSideGameMessages } from '@/lib/survivor/survivorSideGameUiMessages'
 
-type Loaded = { settings: SurvivorSideGameSettings; locked: SurvivorSideGameKey[]; sport?: string }
+type Loaded = { settings: SurvivorSideGameSettings; locked: SurvivorSideGameKey[]; sport?: string; poolGroups?: { conferences: string[]; divisions: string[] } }
+
+/** The shop item a disadvantage adds when the commissioner turns it on (for sale only once priced and switched on). */
+const DISADVANTAGE_SHOP_ITEM: Record<SideGameDisadvantageKind, SurvivorSideGameSettings['tokenShopItems'][number]> = {
+  opponent_penalty: { id: 'opponent_penalty', kind: 'opponent_penalty', enabled: false, cost: 4, amount: 10, powerType: 'extra_vote', samePositionOnly: false },
+  vote_taken: { id: 'vote_taken', kind: 'vote_taken', enabled: false, cost: 6, amount: 0, powerType: 'extra_vote', samePositionOnly: false },
+  forced_bench: { id: 'forced_bench', kind: 'forced_bench', enabled: false, cost: 5, amount: 0, powerType: 'extra_vote', samePositionOnly: false },
+}
 
 /**
  * League settings → Survivor → Exile: the side-game settings (lib/survivor/survivorSideGameSettings.ts)
@@ -49,7 +59,7 @@ export function SurvivorSideGamesSettings({ leagueId, canEdit }: { leagueId: str
       const raw = (await res.json()) as Partial<Loaded> | null
       if (!raw?.settings || typeof raw.settings !== 'object') throw new Error('shape')
       // Normalised through the same reader the server uses, so a partial payload can never break the panel.
-      const data: Loaded = { settings: readSurvivorSideGameSettings({ survivorSideGames: raw.settings }), locked: Array.isArray(raw.locked) ? raw.locked : [], sport: raw.sport }
+      const data: Loaded = { settings: readSurvivorSideGameSettings({ survivorSideGames: raw.settings }), locked: Array.isArray(raw.locked) ? raw.locked : [], sport: raw.sport, poolGroups: raw.poolGroups }
       setLoaded(data)
       adopt(data.settings, data.sport)
     } catch {
@@ -130,6 +140,7 @@ export function SurvivorSideGamesSettings({ leagueId, canEdit }: { leagueId: str
 
       <SettingsSection id="sv-side-secrecy" title={m.secrecyTitle}>
         <SettingsRow label={m.hideExile} control={<Toggle checked={draft.hideExileMembership} disabled={off} onChange={(v) => set('hideExileMembership', v)} />} />
+        {draft.hideExileMembership && <SettingsRow label={m.exposureRule} control={<Select value={draft.exileExposureRule} disabled={off} onChange={(v) => set('exileExposureRule', v as SurvivorSideGameSettings['exileExposureRule'])}><option value="off">{m.exposureOff}</option><option value="remove">{m.exposureRemove}</option><option value="strike">{m.exposureStrike}</option></Select>} />}
       </SettingsSection>
 
       <SettingsSection id="sv-side-token-pool" title={m.tokenPoolTitle}>
@@ -154,12 +165,31 @@ export function SurvivorSideGamesSettings({ leagueId, canEdit }: { leagueId: str
         ))}
       </SettingsSection>
 
+      <SettingsSection id="sv-side-disadvantages" title={m.disadvantagesTitle} description={m.disadvantagesHelp}>
+        {SIDE_GAME_DISADVANTAGE_KINDS.map((kind) => (
+          <SettingsRow key={kind} label={kind === 'opponent_penalty' ? m.disOpponentPenalty : kind === 'forced_bench' ? m.disForcedBench : m.disVoteTaken} control={<Toggle checked={draft.disadvantagesEnabled.includes(kind)} disabled={off} onChange={(v) => setDraft((d) => {
+            const enabled = v ? [...new Set([...d.disadvantagesEnabled, kind])] : d.disadvantagesEnabled.filter((k) => k !== kind)
+            // Turning one on adds its shop item (not for sale until you switch it on and price it);
+            // turning it off takes that item off sale, so the save is never refused for it.
+            const hasItem = d.tokenShopItems.some((i) => i.kind === kind)
+            const items = v
+              ? (hasItem ? d.tokenShopItems : [...d.tokenShopItems, DISADVANTAGE_SHOP_ITEM[kind]])
+              : d.tokenShopItems.map((i) => (i.kind === kind ? { ...i, enabled: false } : i))
+            return { ...d, disadvantagesEnabled: enabled, tokenShopItems: items }
+          })} />} />
+        ))}
+      </SettingsSection>
+
       <SettingsSection id="sv-side-pool" title={m.poolTitle}>
         <SettingsRow label={m.poolEnabled} control={<Toggle checked={draft.survivorPoolEnabled} disabled={off} onChange={(v) => set('survivorPoolEnabled', v)} />} />
         {draft.survivorPoolEnabled && <>
           <SettingsRow label={lbl(m.poolStart, 'survivorPoolStartWeek')} control={<Input type="number" min={1} max={30} value={draft.survivorPoolStartWeek} disabled={off || isLocked('survivorPoolStartWeek')} onChange={(e) => set('survivorPoolStartWeek', Number(e.target.value))} className="w-20" aria-label={m.poolStart} />} />
-          <SettingsRow label={m.poolRule} control={<Select value={draft.survivorPoolRule} disabled={off} onChange={(v) => set('survivorPoolRule', v as SurvivorSideGameSettings['survivorPoolRule'])}><option value="any">{m.ruleAny}</option><option value="conference">{m.ruleConference}</option><option value="away_only">{m.ruleAway}</option><option value="allowed_list">{m.ruleList}</option></Select>} />
-          {draft.survivorPoolRule === 'conference' && <SettingsRow label={m.poolConference} control={<Select value={draft.survivorPoolConference} disabled={off} onChange={(v) => set('survivorPoolConference', v as 'AFC' | 'NFC')}><option value="AFC">AFC</option><option value="NFC">NFC</option></Select>} />}
+          <SettingsRow label={m.poolRule} control={<Select value={draft.survivorPoolRule} disabled={off} onChange={(v) => set('survivorPoolRule', v as SurvivorSideGameSettings['survivorPoolRule'])}><option value="any">{m.ruleAny}</option><option value="conference">{m.ruleConference}</option><option value="away_only">{m.ruleAway}</option><option value="allowed_list">{m.ruleList}</option><option value="division">{m.ruleDivision}</option></Select>} />
+          {draft.survivorPoolRule === 'conference' && <SettingsRow label={m.poolConference} description={m.poolGroupHint} control={<Select value={draft.survivorPoolConference} disabled={off} onChange={(v) => set('survivorPoolConference', v)}>{[...new Set([...(loaded?.poolGroups?.conferences.length ? loaded.poolGroups.conferences : SURVIVOR_POOL_CONFERENCES), draft.survivorPoolConference])].map((c) => <option key={c} value={c}>{c}</option>)}</Select>} />}
+          {draft.survivorPoolRule === 'division' && <SettingsRow label={m.poolDivision} description={m.poolGroupHint} control={<Select value={draft.survivorPoolDivision} disabled={off} onChange={(v) => set('survivorPoolDivision', v)}><option value="">—</option>{[...new Set([...(loaded?.poolGroups?.divisions ?? []), ...(draft.survivorPoolDivision ? [draft.survivorPoolDivision] : [])])].map((d) => <option key={d} value={d}>{d}</option>)}</Select>} />}
+          <SettingsRow label={lbl(m.poolTieRule, 'survivorPoolTieRule')} control={<Select value={draft.survivorPoolTieRule} disabled={off || isLocked('survivorPoolTieRule')} onChange={(v) => set('survivorPoolTieRule', v as SurvivorSideGameSettings['survivorPoolTieRule'])}><option value="push">{m.tiePush}</option><option value="loss">{m.tieLoss}</option><option value="win">{m.tieWin}</option></Select>} />
+          <SettingsRow label={lbl(m.poolMissed, 'survivorPoolMissedPick')} control={<Select value={draft.survivorPoolMissedPick} disabled={off || isLocked('survivorPoolMissedPick')} onChange={(v) => set('survivorPoolMissedPick', v as SurvivorSideGameSettings['survivorPoolMissedPick'])}><option value="none">{m.missedNone}</option><option value="loss">{m.missedLoss}</option><option value="revive">{m.missedRevive}</option></Select>} />
+          <SettingsRow label={lbl(m.poolNoReuse, 'survivorPoolNoReuse')} control={<Toggle checked={draft.survivorPoolNoReuse} disabled={off || isLocked('survivorPoolNoReuse')} onChange={(v) => set('survivorPoolNoReuse', v)} />} />
           {draft.survivorPoolRule === 'allowed_list' && <SettingsRow label={m.poolAllowed} control={<Input value={teamsText} disabled={off} onChange={(e) => setTeamsText(e.target.value)} placeholder="KC, TB, ARI, ATL" className="w-56" aria-label={m.poolAllowed} />} />}
           <SettingsRow label={m.poolWeekRules} control={<Input value={weekRulesText} disabled={off} onChange={(e) => setWeekRulesText(e.target.value)} className="w-64" aria-label={m.poolWeekRules} />} />
           <SettingsRow label={m.poolPrize} control={<Select value={draft.survivorPoolPrize.kind} disabled={off} onChange={(v) => set('survivorPoolPrize', { ...draft.survivorPoolPrize, kind: v as SideGamePrizeKind })}>{prizeKinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}</Select>} />

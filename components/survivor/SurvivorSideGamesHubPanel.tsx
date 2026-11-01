@@ -46,6 +46,7 @@ export function SurvivorSideGamesHubPanel({ leagueId }: { leagueId: string }) {
   const [cash, setCash] = useState<Record<string, number>>({})
   const [auction, setAuction] = useState({ label: '', mode: 'sealed' as 'sealed' | 'open', opensAt: '', closesAt: '' })
   const [items, setItems] = useState<DraftItem[]>([{ label: '', blind: false, kind: 'advantage', amount: 0, powerType: 'extra_vote' }])
+  const [exposed, setExposed] = useState<{ userId: string; preview: string | null }>({ userId: '', preview: null })
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +76,23 @@ export function SurvivorSideGamesHubPanel({ leagueId }: { leagueId: string }) {
     } catch (e) {
       setStatus(e instanceof Error ? e.message : m.saveFailed)
       return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** "Removed if exposed": first a preview (nothing changes), then the commissioner confirms. */
+  async function exposure(confirm: boolean) {
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/survivor/commissioner', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId, action: 'exile_exposure_penalty', userId: exposed.userId, confirm }) })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; preview?: boolean; message?: string }
+      if (!res.ok) throw new Error(body.error || m.saveFailed)
+      if (body.preview) setExposed((x) => ({ ...x, preview: body.message ?? m.exposureApply }))
+      else { setExposed({ userId: '', preview: null }); setStatus(m.done); await load() }
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : m.saveFailed)
     } finally {
       setBusy(false)
     }
@@ -157,9 +175,12 @@ export function SurvivorSideGamesHubPanel({ leagueId }: { leagueId: string }) {
               <select aria-label={m.poolPrize} value={it.kind} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, kind: e.target.value as SideGamePrizeKind } : x)))} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs">
                 <option value="advantage">{m.prizeAdvantage}</option><option value="free_trade_token">{m.prizeFreeTrade}</option><option value="steal_blocker">{m.prizeBlocker}</option>
                 <option value="faab">{m.prizeFaab}</option><option value="score_bonus">{m.prizeScore}</option><option value="tokens">{m.prizeTokens}</option>
+                {s.disadvantagesEnabled?.includes('opponent_penalty') && <option value="opponent_penalty">{m.prizeOpponentPenalty}</option>}
+                {s.disadvantagesEnabled?.includes('vote_taken') && <option value="vote_taken">{m.prizeVoteTaken}</option>}
+                {s.disadvantagesEnabled?.includes('forced_bench') && <option value="forced_bench">{m.prizeForcedBench}</option>}
               </select>
               {it.kind === 'advantage' && <select aria-label={m.prizeAdvantage} value={it.powerType} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, powerType: e.target.value as DraftItem['powerType'] } : x)))} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs"><option value="extra_vote">extra vote</option><option value="vote_shield">vote shield</option><option value="vote_steal">vote steal</option></select>}
-              {['faab', 'score_bonus', 'tokens'].includes(it.kind) && <input type="number" min={1} max={1000} aria-label={m.poolPrizeAmount} value={it.amount} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) } : x)))} className="w-20 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs" />}
+              {['faab', 'score_bonus', 'tokens', 'opponent_penalty'].includes(it.kind) && <input type="number" min={1} max={1000} aria-label={m.poolPrizeAmount} value={it.amount} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) } : x)))} className="w-20 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs" />}
               <label className="flex items-center gap-1 text-[11px] text-white/60"><input type="checkbox" checked={it.blind} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, blind: e.target.checked } : x)))} />{m.itemBlind}</label>
             </div>
           ))}
@@ -189,6 +210,23 @@ export function SurvivorSideGamesHubPanel({ leagueId }: { leagueId: string }) {
               <button type="button" disabled={busy || !cash[c.userId]} onClick={() => void act({ action: 'auction_cash_grant', rosterId: c.rosterId, amount: cash[c.userId] })} className="rounded-lg border border-white/20 px-2 py-1 text-[11px] disabled:opacity-40">{m.grantCash}</button>
             </div>
           ))}
+        </section>
+      )}
+
+      {s.hideExileMembership && s.exileExposureRule && s.exileExposureRule !== 'off' && (
+        <section className="space-y-2 rounded-xl border border-rose-400/20 p-3" data-testid="survivor-exposure-section">
+          <h4 className="text-sm font-semibold">{m.exposureTitle}</h4>
+          <p className="text-[11px] text-white/50">{m.exposureHelp}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select aria-label={m.exposureTitle} value={exposed.userId} onChange={(e) => setExposed({ userId: e.target.value, preview: null })} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs">
+              <option value="">—</option>
+              {view.castaways.filter((c) => c.playerState !== 'eliminated').map((c) => <option key={c.userId} value={c.userId}>{c.displayName}</option>)}
+            </select>
+            {!exposed.preview
+              ? <button type="button" disabled={busy || !exposed.userId} onClick={() => void exposure(false)} className="rounded-lg border border-white/20 px-2 py-1 text-[11px] disabled:opacity-40" data-testid="survivor-exposure-review">{m.exposureCheck}</button>
+              : <button type="button" disabled={busy} onClick={() => void exposure(true)} className="rounded-lg border border-rose-400/40 px-2 py-1 text-[11px] disabled:opacity-40" data-testid="survivor-exposure-confirm">{m.exposureApply}</button>}
+          </div>
+          {exposed.preview && <p className="text-[11px] text-rose-200" role="status">{exposed.preview}</p>}
         </section>
       )}
 

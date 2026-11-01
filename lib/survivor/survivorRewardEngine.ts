@@ -203,7 +203,7 @@ async function requireActive(db: Db, leagueId: string, rosterId: string, who: st
   return c
 }
 
-type Execution = { status: SurvivorRewardStatus; changes: SurvivorRewardChange[]; note: string | null; blockedBy?: string | null }
+type Execution = { status: SurvivorRewardStatus; changes: SurvivorRewardChange[]; note: string | null; blockedBy?: string | null; spec?: SurvivorRewardSpec }
 
 /** Carry a reward out now. Throws RewardRefusal for anything that must not be half-applied. */
 async function executeReward(
@@ -314,7 +314,93 @@ async function executeReward(
       })
       return { status: 'applied', changes: [{ kind: 'advantage', rosterId: spec.rosterId, idolId: idol.id, powerType: spec.powerType }], note: null }
     }
+    case 'opponent_penalty': {
+      const chooser = await requireActive(db, leagueId, spec.chooserRosterId, 'The winner')
+      if (!spec.targetRosterId) return { status: 'awaiting_choice', changes: [], note: null }
+      const target = await requireActive(db, leagueId, spec.targetRosterId, 'That opponent')
+      if (target.rosterId === chooser.rosterId) throw new RewardRefusal('invalid', 'Choose an opponent, not yourself.')
+      const change = await adjustScore(db, leagueId, target, applyWeek, -spec.points)
+      return { status: 'applied', changes: [change], note: null }
+    }
+    case 'vote_taken': {
+      const chooser = await requireActive(db, leagueId, spec.chooserRosterId, 'The winner')
+      if (!spec.targetRosterId) return { status: 'awaiting_choice', changes: [], note: null }
+      const target = await requireActive(db, leagueId, spec.targetRosterId, 'That opponent')
+      if (target.rosterId === chooser.rosterId) throw new RewardRefusal('invalid', 'Choose an opponent, not yourself.')
+      // Held until the target's next Tribal Council opens; the season runner places it there.
+      return { status: 'available', changes: [], note: 'vote_taken_pending' }
+    }
+    case 'forced_bench': {
+      const chooser = await requireActive(db, leagueId, spec.chooserRosterId, 'The winner')
+      if (!spec.targetRosterId) return { status: 'awaiting_choice', changes: [], note: null }
+      const target = await requireActive(db, leagueId, spec.targetRosterId, 'That opponent')
+      if (target.rosterId === chooser.rosterId) throw new RewardRefusal('invalid', 'Choose an opponent, not yourself.')
+      const { firstStarterId, lineupIds } = await import('./survivorForcedBench')
+      const roster = await db.roster.findFirst({ where: { id: target.rosterId, leagueId }, select: { playerData: true } })
+      const playerId = spec.playerId ?? firstStarterId(roster?.playerData)
+      if (!playerId) throw new RewardRefusal('not_found', 'That opponent has no starter to bench.')
+      if (spec.playerId && !lineupIds(roster?.playerData).includes(spec.playerId)) throw new RewardRefusal('invalid', 'That player is not on the opponent’s roster.')
+      // The resolved player is written back onto the spec, so every check reads one fact.
+      return { status: 'applied', changes: [], note: `forced_bench:${playerId}:week:${applyWeek}`, spec: { ...spec, playerId } }
+    }
   }
+}
+
+/** The taken-vote record on a council's `idolsPlayed` (read by the tally as a stolen vote). */
+export function voteTakenPlayId(rewardId: string): string {
+  return `reward-vote-taken:${rewardId}`
+}
+
+/**
+ * Place every held `vote_taken` disadvantage on the first Tribal Council its target votes at: an
+ * open council (`voting_open`) whose attending tribe is the target's (or every tribe, after the
+ * merge). The record reuses the vote-steal shape the tally already reads — the target's ballot is
+ * read as taken — with no extra ballot. Idempotent: the play id is the reward id, and the reward is
+ * consumed in the same transaction. A target who has left the island lets the disadvantage lapse.
+ * Run by the season runner each tick. Returns the reward ids placed.
+ */
+export async function applyPendingVoteTakenRewards(leagueId: string): Promise<string[]> {
+  const pending = [...(await loadLedger(prisma, leagueId)).values()].filter((r) => r.spec.type === 'vote_taken' && r.status === 'available')
+  if (!pending.length) return []
+  const placed: string[] = []
+  for (const candidate of pending) {
+    const done = await inRewardLock(leagueId, async (db) => {
+      const record = (await loadLedger(db, leagueId)).get(candidate.rewardId)
+      if (!record || record.status !== 'available' || record.spec.type !== 'vote_taken' || !record.spec.targetRosterId) return false
+      const [chooser, target] = await Promise.all([castawayForRoster(db, leagueId, record.spec.chooserRosterId), castawayForRoster(db, leagueId, record.spec.targetRosterId)])
+      if (!target || target.playerState !== 'active') {
+        await writeLedgerRow(db, { leagueId, rewardId: record.rewardId, action: SURVIVOR_REWARD_ACTIONS.consumed, week: record.applyWeek, data: { status: 'expired', note: 'target_left_the_island' } })
+        return true
+      }
+      const council = await db.survivorTribalCouncil.findFirst({
+        where: { leagueId, status: 'voting_open', week: { gte: record.week }, OR: [{ attendingTribeId: null }, ...(target.tribeId ? [{ attendingTribeId: target.tribeId }] : [])] },
+        orderBy: [{ week: 'asc' }, { councilNumber: 'asc' }],
+        select: { id: true, week: true, idolsPlayed: true },
+      })
+      if (!council) return false
+      const plays = Array.isArray(council.idolsPlayed) ? (council.idolsPlayed as unknown[]) : []
+      const playId = voteTakenPlayId(record.rewardId)
+      const already = plays.some((p) => p && typeof p === 'object' && (p as Record<string, unknown>).idolId === playId)
+      if (!already) {
+        const play = {
+          idolId: playId, powerType: 'vote_steal', source: 'survivor_reward_vote_taken',
+          playerUserId: chooser?.userId ?? 'survivor-reward', playerRosterId: record.spec.chooserRosterId,
+          stolenVoterUserId: target.userId, stolenVoterRosterId: target.rosterId, playedAt: new Date().toISOString(),
+        }
+        await db.survivorTribalCouncil.update({ where: { id: council.id }, data: { idolsPlayed: [...plays, play] as Prisma.InputJsonValue } })
+      }
+      await writeLedgerRow(db, {
+        leagueId, rewardId: record.rewardId, action: SURVIVOR_REWARD_ACTIONS.consumed, week: council.week,
+        data: { status: 'consumed', note: `council:${council.id}`, changes: [{ kind: 'council_vote', rosterId: target.rosterId, councilId: council.id, playId }] },
+      })
+      return true
+    }).catch((error) => {
+      console.warn('[survivor] vote_taken placement failed', candidate.rewardId, error instanceof Error ? error.message : error)
+      return false
+    })
+    if (done) placed.push(candidate.rewardId)
+  }
+  return placed
 }
 
 function targetTribeOf(spec: SurvivorRewardSpec): string | null {
@@ -353,7 +439,7 @@ export async function applySurvivorReward(input: ApplySurvivorRewardInput): Prom
         actorUserId: input.actorUserId ?? null,
         targetTribeId: targetTribeOf(input.reward),
         data: {
-          spec: input.reward,
+          spec: execution.spec ?? input.reward,
           status: execution.status,
           week: input.week,
           applyWeek,
@@ -382,6 +468,8 @@ export async function chooseSurvivorRewardTarget(args: {
   /** The roster choosing. Must hold the reward unless `asCommissioner`. */
   actorRosterId: string | null
   targetRosterId: string
+  /** forced_bench only: the opponent's player who sits (default: their first starter). */
+  targetPlayerId?: string | null
   actorUserId?: string | null
   asCommissioner?: boolean
   /** Recorded on the row ("chimmy" when Chimmy chose for a seat it runs). */
@@ -395,14 +483,19 @@ export async function chooseSurvivorRewardTarget(args: {
       if (!record) throw new RewardRefusal('not_found', 'No such reward.')
       if (record.status !== 'awaiting_choice') throw new RewardRefusal('conflict', 'This reward is not waiting for a choice.')
       if (!args.asCommissioner && (!args.actorRosterId || !record.holderRosterIds.includes(args.actorRosterId))) throw new RewardRefusal('forbidden', 'Only the winner can make this choice.')
-      if (record.spec.type !== 'tribemate_points' && record.spec.type !== 'steal') throw new RewardRefusal('conflict', 'This reward has no choice to make.')
-      const spec = { ...record.spec, targetRosterId: args.targetRosterId } as SurvivorRewardSpec
+      if (!rewardNeedsChoice({ ...record.spec, targetRosterId: null } as SurvivorRewardSpec)) throw new RewardRefusal('conflict', 'This reward has no choice to make.')
+      const spec = {
+        ...record.spec,
+        targetRosterId: args.targetRosterId,
+        // A forced bench may also name WHICH of the opponent's players sits.
+        ...(record.spec.type === 'forced_bench' && args.targetPlayerId ? { playerId: args.targetPlayerId } : {}),
+      } as SurvivorRewardSpec
       const specError = validateSurvivorRewardSpec(spec)
       if (specError) throw new RewardRefusal('invalid', specError)
       const execution = await executeReward(db, args.leagueId, args.rewardId, spec, record.applyWeek, ledger)
       await writeLedgerRow(db, {
         leagueId: args.leagueId, rewardId: args.rewardId, action: SURVIVOR_REWARD_ACTIONS.choice, week: record.applyWeek, actorUserId: args.actorUserId ?? null,
-        data: { spec, status: execution.status, changes: execution.changes, note: execution.note, chosenBy: args.chosenBy ?? (args.asCommissioner ? 'commissioner' : 'manager'), blockedBy: execution.blockedBy ?? null },
+        data: { spec: execution.spec ?? spec, status: execution.status, changes: execution.changes, note: execution.note, chosenBy: args.chosenBy ?? (args.asCommissioner ? 'commissioner' : 'manager'), blockedBy: execution.blockedBy ?? null },
       })
       return { ok: true as const, rewardId: args.rewardId, status: execution.status, duplicate: false, changes: execution.changes, note: execution.note }
     })
@@ -434,7 +527,7 @@ export async function applyDueDeferredSurvivorRewards(leagueId: string, currentW
       }
       await writeLedgerRow(db, {
         leagueId, rewardId: record.rewardId, action: SURVIVOR_REWARD_ACTIONS.deferredApplied, week: record.applyWeek,
-        data: { status: execution.status, changes: execution.changes, note: execution.note, blockedBy: execution.blockedBy ?? null },
+        data: { status: execution.status, changes: execution.changes, note: execution.note, blockedBy: execution.blockedBy ?? null, ...(execution.spec ? { spec: execution.spec } : {}) },
       })
       return true
     }).catch((error) => {
@@ -515,6 +608,14 @@ export async function reverseSurvivorReward(args: { leagueId: string; rewardId: 
         } else if (change.kind === 'score') {
           await undoScore(db, args.leagueId, change)
           undone.push({ ...change, boost: -change.boost, penalty: -change.penalty })
+        } else if (change.kind === 'council_vote') {
+          // A taken vote comes off a council that has not closed yet; a closed council's read stands.
+          const council = await db.survivorTribalCouncil.findFirst({ where: { id: change.councilId, leagueId: args.leagueId, closedAt: null }, select: { id: true, idolsPlayed: true } })
+          if (council && Array.isArray(council.idolsPlayed)) {
+            const kept = (council.idolsPlayed as unknown[]).filter((p) => !(p && typeof p === 'object' && (p as Record<string, unknown>).idolId === change.playId))
+            await db.survivorTribalCouncil.update({ where: { id: council.id }, data: { idolsPlayed: kept as Prisma.InputJsonValue } })
+            undone.push(change)
+          }
         } else {
           await db.survivorIdol.updateMany({ where: { id: change.idolId, leagueId: args.leagueId, status: 'revealed' }, data: { status: 'expired' } })
           undone.push(change)

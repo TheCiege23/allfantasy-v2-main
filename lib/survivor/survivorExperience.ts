@@ -4,12 +4,13 @@
  *
  * Precedence: the commissioner's manual flag, then this league's own history (the castaway owned a
  * team in an earlier season of the same league — a renewed league keeps its id across seasons), then
- * rookie. Nothing is invented: a castaway with no earlier season on record is a rookie until the
+ * — only when the commissioner opted in (`experienceCrossLeague`) — a previous Survivor season in any
+ * other AllFantasy league (`platform`; which league is never recorded here), then rookie. Nothing is invented: a castaway with no earlier season on record is a rookie until the
  * commissioner says otherwise.
  */
 import type { SurvivorExperience } from './survivorGovernanceSettings'
 
-export type ExperienceSource = 'manual' | 'history' | 'default'
+export type ExperienceSource = 'manual' | 'history' | 'platform' | 'default'
 
 export interface CastawayExperience {
   experience: SurvivorExperience
@@ -20,6 +21,8 @@ export function resolveCastawayExperience(
   userIds: readonly string[],
   overrides: Readonly<Record<string, SurvivorExperience>>,
   returningUserIds: ReadonlySet<string>,
+  /** Played Survivor in another AllFantasy league (opt-in lookup); empty when the lookup is off. */
+  platformVeteranUserIds: ReadonlySet<string> = new Set(),
 ): Record<string, CastawayExperience> {
   const out: Record<string, CastawayExperience> = {}
   for (const userId of userIds) {
@@ -28,7 +31,9 @@ export function resolveCastawayExperience(
       ? { experience: manual, source: 'manual' }
       : returningUserIds.has(userId)
         ? { experience: 'veteran', source: 'history' }
-        : { experience: 'rookie', source: 'default' }
+        : platformVeteranUserIds.has(userId)
+          ? { experience: 'veteran', source: 'platform' }
+          : { experience: 'rookie', source: 'default' }
   }
   return out
 }

@@ -191,7 +191,7 @@ describe('Chimmy’s weekly commissioner report carries the rewards line (gap 4)
   it('appends it after the side-game line, in the league language', async () => {
     const { chimmyWeeklyReportBody } = await import('@/lib/survivor/chimmyWeeklyReport')
     const rows = [{ name: 'Seat 1', state: 'active', voted: 1, exileTeam: null }]
-    const en = chimmyWeeklyReportBody(9, rows, 'en', 'Side games: quiet.', 'Rewards: 2 paid this week, 0 choices pending, 0 reversed.')
+    const en = chimmyWeeklyReportBody(9, rows, 'en', 'Side games: quiet.', null, 'Rewards: 2 paid this week, 0 choices pending, 0 reversed.')
     expect(en.split('\n').slice(-2)).toEqual(['Side games: quiet.', 'Rewards: 2 paid this week, 0 choices pending, 0 reversed.'])
     expect(chimmyWeeklyReportBody(9, rows, 'es')).not.toMatch(/Recompensas/)
   })

@@ -17,9 +17,12 @@ import {
   type SurvivorSettingsForm,
   type SurvivorSettingsKey,
   type SurvivorSettingsLocks,
+  type SurvivorScreenSideGames,
 } from '@/lib/survivor/survivorSettingsScreen'
 import { seasonPreviewMessages, settingsErrorMessages, survivorSettingsScreenMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
 import { messagesFor } from '@/lib/i18n/messages'
+import type { SurvivorSideGameKey } from '@/lib/survivor/survivorSideGameSettings'
+import { survivorSideGameMessages } from '@/lib/survivor/survivorSideGameUiMessages'
 import { SurvivorStateCard } from './core/SurvivorStateCard'
 import { SurvivorChallengeSettingsSection, SurvivorExileExtras, SurvivorJuryExtras, SurvivorPrizesSection, SurvivorRulesSection, survivorSettingsExtrasMessages } from './SurvivorSettingsExtras'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -34,6 +37,7 @@ type ScreenState = {
   chimmyBossAvailable: boolean
   commissionerPlays: boolean
   language?: 'en' | 'es'
+  sideGameLocked?: SurvivorSideGameKey[]
 }
 
 type NavKey = 'navTribes' | 'navTribal' | 'navIdols' | 'navExile' | 'navSwap' | 'navChallenges' | 'navSharing' | null
@@ -47,6 +51,8 @@ const SECTIONS: readonly { id: string; nav: NavKey; icon: string }[] = [
   { id: 'svt-prizes', nav: null, icon: '/survivor/weekly/urn.svg' },
   { id: 'svt-rules', nav: null, icon: '/survivor/exile/wax-seal.svg' },
   { id: 'svt-challenges', nav: 'navChallenges', icon: '/survivor/weekly/torch-lit-icon.svg' },
+  // Labelled by the side games' own EN/ES catalogue (survivorSideGameMessages.cardTitle).
+  { id: 'svt-side-games', nav: null, icon: '/survivor/exile/token-icon.svg' },
   { id: 'svt-sharing', nav: 'navSharing', icon: '/survivor/late/champion-icon.svg' },
 ]
 
@@ -70,6 +76,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
   const extrasText = useMessages(survivorSettingsExtrasMessages)
   const t = useMessages(survivorSettingsScreenMessages)
   const previewCopy = useMessages(seasonPreviewMessages)
+  const sideText = useMessages(survivorSideGameMessages)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -95,6 +102,12 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
   function set<K extends SurvivorSettingsKey>(key: K, value: SurvivorSettingsForm[K]) {
     setMessage(null)
     setDraft(current => (current ? { ...current, [key]: value } : current))
+  }
+
+  /** One side-game value; saved with the form through the shared side-game validator. */
+  function setSide<K extends keyof SurvivorScreenSideGames>(key: K, value: SurvivorScreenSideGames[K]) {
+    setMessage(null)
+    setDraft(current => (current ? { ...current, sideGames: { ...current.sideGames, [key]: value } } : current))
   }
 
   async function save() {
@@ -142,7 +155,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
     { value: 'fixed' as const, label: t.bossFixed },
     { value: 'topN' as const, label: t.bossTopN(draft.exileBossTopN) },
   ]
-  const navLabel = (s: (typeof SECTIONS)[number]) => s.id === 'svt-prizes' ? extrasText.prizesHeading : s.id === 'svt-rules' ? extrasText.rulesHeading : s.nav ? t[s.nav] : s.id
+  const navLabel = (s: (typeof SECTIONS)[number]) => s.id === 'svt-prizes' ? extrasText.prizesHeading : s.id === 'svt-rules' ? extrasText.rulesHeading : s.id === 'svt-side-games' ? sideText.cardTitle : s.nav ? t[s.nav] : s.id
 
   return <div className="svk" style={{ minHeight: '100vh' }} data-testid="survivor-settings-screen">
     <header className="svk-head">
@@ -281,6 +294,67 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
         <SurvivorPrizesSection {...extraProps} icon="/survivor/weekly/urn.svg" sport={state.context.sport} />
         <SurvivorRulesSection {...extraProps} icon="/survivor/exile/wax-seal.svg" />
         <SurvivorChallengeSettingsSection {...extraProps} icon="/survivor/weekly/torch-lit-icon.svg" />
+
+        {draft.sideGames && (() => {
+          const sg = draft.sideGames
+          const sideLocked = (key: SurvivorSideGameKey) => Boolean(state.sideGameLocked?.includes(key))
+          const sideOff = (key: SurvivorSideGameKey) => saving || sideLocked(key)
+          const sideLock = (key: SurvivorSideGameKey) => (sideLocked(key) ? <span className="svt-lock"><Lock size={12} aria-hidden /> {sideText.screenLocked}</span> : null)
+          return <section id="svt-side-games" className="svk-card svt-sec" aria-labelledby="svt-side-games-h" data-testid="survivor-settings-side-games">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <h2 id="svt-side-games-h"><img src="/survivor/exile/token-icon.svg" alt="" />{sideText.cardTitle}</h2>
+            <p style={{ fontSize: 13, opacity: 0.7 }}>{sideText.screenHint}</p>
+            <SvkField title={sideText.tokenPoolEnabled}>
+              {sideLock('tokenPoolEnabled')}
+              <SvkToggle label={sideText.tokenPoolEnabled} checked={sg.tokenPoolEnabled ?? true} onChange={v => setSide('tokenPoolEnabled', v)} disabled={sideOff('tokenPoolEnabled')} testId="survivor-settings-token-pool" />
+            </SvkField>
+            {sg.tokenPoolEnabled !== false && <>
+              <SvkField title={sideText.tokenPoolMode}>
+                {sideLock('tokenPoolMode')}
+                <SvkSegmented label={sideText.tokenPoolMode} value={sg.tokenPoolMode ?? 'per_pick'} onChange={v => setSide('tokenPoolMode', v)} disabled={sideOff('tokenPoolMode')} options={[{ value: 'per_pick', label: sideText.modePerPick }, { value: 'streak', label: sideText.modeStreak }]} />
+              </SvkField>
+              <SvkField title={sideText.wrongPick}>
+                {sideLock('tokenPoolWrongPick')}
+                <SvkSegmented label={sideText.wrongPick} value={sg.tokenPoolWrongPick ?? 'keep'} onChange={v => setSide('tokenPoolWrongPick', v)} disabled={sideOff('tokenPoolWrongPick')} options={[{ value: 'keep', label: sideText.wrongKeep }, { value: 'minus_one', label: sideText.wrongMinusOne }, { value: 'lose_all', label: sideText.wrongLoseAll }]} />
+              </SvkField>
+            </>}
+            <SvkField title={sideText.shopEnabled}>
+              {sideLock('tokenShopEnabled')}
+              <SvkToggle label={sideText.shopEnabled} checked={sg.tokenShopEnabled ?? false} onChange={v => setSide('tokenShopEnabled', v)} disabled={sideOff('tokenShopEnabled')} />
+            </SvkField>
+            <SvkField title={sideText.poolEnabled}>
+              {sideLock('survivorPoolEnabled')}
+              <SvkToggle label={sideText.poolEnabled} checked={sg.survivorPoolEnabled ?? false} onChange={v => setSide('survivorPoolEnabled', v)} disabled={sideOff('survivorPoolEnabled')} testId="survivor-settings-pool" />
+            </SvkField>
+            {sg.survivorPoolEnabled && <>
+              <SvkField title={sideText.poolTieRule}>
+                {sideLock('survivorPoolTieRule')}
+                <SvkSegmented label={sideText.poolTieRule} value={sg.survivorPoolTieRule ?? 'push'} onChange={v => setSide('survivorPoolTieRule', v)} disabled={sideOff('survivorPoolTieRule')} options={[{ value: 'push', label: sideText.tiePush }, { value: 'loss', label: sideText.tieLoss }, { value: 'win', label: sideText.tieWin }]} testId="survivor-settings-pool-tie" />
+              </SvkField>
+              <SvkField title={sideText.poolMissed}>
+                {sideLock('survivorPoolMissedPick')}
+                <SvkSegmented label={sideText.poolMissed} value={sg.survivorPoolMissedPick ?? 'none'} onChange={v => setSide('survivorPoolMissedPick', v)} disabled={sideOff('survivorPoolMissedPick')} options={[{ value: 'none', label: sideText.missedNone }, { value: 'loss', label: sideText.missedLoss }, { value: 'revive', label: sideText.missedRevive }]} />
+              </SvkField>
+              <SvkField title={sideText.poolNoReuse}>
+                {sideLock('survivorPoolNoReuse')}
+                <SvkToggle label={sideText.poolNoReuse} checked={sg.survivorPoolNoReuse ?? false} onChange={v => setSide('survivorPoolNoReuse', v)} disabled={sideOff('survivorPoolNoReuse')} testId="survivor-settings-pool-no-reuse" />
+              </SvkField>
+            </>}
+            <SvkField title={sideText.claimMode}>
+              {sideLock('exileClaimMode')}
+              <SvkSegmented label={sideText.claimMode} value={sg.exileClaimMode ?? 'first_come'} onChange={v => setSide('exileClaimMode', v)} disabled={sideOff('exileClaimMode')} options={[{ value: 'first_come', label: sideText.claimFirstCome }, { value: 'faab_bid', label: sideText.claimBid }]} />
+              {sg.exileClaimMode === 'faab_bid' && <SvkStepper label={sideText.bidBudget} value={sg.exileBidBudget ?? 100} min={1} max={1000} onChange={n => setSide('exileBidBudget', n)} disabled={sideOff('exileBidBudget')} />}
+            </SvkField>
+            <SvkField title={sideText.returnRate}>
+              {sideLock('exileTokenFaabRate')}
+              <SvkStepper label={sideText.returnRate} value={sg.exileTokenFaabRate ?? 0} min={0} max={200} onChange={n => setSide('exileTokenFaabRate', n)} disabled={sideOff('exileTokenFaabRate')} />
+            </SvkField>
+            <SvkField title={sideText.hideExile}>
+              {sideLock('hideExileMembership')}
+              <SvkToggle label={sideText.hideExile} checked={sg.hideExileMembership ?? false} onChange={v => setSide('hideExileMembership', v)} disabled={sideOff('hideExileMembership')} testId="survivor-settings-hide-exile" />
+            </SvkField>
+          </section>
+        })()}
 
         <section id="svt-sharing" className="svk-card svt-sec" aria-labelledby="svt-sharing-h">
           {/* eslint-disable-next-line @next/next/no-img-element */}

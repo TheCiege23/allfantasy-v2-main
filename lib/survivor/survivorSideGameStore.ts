@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeGameStatus } from '@/lib/scores/gameScoreProviders'
 import { isSurvivorPlanSport, planWeekWindow } from './survivorPlanCalendar'
 import { readSurvivorSideGameSettings, type SideGamePrize, type SurvivorSideGameSettings } from './survivorSideGameSettings'
-import { foldSideGameRows, type SideGameGame, type SideGameRawGame } from './survivorSideGameRules'
+import { foldSideGameRows, teamGroupsFromRows, type SideGameGame, type SideGameRawGame, type TeamGroups } from './survivorSideGameRules'
 import { foldSideGameLedger, SIDE_GAME_CATEGORY, SIDE_GAME_ENTITY, sideGameEntity, SIDE_GAME_ACTIONS, type SideGameState } from './survivorSideGameLedger'
 import { applySurvivorReward, type SurvivorRewardSpec } from './SurvivorEffectEngine'
 import { readSurvivorFaabBalance } from './survivorRewardEngine'
@@ -216,6 +216,47 @@ export async function chargeSideGameFaab(args: { leagueId: string; rosterId: str
   }, { timeout: 30_000, maxWait: 10_000 })
 }
 
+/**
+ * Give back an auction's FAAB charge — exactly what the charge row says was TAKEN (never what was
+ * bid), under the same reward lock and in one transaction with its ledger row, so a retry refunds
+ * once. Returns the amount refunded (0 when nothing was charged or it was refunded already).
+ */
+export async function refundSideGameFaab(args: { leagueId: string; rosterId: string; chargeKey: string; key: string; week: number; reason: string; refundOf: string }): Promise<number> {
+  return prisma.$transaction(async (db) => {
+    await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-reward:${args.leagueId}`}, 0))::text`
+    const dup = await db.survivorAuditEntry.findFirst({ where: { leagueId: args.leagueId, relatedEntityType: SIDE_GAME_ENTITY, data: { path: ['key'], equals: args.key } }, select: { data: true } })
+    if (dup) return 0
+    const charge = await db.survivorAuditEntry.findFirst({ where: { leagueId: args.leagueId, relatedEntityType: SIDE_GAME_ENTITY, data: { path: ['key'], equals: args.chargeKey } }, select: { data: true } })
+    const taken = Math.max(0, Math.floor(Number((charge?.data as Record<string, unknown> | undefined)?.amount ?? 0)))
+    if (taken) {
+      const roster = await db.roster.findFirst({ where: { id: args.rosterId, leagueId: args.leagueId }, select: { id: true, redraftRosterId: true, faabRemaining: true } })
+      const redraft = roster?.redraftRosterId ? await db.redraftRoster.findFirst({ where: { id: roster.redraftRosterId, leagueId: args.leagueId }, select: { id: true, faabBalance: true } }) : null
+      if (redraft && redraft.faabBalance != null) await db.redraftRoster.update({ where: { id: redraft.id }, data: { faabBalance: redraft.faabBalance + taken } })
+      if (roster && roster.faabRemaining != null) await db.roster.update({ where: { id: roster.id }, data: { faabRemaining: Math.round(roster.faabRemaining + taken) } })
+    }
+    await appendSideGameRow(db, null, {
+      leagueId: args.leagueId, entity: sideGameEntity.cash(args.rosterId), action: SIDE_GAME_ACTIONS.auctionRefund, week: args.week, key: args.key,
+      data: { amount: taken, currency: 'faab', chargeKey: args.chargeKey, reason: args.reason, refundOf: args.refundOf },
+    })
+    return taken
+  }, { timeout: 30_000, maxWait: 10_000 })
+}
+
+// ── Team groups (conferences and divisions) ────────────────────────────────────────────────────
+
+/**
+ * A sport's conferences and divisions from OUR `SportsTeam` table — never a provider. Every sport we
+ * support stores teams there; the NFL also has its groups built into the rules.
+ */
+export async function loadSideGameTeamGroups(db: Db, sport: string): Promise<TeamGroups> {
+  const rows = await db.sportsTeam.findMany({
+    where: { sport, OR: [{ conference: { not: null } }, { division: { not: null } }] },
+    select: { name: true, shortName: true, city: true, conference: true, division: true },
+    take: 2000,
+  })
+  return teamGroupsFromRows(sport, rows)
+}
+
 // ── Prizes ─────────────────────────────────────────────────────────────────────────────────────
 
 export function prizeRewardSpec(prize: SideGamePrize, rosterId: string, targetWeek: number | null): SurvivorRewardSpec | null {
@@ -225,11 +266,20 @@ export function prizeRewardSpec(prize: SideGamePrize, rosterId: string, targetWe
     case 'advantage': return { type: 'advantage', rosterId, powerType: prize.powerType }
     case 'free_trade_token': return { type: 'free_trade_token', rosterId, samePositionOnly: prize.samePositionOnly }
     case 'steal_blocker': return { type: 'steal_blocker', rosterId }
+    // Disadvantages wait for the winner's choice of opponent (the reward API's choice flow).
+    case 'opponent_penalty': return prize.amount > 0 ? { type: 'opponent_penalty', chooserRosterId: rosterId, points: prize.amount, targetWeek } : null
+    case 'vote_taken': return { type: 'vote_taken', chooserRosterId: rosterId }
+    case 'forced_bench': return { type: 'forced_bench', chooserRosterId: rosterId, targetWeek }
     default: return null
   }
 }
 
-export type PrizePayment = { ok: true; via: 'reward' | 'auction_cash' | 'tokens' | 'none'; rewardId: string | null } | { ok: false; error: string }
+/**
+ * `permanent`: the reward API REFUSED the prize (the winner is no longer an active castaway, the
+ * spec no longer applies) — retrying cannot pay it. Otherwise the failure was transient (a DB error)
+ * and the runner retries it on its next tick.
+ */
+export type PrizePayment = { ok: true; via: 'reward' | 'auction_cash' | 'tokens' | 'none'; rewardId: string | null } | { ok: false; error: string; permanent?: boolean }
 
 /**
  * Pay a side-game prize: a reward-API prize through `applySurvivorReward` (idempotent on `key`), or
@@ -263,11 +313,11 @@ export async function paySideGamePrize(args: {
       })
       return { ok: true, via: args.prize.kind, rewardId: null }
     }
-    if (!args.rosterId) return { ok: false, error: 'no_roster' }
+    if (!args.rosterId) return { ok: false, error: 'no_roster', permanent: true }
     const spec = prizeRewardSpec(args.prize, args.rosterId, args.targetWeek)
     if (!spec) return { ok: true, via: 'none', rewardId: null }
     const result = await applySurvivorReward({ leagueId: args.leagueId, idempotencyKey: args.key, source: args.source, week: args.week, reward: spec })
-    return result.ok ? { ok: true, via: 'reward', rewardId: result.rewardId } : { ok: false, error: result.error }
+    return result.ok ? { ok: true, via: 'reward', rewardId: result.rewardId } : { ok: false, error: result.error, permanent: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }

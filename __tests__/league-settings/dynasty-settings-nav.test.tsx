@@ -174,7 +174,8 @@ describe('a dynasty league', () => {
 describe('the new strings', () => {
   const keys = Object.keys(translations.en).filter((k) => k.startsWith('settingsNav.') || k.startsWith('taxiPanel.'))
   it('exist in English and Spanish', () => {
-    expect(keys.length).toBe(28)
+    // 29: the Survivor "Rules & Conduct" entry joined the bilingual nav keys.
+    expect(keys.length).toBe(29)
     for (const k of keys) {
       expect(translations.es[k], k).toBeTruthy()
     }

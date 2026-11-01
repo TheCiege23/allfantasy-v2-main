@@ -6,7 +6,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { getIntlLocale } from '@/lib/i18n/constants'
 import { survivorRulebookMessages } from '@/lib/core-app/messages/survivorRulebook'
-import { localDeadline, rulebook, type RulebookConfig, type RulebookRule } from '@/lib/core-app/survivorRulebook'
+import { rulebook, voteRuleWhen, type RulebookConfig, type RulebookRule } from '@/lib/core-app/survivorRulebook'
 
 /**
  * The season rulebook: the league's Survivor rules on one carved board, so a castaway never has to
@@ -32,7 +32,7 @@ export function SurvivorRulebook({ config, editHref, collapsible = false }: { co
       case 'idols': return [m.idols, m.idolsValue(r.count)]
       case 'swap': return [m.swap, r.on ? m.on : m.off]
       case 'vote': {
-        const when = locale ? localDeadline(r.day, r.timeUtc, locale) : null
+        const when = locale ? voteRuleWhen(r, locale) : null
         return [m.vote, [when ? m.voteDue(when) : null, r.selfVote ? m.voteSelf : m.voteNoSelf].filter(Boolean).join(' · ')]
       }
       case 'challenges': return [m.challenges, m.challengesValue(r.frequency)]

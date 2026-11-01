@@ -250,7 +250,8 @@ export type ExileStatusTile =
     returnWeek: number
     weeksUntilReturn: number | null
     tokensNeeded: number
-    onExile: number
+    /** Null when Exile membership is secret from this viewer (a headcount is a tell too). */
+    onExile: number | null
     /** Only ever the viewer's own balance, and only while they are on Exile. */
     you: { onExile: true; tokens: number } | { onExile: false }
   }
@@ -260,7 +261,7 @@ export function buildExileStatusTile(input: {
   returnWeek: number
   tokensNeeded: number
   currentWeek: number
-  exileCount: number
+  exileCount: number | null
   viewer: { onExile: boolean; tokens: number }
 }): ExileStatusTile {
   if (!input.enabled) return { enabled: false }

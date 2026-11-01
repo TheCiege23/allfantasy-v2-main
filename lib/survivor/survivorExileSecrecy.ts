@@ -30,3 +30,56 @@ export function canSeeExileMembership(args: {
 export function exileSafePlayerState(state: string, canSee: boolean): string {
   return !canSee && state === 'exile' ? 'eliminated' : state
 }
+
+export type ExileExposureCheck =
+  | { ok: true; penalty: 'remove' | 'strike'; confirmed: boolean }
+  | { ok: false; status: 400 | 404 | 409; reason: 'rule_off' | 'not_hidden' | 'not_castaway' | 'already_out' | 'self' }
+
+/**
+ * The commissioner's "removed if exposed" action (the original league's rule, never automatic):
+ * allowed only while Exile membership is secret and the commissioner turned the rule on, against a
+ * castaway still in the season. Nothing is applied until `confirm` is true — the first call is the
+ * preview the Hub shows in its confirm step. Pure.
+ */
+export function exileExposureCheck(args: {
+  hidden: boolean
+  rule: 'off' | 'remove' | 'strike'
+  target: { playerState: string } | null
+  targetIsActor: boolean
+  confirm: boolean
+}): ExileExposureCheck {
+  if (args.rule === 'off') return { ok: false, status: 409, reason: 'rule_off' }
+  if (!args.hidden) return { ok: false, status: 409, reason: 'not_hidden' }
+  if (!args.target) return { ok: false, status: 404, reason: 'not_castaway' }
+  if (args.targetIsActor) return { ok: false, status: 400, reason: 'self' }
+  if (args.target.playerState === 'eliminated') return { ok: false, status: 409, reason: 'already_out' }
+  return { ok: true, penalty: args.rule, confirmed: args.confirm }
+}
+
+/**
+ * A member list (chat members, alliance members, rosters of names) as a viewer who may not know
+ * about Exile sees it: an exiled member reads as simply out. The list keeps everyone it had — a name
+ * that silently vanished would be its own tell.
+ */
+export function exileSafeMembers<T extends { playerState?: string | null }>(members: readonly T[], canSee: boolean): T[] {
+  return members.map((m) => (m.playerState === 'exile' && !canSee ? { ...m, playerState: 'eliminated' } : m))
+}
+
+/** How many castaways are on Exile, or null when this viewer may not know (a count is a tell too). */
+export function visibleExileCount(players: ReadonlyArray<{ playerState?: string | null }>, canSee: boolean): number | null {
+  return canSee ? players.filter((p) => p.playerState === 'exile').length : null
+}
+
+/**
+ * The Exile page for one viewer. `viewerIsExile` and `nonPlayingCommissioner` always see everything;
+ * a viewer who may not know sees no count, no names and no "players marooned" line.
+ */
+export function exilePageVisibility(args: { membershipHidden: boolean; viewerIsExile: boolean; nonPlayingCommissioner: boolean; players: ReadonlyArray<{ playerState?: string | null }> }): {
+  showCount: boolean
+  count: number | null
+  showMembers: boolean
+} {
+  const canSee = !args.membershipHidden || args.viewerIsExile || args.nonPlayingCommissioner
+  const count = visibleExileCount(args.players, canSee)
+  return { showCount: count != null, count, showMembers: args.viewerIsExile || (canSee && args.nonPlayingCommissioner) }
+}
