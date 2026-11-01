@@ -13,6 +13,10 @@
  *  - A custom multiple choice: a stable pick from the challenge and seat ids (no favourite exists).
  *    A custom number: Chimmy sits it out — there is nothing stored to base a number on.
  *  - A wager: the minimum stake. Chimmy plays safe with a seat it does not own.
+ *  - First TD scorer: a stable pick (nothing stored ranks first scorers). Last score type: a
+ *    touchdown. Position leaders: the option player with the best stored median fantasy points
+ *    this season. A sweep: a stable pick per prop. A puzzle: Chimmy sits it out (it is solved by a
+ *    person, and Chimmy never reads the commissioner's answer).
  */
 
 import { challengeInputKind, type ChallengeBuilderConfig, type ChallengeSubmission } from './survivorChallengeBuilderModel'
@@ -26,6 +30,8 @@ export type ChimmyChallengeFacts = {
   recentTotals?: readonly number[]
   /** The player's stored values for the stat, one per week. */
   playerValues?: readonly number[]
+  /** Position leaders: each option player's stored weekly fantasy points this season (playerId → weeks). */
+  optionValues?: ReadonlyMap<string, readonly number[]>
 }
 
 export function median(values: readonly number[]): number | null {
@@ -76,6 +82,40 @@ export function chimmyChallengeAnswer(config: ChallengeBuilderConfig, facts: Chi
     case 'custom_choice':
       return config.options.length ? { answer: { optionId: config.options[stableIndex(seed, config.options.length)]!.id }, wager } : null
     case 'custom_number':
+      return null
+    // ── The original league's kinds (added later) ──
+    case 'first_td_scorer':
+      // Nothing stored ranks first scorers: a stable pick, like a custom multiple choice.
+      return config.options.length ? { answer: { optionId: config.options[stableIndex(seed, config.options.length)]!.id }, wager } : null
+    case 'last_score_type': {
+      // Touchdowns are the most common last score; Chimmy calls it every time (deterministic).
+      const td = config.options.find((o) => o.id === 'touchdown') ?? config.options[0]
+      return td ? { answer: { optionId: td.id }, wager } : null
+    }
+    case 'position_leader': {
+      // The option whose player has the best stored median fantasy points this season; ties go to
+      // the first option. Options without a stored week count as 0.
+      if (!config.options.length) return null
+      let best = config.options[0]!
+      let bestValue = -Infinity
+      for (const o of config.options) {
+        const v = median((o.playerId && facts.optionValues?.get(o.playerId)) || []) ?? 0
+        if (v > bestValue) { best = o; bestValue = v }
+      }
+      return { answer: { optionId: best.id }, wager }
+    }
+    case 'sweep': {
+      const props = config.props ?? []
+      if (!props.length) return null
+      const picks: Record<string, string> = {}
+      for (const p of props) {
+        if (!p.options.length) return null
+        picks[p.id] = p.options[stableIndex(`${seed}:${p.id}`, p.options.length)]!.id
+      }
+      return { answer: { picks }, wager }
+    }
+    case 'puzzle':
+      // A puzzle is solved by a person; Chimmy never sees the answer and sits it out.
       return null
   }
 }

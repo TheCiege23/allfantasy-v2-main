@@ -14,8 +14,9 @@ import { classifyFixtureResult, groupFixtures, type RealGameRow, type TeamResolv
 import { planWeekWindow, type SurvivorPlanSport } from './survivorPlanCalendar'
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import {
-  answerKey, CHALLENGE_BUILDER_FIRST_NUMBER, CHALLENGE_BUILDER_MAX_PER_WEEK, CHALLENGE_BUILDER_TYPE, challengeAutoSource,
-  challengeError, challengeInputKind, challengeLang, challengeLockLine, challengeOpenLine, challengeResultLine,
+  answerKey, CHALLENGE_BUILDER_FIRST_NUMBER, CHALLENGE_BUILDER_MAX_PER_WEEK, CHALLENGE_BUILDER_TYPE, CHALLENGE_ANYTIME_KEYS, challengeSettlementSource,
+  challengeError, challengeInputKind, challengeLang, challengeLockLine, challengeOpenLine, challengeResultLine, challengeSportKey,
+  normalizeAnswerText, playerStatSupported, positionLeaderTruth, prizePhaseOf, readPrizePhaseRules, type ChallengeSettlementSource,
   choiceTruthFromNumber, clockStatus, describeChallengePrizes, editAfterAnswersError, planChallengePayouts,
   readChallengeBuilderConfig, readChallengeFaabWeeklyCap, readSubmission, scoreChallenge, validateChallengeAnswer,
   validateChallengeDraft, type ChallengeBuilderConfig, type ChallengeBuilderStatus, type ChallengeDraftInput,
@@ -76,7 +77,10 @@ async function leagueFacts(leagueId: string) {
   const lang = challengeLang(league?.language)
   const currentWeek = Math.max(1, game?.currentWeek ?? 1)
   const merged = Boolean(game?.mergeTriggeredAt) || (game?.phase != null && !PRE_MERGE.has(game.phase))
-  return { league, game, configId: config?.id ?? null, lang, currentWeek, merged }
+  // Which prize types this phase allows (the commissioner's per-phase rules; defaults = today's).
+  const prizePhase = prizePhaseOf(game?.phase ?? null, merged)
+  const prizePhaseRules = readPrizePhaseRules(league?.settings)
+  return { league, game, configId: config?.id ?? null, lang, currentWeek, merged, prizePhase, prizePhaseRules }
 }
 
 async function otherFaabThisWeek(leagueId: string, week: number, exceptId?: string): Promise<number> {
@@ -104,6 +108,8 @@ export async function builderMeta(leagueId: string) {
     merged: facts.merged,
     lang: facts.lang,
     faabWeeklyCap: readChallengeFaabWeeklyCap(facts.league?.settings),
+    prizePhase: facts.prizePhase,
+    prizePhaseRules: facts.prizePhaseRules,
   }
 }
 
@@ -186,6 +192,7 @@ export async function createBuilderChallenge(leagueId: string, actorUserId: stri
   const checked = validateChallengeDraft(input, {
     now, currentWeek: facts.currentWeek, merged: facts.merged, lang: facts.lang,
     faabWeeklyCap: readChallengeFaabWeeklyCap(facts.league?.settings), otherFaabThisWeek: await otherFaabThisWeek(leagueId, week),
+    prizePhase: facts.prizePhase, prizePhaseRules: facts.prizePhaseRules,
   })
   if (!checked.ok) return fail(400, checked.error)
   const { draft } = checked
@@ -221,6 +228,7 @@ export async function updateBuilderChallenge(leagueId: string, challengeId: stri
   const checked = validateChallengeDraft({ ...input, week: row.week }, {
     now, currentWeek: Math.min(facts.currentWeek, row.week), merged: facts.merged, lang: facts.lang,
     faabWeeklyCap: readChallengeFaabWeeklyCap(facts.league?.settings), otherFaabThisWeek: await otherFaabThisWeek(leagueId, row.week, row.id),
+    prizePhase: facts.prizePhase, prizePhaseRules: facts.prizePhaseRules,
   })
   if (!checked.ok) return fail(400, checked.error)
   const answers = await prisma.survivorChallengeSubmission.count({ where: { challengeId } })
@@ -351,8 +359,13 @@ export type AutoTruth =
 
 /** The true answer from OUR stored data, or why there is none yet. */
 export async function resolveAutoTruth(config: ChallengeBuilderConfig, now = new Date()): Promise<AutoTruth> {
-  const source = challengeAutoSource(config.kind, Boolean(config.game))
+  const source = challengeSettlementSource(config)
   if (source === 'manual') return { state: 'manual_only' }
+  if (source === 'exact_answer') {
+    // A puzzle settles against the commissioner's own answer the moment it locks.
+    return config.puzzle?.answer ? { state: 'final', truth: { text: config.puzzle.answer }, label: config.puzzle.answer } : { state: 'manual_only' }
+  }
+  if (source === 'position_leader') return resolvePositionLeader(config)
   if (source === 'game' && config.game) {
     const resolve = await teamResolver(config.game.sport)
     if (!resolve) return { state: 'pending', reason: 'no_team_index' }
@@ -388,10 +401,58 @@ export async function resolveAutoTruth(config: ChallengeBuilderConfig, now = new
   return { state: 'manual_only' }
 }
 
-/** One stored stat. Null when that stat is not stored for this sport (then settle by hand). */
+/**
+ * Position leaders from `PlayerWeeklyScore`: the option player with the most stored fantasy points
+ * in that sport week. Pending until the week has finalized rows; an option player with no row that
+ * week (did not play) counts as 0 once any option row is final.
+ */
+async function resolvePositionLeader(config: ChallengeBuilderConfig): Promise<AutoTruth> {
+  const p = config.position
+  const ids = config.options.flatMap((o) => (o.playerId ? [o.playerId] : []))
+  if (!p || !ids.length) return { state: 'manual_only' }
+  const rows = await prisma.playerWeeklyScore.findMany({
+    where: { playerId: { in: ids }, week: p.statWeek, season: p.season, sport: { in: sportSpellings(p.sport) } },
+    select: { playerId: true, fantasyPts: true, isFinalized: true },
+  })
+  if (!rows.some((r) => r.isFinalized)) return { state: 'pending', reason: rows.length ? 'not_final' : 'no_stats_stored' }
+  if (rows.some((r) => !r.isFinalized)) return { state: 'pending', reason: 'not_final' }
+  const points = new Map(ids.map((id) => [id, 0]))
+  for (const r of rows) points.set(r.playerId, Number.isFinite(r.fantasyPts) ? r.fantasyPts : 0)
+  const truth = positionLeaderTruth(config.options, points)
+  if (!truth || !('optionId' in truth)) return { state: 'pending', reason: 'no_stats_stored' }
+  const winners = [truth.optionId, ...(truth.tiedOptionIds ?? [])].map((id) => config.options.find((o) => o.id === id)?.label ?? id)
+  const top = config.options.find((o) => o.id === truth.optionId)?.playerId
+  return { state: 'final', truth, label: `${winners.join(' / ')} (${top ? points.get(top) : ''})` }
+}
+
+/** The spellings a stored row's sport may use (`NCAAF` rows may say `NCAAFB`, and lower case). */
+function sportSpellings(sport: string): string[] {
+  const key = challengeSportKey(sport)
+  const all = new Set([sport, sport.toLowerCase(), key, key.toLowerCase()])
+  if (key === 'NCAAF') { all.add('NCAAFB'); all.add('ncaafb') }
+  if (key === 'NCAAB') { all.add('NCAABB'); all.add('ncaabb') }
+  return [...all]
+}
+
+/**
+ * One stored stat. Null when that stat is not stored for this sport (then settle by hand). NFL reads
+ * the normalized NFL keys; every other sport stores its canonical keys as-is (see
+ * `CHALLENGE_SPORT_STATS`). `total_td` is the sport's "anytime" event (`CHALLENGE_ANYTIME_KEYS`).
+ */
 export function playerStatValue(stat: string, sport: string, stats: unknown, fantasyPts: number): number | null {
   if (stat === 'fantasy_points') return Number.isFinite(fantasyPts) ? fantasyPts : null
-  if (sport.toUpperCase() !== 'NFL') return null
+  const key = challengeSportKey(sport)
+  if (stat === 'total_td' && key !== 'NFL') {
+    const keys = CHALLENGE_ANYTIME_KEYS[key]
+    if (!keys) return null
+    const s = rec(stats)
+    return keys.reduce((sum, k) => sum + (typeof s[k] === 'number' && Number.isFinite(s[k]) ? (s[k] as number) : 0), 0)
+  }
+  if (!playerStatSupported(key, stat)) return null
+  if (key !== 'NFL') {
+    const v = rec(stats)[stat]
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0
+  }
   const s = normalizeNflWeeklyStats(stats)
   if (stat === 'total_td') return (s.rush_td ?? 0) + (s.rec_td ?? 0) + (s.fumble_td ?? 0)
   const v = s[stat]
@@ -411,7 +472,25 @@ function readManual(config: ChallengeBuilderConfig, raw: ManualSettleInput | nul
     return { places }
   }
   const t = rec(raw.truth)
-  if (challengeInputKind(config.kind) === 'number') {
+  const inputKind = challengeInputKind(config.kind)
+  if (inputKind === 'text') {
+    // A puzzle settled by hand: the commissioner confirms (or corrects) the answer to match against.
+    const text = typeof t.text === 'string' ? t.text.trim() : ''
+    if (!text || !normalizeAnswerText(text)) return es ? 'Escribe la respuesta correcta.' : 'Enter the right answer.'
+    return { truth: { text: text.slice(0, 200) }, label: text.slice(0, 200) }
+  }
+  if (inputKind === 'sweep') {
+    const given = rec(t.picks)
+    const picks: Record<string, string> = {}
+    for (const prop of config.props ?? []) {
+      const option = prop.options.find((o) => o.id === given[prop.id])
+      if (!option) return es ? 'Marca la respuesta correcta de cada apuesta.' : 'Mark the right answer on every prop.'
+      picks[prop.id] = option.id
+    }
+    const label = (config.props ?? []).map((p) => p.options.find((o) => o.id === picks[p.id])?.label ?? '').join(' · ')
+    return { truth: { picks }, label }
+  }
+  if (inputKind === 'number') {
     const v = typeof t.value === 'string' ? Number(t.value) : t.value
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100000) return es ? 'Escribe el valor real.' : 'Enter the true value.'
     return { truth: { value: Math.round(v * 100) / 100 }, label: String(Math.round(v * 100) / 100) }
@@ -491,7 +570,7 @@ async function planSettlement(leagueId: string, row: Row & { config: ChallengeBu
     const known = new Set(entrants.entries.map((e) => e.entrantId))
     if (parsed.places.some((p) => p.entrantIds.some((id) => !known.has(id)))) return { ok: false, status: 400, error: lang === 'es' ? 'Solo puede ganar quien respondió.' : 'Only entrants who answered can win.' }
     const winners = new Set(parsed.places.flatMap((p) => p.entrantIds))
-    score = { places: [...parsed.places].sort((a, b) => a.place - b.place), correctIds: parsed.places.find((p) => p.place === 1)?.entrantIds ?? [], wrongIds: challengeInputKind(row.config.kind) === 'choice' ? entrants.entries.map((e) => e.entrantId).filter((id) => !winners.has(id)) : [], ranked: [] }
+    score = { places: [...parsed.places].sort((a, b) => a.place - b.place), correctIds: parsed.places.find((p) => p.place === 1)?.entrantIds ?? [], wrongIds: challengeInputKind(row.config.kind) !== 'number' ? entrants.entries.map((e) => e.entrantId).filter((id) => !winners.has(id)) : [], ranked: [] }
   } else {
     if (parsed) { truth = parsed.truth; truthLabel = parsed.label }
     else {
@@ -659,8 +738,10 @@ export type BuilderChallengeView = {
   status: ChallengeBuilderStatus
   opensAt: string
   locksAt: string
-  inputKind: 'number' | 'choice'
+  inputKind: 'number' | 'choice' | 'text' | 'sweep'
   options: { id: string; label: string; count: number | null }[]
+  /** A sweep's props (questions and options; never the right answers). */
+  props?: { id: string; question: string; options: { id: string; label: string }[] }[]
   prizeText: string
   wager: ChallengeBuilderConfig['wager']
   uniqueAnswers: boolean
@@ -676,6 +757,11 @@ export type BuilderChallengeView = {
 function answerText(config: ChallengeBuilderConfig, sub: ReturnType<typeof readSubmission>): string {
   if (!sub) return '—'
   if ('value' in sub.answer) return String(sub.answer.value)
+  if ('text' in sub.answer) return sub.answer.text
+  if ('picks' in sub.answer) {
+    const picks = sub.answer.picks
+    return (config.props ?? []).map((p) => p.options.find((o) => o.id === picks[p.id])?.label ?? '—').join(' · ')
+  }
   const id = sub.answer.optionId
   return config.options.find((o) => o.id === id)?.label ?? id
 }
@@ -713,6 +799,8 @@ export async function loadBuilderBoard(leagueId: string, userId: string, now = n
       id: row.id, week: row.week, title: row.title, question: config.question, kind: config.kind, scope: config.scope, status,
       opensAt: config.opensAt, locksAt: config.locksAt, inputKind: challengeInputKind(config.kind),
       options: config.options.map((o) => ({ ...o, count: showAnswers ? counts.get(o.id) ?? 0 : null })),
+      // Questions and options only — a puzzle's answer and a sweep's right picks never leave the server.
+      ...(config.props ? { props: config.props.map((p) => ({ id: p.id, question: p.question, options: p.options.map((o) => ({ id: o.id, label: o.label })) })) } : {}),
       prizeText: describeChallengePrizes(config, facts.lang, row.week),
       wager: config.wager, uniqueAnswers: config.uniqueAnswers, sealed: config.sealed,
       mine: mineSub ? { answer: mineSub.answer, wager: mineSub.wager, byMe: mineRow?.userId === userId } : null,
@@ -735,7 +823,8 @@ export type CommissionerChallengeRow = {
   answers: number
   entrants: { id: string; name: string; answer: string }[]
   resultSummary: string | null
-  autoSource: 'game' | 'player_stat' | 'manual'
+  /** How it settles: from stored data, by exact match, or `manual` (the commissioner). */
+  autoSource: ChallengeSettlementSource
 }
 
 /** Every builder challenge, with answers — the commissioner's Mini Games tab. */
@@ -759,7 +848,7 @@ export async function listBuilderChallengesForCommissioner(leagueId: string, now
         return { id, name: (config.scope === 'tribe' ? tribes.get(id) : names.get(id)) ?? id, answer: answerText(config, readSubmission(s.submission)) }
       }),
       resultSummary: row.resultSummary,
-      autoSource: challengeAutoSource(config.kind, Boolean(config.game)),
+      autoSource: challengeSettlementSource(config),
     }]
   })
 }
@@ -770,7 +859,14 @@ export async function summarizeBuilderChallengesForChimmy(leagueId: string, user
   if (!board || !board.challenges.length) return ''
   const live = board.challenges.filter((c) => c.status === 'open' || c.status === 'locked')
   const won = board.challenges.filter((c) => c.myResult === 'won').slice(0, 3)
-  const parts = live.map((c) => `"${c.title}" (${c.scope}, ${c.status === 'open' ? `open, locks ${c.locksAt}` : 'locked, awaiting result'}; prize: ${c.prizeText}; ${c.mine ? `answer in: ${'value' in (c.mine.answer as object) ? (c.mine.answer as { value: number }).value : (c.options.find((o) => o.id === (c.mine!.answer as { optionId: string }).optionId)?.label ?? 'chosen')}` : 'NOT answered yet'})`)
+  const mineText = (c: BuilderChallengeView): string => {
+    const a = (c.mine?.answer ?? {}) as { value?: number; optionId?: string; text?: string; picks?: Record<string, string> }
+    if (typeof a.value === 'number') return String(a.value)
+    if (typeof a.text === 'string') return `"${a.text}"`
+    if (a.picks) return (c.props ?? []).map((p) => p.options.find((o) => o.id === a.picks![p.id])?.label ?? '—').join(' · ')
+    return c.options.find((o) => o.id === a.optionId)?.label ?? 'chosen'
+  }
+  const parts = live.map((c) => `"${c.title}" (${c.scope}, ${c.kind}, ${c.status === 'open' ? `open, locks ${c.locksAt}` : 'locked, awaiting result'}; prize: ${c.prizeText}; ${c.mine ? `answer in: ${mineText(c)}` : 'NOT answered yet'})`)
   const wins = won.map((c) => `"${c.title}"`)
   return `Commissioner challenges: ${parts.join('; ') || 'none open'}.${wins.length ? ` User won: ${wins.join(', ')}.` : ''} (Never reveal another manager's answer before the lock, or any answer before the result when a challenge is sealed.)`
 }
@@ -817,7 +913,7 @@ export async function runChallengeBuilderStep(leagueId: string, now = new Date()
         await lockBuilderChallengeNow(leagueId, row.id, null, now)
         out.locked++
       }
-      if (status === 'locked' && challengeAutoSource(config.kind, Boolean(config.game)) !== 'manual') {
+      if (status === 'locked' && challengeSettlementSource(config) !== 'manual') {
         const settled = await settleBuilderChallenge(leagueId, row.id, { now })
         if (settled.ok && (settled.outcome === 'settled' || settled.outcome === 'void')) out.settled++
       }
@@ -829,7 +925,7 @@ export async function runChallengeBuilderStep(leagueId: string, now = new Date()
 }
 
 async function chimmyFacts(leagueId: string, config: ChallengeBuilderConfig, now: Date): Promise<ChimmyChallengeFacts> {
-  const facts: { records?: Map<string, { wins: number; losses: number }>; recentTotals?: number[]; playerValues?: number[] } = {}
+  const facts: { records?: Map<string, { wins: number; losses: number }>; recentTotals?: number[]; playerValues?: number[]; optionValues?: Map<string, number[]> } = {}
   if (config.game) {
     const resolve = await teamResolver(config.game.sport)
     if (resolve) {
@@ -865,6 +961,17 @@ async function chimmyFacts(leagueId: string, config: ChallengeBuilderConfig, now
     const rows = await prisma.playerWeeklyScore.findMany({ where: { playerId: p.playerId, season: p.season, sport: { in: [p.sport, p.sport.toLowerCase()] }, week: { lt: p.statWeek }, isFinalized: true }, select: { stats: true, fantasyPts: true } })
     facts.playerValues = rows.map((r) => playerStatValue(p.stat, p.sport, r.stats, r.fantasyPts)).filter((n): n is number => n != null)
   }
+  if (config.kind === 'position_leader' && config.position) {
+    // Each option player's stored fantasy points in earlier weeks — never anyone's answer.
+    const pos = config.position
+    const ids = config.options.flatMap((o) => (o.playerId ? [o.playerId] : []))
+    const rows = ids.length
+      ? await prisma.playerWeeklyScore.findMany({ where: { playerId: { in: ids }, season: pos.season, sport: { in: sportSpellings(pos.sport) }, week: { lt: pos.statWeek }, isFinalized: true }, select: { playerId: true, fantasyPts: true } })
+      : []
+    const byPlayer = new Map<string, number[]>()
+    for (const r of rows) byPlayer.set(r.playerId, [...(byPlayer.get(r.playerId) ?? []), r.fantasyPts])
+    facts.optionValues = byPlayer
+  }
   return facts
 }
 
@@ -893,7 +1000,9 @@ async function answerForChimmySeats(leagueId: string, row: Row & { config: Chall
     if (!base) continue
     let attempt: typeof base | null = base
     for (let i = 0; attempt && i < 6; i++) {
-      const res = await submitBuilderAnswer(leagueId, seat.userId, row.id, { ...('value' in attempt.answer ? { value: attempt.answer.value } : { optionId: attempt.answer.optionId }), wager: attempt.wager }, now)
+      const a = attempt.answer
+      const body = 'value' in a ? { value: a.value } : 'picks' in a ? { picks: a.picks } : 'text' in a ? { text: a.text } : { optionId: a.optionId }
+      const res = await submitBuilderAnswer(leagueId, seat.userId, row.id, { ...body, wager: attempt.wager }, now)
       if (res.ok) {
         answered++
         if (seat.tribeId) doneTribes.add(seat.tribeId)

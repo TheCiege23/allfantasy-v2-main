@@ -79,14 +79,17 @@ describe('validateChallengeDraft', () => {
     expect(faabPerWinner([{ place: 1, rewards: [{ type: 'faab_grant', amount: 10 }, { type: 'faab_grant', amount: 5 }] }, { place: 2, rewards: [{ type: 'faab_grant', amount: 12 }] }])).toBe(15)
   })
 
-  it('builds options for O/U, anytime TD and pick-the-winner, and requires NFL for a TD', () => {
+  it('builds options for O/U, anytime TD and pick-the-winner; other sports keep the kinds (settled by hand where nothing is stored)', () => {
     expect(valid({ kind: 'pick_winner', scope: 'individual' }).config.options.map((o) => o.id)).toEqual(['BUF', 'KC'])
     expect(valid({ kind: 'game_total_over_under', line: 47.5 }).config.options.map((o) => o.id)).toEqual(['over', 'under'])
     expect(errorCode({ kind: 'game_total_over_under' })).toBe('line')
     const player = { playerId: 'p1', playerName: 'Josh Allen', sport: 'NFL', season: 2026, statWeek: 9 }
     expect(valid({ kind: 'anytime_td', scope: 'individual', player }).config.player?.stat).toBe('total_td')
-    expect(errorCode({ kind: 'anytime_td', player: { ...player, sport: 'NBA' } })).toBe('tdSport')
-    expect(errorCode({ kind: 'player_stat_over_under', line: 20, player: { ...player, sport: 'NBA', stat: 'rush_yds' } })).toBe('statSport')
+    // Gap 8: no longer refused — an NBA anytime TD / rush-yards prop is kept and settled by the commissioner.
+    expect(errorCode({ kind: 'anytime_td', scope: 'individual', player: { ...player, sport: 'NBA' } })).toBeNull()
+    expect(errorCode({ kind: 'player_stat_over_under', scope: 'individual', line: 20, player: { ...player, sport: 'NBA', stat: 'rush_yds' } })).toBeNull()
+    // A sport's own stat only on that sport.
+    expect(errorCode({ kind: 'player_stat_over_under', scope: 'individual', line: 20, player: { ...player, sport: 'NFL', stat: 'reb' } })).toBe('player')
     expect(errorCode({ kind: 'player_stat_over_under', line: 20, player: { ...player, sport: 'NBA', stat: 'fantasy_points' } })).toBeNull()
     expect(errorCode({ kind: 'custom_choice', options: ['A', 'a'] })).toBe('options')
     expect(errorCode({ kind: 'pick_winner', prizes: [{ place: 2, rewards: [{ type: 'score_bonus', points: 5 }] }] })).toBe('choicePlaces')

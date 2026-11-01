@@ -358,6 +358,38 @@ export function foldSurvivorRewardLedger(rows: readonly SurvivorRewardLedgerRow[
   return out
 }
 
+/**
+ * "Thieves cannot steal from each other" (the original league's rule). Optional, OFF by default:
+ * `League.settings.survivorThievesCannotStealFromEachOther === true`. When on, a manager who holds or
+ * has used a steal in a week cannot be the target of another steal that week.
+ */
+export const SURVIVOR_THIEVES_RULE_KEY = 'survivorThievesCannotStealFromEachOther'
+
+export function readThievesCannotStealFromEachOther(leagueSettings: unknown): boolean {
+  return rec(leagueSettings)[SURVIVOR_THIEVES_RULE_KEY] === true
+}
+
+/**
+ * True when `targetRosterId` holds or has used a steal in `week` (its own week won or the week it
+ * lands), not counting `exceptRewardId` (the steal being aimed). A reversed or lapsed steal does not
+ * count — it was never really held.
+ */
+export function isThiefThisWeek(records: Iterable<SurvivorRewardRecord>, targetRosterId: string, week: number, exceptRewardId?: string | null): boolean {
+  for (const r of records) {
+    if (r.type !== 'steal' || r.rewardId === exceptRewardId) continue
+    if (r.status === 'reversed' || r.status === 'expired') continue
+    if (!r.holderRosterIds.includes(targetRosterId)) continue
+    if (r.week === week || r.applyWeek === week) return true
+  }
+  return false
+}
+
+export function thievesRuleRefusal(language?: string | null): string {
+  return langOf(language) === 'es'
+    ? 'Ese mánager tiene o ya usó un robo esta semana, y en esta liga los ladrones no se roban entre sí. Elige a otra persona.'
+    : 'That manager holds or has used a steal this week, and in this league thieves cannot steal from each other. Choose someone else.'
+}
+
 /** Statuses that still mean something to the holder (shown by Chimmy and Decision OS). */
 export function isOpenRewardStatus(status: SurvivorRewardStatus): boolean {
   return status === 'awaiting_choice' || status === 'deferred' || status === 'available'

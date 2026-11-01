@@ -19,6 +19,7 @@ import {
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { makeBracketsT } from "@/lib/brackets/bracketsI18n"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
+import { orderHubTournaments, type HubTournament } from "@/lib/brackets/hubTournaments"
 
 export const dynamic = "force-dynamic"
 
@@ -141,10 +142,17 @@ const QUICK_ACTIONS: QuickAction[] = [
  */
 const AF_WORDMARK_SRC = "/brand/allfantasy-wordmark-transparent.png"
 
+/** The grid's card for each hub tournament, so the grid leads with the same one the hub does. */
+const HUB_CARD_KEY: Record<HubTournament, SportCard["key"]> = { nba_cup: "nbaCup", ncaaf: "collegeFootball", nfl: "nflPlayoffs" }
+
 export default async function BracketsHomePage() {
   const { language } = await resolveServerRenderPreferences()
   const t = makeBracketsT(language)
   const copy = bracketExperienceCopy(language)
+  // Computed once here and handed to the client hub, so its first render matches.
+  const tournaments = orderHubTournaments(new Date())
+  const hubRank = new Map(tournaments.map((item, index) => [HUB_CARD_KEY[item.tournament], index]))
+  const sportCards = [...SPORT_CARDS].sort((a, b) => (hubRank.get(a.key) ?? 99) - (hubRank.get(b.key) ?? 99))
 
   return (
     // Scoped colors preserve the approved dark canvas in light, dark and AF modes.
@@ -176,7 +184,10 @@ export default async function BracketsHomePage() {
         </div>
       </div>
 
-      <BracketExperienceHub language={language} season={new Date().getUTCFullYear()} />
+      <BracketExperienceHub
+        language={language}
+        tournaments={tournaments.map((item) => ({ ...item, opensAt: item.opensAt.toISOString() }))}
+      />
 
       {/* ─────────────────────────────────────────────────────────────
           Supporting sections below the dramatic hero. Mobile-friendly,
@@ -269,7 +280,7 @@ export default async function BracketsHomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SPORT_CARDS.map(({ key, href, status, soonLabelKey, Icon }) => {
+            {sportCards.map(({ key, href, status, soonLabelKey, Icon }) => {
               const isLive = status === "live"
               const statusLabel = isLive
                 ? t("brk.hub.sports.statusLive")
