@@ -27,7 +27,7 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     await expect(dialog).toHaveAttribute('aria-modal', 'true')
 
     const sections = dialog.locator('[aria-label="League settings sections"]')
-    await expect(sections.getByRole('button').first()).toHaveText(/Zombie Setup/)
+    await expect(sections.getByRole('button').first()).toHaveText(/General/)
     await expect(dialog.getByRole('heading', { name: 'League structure' })).toBeVisible()
     for (const [section, content] of [
       ['Automation', 'Weekly Automation Pipeline'],
@@ -75,9 +75,10 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     await expect(shield).toBeVisible()
     expect(await shield.evaluate(button => button.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
     await shield.click()
-    await expect.poll(() => chimmyDm.bodies).toContainEqual({
+    await expect.poll(() => chimmyDm.bodies).toContainEqual(expect.objectContaining({
       leagueId, message: '@Chimmy use serum protect myself',
-    })
+      commandId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+    }))
     await expect(page.getByRole('status').filter({ hasText: /Chimmy received/ })).toBeVisible()
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     expect(overflow).toBeLessThanOrEqual(1)

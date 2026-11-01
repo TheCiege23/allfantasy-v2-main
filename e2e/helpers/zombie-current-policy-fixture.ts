@@ -74,11 +74,12 @@ export async function seedFinalNflFixtureTotals(leagueId: string, seasonId: stri
     const rosterPlayers = players.filter(p => p.rosterId === rosterId)
     const starter = rosterPlayers.find(p => isScoringStarterSlot(weekSlotType(p, lineups)))
     if (!starter) throw new Error('The synthetic roster needs an actual starter.')
-    const unit = await calculateScoreFromSportConfig(leagueId, starter.playerId, week, { pass_yd: 1 }, starter.position)
+    const unit = await calculateScoreFromSportConfig(leagueId, starter.playerId, week, { pass_td: 1 }, starter.position)
     if (!(unit > 0)) throw new Error('The synthetic NFL stat must have a positive league scoring weight.')
     for (const player of rosterPlayers) {
       const target = player.id === starter.id ? targets.get(rosterId)! : 0
-      const stats = { pass_yd: target / unit }
+      // Use a linear category: yardage thresholds would add bonuses to these exact synthetic totals.
+      const stats = { pass_td: target / unit }
       await prisma.playerWeeklyScore.create({ data: { playerId: player.playerId, sport: 'NFL', season, week, stats, fantasyPts: target, isFinalized: true } })
     }
   }

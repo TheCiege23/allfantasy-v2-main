@@ -170,7 +170,7 @@ export function DraftMobileTray({
 
   return (
     <section
-      className="relative z-10 flex shrink-0 flex-col rounded-t-2xl border-t border-cyan-400/20 bg-[linear-gradient(180deg,rgba(9,17,34,0.98),rgba(7,12,24,0.99))] shadow-[0_-12px_32px_rgba(0,0,0,0.45)]"
+      className="relative z-10 flex max-h-full min-h-0 shrink-0 flex-col rounded-t-2xl border-t border-cyan-400/20 bg-[linear-gradient(180deg,rgba(9,17,34,0.98),rgba(7,12,24,0.99))] shadow-[0_-12px_32px_rgba(0,0,0,0.45)]"
       data-testid={`${testIdPrefix}-tray`}
       data-snap={snap}
       aria-label={ariaLabel}
@@ -204,7 +204,7 @@ export function DraftMobileTray({
             settle(stepTraySnap(snap, 'down'))
           }
         }}
-        className="flex min-h-[28px] cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
+        className="flex min-h-[28px] shrink-0 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
       >
         <span className="h-1 w-10 rounded-full bg-white/30" aria-hidden />
       </div>
