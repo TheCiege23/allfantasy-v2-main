@@ -6,8 +6,10 @@ const h = vi.hoisted(() => ({
   roster: vi.fn(), season: vi.fn(), categoryMatchups: vi.fn(),
   standings: vi.fn(), rosters: vi.fn(), rotoPeriod: vi.fn(),
   importedCategories: vi.fn(),
+  importedTeams: vi.fn(),
   freshCategory: vi.fn(),
   freshEspn: vi.fn(),
+  freshMfl: vi.fn(), freshFleaflicker: vi.fn(), freshFantrax: vi.fn(), fantraxSnapshot: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
@@ -18,10 +20,15 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   fantasyStanding: { findMany: h.standings },
   teamWeekResult: { findFirst: h.rotoPeriod },
   sportsDataCache: { findUnique: h.importedCategories },
+  leagueTeam: { findMany: h.importedTeams },
+  fantraxLeague: { findUnique: h.fantraxSnapshot },
 } }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
 vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooCategoryMatchupForWeek: h.freshCategory }))
 vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnScheduleForSync: h.freshEspn }))
+vi.mock('@/lib/league-import/mfl/MflLeagueFetchService', () => ({ fetchMflScheduleForSync: h.freshMfl }))
+vi.mock('@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService', () => ({ fetchFleaflickerScoreboard: h.freshFleaflicker }))
+vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxMatchupScores: h.freshFantrax }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/core-app/weeklyCapabilities')>(),
   nativeWeeklyLeague: (league: { platform: string }) => league.platform === 'allfantasy',
@@ -47,8 +54,13 @@ beforeEach(() => {
   h.rosters.mockResolvedValue([])
   h.rotoPeriod.mockResolvedValue(null)
   h.importedCategories.mockResolvedValue(null)
+  h.importedTeams.mockResolvedValue([])
   h.freshCategory.mockResolvedValue(null)
   h.freshEspn.mockResolvedValue([])
+  h.freshMfl.mockResolvedValue({ schedule: [] })
+  h.freshFleaflicker.mockResolvedValue({ week: null })
+  h.freshFantrax.mockResolvedValue({ ok: false })
+  h.fantraxSnapshot.mockResolvedValue(null)
 })
 
 describe('selected league live fantasy matchup', () => {
@@ -134,6 +146,81 @@ describe('selected league live fantasy matchup', () => {
     expect(out).toContain('ESPN stat 5: you 12.00, opponent 16.00')
     expect(out).toContain('ESPN current-week matchup cumulativeScore.scoreByStat')
     expect(out).not.toContain('fantasy points:')
+  })
+
+  it('uses an authorized current-week provider point score ahead of the older board', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'ESPN Football', sport: 'NFL', season: 2026,
+      platform: 'espn', platformLeagueId: 'P1', leagueType: 'redraft', settings: {} })
+    h.freshEspn.mockResolvedValue([{ week: 2, season: 2026, matchups: [{ teamId1: '1', teamId2: '2',
+      points1: 105, points2: 97 }] }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('your team 105.00, Rival 97.00')
+    expect(out).toContain('ESPN authorized current-week scoreboard')
+    expect(out).not.toContain('your team 93.00')
+  })
+
+  it('does not replace the board with a provider score from another pairing', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'ESPN Football', sport: 'NFL', season: 2026,
+      platform: 'espn', platformLeagueId: 'P1', leagueType: 'redraft', settings: {} })
+    h.freshEspn.mockResolvedValue([{ week: 2, season: 2026, matchups: [{ teamId1: '1', teamId2: '3',
+      points1: 105, points2: 97 }] }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('your team 93.00, Rival 87.00')
+    expect(out).not.toContain('your team 105.00')
+  })
+
+  it('refreshes MFL scores while preserving franchise IDs with leading zeroes', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'MFL League', sport: 'NFL', season: 2026,
+      platform: 'mfl', platformLeagueId: 'P1', leagueType: 'redraft', settings: {} })
+    h.board.mockResolvedValue({ leagueBoard: { yourRosterId: '0001', yours: { season: 2026, week: 2,
+      opponent: { rosterId: '0002', name: 'Rival' }, live: { you: 93, them: 87, margin: 6, final: false } } }, eliminationWeeks: [] })
+    h.freshMfl.mockResolvedValue({ schedule: [{ season: 2026, week: 2, matchups: [
+      { franchiseId1: '0001', franchiseId2: '0002', points1: 101, points2: 98 },
+    ] }] })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('your team 101.00, Rival 98.00')
+  })
+
+  it('uses a Fleaflicker score only for the requested season and period', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Fleaflicker', sport: 'NFL', season: 2026,
+      platform: 'fleaflicker', platformLeagueId: '123', leagueType: 'redraft', settings: {} })
+    h.freshFleaflicker.mockResolvedValue({ week: { season: 2025, week: 2, games: [{
+      home: { id: 1 }, away: { id: 2 }, homeScore: { score: { value: 101 } }, awayScore: { score: { value: 98 } },
+    }] } })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('your team 93.00, Rival 87.00')
+    expect(out).not.toContain('your team 101.00')
+  })
+
+  it('refreshes Fantrax only after matching unique imported team names', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Fantrax', sport: 'NHL', season: 2026,
+      platform: 'fantrax', platformLeagueId: 'snapshot-1', leagueType: 'redraft', settings: {} })
+    h.fantraxSnapshot.mockResolvedValue({ sourceLeagueId: 'source-1' })
+    h.importedTeams.mockResolvedValue([
+      { externalId: '1', teamName: 'Home', ownerName: 'U1' },
+      { externalId: '2', teamName: 'Rival', ownerName: 'U2' },
+    ])
+    h.freshFantrax.mockResolvedValue({ ok: true, data: { period: 2, matchups: [{
+      home: { teamId: 'fx1', teamName: 'Home', score: 101, gamesPlayed: 1 },
+      away: { teamId: 'fx2', teamName: 'Rival', score: 98, gamesPlayed: 1 },
+    }] } })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('your team 101.00, Rival 98.00')
+  })
+
+  it('shows stored imported roto placements without inventing category rank points', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Yahoo Roto', sport: 'NBA', season: 2026,
+      platform: 'yahoo', platformLeagueId: 'P1', leagueType: 'redraft', settings: { scoring_mode: 'roto' } })
+    h.importedTeams.mockResolvedValue([
+      { externalId: '1', teamName: 'Home', ownerName: 'U1', claimedByUserId: 'u1',
+        currentRank: 1, pointsFor: 20, wins: 0, losses: 0, ties: 0, lastUpdatedAt: new Date('2026-11-01T20:00:00Z') },
+      { externalId: '2', teamName: 'Rival', ownerName: 'U2', claimedByUserId: 'u2',
+        currentRank: 2, pointsFor: 17, wins: 0, losses: 0, ties: 0, lastUpdatedAt: new Date('2026-11-01T20:00:00Z') },
+    ])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('Your stored rank: 1 of 2')
+    expect(out).toContain('Category totals and rank points are not on file')
+    expect(out).not.toContain('20.00 category rank points')
   })
 
   it('reports a native category snapshot without calling it real-time', async () => {

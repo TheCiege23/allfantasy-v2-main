@@ -174,7 +174,8 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     let scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
-    if (kind === 'lineup' && scenario?.status === 'unresolved' && scenario.reason === 'sport_not_supported') {
+    if (kind === 'lineup' && scenario?.status === 'unresolved' &&
+      (scenario.reason === 'sport_not_supported' || scenario.reason === 'roster_ids_unreadable')) {
       const { buildOtherSportStartSit } = await import('./otherSportStartSit')
       const comparison = await buildOtherSportStartSit({
         leagueId: provenLeagueId, userId: args.userId,
