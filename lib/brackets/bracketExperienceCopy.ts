@@ -18,8 +18,8 @@ const en = {
   cfpRule: "CFP picks and finalization lock when the first game starts.", correct: "Correct pick", zero: "Incorrect or missed pick", points: "points",
   firstRound: "First Round", quarters: "Quarterfinals", semis: "Semifinals", championship: "Championship", group: "Group Play", groupNote: "Group games appear automatically in your league. Pick each confirmed game before tipoff.",
   team: "Seed", east: "East", west: "West", winner: "Winner", next: "More brackets", leagueHome: "League dashboard", myLeagues: "My Leagues", discover: "Discover",
-  nfl: "NFL Playoffs", nflFormat: "14 teams · 13 games", nflSoon: "NFL playoff pools open in January", nflLock: "Each game’s kickoff",
-  nflLockNote: "Pools open when the playoff field is set", liveNow: "Live now", opens: "Opens", upperBracket: "Upper bracket", lowerBracket: "Lower bracket",
+  nfl: "NFL Playoffs", nflFormat: "14 teams · 13 games", nflLock: "Each game’s kickoff",
+  nflLockNote: "Picks open when the playoff field is set in January", liveNow: "Live now", opens: "Opens", upperBracket: "Upper bracket", lowerBracket: "Lower bracket",
   wildCard: "Wild Card", divisional: "Divisional", conferenceRound: "Conference", superBowl: "Super Bowl", afc: "AFC", nfc: "NFC",
   lowestSeed: "Lowest seed left", champion: "champion", nflRule: "Seed 1 in each conference has a bye. The divisional round reseeds: the 1 seed plays the lowest seed left.",
 } as const
@@ -44,8 +44,8 @@ const es: Record<keyof typeof en, string> = {
   cfpRule: "Las selecciones y la finalización del CFP cierran al comenzar el primer partido.", correct: "Selección correcta", zero: "Selección incorrecta u omitida", points: "puntos",
   firstRound: "Primera ronda", quarters: "Cuartos de final", semis: "Semifinales", championship: "Campeonato", group: "Fase de grupos", groupNote: "Los partidos de grupos aparecen automáticamente en tu liga. Elige antes del inicio de cada partido confirmado.",
   team: "Cabeza de serie", east: "Este", west: "Oeste", winner: "Ganador", next: "Más cuadros", leagueHome: "Panel de la liga", myLeagues: "Mis ligas", discover: "Descubrir",
-  nfl: "Playoffs de la NFL", nflFormat: "14 equipos · 13 partidos", nflSoon: "Las ligas de playoffs de la NFL abren en enero", nflLock: "El inicio de cada partido",
-  nflLockNote: "Las ligas abren cuando se define el cuadro", liveNow: "En vivo", opens: "Abre", upperBracket: "Llave superior", lowerBracket: "Llave inferior",
+  nfl: "Playoffs de la NFL", nflFormat: "14 equipos · 13 partidos", nflLock: "El inicio de cada partido",
+  nflLockNote: "Las selecciones abren cuando se define el cuadro en enero", liveNow: "En vivo", opens: "Abre", upperBracket: "Llave superior", lowerBracket: "Llave inferior",
   wildCard: "Comodines", divisional: "Divisional", conferenceRound: "Conferencia", superBowl: "Super Bowl", afc: "AFC", nfc: "NFC",
   lowestSeed: "Sembrado más bajo restante", champion: "campeón", nflRule: "El sembrado 1 de cada conferencia descansa. La ronda divisional se reordena: el 1 enfrenta al sembrado más bajo restante.",
 }

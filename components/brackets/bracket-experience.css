@@ -109,8 +109,6 @@
 .af-bx-live-tag { display: inline-flex; align-items: center; color: #ffb1b1; background: rgba(255, 107, 107, .12); }
 .af-bx-live-tag .af-bx-live-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: none; }
 .af-bx-soon-tag { color: #ffdfad; background: #4c391d; }
-.af-bx-btn.af-bx-closed { cursor: default; background: #132f2c; border-style: dashed; color: #bed5c5; }
-.af-bx-btn.af-bx-closed:hover { background: #132f2c; border-color: #4d7770; }
 
 /*
  * 🛑 LIGHT MODE MUST NOT RECOLOUR THIS CANVAS. app/globals.css maps every

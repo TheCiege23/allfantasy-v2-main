@@ -21,7 +21,7 @@ const SCORING_OPTIONS = [
 ] as const
 
 const SPORT_LABELS: Record<string, string> = {
-  NFL: "NFL",
+  NFL: "NFL Playoffs",
   NHL: "NHL",
   NBA: "NBA",
   MLB: "MLB",
@@ -81,9 +81,9 @@ export default function NewBracketLeaguePage() {
    * app/api/brackets/playoffs/route.ts — they are the same decision written
    * twice, and only the API one is enforced.
    */
-  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB", "NCAAF", "NBA_CUP"]
+  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB", "NCAAF", "NBA_CUP", "NFL"]
   const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
-  const isSingleGamePool = isPlayoffPool && (sport === "NCAAF" || sport === "NBA_CUP")
+  const isSingleGamePool = isPlayoffPool && (sport === "NCAAF" || sport === "NBA_CUP" || sport === "NFL")
   // The real AF Commissioner plan (the same feature the server checks at create), plus AllFantasy's
   // own test accounts. The allowlist alone locked these options for every paying commissioner.
   const commissionerPlan = useEntitlement("commissioner_ai_tools")
@@ -127,6 +127,7 @@ export default function NewBracketLeaguePage() {
   const scoringSummary = useMemo(
     () => isSingleGamePool
       ? sport === "NCAAF" ? "First round 1 · Quarterfinals 2 · Semifinals 4 · Championship 8"
+        : sport === "NFL" ? "Wild Card 1 · Divisional 2 · Conference 4 · Super Bowl 8"
         : "Quarterfinals 1 · Semifinals 2 · Championship 4"
       : getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
     [challengeType, isSingleGamePool, sport],
@@ -159,7 +160,7 @@ export default function NewBracketLeaguePage() {
 
     try {
       if (isPlayoffPool) {
-        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
+        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
         const config = sanitizePlayoffChallengeConfig(
           defaultPlayoffChallengeConfig({
             visibility: isPublic ? "public" : "private",

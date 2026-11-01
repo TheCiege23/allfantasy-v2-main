@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { syncSeasonBracketResults } from "@/lib/playoffs/syncSeasonBracketResults"
 import { syncNbaCupTournament } from "@/lib/playoffs/syncNbaCupTournament"
+import { syncNflPlayoffs } from "@/lib/playoffs/syncNflPlayoffs"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -13,10 +14,15 @@ export const runtime = "nodejs"
 export async function POST(request: NextRequest) {
   if (!requireCronAuth(request, "CRON_SECRET")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const body = await request.json().catch(() => ({})) as Record<string, unknown>
-  const sport = body.sport === "ncaaf" || body.sport === "nba_cup" ? body.sport : null
+  const sport = body.sport === "ncaaf" || body.sport === "nba_cup" || body.sport === "nfl" ? body.sport : null
   const season = body.season == null ? new Date().getUTCFullYear() : Number(body.season)
   if (!sport || !Number.isInteger(season) || season < 2024 || season > 2100) {
     return NextResponse.json({ error: "Valid tournament and season required." }, { status: 400 })
+  }
+  if (sport === "nfl") {
+    // Outside January-February this returns before any provider call (nflPostseasonWindowOpen).
+    const result = await syncNflPlayoffs({ season, apply: body.apply === true })
+    return NextResponse.json({ ok: result.failures.length === 0, ...result }, { status: result.failures.length ? 502 : 200 })
   }
   if (sport === "nba_cup") {
     const result = await syncNbaCupTournament({ season, apply: body.apply === true })

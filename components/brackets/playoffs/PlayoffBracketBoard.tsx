@@ -49,6 +49,10 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   cup_quarterfinals: "NBA Cup Quarterfinals",
   cup_semifinals: "NBA Cup Semifinals",
   cup_championship: "NBA Cup Championship",
+  nfl_wild_card: "Wild Card",
+  nfl_divisional: "Divisional Round",
+  nfl_conference: "Conference Championship",
+  nfl_super_bowl: "Super Bowl",
 }
 
 /**

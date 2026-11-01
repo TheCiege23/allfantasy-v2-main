@@ -264,7 +264,7 @@ const EN: BracketsDictionary = {
     "Stanley Cup bracket pool. Pick every series.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Wild Card to Super Bowl bracket pool. Opens in January.",
+    "Wild Card to Super Bowl bracket pool. Create one now; picks open when the field is set in January.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Pick every postseason series, Wild Card to World Series.",
@@ -508,7 +508,7 @@ const ES: BracketsDictionary = {
     "Grupo de bracket de la Copa Stanley. Elige cada serie.",
   "brk.hub.sports.sport.nflPlayoffs": "Playoffs NFL",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Grupo de bracket del Wild Card al Super Bowl. Abre en enero.",
+    "Grupo de bracket del Wild Card al Super Bowl. Créalo ya; las selecciones abren cuando se define el cuadro en enero.",
   "brk.hub.sports.sport.mlbPostseason": "Postemporada MLB",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Elige cada serie de la postemporada, del Wild Card a la Serie Mundial.",
@@ -754,7 +754,7 @@ const ZH: BracketsDictionary = {
     "史丹利盃對戰群組。預測每一輪系列賽。",
   "brk.hub.sports.sport.nflPlayoffs": "NFL 季後賽",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "從外卡賽到超級盃的對戰群組。1 月開放。",
+    "從外卡賽到超級盃的對戰群組。現在即可建立；1 月確定參賽隊伍後開放選擇。",
   "brk.hub.sports.sport.mlbPostseason": "MLB 季後賽",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "預測每一輪季後賽系列賽，從外卡賽到世界大賽。",
@@ -1001,7 +1001,7 @@ const FIL: BracketsDictionary = {
     "Bracket pool ng Stanley Cup. Piliin ang bawat serye.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Bracket pool mula Wild Card hanggang Super Bowl. Magbubukas sa Enero.",
+    "Bracket pool mula Wild Card hanggang Super Bowl. Gumawa na ngayon; magbubukas ang picks kapag naitakda ang field sa Enero.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Piliin ang bawat serye ng postseason, mula Wild Card hanggang World Series.",
@@ -1249,7 +1249,7 @@ const VI: BracketsDictionary = {
     "Nhóm bracket Stanley Cup. Dự đoán từng loạt đấu.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Nhóm bracket từ Wild Card đến Super Bowl. Mở vào tháng 1.",
+    "Nhóm bracket từ Wild Card đến Super Bowl. Tạo ngay; lựa chọn mở khi danh sách đội được xác định vào tháng 1.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Dự đoán từng loạt đấu hậu mùa giải, từ Wild Card đến World Series.",

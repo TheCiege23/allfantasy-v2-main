@@ -8,6 +8,9 @@ const year = now.getUTCFullYear()
 const jobs = [
   { sport: "ncaaf", season: now.getUTCMonth() === 0 ? year - 1 : year },
   { sport: "nba_cup", season: year },
+  // NFL playoffs run Jan-Feb under the season that started the year before. The route
+  // returns without calling ESPN outside that window.
+  { sport: "nfl", season: now.getUTCMonth() <= 1 ? year - 1 : year },
 ]
 let failed = false
 for (const job of jobs) {
@@ -27,7 +30,7 @@ for (const job of jobs) {
     console.log(JSON.stringify({ job, applied: result.applied, outcomes,
       ...(job.sport === "nba_cup" ? { gamesPublished: result.gamesPublished ?? 0, poolsUpdated: result.poolsUpdated ?? 0, providerFailures: (result.failures ?? []).length } : {}),
     }))
-    if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score)$/.test(row.outcome))) {
+    if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score|not-in-seeded-field)$/.test(row.outcome))) {
       failed = true
     }
   } catch (error) {

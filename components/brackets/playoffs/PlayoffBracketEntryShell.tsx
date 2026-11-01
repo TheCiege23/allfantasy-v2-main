@@ -38,7 +38,7 @@ type PlayoffProjectionMode = "official" | "user_projection"
  * branch is on the sport string and nothing else, so an NBA playoff pool renders
  * byte-identically to yesterday.
  */
-const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup"])
+const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup", "nfl"])
 
 export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const router = useRouter()
@@ -73,7 +73,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canAdminPool = view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) && canAdminPool
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
-  const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
+  const canShareEntry = ["ncaaf", "nba_cup", "nfl"].includes(String(view.challenge.sport ?? "").toLowerCase())
   const isLiveSingleGame = canShareEntry && !view.challenge.isTestMode
   const rollingCup = isLiveSingleGame && view.challenge.sport === "nba_cup"
   useEffect(() => {

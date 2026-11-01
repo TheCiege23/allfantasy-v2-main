@@ -10,7 +10,7 @@ export default async function UniversalBracketStandings(props: {
   searchParams: Promise<{ sport?: string; season?: string }>
 }) {
   const params = await props.searchParams
-  const sport: PlayoffSport = params.sport === "nba_cup" ? "nba_cup" : "ncaaf"
+  const sport: PlayoffSport = params.sport === "nba_cup" ? "nba_cup" : params.sport === "nfl" ? "nfl" : "ncaaf"
   const parsedSeason = Number(params.season)
   const season = Number.isInteger(parsedSeason) && parsedSeason >= 2024 && parsedSeason <= 2100
     ? parsedSeason : new Date().getUTCFullYear()
@@ -44,7 +44,7 @@ export default async function UniversalBracketStandings(props: {
     ...scoreAndPotential(entry.challenge.series, sport === "nba_cup" ? eligibleNbaCupPicks(entry.challenge.series, entry.picks, entry.finalizedAt) : entry.picks, sport),
   }))
   const ranked = rankBrackets(scored, completedFinal)
-  const title = sport === "ncaaf" ? "College Football Playoff" : "NBA Cup"
+  const title = sport === "ncaaf" ? "College Football Playoff" : sport === "nfl" ? "NFL Playoffs" : "NBA Cup"
 
   return <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
     <div className="mx-auto max-w-6xl">
@@ -58,6 +58,7 @@ export default async function UniversalBracketStandings(props: {
         <div className="flex gap-2">
           <Link href={`/brackets/standings?sport=ncaaf&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "ncaaf" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>CFP</Link>
           <Link href={`/brackets/standings?sport=nba_cup&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "nba_cup" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>NBA Cup</Link>
+          <Link href={`/brackets/standings?sport=nfl&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "nfl" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>NFL</Link>
         </div>
       </div>
       <div className="mt-8 overflow-x-auto rounded-3xl border border-white/15 bg-slate-900/80 shadow-2xl">

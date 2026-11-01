@@ -125,39 +125,3 @@ export function funnelFromSeries(
     final: { title: opts.roundTitle(final.round), points: opts.points(final.round), game: toGame(final) },
   }
 }
-
-/**
- * The NFL playoff field: seven teams a conference, the 1 seed on a bye.
- * A preview only — NFL pools are not a playoff-engine sport yet. The
- * divisional round RESEEDS (the 1 seed meets the lowest seed left), so those
- * slots are described, not wired to a fixed wild-card game.
- */
-export function nflFunnel(copy: {
-  afc: string; nfc: string; wildCard: string; divisional: string; conference: string; superBowl: string
-  lowestSeed: string; winner: string; seed: string; champion: string
-}): FunnelModel {
-  const half = (conf: string): FunnelColumn[] => [
-    {
-      title: copy.wildCard,
-      games: [[2, 7], [3, 6], [4, 5]].map(([a, b]) => ({
-        id: `${conf}-wc-${a}`,
-        teams: [{ seed: a, name: `${conf} ${copy.seed} ${a}` }, { seed: b, name: `${conf} ${copy.seed} ${b}` }] as [FunnelTeam, FunnelTeam],
-      })),
-    },
-    {
-      title: copy.divisional,
-      games: [
-        { id: `${conf}-div-1`, teams: [{ seed: 1, name: `${conf} ${copy.seed} 1` }, { name: copy.lowestSeed }] },
-        { id: `${conf}-div-2`, teams: [{ name: copy.winner }, { name: copy.winner }] },
-      ],
-    },
-    { title: copy.conference, games: [{ id: `${conf}-conf`, teams: [{ name: copy.winner }, { name: copy.winner }] }] },
-  ]
-  return {
-    leftLabel: copy.afc,
-    rightLabel: copy.nfc,
-    left: half(copy.afc),
-    right: half(copy.nfc),
-    final: { title: copy.superBowl, game: { id: "sb", teams: [{ name: `${copy.afc} ${copy.champion}` }, { name: `${copy.nfc} ${copy.champion}` }] } },
-  }
-}

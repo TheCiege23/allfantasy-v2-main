@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, CalendarClock, Check, Copy, Plus, Share2, Trophy, Users } from "lucide-react"
+import { ArrowRight, Check, Copy, Plus, Share2, Trophy, Users } from "lucide-react"
 import type { PlayoffChallengeListItem, PlayoffChallengeView, PlayoffRoundKey, PlayoffSeriesView } from "@/lib/playoffs/types"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
 import { roundPointsTable } from "@/lib/playoffs/playoffScoring"
@@ -10,14 +10,13 @@ import { createPlayoffBracketEntryClient, getPlayoffBracketViewClient } from "@/
 import { bracketExperienceCopy } from "@/lib/brackets/bracketExperienceCopy"
 import { orderHubTournaments, type HubTournament } from "@/lib/brackets/hubTournaments"
 import MlbBracketBoard from "./playoffs/MlbBracketBoard"
-import BracketFunnel, { funnelFromSeries, nflFunnel } from "./BracketFunnel"
+import BracketFunnel, { funnelFromSeries } from "./BracketFunnel"
 import "./bracket-experience.css"
 
 type Sport = HubTournament
-/** The tournaments the playoff engine can run a league for. NFL is a preview until it is one. */
-type EngineSport = Exclude<Sport, "nfl">
 type Tab = "bracket" | "standings" | "rules"
-const createHref = (sport: EngineSport) => `/brackets/leagues/new?sport=${sport === "ncaaf" ? "NCAAF" : "NBA_CUP"}&challengeType=playoff_challenge`
+const CREATE_SPORT: Record<Sport, string> = { ncaaf: "NCAAF", nba_cup: "NBA_CUP", nfl: "NFL" }
+const createHref = (sport: Sport) => `/brackets/leagues/new?sport=${CREATE_SPORT[sport]}&challengeType=playoff_challenge`
 
 export type HubTournamentProp = { tournament: Sport; live: boolean; season: number; opensAt: string }
 
@@ -34,7 +33,6 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
   const [sport, setSport] = useState<Sport>(order[0]?.tournament ?? "nba_cup")
   const current = order.find((t) => t.tournament === sport) ?? order[0]
   const season = seasonOverride ?? current?.season ?? new Date().getUTCFullYear()
-  const engineSport: EngineSport | null = sport === "nfl" ? null : sport
   const [tab, setTab] = useState<Tab>("bracket")
   const [leagues, setLeagues] = useState<PlayoffChallengeListItem[]>([])
   const [view, setView] = useState<PlayoffChallengeView | null>(null)
@@ -48,18 +46,15 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
   useEffect(() => {
     const current = ++generation.current
     const controller = new AbortController()
-    setView(null); setLeagues([]); setError(null)
-    // NFL has no pools yet, so there is nothing to load — only the preview.
-    if (!engineSport) { setLoading(false); return () => { controller.abort(); generation.current++ } }
-    setLoading(true)
+    setLoading(true); setView(null); setLeagues([]); setError(null)
     void (async () => {
       try {
-        const response = await fetch(`/api/brackets/playoffs?sport=${engineSport}`, { cache: "no-store", signal: controller.signal })
+        const response = await fetch(`/api/brackets/playoffs?sport=${sport}`, { cache: "no-store", signal: controller.signal })
         if (response.status === 401 || response.status === 403) return
         if (!response.ok) throw new Error(copy.loadError)
         const payload = await response.json()
         if (!Array.isArray(payload.challenges)) throw new Error(copy.loadError)
-        const own = payload.challenges.filter((league: PlayoffChallengeListItem) => league.sport === engineSport && league.seasonYear === season)
+        const own = payload.challenges.filter((league: PlayoffChallengeListItem) => league.sport === sport && league.seasonYear === season)
         if (generation.current !== current) return
         setLeagues(own)
         if (own.length) {
@@ -73,7 +68,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
       }
     })()
     return () => { controller.abort(); generation.current++ }
-  }, [engineSport, season, retry, copy.loadError])
+  }, [sport, season, retry, copy.loadError])
 
   useEffect(() => {
     if (!view) return
@@ -118,23 +113,20 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
   const title = titleOf(sport)
   const entry = view?.activeEntry
   const ranked = (view?.entries ?? []).filter((row) => row.finalizedAt).sort((a, b) => (a.rank ?? 999999) - (b.rank ?? 999999))
-  const rows = engineSport ? buildPlayoffTemplate({ sport: engineSport, seasonYear: season }) : []
-  const points = engineSport ? roundPointsTable(engineSport) : []
-  const roundTitle = (round: PlayoffRoundKey) => round === "cup_group_play" ? copy.group : round === "cfp_first_round" ? copy.firstRound : /quarterfinals/.test(round) ? copy.quarters : /semifinals/.test(round) ? copy.semis : copy.championship
-  const previewName = (name: string) => name.replace(/^CFP(\d+)$/, `${copy.team} $1`).replace(/^EAST(\d+)$/, `${copy.east} $1`).replace(/^WEST(\d+)$/, `${copy.west} $1`).replace(/^Winner S(\d+)$/, `${copy.winner} $1`).replace("East Champion", `${copy.east} · ${copy.winner}`).replace("West Champion", `${copy.west} · ${copy.winner}`)
+  const rows = buildPlayoffTemplate({ sport, seasonYear: season })
+  const points = roundPointsTable(sport)
+  const roundTitle = (round: PlayoffRoundKey) => round === "nfl_wild_card" ? copy.wildCard : round === "nfl_divisional" ? copy.divisional : round === "nfl_conference" ? copy.conferenceRound : round === "nfl_super_bowl" ? copy.superBowl : round === "cup_group_play" ? copy.group : round === "cfp_first_round" ? copy.firstRound : /quarterfinals/.test(round) ? copy.quarters : /semifinals/.test(round) ? copy.semis : copy.championship
+  const previewName = (name: string) => name.replace(/^(AFC|NFC)(\d+)$/, `$1 ${copy.team} $2`).replace(/^(AFC|NFC) Lowest Seed Left$/, `$1 · ${copy.lowestSeed}`).replace(/^(AFC|NFC) Wild Card Winner$/, `$1 · ${copy.winner}`).replace(/^CFP(\d+)$/, `${copy.team} $1`).replace(/^EAST(\d+)$/, `${copy.east} $1`).replace(/^WEST(\d+)$/, `${copy.west} $1`).replace(/^Winner S(\d+)$/, `${copy.winner} $1`).replace("East Champion", `${copy.east} · ${copy.winner}`).replace("West Champion", `${copy.west} · ${copy.winner}`)
   const entryHref = view && entry ? `/brackets/leagues/${view.challenge.id}/entries/${entry.id}` : null
   const boardHref = `/brackets/standings?sport=${sport}&season=${season}`
-  const sideName = (conference: string | null) => conference === "east" ? copy.east : conference === "west" ? copy.west : conference === "upper" ? copy.upperBracket : conference === "lower" ? copy.lowerBracket : ""
-  const funnel = engineSport
-    ? funnelFromSeries(rows.filter((row) => row.round !== "cup_group_play").map((row) => ({ ...row, id: String(row.seriesNumber) })) as PlayoffSeriesView[], {
+  const sideName = (conference: string | null) => conference === "afc" ? copy.afc : conference === "nfc" ? copy.nfc : conference === "east" ? copy.east : conference === "west" ? copy.west : conference === "upper" ? copy.upperBracket : conference === "lower" ? copy.lowerBracket : ""
+  const funnel = funnelFromSeries(rows.filter((row) => row.round !== "cup_group_play").map((row) => ({ ...row, id: String(row.seriesNumber) })) as PlayoffSeriesView[], {
         name: previewName,
         roundTitle,
         points: (round) => points.find((item) => item.round === round)?.points ?? null,
         sideLabel: sideName,
       })
-    : nflFunnel({ afc: copy.afc, nfc: copy.nfc, wildCard: copy.wildCard, divisional: copy.divisional, conference: copy.conferenceRound, superBowl: copy.superBowl, lowestSeed: copy.lowestSeed, winner: copy.winner, seed: copy.team, champion: copy.champion })
   const opensLabel = (t: HubTournamentProp) => `${copy.opens} ${new Intl.DateTimeFormat(language, { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(t.opensAt))}`
-  const nflClosed = <span className="af-bx-btn af-bx-closed" role="note"><CalendarClock size={16} aria-hidden />{copy.nflSoon}</span>
   const standings = (limit?: number) => <>
     {(limit ? ranked.slice(0, limit) : ranked).map((row) => <div className="af-bx-leader" key={row.id}>
       <span className="af-bx-rank">{row.rank ?? "—"}</span><strong>{row.name}<small>{row.potentialTotal ?? 0} {copy.potential}</small></strong><span className="af-bx-points">{row.totalScore ?? 0}<small>{copy.earned}</small></span>
@@ -147,7 +139,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
       <div><p className="af-bx-eyebrow">{copy.eyebrow}</p><h1>{copy.title}<br />{copy.titleEnd}</h1><p>{copy.subtitle}</p></div>
       <div className="af-bx-actions">
         <Link className="af-bx-btn" href="/brackets/my" data-testid="brackets-hub-my-brackets"><Trophy size={17} aria-hidden />{copy.myBrackets}</Link>
-        {engineSport ? <Link className="af-bx-btn af-bx-primary" href={createHref(engineSport)}><Plus size={17} />{copy.create}</Link> : nflClosed}
+        <Link className="af-bx-btn af-bx-primary" href={createHref(sport)}><Plus size={17} />{copy.create}</Link>
         {view ? <button className="af-bx-btn" onClick={() => void share()}><Share2 size={16} />{copy.share}</button> : <Link className="af-bx-btn" href="/brackets/join"><Users size={16} />{copy.join}</Link>}
       </div>
     </section>
@@ -186,8 +178,8 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
         {tab === "bracket" ? view && entry ? <MlbBracketBoard view={view} onViewChange={setView} actions={<Link className="af-pb-btn af-pb-btn--accent" href={entryHref!}>{copy.finalize} <ArrowRight size={14} /></Link>} /> : <>
           {view && !entry ? <div className="af-bx-detail"><button type="button" className="af-bx-btn af-bx-primary" disabled={creating} onClick={() => void createEntry()}>{creating ? copy.creating : copy.createEntry}</button></div> : null}
           {sport === "nba_cup" ? <div className="af-bx-group-note"><strong>{copy.group}</strong><p>{copy.groupNote}</p></div> : null}
-          {funnel ? <BracketFunnel model={funnel} href={view ? `/brackets/leagues/${view.challenge.id}` : engineSport ? createHref(engineSport) : null} pointsLabel={copy.points} matchupLabel={copy.matchup} championLabel={copy.championship} /> : null}
-          <p className="af-bx-boardfoot">{engineSport ? copy.previewNote : copy.nflSoon}</p>
+          {funnel ? <BracketFunnel model={funnel} href={view ? `/brackets/leagues/${view.challenge.id}` : createHref(sport)} pointsLabel={copy.points} matchupLabel={copy.matchup} championLabel={copy.championship} /> : null}
+          <p className="af-bx-boardfoot">{copy.previewNote}</p>
         </> : tab === "standings" ? <div className="af-bx-detail">{standings()}<Link className="af-bx-btn" href={boardHref}>{copy.fullBoard} <ArrowRight size={14} /></Link></div> : <div className="af-bx-detail">
           <h3>{copy.rules}</h3><p>{sport === "nba_cup" ? copy.gameLock : sport === "nfl" ? copy.nflRule : copy.cfpRule}</p>
           {points.map((item) => <div className="af-bx-rule" key={item.round}><span>{roundTitle(item.round)}</span><strong>+{item.points} {copy.points}</strong></div>)}
@@ -198,7 +190,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
         <section className="af-bx-panel"><div className="af-bx-sidebody"><p className="af-bx-eyebrow">{copy.leagues}</p><h2>{view?.challenge.name || copy.crew}</h2>
           <p className="af-bx-muted">{view ? `${view.participants?.length ?? 0} ${copy.members} · ${view.entries.length} ${copy.brackets}` : copy.crewBody}</p>
           {leagues.length > 1 ? <label className="af-bx-select">{copy.selectLeague}<select value={view?.challenge.id ?? leagues[0].challengeId} onChange={(event) => void selectLeague(event.target.value)}>{leagues.map((league) => <option key={league.challengeId} value={league.challengeId}>{league.name}</option>)}</select></label> : null}
-          {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share(true)} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share(true)}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <>{engineSport ? <Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(engineSport)}><Users size={16} />{copy.create}</Link> : nflClosed}<Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
+          {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share(true)} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share(true)}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
         </div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2><Trophy size={17} />{copy.leaderboard}</h2></header><div className="af-bx-sidebody">{standings(3)}<Link className="af-bx-btn af-bx-wide" href={boardHref}>{copy.fullBoard} <ArrowRight size={14} /></Link></div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2>{copy.leagueRules}</h2></header><div className="af-bx-sidebody"><div className="af-bx-rule"><span>{copy.limit}</span><strong>{copy.capacity}</strong></div><div className="af-bx-rule"><span>{copy.visibility}</span><strong>{copy.hidden}</strong></div><div className="af-bx-rule"><span>{copy.tiebreak}</span><strong>{copy.total}</strong></div></div></section>

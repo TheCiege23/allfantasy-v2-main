@@ -64,7 +64,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
   const standings = useMemo(() => {
     return view.entries
-      .filter((entry) => !["ncaaf", "nba_cup"].includes(sport) || entry.isComplete)
+      .filter((entry) => !["ncaaf", "nba_cup", "nfl"].includes(sport) || entry.isComplete)
       .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) ||
         (b.totalScore ?? 0) - (a.totalScore ?? 0) || a.name.localeCompare(b.name))
   }, [view.entries])
@@ -102,7 +102,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
       <section className="af-pb-card" data-testid="pb-leaderboard">
         <div className="af-pb-rail-head">Pool standings</div>
-        {["ncaaf", "nba_cup"].includes(sport) && <Link className="af-pb-basis" href={`/brackets/standings?sport=${sport}&season=${view.challenge.seasonYear}`}>Universal board →</Link>}
+        {["ncaaf", "nba_cup", "nfl"].includes(sport) && <Link className="af-pb-basis" href={`/brackets/standings?sport=${sport}&season=${view.challenge.seasonYear}`}>Universal board →</Link>}
         {standings.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>No entries yet.</p>
         ) : (
@@ -113,7 +113,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
                 {e.name}
                 {e.userId === viewerId ? " · you" : ""}
               </span>
-              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}{["ncaaf", "nba_cup"].includes(sport) ? ` / ${e.potentialTotal ?? 0} max` : ""}</span>
+              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}{["ncaaf", "nba_cup", "nfl"].includes(sport) ? ` / ${e.potentialTotal ?? 0} max` : ""}</span>
             </div>
           ))
         )}
