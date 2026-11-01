@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
-import { qualificationScenarios, type BracketCoach, type CoachGame } from "@/lib/playoffs/bracketCoach"
+import { buildBracketCoach, qualificationScenarios, type BracketCoach, type CoachGame } from "@/lib/playoffs/bracketCoach"
 import { nbaCupGroupStandings } from "@/lib/playoffs/nbaCupProgress"
 import ChimmyMatchupAdvice from "./ChimmyMatchupAdvice"
 import "./bracket-coach.css"
@@ -35,9 +35,12 @@ export default function BracketCoachPanel({ view }: { view: PlayoffChallengeView
   const [message, setMessage] = useState("")
   const [showAllGames, setShowAllGames] = useState(false)
   const entryId = view.activeEntry?.id ?? ""
+  // Sandbox brackets are locally projected fixtures. Do not poll the live/private feed for them.
+  const testCoach = useMemo(() => view.challenge.isTestMode ? buildBracketCoach(view,null,Date.now(),Intl.DateTimeFormat().resolvedOptions().timeZone) : null, [view])
   useEffect(() => {
     setCoach(null); setError(null)
     if (!view.viewerUserId) return
+    if (testCoach) { setCoach(testCoach); return }
     let stopped = false, pending = false
     const controller = new AbortController()
     const refresh = async () => {
@@ -59,7 +62,7 @@ export default function BracketCoachPanel({ view }: { view: PlayoffChallengeView
     const timer = setInterval(() => void refresh(), 30000)
     document.addEventListener("visibilitychange", refresh)
     return () => { stopped = true; controller.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", refresh) }
-  }, [view.challenge.id, view.viewerUserId, entryId, rivalId, language])
+  }, [view.challenge.id, view.viewerUserId, entryId, rivalId, language, testCoach])
   const groups = useMemo(() => view.challenge.sport === "nba_cup" ? nbaCupGroupStandings(view.series, view.challenge.seasonYear) : [], [view.challenge.sport, view.challenge.seasonYear, view.series])
   const selectedTeam = team || groups[0]?.teams[0]?.team || ""
   const scenarios = useMemo(() => qualificationScenarios(view.series, view.challenge.seasonYear, selectedTeam, language), [view.series, view.challenge.seasonYear, selectedTeam, language])
@@ -81,6 +84,7 @@ export default function BracketCoachPanel({ view }: { view: PlayoffChallengeView
   return <section className="af-coach" aria-label={c.companion}>
     <header><div><p className="af-coach-eyebrow">{copy.eyebrow}</p><h2>{copy.title}</h2></div>
       {coach && <span className="af-coach-faint">{c.updated} {new Date(coach.generatedAt).toLocaleTimeString(locale)}</span>}</header>
+    {view.challenge.isTestMode && <p className="af-coach-faint">{c.testMode}</p>}
     {coach?.experience && <BracketEntryChecklist experience={coach.experience} challengeId={view.challenge.id} entryId={entryId} />}
     <nav aria-label={c.views}>{tabs.map((item) => <button type="button" key={item.id} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav>
     {!view.viewerUserId ? <p><Link href={`/login?callbackUrl=${encodeURIComponent(entryHref)}`}>{copy.signin}</Link> {copy.signinBody}</p> : <>

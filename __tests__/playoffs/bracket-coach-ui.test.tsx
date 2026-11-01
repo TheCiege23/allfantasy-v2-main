@@ -17,6 +17,14 @@ const view = (): PlayoffChallengeView => ({
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 describe("bracket coach interactions", () => {
+  it("derives sandbox coaching locally without adding network calls to the pick flow", async () => {
+    const v = view(); v.challenge.isTestMode = true
+    const fetcher = vi.fn(); vi.stubGlobal("fetch",fetcher)
+    render(<BracketCoachPanel view={v} />)
+    expect(await screen.findByText(/Test pool: coaching uses local fixture data/)).toBeInTheDocument()
+    expect(screen.queryByText("Loading your bracket coach…")).not.toBeInTheDocument()
+    expect(fetcher).not.toHaveBeenCalled()
+  })
   it("loads the personal slate and exposes rooting, comparison and recap without changing picks", async () => {
     const v = view(), response = buildBracketCoach(v, null, Date.parse("2026-11-07T00:00:00Z"))
     const fetcher = vi.fn(async () => Response.json(response)); vi.stubGlobal("fetch", fetcher)
