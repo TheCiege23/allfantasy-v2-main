@@ -36,6 +36,7 @@ import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePan
 import { GenericTradeAnalyzer } from '@/components/core-app/screens/GenericTradeAnalyzer'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { TradeCenterPanel } from '@/components/core-app/screens/TradeCenterPanel'
+import { ProposeTradeFlow, ProposeTradeLaunch } from '@/components/core-app/screens/ProposeTradeFlow'
 import { useMessages } from '@/components/i18n/useMessages'
 import { tradePartnerSelectMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -626,6 +627,8 @@ export function TradeCenter(props: {
   const [countering, setCountering] = useState<{ tradeId: string; label: string } | null>(null)
   /** Bumped after a send lands, so the inbox refetches what the write changed. */
   const [inboxReloadToken, setInboxReloadToken] = useState(0)
+  // The guided propose flow (ProposeTradeFlow): every roster as a column, then assets, then send.
+  const [proposeOpen, setProposeOpen] = useState(false)
   /* An action in the trade center changed a trade: the inbox above re-reads too. */
   const bumpInboxReload = useCallback(() => setInboxReloadToken((n) => n + 1), [])
   const partnerSelectCopy = useMessages(tradePartnerSelectMessages)
@@ -2738,6 +2741,18 @@ export function TradeCenter(props: {
             ))}
           </div>
         </details>
+      ) : null}
+      {props.league?.id ? (
+        <ProposeTradeLaunch rosterData={rosterData} onOpen={() => setProposeOpen(true)} />
+      ) : null}
+      {proposeOpen && props.league?.id && rosterData?.viewerRosterId ? (
+        <ProposeTradeFlow
+          leagueId={props.league.id}
+          rosters={rosterData.rosters}
+          viewerRosterId={rosterData.viewerRosterId}
+          onClose={() => setProposeOpen(false)}
+          onSent={bumpInboxReload}
+        />
       ) : null}
       <div className="af-tc-mstep-wrap">
         {/*
