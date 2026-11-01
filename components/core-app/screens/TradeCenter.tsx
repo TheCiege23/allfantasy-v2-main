@@ -77,6 +77,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { tradeCenterMessages } from '@/lib/core-app/messages/tradeCenter'
 import { PickTradeDeadlineChip, TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import { RedraftTradeDeadlineBar } from '@/components/core-app/RedraftTradeDeadlineBar'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -1623,6 +1624,8 @@ export function TradeCenter(props: {
           <PickTradeDeadlineChip view={props.pickTradeDeadline} className="af-tc-chip af-tc-chip--deadline" />
         </div>
       ) : null}
+      {/* Redraft /core shell only (batch B4): the deadline as a bar. Renders nothing for any other league. */}
+      {props.league ? <RedraftTradeDeadlineBar countdown={props.deadlineCountdown} /> : null}
 
       {/* Every league at a glance — folded to one line; see the strip's own header. */}
       {props.leagues && props.leagues.length > 0 ? (
