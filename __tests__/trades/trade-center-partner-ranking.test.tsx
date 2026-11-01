@@ -83,6 +83,15 @@ describe('Trade Center partner ranking', () => {
     expect(fits.textContent).toContain('Trade history is not on file')
   })
 
+  it('"All managers": every other team in one select, by name, with its record — and it selects the chip too', () => {
+    render(<TradeCenter league={LEAGUE} />)
+    const select = document.querySelector('.af-tc-partner-select select') as HTMLSelectElement
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose a manager…', 'Bravo (0–0)', 'Charlie (0–0)', 'Delta (0–0)'])
+    fireEvent.change(select, { target: { value: 'r4' } })
+    const on = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.getAttribute('data-on') === 'true')
+    expect(on?.textContent).toBe('Delta')
+  })
+
   it('choosing a partner from a card selects the same team as its chip', () => {
     render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getAllByText('Trade with them')[0]!)
