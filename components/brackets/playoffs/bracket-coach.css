@@ -1,0 +1,25 @@
+.af-coach { color: #e6edf6; background: #101a2b; border: 1px solid #30435e; border-radius: 20px; padding: clamp(16px, 3vw, 24px); font-size: 14px; line-height: 1.6; min-width: 0; margin: 20px 0; }
+.af-coach header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.af-coach h2 { font-size: clamp(20px, 3vw, 26px); font-weight: 800; }
+.af-coach h3 { font-weight: 800; margin: 16px 0 8px; }
+.af-coach p { margin: 8px 0; overflow-wrap: anywhere; }
+.af-coach-eyebrow { color: #86e6d1; font-size: 12px; font-weight: 800; }
+.af-coach-faint { color: #b5c4d9; font-size: 12px; }
+.af-coach-warning { color: #ffe19a; }
+.af-coach nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.af-coach button, .af-coach select { min-height: 44px; border: 1px solid #57718c; border-radius: 10px; padding: 8px 12px; font: inherit; color: #e9f3ff; background: #182941; max-width: 100%; }
+.af-coach button { cursor: pointer; }
+.af-coach button[aria-pressed="true"] { background: #115f59; border-color: #72e0ce; }
+.af-coach button:disabled { opacity: .6; cursor: wait; }
+.af-coach button:focus-visible, .af-coach select:focus-visible, .af-coach a:focus-visible { outline: 3px solid #72e0ce; outline-offset: 3px; }
+.af-coach label { display: block; font-weight: 700; margin: 12px 0 4px; }
+.af-coach a { color: #8cebd7; text-decoration: underline; }
+.af-coach-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; margin: 12px 0; }
+.af-coach article { min-width: 0; border: 1px solid #35465e; border-radius: 14px; padding: 16px; }
+.af-coach article button { margin: 8px 0 0; display: block; }
+.af-coach li { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin: 10px 0; }
+.af-coach-table { overflow-x: auto; margin: 16px 0; }
+.af-coach table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.af-coach th, .af-coach td { text-align: left; padding: 12px; border-bottom: 1px solid #35465e; min-width: 120px; }
+.af-coach caption { text-align: left; padding: 8px 0; }
+.af-coach-analysis { border-top: 1px solid #57718c; margin-top: 20px; padding-top: 16px; }

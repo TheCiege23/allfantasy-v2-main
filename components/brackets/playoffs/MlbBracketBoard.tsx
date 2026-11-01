@@ -32,6 +32,7 @@ import { buildNbaCupGroups, cupGameState, cupLiveClock } from "@/lib/playoffs/nb
 import CupGroupPlaySection from "./cup/CupGroupPlaySection"
 import CupStandingsRail from "./cup/CupStandingsRail"
 import CupPhaseTrack from "./cup/CupPhaseTrack"
+import BracketCoachPanel from "./BracketCoachPanel"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -498,6 +499,7 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          <BracketCoachPanel view={view} />
           {rollingCup ? <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
           {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
             <div className="af-pb-cup-group-heading"><div>
@@ -620,7 +622,7 @@ export default function MlbBracketBoard({
       {liveNode ? singleGame ? (() => {
         const modalSeries = projectedSeries.find((item) => item.id === liveNode)
         return modalSeries ? <SingleGameMatchupModal
-          series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}} teamLogos={teamLogos}
+          challengeId={view.challenge.id} series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}} teamLogos={teamLogos}
           cupGroups={rollingCup ? cupGroups : undefined}
           cupGames={rollingCup ? groupGames : undefined}
           picked={picksBySeries.get(liveNode) ?? null}

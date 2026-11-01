@@ -23,6 +23,7 @@ import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import PlayoffBracketBoard from "./PlayoffBracketBoard"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import MlbBracketBoard from "./MlbBracketBoard"
+import BracketCoachPanel from "./BracketCoachPanel"
 import PlayoffSettingsModal from "./PlayoffSettingsModal"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
 
@@ -307,6 +308,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-5 p-4 sm:p-6">
+      <BracketCoachPanel view={view} />
       <section className="rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
