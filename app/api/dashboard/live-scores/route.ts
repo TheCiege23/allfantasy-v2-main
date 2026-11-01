@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -325,22 +326,33 @@ export async function GET(request: NextRequest) {
         ? (oppRoster.teamName?.trim() || oppRoster.ownerName || null)
         : null
 
-      const myWins = myRoster.wins
+      // Count rosters strictly better (higher win %, or the same win % and more PF) → rank = count + 1.
+      // Win %, ties as half, as the standings rank: an odd-team league plays unequal numbers of games.
+      const pct = (r: { wins: number; losses: number; ties: number }) =>
+        (r.wins + 0.5 * r.ties) / Math.max(1, r.wins + r.losses + r.ties)
+      const myPct = pct(myRoster)
       const myPF = myRoster.pointsFor
-      // Count rosters strictly better (more wins, or same wins + more PF) → rank = count + 1
       const betterCount = allRosters.filter(
-        (r) => r.wins > myWins || (r.wins === myWins && r.pointsFor > myPF),
+        (r) => pct(r) > myPct || (pct(r) === myPct && r.pointsFor > myPF),
       ).length
       const myRank = betterCount + 1
+
+      // An odd-team league's extra game (lib/redraft/oddTeamExtraMatchupRules.ts): the leftover team's
+      // "opponent" is the chosen team, with its score; the chosen team keeps its own game and the label.
+      const extra = totalTeams % 2 === 1
+        ? await readExtraMatchupViewForSeason({ seasonId: season.id, week, redraftRosterId: myRoster.id })
+        : null
+      const leftover = extra?.role === 'leftover'
 
       results.push({
         leagueId: season.leagueId,
         leagueName: season.league.name ?? 'League',
         sport: season.sport ?? 'NFL',
         week,
-        myPts,
-        oppPts: matchup?.awayRosterId ? oppPts : null,
-        oppTeamName,
+        myPts: leftover && extra.yourScore != null ? extra.yourScore : myPts,
+        oppPts: leftover ? extra.theirScore : matchup?.awayRosterId ? oppPts : null,
+        oppTeamName: leftover ? extra.teamName : oppTeamName,
+        ...(extra ? { extraMatchupLabel: extra.line } : {}),
         myRecord: { wins: myRoster.wins, losses: myRoster.losses, ties: myRoster.ties },
         myRank,
         totalTeams,

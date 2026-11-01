@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
+
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Coins, Loader2, Lock, Sparkles } from "lucide-react"
@@ -39,7 +41,7 @@ export default function WorldCupExplainBracketCard({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(
+      const res = await paidToolFetch(
         `/api/brackets/world-cup/${challengeId}/entries/${entryId}/explain`,
         {
           method: "POST",

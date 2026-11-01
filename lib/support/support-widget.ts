@@ -10,3 +10,6 @@ export const SUPPORT_WIDGET_TOOL = 'global-support-widget'
 
 /** Fixed feedback type for support-widget submissions (the form has no type selector). */
 export const SUPPORT_WIDGET_FEEDBACK_TYPE = 'support'
+
+/** Opens the same support form from a visible in-page button. */
+export const SUPPORT_WIDGET_OPEN_EVENT = 'af:open-support-widget'

@@ -1,0 +1,4 @@
+**
+!scripts/
+!scripts/zombie-staging-cron.mjs
+!scripts/zombie-staging-cron.test.mjs

@@ -109,15 +109,26 @@ const SLOT_ELIGIBILITY: Record<string, readonly string[]> = {
   DB: ['DB'],
 }
 
+// Fantrax NBA's verified slot vocabulary (see fantraxProSports.ts). Keep it
+// sport-scoped: `G` is a basketball guard but a hockey goalie.
+const NBA_SLOT_ELIGIBILITY: Record<string, readonly string[]> = {
+  PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'],
+  G: ['PG', 'SG'], F: ['SF', 'PF'],
+  UTIL: ['PG', 'SG', 'SF', 'PF', 'C'],
+  FLEX_G_F: ['PG', 'SG', 'SF', 'PF'],
+  FLEX_F_C: ['SF', 'PF', 'C'],
+}
+
 /** True when `position` may start in `slotLabel`. Unknown slot ⇒ false. */
 export function isEligibleForSlot(
   slotLabel: string | null | undefined,
   position: string | null | undefined,
+  sport?: string | null,
 ): boolean {
   const slot = (slotLabel ?? '').trim().toUpperCase()
   const pos = (position ?? '').trim().toUpperCase()
   if (!slot || !pos) return false
-  const allowed = SLOT_ELIGIBILITY[slot]
+  const allowed = sport?.toUpperCase() === 'NBA' ? NBA_SLOT_ELIGIBILITY[slot] : SLOT_ELIGIBILITY[slot]
   if (!allowed) return false
   return allowed.includes(pos === 'DST' ? 'DEF' : pos)
 }

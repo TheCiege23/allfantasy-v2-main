@@ -1,7 +1,12 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { scheduleDivisionsForRosters } from '@/lib/league/divisions/leagueDivisions'
 
 export type NextRedraftSeasonShell = { id: string; season: number }
+
+/** The client the shell is written through: the global client, or a caller's open transaction. */
+type ShellDb = Pick<Prisma.TransactionClient, 'redraftSeason' | 'league' | 'redraftRoster' | 'redraftMatchup'>
 
 /**
  * Ensures a "next" RedraftSeason exists for a league whose season just
@@ -14,21 +19,28 @@ export type NextRedraftSeasonShell = { id: string; season: number }
 export async function ensureNextRedraftSeasonShell(
   leagueId: string,
   completedSeasonId: string,
+  /**
+   * An open transaction to write the shell in. The renewal flow passes its own so the new season,
+   * the roster reset and the new draft commit or roll back together; without one the shell gets a
+   * transaction of its own, as before.
+   */
+  db?: ShellDb,
 ): Promise<NextRedraftSeasonShell | null> {
-  const existing = await prisma.redraftSeason.findFirst({
+  const client: ShellDb = db ?? prisma
+  const existing = await client.redraftSeason.findFirst({
     where: { leagueId, NOT: { id: completedSeasonId } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, season: true },
   })
   if (existing) return existing
 
-  const completedSeason = await prisma.redraftSeason.findUnique({
+  const completedSeason = await client.redraftSeason.findUnique({
     where: { id: completedSeasonId },
     select: { sport: true, season: true, totalWeeks: true, playoffStartWeek: true, medianGame: true },
   })
   if (!completedSeason) return null
 
-  const league = await prisma.league.findFirst({
+  const league = await client.league.findFirst({
     where: { id: leagueId },
     include: { teams: true },
   })
@@ -43,7 +55,7 @@ export async function ensureNextRedraftSeasonShell(
    * go. Cloning keeps each team's identity (`roster:<id>` for an orphan) exactly as the season
    * engine wrote it, which is also what lets carryover match teams across the two seasons.
    */
-  const previousRosters = await prisma.redraftRoster.findMany({
+  const previousRosters = await client.redraftRoster.findMany({
     where: { leagueId, seasonId: completedSeasonId },
     orderBy: { id: 'asc' },
     select: { ownerId: true, ownerName: true, teamName: true, avatarUrl: true },
@@ -63,7 +75,7 @@ export async function ensureNextRedraftSeasonShell(
 
   const nextSeasonYear = completedSeason.season + 1
 
-  return prisma.$transaction(async (tx) => {
+  const write = async (tx: ShellDb): Promise<NextRedraftSeasonShell> => {
     const rs = await tx.redraftSeason.create({
       data: {
         leagueId,
@@ -78,6 +90,7 @@ export async function ensureNextRedraftSeasonShell(
     })
 
     const rosters: { id: string }[] = []
+    const rosterTeam: Array<{ rosterId: string; ids: string[] }> = []
     for (const t of shells) {
       const r = await tx.redraftRoster.create({
         data: {
@@ -90,14 +103,21 @@ export async function ensureNextRedraftSeasonShell(
         },
       })
       rosters.push({ id: r.id })
+      // An orphan team's owner id is `roster:<externalId or team id>`; either form names its team.
+      rosterTeam.push({ rosterId: r.id, ids: [t.ownerId, t.ownerId.startsWith('roster:') ? t.ownerId.slice('roster:'.length) : null].filter((v): v is string => Boolean(v)) })
     }
 
+    const divisions = scheduleDivisionsForRosters(league.settings, league.teams, rosterTeam)
     const slots = generateSchedule(
       rosters,
       completedSeason.totalWeeks,
       completedSeason.playoffStartWeek,
       completedSeason.sport,
-      { medianGame: completedSeason.medianGame },
+      {
+        medianGame: completedSeason.medianGame,
+        divisionByRoster: divisions?.byRoster ?? null,
+        divisionRivalsTwice: divisions?.rivalsTwice === true,
+      },
     )
     for (const s of slots) {
       if (s.type === 'median') continue
@@ -120,5 +140,6 @@ export async function ensureNextRedraftSeasonShell(
     })
 
     return { id: rs.id, season: nextSeasonYear }
-  })
+  }
+  return db ? write(db) : prisma.$transaction((tx) => write(tx))
 }

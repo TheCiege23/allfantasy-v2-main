@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
@@ -13,6 +14,15 @@ import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+
+/**
+ * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
+ * 84px per column (a large league on a narrow screen) it scrolls sideways instead of squashing.
+ */
+const BOARD_COLUMN = 'minmax(84px, var(--af-board-col-max, 1fr))'
+/** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
+const ROUND_COLUMN = '28px'
 
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
@@ -76,6 +86,7 @@ type AuctionBoardColumn = {
   displayName: string
   tintHex: string
   picks: DraftBoardCellPick[]
+  tribe: SlotOrderEntry['tribe']
 }
 
 function isSnakeRoundReversed(round: number, draftType: 'snake' | 'linear' | 'auction', thirdRoundReversal: boolean): boolean {
@@ -84,19 +95,19 @@ function isSnakeRoundReversed(round: number, draftType: 'snake' | 'linear' | 'au
   return round === 2 || round === 3 || (round >= 4 && round % 2 === 1)
 }
 
-function describeBoardMode(
+export function describeBoardMode(
   draftType: 'snake' | 'linear' | 'auction',
   thirdRoundReversal: boolean,
-  orderSourceLabel?: string | null,
+  orderSourceLabel: string | null | undefined,
+  t: (key: string) => string,
 ): string {
-  if (draftType === 'auction') return 'Auction purchase board'
-  if (thirdRoundReversal) {
-    return orderSourceLabel ? `3RR snake | ${orderSourceLabel}` : '3RR snake'
-  }
-  if (draftType === 'linear') {
-    return orderSourceLabel ? `Linear | ${orderSourceLabel}` : 'Linear'
-  }
-  return orderSourceLabel ? `Snake | ${orderSourceLabel}` : 'Snake'
+  if (draftType === 'auction') return t('draftRoom.board.mode.auction')
+  const mode = thirdRoundReversal
+    ? t('draftRoom.board.mode.thirdRoundReversal')
+    : draftType === 'linear'
+      ? t('draftRoom.board.mode.linear')
+      : t('draftRoom.board.mode.snake')
+  return orderSourceLabel ? `${mode} | ${orderSourceLabel}` : mode
 }
 
 function managerInitials(value: string): string {
@@ -167,8 +178,10 @@ function DraftBoardInner({
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
+  const { t } = useOptionalLanguage()
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
+  const boardRef = useRef<HTMLElement | null>(null)
   const lastFollowedOverallRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -190,9 +203,9 @@ function DraftBoardInner({
   useEffect(() => {
     if (draftType === 'auction' || currentOverallPick == null) return
     const raf = window.requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
-      el?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
+      el?.scrollIntoView?.({
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'nearest',
         inline: 'nearest',
       })
@@ -370,6 +383,7 @@ function DraftBoardInner({
           displayName: entry.displayName,
           tintHex,
           picks: ownedPicks,
+          tribe: entry.tribe ?? null,
         }
       })
   }, [draftType, picks, slotOrder, sport, poolPlayerById])
@@ -389,7 +403,7 @@ function DraftBoardInner({
     [auctionColumns],
   )
 
-  const boardModeLabel = describeBoardMode(draftType, thirdRoundReversal, orderSourceLabel)
+  const boardModeLabel = describeBoardMode(draftType, thirdRoundReversal, orderSourceLabel, t)
   const currentRoundDirection =
     draftType === 'auction'
       ? 'Budgets and sold players update live during bidding.'
@@ -408,6 +422,7 @@ function DraftBoardInner({
 
   return (
     <section
+      ref={boardRef}
       className={
         rs
           ? 'relative flex flex-col overflow-hidden rounded-2xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(15,23,42,0.92)_0%,rgba(6,13,26,0.98)_45%,rgba(4,9,17,1)_100%)] shadow-[0_24px_72px_rgba(0,0,0,0.55),0_0_0_1px_rgba(34,211,238,0.06),inset_0_1px_0_rgba(255,255,255,0.06)]'
@@ -424,11 +439,12 @@ function DraftBoardInner({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-bold tracking-tight drop-shadow-sm ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
+            {/* Phones: the title, mode chip and legend cost a row of a ~570px board; the round controls stay. */}
+            <span className={`text-sm font-bold tracking-tight drop-shadow-sm max-md:hidden ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
               Draft board
             </span>
             <span
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm max-md:hidden ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
             >
               {boardModeLabel}
             </span>
@@ -442,7 +458,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
@@ -548,7 +564,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -589,6 +605,7 @@ function DraftBoardInner({
                     />
                   </div>
                   <p className="mt-1 truncate text-sm font-semibold text-white">{column.displayName}</p>
+                  {column.tribe ? <SurvivorTribeBadge tribe={column.tribe} className="mt-1 max-w-full" /> : null}
                 </div>
 
                 <div className="space-y-1.5 p-1.5">
@@ -652,14 +669,21 @@ function DraftBoardInner({
         </div>
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
-          <div className="min-w-max" data-testid="draft-board-grid">
+          {/*
+            ⚠ PHONE COLUMNS ARE CAPPED (2026-10-29). Below sm the grid is `min-w-max`, and a `1fr`
+            track there grows to its longest content — one "steve21011gmailcom's Team" made every
+            column ~157px, so a phone showed 2.6 teams. Below md `--af-board-col-max` pins a column
+            to 84px (names truncate; the header cell's `title` keeps the full name). md+ leaves it
+            unset, so BOARD_COLUMN resolves to its plain `minmax(84px, 1fr)`.
+          */}
+          <div className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
-              className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
+              className={`sticky top-0 z-10 grid gap-[2px] border-b pb-0.5 backdrop-blur-md ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+              style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -677,7 +701,7 @@ function DraftBoardInner({
                 <div
                   key={entry.rosterId}
                   data-testid={`draft-board-team-header-slot-${entry.slot}`}
-                  title={meta?.aiArchetypeLabel ? `${headerName} · ${meta.aiArchetypeLabel}` : headerName}
+                  title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
                   className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
                   } ${isUser ? 'bg-cyan-400/[0.08]' : ''}`}
@@ -711,6 +735,9 @@ function DraftBoardInner({
                         data-testid={`draft-board-team-header-orphan-${entry.slot}`}
                       />
                     ) : null}
+                    {entry.tribe ? (
+                      <SurvivorTribeMark tribe={entry.tribe} className="absolute -bottom-0.5 -right-0.5" />
+                    ) : null}
                   </span>
                   <span
                     className={`w-full truncate text-center text-[11px] leading-none ${
@@ -727,23 +754,19 @@ function DraftBoardInner({
               })}
             </div>
 
-            <div className="space-y-[3px] pt-0.5">
+            <div className="space-y-[2px] pt-0.5">
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
-                      className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+                      className="grid gap-[2px]"
+                      style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[46px] ${
-                            round === 1
-                              ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
-                              : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'
-                          }`}
+                          className="flex h-full flex-col items-center justify-center gap-0.5 rounded-[4px] text-[11px] text-white/55"
                           title={
                             isSnake
                               ? reversed
@@ -754,11 +777,11 @@ function DraftBoardInner({
                           data-testid={`draft-board-round-${round}-direction`}
                           data-direction={reversed ? 'reverse' : 'forward'}
                         >
-                          <span className="font-semibold uppercase tracking-[0.14em]">R{round}</span>
+                          <span className="font-bold tabular-nums">{round}</span>
                           {reversed ? (
-                            <ArrowLeft className="h-3 w-3 text-amber-300/80" aria-label="reverse" />
+                            <ArrowLeft className="h-3 w-3 text-white/40" aria-label="reverse" />
                           ) : (
-                            <ArrowRight className="h-3 w-3 text-cyan-300/80" aria-label="forward" />
+                            <ArrowRight className="h-3 w-3 text-white/40" aria-label="forward" />
                           )}
                         </div>
                       )
@@ -770,7 +793,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="min-h-[44px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[46px]"
+                            className="h-[50px] rounded-[4px] bg-red-500/15"
                             title="Missing cell data for this slot"
                           />
                         )

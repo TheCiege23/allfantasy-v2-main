@@ -237,6 +237,6 @@ export function guillotineStakes(summary: GuillotineSummaryLite | null): FormatS
     deadlineIso: null,
     deadlineLabel: null,
     tab: 'guillotine',
-    cta: 'Open the Guillotine',
+    cta: 'Open the Guilly',
   }
 }

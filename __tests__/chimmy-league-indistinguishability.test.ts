@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { issueAnalysisQuote } from '@/lib/chimmy/analysisQuote'
+import { fingerprintChimmyRequest } from '@/lib/chimmy/requestFingerprint'
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
 
 /**
@@ -57,6 +59,25 @@ const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
 const getInsightBundleMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
+
+// The durable DB boundary is mocked; real signed quote validation and all league authorization stay active.
+vi.mock('@/lib/chimmy/requestReceipts', async original => ({
+  ...await original<typeof import('@/lib/chimmy/requestReceipts')>(),
+  claimRequestReceipt: async ({ userId, requestId }: { userId: string; requestId: string }) => ({
+    kind: 'execute', context: { id: `receipt-${requestId}`, userId, ownerToken: 'test-owner' },
+  }),
+  recordReceiptTokenIntent: vi.fn().mockResolvedValue(undefined),
+  assertReceiptTokenSpend: vi.fn().mockResolvedValue(undefined),
+  finishRequestReceipt: vi.fn().mockResolvedValue(undefined),
+  reconcileRequestCharge: vi.fn().mockResolvedValue(undefined),
+  reconcileUnreportedTokenCharge: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -147,10 +168,20 @@ const OTHERS_LEAGUE = {
   importedAt: null,
 }
 
-function request(fields: Record<string, string>) {
+let requestSequence = 0
+async function request(fields: Record<string, string>) {
   const fd = new FormData()
   for (const [k, v] of Object.entries(fields)) fd.append(k, v)
-  return createMockNextRequest('http://localhost/api/chat/chimmy', { method: 'POST', body: fd })
+  const headers: Record<string, string> = {}
+  if (fields.confirmTokenSpend === 'true') {
+    const requestId = `security-request-${++requestSequence}`
+    fd.set('requestId', requestId)
+    fd.set('analysisPreviewVersion', '1')
+    fd.set('tokenQuote', issueAnalysisQuote({ userId: 'stranger-1', requestId,
+      fingerprint: await fingerprintChimmyRequest(fd), tokenCost: 15, access: 'tokens' }).quote)
+    headers['x-chimmy-request-id'] = requestId
+  }
+  return createMockNextRequest('http://localhost/api/chat/chimmy', { method: 'POST', body: fd, headers })
 }
 
 /*
@@ -239,7 +270,7 @@ function asNonexistent() {
 
 async function post(fields: Record<string, string>) {
   const { POST } = await import('@/app/api/chat/chimmy/route')
-  const res = await POST(request(fields) as never)
+  const res = await POST(await request(fields) as never)
   const text = await res.text()
   let json: unknown = null
   try {
@@ -346,6 +377,10 @@ describe('the successful global-answer path, at a real HTTP 200', () => {
     asNonexistent()
     const b = await post(GLOBAL_200)
     expect(b.status).toBe(200)
+    expect(spendTokensForRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      expectedTokenCost: 15, idempotencyKey: expect.stringContaining('chimmy_request:'),
+      assertWithinTransaction: expect.any(Function),
+    }))
   })
 
   it('🛑 the constructed meta.leagueGrounding is IDENTICAL in both cases', async () => {

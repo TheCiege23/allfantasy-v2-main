@@ -507,3 +507,21 @@
 .af-lt-workspace { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; }
 .af-core .af-lt-workspace-open { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line2); border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 750; text-decoration: none; }
 .af-lt-workspace > span { color: var(--muted); font-size: 12px; }
+
+
+.af-core .af-lt { gap: 8px; margin-bottom: 16px; padding-bottom: 10px; }
+.af-core .af-lt-compact { gap: 6px; width: 100%; }
+.af-core .af-lt-tab { font-size: 13px; letter-spacing: 0; border-radius: 10px; }
+.af-core .af-lt-more-list { padding: 8px; border-radius: 14px; }
+.af-core .af-lt-absent { font-size: 12px; line-height: 1.5; }
+@media (max-width: 720px) {
+  .af-core .af-lt .af-lt-compact-row { display: flex; flex-wrap: nowrap; min-width: 0; width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .af-core .af-lt-compact-row .af-lt-tab { flex: 0 0 auto; padding-inline: 13px; }
+  .af-core .af-lt-more-list { position: static; display: flex; flex-wrap: wrap; max-width: 100%; }
+}
+
+
+.af-core .af-lctx-details { min-width: 0; width: 100%; }
+.af-core .af-lctx-details > summary { display: flex; align-items: center; min-height: 44px; color: var(--muted); cursor: pointer; font-size: 13px; }
+.af-core .af-lctx-details[open] > summary { color: var(--accent); }
+.af-core .af-lctx-details .af-lctx-statuses { flex-wrap: wrap; overflow: visible; gap: 8px; padding-top: 8px; }

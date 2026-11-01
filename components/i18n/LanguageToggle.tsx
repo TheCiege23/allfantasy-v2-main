@@ -5,6 +5,26 @@ import { useOptionalSession } from "@/components/auth/useOptionalSession";
 import { useOptionalLanguage } from "./LanguageProviderClient";
 import { getLanguageOptionLabel, SELECTABLE_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
 
+/**
+ * Switch language the way every picker should: the provider (cookie, localStorage,
+ * `<html lang>`, server refresh) plus `UserProfile.preferredLanguage` when signed in.
+ * Shared so a compact control elsewhere (the /core top-bar chip) persists identically.
+ */
+export function useSelectLanguage(): (lang: LanguageCode) => void {
+  const { data: session } = useOptionalSession();
+  const { setLanguage } = useOptionalLanguage();
+  return (lang: LanguageCode) => {
+    setLanguage(lang);
+    if (session?.user) {
+      fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredLanguage: lang }),
+      }).catch(() => {});
+    }
+  };
+}
+
 export type LanguageToggleVariant = "default" | "compact";
 
 /**
@@ -30,19 +50,8 @@ export default function LanguageToggle({
    * set it, so everywhere else server-rendered text kept the old language. `LanguageProviderClient`
    * now refreshes on every real switch, from any control — a second refresh here would double it.
    */
-  const { data: session } = useOptionalSession();
-  const { language, setLanguage, t } = useOptionalLanguage();
-
-  const selectLang = (lang: LanguageCode) => {
-    setLanguage(lang);
-    if (session?.user) {
-      fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferredLanguage: lang }),
-      }).catch(() => {});
-    }
-  };
+  const { language, t } = useOptionalLanguage();
+  const selectLang = useSelectLanguage();
 
   const labelText = t("common.language");
 

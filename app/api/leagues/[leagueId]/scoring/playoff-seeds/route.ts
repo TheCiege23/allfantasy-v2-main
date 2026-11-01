@@ -6,6 +6,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { computePlayoffSeeds } from '@/server/services/playoffEngine'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { loadNativePlayoffSeedPreview } from '@/lib/playoff-runtime/playoffSeedPreview'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,33 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         }),
       )
       .catch(() => {})
+  }
+
+  // A native season: the bracket's own seeds (lib/playoff-runtime/playoffSeedPreview.ts), live until
+  // the bracket is generated and then the ones it was built with — so the preview cannot disagree with
+  // the bracket, divisions included. `projected` marks "if the season ended today".
+  const native = await loadNativePlayoffSeedPreview(leagueId, season).catch(() => null)
+  if (native && native.seeds.length > 0) {
+    const [labels, standingRows] = await Promise.all([
+      buildRosterLabelMap(leagueId),
+      prisma.fantasyStanding.findMany({ where: { leagueId, season } }),
+    ])
+    const standingByRoster = new Map(standingRows.map((r) => [r.rosterId, r]))
+    return NextResponse.json({
+      season,
+      source: 'playoff_runtime',
+      projected: !native.locked,
+      seeds: native.seeds.map((s) => ({
+        rosterId: s.rosterId,
+        seed: s.seed,
+        teamName: labels.get(s.rosterId) ?? s.displayName,
+        qualifiedBy: s.qualifiedBy,
+        wins: standingByRoster.get(s.rosterId)?.wins ?? 0,
+        pointsFor: standingByRoster.get(s.rosterId)?.pointsFor ?? 0,
+      })),
+      // Best-of-N series rounds (lib/playoff-runtime/playoffSeries.ts), from the scorer's own week rule.
+      series: native.series,
+    })
   }
 
   const [labels, rows] = await Promise.all([

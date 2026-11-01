@@ -23,6 +23,7 @@ import {
   type ScoringCategory,
   type ScoringRow,
 } from '@/lib/nfl-scoring/NflScoringCategories'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,11 +46,27 @@ interface NflScoringConfig {
   rules: Record<string, number>
   matchesPreset: boolean
   premiumFeaturesUsed: boolean
+  importNotScored?: string[]
+  importApproximated?: string[]
 }
 
 // ---------------------------------------------------------------------------
 // Tab pill colour map — visually distinguishes categories
 // ---------------------------------------------------------------------------
+
+/** Copy for the imported-scoring note, kept beside it so the shared table is not a merge point. */
+const IMPORT_NOTE_COPY = {
+  en: {
+    intro: 'This scoring was carried over from your imported league as closely as AllFantasy can score it.',
+    notScored: 'Not scored yet:',
+    approximated: 'Set to one value where your old league used several:',
+  },
+  es: {
+    intro: 'Esta puntuación se trajo de tu liga importada lo más fiel que AllFantasy puede puntuarla.',
+    notScored: 'Aún sin puntuar:',
+    approximated: 'Con un solo valor donde tu liga anterior usaba varios:',
+  },
+} as const
 
 const TAB_COLORS: Record<string, string> = {
   passing:       'border-blue-500/40 bg-blue-500/15 text-blue-200',
@@ -88,6 +105,7 @@ interface Props {
 
 export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, FOOTBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NflScoringPreset[]>([])
@@ -182,7 +200,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     if (!leagueId) return
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nfl-scoring`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nfl-scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         // Rules only for a custom table. The route treats any `rules` in the body as a premium
@@ -197,12 +215,13 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
       if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId, scoringLabel: data.config?.presetLabel } }))
       setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('lsScore.err.request')) }
     finally { setSaving(false) }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -222,6 +241,8 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -256,6 +277,22 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
           <div className="text-[11px] text-amber-200/80">
             <p>{st(currentPreset.warning)}</p>
             <p className="mt-1 text-amber-200/60">{t('lsScore.specialtyNote')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Imported rules that could not be carried over exactly */}
+      {config?.source === 'IMPORTED_MAPPED' && ((config.importNotScored?.length ?? 0) > 0 || (config.importApproximated?.length ?? 0) > 0) && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2.5" data-testid="nfl-scoring-import-notes">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div className="space-y-1 text-[11px] text-amber-200/80">
+            <p>{IMPORT_NOTE_COPY[language === 'es' ? 'es' : 'en'].intro}</p>
+            {(config.importNotScored?.length ?? 0) > 0 && (
+              <p>{IMPORT_NOTE_COPY[language === 'es' ? 'es' : 'en'].notScored} {config.importNotScored!.map(st).join(', ')}</p>
+            )}
+            {(config.importApproximated?.length ?? 0) > 0 && (
+              <p>{IMPORT_NOTE_COPY[language === 'es' ? 'es' : 'en'].approximated} {config.importApproximated!.map(st).join(', ')}</p>
+            )}
           </div>
         </div>
       )}
@@ -426,5 +463,6 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NFL')}
       />
     </div>
+    </>
   )
 }

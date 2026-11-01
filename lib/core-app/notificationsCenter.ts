@@ -6,6 +6,7 @@ import { categoryFromMeta } from '@/lib/core-app/notificationMutes'
 import { handoffFor } from '@/lib/core-app/platformLinks'
 import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import { survivorNotificationKind } from '@/lib/core-app/survivorNotificationIcon'
 
 /**
  * 22c — the notifications centre, and the push suppression rule behind it.
@@ -44,6 +45,8 @@ export type NotificationFilter =
 export type NotificationRow = {
   relatedIds?: string[]
   id: string
+  type?: string
+  meta?: unknown
   /** Which filter chip this falls under. */
   kind: NotificationFilter
   title: string
@@ -70,6 +73,12 @@ export type NotificationRow = {
    * provider id (user decision 2026-09-14). See platformLinks.handoffFor.
    */
   handoff?: { href: string; label: string; screen: string } | null
+  /**
+   * The Survivor kind (`idol_found`, `torch_out`, …) when the stored type is `survivor:<kind>`, for
+   * the row's island icon (lib/core-app/survivorNotificationIcon.ts). Absent on every other row.
+   * Display only: the row's filter, copy and action are decided exactly as before.
+   */
+  survivorType?: string
 }
 
 export type NotificationsCenterData = {
@@ -403,6 +412,12 @@ export async function getNotificationsCenter(input: {
 
   const rest: NotificationRow[] = stored.map((n) => {
     const kind = classifyStored(n.type, n.title, n.body, n.meta)
+    const metadata = n.meta && typeof n.meta === 'object' ? n.meta as Record<string, unknown> : null
+    const storedHref = metadata?.actionHref
+    const gameHref = n.type.startsWith('game_') || n.type === 'postgame_recap'
+      ? typeof storedHref === 'string' && /^\/core\/live(?:\?|$)/.test(storedHref) ? storedHref : '/core/live'
+      : null
+    const survivorType = survivorNotificationKind(n.type)
     const handoff =
       n.leagueId && n.league
         ? handoffFor(
@@ -419,7 +434,10 @@ export async function getNotificationsCenter(input: {
         : null
     return {
       ...(handoff ? { handoff: { href: handoff.href, label: handoff.label, screen: handoff.screen } } : {}),
+      ...(survivorType ? { survivorType } : {}),
       id: n.id,
+      type: n.type,
+      meta: n.meta,
       kind,
       title: n.title,
       /*
@@ -443,7 +461,7 @@ export async function getNotificationsCenter(input: {
               : `/core${kind === 'lineups' ? '/my-team' : kind === 'trades' ? '/trades' : kind === 'waivers' ? '/waivers' : kind === 'drafts' ? '/draft-hq' : ''}?league=${encodeURIComponent(n.leagueId)}`,
             external: false,
           }
-        : null,
+        : gameHref ? { label: 'Open game', href: gameHref, external: false } : null,
     }
   })
 

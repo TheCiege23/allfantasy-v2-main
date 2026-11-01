@@ -93,9 +93,10 @@ export async function executeRocksDraw(
   // Get display names
   const players = await (prisma as any).survivorPlayer.findMany({
     where: { id: { in: eligibleIds }, leagueId: council.leagueId },
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, userId: true, redraftRosterId: true },
   })
   const nameMap = new Map<string, string>(players.map((p: any) => [p.id, p.displayName ?? 'Unknown']))
+  const playerById = new Map<string, { userId: string | null; redraftRosterId: string | null }>(players.map((p: any) => [p.id, p]))
 
   // Generate seed if not provided
   const drawSeed = seed ?? `rocks-${councilId}-${Date.now()}`
@@ -108,9 +109,11 @@ export async function executeRocksDraw(
     ;[shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!]
   }
 
-  // First in shuffled order draws the purple rock (eliminated)
-  const eliminatedRosterId = shuffled[0]!
-  const eliminatedName = nameMap.get(eliminatedRosterId) ?? 'Unknown'
+  // First in shuffled order draws the purple rock (eliminated). `shuffled` holds SurvivorPlayer ids.
+  const eliminatedPlayerId = shuffled[0]!
+  const eliminatedPlayer = playerById.get(eliminatedPlayerId) ?? null
+  const eliminatedRosterId = eliminatedPlayer?.redraftRosterId ?? eliminatedPlayerId
+  const eliminatedName = nameMap.get(eliminatedPlayerId) ?? 'Unknown'
 
   const drawOrder = shuffled.map((id, index) => ({
     rosterId: id,
@@ -123,7 +126,11 @@ export async function executeRocksDraw(
     where: { id: councilId },
     data: {
       tiePhase: 'rocks_resolved',
-      rockDrawerUserId: eliminatedRosterId,
+      rockDrawerUserId: eliminatedPlayer?.userId ?? eliminatedPlayerId,
+      // resolveElimination refuses a council that is still tied or names no user; without these
+      // two fields a rocks draw could never finish an elimination.
+      eliminatedUserId: eliminatedPlayer?.userId ?? null,
+      isTie: false,
       eliminatedRosterId,
       eliminatedName,
       closedAt: new Date(),
@@ -149,7 +156,7 @@ export async function executeRocksDraw(
       week: council.week,
       category: 'tribal_council',
       action: 'rocks_draw',
-      targetUserId: eliminatedRosterId,
+      targetUserId: eliminatedPlayer?.userId ?? eliminatedPlayerId,
       data: {
         councilId,
         seed: drawSeed,

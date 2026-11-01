@@ -155,7 +155,7 @@ export function GuillotineSettingsPanel({ settings, onChange, sport }: Guillotin
 
   return (
     <div className="space-y-5 rounded-2xl border border-red-500/20 bg-red-500/[0.03] p-5">
-      <div className="text-sm font-semibold text-white/90">Guillotine Settings</div>
+      <div className="text-sm font-semibold text-white/90">Guilly Settings</div>
 
       {/* Schedule info */}
       <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/50">

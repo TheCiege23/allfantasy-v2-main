@@ -19,6 +19,7 @@
  */
 
 export type BreakingKind =
+  | 'championship_matchup'
   | 'trade'
   | 'signing'
   | 'release'
@@ -71,11 +72,22 @@ const REPORT = /^(sources?|report|reports)\b|\b(sources? (say|said|tell)|per sou
 /** Big money or a long deal: what makes a signing reach beyond the team's own followers. */
 const BIG_SIGNING = /\$\s?\d{2,}(\.\d+)?\s?(M|million|B|billion)\b|\b\d{2,}\s?million\b|\b([4-9]|1[0-5])-year\b/i
 
+/** A confirmed title-game pairing, not a schedule announcement or a prediction. */
+const CHAMPIONSHIP_MATCHUP = /\b(world series|super bowl|nba finals|wnba finals|stanley cup final|national championship|college world series|mls cup|champions league final|world cup final)(?:\s+(?:matchup|match-up|pairing|field))?\s+(?:(?:is|are|now|officially)\s+)*(?:set|confirmed|locked in)\b/i
+
+// ESPN can announce the pairing by updating its schedule headline instead of saying "set".
+// Require two named opponents, not a generic schedule or an unresolved placeholder.
+const CHAMPIONSHIP_SCHEDULE_PAIRING = /\b(world series|super bowl|nba finals|wnba finals|stanley cup final|national championship|college world series|mls cup|champions league final|world cup final) schedule: [a-z][a-z .'-]+ vs\.? [a-z][a-z .'-]+ dates and times$/i
+
 export function classifyBreakingHeadline(title: string, description?: string | null): BreakingClassification | null {
   const t = String(title ?? '').trim()
   if (t.length < 12) return null
   // A question is never a fact.
   if (/\?\s*$/.test(t)) return null
+  // A named pairing can contain 'vs.'; retain every other speculation/opinion guard.
+  if ((CHAMPIONSHIP_MATCHUP.test(t) || (CHAMPIONSHIP_SCHEDULE_PAIRING.test(t) && !/\b(TBD|TBA|winner|undetermined)\b/i.test(t))) && !NOT_NEWS.test(t.replace(/\bvs\.?/gi, ' '))) {
+    return { kind: 'championship_matchup', tier: 'major', confidence: REPORT.test(t) ? 'report' : 'confirmed' }
+  }
   if (NOT_NEWS.test(t)) return null
 
   const confidence: BreakingClassification['confidence'] = REPORT.test(t) ? 'report' : 'confirmed'
@@ -318,6 +330,7 @@ export function breakingStoryKey(input: {
 /** Push/email title for a breaking story. */
 export function breakingAlertTitle(sport: string, c: BreakingClassification): string {
   const label: Record<BreakingKind, string> = {
+    championship_matchup: 'Championship matchup set',
     trade: 'Trade',
     signing: 'Signing',
     release: 'Roster move',

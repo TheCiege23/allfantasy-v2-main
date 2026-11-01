@@ -73,8 +73,8 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     lineupFrequency: 'weekly',
     scoringWindow: 'Thursday through Monday (NFL schedule)',
     lockRule: 'Individual game kickoff locks each player',
-    bashingThreshold: 30,
-    maulingThreshold: 50,
+    bashingThreshold: 60,
+    maulingThreshold: 60,
     weaponThresholds: [
       { type: 'weapon_knife', label: 'Knife', minPoints: 120, description: 'Score 120+ pts in a week' },
       { type: 'weapon_axe', label: 'Axe', minPoints: 140, description: 'Score 140+ pts in a week' },

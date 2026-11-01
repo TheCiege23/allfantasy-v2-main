@@ -45,4 +45,31 @@ describe('draftIntelStateStore', () => {
 
     unsubscribe()
   })
+
+  it('drops states not written for six hours, but never one with a live subscriber', () => {
+    vi.useFakeTimers()
+    try {
+      const make = (leagueId: string) => ({ leagueId, userId: 'u', headline: leagueId }) as any
+      const unsubscribe = draftIntelStateStore.subscribe('open-room', 'u', () => {})
+      draftIntelStateStore.set('queue_update', make('finished'))
+      draftIntelStateStore.set('queue_update', make('open-room'))
+      vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1)
+      draftIntelStateStore.set('queue_update', make('fresh'))
+
+      expect(draftIntelStateStore.get('finished', 'u')).toBeNull()
+      expect(draftIntelStateStore.get('open-room', 'u')?.headline).toBe('open-room')
+      expect(draftIntelStateStore.get('fresh', 'u')?.headline).toBe('fresh')
+      unsubscribe()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('caps the number of states, dropping the oldest write first', () => {
+    const make = (leagueId: string) => ({ leagueId, userId: 'cap', headline: leagueId }) as any
+    for (let i = 0; i <= 2000; i++) draftIntelStateStore.set('queue_update', make(`cap-${i}`))
+
+    expect(draftIntelStateStore.get('cap-0', 'cap')).toBeNull()
+    expect(draftIntelStateStore.get('cap-2000', 'cap')?.headline).toBe('cap-2000')
+  })
 })

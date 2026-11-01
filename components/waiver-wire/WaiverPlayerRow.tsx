@@ -6,6 +6,7 @@ import { Plus, TrendingUp, Loader2 } from "lucide-react"
 import { PlayerHeadshot } from "@/components/league/PlayerHeadshot"
 import { teamLogoUrl } from "@/lib/media-url"
 import { positionColor } from "@/lib/draft/positions"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 
 type Props = {
   player: {
@@ -22,6 +23,8 @@ type Props = {
     aiAdp?: number | null
     byeWeek?: number | null
     rank?: number | null
+    /** NBA / NHL / MLB: "C12". Shown in place of the overall rank, which those sports do not have. */
+    positionRank?: string | null
     ownershipPercent?: number | null
     projectionSourceLabel?: string | null
     adpSourceLabel?: string | null
@@ -30,6 +33,8 @@ type Props = {
     seasonStatsSummary?: string[]
   }
   sport?: string | null
+  /** NHL dynasty: a Fantrax-only prospect — "Prospect" badge, "Unsigned" when he has no club. */
+  prospect?: boolean
   onAddClick: () => void
   /** When set, the primary CTA performs an immediate free-agent add/drop instead of opening a claim. */
   addMode?: boolean
@@ -41,6 +46,10 @@ type Props = {
   watchlisted?: boolean
   alreadyClaimed?: boolean
   trendScore?: number
+  /** "On waivers until …" for a recently dropped player (lib/waiver-wire/dropped-player-waivers.ts). */
+  waiverHoldLabel?: string | null
+  /** The season phase closes every move (offseason / playoff rules); the button is disabled. */
+  movesClosedReason?: string | null
 }
 
 function formatDecimal(value: number | null | undefined, digits = 1): string {
@@ -102,6 +111,7 @@ function SourcePill({ label, tone = "neutral" }: { label: string; tone?: "neutra
 export default function WaiverPlayerRow({
   player,
   sport,
+  prospect,
   onAddClick,
   addMode,
   onAdd,
@@ -111,9 +121,14 @@ export default function WaiverPlayerRow({
   watchlisted,
   alreadyClaimed,
   trendScore,
+  waiverHoldLabel,
+  movesClosedReason,
 }: Props) {
+  const { t } = useOptionalLanguage()
   const pos = player.position || "UNK"
   const team = player.team || "FA"
+  // A prospect Fantrax lists with no NHL club is "Unsigned", never "FA" (every row here is a free agent).
+  const teamLabel = prospect && !player.team ? t("draftRoom.pool.prospectUnsigned") : team
   const normalizedSport = String(sport ?? "NFL").toUpperCase()
   const trend = typeof trendScore === "number" ? trendScore : 0
   const logo = player.teamLogoUrl || (player.team ? teamLogoUrl(player.team, sport ?? "NFL") : "")
@@ -164,12 +179,29 @@ export default function WaiverPlayerRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-semibold text-[var(--text)]">{player.name}</span>
             <TeamLogoBadge logo={logo} team={team} sport={normalizedSport} />
-            <span className="rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
-              {team}
+            <span
+              className="rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-0.5 text-[11px] text-[var(--muted)]"
+              data-testid={prospect && !player.team ? `waiver-player-prospect-unsigned-${player.id}` : undefined}
+            >
+              {teamLabel}
             </span>
+            {prospect ? (
+              <span
+                className="rounded border border-sky-300/35 bg-sky-500/12 px-1 py-px text-[11px] font-semibold uppercase tracking-[0.06em] text-sky-100"
+                title={t("draftRoom.pool.prospectTooltip")}
+                data-testid={`waiver-player-prospect-badge-${player.id}`}
+              >
+                {t("draftRoom.pool.prospectBadge")}
+              </span>
+            ) : null}
             {player.injuryStatus ? (
               <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-100">
                 {player.injuryStatus}
+              </span>
+            ) : null}
+            {waiverHoldLabel ? (
+              <span data-testid={`waiver-player-hold-${player.id}`}>
+                <SourcePill label={waiverHoldLabel} tone="warn" />
               </span>
             ) : null}
             {watchlisted ? <SourcePill label="Watchlist" tone="good" /> : null}
@@ -181,7 +213,11 @@ export default function WaiverPlayerRow({
             <Metric label="ADP" value={formatDecimal(player.adp)} testId={`waiver-player-adp-${player.id}`} />
             <Metric label="AF ADP" value={player.aiAdp != null ? formatDecimal(player.aiAdp) : "Soon"} />
             <Metric label="Bye" value={player.byeWeek != null ? String(player.byeWeek) : "-"} />
-            <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            {player.positionRank ? (
+              <Metric label="Pos rank" value={player.positionRank} testId={`waiver-player-position-rank-${player.id}`} />
+            ) : (
+              <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
@@ -241,7 +277,8 @@ export default function WaiverPlayerRow({
         ) : addMode ? (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               ;(onAdd ?? onAddClick)()
@@ -255,7 +292,8 @@ export default function WaiverPlayerRow({
         ) : (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               onAddClick()

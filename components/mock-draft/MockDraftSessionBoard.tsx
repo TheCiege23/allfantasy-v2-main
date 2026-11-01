@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Save, Share2 } from 'lucide-react'
+import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 
@@ -381,6 +382,17 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
         </div>
       )}
 
+      <DraftBoardPreview
+        teams={Array.from({ length: draft.settings.numTeams }, (_, index) => {
+          const seat = draft.slotConfig.find((entry) => entry.slot === index + 1)
+          return { id: String(index + 1), slot: index + 1, name: seat?.displayName || ('Team ' + (index + 1)), isCpu: seat?.type === 'cpu' }
+        })}
+        picks={draft.results.map((pick) => ({ ...pick, rosterId: String(pick.slot) }))}
+        teamCount={draft.settings.numTeams} rounds={draft.settings.rounds} sport={draft.settings.sport}
+        draftType={draft.settings.draftType === 'auction' ? 'auction' : draft.settings.draftType === 'linear' ? 'linear' : 'snake'}
+        currentOverall={draft.status === 'in_progress' ? draft.progress?.currentOverall : null}
+      />
+
       <div className="rounded-xl border border-white/10 bg-black/30 p-3">
         <p className="mb-2 text-[11px] font-semibold text-white/90">Recent picks</p>
         {recentPicks.length === 0 ? (
@@ -400,14 +412,16 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
               return (
                 <li key={`${pick.overall}-${pick.playerName}`} data-testid={`mock-draft-session-pick-${index}`}>
                   <p className="mb-1 text-[11px] text-white/60">#{pick.overall} · {pick.manager}</p>
-                  <DraftPlayerCard
-                    display={display}
-                    name={pick.playerName}
-                    position={pick.position}
-                    team={pick.team ?? null}
-                    byeWeek={pick.byeWeek ?? null}
-                    variant="row"
-                  />
+                  <ul>
+                    <DraftPlayerCard
+                      display={display}
+                      name={pick.playerName}
+                      position={pick.position}
+                      team={pick.team ?? null}
+                      byeWeek={pick.byeWeek ?? null}
+                      variant="row"
+                    />
+                  </ul>
                 </li>
               )
             })}

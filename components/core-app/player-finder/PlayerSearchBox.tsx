@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
-import { suggestionChip, suggestionFact, suggestionTone } from '@/lib/core-app/suggestionChip'
+import { suggestionChip, suggestionFact, suggestionTone, type SuggestionFact } from '@/lib/core-app/suggestionChip'
 import { searchBoxCopy, suggestionChipText } from '@/lib/core-app/finderSearchCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SuggestionPresence } from '@/lib/core-app/playerSuggest'
@@ -37,6 +37,9 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
  * Spanish (2026-10-05): the labels, the note and the chips are built at render from
  * `useOptionalLanguage` (finderSearchCopy.ts), which starts at English on server and client alike.
  */
+
+/** Languages whose chips are rebuilt from the fact; every other language keeps `suggestionChip`'s English. */
+const CHIP_TEXT: Partial<Record<string, (fact: SuggestionFact) => string>> = { es: suggestionChipText }
 
 export type SearchHit = {
   /** SportsPlayer.externalId, when the API is new enough to send it; the link degrades to a name search without it. */
@@ -267,8 +270,9 @@ export function PlayerSearchBox({
                     </span>
                     {/* Where he is in your leagues — its own line, so a long name never has to make room for it. */}
                     {(() => {
-                      const fact = language === 'es' ? suggestionFact(h.presence) : null
-                      const chip = fact ? { text: suggestionChipText(fact), tone: suggestionTone(fact) } : suggestionChip(h.presence)
+                      const chipText = CHIP_TEXT[language]
+                      const fact = chipText ? suggestionFact(h.presence) : null
+                      const chip = fact && chipText ? { text: chipText(fact), tone: suggestionTone(fact) } : suggestionChip(h.presence)
                       return chip ? (
                         <span className="af-chip af-pf-suggest-chip" data-tone={chip.tone}>
                           {chip.text}

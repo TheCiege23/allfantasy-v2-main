@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { isBigBrotherLeague } from './BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague, transitionPhase } from './BigBrotherPhaseStateMachine'
 import { getEligibility, isJuryRoster } from './BigBrotherEligibilityEngine'
@@ -212,7 +213,7 @@ export async function processBigBrotherLeagueChatInput(
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 
   if (looksLikePublicEvictionVote(rawMessage)) {
     await logBigBrotherChatCommand({
@@ -737,7 +738,7 @@ export async function getBbChimmyMentionOptions(args: {
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 
   const current = await getCurrentCycleForLeague(leagueId)
   if (!current) return { type: 'command', options: getBbChimmyCommandSuggestions({ phase: '—', myRosterId, hohRosterId: null, vetoWinnerRosterId: null, nominee1RosterId: null, nominee2RosterId: null, vetoParticipantRosterIds: null, canVote: [], juryRosterIds: [], isJury: false, finaleActive: false }) }

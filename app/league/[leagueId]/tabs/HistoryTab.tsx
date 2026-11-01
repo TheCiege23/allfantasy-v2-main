@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { History } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { BarChart3, History, Medal, Trophy } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -16,6 +17,13 @@ import type { UserLeague } from '@/app/dashboard/types'
 import type { ManagerAllTime } from '@/lib/league/history-aggregates'
 import type { LeagueSeason } from '@prisma/client'
 import { SeasonDetailView } from '@/components/league/SeasonDetailView'
+import { SeasonRecapView } from '@/components/league/SeasonRecapView'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { HistoricalDraftBoard } from '@/components/league/HistoricalDraftBoard'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { dynastyYearOf, firstSeasonOf } from '@/lib/dynasty-core/dynastyDetails'
+import '@/components/dynasty/dynasty-details.css'
 
 export type HistoryTabProps = {
   league: UserLeague
@@ -34,7 +42,7 @@ function getSeasonAccent(index: number) {
     return {
       pill: 'border-[#ff3d81]/30 bg-[#ff3d81]/12 text-[#ffd7e5]',
       card: 'border-[#ff3d81]/18 bg-[linear-gradient(135deg,rgba(255,61,129,0.12),rgba(255,255,255,0.03))]',
-      label: 'Current import layer',
+      label: 'Latest season',
     }
   }
   if (index === 1) {
@@ -60,6 +68,18 @@ export function HistoryTab({ league }: HistoryTabProps) {
   const [syncing, setSyncing] = useState(false)
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [detailExpanded, setDetailExpanded] = useState<Record<number, boolean>>({})
+  // The season recap (lib/season-recap) — native leagues only; an import's season was not played here.
+  // `?recap=<season>` is the "recap is ready" notice's deep link and opens that season's recap.
+  const searchParams = useSearchParams()
+  const recapParam = Number.parseInt(searchParams?.get('recap') ?? '', 10)
+  const [recapExpanded, setRecapExpanded] = useState<Record<number, boolean>>(
+    Number.isFinite(recapParam) ? { [recapParam]: true } : {},
+  )
+  const showRecap = isNativePlatform(league.platform)
+  const { t, tInterpolate } = useOptionalLanguage()
+  // Dynasty only: the season clock, lucide icons in place of emoji, and each season's rookie draft.
+  const dynasty = usesDynastyBackground(league)
+  const [draftExpanded, setDraftExpanded] = useState<Record<number, boolean>>({})
   const historicalBackfillStatus =
     league.settings && typeof league.settings === 'object'
       ? String((league.settings as Record<string, unknown>).historicalBackfillStatus ?? '')
@@ -69,7 +89,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/league/history?leagueId=${encodeURIComponent(league.id)}`)
+      const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/history`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load history')
       setSeasons(data.seasons ?? [])
@@ -114,6 +134,8 @@ export function HistoryTab({ league }: HistoryTabProps) {
     () => [...seasons].sort((a, b) => b.season - a.season),
     [seasons]
   )
+  /** The earliest season on file: Year 1 of the season clock. */
+  const firstSeason = useMemo(() => firstSeasonOf(seasons), [seasons])
 
   const barColor = (pct: number) => {
     if (pct >= 60) return '#10b981'
@@ -224,8 +246,21 @@ export function HistoryTab({ league }: HistoryTabProps) {
               <th className="px-2 py-2 font-medium">W-L</th>
               <th className="px-2 py-2 font-medium">Win%</th>
               <th className="px-2 py-2 font-medium">Pts/Szn</th>
-              <th className="px-2 py-2 font-medium text-center">🏆</th>
-              <th className="px-2 py-2 font-medium text-center">🥈</th>
+              {dynasty ? (
+                <>
+                  <th className="px-2 py-2 font-medium text-center" aria-label={t('dynasty.history.titles')}>
+                    <Trophy className="dyd-gold-icon mx-auto h-3.5 w-3.5" aria-hidden />
+                  </th>
+                  <th className="px-2 py-2 font-medium text-center" aria-label={t('dynasty.history.runnerUps')}>
+                    <Medal className="dyd-faint-icon mx-auto h-3.5 w-3.5" aria-hidden />
+                  </th>
+                </>
+              ) : (
+                <>
+                  <th className="px-2 py-2 font-medium text-center">🏆</th>
+                  <th className="px-2 py-2 font-medium text-center">🥈</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody className="text-[12px] text-white/85">
@@ -284,23 +319,30 @@ export function HistoryTab({ league }: HistoryTabProps) {
           {sortedSeasons.map((s, index) => {
             const recs = (s.teamRecords as unknown[]) ?? []
             const open = expanded[s.season] ?? false
-            const sorted = [...(recs as { wins?: number; pointsFor?: number; managerName?: string }[])].sort(
-              (a, b) => (b.wins ?? 0) - (a.wins ?? 0),
+            const sorted = [...(recs as { rank?: number; wins?: number; pointsFor?: number; managerName?: string }[])].sort(
+              (a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || (b.wins ?? 0) - (a.wins ?? 0),
             )
             const mostPts = sorted.reduce(
               (best, cur) => ((cur.pointsFor ?? 0) > (best?.pointsFor ?? 0) ? cur : best),
               sorted[0],
             )
             const accent = getSeasonAccent(index)
+            const dynastyYear = dynasty ? dynastyYearOf(s.season, firstSeason) : null
             return (
               <div
                 key={s.id}
                 className={`rounded-2xl border p-4 ${accent.card}`}
               >
                 <div className="flex flex-wrap items-center gap-2 text-sm text-white/80">
-                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.22em] ${accent.pill}`}>
-                    {s.season}
-                  </span>
+                  {dynastyYear != null ? (
+                    <span className="dyd-season-clock" data-testid="history-season-clock">
+                      {tInterpolate('dynasty.history.year', { n: dynastyYear, season: s.season })}
+                    </span>
+                  ) : (
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.22em] ${accent.pill}`}>
+                      {s.season}
+                    </span>
+                  )}
                   <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">{accent.label}</span>
                   <span className="text-white/35">·</span>
                   <span className="text-white/55">{league.sport}</span>
@@ -323,22 +365,40 @@ export function HistoryTab({ league }: HistoryTabProps) {
                       ) : null}
                       <div>
                         <p className="text-sm font-bold text-amber-100">{s.championName}</p>
-                        <p className="text-[11px] text-amber-200/70">🏆 {s.season} Champion</p>
+                        {dynasty ? (
+                          <p className="flex items-center gap-1 text-[11px] text-amber-200/70">
+                            <Trophy className="dyd-gold-icon h-3 w-3" aria-hidden /> {s.season} Champion
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-amber-200/70">🏆 {s.season} Champion</p>
+                        )}
                       </div>
                     </div>
                   </div>
                 ) : null}
 
                 {s.runnerUpName ? (
-                  <p className="mt-2 text-[12px] text-slate-300/90">
-                    🥈 Runner-up: {s.runnerUpName}
-                  </p>
+                  dynasty ? (
+                    <p className="mt-2 flex items-center gap-1 text-[12px] text-slate-300/90">
+                      <Medal className="dyd-faint-icon h-3.5 w-3.5" aria-hidden /> Runner-up: {s.runnerUpName}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[12px] text-slate-300/90">
+                      🥈 Runner-up: {s.runnerUpName}
+                    </p>
+                  )
                 ) : null}
 
                 {mostPts?.managerName ? (
-                  <p className="mt-1 text-[11px] text-white/50">
-                    📊 Most points: {mostPts.managerName} ({(mostPts.pointsFor ?? 0).toFixed(1)} pts)
-                  </p>
+                  dynasty ? (
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-white/50">
+                      <BarChart3 className="dyd-faint-icon h-3 w-3" aria-hidden /> Most points: {mostPts.managerName} ({(mostPts.pointsFor ?? 0).toFixed(1)} pts)
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-white/50">
+                      📊 Most points: {mostPts.managerName} ({(mostPts.pointsFor ?? 0).toFixed(1)} pts)
+                    </p>
+                  )
                 ) : null}
 
                 <div className="mt-3 flex items-center gap-4">
@@ -359,6 +419,29 @@ export function HistoryTab({ league }: HistoryTabProps) {
                     {detailExpanded[s.season] ? 'Hide Details ▲' : 'Full Details ▼'}
                   </button>
                 </div>
+                {showRecap ? (
+                  <button
+                    type="button"
+                    onClick={() => setRecapExpanded((prev) => ({ ...prev, [s.season]: !(prev[s.season] ?? false) }))}
+                    className="mt-2 text-[11px] font-semibold text-amber-200/80 hover:text-amber-100"
+                    aria-expanded={recapExpanded[s.season] ?? false}
+                  >
+                    {tInterpolate('seasonRecap.open')} {recapExpanded[s.season] ? '▲' : '▼'}
+                  </button>
+                ) : null}
+                {showRecap && recapExpanded[s.season] ? <SeasonRecapView leagueId={league.id} season={s.season} /> : null}
+                {dynasty ? (
+                  <button
+                    type="button"
+                    onClick={() => setDraftExpanded((prev) => ({ ...prev, [s.season]: !(prev[s.season] ?? false) }))}
+                    className={`dyd-link mt-2 inline-flex items-center gap-1 ${showRecap ? 'ml-4' : ''}`}
+                    aria-expanded={draftExpanded[s.season] ?? false}
+                    data-testid="history-rookie-draft-toggle"
+                  >
+                    {t('dynasty.history.rookieDraft')} {draftExpanded[s.season] ? '▲' : '▼'}
+                  </button>
+                ) : null}
+                {dynasty && draftExpanded[s.season] ? <HistoricalDraftBoard leagueId={league.id} season={s.season} /> : null}
                 {detailExpanded[s.season] ? (
                   <SeasonDetailView leagueId={league.id} season={s.season} />
                 ) : null}

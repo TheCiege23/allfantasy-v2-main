@@ -12,11 +12,12 @@ const m = vi.hoisted(() => ({
   prisma: {
     league: { findUnique: vi.fn() },
     draftSession: { findFirst: vi.fn() },
-    leagueSettings: { upsert: vi.fn() },
+    leagueSettings: { findUnique: vi.fn(), upsert: vi.fn() },
   },
   updateVariant: vi.fn(),
   getVariant: vi.fn(),
   copyBack: vi.fn(),
+  notifyDraftTimeSet: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'commish' } }) }))
@@ -38,7 +39,7 @@ vi.mock('@/lib/orphan-ai-manager/orphanRosterResolver', () => ({ getOrphanRoster
 vi.mock('@/lib/commissioner-ai-draft-manager', () => ({ buildApiResponse: vi.fn(), parseCommissionerAiManagers: vi.fn() }))
 vi.mock('@/lib/orphan-ai-manager/OrphanAIManagerService', () => ({ getRecentAuditEntries: vi.fn() }))
 vi.mock('@/lib/provider-config', () => ({ getProviderStatus: vi.fn() }))
-vi.mock('@/lib/draft-notifications', () => ({ notifyOrphanAiManagerAssigned: vi.fn() }))
+vi.mock('@/lib/draft-notifications', () => ({ notifyOrphanAiManagerAssigned: vi.fn(), notifyDraftTimeSet: m.notifyDraftTimeSet }))
 vi.mock('@/lib/sport-scope', () => ({ supportsIdpLeagueSport: vi.fn() }))
 vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ triggerDraftPoolPrewarmBackground: vi.fn() }))
 vi.mock('@/lib/draft-room/currentDraftSession', () => ({ CURRENT_DRAFT_SESSION_ORDER: [] }))
@@ -48,7 +49,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
     this.resolveForUser = vi.fn().mockResolvedValue({ hasAccess: true })
   }),
 }))
-vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn() }))
+vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn() }))
 vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: m.copyBack }))
 
@@ -70,7 +71,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.prisma.league.findUnique.mockResolvedValue({ leagueType: 'redraft', timezone: 'America/New_York', leagueSize: 12, settings: {} })
   m.prisma.draftSession.findFirst.mockResolvedValue({ id: 'ds1', status: 'pre_draft' })
+  m.prisma.leagueSettings.findUnique.mockResolvedValue(null)
   m.prisma.leagueSettings.upsert.mockImplementation(async ({ update }: { update: Record<string, unknown> }) => ({ leagueId: 'L', ...update }))
+  m.notifyDraftTimeSet.mockResolvedValue(undefined)
   m.getVariant.mockResolvedValue(variant)
   m.updateVariant.mockResolvedValue(variant)
   m.copyBack.mockResolvedValue('not_linked')
@@ -91,6 +94,7 @@ describe('PATCH draft/settings: one save, every copy', () => {
     const update = m.prisma.leagueSettings.upsert.mock.calls[0][0].update
     expect(update.draftDateUtc).toEqual(new Date('2026-10-20T00:00:00.000Z'))
     expect(update.autostart).toBe(true)
+    expect(m.notifyDraftTimeSet).toHaveBeenCalledWith('L', new Date('2026-10-20T00:00:00.000Z'))
   })
 
   it('🛑 a draft date saved here is copied back to a tournament conference record, as the saver', async () => {

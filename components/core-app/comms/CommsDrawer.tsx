@@ -14,6 +14,8 @@ import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
@@ -504,12 +506,25 @@ export function CommsDrawer({
   userId,
 }: CommsDrawerProps) {
   const { language } = useOptionalLanguage()
+  const m = messagesFor(coreWidgetsMessages, language)
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
   const [dismissedLeagueDraft, setDismissedLeagueDraft] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const viewport = window.visualViewport
+    const sync = () => {
+      panelRef.current?.style.setProperty('--af-comms-vh', `${viewport?.height ?? window.innerHeight}px`)
+      panelRef.current?.style.setProperty('--af-comms-top', `${viewport?.offsetTop ?? 0}px`)
+    }
+    sync()
+    viewport?.addEventListener('resize', sync)
+    viewport?.addEventListener('scroll', sync)
+    return () => { viewport?.removeEventListener('resize', sync); viewport?.removeEventListener('scroll', sync) }
+  }, [open])
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
@@ -653,7 +668,7 @@ export function CommsDrawer({
           type="button"
           ref={scrimRef}
           className="af-cm-scrim"
-          aria-label={language === 'es' ? 'Cerrar mensajes' : 'Close communications'}
+          aria-label={m.commsDrawerClose}
           onClick={onClose}
         />
       ) : null}
@@ -675,7 +690,7 @@ export function CommsDrawer({
             </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
-              {scopeName ?? (language === 'es' ? 'TODAS LAS LIGAS' : 'GLOBAL')}
+              {scopeName ?? m.commsDrawerGlobal}
             </span>
             <button type="button" className="af-cm-close" onClick={onClose} aria-label={coreUiCopy('Close', language)}>
               <X size={16} aria-hidden />
@@ -685,7 +700,7 @@ export function CommsDrawer({
           <nav
             className="af-cm-tabs"
             role="tablist"
-            aria-label={language === 'es' ? 'Canales de mensajes' : 'Message channels'}
+            aria-label={m.commsDrawerChannels}
             onKeyDown={(event) => {
               const current = TABS.findIndex((item) => item.id === tab)
               const next = event.key === 'ArrowRight' ? (current + 1) % TABS.length

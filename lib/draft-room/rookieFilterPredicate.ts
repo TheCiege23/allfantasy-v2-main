@@ -3,12 +3,15 @@
  *
  * Rookie rules:
  * - Explicit `isRookie === true` always wins.
+ * - A stored-season-stats verdict of `not_rookie` (MLB/NBA/NHL, `seasonStatsRookieStatus.ts`) is
+ *   proof, and beats the age / draft-year inference below.
  * - `yearsExp === 0` means rookie when experience data is available.
  * - Devy/C2C rows remain rookie while not graduated.
  * - Non-football sports get conservative inference from available metadata.
  *
  * Vet rules:
  * - Explicit rookie marker beats vet classification.
+ * - A `not_rookie` verdict means veteran.
  * - `yearsExp >= 1` means veteran.
  * - Graduated devy rows count as vets only when not explicitly rookie.
  * - Unknown rows stay excluded from both filters.
@@ -27,6 +30,7 @@ export type DraftSportForRookieInference =
 export type RookieFilterCandidate = {
   sport?: DraftSportForRookieInference | null
   isRookie?: boolean
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   yearsExp?: number | null
   isDevy?: boolean
   graduatedToNFL?: boolean
@@ -44,6 +48,7 @@ export type RookieFilterCandidate = {
 
 export type VetFilterCandidate = {
   isRookie?: boolean
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   yearsExp?: number | null
   isDevy?: boolean
   graduatedToNFL?: boolean
@@ -152,6 +157,7 @@ export function isRookieEligibleForFilter(
   },
 ): boolean {
   if (player.isRookie === true) return true
+  if (player.rookieVerdict === 'not_rookie') return false
 
   if (player.yearsExp != null && Number.isFinite(Number(player.yearsExp))) {
     return Number(player.yearsExp) === 0
@@ -169,6 +175,7 @@ export function isRookieEligibleForFilter(
 
 export function isVetEligibleForFilter(player: VetFilterCandidate): boolean {
   if (player.isRookie === true) return false
+  if (player.rookieVerdict === 'not_rookie') return true
 
   if (player.yearsExp != null && Number.isFinite(Number(player.yearsExp))) {
     return Number(player.yearsExp) >= 1

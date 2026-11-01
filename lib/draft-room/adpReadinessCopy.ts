@@ -4,6 +4,17 @@
 
 export const ADP_LABEL_SYSTEM = 'ADP'
 export const ADP_LABEL_AI = 'AI ADP'
+export const ADP_LABEL_AF = 'AF ADP'
+
+/**
+ * AF Blue — the AllFantasy brand blue. Same token and fallback the Connect Leagues surface uses
+ * (`var(--af-blue, #3b82f6)`); #3b82f6 on the draft room's dark navy is ~5:1, which clears WCAG AA
+ * for the 11-12px table text it is used at.
+ */
+export const AF_BLUE = 'var(--af-blue, #3b82f6)'
+
+export const TOOLTIP_AF_ADP =
+  'AllFantasy ADP — blends market ADP with real completed drafts from imported leagues and from AllFantasy leagues. Each draft source counts more the more drafts stand behind it.'
 
 export const TOOLTIP_SYSTEM_ADP =
   'Imported / consensus average draft position when available from your data provider. Lower is earlier.'
@@ -37,6 +48,34 @@ export function systemAdpCellTitle(hasValue: boolean): string {
  * identically to a measured value would present an estimate with the authority of an
  * observation, which is the honest-degradation failure this codebase names elsewhere.
  */
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`
+}
+
+/**
+ * Explain an AF ADP figure by what actually went into it, so a reader can tell "mostly the market"
+ * from "mostly 400 of our drafts". Shares come from the blend itself and already sum to 1.
+ */
+export function afAdpCellTitle(input: {
+  hasValue: boolean
+  contributions?: { market: number; imported: number; af: number } | null
+  importedSampleSize?: number | null
+  ownSampleSize?: number | null
+}): string {
+  if (!input.hasValue) return `${ADP_LABEL_AF}: No market ADP or completed drafts for this player yet.`
+  const c = input.contributions
+  if (!c) return `${ADP_LABEL_AF}: ${TOOLTIP_AF_ADP}`
+  const parts: string[] = []
+  if (c.market > 0) parts.push(`market ${pct(c.market)}`)
+  if (c.imported > 0)
+    parts.push(
+      `imported leagues ${pct(c.imported)}${input.importedSampleSize != null ? ` (${input.importedSampleSize} drafts)` : ''}`,
+    )
+  if (c.af > 0)
+    parts.push(`AllFantasy leagues ${pct(c.af)}${input.ownSampleSize != null ? ` (${input.ownSampleSize} drafts)` : ''}`)
+  return `${ADP_LABEL_AF}: ${TOOLTIP_AF_ADP} This number: ${parts.join(', ')}.`
+}
+
 export function aiAdpCellTitle(input: {
   hasValue: boolean
   lowSample?: boolean

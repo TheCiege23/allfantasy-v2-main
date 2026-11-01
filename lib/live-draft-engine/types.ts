@@ -7,11 +7,22 @@ export type DraftSessionStatus = 'pre_draft' | 'in_progress' | 'paused' | 'compl
 
 export type DraftType = 'snake' | 'linear' | 'auction'
 
+/** Survivor: the seat's tribe, shown on the board once tribes are locked before the draft. */
+export interface SlotOrderTribeBadge {
+  id: string
+  name: string
+  colorHex: string | null
+  markUrl: string | null
+  crestUrl: string | null
+}
+
 export interface SlotOrderEntry {
   slot: number
   rosterId: string
   displayName: string
   platformUserId?: string
+  /** Present only on Survivor leagues whose tribes exist and whose plan shows them on the board. */
+  tribe?: SlotOrderTribeBadge | null
 }
 
 /** One traded pick: ownership change for (round, slot) from originalRosterId to newRosterId. */
@@ -113,7 +124,7 @@ export interface DraftSessionSnapshot {
   /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
   viewerAutopick?: {
     enabled: boolean
-    mode: 'standard' | 'ai_queue'
+    mode: 'standard' | 'ai_queue' | 'draft_as_me'
     isProEligible: boolean
     updatedAt: string | null
   } | null
@@ -270,6 +281,10 @@ export interface AuctionNomination {
 }
 
 export interface AuctionState {
+  /** One-time transferred nomination turns followed by the ordinary repeating rotation. */
+  nominationOrder?: SlotOrderEntry[]
+  nominationFallbackStart?: number
+  rookieAuction?: unknown
   /** Index into slotOrder for who nominates next (0-based). */
   nominationOrderIndex: number
   /** Currently nominated player (on the block). */

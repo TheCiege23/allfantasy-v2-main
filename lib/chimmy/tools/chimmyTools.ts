@@ -12,6 +12,7 @@ import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
+import { requestsPickTradePackage } from '@/lib/chimmy/tradeFinderIntent'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
@@ -58,6 +59,7 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  currentQuestion?: string
   /**
    * "Start X over Y" calls the engines made during this answer, collected so the route can record
    * the ones the answer actually said (`lib/chimmy-advice/chatStartSitAdvice.ts`) and grade them later
@@ -159,6 +161,25 @@ export const CHIMMY_TOOL_SPECS = [
           },
         },
         required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'find_open_leagues',
+      description:
+        "Search Find a League for leagues with open seats the user could JOIN — not leagues they are already in. Use when they ask to find, join or look for a new league (\"find me a 12 team dynasty league\", \"any casual leagues drafting this weekend?\"). Pass their words as the query; it understands sport, league type, team count, draft type, draft time, time zone and vibe. Returns real listings with a link to the page. Free leagues only — paid ones are on the link.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: "What they are looking for, in their own words, e.g. '12 team dynasty snake weeknights casual'.",
+          },
+        },
+        required: ['query'],
+        additionalProperties: false,
       },
     },
   },
@@ -408,7 +429,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Soccer has per-match logs only, not verified full-season totals. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           season: { type: 'number', description: 'A year, only if the user named one (e.g. 2025). Omit for the current season.' },
         },
         required: ['player'],
@@ -425,7 +446,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           week: { type: 'number', description: 'NFL / college only: a specific week, only if the user named one. Do not guess the current week. Ignored for MLB/NBA/NHL.' },
           last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
@@ -499,7 +520,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'compare_start_options',
       description:
-        "Start A or B? Compares exactly two players on the user's roster: this week's projection for each under the league's scoring, and the best lineup total if each is the one started. Use when they name two players ('Chase or Nacua?'). For the whole lineup use optimize_my_lineup.",
+        "Start A or B? Compares two players on the user's roster in the selected league. NFL uses this week's league-scored projection and whole-lineup impact. NBA, NHL, MLB, college sports, and soccer combine current-season game logs with verified remaining games and opponents in the scoring period; points leagues receive a schedule-adjusted baseline, category and roto leagues receive category-by-category contributions without an invented overall winner. Soccer calls are limited to verified gameweeks. Use when they name two players. For a whole-lineup question use optimize_my_lineup.",
       parameters: {
         type: 'object',
         properties: {
@@ -542,7 +563,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'find_trade_ideas',
       description:
-        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
+        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. Set goal and include_picks whenever the user says so — 'win now', 'contend', 'using my picks', 'a 2nd instead of my 1st' are search terms, not flavour. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
       parameters: {
         type: 'object',
         properties: {
@@ -554,6 +575,15 @@ export const CHIMMY_TOOL_SPECS = [
           trade_away: {
             type: 'string',
             description: 'Full name of a player on the USER\'s roster they want to move, when they named one.',
+          },
+          goal: {
+            type: 'string',
+            enum: ['win_now'],
+            description: "'win_now' when the user wants to improve THIS season (win now, contend, playoff push): only packages that raise their current-season value come back.",
+          },
+          include_picks: {
+            type: 'boolean',
+            description: 'True when the user offers their own draft picks as part of the package.',
           },
         },
         required: [],
@@ -590,8 +620,31 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_my_matchup',
       description:
-        "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a guillotine league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
+        "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a Guilly league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_live_fantasy_matchup',
+      description:
+        "The selected league's current fantasy scoreboard: head-to-head points and starter contributions, native category matchup values, or native rotisserie standings and rank points, depending on league format. Use for 'what is my score', 'am I winning right now', 'what is my roto rank', or 'live fantasy matchup'. Requires a selected league. Repeat the refresh time; never call missing scores zero or stale data real-time. For pregame matchup projections use get_my_matchup.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_fantasy_matchup_history',
+      description:
+        "Played fantasy results in the selected league across stored seasons. Use for past team results and league W-L; add player for a named athlete's actual league-scored fantasy points by week, including starter or bench and finalization status. Native category and roto leagues report finalized category snapshots when stored. Optional season, week and limit narrow the read. It does not infer missing 0–0 games or historical roster membership. For real-sports games use get_player_game_log instead.",
+      parameters: { type: 'object', properties: {
+        season: { type: 'integer', description: 'Optional fantasy season year.' },
+        week: { type: 'integer', description: 'Optional fantasy matchup week.' },
+        player: { type: 'string', description: 'Exact player name when asking for this athlete’s historical fantasy points in the selected league.' },
+        limit: { type: 'integer', description: 'Maximum results to show, 1–20. Defaults to 8.' },
+      }, required: [] },
     },
   },
 
@@ -679,6 +732,23 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_automation_change',
+      description:
+        "COMMISSIONERS ONLY. Prepares a change to the league's automations and shows a CONFIRM CARD — nothing is saved unless the commissioner taps Confirm. Use when a commissioner asks to turn on the recommended setup, let AllFantasy run the league, go hands-on, or hand quiet / inactive teams over after N days (or stop doing that). Pass EXACTLY ONE of: preset ('recommended' = the fair-play automations; 'run_it' = recommended plus handing quiet teams over after 14 days; 'hands_on' = nothing runs on its own), or handover_days (7, 14 or 21; 0 turns it off) with optional handover_to ('lineups' free, or 'autopilot' which needs AF Commissioner). For anyone who is not the commissioner it refuses and says so.",
+      parameters: {
+        type: 'object',
+        properties: {
+          preset: { type: 'string', enum: ['recommended', 'run_it', 'hands_on'], description: 'A whole setup to switch to.' },
+          handover_days: { type: 'number', enum: [0, 7, 14, 21], description: 'Hand a team over after this many days with no activity from its owner; 0 turns it off.' },
+          handover_to: { type: 'string', enum: ['lineups', 'autopilot'], description: 'What happens to a handed-over team. Omit to use the best the league has.' },
+        },
+        required: [],
+      },
+    },
+  },
 ] as const
 
 /*
@@ -756,6 +826,15 @@ export async function executeChimmyTool(
        * model — `findLeagueByName` only ever returns a league this user is
        * demonstrably a member of.
        */
+      /*
+       * Reads PUBLIC listings only — never the user's own leagues — so it needs no league in scope
+       * and binds none. The asker is used for their rank bands, nothing else.
+       */
+      case 'find_open_leagues': {
+        const { findOpenLeaguesForChimmy } = await import('@/lib/public-discovery/chimmyLeagueSearch')
+        return await findOpenLeaguesForChimmy(ctx.userId, typeof args.query === 'string' ? args.query.slice(0, 200) : '')
+      }
+
       case 'find_league_by_name': {
         if (!ctx.userId) {
           return 'I cannot tell who is signed in, so I cannot look up their leagues. Say that; do not name a league.'
@@ -1110,6 +1189,9 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           position: readTradeFinderPosition(args.position),
           tradeAway: typeof args.trade_away === 'string' && args.trade_away.trim() ? args.trade_away.trim().slice(0, 80) : null,
+          goal: args.goal === 'win_now' ? 'win_now' : null,
+          includePicks: args.include_picks === true,
+          ...(requestsPickTradePackage(ctx.currentQuestion ?? '') ? { requiresPicks: true } : {}),
         })
       }
 
@@ -1143,6 +1225,22 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           ...(settles ? { onSettle: (run: ChimmyEliminationSettleRun) => settles.push(run) } : {}),
         })
+      }
+
+      case 'get_live_fantasy_matchup': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLiveFantasyMatchupContext } = await import('@/lib/chimmy/liveFantasyMatchupGrounding')
+        return await buildLiveFantasyMatchupContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'get_fantasy_matchup_history': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLeagueFantasyHistoryContext } = await import('@/lib/chimmy/leagueFantasyHistoryGrounding')
+        return await buildLeagueFantasyHistoryContext({ leagueId: ctx.leagueId, userId: ctx.userId,
+          season: typeof args.season === 'number' ? args.season : null,
+          week: typeof args.week === 'number' ? args.week : null,
+          limit: typeof args.limit === 'number' ? args.limit : null,
+          player: typeof args.player === 'string' ? args.player : null })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */
@@ -1187,6 +1285,26 @@ export async function executeChimmyTool(
                 give: args.give,
                 get: args.get,
               })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      // Same rule as the two above: a card, never a write. The commissioner check is inside.
+      case 'propose_automation_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return "This chat surface cannot show a confirm card, so nothing was prepared. Tell the commissioner to change it in the Commissioner Hub's \"What runs itself\" card. Do not say it was done."
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/automationAction')).proposeAutomationChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          preset: args.preset,
+          handoverDays: args.handover_days,
+          handoverTo: args.handover_to,
+        })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text
       }

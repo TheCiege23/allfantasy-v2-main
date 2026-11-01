@@ -25,7 +25,9 @@ vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({
 vi.mock('@/lib/guillotine/GuillotineWeeklySummaryService', () => ({ buildWeeklySummary: vi.fn() }))
 vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: vi.fn() }))
 vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: vi.fn(), findViewerRosterId: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+// A native league: the route refuses an imported one (lib/guillotine/importedLeagueGuard.ts).
+const leaguePlatform = vi.hoisted(() => ({ value: 'allfantasy' as string | null }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: async () => ({ platform: leaguePlatform.value }) } } }))
 
 import { NextRequest } from 'next/server'
 import { PATCH } from '@/app/api/leagues/[leagueId]/guillotine/summary/route'
@@ -128,7 +130,7 @@ describe('updateGuillotineFirstChopWeek', () => {
     expect(deps.upsert).not.toHaveBeenCalled()
   })
 
-  it('404s a league with no guillotine config', async () => {
+  it('404s a league with no Guilly config', async () => {
     const deps = makeDeps({ config: null })
     expect(await updateGuillotineFirstChopWeek('lg1', 3, deps)).toMatchObject({ ok: false, status: 404 })
   })
@@ -166,6 +168,30 @@ describe('PATCH /api/leagues/[leagueId]/guillotine/summary', () => {
   it('404 for a non-guillotine league', async () => {
     h.isG.mockResolvedValue(false)
     expect((await patch({ eliminationStartWeek: 3 })).status).toBe(404)
+  })
+
+  it('an imported league is refused (409) before anything is read or saved: its provider sets the rules', async () => {
+    leaguePlatform.value = 'sleeper'
+    try {
+      for (const body of [{ eliminationStartWeek: 10 }, { rules: { teamsPerChop: 2 } }, { advanced: { immunity: 'top_scorer' } }]) {
+        const res = await patch(body)
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'This league was imported, so its Guilly rules and chops are set on Sleeper.', code: 'imported_league' })
+      }
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      leaguePlatform.value = 'allfantasy'
+    }
+  })
+
+  it('a league with no platform on file is a native (legacy) league and is not refused', async () => {
+    leaguePlatform.value = null
+    try {
+      spy.mockResolvedValueOnce({ ok: true, eliminationStartWeek: 10, eliminationEndWeek: 24 })
+      expect((await patch({ eliminationStartWeek: 10 })).status).toBe(200)
+    } finally {
+      leaguePlatform.value = 'allfantasy'
+    }
   })
 
   it('400 without eliminationStartWeek', async () => {

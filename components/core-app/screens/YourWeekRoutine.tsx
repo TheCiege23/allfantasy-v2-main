@@ -5,7 +5,8 @@ import Link from 'next/link'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { weekdayEs } from '@/lib/core-app/kickoffText'
+import { useMessages } from '@/components/i18n/useMessages'
+import { yourWeekRoutineMessages } from '@/lib/core-app/messages/yourWeekRoutine'
 import { awardLabelText, routineStepTitle, routineSummaryText, routineTodayLabel } from '@/lib/core-app/dashboard3aCopy'
 
 /**
@@ -23,7 +24,7 @@ import { awardLabelText, routineStepTitle, routineSummaryText, routineTodayLabel
  */
 export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null; help?: ReactNode }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(yourWeekRoutineMessages)
   if (!data) return null
   const todayStep = data.steps.find((s) => s.today)
   const recap = data.today === 'recap' ? data.recap : null
@@ -31,9 +32,9 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
   const upsets = data.upsets ?? []
 
   return (
-    <section className="af3a-sec af3a-routine" aria-label={es ? 'Tu semana' : 'Your week'}>
+    <section className="af3a-sec af3a-routine" aria-label={m.yourWeek}>
       <header className="af3a-sechead">
-        <h2>{es ? 'Tu semana' : 'Your week'}</h2>
+        <h2>{m.yourWeek}</h2>
         {help}
         <span className="af3a-note">
           {routineTodayLabel(data.todayLabel, language)}
@@ -52,12 +53,12 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
             data-state={s.state}
             aria-current={s.today ? 'step' : undefined}
           >
-            <span className="af3a-routine-day af3a-mono">{es ? weekdayEs(s.day) : s.day}</span>
+            <span className="af3a-routine-day af3a-mono">{m.weekday(s.day)}</span>
             <Link className="af3a-routine-title" href={s.href}>
               {routineStepTitle(s, language)}
             </Link>
             {s.state === 'done' ? (
-              <span className="af3a-routine-check" aria-label={es ? 'Hecho' : 'Done'}>
+              <span className="af3a-routine-check" aria-label={m.done}>
                 ✓
               </span>
             ) : null}
@@ -66,55 +67,21 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
           )
         })}
       </ol>
-      {recap && es ? (
+      {recap ? (
         <div className="af3a-card af3a-routine-recap">
-          <b>
-            Resumen de la semana {recap.week} de {recap.season}: {recap.wins}-{recap.losses}
-          </b>
+          <b>{m.recapTitle(recap.week, recap.season, recap.wins, recap.losses)}</b>
           <ul>
             {recap.biggestWin ? (
-              <li>
-                Mayor victoria: {recap.biggestWin.leagueName} por {recap.biggestWin.margin.toFixed(1)}
-              </li>
+              <li>{m.biggestWin(recap.biggestWin.leagueName, recap.biggestWin.margin.toFixed(1))}</li>
             ) : null}
             {recap.closestLoss ? (
-              <li>
-                Derrota más ajustada: {recap.closestLoss.leagueName} por {recap.closestLoss.margin.toFixed(1)}
-              </li>
+              <li>{m.closestLoss(recap.closestLoss.leagueName, recap.closestLoss.margin.toFixed(1))}</li>
             ) : null}
             {recap.topScorer ? (
-              <li>
-                Máximo anotador: {recap.topScorer.name} {recap.topScorer.points.toFixed(1)} ({recap.topScorer.leagueName})
-              </li>
+              <li>{m.topScorer(recap.topScorer.name, recap.topScorer.points.toFixed(1), recap.topScorer.leagueName)}</li>
             ) : null}
           </ul>
-          {recap.pending ? (
-            <p className="af3a-receipt-note">Los partidos del lunes por la noche aún pueden cambiar esto.</p>
-          ) : null}
-        </div>
-      ) : recap ? (
-        <div className="af3a-card af3a-routine-recap">
-          <b>
-            {recap.season} week {recap.week} recap: {recap.wins}-{recap.losses}
-          </b>
-          <ul>
-            {recap.biggestWin ? (
-              <li>
-                Biggest win: {recap.biggestWin.leagueName} by {recap.biggestWin.margin.toFixed(1)}
-              </li>
-            ) : null}
-            {recap.closestLoss ? (
-              <li>
-                Closest loss: {recap.closestLoss.leagueName} by {recap.closestLoss.margin.toFixed(1)}
-              </li>
-            ) : null}
-            {recap.topScorer ? (
-              <li>
-                Top scorer: {recap.topScorer.name} {recap.topScorer.points.toFixed(1)} ({recap.topScorer.leagueName})
-              </li>
-            ) : null}
-          </ul>
-          {recap.pending ? <p className="af3a-receipt-note">Monday night games may still change these.</p> : null}
+          {recap.pending ? <p className="af3a-receipt-note">{m.recapPending}</p> : null}
         </div>
       ) : null}
       {/*
@@ -123,7 +90,7 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
       */}
       {awards.length > 0 ? (
         <div className="af3a-card af3a-routine-awards">
-          <b>{es ? `Premios de la semana ${awards[0]!.week}` : <>Week {awards[0]!.week} awards</>}</b>
+          <b>{m.awardsTitle(awards[0]!.week)}</b>
           <ul>
             {awards.map((a) => (
               <li key={`${a.leagueId}:${a.kind}`} className="af3a-routine-award" data-award={a.kind}>
@@ -131,17 +98,13 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
                   {awardLabelText(a, language)} · {a.leagueName} ·{' '}
                   <b className="af3a-mono">
                     {a.value.toFixed(1)}
-                    {a.unit === 'pts' ? ' pts' : es ? ' pts de diferencia' : ' pt margin'}
+                    {a.unit === 'pts' ? ' pts' : m.ptMargin}
                   </b>
                 </span>
                 <ShareMomentButton
                   url={`/api/share/rivalry-card?kind=award&leagueId=${encodeURIComponent(a.leagueId)}&award=${a.kind}`}
                   filename={`award-${a.kind}-week-${a.week}.png`}
-                  title={
-                    es
-                      ? `${awardLabelText(a, language)} — ${a.leagueName}, semana ${a.week}`
-                      : `${a.label} — ${a.leagueName}, week ${a.week}`
-                  }
+                  title={m.awardShareTitle(awardLabelText(a, language), a.leagueName, a.week)}
                 />
               </li>
             ))}
@@ -154,25 +117,21 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
       */}
       {upsets.length > 0 ? (
         <div className="af3a-card af3a-routine-awards af3a-routine-upsets">
-          <b>{es ? `Sorpresas de la semana ${upsets[0]!.week}` : <>Week {upsets[0]!.week} upsets</>}</b>
+          <b>{m.upsetsTitle(upsets[0]!.week)}</b>
           <ul>
             {upsets.map((u) => (
               <li key={u.leagueId} className="af3a-routine-award" data-upset={u.leagueId}>
                 <span>
-                  {u.leagueName} · {es ? 'ganaste' : 'won'}{' '}
+                  {u.leagueName} · {m.won}{' '}
                   <b className="af3a-mono">
                     {u.pointsFor.toFixed(1)}–{u.pointsAgainst.toFixed(1)}
                   </b>{' '}
-                  · {es ? 'probabilidad de ganar antes del partido' : 'pre-game win chance'} {u.winChance}
+                  · {m.preGameChance} {u.winChance}
                 </span>
                 <ShareMomentButton
                   url={`/api/share/rivalry-card?kind=upset&leagueId=${encodeURIComponent(u.leagueId)}&season=${u.season}&week=${u.week}`}
                   filename={`upset-week-${u.week}.png`}
-                  title={
-                    es
-                      ? `Victoria sorpresa — ${u.leagueName}, semana ${u.week}`
-                      : `Upset win — ${u.leagueName}, week ${u.week}`
-                  }
+                  title={m.upsetShareTitle(u.leagueName, u.week)}
                 />
               </li>
             ))}

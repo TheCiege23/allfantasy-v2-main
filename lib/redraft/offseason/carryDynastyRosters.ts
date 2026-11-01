@@ -23,13 +23,9 @@
  */
 import { prisma } from '@/lib/prisma'
 
-const DYNASTY_FAMILY_TYPES = new Set(['dynasty', 'devy', 'c2c'])
+import { isDynastyFamilyLeague } from './dynastyFamily'
 
-/** Dynasty, devy and C2C keep their rosters and hold a rookie draft; `isDynasty` covers legacy rows. */
-export function isDynastyFamilyLeague(league: { leagueType?: string | null; isDynasty?: boolean | null }): boolean {
-  if (league.isDynasty === true) return true
-  return DYNASTY_FAMILY_TYPES.has(String(league.leagueType ?? '').toLowerCase())
-}
+export { isDynastyFamilyLeague }
 
 export type DynastyCarryoverResult = {
   rostersMatched: number

@@ -1,5 +1,11 @@
 import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
+import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
+import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 /** Subset of `League` exposed to commissioner settings UI (GET + PATCH). */
 export type CommissionerSettingsFormData = {
@@ -27,6 +33,27 @@ export type CommissionerSettingsFormData = {
    * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
    */
   championshipLength?: number | null
+  /**
+   * Best-of-N playoff series per round (`settings.playoff_series`, lib/playoff-runtime/playoffSeries.ts);
+   * null = cumulative rounds. PATCHed as `playoffSeriesLengths` (AF Commissioner for any N > 1).
+   */
+  playoffSeriesLengths?: number[] | null
+  /**
+   * Semifinal losers play for third (`settings.playoff_structure.third_place_game_enabled`, else the
+   * sport default — lib/playoff-runtime/thirdPlaceGame.ts). Not a column — PATCHed as `thirdPlaceGameEnabled`.
+   */
+  thirdPlaceGameEnabled?: boolean
+  /** `settings.games_limits` (lib/redraft/gamesLimits.ts); null = off. PATCHed as `gamesLimits`. */
+  gamesLimits?: GamesLimits | null
+  /** Whether the league scores daily lineups — games limits are refused without it. Read-only here. */
+  dailyLineupsActive?: boolean
+  /** Starter slots a games-played cap may name in this league (NBA/NHL/MLB; empty otherwise). */
+  gamesLimitsCapSlots?: string[]
+  /**
+   * Daily or weekly lineups (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts), read from the two
+   * `settings.sportConfig` fields the scorer and the lock read. Not a column — PATCHed as `lineupMode`.
+   */
+  lineupMode?: LineupMode
   playoffSeedingRule?: string | null
   playoffLowerBracket?: string | null
   irSlots?: number | null
@@ -38,6 +65,11 @@ export type CommissionerSettingsFormData = {
   irAllowDoubtful?: boolean | null
   leagueType?: string | null
   medianGame?: boolean | null
+  /**
+   * Whether the league median also plays in playoff weeks (`settings.median_game_in_playoffs`,
+   * lib/redraft/medianGame.ts); false unless stored true. Not a column — PATCHed as `medianGameInPlayoffs`.
+   */
+  medianGameInPlayoffs?: boolean
   allowPreDraftMoves?: boolean | null
   preventBenchDrops?: boolean | null
   lockAllMoves?: boolean | null
@@ -174,6 +206,12 @@ export function commissionerLeagueFieldsFromRow(
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
     championshipLength: readChampionshipLength(league.settings),
+    playoffSeriesLengths: readPlayoffSeriesLengths(league.settings),
+    thirdPlaceGameEnabled: readThirdPlaceGameEnabled(league.settings, league.sport),
+    gamesLimits: readGamesLimits(league.settings, league.sport),
+    dailyLineupsActive: isDailyLineupScoringEnabled(league.settings, league.sport),
+    gamesLimitsCapSlots: ['NBA', 'NHL', 'MLB'].includes(String(league.sport)) ? capSlotTokens(String(league.sport), league.settings) : [],
+    lineupMode: readLineupMode(league.settings, league.sport),
     playoffSeedingRule: league.playoffSeedingRule,
     playoffLowerBracket: league.playoffLowerBracket,
     irSlots: league.irSlots,
@@ -185,6 +223,7 @@ export function commissionerLeagueFieldsFromRow(
     irAllowDoubtful: league.irAllowDoubtful,
     leagueType: league.leagueType,
     medianGame: league.medianGame,
+    medianGameInPlayoffs: readMedianGameInPlayoffs(league.settings),
     allowPreDraftMoves: league.allowPreDraftMoves,
     preventBenchDrops: league.preventBenchDrops,
     lockAllMoves: league.lockAllMoves,

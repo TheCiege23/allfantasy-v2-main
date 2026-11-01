@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -6,10 +7,11 @@ import { prisma } from '@/lib/prisma'
 import { answerAICommissionerQuestion } from '@/lib/ai-commissioner'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
+import { readCommissionerDesk } from '@/lib/ai-commissioner/commissionerDesk'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
+async function paidToolPost(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -72,7 +74,11 @@ export async function POST(
       where: { leagueId, network: { ownerUserId: userId } },
       select: { network: { select: { name: true, members: { select: { league: { select: { id: true, name: true, userId: true } } } } } } },
     })).catch(() => null)
+    // What is waiting on this commissioner (lib/ai-commissioner/commissionerDesk.ts). A failed read
+    // answers without it rather than failing a question the commissioner has paid for.
+    const desk = await readCommissionerDesk(leagueId, userId).catch(() => null)
     const result = await answerAICommissionerQuestion({
+      desk,
       leagueId,
       question,
       sport: body.sport ?? null,
@@ -83,6 +89,7 @@ export async function POST(
       } : null,
     })
 
+    if (result.source !== 'ai') paidToolNotDelivered()
     return NextResponse.json({
       ...result,
       tokenSpend: gate.tokenSpend
@@ -114,3 +121,5 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to reach AI Commissioner' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

@@ -221,9 +221,21 @@ describe('live search fallback charges for what it costs', () => {
     expect(BLOCK).toContain('ledgerId')
   })
 
-  /* A failed charge must not also swallow the answer we already paid for. */
-  it('still returns the answer if the charge races and fails', () => {
-    expect(BLOCK).toMatch(/spendTokensForRule[\s\S]*?\.catch\(\(\) => null\)/)
+  it('withholds the locked result when any quoted unlock debit fails', () => {
+    // Cached older clients retain their existing fallback; the preview contract
+    // must stop before any full searched text or citations enter the response.
+    expect(BLOCK).toContain('searchChargeFailed = Boolean(analysisContract || requestReceipt)')
+    expect(BLOCK).toContain('requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)')
+    const debit = BLOCK.indexOf('spendTokensForRule')
+    const failure = BLOCK.indexOf('if (searchChargeFailed)')
+    const fullResponse = BLOCK.indexOf('const sourceLines =')
+    expect(failure).toBeGreaterThan(debit)
+    expect(fullResponse).toBeGreaterThan(failure)
+    const stop = BLOCK.slice(failure, fullResponse)
+    expect(stop).toContain("code: 'chimmy_unlock_failed'")
+    expect(stop).toContain('{ status: 503 }')
+    expect(stop).toContain('if (searchPriceChanged)')
+    expect(stop).toContain('await searchAccess(true, true)')
   })
 })
 
@@ -365,7 +377,7 @@ describe('tool loop system prompt', () => {
     /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
     /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
     /* `eliminationSettles` (2026-09-28) feeds the SAFE / OUT chip from a decided guillotine week. */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, currentQuestion: message, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

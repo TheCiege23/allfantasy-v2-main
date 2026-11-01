@@ -12,12 +12,12 @@ import { logSurvivorAuditEntry } from '@/lib/survivor/auditEntry'
 
 export const dynamic = 'force-dynamic'
 
-// Advantage costs from Phase 1 defaults. Phase 2 items remain pending.
-const TOKEN_COSTS: Record<string, number> = {
-  buy_clue: 2,
-}
+// Advantages that are built and deliver. None yet: `buy_clue` took tokens and sent nothing, from
+// the same balance an Exile return needs (see token-shop/route.ts). Add an advantage here only
+// together with the code that delivers it.
+const TOKEN_COSTS: Record<string, number> = {}
 
-const PENDING_ADVANTAGES = new Set(['buy_vote_steal', 'buy_waiver_priority_boost', 'buy_protection', 'buy_extra_vote'])
+const PENDING_ADVANTAGES = new Set(['buy_clue', 'buy_vote_steal', 'buy_waiver_priority_boost', 'buy_protection', 'buy_extra_vote'])
 
 export async function POST(
   req: NextRequest,

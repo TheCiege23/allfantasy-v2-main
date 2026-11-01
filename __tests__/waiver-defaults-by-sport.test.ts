@@ -189,11 +189,13 @@ describe('Prompt 18 waiver defaults by sport and variant', () => {
     expect(config?.waiver_type).toBe('rolling')
     expect(config?.processing_days).toEqual([2])
     expect(config?.claim_limit_per_period).toBe(6)
-    expect(config?.claim_priority_behavior).toBe('priority_lowest_first')
+    // Unset keys fall back to the SUPERFLEX defaults, which are the redraft FAAB $100 row since
+    // 2026-10-25; the stored waiver type still wins, so FAAB stays off for this rolling league.
+    expect(config?.claim_priority_behavior).toBe('faab_highest')
     expect(config?.game_lock_behavior).toBe('game_time')
     expect(config?.free_agent_unlock_behavior).toBe('after_waiver_run')
     expect(config?.faab_enabled).toBe(false)
-    expect(config?.faab_budget).toBeNull()
+    expect(config?.faab_budget).toBe(100)
   })
 
   it('resolves FAAB config with per-key fallback for missing budget', async () => {

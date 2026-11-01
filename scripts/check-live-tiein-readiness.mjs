@@ -60,12 +60,15 @@ try {
 
   const q = async (sql) => (await client.query(sql)).rows
 
+  // Sleeper rows only: native leagues' own rows (source 'allfantasy', written by our scoring engine)
+  // share the table and would otherwise read as tie-ins existing while the Sleeper sync is dead.
   const [tie] = await q(`
     select count(*)::int                       as rows,
            count(distinct "leagueId")::int     as leagues,
            coalesce(max(week), 0)::int         as newest_week,
            coalesce(max("seasonYear"), 0)::int as season
-      from league_player_weekly_scores`)
+      from league_player_weekly_scores
+     where source = 'sleeper'`)
 
   /*
    * Has any week of the CURRENT season been played? A scheduled-but-unplayed

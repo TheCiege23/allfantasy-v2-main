@@ -98,7 +98,7 @@ describe('buildMatchupPreviewContext — one league', () => {
     expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/no game this week/)
   })
 
-  it('reads a guillotine week as a cut line', async () => {
+  it('reads a Guilly week as a cut line', async () => {
     getBoard.mockResolvedValue(
       board({
         leagueBoard: null,
@@ -122,7 +122,7 @@ describe('buildMatchupPreviewContext — one league', () => {
     season: 2026, week: 3, yourScore: 87.74, cutLine: 46.54, rank: 4, fieldSize: 16, margin: 41.2, onTheBlock: false, labelled: true, href: '/core',
   }
 
-  it('says a decided guillotine week is SAFE, from whose games have finished', async () => {
+  it('says a decided Guilly week is SAFE, from whose games have finished', async () => {
     getBoard.mockResolvedValue(board({ leagueBoard: null, eliminationWeeks: [chopWeek] }))
     const loadSettle = vi.fn().mockResolvedValue({ verdict: 'safe', finishedBelow: 7, chops: 1 })
     const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadSettle })

@@ -1,0 +1,79 @@
+/* League Settings in the redraft identity — "how your season works" (wave-2 A5, 2026-10-31).
+ * Design notes: docs/design/redraft-settings.md. Tokens: docs/design/redraft-identity.md.
+ *
+ * ⚠ EVERY RULE NEEDS BOTH HALVES OF THE SCOPE: the workspace stamp `.nl-workspace[data-format=redraft]`
+ * (NativeLeagueWorkspace, lib/league-media/redraftIdentity.ts) AND the page's own `[data-rd-settings]`
+ * marker, which LeagueSettingsHome / CommissionerCenter render only when buildRedraftSettingsView
+ * returned a view. Either alone could disagree with the other; both together cannot style a dynasty,
+ * keeper, best-ball, guillotine, IDP or imported league. __tests__/league-media/redraftSettingsCss.test.ts
+ * enforces it, with a positive control.
+ *
+ * ⚠ THE PAGE IS A SECOND `.af-core`, SO /core's PALETTE IS RE-DECLARED ON IT. `.lsh-root` carries
+ * `af-core` itself, and `.af-core` / `html[data-mode=light] .af-core` (0,2,1) set `--accent` back to
+ * /core's teal on that element — which is why, before this file, a redraft league's Settings page
+ * showed teal buttons and links inside a sport-coloured workspace. The re-point below is (0,5,0).
+ * The `--rd-*` tokens are declared only on the workspace, so they inherit through untouched.
+ *
+ * Tokens only: no hex, no rgb()/hsl(). No font size under 11px. ONE top-level @media block, at the end.
+ */
+
+.nl-workspace[data-format=redraft] .af-core.lsh-root[data-rd-settings]{
+  --accent:var(--rd-accent-text);--accent-ink:var(--rd-accent-ink);--accent-soft:var(--rd-accent-soft);--accent-line:var(--rd-accent-line);
+  --lsh-rd-dot-x:16px;
+  background:transparent
+}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-header{background:var(--bg);border-bottom-color:var(--rd-accent-line)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-header h1{font-size:19px;font-weight:900;letter-spacing:-0.02em}
+
+/* League name: a mono eyebrow in the sport colour, the mock's "SUNDAY NIGHT REDRAFT" line. */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-subtitle{padding:18px 16px 0;color:var(--rd-accent-text);font:700 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-readonly-note{border-color:var(--rd-accent-line);box-shadow:inset 3px 0 0 var(--rd-accent);background:var(--rd-surface-elev);color:var(--text2)}
+
+/* Sections become the season timeline: a rail on the left, one dot per season section. */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section{position:relative;margin-top:14px;padding-left:calc(var(--lsh-rd-dot-x) + 28px)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage]::before{content:'';position:absolute;left:calc(var(--lsh-rd-dot-x) + 7px);top:0;bottom:-14px;width:3px;border-radius:2px;background:var(--rd-track)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage=done]::before{background:var(--rd-accent)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-testid=lsh-section-general]::before{top:30px}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-testid=lsh-section-playoffs]::before{bottom:auto;height:30px}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage]::after{content:'';position:absolute;left:var(--lsh-rd-dot-x);top:21px;width:17px;height:17px;box-sizing:border-box;border-radius:50%;background:var(--surface);border:3px solid var(--rd-track)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage=done]::after{background:var(--rd-accent);border-color:var(--rd-accent)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage=now]::after{background:var(--rd-accent);border-color:var(--bg);box-shadow:0 0 0 4px var(--rd-accent-soft)}
+
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-rd-when{margin:0;padding:0 16px 4px 2px;color:var(--faint);font:700 11px/1.3 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage=now] .lsh-rd-when{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section h2{padding:0 16px 10px 2px;color:var(--text);font-size:18px;font-weight:800;letter-spacing:-0.01em;text-transform:none}
+
+/* The card: a rounded list at every width (the default page runs it edge to edge on a phone). */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-list{margin:0 16px 0 0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section[data-rd-stage=now] .lsh-list{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-label{font-weight:700}
+/* The current value reads in the sport colour, the mock's value pill without the extra box. */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-value{color:var(--rd-accent-text);font-weight:700;font-variant-numeric:tabular-nums}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-value[data-pending='true']{color:var(--faint);font-weight:500}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] button.lsh-row:hover{background:var(--rd-accent-soft)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] button.lsh-row:hover .lsh-chevron{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-setup{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+
+/* Commissioner center (desktop commissioner layout). */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-head h1{font-weight:900}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button[aria-current='page']{box-shadow:inset 3px 0 0 var(--rd-accent);background:var(--rd-accent-soft);border-color:var(--rd-accent-line);color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button[data-rd-stage]{gap:10px}
+/* Items with no season point keep their label on the same left edge as the dotted ones. */
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button:not([data-rd-stage]){padding-left:31px}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button[data-rd-stage]::before{content:'';flex:none;width:9px;height:9px;box-sizing:border-box;border-radius:50%;border:2px solid var(--line2);background:transparent}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button[data-rd-stage=done]::before{background:var(--rd-accent);border-color:var(--rd-accent)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-nav button[data-rd-stage=now]::before{background:var(--rd-accent);border-color:var(--rd-accent);box-shadow:0 0 0 3px var(--rd-accent-soft)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-pane .cc-card{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-pane .cc-label{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-rd-when{color:var(--muted)}
+.nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .cc-tools button:hover{border-color:var(--rd-accent-line)}
+
+@media (max-width: 639.98px){
+  .nl-workspace[data-format=redraft] .af-core.lsh-root[data-rd-settings]{--lsh-rd-dot-x:4px}
+  .nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section{padding-left:calc(var(--lsh-rd-dot-x) + 26px)}
+  .nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-section h2{font-size:17px}
+  .nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-list{margin-right:8px}
+  /* The lost rail width would otherwise squeeze a short value into four lines beside a long label. */
+  .nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-row[data-layout=inline] .lsh-label{flex:1 1 50%}
+  .nl-workspace[data-format=redraft] .lsh-root[data-rd-settings] .lsh-row[data-layout=inline] .lsh-value{flex:1 1 50%}
+}

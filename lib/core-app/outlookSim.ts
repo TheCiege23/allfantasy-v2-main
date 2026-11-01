@@ -54,6 +54,12 @@ export type SimInput = {
   playoffTeams: number
   /** Seeds that skip the first playoff round. 0 when the field is a power of two. */
   byeTeams: number
+  /**
+   * The league also plays the week's median (Sleeper `league_average_match`): every remaining week
+   * is a second game, won by the top half of that week's scores. Base `wins`/`losses`/`ties` must
+   * already include the median results of the weeks played.
+   */
+  medianGame?: boolean
 }
 
 /**
@@ -76,6 +82,8 @@ export type SimRunView = {
   /** Roster ids that made the field in this run. */
   field: ReadonlySet<string>
   finalWins: (rosterId: string) => number
+  /** Final regular-season points for, in this run. Draft-order odds rank non-playoff teams by it. */
+  finalPoints: (rosterId: string) => number
   /**
    * Who won one remaining game in this run, by its week and pairing (either order). Null when the game
    * is not on the schedule or was not played out — a game with an unmodelled team is skipped.
@@ -135,8 +143,8 @@ function clampShare(v: number | undefined): number {
   return v == null || !Number.isFinite(v) ? 1 : Math.min(1, Math.max(0, v))
 }
 
-/** Box–Muller, one value per call. */
-function gaussian(rng: () => number, mu: number, sigma: number): number {
+/** Box–Muller, one value per call. Exported for the scenario explainer's chop simulation. */
+export function gaussian(rng: () => number, mu: number, sigma: number): number {
   const u = Math.max(rng(), 1e-12)
   const v = rng()
   return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
@@ -198,6 +206,8 @@ type Prepared = {
   playoffTeams: number
   byeTeams: number
   maxWins: number
+  /** Median game: the slots of each remaining week, in week order. Empty without the median game. */
+  medianWeeks: number[][]
 }
 
 function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced' | 'neutralScheduleFor'>): Prepared {
@@ -321,13 +331,34 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   const playoffTeams = Math.max(1, Math.min(size, Math.floor(input.playoffTeams)))
   const byeTeams = Math.max(0, Math.min(playoffTeams - 1, Math.floor(input.byeTeams)))
 
+  /*
+   * The median game: one more game per team per remaining week. Its result needs the whole week's
+   * scores, so the run plays the week's slots first and then splits the field (see `runSeasons`).
+   */
+  const medianWeeks: number[][] = []
+  if (input.medianGame) {
+    const byWeek = new Map<number, number[]>()
+    slots.forEach((g, k) => {
+      const list = byWeek.get(g.week)
+      if (list) list.push(k)
+      else byWeek.set(g.week, [k])
+    })
+    for (const week of [...byWeek.keys()].sort((x, y) => x - y)) {
+      const ks = byWeek.get(week)!
+      medianWeeks.push(ks)
+      const seen = new Set<number>()
+      for (const k of ks) for (const i of [slots[k].a, slots[k].b]) if (i >= 0) seen.add(i)
+      for (const i of seen) gamesLeft[i] += 1
+    }
+  }
+
   /* The most wins any team can finish on — the length of every win histogram. */
   let maxWins = 0
   for (let i = 0; i < size; i += 1) maxWins = Math.max(maxWins, baseWins[i] + gamesLeft[i])
 
   return {
     ids, index, mu, sigma, n, has, baseWins, baseTies, basePoints, ga, gb, adjA, adjB, liveA, liveB, restA, restB, forcedWinner, slotOf, playoffAdj,
-    playoffTeams, byeTeams, maxWins,
+    playoffTeams, byeTeams, maxWins, medianWeeks,
   }
 }
 
@@ -407,6 +438,11 @@ function runSeasons(
   const order = new Array<number>(size)
   /* Who won each slot this run; -1 when the slot was skipped. Only kept when someone is watching. */
   const slotWinner = extra?.onRun ? new Int32Array(p.ga.length) : null
+  /* Each slot's two scores this run — the median game ranks a week by them. NaN: slot not played. */
+  const median = p.medianWeeks.length > 0
+  const scoreA = median ? new Float64Array(p.ga.length) : null
+  const scoreB = median ? new Float64Array(p.ga.length) : null
+  const weekScores = new Map<number, number>()
 
   for (let it = 0; it < iterations; it += 1) {
     const rng = createRng(seed + it * 9973)
@@ -419,6 +455,10 @@ function runSeasons(
       const a = rawA < 0 ? phantom : rawA
       const b = rawB < 0 ? phantom : rawB
       if (slotWinner) slotWinner[k] = -1
+      if (scoreA && scoreB) {
+        scoreA[k] = NaN
+        scoreB[k] = NaN
+      }
       if (!p.has[a] || !p.has[b]) continue
       /*
        * Points on the board, plus a draw for the share of the week still to play: that share of the
@@ -431,10 +471,47 @@ function runSeasons(
       const sb = p.liveB[k] + gaussian(rng, rb * (mu[b] + p.adjB[k]), Math.sqrt(rb) * p.sigma[b])
       if (a !== phantom) points[a] += sa
       if (b !== phantom) points[b] += sb
+      if (scoreA && scoreB) {
+        scoreA[k] = sa
+        scoreB[k] = sb
+      }
       const forced = p.forcedWinner[k]
       const winner = forced >= 0 ? forced : sa >= sb ? a : b
       if (winner !== phantom) wins[winner] += 1
       if (slotWinner) slotWinner[k] = winner === phantom ? -1 : winner
+    }
+
+    /*
+     * The median game, week by week: the top half of the teams that played wins it — the rule
+     * `advanceWeek` (standingsModel.ts) scores a played week by. Level scores on the line split the
+     * win; with continuous draws that is vanishingly rare, but it keeps the total at half the field.
+     * The league-average phantom never takes a place in the field.
+     */
+    if (scoreA && scoreB) {
+      for (const ks of p.medianWeeks) {
+        weekScores.clear()
+        for (const k of ks) {
+          if (Number.isNaN(scoreA[k])) continue
+          if (p.ga[k] >= 0) weekScores.set(p.ga[k], scoreA[k])
+          if (p.gb[k] >= 0) weekScores.set(p.gb[k], scoreB[k])
+        }
+        const m = weekScores.size
+        if (m < 2) continue
+        const sorted = [...weekScores.values()].sort((x, y) => y - x)
+        const half = Math.floor(m / 2)
+        const lastIn = sorted[half - 1]
+        const firstOut = sorted[half]
+        let level = 0
+        let levelIn = 0
+        if (lastIn === firstOut) {
+          for (const v of sorted) if (v === lastIn) level += 1
+          for (let s = 0; s < half; s += 1) if (sorted[s] === lastIn) levelIn += 1
+        }
+        for (const [i, v] of weekScores) {
+          if (lastIn === firstOut && v === lastIn) wins[i] += levelIn / level
+          else if (v >= lastIn) wins[i] += 1
+        }
+      }
     }
 
     for (let i = 0; i < size; i += 1) order[i] = i
@@ -467,6 +544,10 @@ function runSeasons(
           finalWins: (id) => {
             const i = p.index.get(id)
             return i == null ? 0 : wins[i]
+          },
+          finalPoints: (id) => {
+            const i = p.index.get(id)
+            return i == null ? 0 : points[i]
           },
           winnerOf: (week, a, b) => {
             const k = p.slotOf.get(`${week}|${a}|${b}`)
@@ -632,10 +713,19 @@ export const pctOf = (count: number, iterations: number) => (iterations > 0 ? (c
  * fewer than `playoffTeams` other teams can even reach your current total. Ties are resolved against
  * you in both tests, because the points tiebreak is not decided yet.
  */
+/**
+ * Regular-season games a team has left: its remaining head-to-head games, plus — in a median league —
+ * one median game for every remaining week it plays.
+ */
+export function gamesLeftFor(input: SimInput, rosterId: string): number {
+  const games = input.remaining.filter((g) => g.a === rosterId || g.b === rosterId)
+  return games.length + (input.medianGame ? new Set(games.map((g) => g.week)).size : 0)
+}
+
 export function mathStatus(input: SimInput, rosterId: string): 'clinched' | 'eliminated' | null {
   const me = input.teams.find((t) => t.rosterId === rosterId)
   if (!me) return null
-  const left = (id: string) => input.remaining.filter((g) => g.a === id || g.b === id).length
+  const left = (id: string) => gamesLeftFor(input, id)
   const recordPoints = (t: SimTeam) => t.wins + (t.ties ?? 0) / 2
   const myMax = recordPoints(me) + left(rosterId)
   const others = input.teams.filter((t) => t.rosterId !== rosterId)
@@ -743,7 +833,7 @@ export function readMilestones(
   const me = input.teams.find((t) => t.rosterId === rosterId)
   const tracked = tally.finishes[rosterId]
   if (!me || !tracked || !me.profile) return null
-  const left = input.remaining.filter((g) => g.a === rosterId || g.b === rosterId).length
+  const left = gamesLeftFor(input, rosterId)
   const maxWins = me.wins + left
 
   const oddsByWins: Array<number | null> = []

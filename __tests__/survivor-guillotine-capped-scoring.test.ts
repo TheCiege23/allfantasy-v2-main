@@ -6,7 +6,7 @@ import { calculateCappedGameScores, scoreNbaGame } from '@/lib/survivor-guilloti
 
 const day = (n: number) => new Date(`2026-11-${String(n).padStart(2, '0')}T00:00:00Z`)
 
-describe('Survivor Guillotine NBA capped games', () => {
+describe('Survivor Guilly NBA capped games', () => {
   it('counts the first N player-games, including zeroes, rather than the highest N', () => {
     const scores = calculateCappedGameScores(['a', 'b'], [
       { rosterId: 'a', playerId: 'p1', gameId: 'g3', gameDate: day(3), points: 90 },

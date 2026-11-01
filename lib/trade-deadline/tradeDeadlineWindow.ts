@@ -38,18 +38,47 @@
  * after a review period does not re-check it, because the acceptance already passed the gate. A
  * trade forced through with no acceptance at all (a commissioner processing a still-pending offer)
  * is checked at execution like a proposal.
+ *
+ * A CLOSE TIME AS WELL AS A WEEK. A commissioner may also set the moment trades close
+ * (`League.settings.trade_deadline_at`, ./tradeDeadlineTime.ts). Trades close at whichever comes
+ * first, and the close time binds the in-season window only, exactly like the week.
+ *
+ * PICK TRADES MAY HAVE THEIR OWN DEADLINE. A dynasty league can keep trades made only of draft picks
+ * open after the trade deadline, or close them at another week (./pickTradeDeadline.ts). A caller that
+ * knows the trade passes its items (or `picksOnly`), and the verdict then says which rule it read
+ * (`scope`). A caller that passes nothing reads the trade deadline, as before.
  */
 
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { deadlinePassed, deadlinePassedMessage, readDeadlineAt } from './tradeDeadlineTime'
+import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { tradeDeadlineCountdown, type TradeDeadlineCountdown } from './tradeDeadlineCountdown'
+import { isPicksOnlyTrade, pickTradeDeadlineFor, pickTradeDeadlinePassed, pickTradeDeadlinePassedMessage, type PickTradeDeadline, type PickTradeDeadlineView } from './pickTradeDeadline'
+
+export type { PickTradeDeadlineView }
 
 export type TradeDeadlineLeague = {
   id: string
   lifecycleState?: string | null
   /** `League.platform` — decides whether the stored week or the schedule's week is read. */
   platform?: string | null
+  /** `League.settings` — carries the close time. Absent: the week alone decides. */
+  settings?: unknown
+  /** `League.timezone` — only for naming the close time in a refusal. */
+  timezone?: string | null
+  /** With `isDynasty`, decides whether the league can give pick trades their own deadline. */
+  leagueType?: string | null
+  isDynasty?: boolean | null
+}
+
+/** What is being traded, when the caller knows. Absent: the trade deadline applies. */
+export type TradeDeadlineScope = {
+  items?: ReadonlyArray<{ itemType?: string | null }> | null
+  /** The caller trades nothing but picks (the draft room). */
+  picksOnly?: boolean
 }
 
 export type ServerTradeWeek =
@@ -64,6 +93,7 @@ export type TradeDeadlineDeps = {
   prisma?: Pick<PrismaClient, 'redraftSeason'>
   /** Injectable for tests. Production reads `resolveEffectiveRedraftWeek`. */
   resolveWeek?: (season: { id: string; currentWeek: number | null }, platform: string | null | undefined) => Promise<number>
+  now?: () => Date
 }
 
 /** Lifecycle states that are not a season in progress. `post_draft` IS one: a native league lives
@@ -111,29 +141,72 @@ export function normalizeDeadlineWeek(value: unknown): number | null {
 
 export type TradeDeadlineVerdict = {
   passed: boolean
+  /** Which limit closed trades: the week, the close time, or neither. */
+  by: 'week' | 'time' | null
   deadlineWeek: number | null
+  deadlineAt: Date | null
+  timezone: string | null
   /** Null when no deadline is configured: nothing was read, because nothing needed to be. */
   window: ServerTradeWeek | null
+  /** `picks`: a picks-only trade in a league whose pick trades have their own deadline (./pickTradeDeadline.ts). */
+  scope: 'trades' | 'picks'
+}
+
+function verdictFor(
+  league: TradeDeadlineLeague,
+  deadlineWeek: number | null,
+  window: ServerTradeWeek | null,
+  deps: TradeDeadlineDeps,
+): TradeDeadlineVerdict {
+  const deadlineAt = readDeadlineAt(league.settings)
+  const { passed, by } = window
+    ? deadlinePassed({ inSeason: window.inSeason, currentWeek: window.week, deadlineWeek, deadlineAt, now: (deps.now ?? (() => new Date()))() })
+    : { passed: false, by: null }
+  return { passed, by, deadlineWeek, deadlineAt, timezone: league.timezone ?? null, window, scope: 'trades' }
+}
+
+/** The pick rule this trade is held to, or null when the trade deadline is. */
+function pickRuleFor(league: TradeDeadlineLeague, scope: TradeDeadlineScope): Exclude<PickTradeDeadline, { mode: 'same' }> | null {
+  const picksOnly = scope.picksOnly ?? (scope.items ? isPicksOnlyTrade(scope.items) : false)
+  if (!picksOnly) return null
+  const rule = pickTradeDeadlineFor(league)
+  return rule.mode === 'same' ? null : rule
+}
+
+async function pickVerdict(
+  league: TradeDeadlineLeague,
+  rule: Exclude<PickTradeDeadline, { mode: 'same' }>,
+  deps: TradeDeadlineDeps,
+): Promise<TradeDeadlineVerdict> {
+  const base = { deadlineAt: null, timezone: league.timezone ?? null, scope: 'picks' as const }
+  if (rule.mode === 'open') return { ...base, passed: false, by: null, deadlineWeek: null, window: null }
+  const window = await resolveServerTradeWeek(league, deps)
+  const passed = pickTradeDeadlinePassed(rule, { inSeason: window.inSeason, currentWeek: window.week })
+  return { ...base, passed, by: passed ? 'week' : null, deadlineWeek: rule.week, window }
 }
 
 /**
- * Has `deadlineWeek` passed for this league right now? The deadline week itself is still open —
- * "deadline week 11" refuses from week 12 — matching `isPastTradeDeadline` and the NFL runtime.
+ * Has the deadline passed for this league right now? The deadline week itself is still open —
+ * "deadline week 11" refuses from week 12 — matching `isPastTradeDeadline` and the NFL runtime. A close
+ * time in `league.settings` closes trades from that moment, whichever comes first.
  */
 export async function resolveTradeDeadlineStatus(
   league: TradeDeadlineLeague,
   deadlineWeek: unknown,
   deps: TradeDeadlineDeps = {},
+  scope: TradeDeadlineScope = {},
 ): Promise<TradeDeadlineVerdict> {
+  const pickRule = pickRuleFor(league, scope)
+  if (pickRule) return pickVerdict(league, pickRule, deps)
   const deadline = normalizeDeadlineWeek(deadlineWeek)
-  if (deadline == null) return { passed: false, deadlineWeek: null, window: null }
-  const window = await resolveServerTradeWeek(league, deps)
-  return { passed: window.inSeason && window.week > deadline, deadlineWeek: deadline, window }
+  if (deadline == null && !readDeadlineAt(league.settings)) return verdictFor(league, null, null, deps)
+  return verdictFor(league, deadline, await resolveServerTradeWeek(league, deps), deps)
 }
 
 /**
  * The week a caller of `isPastTradeDeadline` / `validateTradeAssets` should pass: the server's
- * in-season week, or null when no deadline applies (none configured, or not in season).
+ * in-season week, or null when no deadline applies (none configured, or not in season). A non-null week
+ * is what lets `isPastTradeDeadline` apply the close time, so it is returned when only a time is set.
  */
 export async function serverWeekForTradeDeadline(
   league: TradeDeadlineLeague,
@@ -160,16 +233,70 @@ export async function evaluateRedraftTradeDeadline(
 ): Promise<TradeDeadlineVerdict> {
   const row = await (deps.leagueDb ?? defaultPrisma).league.findUnique({
     where: { id: leagueId },
-    select: { id: true, tradeDeadlineWeek: true, lifecycleState: true, platform: true },
+    select: { id: true, tradeDeadlineWeek: true, lifecycleState: true, platform: true, settings: true, timezone: true },
   })
-  if (!row) return { passed: false, deadlineWeek: null, window: null }
+  if (!row) return verdictFor({ id: leagueId }, null, null, deps)
   const league = { ...row, id: leagueId }
   if (!opts.alwaysResolveWeek) return resolveTradeDeadlineStatus(league, row.tradeDeadlineWeek, deps)
-  const deadline = normalizeDeadlineWeek(row.tradeDeadlineWeek)
-  const window = await resolveServerTradeWeek(league, deps)
-  return { passed: deadline != null && window.inSeason && window.week > deadline, deadlineWeek: deadline, window }
+  return verdictFor(league, normalizeDeadlineWeek(row.tradeDeadlineWeek), await resolveServerTradeWeek(league, deps), deps)
 }
 
-export function tradeDeadlinePassedMessage(deadlineWeek: number): string {
-  return `Trade deadline passed after Week ${deadlineWeek}.`
+/** The refusal text, naming whichever limit closed trades. */
+export function tradeDeadlinePassedMessage(
+  verdict: Pick<TradeDeadlineVerdict, 'by' | 'deadlineWeek' | 'deadlineAt' | 'timezone'> & { scope?: TradeDeadlineVerdict['scope'] },
+): string {
+  if (verdict.scope === 'picks') return pickTradeDeadlinePassedMessage(verdict.deadlineWeek ?? 0)
+  return deadlinePassedMessage(verdict)
+}
+
+/**
+ * The deadline for a league by id, read exactly as the AF league engine reads it at acceptance —
+ * `resolveLeagueTradeSettings(league).tradeDeadlineWeek`, which prefers the commissioner settings'
+ * week over the column. For a path that has only a league id and must refuse what the engine would
+ * refuse: the draft-room pick trades and the scheduled deadline sweep.
+ */
+export async function evaluateLeagueTradeDeadline(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+  scope: TradeDeadlineScope = {},
+): Promise<TradeDeadlineVerdict> {
+  const league = await (deps.leagueDb ?? defaultPrisma).league.findUnique({ where: { id: leagueId } })
+  if (!league) return verdictFor({ id: leagueId }, null, null, deps)
+  return resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, deps, scope)
+}
+
+export async function loadPickTradeDeadlineView(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+): Promise<PickTradeDeadlineView | null> {
+  const league = await (deps.leagueDb ?? defaultPrisma).league.findUnique({ where: { id: leagueId } })
+  if (!league) return null
+  const rule = pickTradeDeadlineFor(league)
+  if (rule.mode === 'same') return null
+  const verdict = await pickVerdict(league, rule, deps)
+  return { mode: rule.mode, week: rule.mode === 'week' ? rule.week : null, passed: verdict.passed }
+}
+
+/**
+ * The countdown a trades screen shows. Reads the window even when only a week is set, so a week-only
+ * deadline can say how many weeks are left. Null when the league does not exist.
+ */
+export async function loadTradeDeadlineCountdown(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+): Promise<TradeDeadlineCountdown | null> {
+  const league = await (deps.leagueDb ?? defaultPrisma).league.findUnique({ where: { id: leagueId } })
+  if (!league) return null
+  const verdict = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, deps)
+  return tradeDeadlineCountdown(verdict, (deps.now ?? (() => new Date()))())
+}
+
+/** The refusal text when the league's deadline has passed, or null while trades are open. */
+export async function tradeDeadlineRefusal(
+  leagueId: string,
+  deps: TradeDeadlineDeps & { leagueDb?: Pick<PrismaClient, 'league'> } = {},
+  scope: TradeDeadlineScope = {},
+): Promise<string | null> {
+  const verdict = await evaluateLeagueTradeDeadline(leagueId, deps, scope)
+  return verdict.passed ? tradeDeadlinePassedMessage(verdict) : null
 }

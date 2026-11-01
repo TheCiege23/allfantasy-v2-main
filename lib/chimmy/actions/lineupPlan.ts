@@ -13,12 +13,16 @@
  * the roster is the one this code cannot make safe, so it does not try.
  *
  * ── SEATING ────────────────────────────────────────────────────────────────────────────────────
- * Stored starters are index-aligned to the league's expanded slots (QB, RB1, RB2, …, FLEX) — the
- * convention `buildLineupListsFromPlayerData` reads. Players who stay keep their slot; incoming
+ * A stored starter's slot is his `slotIndex` (lib/league/lineupSlotPositions.ts) when the lineup
+ * carries positions, else his place in the list — the convention `buildLineupListsFromPlayerData`
+ * reads. Every starter row written here carries the slot he was matched to, and a benched row loses
+ * his, so FLEX vs RB2 survives the move and the reload. Players who stay keep their slot; incoming
  * players fill the freed slots they are eligible for. When that does not work (a WR replacing a
  * RB in the RB slot while the FLEX holds a RB), every starter is re-seated by bipartite matching,
  * so "start Nacua, bench Pollard" still lands if ANY legal arrangement exists.
  */
+
+import { placeStartersBySlotIndex, withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
 
 export type PlanSlot = { index: number; label: string; allowedPositions: string[] }
 
@@ -235,7 +239,11 @@ export function planLineupMoves(args: {
     }
   }
 
-  const originalIndex = new Map(starterIds.map((id, i) => [id, i]))
+  // Where each stayer sits now: his stored slot position when the lineup has them, else list order.
+  const placed = placeStartersBySlotIndex(rawStarters, args.slots.length)
+  const originalIndex = placed
+    ? new Map(placed.flatMap((id, i) => (id ? [[id, args.slots[i]?.index ?? i] as [string, number]] : [])))
+    : new Map(starterIds.map((id, i) => [id, i]))
   const pos = (id: string) => args.players.get(id)?.position ?? null
 
   /* 1. Stable: stayers keep their slot; incoming players fill what was freed. */
@@ -267,8 +275,12 @@ export function planLineupMoves(args: {
     if (id && !rowFor.has(id)) rowFor.set(id, item)
   }
   const inSet = new Set(moveIn)
-  const nextStarters = bySlot.map(([id]) => rowFor.get(id))
-  const nextBench = [...rawBench.filter((item) => !inSet.has(idOf(item) ?? '')), ...moveOut.map((id) => rowFor.get(id))]
+  // Each starter row names the slot he was matched to; a benched row keeps every field but that one.
+  const seat = (item: unknown, slotIndex: number) =>
+    item && typeof item === 'object' ? { ...(item as Record<string, unknown>), slotIndex } : { id: idOf(item), slotIndex }
+  const unseat = (item: unknown) => (item && typeof item === 'object' ? withoutSlotIndex(item as Record<string, unknown>) : item)
+  const nextStarters = bySlot.map(([id, slotIndex]) => seat(rowFor.get(id), slotIndex))
+  const nextBench = [...rawBench.filter((item) => !inSet.has(idOf(item) ?? '')), ...moveOut.map((id) => unseat(rowFor.get(id)))]
   const afterStarterIds = bySlot.map(([id]) => id)
 
   const nextPlayerData: Record<string, unknown> = {

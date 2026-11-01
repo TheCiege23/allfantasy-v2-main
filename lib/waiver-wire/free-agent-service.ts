@@ -35,6 +35,10 @@ export async function executeImmediateAddDrop(
   leagueId: string,
   rosterId: string,
   input: { addPlayerId: string; dropPlayerId?: string | null },
+  opts: {
+    /** The commissioner opened the offseason as first-come free agency (season-phase-policy.ts). */
+    offseasonFreeAgency?: boolean
+  } = {},
 ): Promise<ImmediateAddDropResult> {
   const addPlayerId = String(input.addPlayerId)
   const dropPlayerId = input.dropPlayerId ? String(input.dropPlayerId) : null
@@ -47,6 +51,7 @@ export async function executeImmediateAddDrop(
     dropPlayerId,
     faabBid: null,
     claimMetadata: { source: 'free_agent_immediate' },
+    ...(opts.offseasonFreeAgency ? { offseasonFreeAgency: true } : {}),
   })
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })

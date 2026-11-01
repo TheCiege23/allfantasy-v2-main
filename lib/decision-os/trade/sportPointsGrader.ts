@@ -9,6 +9,7 @@ import {
   type SportScoringFormat,
 } from './sportPointsContext'
 import { gradeSportPointsDeal, isPointsGradedSport } from './sportPointsValue'
+import { gradeSportDynastyDeal, isDynastyGradedSport } from './sportDynastyValue'
 
 /**
  * The daily-sport half of the one grade — NBA, college basketball, NHL — shared by
@@ -16,8 +17,9 @@ import { gradeSportPointsDeal, isPointsGradedSport } from './sportPointsValue'
  * two surfaces can grade one of these deals differently. Null for every other sport.
  *
  * Every view it returns is final for that deal: a letter on points over replacement, or withheld with
- * the reason (a category or dynasty league, a thin projection, a pick). It never falls through to the
- * NFL chart, which prices none of these sports.
+ * the reason (a category league it cannot read, a keeper league, a thin projection, a pick outside a
+ * dynasty league). An NBA, NHL or MLB dynasty league is graded over five seasons, picks included. It
+ * never falls through to the NFL chart, which prices none of these sports.
  */
 export type SportPointsGrader = {
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView>
@@ -46,7 +48,12 @@ export function createSportPointsGrader(
     async grade(give, get) {
       const loaded = await baseOnce()
       if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null }
-      return gradeSportPointsDeal({ give, get, ctx: loaded.ctx })
+      const { ctx } = loaded
+      // An NBA, NHL or MLB dynasty league: five seasons and draft picks (`./sportDynastyValue.ts`).
+      if (ctx.dynasty && isDynastyGradedSport(ctx.sport)) {
+        return gradeSportDynastyDeal({ give, get, ctx: { ...ctx, sport: ctx.sport }, dynasty: ctx.dynasty })
+      }
+      return gradeSportPointsDeal({ give, get, ctx })
     },
   }
 }

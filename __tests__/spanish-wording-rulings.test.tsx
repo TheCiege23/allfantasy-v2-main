@@ -17,6 +17,13 @@
  *    screen (and a settings tab titled "Waivers") are «agentes libres»; the waiver system / type is
  *    «reclamos»; a run is «procesamiento de reclamos»; a waiver period is «período de reclamos».
  *    The only survivor is "Waiver Warriors", a made-up team NAME on the landing page.
+ * 9. Scoring-format names (2026-10-30): "translate everywhere". The scoring part of a format label is
+ *    Spanish on every /core surface — "Half PPR" → «Medio PPR», "Standard" → «Estándar», "Non-PPR" →
+ *    «Sin PPR», "Standard scoring" → «Puntuación estándar» — matching league settings and the scoring
+ *    presets, which already said so. "PPR", "Superflex", "TEP", "IDP", "2QB", "Best Ball", "Dynasty"
+ *    and the other acronyms / brand-like names stay. ONE term table (lib/core-app/messages/
+ *    scoringFormat.ts), ONE reader (`scoringFormatText`); "Half PPR Superflex TEP" translates only its
+ *    scoring part. Retires the home dashboard's "scoring stays as written".
  *
  * Every changed string is pinned in Spanish AND asserted unchanged in English.
  */
@@ -74,6 +81,11 @@ import { RANKINGS_TOPICS } from '@/lib/core-app/help-topics/rankings'
 import { TRADES_TOPICS } from '@/lib/core-app/help-topics/trades'
 import { WAIVERS_TOPICS } from '@/lib/core-app/help-topics/waivers'
 import { teamWorkspaceCopy } from '@/lib/core-app/teamWorkspaceCopy'
+import { scoringFormatText } from '@/lib/core-app/scoringFormatText'
+import { scoringFormatMessages } from '@/lib/core-app/messages/scoringFormat'
+import { formatLabelText } from '@/lib/core-app/dashboard3aCopy'
+import { messagesFor } from '@/lib/i18n/messages'
+import { leagueRulesCopyEs } from '@/lib/i18n/league-rules-copy'
 
 afterEach(() => {
   cleanup()
@@ -697,8 +709,9 @@ describe('a waiver CLAIM is «reclamo», app-wide', () => {
       expect(es[key], key).toBe(spanish)
       expect(en[key], key).toBe(english)
     }
-    expect(es['coowner.info']).toContain('hacer reclamos, proponer trades')
-    expect(en['coowner.info']).toContain('make waiver claims, propose trades')
+    expect(es['coowner.info']).toContain('gestionar los ajustes y miembros de la liga')
+    expect(en['coowner.info']).toContain('manage league settings and members')
+    expect(en['coowner.info']).not.toContain('do not have commissioner')
   })
 })
 
@@ -904,5 +917,129 @@ describe('no Spanish value says «waiver» (the owner: "fix all")', () => {
     expect(JSON.stringify(getNocturneCopy('en'))).toContain('Waiver today')
     expect(JOURNEY_COPY.es.journey.waiverWednesday.eyebrow).toBe('Miércoles de reclamos')
     expect(JOURNEY_COPY.en.journey.waiverWednesday.eyebrow).toBe('Waiver Wednesday')
+  })
+})
+
+/* ── 9. Scoring-format names ─────────────────────────────────────────────────── */
+
+describe('scoring-format names: the scoring part of a label is translated, everywhere in /core', () => {
+  /** Every label shape /core shows: League.scoring as each importer writes it, and the screens' own tables. */
+  const SHAPES: Array<[string, string]> = [
+    // Sleeper mapper / receptionScoringLabel: "<rate label>[ Superflex][ TEP]" or "Standard"
+    ['PPR', 'PPR'],
+    ['Half PPR', 'Medio PPR'],
+    ['Standard', 'Estándar'],
+    ['0.25 PPR', '0.25 PPR'],
+    ['PPR Superflex', 'PPR Superflex'],
+    ['Half PPR Superflex', 'Medio PPR Superflex'],
+    ['Half PPR Superflex TEP', 'Medio PPR Superflex TEP'],
+    ['Half PPR TEP', 'Medio PPR TEP'],
+    ['PPR Superflex TEP', 'PPR Superflex TEP'],
+    ['Superflex', 'Superflex'],
+    ['Superflex TEP', 'Superflex TEP'],
+    ['0.25 PPR Superflex TEP', '0.25 PPR Superflex TEP'],
+    // ESPN / Yahoo / MFL codes, AF wizard preset ids
+    ['standard', 'Estándar'],
+    ['half', 'Medio PPR'],
+    ['half_ppr', 'Medio PPR'],
+    ['ppr', 'ppr'],
+    ['h2h-points', 'h2h-points'],
+    ['total-points', 'total-points'],
+    ['imported', 'imported'],
+    // leagueFormatLabel's hyphenated form, and the other spellings the rule names
+    ['Half-PPR', 'Medio PPR'],
+    ['Non-PPR', 'Sin PPR'],
+    ['Standard scoring', 'Puntuación estándar'],
+    // acronyms and brand-like names stay
+    ['IDP', 'IDP'],
+    ['2QB', '2QB'],
+    ['Best Ball', 'Best Ball'],
+    ['Dynasty', 'Dynasty'],
+    ['TE premium', 'TE premium'],
+    ['Rulebook not stored', 'Rulebook not stored'],
+  ]
+
+  it('Spanish translates only the scoring words; English (and a language without terms) is the same string', () => {
+    for (const [label, spanish] of SHAPES) {
+      expect(scoringFormatText(label, 'es'), label).toBe(spanish)
+      expect(scoringFormatText(label, 'en'), label).toBe(label)
+      expect(scoringFormatText(label, null), label).toBe(label)
+      expect(scoringFormatText(label, 'vi'), label).toBe(label)
+    }
+  })
+
+  it('one term table, and it says what league settings and the presets already say', () => {
+    const es = messagesFor(scoringFormatMessages, 'es')
+    expect(es.halfPpr).toBe(leagueRulesCopyEs['leagueRules.preset.half_ppr'])
+    expect(es.standard).toBe(leagueRulesCopyEs['leagueRules.preset.standard'])
+    expect((translations.es as Record<string, string>)['settings.chimmyPrefs.scoringHalfPpr']).toBe(es.halfPpr)
+    expect((translations.es as Record<string, string>)['settings.chimmyPrefs.scoringStandard']).toBe(es.standard)
+    expect(scoringFormatMessages.en).toEqual({
+      halfPpr: 'Half PPR',
+      standard: 'Standard',
+      nonPpr: 'Non-PPR',
+      standardScoring: 'Standard scoring',
+    })
+  })
+
+  it("the home dashboard's league format line: the scoring part reads Spanish, the rest as before", () => {
+    const cases: Array<[string, string]> = [
+      ['2026 · 12-team · Dynasty · PPR Superflex', '2026 · 12 equipos · Dynasty · PPR Superflex'],
+      ['2026 · 10-team · Guilly · Half PPR', '2026 · 10 equipos · Guilly · Medio PPR'],
+      ['2026 · 12-team · Redraft · Half PPR Superflex TEP', '2026 · 12 equipos · Redraft · Medio PPR Superflex TEP'],
+      ['2025 · 12-team · Standard', '2025 · 12 equipos · Estándar'],
+      ['2026 · 10-team · half', '2026 · 10 equipos · Medio PPR'],
+      ['2026 · 14-team · Salary Cap · standard', '2026 · 14 equipos · Tope salarial · Estándar'],
+      ['2026', '2026'],
+    ]
+    for (const [english, spanish] of cases) {
+      expect(formatLabelText(english, 'es'), english).toBe(spanish)
+      expect(formatLabelText(english, 'en'), english).toBe(english)
+    }
+  })
+
+  it("the Portfolio help tip names the scoring buckets the way the board shows them", () => {
+    expect(OUTLOOK_TOPICS.ppr.es.body).toContain('menos de 0,25 es Estándar, menos de 0,75 es Medio PPR y cualquier valor mayor es PPR')
+    expect(OUTLOOK_TOPICS.ppr.es.body).not.toMatch(/\bHalf PPR\b|\bStandard\b/)
+    expect(OUTLOOK_TOPICS.ppr.en.body).toBe(
+      'Read from each league’s own points per catch: under 0.25 is Standard, under 0.75 is Half PPR, anything higher is PPR. “Rulebook not stored” means we have no per-catch setting for that league.',
+    )
+  })
+
+  it('no Spanish help topic or /core message catalog says "Half PPR" or "Standard"', () => {
+    const catalogs = import.meta.glob('../lib/core-app/messages/*.ts', { eager: true }) as Record<string, Record<string, unknown>>
+    expect(Object.keys(catalogs).length, 'the catalogs loaded').toBeGreaterThan(40)
+    const ENGLISH_SCORING = /\bHalf[- ]PPR\b|\bStandard\b|\bNon-PPR\b/
+    // A catalog function takes typed arguments; one that cannot render with none is read as its source.
+    const read = (v: unknown, path = '', out: Array<[string, string]> = []): Array<[string, string]> => {
+      if (typeof v === 'string') out.push([path, v])
+      else if (typeof v === 'function') {
+        let r: unknown
+        try {
+          r = (v as () => unknown)()
+        } catch {
+          r = String(v)
+        }
+        read(r, `${path}()`, out)
+      } else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) read(x, path ? `${path}.${k}` : k, out)
+      return out
+    }
+    const hits: string[] = []
+    const control: string[] = []
+    for (const [file, mod] of Object.entries(catalogs))
+      for (const [name, value] of Object.entries(mod)) {
+        const c = value as { en?: unknown; es?: unknown }
+        if (!c || typeof c !== 'object' || !('en' in c)) continue
+        for (const [path, text] of read(c.es)) if (ENGLISH_SCORING.test(text)) hits.push(`${file} ${name}.es.${path}: ${text.slice(0, 120)}`)
+        for (const [, text] of read(c.en)) if (ENGLISH_SCORING.test(text)) control.push(text)
+      }
+    for (const [name, topics] of Object.entries({ HOME_TOPICS, CAREER_TOPICS, DRAFT_TOPICS, OUTLOOK_TOPICS, RANKINGS_TOPICS, TRADES_TOPICS, WAIVERS_TOPICS }))
+      for (const [key, topic] of Object.entries(topics)) {
+        for (const [path, text] of leaves((topic as { es: unknown }).es)) if (ENGLISH_SCORING.test(text)) hits.push(`${name}.${key}.es.${path}: ${text.slice(0, 120)}`)
+        for (const [, text] of leaves((topic as { en: unknown }).en)) if (ENGLISH_SCORING.test(text)) control.push(text)
+      }
+    // Positive control: the English side of the same objects does say it, so the walk reads real copy.
+    expect(control.length, 'English control').toBeGreaterThan(2)
+    expect(hits).toEqual([])
   })
 })

@@ -54,6 +54,14 @@ describe("/brackets/leagues/new create page", () => {
     expect(createPlayoffMock).not.toHaveBeenCalled()
   })
 
+  it("includes group-play points in the NBA Cup scoring preview", () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams("sport=nba_cup&challengeType=playoff_challenge"))
+    render(<NewBracketLeaguePage />)
+
+    expect(screen.getByText("Group Play 1 · Quarterfinals 1 · Semifinals 2 · Championship 4")).toBeInTheDocument()
+    expect(createPlayoffMock).not.toHaveBeenCalled()
+  })
+
   /*
    * The sentence as reported, on the sport it was reported for.
    *

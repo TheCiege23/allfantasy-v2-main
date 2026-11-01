@@ -26,7 +26,18 @@ import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
+import { homeSectionMutingCategory } from "@/lib/core-app/homeSections"
 import TeamFollowsSettingsCard from "@/components/settings/TeamFollowsSettingsCard"
+import {
+  LIVE_ALERT_LEVELS,
+  LIVE_ALERT_LEVEL_LABEL_KEYS,
+  readLiveAlertLevel,
+} from "@/lib/notification-settings/liveAlertLevel"
+import {
+  PLAYER_NEWS_LEVELS,
+  PLAYER_NEWS_LEVEL_LABEL_KEYS,
+  readPlayerNewsLevel,
+} from "@/lib/notification-settings/playerNewsLevel"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -216,7 +227,7 @@ export function NotificationsSettingsSection({
     setSaving(true)
     setSaveError(null)
     setSavedFlash(false)
-    const result = await updateNotificationPreferences(prefs)
+    const result = await updateNotificationPreferences(prefs).catch(() => ({ ok: false, error: t("settings.notifications.saveFailed") }))
     setSaving(false)
     if (result.ok) {
       setSavedFlash(true)
@@ -318,7 +329,7 @@ export function NotificationsSettingsSection({
   }
 
   return (
-    <div className="space-y-6">
+    <fieldset disabled={saving} className="min-w-0 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-[var(--text)]">
           {t("settings.notifications.title")}
@@ -360,6 +371,107 @@ export function NotificationsSettingsSection({
       </div>
 
       {/*
+        LIVE GAME ALERT LEVEL (owner's call, 2026-10-22). One choice that sets how much a person
+        hears during games, with each level's meaning spelled out under its name. The senders read
+        the same table (lib/notification-settings/liveAlertLevel.ts), so what this card says is what
+        the app does.
+      */}
+      <div
+        className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4"
+        data-testid="notifications-live-level-card"
+      >
+        <div>
+          <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.liveLevel.title")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("settings.notifications.liveLevel.hint")}</p>
+        </div>
+        <div role="radiogroup" aria-label={t("settings.notifications.liveLevel.title")} className="space-y-2">
+          {LIVE_ALERT_LEVELS.map((level) => {
+            const selected = readLiveAlertLevel(prefs) === level
+            return (
+              <label
+                key={level}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                  selected ? "border-[var(--accent-cyan)] bg-[var(--panel)]" : "border-[var(--border)]"
+                }`}
+                data-testid={`notifications-live-level-${level}`}
+              >
+                <input
+                  type="radio"
+                  name="live-alert-level"
+                  value={level}
+                  checked={selected}
+                  onChange={() => {
+                    setDirty(true)
+                    setSaveError(null)
+                    setPrefs((p) => ({ ...p, liveAlertLevel: level }))
+                  }}
+                  className="mt-1 h-4 w-4 accent-[var(--accent-cyan)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[var(--text)]">
+                    {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].name)}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                    {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].definition)}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      {/*
+        PLAYER NEWS LEVEL (owner's call, 2026-10-22, after 59 player-news emails in one day). Same
+        pattern as the live level above: each choice's meaning is on screen, and every player-news
+        sender routes through lib/notification-settings/playerNewsLevel.ts.
+      */}
+      <div
+        className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4"
+        data-testid="notifications-player-news-card"
+      >
+        <div>
+          <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.playerNews.title")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("settings.notifications.playerNews.hint")}</p>
+        </div>
+        <div role="radiogroup" aria-label={t("settings.notifications.playerNews.title")} className="space-y-2">
+          {PLAYER_NEWS_LEVELS.filter((level) => level !== 'starters').map((level) => {
+            const selected = level === 'roster' ? readPlayerNewsLevel(prefs) !== 'off' : readPlayerNewsLevel(prefs) === 'off'
+            return (
+              <label
+                key={level}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                  selected ? "border-[var(--accent-cyan)] bg-[var(--panel)]" : "border-[var(--border)]"
+                }`}
+                data-testid={`notifications-player-news-${level}`}
+              >
+                <input
+                  type="radio"
+                  name="player-news-level"
+                  value={level}
+                  checked={selected}
+                  onChange={() => {
+                    setDirty(true)
+                    setSaveError(null)
+                    setPrefs((p) => ({ ...p, playerNewsLevel: level }))
+                  }}
+                  className="mt-1 h-4 w-4 accent-[var(--accent-cyan)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[var(--text)]">
+                    {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].name)}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                    {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].definition)}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      {/*
         QUIET HOURS (spec item 16). Sits directly under the global switch because the
         user asked that people be TOLD the option exists — buried three sections down it
         may as well not.
@@ -392,7 +504,7 @@ export function NotificationsSettingsSection({
                 quietHours: {
                   startHour: p.quietHours?.startHour ?? 22,
                   endHour: p.quietHours?.endHour ?? 7,
-                  allowCritical: p.quietHours?.allowCritical ?? true,
+                  allowCritical: p.quietHours?.allowCritical ?? false,
                   ...p.quietHours,
                   enabled: e.target.checked,
                 },
@@ -441,7 +553,7 @@ export function NotificationsSettingsSection({
             <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
               <input
                 type="checkbox"
-                checked={prefs.quietHours?.allowCritical !== false}
+                checked={prefs.quietHours?.allowCritical === true}
                 onChange={(e) => {
                   setDirty(true)
                   setPrefs((p) => ({
@@ -612,6 +724,25 @@ export function NotificationsSettingsSection({
                 onToggleEnabled={(enabled) => updateCategory(categoryId, { enabled })}
                 onToggleChannel={(channel, value) => updateCategory(categoryId, { [channel]: value })}
               />
+              {/*
+                Settings → Home page silences a hidden section's alerts at send time without touching
+                this switch (lib/core-app/homeSections.ts), so the switch can read ON while nothing
+                arrives. Say why, with the way back — a switch that disagrees with the phone is the
+                confusion this file keeps removing.
+              */}
+              {(() => {
+                const mutedBy = homeSectionMutingCategory(profile?.notificationPreferences, categoryId)
+                return mutedBy ? (
+                  <p className="mt-1 px-1 text-xs" style={{ color: "var(--muted2)" }} data-testid={`home-paused-${categoryId}`}>
+                    {tInterpolate("settings.notifications.pausedByHome", {
+                      section: t(`settings.home.section.${mutedBy}.title`),
+                    })}{" "}
+                    <a href="/settings?tab=home" className="underline">
+                      {t("settings.notifications.pausedByHomeLink")}
+                    </a>
+                  </p>
+                ) : null
+              })()}
             </li>
           ))}
         </ul>
@@ -764,6 +895,6 @@ export function NotificationsSettingsSection({
           {t("settings.notifications.backToProfile")}
         </a>
       </div>
-    </div>
+    </fieldset>
   )
 }

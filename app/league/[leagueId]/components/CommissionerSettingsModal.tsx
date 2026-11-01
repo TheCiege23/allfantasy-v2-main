@@ -1,16 +1,30 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
+import {
+  AdvancedRulesTab,
+  AppearanceTab,
+  DraftPicksTab,
+  DuesTab,
+  ImportSyncTab,
+  IntegrationsTab,
+  PermissionsTab,
+} from './settings/CommissionerExtraTabs'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
+import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
 import { TradeSettingsPanel } from './settings/TradeSettingsPanel'
 import { WaiverLeagueSettingsPanel } from './settings/WaiverLeagueSettingsPanel'
 import { RosterComplianceSettingsPanel } from './settings/RosterComplianceSettingsPanel'
+import { LineupModeSetting } from './settings/LineupModeSetting'
 import { AiLeagueSettingsPanel } from './settings/AiLeagueSettingsPanel'
 import { DraftSettingsPanel } from './settings/DraftSettingsPanel'
 import { ScheduleSettingsPanel } from './settings/ScheduleSettingsPanel'
@@ -40,6 +54,7 @@ import { SurvivorMergeJuryPanel } from './settings/survivor/SurvivorMergeJuryPan
 import { SurvivorChatPanel } from './settings/survivor/SurvivorChatPanel'
 import { SurvivorAIHostPanel } from './settings/survivor/SurvivorAIHostPanel'
 import { SurvivorAdvancedPanel } from './settings/survivor/SurvivorAdvancedPanel'
+import { SurvivorGovernancePanel } from './settings/survivor/SurvivorGovernancePanel'
 import { ZombieSetupPanel } from '@/app/zombie/components/commissioner/ZombieSetupPanel'
 import { ZombieWhispererPanel } from '@/app/zombie/components/commissioner/ZombieWhispererPanel'
 import { ZombieCombatPanel } from '@/app/zombie/components/commissioner/ZombieCombatPanel'
@@ -47,6 +62,9 @@ import { ZombieItemsPanel } from '@/app/zombie/components/commissioner/ZombieIte
 import { ZombiePaidPanel } from '@/app/zombie/components/commissioner/ZombiePaidPanel'
 import { ZombieUniversePanel } from '@/app/zombie/components/commissioner/ZombieUniversePanel'
 import { ZombieUpdatesPanel } from '@/app/zombie/components/commissioner/ZombieUpdatesPanel'
+import { ZombieAutomationPanel } from '@/app/zombie/components/commissioner/ZombieAutomationPanel'
+import { ZombieOverridePanel } from '@/app/zombie/components/commissioner/ZombieOverridePanel'
+import { ZombieAuditLogPanel } from '@/app/zombie/components/commissioner/ZombieAuditLogPanel'
 import { ZombieAIPanel } from '@/app/zombie/components/commissioner/ZombieAIPanel'
 import { ZombieAnimationsPanel } from '@/app/zombie/components/commissioner/ZombieAnimationsPanel'
 import { ZombieAdvancedPanel } from '@/app/zombie/components/commissioner/ZombieAdvancedPanel'
@@ -58,6 +76,8 @@ import { DevyDraftsPanel } from '@/app/devy/components/settings/DevyDraftsPanel'
 import { DevyImportPanel } from '@/app/devy/components/settings/DevyImportPanel'
 import { DevyAIPanel } from '@/app/devy/components/settings/DevyAIPanel'
 import { C2CFormatPanel } from '@/app/c2c/components/settings/C2CFormatPanel'
+import { DevySettingsPanel } from '@/components/devy/DevySettingsPanel'
+import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
 import { C2CRostersPanel } from '@/app/c2c/components/settings/C2CRostersPanel'
 import { C2CScoringPanel } from '@/app/c2c/components/settings/C2CScoringPanel'
 import { C2CTaxiPanel } from '@/app/c2c/components/settings/C2CTaxiPanel'
@@ -80,6 +100,17 @@ import {
   commissionerKeeperSectionHeading,
   showKeeperSelectionInCommissionerSettings,
 } from '@/lib/league/keeper-policy'
+
+/** A dynasty-family league that plays on AllFantasy: the trade engine's native pick test (isNativeFuturePickLeague). */
+function isNativeDynastyLeague(row: Record<string, unknown>): boolean {
+  return (
+    String(row.platform ?? '').trim().toLowerCase() === 'manual' &&
+    isDynastyFamilyLeague({
+      leagueType: typeof row.leagueType === 'string' ? row.leagueType : null,
+      isDynasty: typeof row.isDynasty === 'boolean' ? row.isDynasty : null,
+    })
+  )
+}
 
 type ApiGet = {
   userRole: 'commissioner' | 'co_commissioner' | 'member' | null
@@ -105,6 +136,7 @@ export function CommissionerSettingsModal({
   onClose: () => void
 }) {
   const [activeTab, setActiveTab] = useState<SettingsNavTabId>('league')
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [payload, setPayload] = useState<ApiGet | null>(null)
@@ -116,8 +148,11 @@ export function CommissionerSettingsModal({
   const [devyConfig, setDevyConfig] = useState<Record<string, unknown> | null>(null)
   const [c2cMode, setC2cMode] = useState(false)
   const [c2cConfig, setC2cConfig] = useState<C2CConfigClient | null>(null)
+  const [nativeDevy, setNativeDevy] = useState(false)
+  const [nativeC2c, setNativeC2c] = useState(false)
 
-  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId)
+  const { confirm: confirmMidSeason, dialog: midSeasonDialog } = useMidSeasonConfirm()
+  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId, { confirmMidSeason })
   const { hasCommissioner } = useEntitlements()
 
   useEffect(() => {
@@ -156,7 +191,10 @@ export function CommissionerSettingsModal({
   useEffect(() => {
     if (!isOpen || !leagueId) return
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
-      .then((r) => setZombieMode(r.ok))
+      .then((r) => {
+        setZombieMode(r.ok)
+        if (r.ok) setActiveTab((current) => current === 'league' ? 'zombie_setup' : current)
+      })
       .catch(() => setZombieMode(false))
   }, [isOpen, leagueId])
 
@@ -205,6 +243,22 @@ export function CommissionerSettingsModal({
         setDevyConfig(null)
       })
   }, [isOpen, leagueId])
+
+  // A Devy / C2C league that plays on AllFantasy: its config rows answer these GETs (404 otherwise).
+  useEffect(() => {
+    if (!isOpen) return
+    const id = encodeURIComponent(leagueId)
+    fetch(`/api/leagues/${id}/devy/config`, { credentials: 'include' })
+      .then((r) => setNativeDevy(r.ok))
+      .catch(() => setNativeDevy(false))
+    fetch(`/api/leagues/${id}/merged-devy-c2c/config`, { credentials: 'include' })
+      .then((r) => setNativeC2c(r.ok))
+      .catch(() => setNativeC2c(false))
+  }, [isOpen, leagueId])
+
+  useEffect(() => {
+    if ((activeTab === 'native_devy' && !nativeDevy) || (activeTab === 'native_c2c' && !nativeC2c)) setActiveTab('league')
+  }, [nativeDevy, nativeC2c, activeTab])
 
   useEffect(() => {
     if (!isOpen) {
@@ -264,6 +318,16 @@ export function CommissionerSettingsModal({
 
   useEffect(() => {
     if (!isOpen) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      if (opener?.isConnected) opener.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -276,6 +340,8 @@ export function CommissionerSettingsModal({
   const canEdit = payload?.canEdit ?? false
   const hasSub = hasCommissioner || (payload?.hasAfCommissionerSub ?? false)
   const initialData = payload?.league as CommissionerSettingsFormData | undefined
+  /** The raw league row from /api/league/settings, for the fields the form data does not type. */
+  const leagueRow: Record<string, unknown> = payload?.league ?? {}
 
   const showKeeperSessionStrip = showKeeperSelectionInCommissionerSettings({
     leagueType: initialData?.leagueType ?? null,
@@ -290,6 +356,7 @@ export function CommissionerSettingsModal({
 
   return (
     <SubscriptionGateProvider>
+    {midSeasonDialog}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-0 backdrop-blur-sm md:p-4"
       role="dialog"
@@ -306,6 +373,7 @@ export function CommissionerSettingsModal({
           onClick={onClose}
           className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.06] text-[15px] text-white/55 transition-colors hover:bg-white/[0.12] hover:text-white md:right-4 md:top-4"
           aria-label="Close settings"
+          ref={closeButtonRef}
         >
           ✕
         </button>
@@ -320,6 +388,9 @@ export function CommissionerSettingsModal({
           showIdpTabs={idpLeague}
           showDevyTabs={devyMode}
           showC2cTabs={c2cMode}
+          showNativeDevyTab={nativeDevy}
+          showNativeC2cTab={nativeC2c}
+          dynasty={usesDynastyBackground(leagueRow as Parameters<typeof usesDynastyBackground>[0])}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
@@ -368,7 +439,15 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'team' ? (
             <TeamSettingsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'roster' ? (
-            <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <LineupModeSetting
+                leagueId={leagueId}
+                sport={initialData.sport ?? null}
+                initialMode={initialData.lineupMode ?? null}
+                canEdit={canEdit}
+              />
+              <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            </div>
           ) : activeTab === 'scoring' ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <CommissionerScoringSettingsPanel
@@ -377,6 +456,12 @@ export function CommissionerSettingsModal({
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                 canEdit={canEdit}
                 scoringConfig={payload?.scoringConfig ?? null}
+              />
+              <GamesLimitsSettingsPanel
+                sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                initialData={initialData}
+                canEdit={canEdit}
+                debouncedSave={debouncedSave}
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
@@ -394,6 +479,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
+              league={payload?.league ?? null}
               canEdit={canEdit}
               save={save}
               debouncedSave={debouncedSave}
@@ -439,19 +525,24 @@ export function CommissionerSettingsModal({
               save={save}
             />
           ) : activeTab === 'dues' ? (
-            <PlaceholderPanel title="Payments / League Dues" subtitle="Buy-ins, deadlines, and tracked payouts." />
+            <DuesTab leagueId={leagueId} />
           ) : activeTab === 'import_sync' ? (
-            <PlaceholderPanel title="Import / Sync" subtitle="Provider mapping, refresh, and conflict handling." />
+            <ImportSyncTab
+              platform={typeof leagueRow.platform === 'string' ? leagueRow.platform : null}
+              importedAt={typeof leagueRow.importedAt === 'string' ? leagueRow.importedAt : null}
+              lastSyncedAt={typeof leagueRow.lastSyncedAt === 'string' ? leagueRow.lastSyncedAt : null}
+              syncStatus={typeof leagueRow.syncStatus === 'string' ? leagueRow.syncStatus : null}
+            />
           ) : activeTab === 'advanced' ? (
-            <PlaceholderPanel title="Advanced Rules" subtitle="Overrides, offseason mode, and custom enforcement." />
+            <AdvancedRulesTab leagueId={leagueId} />
           ) : activeTab === 'appearance' ? (
-            <PlaceholderPanel title="Appearance / Branding" subtitle="League visuals and discovery presentation." />
+            <AppearanceTab leagueId={leagueId} logoUrl={typeof leagueRow.logoUrl === 'string' ? leagueRow.logoUrl : null} canEdit={canEdit} />
           ) : activeTab === 'security' ? (
-            <PlaceholderPanel title="Security / Permissions" subtitle="Who can change what, audit, and locks." />
+            <PermissionsTab leagueId={leagueId} />
           ) : activeTab === 'draft_picks' ? (
-            <PlaceholderPanel title="Draft Pick Settings" subtitle="Future picks, years traded, and display rules." />
+            <DraftPicksTab leagueId={leagueId} nativeDynasty={isNativeDynastyLeague(leagueRow)} canEdit={canEdit} />
           ) : activeTab === 'integrations' ? (
-            <PlaceholderPanel title="Integrations" subtitle="External tools and webhooks (when enabled)." />
+            <IntegrationsTab leagueId={leagueId} leagueOwnerUserId={payload?.leagueOwnerUserId ?? ''} />
           ) : activeTab === 'commissioner' ? (
             <div className="space-y-8 px-6 py-6">
               {showKeeperSessionStrip ? (
@@ -507,22 +598,30 @@ export function CommissionerSettingsModal({
             <SurvivorChatPanel {...survivorProps} />
           ) : activeTab === 'survivor_ai' ? (
             <SurvivorAIHostPanel {...survivorProps} initialData={initialData} debouncedSave={debouncedSave} />
+          ) : activeTab === 'survivor_governance' ? (
+            <SurvivorGovernancePanel {...survivorProps} />
           ) : activeTab === 'survivor_advanced' ? (
             <SurvivorAdvancedPanel {...survivorProps} />
           ) : activeTab === 'zombie_setup' ? (
             <ZombieSetupPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_whisperer' ? (
-            <ZombieWhispererPanel canEdit={canEdit} />
+            <ZombieWhispererPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_combat' ? (
-            <ZombieCombatPanel canEdit={canEdit} />
+            <ZombieCombatPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_items' ? (
-            <ZombieItemsPanel canEdit={canEdit} />
+            <ZombieItemsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_paid' ? (
             <ZombiePaidPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_universe' ? (
-            <ZombieUniversePanel canEdit={canEdit} />
+            <ZombieUniversePanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_updates' ? (
             <ZombieUpdatesPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_automation' ? (
+            <ZombieAutomationPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_overrides' ? (
+            <ZombieOverridePanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_audit' ? (
+            <ZombieAuditLogPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_animations' ? (
             <ZombieAnimationsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_advanced' ? (
@@ -540,31 +639,43 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'idp_cap' ? (
             <IDPCapPanel leagueId={leagueId} />
           ) : activeTab === 'devy_format' ? (
-            <DevyFormatPanel config={devyConfig} />
+            <DevyFormatPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_roster' ? (
-            <DevyRosterPanel config={devyConfig} />
+            <DevyRosterPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_rules' ? (
-            <DevyRulesPanel config={devyConfig} />
+            <DevyRulesPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_taxi' ? (
-            <DevyTaxiPanel config={devyConfig} />
+            <DevyTaxiPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_drafts' ? (
-            <DevyDraftsPanel config={devyConfig} />
+            <DevyDraftsPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_import' ? (
-            <DevyImportPanel />
+            <DevyImportPanel leagueId={leagueId} />
           ) : activeTab === 'devy_ai' ? (
             <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
+          ) : activeTab === 'native_devy' ? (
+            <div className="px-6 py-6" data-testid="native-devy-settings">
+              <DevySettingsPanel leagueId={leagueId} isCommissioner={canEdit} />
+            </div>
+          ) : activeTab === 'native_c2c' ? (
+            <div className="px-6 py-6" data-testid="native-c2c-settings">
+              {canEdit ? (
+                <MergedDevyC2CCommissionerSettings leagueId={leagueId} />
+              ) : (
+                <p className="text-[13px] text-white/55">Only the commissioner can change the C2C settings.</p>
+              )}
+            </div>
           ) : activeTab === 'c2c_format' ? (
-            <C2CFormatPanel config={c2cConfig} canEdit={canEdit} />
+            <C2CFormatPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_rosters' ? (
-            <C2CRostersPanel config={c2cConfig} canEdit={canEdit} />
+            <C2CRostersPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_scoring' ? (
-            <C2CScoringPanel config={c2cConfig} />
+            <C2CScoringPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_taxi' ? (
-            <C2CTaxiPanel />
+            <C2CTaxiPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_devy' ? (
-            <C2CDevyPanel config={c2cConfig} />
+            <C2CDevyPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_drafts' ? (
-            <C2CDraftsPanel config={c2cConfig} />
+            <C2CDraftsPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_ai' ? (
             <C2CAIPanel leagueId={leagueId} hasAfSub={hasSub} c2cConfig={c2cConfig} isCommissioner={canEdit} />
           ) : (

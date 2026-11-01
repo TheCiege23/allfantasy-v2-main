@@ -14,6 +14,8 @@ name: Unit tests
 # follows ts-error-ratchet.yml instead -- allowlist the known-bad set in
 # scripts/vitest-failure-baseline.json, and fail only when a file that was
 # PASSING starts failing. The debt cannot grow; it can only be driven down.
+# Since 2026-10-19 a baselined file that now PASSES also fails its shard: remove
+# the stale entry in the same change, or it excuses that file's next regression.
 #
 # ⚠ ALL FOUR SHARDS ARE REQUIRED CHECKS ON MAIN. VERIFIED, NOT ASSUMED:
 #
@@ -187,6 +189,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
+
+      - name: Staging data runner contracts
+        if: matrix.shard == 1
+        run: node --test scripts/zombie-staging-cron.test.mjs
 
       - name: Install dependencies
         run: npm ci

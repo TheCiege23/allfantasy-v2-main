@@ -524,7 +524,12 @@ async function handle(req: NextRequest) {
        * SportsGame only. It runs on the shared budget and never fails the scores run: a broken
        * alert path must not turn a healthy ingest red, so it is reported, not thrown.
        */
-      if (!budget.exhausted()) {
+      /*
+       * ⚠ OFF BY DEFAULT SINCE 2026-10-22. Football halftime and final scores for followers are now
+       * sent by lib/engagement-alerts (the minute-by-minute game engine), which also sent them — so
+       * followers got every halftime and final twice. AF_LEGACY_GAME_ALERTS=1 turns this back on.
+       */
+      if (process.env.AF_LEGACY_GAME_ALERTS === "1" && !budget.exhausted()) {
         scoreAlerts = await dispatchTeamScoreAlerts({ budget }).catch((err: unknown) => ({
           error: err instanceof Error ? err.message.slice(0, 200) : "failed",
         }))

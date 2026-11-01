@@ -1,3 +1,4 @@
+import { reconcileCurrentProRows } from '@/lib/draft-room/currentProRoster'
 /**
  * Resolves player pool by sport so leagues only load players for their sport.
  * Uses SportsPlayer and PlayerIdentityMap; draft room and waiver wire filter by league sport.
@@ -19,6 +20,7 @@ import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalizat
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { mergeKnownYearsExp } from '@/lib/draft-room/nonNflRookieFields'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
@@ -40,11 +42,16 @@ const POOL_PLAYER_SELECT = {
   team: true,
   teamId: true,
   status: true,
+  dob: true,
+  fetchedAt: true,
+  expiresAt: true,
   sleeperId: true,
   externalId: true,
   age: true,
   imageUrl: true,
   source: true,
+  // `0` is a rookie, NULL is unknown — carried as `experience` for every sport (see nonNflRookieFields).
+  yearsExp: true,
 } as const
 
 const SPORT_STR: Record<LeagueSport, string> = {
@@ -391,13 +398,14 @@ function normalizePositionFilter(sport: string, position?: string): string[] | n
  */
 export async function getPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const memoKey = JSON.stringify([
     normalizeSport(sportType),
     options?.limit ?? null,
     options?.teamId?.trim() || null,
     options?.position?.trim() || null,
+    options?.currentRosterOnly === true,
   ])
   const memoised = playerPoolMemo.get(memoKey)
   if (memoised) return structuredClone(memoised)
@@ -418,7 +426,7 @@ export async function getPlayerPoolForSport(
  */
 async function buildPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const rosterStatusById = new Map<string, string | null>()
   const pool = await buildPlayerPoolRecords(sportType, options, rosterStatusById)
@@ -440,7 +448,7 @@ async function buildPlayerPoolForSport(
 
 async function buildPlayerPoolRecords(
   sportType: SportType | LeagueSport | string,
-  options: { limit?: number; teamId?: string; position?: string } | undefined,
+  options: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean } | undefined,
   rosterStatusById: Map<string, string | null>,
 ): Promise<PoolPlayerRecord[]> {
   const sport = normalizeSport(sportType)
@@ -531,7 +539,7 @@ async function buildPlayerPoolRecords(
   // invalidate this key, or the pool it half-deletes gets frozen here for a full
   // TTL. The empty guard below does not cover that case and is not meant to.
   const rows = await cachedFetch(
-    cacheKey('sportsPlayerPool', where),
+    cacheKey('sportsPlayerPoolV2', where),
     dbFirstMode.draftPoolCacheTtlSeconds,
     () => prisma.sportsPlayer.findMany({
       where,
@@ -550,7 +558,8 @@ async function buildPlayerPoolRecords(
   // row that won.
   // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
   const isNfl = sport === 'NFL'
-  const poolRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
+  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
+  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true)
   // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
   // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
   const teamKeyOf = (team: string | null) =>
@@ -559,8 +568,12 @@ async function buildPlayerPoolRecords(
   const isAuthoritative = (row: { source?: string | null }) => isNfl && row.source === 'sleeper'
   const bestByKey = new Map<string, (typeof rows)[number]>()
   const bestImageByKey = new Map<string, { url: string; quality: number }>()
+  // Experience is carried like the photo: the winning duplicate may be the one source that lacks it.
+  const yearsExpValuesByKey = new Map<string, unknown[]>()
   for (const row of poolRows) {
     const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${teamKeyOf(row.team)}`
+    const ye = (row as { yearsExp?: number | null }).yearsExp
+    if (ye != null) yearsExpValuesByKey.set(key, [...(yearsExpValuesByKey.get(key) ?? []), ye])
     const quality = sportsPlayerQuality(row)
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
       bestImageByKey.set(key, { url: String(row.imageUrl), quality })
@@ -582,7 +595,9 @@ async function buildPlayerPoolRecords(
   }
   for (const [key, row] of bestByKey) {
     const image = bestImageByKey.get(key)
-    if (image && !isHttpImage(row.imageUrl)) bestByKey.set(key, { ...row, imageUrl: image.url })
+    const withImage = image && !isHttpImage(row.imageUrl) ? { ...row, imageUrl: image.url } : row
+    const knownValues = yearsExpValuesByKey.get(key)
+    bestByKey.set(key, knownValues ? { ...withImage, yearsExp: mergeKnownYearsExp(knownValues) } : withImage)
   }
 
   // Phase 27 fix: alphabetical order alone is not a fantasy-relevance signal.
@@ -666,7 +681,7 @@ async function buildPlayerPoolRecords(
     // cannot tell a Sleeper id from a provider id that merely looks like one.
     sleeper_id: r.sleeperId ?? null,
     age: r.age ?? null,
-    experience: null,
+    experience: (r as { yearsExp?: number | null }).yearsExp ?? null,
     secondary_positions: [],
     metadata: { source: r.source },
     image_url: toImageUrl((r as { imageUrl?: string | null }).imageUrl),
@@ -718,7 +733,7 @@ async function buildPlayerPoolRecords(
     (normalizedPositions == null ||
       normalizedPositions.some((p) => IDP_INDIVIDUAL_POSITIONS.has(p) || p === 'IDP_FLEX'))
 
-  if (!canFallbackIdpFromIdentity || primary.length >= limit) {
+  if (options?.currentRosterOnly || !canFallbackIdpFromIdentity || primary.length >= limit) {
     return primary
   }
 
@@ -793,7 +808,7 @@ async function buildPlayerPoolRecords(
 export async function getPlayerPoolForLeague(
   leagueId: string,
   leagueSport: LeagueSport,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const sportType = leagueSportToSportType(leagueSport)
   const sportStr = SPORT_STR[leagueSport] ?? sportType

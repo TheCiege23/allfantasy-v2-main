@@ -12,6 +12,7 @@ const db = vi.hoisted(() => ({
   sportsTeam: { findMany: vi.fn(), updateMany: vi.fn() },
   sportsPlayer: { findMany: vi.fn(), update: vi.fn() },
   playerIdentityMap: { updateMany: vi.fn() },
+  sportsDataCache: { upsert: vi.fn() },
 }))
 const served = vi.hoisted(() => ({ isServedImage: vi.fn() }))
 const canonical = vi.hoisted(() => ({ writeCanonicalHeadshot: vi.fn() }))
@@ -36,6 +37,7 @@ beforeEach(() => {
   db.sportsTeam.updateMany.mockResolvedValue({ count: 1 })
   db.sportsPlayer.update.mockResolvedValue({})
   db.playerIdentityMap.updateMany.mockResolvedValue({ count: 1 })
+  db.sportsDataCache.upsert.mockResolvedValue({})
   served.isServedImage.mockReset().mockResolvedValue(true)
   canonical.writeCanonicalHeadshot.mockReset().mockResolvedValue(undefined)
 })
@@ -132,6 +134,27 @@ describe('syncEspnNcaabRosters', () => {
     )
     // Rotation: the school goes to the back of the queue.
     expect(db.teamProviderIdentity.update).toHaveBeenCalledWith({ where: { id: 'tpi-belmont' }, data: { fetchedAt: now } })
+  })
+
+  it('stores a current roster even when a freshman has no RI match', async () => {
+    db.teamProviderIdentity.findMany
+      .mockResolvedValueOnce([{ id: 'a', providerTeamId: '150', teamId: 'canon-duke', displayName: 'Duke' }])
+      .mockResolvedValueOnce([])
+    const r = await run(vi.fn(async () => roster([dillon])))
+    expect(r.rosterSnapshotsStored).toBe(1)
+    expect(db.sportsDataCache.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { cacheKey: 'espn:ncaab:roster:2027:150' },
+      create: expect.objectContaining({ data: expect.objectContaining({ school: 'Duke', athletes: [expect.objectContaining({ id: '5241333' })] }) }),
+    }))
+  })
+
+  it('does not overwrite a snapshot with a partially parsed roster', async () => {
+    db.teamProviderIdentity.findMany
+      .mockResolvedValueOnce([{ id: 'a', providerTeamId: '150', teamId: 'canon-duke', displayName: 'Duke' }])
+      .mockResolvedValueOnce([])
+    const r = await run(vi.fn(async () => roster([dillon, { fullName: 'Missing id' }])))
+    expect(r.rosterSnapshotsRejected).toBe(1)
+    expect(db.sportsDataCache.upsert).not.toHaveBeenCalled()
   })
 
   it('stores no photo the CDN does not actually serve', async () => {

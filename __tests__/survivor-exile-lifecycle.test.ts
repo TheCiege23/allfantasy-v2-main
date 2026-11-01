@@ -13,7 +13,7 @@ const m = vi.hoisted(() => {
     survivorTribe: { findFirst: vi.fn() }, survivorTribeMember: { upsert: vi.fn(), deleteMany: vi.fn() },
     survivorJuryMember: { deleteMany: vi.fn(), upsert: vi.fn() }, survivorChatChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     survivorChatMessage: { create: vi.fn() }, survivorNotification: { create: vi.fn() }, survivorTribalCouncil: { findFirst: vi.fn(), update: vi.fn() },
-    survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn() },
+    survivorExileLeague: { findUnique: vi.fn() }, exileIsland: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() }, exileWeeklyEntry: { findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
     survivorWeeklyScore: { findMany: vi.fn() },
   }
   return { db, transaction: vi.fn() }
@@ -30,7 +30,7 @@ const players = [
 beforeEach(() => {
   vi.resetAllMocks()
   m.transaction.mockImplementation(fn => fn(m.db))
-  m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 } })
+  m.db.league.findUnique.mockResolvedValue({ platform: 'manual', sport: 'NBA', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4 } })
   m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_week_scored' ? { id: 'scored', data: { balances: players } } : null)
   m.db.survivorAuditEntry.findMany.mockResolvedValue([])
   m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', mergeTriggeredAt: new Date(), activeCouncilId: null })
@@ -58,10 +58,26 @@ describe('Exile scheduled return', () => {
     m.db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', activeCouncilId: 'open' })
     expect(await resolveScheduledExileReturn('league', 10)).toBeNull()
   })
-  it('waits for finalized Exile results, even when the main island is ready', async () => {
+  it('waits for finalized Exile results when someone on Exile entered a roster that week', async () => {
     m.db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island' })
+    m.db.exileWeeklyEntry.count.mockResolvedValue(1)
     expect(await resolveScheduledExileReturn('league', 10)).toBeNull()
     expect(m.db.survivorPlayer.update).not.toHaveBeenCalled()
+    expect(m.db.survivorAuditEntry.create).not.toHaveBeenCalled()
+  })
+  it('does not stall when nobody on Exile entered a roster: today\'s balances are the deadline snapshot', async () => {
+    // Found by the staging season rehearsal: no entries meant no exile_week_scored, forever.
+    m.db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island' })
+    m.db.exileWeeklyEntry.count.mockResolvedValue(0)
+    m.db.survivorAuditEntry.create.mockImplementation(async ({ data }) => ({ id: 'snap', data: data.data }))
+    expect(await resolveScheduledExileReturn('league', 10)).toBe('b')
+    expect(m.db.exileWeeklyEntry.count).toHaveBeenCalledWith({ where: { exileId: 'island', week: 10 } })
+    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      action: 'exile_week_scored', week: 10, data: expect.objectContaining({ entryCount: 0, noEntries: true, balances: players }),
+    }) }))
+    expect(m.db.survivorAuditEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'scheduled_exile_return_resolved', targetUserId: 'b' }) }))
   })
   it('reactivates the actual season roster and consumes the token cost together', async () => {
     expect(await resolveScheduledExileReturn('league', 10)).toBe('b')
@@ -94,6 +110,15 @@ describe('voted-out manager moves to Exile', () => {
     expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerState: 'exile', canAccessExileChat: true, canAccessTribeChat: false }) }))
     expect(m.db.exileIsland.upsert).toHaveBeenCalledOnce()
   })
+  it('takes the manager out of their tribe chat and their tribe, and into the Exile chat', async () => {
+    m.db.survivorChatChannel.findMany.mockResolvedValue([{ id: 'tribe-chat', memberUserIds: ['a', 'b', 'c'] }])
+    m.db.survivorChatChannel.findFirst.mockResolvedValue({ id: 'exile-chat', memberUserIds: ['x'] })
+    const result = await resolveElimination('league', 'council')
+    expect(result).toMatchObject({ ok: true, removedFromChats: 1 })
+    expect(m.db.survivorChatChannel.update).toHaveBeenCalledWith({ where: { id: 'tribe-chat' }, data: { memberUserIds: ['a', 'c'] } })
+    expect(m.db.survivorTribeMember.deleteMany).toHaveBeenCalledWith({ where: { rosterId: 'legacy-b', tribe: { leagueId: 'league' } } })
+    expect(m.db.survivorChatChannel.update).toHaveBeenCalledWith({ where: { id: 'exile-chat' }, data: { memberUserIds: { push: 'b' } } })
+  })
   it('queues one spoiler-safe elimination alert for the league', async () => {
     await resolveElimination('league', 'council')
     expect(m.db.survivorNotification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'elimination', recipientRole: 'all', isSpoilerSafe: false }) }))
@@ -113,7 +138,7 @@ describe('voted-out manager moves to Exile', () => {
 describe('Exile weekly settlement against a score boss (new leagues: median)', () => {
   const finalizedOnly = async ({ where }: { where: { action: string } }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null
   beforeEach(() => {
-    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileBossMode: 'median' } })
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', sport: 'NBA', settings: { exileIslandEnabled: true, exileBossMode: 'median' } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.survivorAuditEntry.findFirst.mockImplementation(finalizedOnly)
     m.db.survivorPlayer.findUnique.mockImplementation(async ({ where }) => ({ ...players.find(p => p.userId === where.leagueId_userId.userId), playerState: 'exile' }))
@@ -138,7 +163,7 @@ describe('Exile weekly settlement against a score boss (new leagues: median)', (
     expect(m.db.survivorPlayer.updateMany).not.toHaveBeenCalled()
   })
   it('uses a fixed commissioner score without reading main-island scores', async () => {
-    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileBossMode: 'fixed', exileBossFixedScore: 100 } })
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', sport: 'NBA', settings: { exileBossMode: 'fixed', exileBossFixedScore: 100 } })
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry-b', userId: 'b', weeklyScore: 100 }])
     expect(await scoreExileWeek('league', 10)).toBe(true)
     expect(m.db.survivorWeeklyScore.findMany).not.toHaveBeenCalled()
@@ -149,7 +174,7 @@ describe('Exile weekly settlement against a score boss (new leagues: median)', (
 
 describe('Exile weekly award settlement (legacy Chimmy roster boss)', () => {
   it('a league with no stored boss mode keeps the Chimmy boss (waits for its verified score)', async () => {
-    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true } })
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', sport: 'NBA', settings: { exileIslandEnabled: true } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.survivorAuditEntry.findFirst.mockImplementation(async ({ where }) => where.action === 'exile_results_finalized' ? { id: 'finalized' } : null)
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 50 }])
@@ -158,7 +183,7 @@ describe('Exile weekly award settlement (legacy Chimmy roster boss)', () => {
   })
 
   beforeEach(() => {
-    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4, exileBossMode: 'chimmy_roster' } })
+    m.db.league.findUnique.mockResolvedValue({ platform: 'manual', sport: 'NBA', settings: { exileIslandEnabled: true, exileReturnWeek: 10, exileReturnTokens: 4, exileBossMode: 'chimmy_roster' } })
     m.db.exileIsland.findUnique.mockResolvedValue({ id: 'island', isActive: true, bossWinsEnabled: true, bossTokenResetOnWin: true, currentWeek: 9 })
     m.db.exileWeeklyEntry.findMany.mockResolvedValue([{ id: 'entry', userId: 'b', weeklyScore: 0 }])
     m.db.survivorPlayer.findUnique.mockResolvedValue({ ...players[1], playerState: 'exile' })

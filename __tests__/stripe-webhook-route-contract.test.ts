@@ -5,13 +5,15 @@ import { buildStripeCheckoutClientReferenceId } from "@/lib/monetization/StripeC
 const constructEventMock = vi.hoisted(() => vi.fn())
 // A buyer-controlled client_reference_id SKU is only honoured if the session bought
 // that SKU's catalog price, so the webhook lists line items on that path.
+const listSessionsMock = vi.hoisted(() => vi.fn().mockResolvedValue({ data: [], has_more: false }))
+const reversePackagePurchaseMock = vi.hoisted(() => vi.fn())
 const listLineItemsMock = vi.hoisted(() => vi.fn())
 const getStripeClientMock = vi.hoisted(() =>
   vi.fn(() => ({
     webhooks: {
       constructEvent: constructEventMock,
     },
-    checkout: { sessions: { listLineItems: listLineItemsMock } },
+    checkout: { sessions: { listLineItems: listLineItemsMock, list: listSessionsMock } },
   }))
 )
 const getStripeWebhookSecretMock = vi.hoisted(() => vi.fn(() => "whsec_test"))
@@ -78,6 +80,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/tokens/TokenSpendService", () => ({
   TokenSpendService: vi.fn().mockImplementation(function (this: any) {
     this.grantTokensFromPackagePurchase = grantTokensFromPackagePurchaseMock
+    this.reversePackagePurchase = reversePackagePurchaseMock
   }),
 }))
 
@@ -617,6 +620,8 @@ describe("Stripe webhook route — refunds and chargebacks", () => {
     createMock.mockResolvedValue({ id: "row-1" })
     updateMock.mockResolvedValue({ id: "row-1" })
     reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: "revoked", subscriptionId: "sub_1" })
+    listSessionsMock.mockResolvedValue({ data: [], has_more: false })
+    reversePackagePurchaseMock.mockResolvedValue(undefined)
   })
 
   it("a full refund ends the plan it paid for", async () => {
@@ -667,4 +672,36 @@ describe("Stripe webhook route — refunds and chargebacks", () => {
     const { body } = await post()
     expect(body).toMatchObject({ purchaseType: "refund_no_subscription" })
   }, 60000)
+  it.each(['charge.refunded', 'charge.dispute.created'])('%s reverses a token pack resolved from its payment session', async type => {
+    reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: 'no_subscription', subscriptionId: null })
+    listSessionsMock.mockResolvedValue({ data: [{ id: 'cs_pack', mode: 'payment', metadata: { userId: 'u1', sku: 'af_tokens_5', purchaseType: 'tokens' } }], has_more: false })
+    constructEventMock.mockReturnValue({ id: 'evt_pack', type, data: { object: { id: 'ch_or_dp', payment_intent: 'pi_pack', refunded: true, amount: 500, amount_refunded: 500 } } })
+    const result = await post()
+    expect(result.status).toBe(200)
+    expect(listSessionsMock).toHaveBeenCalledWith({ payment_intent: 'pi_pack', limit: 100 })
+    expect(reversePackagePurchaseMock).toHaveBeenCalledWith({ purchaseKey: 'stripe_checkout:cs_pack:af_tokens_5', userId: 'u1', packageSku: 'af_tokens_5', sourceType: 'stripe_checkout', sourceId: 'ch_or_dp', reason: type === 'charge.refunded' ? 'refund' : 'dispute' })
+    expect(result.body.purchaseType).toBe(type === 'charge.refunded' ? 'refund_tokens_revoked' : 'dispute_tokens_revoked')
+  })
+
+  it('a token reversal failure stays retryable instead of acknowledging lost work', async () => {
+    reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: 'no_subscription', subscriptionId: null })
+    listSessionsMock.mockResolvedValue({ data: [{ id: 'cs_pack', mode: 'payment', metadata: { userId: 'u1', sku: 'af_tokens_5' } }], has_more: false })
+    reversePackagePurchaseMock.mockRejectedValueOnce(new Error('database unavailable'))
+    constructEventMock.mockReturnValue({ id: 'evt_retry_pack', type: 'charge.refunded', data: { object: { id: 'ch_retry', payment_intent: 'pi_pack', refunded: true, amount: 500, amount_refunded: 500 } } })
+    expect((await post()).status).toBe(500)
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'error' }) }))
+  })
+
+  it('buyer-controlled reversal claims must match the actual purchased price', async () => {
+    process.env.STRIPE_PRICE_AF_TOKENS_10 = 'price_pack_600'
+    reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: 'no_subscription', subscriptionId: null })
+    listSessionsMock.mockResolvedValue({ data: [{ id: 'cs_mismatch', mode: 'payment', metadata: {},
+      client_reference_id: buildStripeCheckoutClientReferenceId({ userId: 'u1', sku: 'af_tokens_10', purchaseType: 'tokens' }) }], has_more: false })
+    listLineItemsMock.mockResolvedValue({ data: [{ price: { id: 'price_pack_250' } }] })
+    constructEventMock.mockReturnValue({ id: 'evt_mismatch', type: 'charge.refunded', data: { object: { id: 'ch_mismatch', payment_intent: 'pi_mismatch', refunded: true, amount: 500, amount_refunded: 500 } } })
+    expect((await post()).status).toBe(500)
+    expect(reversePackagePurchaseMock).not.toHaveBeenCalled()
+    delete process.env.STRIPE_PRICE_AF_TOKENS_10
+  })
+
 })

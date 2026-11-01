@@ -156,3 +156,28 @@ export function summarizeFleaflickerRosterShape(
     maxRosterSize: numberOr(raw?.maxRosterSize, null),
   }
 }
+
+/**
+ * Taxi squad size: the `start` of the `TAXI`-group roster position(s) — 3 in the committed
+ * fixture (`rules.NFL.json`, `{ label: 'TAXI', group: 'TAXI', start: 3 }`). Until 2026-10-26
+ * nothing read it, so a Fleaflicker import carried its taxi PLAYERS (from `FetchRoster`) into a
+ * league recording no taxi slots at all.
+ *
+ * ⚠ ONLY NFL IS CAPTURED. `rosterPositions` is the same response shape for every sport
+ * (`ENDPOINTS.yaml` FetchLeagueRules), so an MLB/NHL league is read the same way, but no
+ * MLB/NHL rules fixture exists to show a taxi group there (contracts/fleaflicker/GAPS.md). Absent
+ * or non-numeric means "the provider did not say" and returns null, never a guessed 0.
+ */
+export function fleaflickerTaxiSlots(raw: FleaflickerRulesResponse | null | undefined): number | null {
+  const taxi = (raw?.rosterPositions ?? []).filter(
+    (p) => String(p?.group ?? '').toUpperCase() === 'TAXI' || String(p?.label ?? '').toUpperCase() === 'TAXI',
+  )
+  if (taxi.length === 0) return null
+  let total = 0
+  for (const p of taxi) {
+    const n = numberOr(p.start, null) ?? numberOr(p.max, null)
+    if (n == null || n < 0) return null
+    total += n
+  }
+  return total
+}

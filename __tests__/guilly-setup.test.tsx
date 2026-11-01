@@ -34,7 +34,7 @@ describe('Guilly setup', () => {
     expect(validateGuillySetup({ ...named, name: '  ' })).toHaveLength(1)
   })
 
-  it('creates an NBA guillotine league through the existing create route', () => {
+  it('creates an NBA Guilly league through the existing create route', () => {
     expect(buildGuillyCreateBody({ ...named, draft: 'snake', leagueSize: 14 })).toEqual({
       platform: 'manual', name: 'Chop Night', sport: 'NBA', leagueSize: 14, leagueType: 'guillotine', draftType: 'snake',
       settings: { teamCount: 14, roster_mode: 'redraft' },

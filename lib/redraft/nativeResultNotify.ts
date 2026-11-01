@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { describeExtraMatchupReason, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /**
  * "Week 4 final — you won" — the result push for a league AllFantasy scores itself (2026-10-02).
@@ -14,7 +15,8 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
  * 2026-10-01), so whoever muted results gets none of this and there is no new settings row.
  *
  * ⚠ ONLY GAMES AGAINST A MANAGER, ONLY TO PEOPLE. A bye (no away roster) and a median game are not a
- * result against anyone, and a native roster's `ownerId` is an AppUser id only once a person holds
+ * result against anyone — except the bye an odd-team league replaces with an extra matchup, which is
+ * a game against the chosen team and is announced as one, and a native roster's `ownerId` is an AppUser id only once a person holds
  * the seat — open seats carry `open-slot-*` / `orphan-*` / `roster:*` keys, which are not notified.
  *
  * ⚠ ONCE PER PERSON PER WEEK, CHECKED BEFORE DISPATCH. `PlatformNotification.sourceKey` dedupes the
@@ -42,7 +44,26 @@ export type NativeResultGame = {
   awayScore: number
 }
 
-export type NativeResultMessage = { userId: string; title: string; body: string }
+/**
+ * `prefix` is the dedupe key's middle part: the week's own game uses the week's key; an odd-team
+ * league's extra matchup uses its own (`<week key>:extra`), so the chosen team under "both count"
+ * hears about both games and neither push replaces the other.
+ */
+export type NativeResultMessage = { userId: string; title: string; body: string; extra?: boolean }
+
+/** An odd-team league's extra matchup, decided (lib/redraft/oddTeamExtraMatchupRules.ts). */
+export type NativeExtraResultGame = {
+  leftoverOwnerId: string
+  leftoverTeam: string
+  leftoverScore: number
+  opponentOwnerId: string
+  opponentTeam: string
+  opponentScore: number
+  /** "last week's top scorer" etc. */
+  reason: string
+  /** The chosen team hears about it only when the game counts for it ("both count"). */
+  countsForOpponent: boolean
+}
 
 const pts = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
 
@@ -70,6 +91,35 @@ export function nativeResultMessages(args: {
         body: tied
           ? `${args.leagueName}: you tied ${s.opp} ${score}.`
           : `${args.leagueName}: ${won ? 'you beat' : 'you fell to'} ${s.opp} ${score}.`,
+      })
+    }
+  }
+  return out
+}
+
+/** One message per person whose record the extra game moved. Pure; exported for tests. */
+export function nativeExtraResultMessages(args: {
+  games: readonly NativeExtraResultGame[]
+  people: ReadonlySet<string>
+  leagueName: string
+  week: number
+}): NativeResultMessage[] {
+  const out: NativeResultMessage[] = []
+  for (const g of args.games) {
+    const sides = [
+      { me: g.leftoverOwnerId, mine: g.leftoverScore, opp: g.opponentTeam, theirs: g.opponentScore, why: g.reason, counts: true },
+      { me: g.opponentOwnerId, mine: g.opponentScore, opp: g.leftoverTeam, theirs: g.leftoverScore, why: 'you were ' + g.reason, counts: g.countsForOpponent },
+    ]
+    for (const s of sides) {
+      if (!s.counts || !args.people.has(s.me)) continue
+      const score = `${pts(s.mine)}–${pts(s.theirs)}`
+      const won = s.mine > s.theirs
+      const tied = s.mine === s.theirs
+      out.push({
+        userId: s.me,
+        extra: true,
+        title: `Week ${args.week} extra matchup final — ${won ? 'you won' : tied ? 'a tie' : 'you lost'}`,
+        body: `${args.leagueName}: extra matchup vs ${s.opp} (${s.why}) — ${tied ? 'tied' : won ? 'you won' : 'you lost'} ${score}.`,
       })
     }
   }
@@ -117,23 +167,62 @@ export async function notifyNativeWeekResults(args: {
         awayTeam: team(r.awayRoster),
         awayScore: r.awayScore,
       }))
-    const ownerIds = [...new Set(games.flatMap((g) => [g.homeOwnerId, g.awayOwnerId]))]
+    // An odd-team league's extra matchup: the leftover team's bye row carries the pick, and the game
+    // counts once both its bye row and the chosen team's own game are final.
+    const weekRows = await prisma.redraftMatchup.findMany({
+      where: { seasonId, week, isMedianMatchup: false },
+      select: { week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, status: true, lineupSnapshots: true },
+    })
+    const extraResults = extraMatchupResults(weekRows)
+    const extraGames: NativeExtraResultGame[] = []
+    if (extraResults.length > 0) {
+      const rosters = await prisma.redraftRoster.findMany({
+        where: { seasonId },
+        select: { id: true, ownerId: true, teamName: true, ownerName: true },
+      })
+      const byId = new Map(rosters.map((r) => [r.id, r]))
+      for (const x of extraResults) {
+        const leftover = byId.get(x.leftoverRosterId)
+        const opponent = byId.get(x.opponentRosterId)
+        const record = readExtraMatchupRecord(weekRows.find((r) => !r.awayRosterId && r.homeRosterId === x.leftoverRosterId)?.lineupSnapshots)
+        if (!leftover || !opponent || !record) continue
+        extraGames.push({
+          leftoverOwnerId: leftover.ownerId,
+          leftoverTeam: team(leftover),
+          leftoverScore: x.leftoverScore,
+          opponentOwnerId: opponent.ownerId,
+          opponentTeam: team(opponent),
+          opponentScore: x.opponentScore,
+          reason: describeExtraMatchupReason(record.reason),
+          countsForOpponent: x.scoring === 'both',
+        })
+      }
+    }
+
+    const ownerIds = [...new Set([
+      ...games.flatMap((g) => [g.homeOwnerId, g.awayOwnerId]),
+      ...extraGames.flatMap((g) => [g.leftoverOwnerId, g.opponentOwnerId]),
+    ])]
     if (ownerIds.length === 0) return none
     const people = new Set(
       (await prisma.appUser.findMany({ where: { id: { in: ownerIds } }, select: { id: true } })).map((u) => u.id),
     )
 
     const leagueName = season.league.name?.trim() || 'Your league'
-    const messages = nativeResultMessages({ games, people, leagueName, week })
+    const messages = [
+      ...nativeResultMessages({ games, people, leagueName, week }),
+      ...nativeExtraResultMessages({ games: extraGames, people, leagueName, week }),
+    ]
     if (messages.length === 0) return none
 
-    const prefix = `${NATIVE_RESULT_PREFIX}:${seasonId}:${week}`
+    const weekPrefix = `${NATIVE_RESULT_PREFIX}:${seasonId}:${week}`
+    const prefixOf = (m: NativeResultMessage) => (m.extra ? `${weekPrefix}:extra` : weekPrefix)
     const existing = await prisma.platformNotification
-      .findMany({ where: { sourceKey: { in: messages.map((m) => `${prefix}:${m.userId}`) } }, select: { sourceKey: true } })
+      .findMany({ where: { sourceKey: { in: messages.map((m) => `${prefixOf(m)}:${m.userId}`) } }, select: { sourceKey: true } })
       .catch(() => null)
     if (existing == null) return { targeted: messages.length, sent: 0, skipped: messages.length }
     const done = new Set(existing.map((e) => e.sourceKey))
-    const todo = messages.filter((m) => !done.has(`${prefix}:${m.userId}`))
+    const todo = messages.filter((m) => !done.has(`${prefixOf(m)}:${m.userId}`))
 
     const dispatch = args.dispatch ?? (await import('@/lib/notifications/NotificationDispatcher')).dispatchNotification
     const href = `/core/matchup?league=${encodeURIComponent(season.leagueId)}`
@@ -149,10 +238,10 @@ export async function notifyNativeWeekResults(args: {
           actionHref: href,
           actionLabel: 'See the game',
           severity: 'low',
-          dedupePrefix: prefix,
+          dedupePrefix: prefixOf(m),
           // A push and an in-app row — never an email or a text for one game.
           skipChannels: { email: true, sms: true },
-          meta: { leagueId: season.leagueId, week, pushTag: `${NATIVE_RESULT_PREFIX}:${season.leagueId}:${week}` },
+          meta: { leagueId: season.leagueId, week, pushTag: `${NATIVE_RESULT_PREFIX}:${season.leagueId}:${week}${m.extra ? ':extra' : ''}` },
         })
         sent += 1
       } catch {

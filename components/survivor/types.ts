@@ -2,6 +2,8 @@
  * Frontend types for Survivor league summary (PROMPT 347).
  */
 
+import type { SurvivorAdvice } from '@/lib/survivor/survivorWeekAdvice'
+
 export type SurvivorView =
   | 'tribe-board'
   | 'challenge'
@@ -36,6 +38,10 @@ export interface SurvivorSummaryConfig {
   /** Commissioner headline (e.g. Heroes vs Villains); not a default tribe split. */
   seasonThemeLabel?: string | null
   visualThemeId?: string | null
+  /** Island banner scene picked by the commissioner; 'auto' (or absent) follows the season. */
+  islandScene?: string | null
+  /** When Tribal votes are due (settings screen vote day/time, Eastern, less the finale's hours-before rule). */
+  tribalVotesDue?: { day: string; timeEt: string; hoursBefore: number } | null
   challengesSystemRun?: boolean
   regularSeasonEndWeek?: number | null
   faqSeededAt?: string | null
@@ -66,6 +72,8 @@ export interface SurvivorSummaryTribe {
   id: string
   name: string
   emoji?: string | null
+  /** The tribe's emoji for "tribe emoji in names" (leading icon, else catalogue mascot); shown only when `tribeEmojiInNames`. */
+  tribeEmoji?: string | null
   slotIndex: number
   members: { rosterId: string; isLeader: boolean }[]
   /** Voted-out castaways from this tribe, for the struck-through "Out · Wk N" rows. */
@@ -75,6 +83,10 @@ export interface SurvivorSummaryTribe {
 export interface SurvivorSummaryCouncil {
   id: string
   week: number
+  /** Which of the week's votes this is, on a double-elimination week (see councilWeekLabel). */
+  weekPosition?: { ordinal: number; planned: number } | null
+  /** "Vote 2 of 2 this week" on a double-elimination week; null otherwise. */
+  weekLabel?: string | null
   phase: string
   attendingTribeId: string | null
   voteDeadlineAt: string
@@ -136,7 +148,13 @@ export interface SurvivorSummary {
   myRosterId?: string
   myTribeId?: string
   myTribeSource?: string | null
+  /** The commissioner's "tribe emoji in names" is on and the tribes have not merged (display only). */
+  tribeEmojiInNames?: boolean
   myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
+  /** The league's idol expiry rule, as the holder reads it (survivorIdolExpiry). */
+  idolExpiryText?: string | null
+  /** This week's strategy for the viewer: at risk, idol play, lineup (survivorWeekAdvice). */
+  weekAdvice?: SurvivorAdvice[]
   myActiveEffects?: {
     rewardType: string
     week: number

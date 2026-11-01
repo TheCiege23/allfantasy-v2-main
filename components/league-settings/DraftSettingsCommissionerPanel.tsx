@@ -16,20 +16,23 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { DraftDayKit } from '@/components/draft-day/DraftDayKit'
 import { LiveRookieOrderPanel } from '@/components/league-settings/LiveRookieOrderPanel'
 import {
   LEGACY_TIMER_SECONDS,
-  RANDOMIZE_MAX_TIMES,
+  RANDOMIZE_COUNT_OPTIONS,
   STANDARD_TIMER_SECONDS,
   classifyDraftPace,
   customTimerToSeconds,
+  randomizeStepMs,
   secondsToCustomParts,
   slowDraftPauseAllowed,
-  timerOptionsFor,
+  timerSelectOptions,
   type CustomTimerUnit,
   type DraftPace,
 } from '@/lib/draft/draftSettingsPolicy'
 import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName, utcToWallClock, wallClockToUtc } from '@/lib/timezone'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +40,8 @@ import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName, utcToWallClock, wallClockTo
 
 interface DraftTeamSlot {
   position: number
+  /** Present for a real team; null for an empty seat. */
+  teamId?: string | null
   teamName: string | null
   ownerName: string | null
   avatarUrl: string | null
@@ -63,6 +68,8 @@ const fill = (s: string, vars: Record<string, string | number>) =>
 
 function formatTimer(seconds: number, t: T): string {
   if (KEYED_TIMERS.has(seconds)) return t(`lsEd.dr.timer.s${seconds}`)
+  // Every whole hour 1–24 is a list value, not a custom one.
+  if (seconds % 3600 === 0 && seconds <= 24 * 3600) return fill(t('lsEd.dr.v2.hoursN'), { n: seconds / 3600 })
   let short: string
   if (seconds < 60) short = fill(t('lsEd.dr.v2.fmtSec'), { n: seconds })
   else if (seconds < 3600) short = fill(t('lsEd.dr.v2.fmtMin'), { n: Math.round((seconds / 60) * 10) / 10 })
@@ -75,9 +82,19 @@ function formatTimer(seconds: number, t: T): string {
 // Component
 // ---------------------------------------------------------------------------
 
+/** One shuffle being replayed: positions into `teams`, the run size, and which pass is on screen. */
+interface ShuffleReplay {
+  teams: Array<{ teamName: string | null; ownerName: string | null; avatarUrl: string | null }>
+  steps: number[][]
+  index: number
+}
+
 interface Props {
   leagueId: string
-  /** AF Commissioner subscription — unlocks the custom pick timer, the rounds override and Randomize ×N. */
+  /**
+   * AF Commissioner subscription (AF Supreme includes it) — unlocks every hour 1–24 in the pick
+   * timer, the custom timer, the rounds override and the randomize count.
+   */
   hasAfCommissionerSub?: boolean
 }
 
@@ -97,6 +114,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [computedRounds, setComputedRounds] = useState<ComputedRounds | null>(null)
   const [timerSeconds, setTimerSeconds] = useState<number>(28800)
   const [autostartEnabled, setAutostartEnabled] = useState(false)
+  // Native redraft drafts start at their time whatever Autostart says, so the toggle is hidden for them.
+  // The saved value is still sent back unchanged on save.
+  const [startsAtScheduledTime, setStartsAtScheduledTime] = useState(false)
   const [cpuAutoPickEnabled, setCpuAutoPickEnabled] = useState(true)
   const [slowDraftPauseEnabled, setSlowDraftPauseEnabled] = useState(false)
   const [slowDraftPauseFrom, setSlowDraftPauseFrom] = useState('21:00')
@@ -118,14 +138,22 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [teams, setTeams] = useState<DraftTeamSlot[]>([])
   const [orderLocked, setOrderLocked] = useState(false)
   const [fillInfoOpen, setFillInfoOpen] = useState(false)
-  const [randomizeOpen, setRandomizeOpen] = useState(false)
-  const [randomizeTimes, setRandomizeTimes] = useState('1')
-  const [randomizeError, setRandomizeError] = useState<string | null>(null)
+  const [randomizeCount, setRandomizeCount] = useState('1')
+  // Team whose manager chose the count ('' = the commissioner). Credited in league chat.
+  const [chosenBy, setChosenBy] = useState('')
+  // Every shuffle is shown: the server returns each pass and the list steps through them.
+  const [replay, setReplay] = useState<ShuffleReplay | null>(null)
+  const [shuffleLog, setShuffleLog] = useState<Array<{ n: number; first: string }>>([])
+  const replayTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => () => { if (replayTimer.current) clearInterval(replayTimer.current) }, [])
 
   // Rookie draft order (dynasty/C2C/devy only)
   const [isDynastyLike, setIsDynastyLike] = useState(false)
   const [rookieMode, setRookieMode] = useState<'worst_to_first' | 'reverse_max_pf'>('worst_to_first')
   const [rookieEnabled, setRookieEnabled] = useState(false)
+  // What is saved, and whether the owner's plan lets it be switched on (the route's `canAutomate`).
+  const [rookieEnabledSaved, setRookieEnabledSaved] = useState(false)
+  const [rookieCanAutomate, setRookieCanAutomate] = useState(false)
   const [rookieSlots, setRookieSlots] = useState<Array<{
     slot: number; teamName: string; ownerName: string; avatarUrl: string | null
     orderLabel: string; isPlayoffTeam: boolean; playoffFinish: string | null
@@ -136,7 +164,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
 
   const ids = {
     autostart: useId(), slowPause: useId(), cpu: useId(), rookieAuto: useId(), timer: useId(),
-    draftType: useId(), rounds: useId(), fillInfo: useId(), randomize: useId(), customAmount: useId(), customUnit: useId(),
+    draftType: useId(), rounds: useId(), fillInfo: useId(), customAmount: useId(), customUnit: useId(),
+    randomizeCount: useId(), chosenBy: useId(), shuffleLog: useId(),
   }
 
   const flash = useCallback((msg: string) => {
@@ -152,6 +181,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     setRounds(typeof cfg.rounds === 'number' ? cfg.rounds : 15)
     if (typeof cfg.timer_seconds === 'number' && cfg.timer_seconds > 0) setTimerSeconds(cfg.timer_seconds)
     setAutostartEnabled(Boolean(data.autostartEnabled ?? cfg.autostart))
+    setStartsAtScheduledTime(startsAtScheduledTimeRegardlessOfAutostart(data.scheduledStartLeague))
     setCpuAutoPickEnabled(data.cpuAutoPickEnabled ?? cfg.autopick_behavior !== 'skip')
     setSlowDraftPauseEnabled(Boolean(data.slowDraftPauseEnabled))
     if (data.slowDraftPauseFrom) setSlowDraftPauseFrom(data.slowDraftPauseFrom)
@@ -196,6 +226,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       setIsDynastyLike(true)
       setRookieMode(data.savedMode ?? data.mode ?? 'worst_to_first')
       setRookieEnabled(data.enabled ?? false)
+      setRookieEnabledSaved(data.enabled ?? false)
+      setRookieCanAutomate(data.canAutomate === true)
       setRookieSlots(data.slots ?? [])
       setRookieNextSeason(data.season ?? 0)
       setRookieWarning(data.warning ?? null)
@@ -204,7 +236,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
 
   useEffect(() => { loadRookieOrder() }, [loadRookieOrder])
 
-  // Save rookie draft order config. Free: both modes are a deterministic sort.
+  // Save rookie draft order config. Switching auto-ordering on is AF Commissioner; off is free.
   const saveRookieConfig = useCallback(async () => {
     setRookieSaving(true); setError(null)
     try {
@@ -217,7 +249,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
+      if (!res.ok) { setError(data.errorCode === 'AF_COMMISSIONER_REQUIRED' ? t('lsEd.dr.rookieAutoPlan') : data.error ?? t('lsEd.saveFailed')); return }
       flash(t('lsEd.dr.saved'))
       await loadRookieOrder(rookieMode)
     } catch { setError(t('lsEd.requestFailed')) }
@@ -265,38 +297,49 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     slowDraftPauseFrom, slowDraftPauseTo, draftDate, draftTime, leagueTimezone, flash, t])
 
   // Randomize draft order — once for everyone, 1–100 times for AF Commissioner (posted to chat).
-  const runRandomize = useCallback(async (times: number) => {
-    setSaving(true); setError(null)
+  // The server shuffles and saves; the panel then shows every pass it made, then the final order.
+  const runRandomize = useCallback(async (times: number, chosenByTeamId: string) => {
+    setSaving(true); setError(null); setShuffleLog([])
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/randomize-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ times }),
+        body: JSON.stringify(chosenByTeamId ? { times, chosenByTeamId } : { times }),
       })
       const d = await res.json().catch(() => ({}))
-      if (!res.ok) { setError(d.error ?? t('lsEd.dr.randomizeFailed')); return }
-      if (Array.isArray(d.teams) && d.teams.length) {
+      if (!res.ok) { setError(d.error ?? t('lsEd.dr.randomizeFailed')); setSaving(false); return }
+      if (!Array.isArray(d.teams) || !d.teams.length) { setError(t('lsEd.dr.noTeamsRandomize')); setSaving(false); return }
+      const ran = typeof d.times === 'number' ? d.times : times
+      const finish = () => {
+        setReplay(null)
         setTeams(d.teams)
-        setRandomizeOpen(false)
-        flash((d.times ?? times) > 1 ? fill(t('lsEd.dr.v2.randomizedN'), { n: d.times ?? times }) : t('lsEd.dr.v2.randomizedOnce'))
-      } else {
-        setError(t('lsEd.dr.noTeamsRandomize'))
+        setSaving(false)
+        flash(ran > 1 ? fill(t('lsEd.dr.v2.randomizedN'), { n: ran }) : t('lsEd.dr.v2.randomizedOnce'))
       }
-    } catch { setError(t('lsEd.requestFailed')) }
-    finally { setSaving(false) }
+      const stepTeams = Array.isArray(d.stepTeams) ? d.stepTeams : null
+      const steps: number[][] = Array.isArray(d.steps) ? d.steps : []
+      if (!stepTeams || steps.length === 0) { finish(); return }
+      const nameAt = (i: number) => stepTeams[i]?.teamName ?? stepTeams[i]?.ownerName ?? ''
+      setReplay({ teams: stepTeams, steps, index: 0 })
+      setShuffleLog([{ n: 1, first: nameAt(steps[0]![0]!) }])
+      let index = 0
+      replayTimer.current = setInterval(() => {
+        index += 1
+        if (index >= steps.length) {
+          if (replayTimer.current) clearInterval(replayTimer.current)
+          replayTimer.current = null
+          finish()
+          return
+        }
+        const at = index
+        setReplay((cur) => (cur ? { ...cur, index: at } : cur))
+        setShuffleLog((log) => [{ n: at + 1, first: nameAt(steps[at]![0]!) }, ...log])
+      }, randomizeStepMs(steps.length))
+    } catch { setError(t('lsEd.requestFailed')); setSaving(false) }
   }, [leagueId, flash, t])
 
   const onRandomizeClick = () => {
-    if (!hasSub) { void runRandomize(1); return }
-    setRandomizeError(null)
-    setRandomizeOpen((o) => !o)
-  }
-
-  const submitRandomizeTimes = () => {
-    const n = Number(randomizeTimes)
-    if (!Number.isInteger(n) || n < 1 || n > RANDOMIZE_MAX_TIMES) { setRandomizeError(t('lsEd.dr.v2.randomizeInvalid')); return }
-    setRandomizeError(null)
-    void runRandomize(n)
+    void runRandomize(hasSub ? Number(randomizeCount) || 1 : 1, hasSub ? chosenBy : '')
   }
 
   // Fill empty seats with Chimmy Intelligence teams (POST /fill-empty-slots).
@@ -325,7 +368,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   }, [leagueId, loadSettings, flash, t])
 
   // Time-per-pick select
-  const timerChoices = useMemo(() => timerOptionsFor(timerSeconds), [timerSeconds])
+  const timerChoices = useMemo(() => timerSelectOptions(timerSeconds, hasSub), [timerSeconds, hasSub])
   const onTimerSelect = (v: string) => {
     if (v === CUSTOM_VALUE) {
       const parts = secondsToCustomParts(timerSeconds)
@@ -351,6 +394,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.dr.loading')}</div>
 
   const ro = !isCommissioner
+  const shownTeams: DraftTeamSlot[] = replay
+    ? replay.steps[replay.index]!.map((i, k) => ({ position: k + 1, ...replay.teams[i]!, isEmpty: false }))
+    : teams
   // Abbreviation at the chosen draft instant, so a November draft reads "EST" even when viewed in summer.
   const scheduleInstant = draftDate ? wallClockToUtc(draftDate, draftTime || '19:30', leagueTimezone) : null
   const scheduleTzLabel = `${timeZoneShortName(leagueTimezone, scheduleInstant ?? new Date())} · ${leagueTimezone}`
@@ -367,12 +413,11 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       <section className="af-ls-card space-y-3">
         <p className="af-ls-eyebrow">{t('lsEd.dr.v2.schedule')}</p>
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <PickerField
-            kind="date" label={t('lsEd.dr.v2.dateLabel')} placeholder={t('lsEd.dr.v2.datePlaceholder')}
-            value={draftDate} onChange={setDraftDate} disabled={ro} language={language}
+          <DateField
+            label={t('lsEd.dr.v2.dateLabel')} value={draftDate} onChange={setDraftDate} disabled={ro} language={language} t={t}
           />
-          <PickerField
-            kind="time" label={t('lsEd.dr.v2.timeLabel')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
+          <TimeField
+            label={t('lsEd.dr.v2.timeLabel')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
             value={draftTime} onChange={setDraftTime} disabled={ro} language={language}
           />
         </div>
@@ -380,10 +425,16 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           {fill(t('lsEd.dr.v2.leagueTz'), { tz: scheduleTzLabel })}
         </p>
         <div className="border-t border-white/10 pt-1">
-          <ToggleRow
-            id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
-            enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
-          />
+          {startsAtScheduledTime ? (
+            <p className="text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+              {t('draft.autostartScheduledNote')}
+            </p>
+          ) : (
+            <ToggleRow
+              id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
+              enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
+            />
+          )}
         </div>
       </section>
 
@@ -415,12 +466,19 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
             id={ids.timer}
             value={customOpen ? CUSTOM_VALUE : String(timerSeconds)}
             options={[
-              ...timerChoices.map((s) => ({ value: String(s), label: formatTimer(s, t) })),
+              ...timerChoices.map((o) => ({
+                value: String(o.seconds),
+                label: o.locked ? fill(t('lsEd.dr.v2.hourlyLockedOption'), { label: formatTimer(o.seconds, t) }) : formatTimer(o.seconds, t),
+                disabled: o.locked,
+              })),
               ...(hasSub ? [{ value: CUSTOM_VALUE, label: t('lsEd.dr.v2.customOption') }] : []),
             ]}
             onChange={onTimerSelect}
             disabled={ro}
           />
+          {!hasSub && !ro && (
+            <p className="text-[11px] text-white/40" data-testid="draft-hourly-locked">{t('lsEd.dr.v2.hourlyLockedNote')}</p>
+          )}
           {hasSub && customOpen && !ro && (
             <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3" data-testid="draft-custom-timer">
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
@@ -460,9 +518,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           />
           {pauseAllowed && slowDraftPauseEnabled && (
             <div className="grid min-w-0 grid-cols-2 gap-2" data-testid="draft-pause-window">
-              <PickerField kind="time" label={t('lsEd.dr.v2.pauseFrom')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
+              <TimeField label={t('lsEd.dr.v2.pauseFrom')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
                 value={slowDraftPauseFrom} onChange={setSlowDraftPauseFrom} disabled={ro} language={language} />
-              <PickerField kind="time" label={t('lsEd.dr.v2.pauseUntil')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
+              <TimeField label={t('lsEd.dr.v2.pauseUntil')} placeholder={t('lsEd.dr.v2.timePlaceholder')}
                 value={slowDraftPauseTo} onChange={setSlowDraftPauseTo} disabled={ro} language={language} />
             </div>
           )}
@@ -538,10 +596,11 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
                 </button>
               </div>
               <button type="button" onClick={onRandomizeClick} disabled={saving || orderLocked}
-                aria-expanded={hasSub ? randomizeOpen : undefined} aria-controls={hasSub ? ids.randomize : undefined}
                 className="flex min-w-[9rem] flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-600/80 px-3 py-2 text-[13px] font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition">
                 <Shuffle className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">{t('draft.randomize')}</span>
+                <span className="truncate">
+                  {hasSub && Number(randomizeCount) > 1 ? fill(t('lsEd.dr.v2.randomizeNButton'), { n: randomizeCount }) : t('draft.randomize')}
+                </span>
               </button>
             </div>
             {fillInfoOpen && (
@@ -554,37 +613,46 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
               </div>
             )}
             {orderLocked && <p className="text-[11px] text-amber-300/80">{t('lsEd.dr.v2.orderLocked')}</p>}
-            {hasSub && randomizeOpen && (
-              <div id={ids.randomize} role="dialog" aria-label={t('lsEd.dr.v2.randomizeTitle')}
-                className="space-y-2 rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3" data-testid="draft-randomize-dialog">
-                <p className="text-[13px] font-semibold text-white">{t('lsEd.dr.v2.randomizeTitle')}</p>
-                <label className="block min-w-0">
-                  <span className="mb-1 block text-[11px] text-white/50">{t('lsEd.dr.v2.randomizeTimes')}</span>
-                  <input type="number" inputMode="numeric" min={1} max={RANDOMIZE_MAX_TIMES} step={1}
-                    value={randomizeTimes} onChange={(e) => setRandomizeTimes(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') submitRandomizeTimes() }}
-                    className="w-full min-w-0 rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2.5 text-sm text-white" />
-                </label>
-                <p className="text-[11px] text-white/40">{t('lsEd.dr.v2.randomizeTimesHint')}</p>
-                {randomizeError && <p role="alert" className="text-[12px] text-red-300">{randomizeError}</p>}
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setRandomizeOpen(false)}
-                    className="rounded-lg border border-white/15 px-3 py-2 text-[13px] font-semibold text-white/80 hover:text-white transition">
-                    {t('lsEd.dr.v2.cancel')}
-                  </button>
-                  <button type="button" onClick={submitRandomizeTimes} disabled={saving}
-                    className="rounded-lg bg-cyan-600/80 px-3 py-2 text-[13px] font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition">
-                    {t('lsEd.dr.v2.randomizeRun')}
-                  </button>
+            {hasSub && !orderLocked && (
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" data-testid="draft-randomize-controls">
+                <div className="min-w-0">
+                  <label htmlFor={ids.randomizeCount} className="mb-1 block text-[11px] font-semibold text-white/50">{t('lsEd.dr.v2.randomizeCount')}</label>
+                  <SelectRow
+                    id={ids.randomizeCount} value={randomizeCount} disabled={saving}
+                    options={RANDOMIZE_COUNT_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
+                    onChange={setRandomizeCount}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor={ids.chosenBy} className="mb-1 block text-[11px] font-semibold text-white/50">{t('lsEd.dr.v2.randomizeChosenBy')}</label>
+                  <SelectRow
+                    id={ids.chosenBy} value={chosenBy} disabled={saving}
+                    options={[
+                      { value: '', label: t('lsEd.dr.v2.chosenByCommissioner') },
+                      ...teams.filter((x) => !x.isEmpty && x.teamId).map((x) => ({ value: x.teamId!, label: x.teamName ?? x.ownerName ?? '' })),
+                    ]}
+                    onChange={setChosenBy}
+                  />
+                </div>
+                <p className="text-[11px] text-white/40 sm:col-span-2">{t('lsEd.dr.v2.randomizeEachShown')}</p>
+              </div>
+            )}
+            {replay && (
+              <div className="space-y-1.5" data-testid="draft-randomize-progress">
+                <p className="text-[12px] font-semibold text-cyan-200">
+                  {fill(t('lsEd.dr.v2.randomizeShowing'), { k: replay.index + 1, n: replay.steps.length })}
+                </p>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden>
+                  <div className="h-full rounded-full bg-cyan-400 transition-[width]" style={{ width: `${((replay.index + 1) / replay.steps.length) * 100}%` }} />
                 </div>
               </div>
             )}
           </div>
         )}
 
-        <ol className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-1.5">
-          {teams.length > 0 ? (
-            teams.map((slot, idx) => (
+        <ol className="min-w-0 space-y-0.5 rounded-xl border border-white/10 bg-white/[0.02] p-1.5" aria-busy={replay ? true : undefined}>
+          {shownTeams.length > 0 ? (
+            shownTeams.map((slot, idx) => (
               <li key={idx} className="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-2">
                 <span className="w-6 shrink-0 text-right text-[13px] font-medium tabular-nums text-white/40">{idx + 1}.</span>
                 {slot.avatarUrl ? (
@@ -612,6 +680,16 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
             <li className="px-2 py-4 text-center text-[12px] text-white/30">{t('lsEd.dr.noTeams')}</li>
           )}
         </ol>
+        {shuffleLog.length > 0 && (
+          <div className="min-w-0 space-y-1" data-testid="draft-shuffle-log">
+            <p id={ids.shuffleLog} className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{t('lsEd.dr.v2.randomizeLog')}</p>
+            <ol aria-labelledby={ids.shuffleLog} className="max-h-40 min-w-0 space-y-0.5 overflow-y-auto text-[12px] text-white/60">
+              {shuffleLog.map((row) => (
+                <li key={row.n} className="truncate">{fill(t('lsEd.dr.v2.randomizeLogRow'), { k: row.n, team: row.first })}</li>
+              ))}
+            </ol>
+          </div>
+        )}
       </section>
 
       {/* ===== ROOKIE DRAFT ORDER (Dynasty/C2C/Devy only) ===== */}
@@ -641,10 +719,20 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           </div>
 
           {isCommissioner && (
-            <ToggleRow
-              id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
-              enabled={rookieEnabled} onChange={setRookieEnabled}
-            />
+            <>
+              <ToggleRow
+                id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
+                enabled={rookieEnabled} onChange={setRookieEnabled}
+                // Off can always be saved; on needs the owner's plan.
+                disabled={!rookieCanAutomate && !rookieEnabledSaved}
+              />
+              {!rookieCanAutomate ? (
+                <p className="text-[11px] leading-snug text-white/45" data-testid="rookie-auto-plan">
+                  {t('lsEd.dr.rookieAutoPlan')}{' '}
+                  <a href="/upgrade?plan=commissioner" className="font-semibold text-violet-300 underline">{t('lsEd.dr.rookieAutoUpgrade')}</a>
+                </p>
+              ) : null}
+            </>
           )}
 
           {rookieSlots.length > 0 && (
@@ -690,6 +778,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         </section>
       )}
 
+      <DraftDayKit leagueId={leagueId} isCommissioner={isCommissioner} />
       {/* ===== LIVE ROOKIE ORDER (Dynasty/C2C/Devy, commissioner only) ===== */}
       {isDynastyLike && isCommissioner && <LiveRookieOrderPanel leagueId={leagueId} />}
 
@@ -726,13 +815,111 @@ function PaceBadge({ pace, t }: { pace: DraftPace; t: T }) {
   )
 }
 
+/** Typed date order: Spanish readers write day first, everyone else month first. */
+function dateOrder(language?: string): 'dmy' | 'mdy' {
+  return language === 'es' ? 'dmy' : 'mdy'
+}
+
+/** `YYYY-MM-DD` → the typed form for this language (`MM/DD/YYYY` or `DD/MM/YYYY`). */
+export function formatTypedDate(iso: string, language?: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return ''
+  return dateOrder(language) === 'dmy' ? `${m[3]}/${m[2]}/${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`
+}
+
 /**
- * A date or time field that looks like a field even when empty: bordered box, icon, placeholder.
- * The native input covers the box (transparent) so a tap opens the platform picker on iOS/Android;
- * `showPicker()` does the same on desktop browsers.
+ * Typed date → `YYYY-MM-DD`, or null when it is not a real calendar date. Accepts the language's
+ * order with `/`, `-` or `.`, one- or two-digit day and month, and an ISO date as typed.
  */
-function PickerField({ kind, label, placeholder, value, onChange, disabled, language }: {
-  kind: 'date' | 'time'; label: string; placeholder: string; value: string
+export function parseTypedDate(text: string, language?: string): string | null {
+  const v = text.trim()
+  let y: number, mo: number, d: number
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v)
+  const loc = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v)
+  if (iso) { y = +iso[1]!; mo = +iso[2]!; d = +iso[3]! }
+  else if (loc) {
+    y = +loc[3]!
+    if (dateOrder(language) === 'dmy') { d = +loc[1]!; mo = +loc[2]! } else { mo = +loc[1]!; d = +loc[2]! }
+  } else return null
+  const dt = new Date(Date.UTC(y, mo - 1, d))
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/**
+ * Draft date: type it, or open the calendar. The text box takes the language's order; the calendar
+ * button opens the platform date picker on a native date input that also carries the value.
+ */
+function DateField({ label, value, onChange, disabled, language, t }: {
+  label: string; value: string; onChange: (v: string) => void; disabled?: boolean; language?: string; t: T
+}) {
+  const id = useId()
+  const errId = useId()
+  const nativeRef = useRef<HTMLInputElement>(null)
+  const [text, setText] = useState(() => formatTypedDate(value, language))
+  const [invalid, setInvalid] = useState(false)
+  // A calendar pick or a load replaces whatever was typed.
+  useEffect(() => { setText(formatTypedDate(value, language)); setInvalid(false) }, [value, language])
+  const placeholder = t(dateOrder(language) === 'dmy' ? 'lsEd.dr.v2.dateFormatDmy' : 'lsEd.dr.v2.dateFormatMdy')
+  const long = useMemo(() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    if (!m) return ''
+    try {
+      return new Date(+m[1]!, +m[2]! - 1, +m[3]!).toLocaleDateString(language || undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    } catch { return '' }
+  }, [value, language])
+  const commit = (raw: string) => {
+    if (!raw.trim()) { setInvalid(false); onChange(''); return }
+    const parsed = parseTypedDate(raw, language)
+    if (parsed) { setInvalid(false); onChange(parsed) } else setInvalid(true)
+  }
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="mb-1 block text-[11px] font-semibold text-white/50">{label}</label>
+      <div className={`relative flex min-h-[44px] w-full min-w-0 items-center gap-1 rounded-lg border pl-3 ${
+        invalid ? 'border-red-400/60' : value ? 'border-white/20' : 'border-dashed border-cyan-400/40'
+      } bg-[#0d1526] ${disabled ? 'opacity-50' : ''}`}>
+        <input
+          id={id} type="text" inputMode="numeric" autoComplete="off" value={text} placeholder={placeholder} disabled={disabled}
+          aria-invalid={invalid || undefined} aria-describedby={invalid ? errId : undefined}
+          onChange={(e) => { setText(e.target.value); if (invalid) setInvalid(false) }}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit((e.target as HTMLInputElement).value) }}
+          className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white placeholder:text-white/45 focus:outline-none"
+        />
+        <button
+          type="button" disabled={disabled} aria-label={t('lsEd.dr.v2.openCalendar')}
+          onClick={() => { try { nativeRef.current?.showPicker?.() } catch { nativeRef.current?.focus() } }}
+          className="relative flex shrink-0 items-center justify-center rounded-md text-cyan-300 hover:text-white disabled:cursor-not-allowed"
+          style={{ minWidth: 44, minHeight: 44 }}
+        >
+          <Calendar className="h-4 w-4" aria-hidden />
+        </button>
+        {/* The platform calendar. Visually hidden; the button above opens it. */}
+        <input
+          ref={nativeRef} type="date" value={value} disabled={disabled} tabIndex={-1} aria-hidden
+          onChange={(e) => onChange(e.target.value)}
+          className="pointer-events-none absolute h-px w-px opacity-0"
+          style={{ colorScheme: 'dark' }}
+        />
+      </div>
+      {invalid ? (
+        <p id={errId} role="alert" className="mt-1 text-[11px] text-red-300">
+          {fill(t('lsEd.dr.v2.dateInvalid'), { example: placeholder })}
+        </p>
+      ) : long ? (
+        <p className="mt-1 text-[11px] text-white/40" data-testid="draft-date-long">{long}</p>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * A time field you can type into or tap: a visible native time input (keyboard entry everywhere,
+ * the platform picker on tap) with the clock icon opening the picker on desktop browsers too.
+ */
+function TimeField({ label, placeholder, value, onChange, disabled, language }: {
+  label: string; placeholder: string; value: string
   onChange: (v: string) => void; disabled?: boolean; language?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -740,36 +927,34 @@ function PickerField({ kind, label, placeholder, value, onChange, disabled, lang
   const display = useMemo(() => {
     if (!value) return ''
     try {
-      if (kind === 'date') {
-        const [y, m, d] = value.split('-').map(Number)
-        return new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString(language || undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-      }
       const [h, mi] = value.split(':').map(Number)
       const dt = new Date(); dt.setHours(h ?? 0, mi ?? 0, 0, 0)
       return dt.toLocaleTimeString(language || undefined, { hour: 'numeric', minute: '2-digit' })
     } catch { return value }
-  }, [kind, value, language])
-  const Icon = kind === 'date' ? Calendar : Clock
+  }, [value, language])
   return (
     <div className="min-w-0">
       <label htmlFor={id} className="mb-1 block text-[11px] font-semibold text-white/50">{label}</label>
-      <div className={`relative flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-lg border px-3 ${
+      <div className={`flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-lg border pl-3 pr-1 ${
         value ? 'border-white/20' : 'border-dashed border-cyan-400/40'
       } bg-[#0d1526] ${disabled ? 'opacity-50' : ''}`}>
-        <Icon className={`h-4 w-4 shrink-0 ${value ? 'text-white/50' : 'text-cyan-300'}`} aria-hidden />
-        <span className={`min-w-0 flex-1 truncate text-sm ${value ? 'text-white' : 'text-white/45'}`} aria-hidden>
-          {display || placeholder}
-        </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
         <input
-          ref={inputRef} id={id} type={kind} value={value} disabled={disabled}
+          ref={inputRef} id={id} type="time" value={value} disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
-          onClick={() => { try { inputRef.current?.showPicker?.() } catch { /* not supported */ } }}
           aria-label={value ? `${label}: ${display}` : `${label}: ${placeholder}`}
-          className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
-          style={{ minHeight: 44, colorScheme: 'dark' }}
+          className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white focus:outline-none"
+          style={{ colorScheme: 'dark' }}
         />
+        <button
+          type="button" disabled={disabled} aria-hidden tabIndex={-1}
+          onClick={() => { try { inputRef.current?.showPicker?.() } catch { inputRef.current?.focus() } }}
+          className="flex shrink-0 items-center justify-center rounded-md text-white/50 hover:text-white disabled:cursor-not-allowed"
+          style={{ minWidth: 44, minHeight: 44 }}
+        >
+          <Clock className="h-4 w-4" aria-hidden />
+        </button>
       </div>
+      {!value && <p className="mt-1 text-[11px] text-white/40">{placeholder}</p>}
     </div>
   )
 }
@@ -790,7 +975,7 @@ function ToggleRow({ id, label, description, enabled, onChange, disabled }: {
 }
 
 function SelectRow({ id, value, options, onChange, disabled }: {
-  id?: string; value: string; options: { value: string; label: string }[]
+  id?: string; value: string; options: { value: string; label: string; disabled?: boolean }[]
   onChange: (v: string) => void; disabled?: boolean
 }) {
   return (
@@ -803,7 +988,7 @@ function SelectRow({ id, value, options, onChange, disabled }: {
         className="w-full min-w-0 appearance-none truncate rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2.5 pr-9 text-sm font-medium text-white disabled:cursor-default disabled:opacity-50"
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
         ))}
       </select>
       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" aria-hidden />

@@ -1271,12 +1271,19 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  // Private fantasy scores require the authorized league board, not a public game-score shortcut.
+  if (/\b(?:my|our)\b[^?]*\b(?:(?:fantasy|league|team)\s+)?(?:matchup|score)\b|\b(?:am\s+i\s+(?:winning|losing)|who\s+is\s+scoring\s+for\s+me)\b/i.test(message)) return null
+  if (/\b(?:my|our)\b[^?]*\b(?:fantasy|league)\b[^?]*\b(?:history|record|past|last\s+season|week\s+\d+)\b/i.test(message)) return null
   // A cache hit for one player or game cannot answer a complete roster request.
   if (isOwnRosterAnalysisQuestion(message)) return null
   if (isScopedRosterReviewQuestion(message, leagueRequested)) return null
   // A result or schedule is evidence for analysis, never a probability or a recommendation.
   // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.
-  if (/\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
+  // ⚠ EXCEPT unsupported live data: the router has already classified it blocked_no_charge, and
+  // ChimmyChat skips the spend preflight on that policy. Yielding sent "live World Cup odds" on
+  // to the paid model path with no confirmation and no live data behind it; the refusal below is
+  // the free, honest answer the client was promised.
+  if (intentRoute.category !== 'unsupported_live_data' && /\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
     return null
   }
   /*

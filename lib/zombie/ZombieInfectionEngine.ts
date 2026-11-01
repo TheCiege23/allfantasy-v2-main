@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { getZombieLeagueConfig } from './ZombieLeagueConfig'
 import { getRosterTeamMap } from './rosterTeamMap'
@@ -120,20 +121,21 @@ export async function loadNativeWeekResults(
   leagueId: string,
   week: number,
   season: number,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<NativeWeekResult[] | null> {
-  const redraftSeason = await prisma.redraftSeason.findFirst({
+  const redraftSeason = await db.redraftSeason.findFirst({
     where: { leagueId, season },
     select: { id: true },
   })
   if (!redraftSeason) return null
 
   const [matchups, seasonRosters, rosters] = await Promise.all([
-    prisma.redraftMatchup.findMany({
+    db.redraftMatchup.findMany({
       where: { seasonId: redraftSeason.id, week },
       select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, status: true },
     }),
-    prisma.redraftRoster.findMany({ where: { seasonId: redraftSeason.id }, select: { id: true, ownerId: true } }),
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true } }),
+    db.redraftRoster.findMany({ where: { seasonId: redraftSeason.id }, select: { id: true, ownerId: true } }),
+    db.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true } }),
   ])
   const toRoster = seasonRosterToLeagueRoster(seasonRosters, rosters)
 
@@ -199,6 +201,19 @@ export async function computeInfections(input: InfectionInput): Promise<ZombieIn
     select: { team: { select: { rosterId: true } } },
   })
   const serumProtectedRosterIds = new Set(pendingSerum.map((i) => i.team.rosterId))
+  const armedWeapons = await prisma.zombieTeamItem.findMany({
+    where: {
+      itemType: { in: ['weapon_knife', 'weapon_bow', 'weapon_axe', 'weapon_gun'] },
+      usedEffect: 'infection_shield',
+      team: { leagueId },
+      OR: [
+        { activationState: 'pending_activation', activatesAtWeek: week, isUsed: false },
+        { isUsed: true, usedAtWeek: week },
+      ],
+    },
+    select: { team: { select: { rosterId: true } } },
+  })
+  const weaponProtectedRosterIds = new Set(armedWeapons.map((i) => i.team.rosterId))
 
   for (const m of matchups) {
     const { winnerRosterId, loserRosterId } = m
@@ -212,6 +227,7 @@ export async function computeInfections(input: InfectionInput): Promise<ZombieIn
     const infectByWhisperer = config.infectionLossToWhisperer && winnerStatus === 'Whisperer'
     const infectByZombie = config.infectionLossToZombie && winnerStatus === 'Zombie'
     if (!infectByWhisperer && !infectByZombie) continue
+    if (weaponProtectedRosterIds.has(loserRosterId)) continue
 
     infected.push({
       survivorRosterId: loserRosterId,

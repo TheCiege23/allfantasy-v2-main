@@ -14,6 +14,8 @@ const m = vi.hoisted(() => ({
   seasonFindFirst: vi.fn(),
   rosterFindMany: vi.fn(),
   playerUpdateMany: vi.fn(),
+  // Max seasons on taxi (lib/taxi/taxiMaxYears.ts) reads finished seasons' taxi rows; none by default.
+  playerFindMany: vi.fn(async () => []),
   playerDelete: vi.fn(),
   sportsPlayerFindMany: vi.fn(),
 }))
@@ -23,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: m.leagueFindUnique, update: m.leagueUpdate },
     redraftSeason: { findUnique: m.seasonFindUnique, findFirst: m.seasonFindFirst },
     redraftRoster: { findMany: m.rosterFindMany },
-    redraftRosterPlayer: { updateMany: m.playerUpdateMany, delete: m.playerDelete, deleteMany: m.playerDelete },
+    redraftRosterPlayer: { findMany: m.playerFindMany, updateMany: m.playerUpdateMany, delete: m.playerDelete, deleteMany: m.playerDelete },
     sportsPlayer: { findMany: m.sportsPlayerFindMany },
   },
 }))
@@ -156,6 +158,18 @@ describe('runDynastyRolloverHousekeeping', () => {
     const written = m.leagueUpdate.mock.calls[0][0].data.lifecycleMetadata.dynastyRollover
     expect(written).toMatchObject({ seasonId: 'y2', needsCutDown: [] })
     expect(written.movedToBench).toHaveLength(2)
+  })
+
+  it('moves a taxi player who has used the league’s seasons on taxi (2 by default), counted over finished seasons', async () => {
+    m.leagueFindUnique.mockResolvedValue({ ...LEAGUE, taxiAllowNonRookies: true, taxiYearsLimit: null })
+    m.rosterFindMany.mockResolvedValue([{ id: 'R1', ownerId: 'u1', teamName: 'Aces', players: [p('vet', 'taxi')] }])
+    m.playerFindMany.mockResolvedValueOnce([
+      { playerId: 'vet', roster: { seasonId: 'y0' } },
+      { playerId: 'vet', roster: { seasonId: 'y1' } },
+    ])
+    const out = await runDynastyRolloverHousekeeping('L', 'y2')
+    expect(m.playerFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ roster: { leagueId: 'L', season: { status: 'complete' } } }) }))
+    expect(out?.movedToBench).toEqual([expect.objectContaining({ playerId: 'vet', reason: 'taxi_max_years' })])
   })
 
   it('reports a move a manager beat it to as not applied', async () => {

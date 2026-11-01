@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const h = vi.hoisted(() => ({
+  // Today's one designed player-news email (lib/notifications/playerNewsGate claimPlayerNewsEmailToday).
+  emailClaims: new Set<string>(),
+  profiles: vi.fn(async () => [] as Array<{ userId: string; notificationPreferences: unknown }>),
   hydrate: vi.fn(),
   detect: vi.fn(),
   loadPrefs: vi.fn(),
@@ -28,6 +31,14 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findMany: async () => [{ claimedByUserId: 'u1' }] },
     appUser: { count: async () => 1 },
     platformNotification: { findFirst: h.findFirst },
+    userProfile: { findMany: h.profiles },
+    sportsDataCache: {
+      create: async ({ data }: { data: { cacheKey: string } }) => {
+        if (h.emailClaims.has(data.cacheKey)) throw Object.assign(new Error('unique'), { code: 'P2002' })
+        h.emailClaims.add(data.cacheKey)
+        return data
+      },
+    },
   },
 }))
 vi.mock('@/lib/autocoach/status-sources/SleeperStatusAdapter', () => ({ fetchSleeperStatuses: vi.fn(async () => ({})) }))
@@ -74,6 +85,8 @@ const call = (qs: string) => GET(new NextRequest(`https://allfantasy.ai/api/cron
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.emailClaims.clear()
+  h.profiles.mockResolvedValue([])
   h.teamSweep.mockResolvedValue({nativeLeagues:0,swaps:0,alertsEvaluated:0,errors:0,budgetStopped:false,deliveryReceiptsChecked:0})
   h.hydrate.mockResolvedValue({ injuredStarters: [{}], leaguesScanned: 3, feedStale: false })
   h.loadPrefs.mockResolvedValue(null)
@@ -102,6 +115,26 @@ describe('alert sweep — injury fan-out', () => {
     expect(sent.body).toContain('Home League: no bench player can come in for him.')
     expect(sent.emailOverride.html).toContain('Fix your lineup in KBFL')
     expect(h.fanOut.mock.calls[0]![1].map((a: { leagueId: string }) => a.leagueId)).toEqual(['L1', 'L2'])
+  })
+
+  it('sends the designed injury email once a day: a later sweep that day writes the bell without it', async () => {
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+    h.fanOut.mockResolvedValue([])
+    await call('userId=u1')
+    expect(h.dispatch.mock.calls[0]![0].emailOverride).toBeDefined()
+    h.dispatch.mockClear()
+    h.detect.mockReturnValue([alert('L1', 'Nico Collins', 90)])
+    await call('userId=u1')
+    expect(h.dispatch).toHaveBeenCalledTimes(1)
+    expect(h.dispatch.mock.calls[0]![0].emailOverride).toBeUndefined()
+    expect(h.dispatch.mock.calls[0]![0].skipChannels.email).toBe(true)
+  })
+
+  it('Player news "Off" sends nothing from the sweep', async () => {
+    h.profiles.mockResolvedValue([{ userId: 'u1', notificationPreferences: { playerNewsLevel: 'off' } }])
+    h.detect.mockReturnValue([alert('L1', 'Tank Dell', 90)])
+    await call('userId=u1')
+    expect(h.dispatch).not.toHaveBeenCalled()
   })
 
   it('no bench player in a league: the message names the free agent and the email links his claim screen (2026-10-09)', async () => {

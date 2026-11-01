@@ -118,8 +118,15 @@ export function mapFantraxRosterSlots(
   sport: 'NBA' | 'NHL',
   rosterInfo: unknown,
 ): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
+  return mapSlots(SLOT_CODES[sport], sport, rosterInfo)
+}
+
+function mapSlots(
+  codes: Record<string, string>,
+  sport: string,
+  rosterInfo: unknown,
+): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
   const info = record(rosterInfo)
-  const codes = SLOT_CODES[sport]
   const counts = new Map<string, number>()
   const gaps: string[] = []
   for (const [code, raw] of Object.entries(record(info.positionConstraints))) {
@@ -136,7 +143,66 @@ export function mapFantraxRosterSlots(
     }
     counts.set(key, (counts.get(key) ?? 0) + count)
   }
-  const bench = info.maxTotalReservePlayers
-  if (counts.size > 0 && typeof bench === 'number' && Number.isSafeInteger(bench) && bench > 0) counts.set('BN', bench)
+  /*
+   * The captured NBA league sends no `maxTotalReservePlayers` at all — only 14 total and 10 active —
+   * so its 4 bench seats were dropped. Total minus active is the same remainder the MLB capture
+   * states outright (22 + 8 = 30), so it stands in when the reserve count is absent.
+   */
+  const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
+  const bench = isCount(info.maxTotalReservePlayers)
+    ? info.maxTotalReservePlayers
+    : isCount(info.maxTotalPlayers) && isCount(info.maxTotalActivePlayers)
+      ? info.maxTotalPlayers - info.maxTotalActivePlayers
+      : null
+  if (counts.size > 0 && bench != null && bench > 0) counts.set('BN', bench)
   return { slots: Array.from(counts, ([position, count]) => ({ position, count })), gaps }
+}
+
+/**
+ * Fantrax football / baseball slot code → the token our importers store in `roster_positions`
+ * (the vocabulary `lib/league/importedLineupTemplate.ts` reads, and ESPN's adapter writes).
+ *
+ * Football: positional codes map to themselves; `RWT` / `SFX` are Fantrax's RB/WR/TE flex and
+ * superflex (already treated as slots by `importedPlayerMetadata.ts`); `ID` is the IDP flex — the NFL
+ * capture's `playerInfo.eligiblePos` lists it for DL, LB and DB players alike (`ID,DL`, `LB,ID`,
+ * `DB,ID`). ⚠ `ER` (in that same capture, on a DL player) is deliberately absent: which of our
+ * positions it accepts is not established, so it is reported rather than guessed.
+ *
+ * Baseball: the captured MLB codes (`C` … `UT`, `CI`, `MI`, `P`), `UT` spelled as our `UTIL`.
+ */
+const FOOTBALL_SLOT_CODES: Record<string, string> = {
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF', DST: 'DST', 'D/ST': 'D/ST',
+  RWT: 'FLEX', SFX: 'SUPER_FLEX',
+  DL: 'DL', DE: 'DE', DT: 'DT', LB: 'LB', DB: 'DB', CB: 'CB', S: 'S', ID: 'IDP_FLEX',
+}
+const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB', Record<string, string>> = {
+  NFL: FOOTBALL_SLOT_CODES,
+  NCAAF: FOOTBALL_SLOT_CODES,
+  MLB: {
+    C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', CI: 'CI', MI: 'MI',
+    SP: 'SP', RP: 'RP', P: 'P', UT: 'UTIL', UTIL: 'UTIL',
+  },
+}
+
+/**
+ * A Fantrax NFL, college-football or MLB league's starting lineup, as `SLOT:COUNT` entries.
+ *
+ * 🛑 ALL OR NOTHING, unlike the NBA/NHL mapper. These slots feed `importedLineupTemplateSlots`, which
+ * trusts a pair list as the whole lineup — so a lineup with one seat dropped would be a smaller lineup
+ * that looks real. Any unmapped code, or starters that do not add up to the league's own
+ * `maxTotalActivePlayers`, yields no slots and a named gap, and the caller keeps its old "no stated
+ * lineup" resolution.
+ */
+export function mapFantraxLineupSlots(
+  sport: 'NFL' | 'NCAAF' | 'MLB',
+  rosterInfo: unknown,
+): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
+  const mapped = mapSlots(LINEUP_SLOT_CODES[sport], sport, rosterInfo)
+  const active = record(rosterInfo).maxTotalActivePlayers
+  const starters = mapped.slots.filter((s) => s.position !== 'BN').reduce((sum, s) => sum + s.count, 0)
+  const gaps = [...mapped.gaps]
+  if (gaps.length === 0 && starters > 0 && typeof active === 'number' && active !== starters) {
+    gaps.push(`Fantrax lineup slots add up to ${starters}, but the league starts ${active}`)
+  }
+  return gaps.length > 0 ? { slots: [], gaps } : mapped
 }

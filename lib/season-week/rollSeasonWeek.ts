@@ -29,6 +29,7 @@ import { REDRAFT_SEASON_STATUS, engineSeasonScope } from '@/lib/redraft/seasonSt
 import { resolveRegularSeasonEndWeek } from './leagueSeasonWeek'
 import { activateImportedMlbSeasons } from './activateImportedMlbSeasons'
 import { activateDynastyNewSeasonsAtKickoff, type KickoffActivationOutcome } from '@/lib/redraft/offseason/startDynastyNewSeason'
+import { openDynastyRookieDraftsOnCalendar, type RookieDraftOpenOutcome } from '@/lib/redraft/offseason/openRookieDraftsOnCalendar'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import { resolveSeasonWeekForRedraftSeason } from './seasonWeekService'
 import type { LeagueSeasonWeekResolution } from './types'
@@ -154,6 +155,8 @@ export type WeekRollSummary = {
   outcomes: SeasonRollOutcome[]
   /** Dynasty seasons started at their sport's week 1 this run — see `activateDynastyNewSeasonsAtKickoff`. */
   dynastyKickoff?: KickoffActivationOutcome[]
+  /** Dynasty rookie drafts opened on their sport's calendar this run — see `openDynastyRookieDraftsOnCalendar`. */
+  rookieDraftsOpened?: RookieDraftOpenOutcome[]
 }
 
 export type RollSeasonWeeksOptions = {
@@ -183,6 +186,10 @@ export async function rollSeasonWeeks(
    * scored. Runs BEFORE the read below so a season started now is rolled in the same pass. It never
    * starts a season while a draft is open; a failure here must not stop the roller.
    */
+  const resolveWeek = async (seasonId: string) => {
+    const r = await resolveSeasonWeekForRedraftSeason(seasonId, { prisma: db, now })
+    return r.ok ? { ok: true, phase: r.phase } : { ok: false, reason: r.reason }
+  }
   const dynastyKickoff = options.dryRun
     ? []
     : await activateDynastyNewSeasonsAtKickoff({
@@ -190,13 +197,27 @@ export async function rollSeasonWeeks(
         limit: options.limit ?? 200,
         actorUserId: WEEK_ROLLER_ACTOR,
         nativePlatforms: NATIVE_PLATFORM_VALUES,
-        resolveWeek: async (seasonId) => {
-          const r = await resolveSeasonWeekForRedraftSeason(seasonId, { prisma: db, now })
-          return r.ok ? { ok: true, phase: r.phase } : { ok: false, reason: r.reason }
-        },
+        resolveWeek,
       }).catch((error) => {
         console.error('[season-week-roll] dynasty kickoff activation failed', error)
         return [] as KickoffActivationOutcome[]
+      })
+  /*
+   * AFTER kickoff, so a season that started this pass is no longer a `setup` candidate. Opens a
+   * rookie draft (pre-draft, never started) for a league that turned auto-open on, once its sport's
+   * window has opened and its week 1 has not. A failure here must not stop the roller.
+   */
+  const rookieDraftsOpened = options.dryRun
+    ? []
+    : await openDynastyRookieDraftsOnCalendar({
+        now,
+        limit: options.limit ?? 200,
+        actorUserId: WEEK_ROLLER_ACTOR,
+        nativePlatforms: NATIVE_PLATFORM_VALUES,
+        resolveWeek,
+      }).catch((error) => {
+        console.error('[season-week-roll] rookie draft auto-open failed', error)
+        return [] as RookieDraftOpenOutcome[]
       })
 
   const seasons = await db.redraftSeason.findMany({
@@ -280,7 +301,7 @@ export async function rollSeasonWeeks(
     }
   }
 
-  return { considered: seasons.length, advanced, held, failed, outcomes, dynastyKickoff }
+  return { considered: seasons.length, advanced, held, failed, outcomes, dynastyKickoff, rookieDraftsOpened }
 }
 
 /** Recorded on every audit row and event the advance emits. */
@@ -353,11 +374,11 @@ export async function rollPostseason(
   const db = options.prisma ?? defaultPrisma
 
   const seasons = await db.redraftSeason.findMany({
-    where: engineSeasonScope({
+    where: { AND: [engineSeasonScope({
       includeShadowLeagues: options.includeShadowLeagues,
-      statuses: [REDRAFT_SEASON_STATUS.REGULAR_SEASON_COMPLETE, REDRAFT_SEASON_STATUS.PLAYOFFS],
-    }),
-    select: { id: true, leagueId: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
+      statuses: [REDRAFT_SEASON_STATUS.REGULAR_SEASON_COMPLETE, REDRAFT_SEASON_STATUS.PLAYOFFS, REDRAFT_SEASON_STATUS.COMPLETE],
+    }), { OR: [{ status: { not: REDRAFT_SEASON_STATUS.COMPLETE } }, { league: { lifecycleState: 'completed' } }] }] },
+    select: { id: true, leagueId: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true, lifecycleState: true } } },
     take: options.limit ?? 200,
   })
 
@@ -369,6 +390,7 @@ export async function rollPostseason(
 
   for (const season of seasons) {
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
+    if (season.status === REDRAFT_SEASON_STATUS.COMPLETE && season.league?.lifecycleState !== 'completed') continue
 
     if ((season.league?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
       if (options.dryRun) { held++; outcomes.push({...base,step:'held',detail:'dryRun'}); continue }
@@ -416,6 +438,12 @@ export async function rollPostseason(
     }
 
     try {
+      if (season.status === REDRAFT_SEASON_STATUS.COMPLETE) {
+        const outcome = await finalizeSeasonAndEnterOffseason({ seasonId: season.id, leagueId: season.leagueId, actorUserId: WEEK_ROLLER_ACTOR })
+        if (outcome.ok && outcome.offseasonEntered) { finalized++; outcomes.push({ ...base, step: 'finalized', championRosterId: outcome.championRosterId, offseasonEntered: true }) }
+        else { held++; outcomes.push({ ...base, step: 'held', detail: outcome.ok ? 'OFFSEASON_ARCHIVE_PENDING' : outcome.code }) }
+        continue
+      }
       const round = await advanceNflRedraftPlayoffRuntimeRound({
         seasonId: season.id,
         actorUserId: WEEK_ROLLER_ACTOR,

@@ -3,8 +3,12 @@ import 'server-only'
 import type { League } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { listDivisionsByLeague } from '@/lib/promotion-relegation/DivisionResolver'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { importedGuillyFormat } from '@/lib/guillotine/importedGuillyHealth'
+import { loadImportedGuillyTab } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { importedGuillyTiers } from '@/lib/guillotine/importedGuillyView'
 import type {
   LeagueDashboardView,
   LeagueSettingsRow,
@@ -12,6 +16,7 @@ import type {
 } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { buildLeagueScoringDashboardSummary } from '@/lib/league/league-scoring-dashboard'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 
 function weekFromSettings(settings: unknown): number | null {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
@@ -153,6 +158,10 @@ export function buildLeagueSettingsRows(league: League): LeagueSettingsRow[] {
 
   if (league.medianGame) {
     rows.push({ label: 'Median Game', value: 'Enabled' })
+    rows.push({
+      label: 'Median in Playoffs',
+      value: readMedianGameInPlayoffs(league.settings) ? 'Counts in playoff weeks' : 'Off — win or go home',
+    })
   }
 
   return rows
@@ -194,9 +203,29 @@ async function loadStandingsPresentation(league: League): Promise<StandingsPrese
     }
   }
 
+  /*
+   * An IMPORTED Guilly league: its provider chops it and none of the native tables (chop rows, period
+   * scores) exist, so the tiers come from the provider's weekly scores — the same read as the league's
+   * imported Guilly tab. Checked before `guillotineMode`, which some older imports still carry and which
+   * would otherwise ask the native engine and get nothing.
+   */
+  if (!isNativePlatform(league.platform) && importedGuillyFormat(league)) {
+    const tab = await loadImportedGuillyTab(leagueId).catch(() => null)
+    const byRoster = tab ? importedGuillyTiers(tab.view) : {}
+    const teams = Object.keys(byRoster).length
+      ? await prisma.leagueTeam.findMany({ where: { leagueId }, select: { id: true, externalId: true } }).catch(() => [])
+      : []
+    const dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe' | 'chopped'> = {}
+    for (const t of teams) {
+      const tier = byRoster[String(t.externalId)]
+      if (tier) dangerByTeamId[t.id] = tier
+    }
+    return { mode: 'guillotine', dangerByTeamId }
+  }
+
   if (league.guillotineMode) {
     const w = weekFromSettings(league.settings) ?? 1
-    const dangerRows = await getDangerTiers({ leagueId, weekOrPeriod: Math.max(1, w) }).catch(() => [])
+    const dangerRows = (await getLiveDangerTiers({ leagueId, weekOrPeriod: Math.max(1, w) }).catch(() => ({ rows: [] }))).rows
     if (dangerRows.length > 0) {
       const map = await getRosterTeamMap(leagueId)
       const dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe'> = {}

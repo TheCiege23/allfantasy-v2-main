@@ -8,7 +8,6 @@ export {
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
 } from './build-orchestration-meta'
-export { appendOrchestrationFooterIfMissing } from './format-chimmy-reply'
 export {
   parseOrchestrationResponseSections,
   type ParsedOrchestrationSections,

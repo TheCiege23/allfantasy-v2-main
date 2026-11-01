@@ -4,9 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { MessageSquare } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
-import SupportModal from '@/components/core-app/support/SupportModal'
+import dynamic from 'next/dynamic'
+import type { CommsLeague, CommsTab } from './CommsDrawer'
+import '@/components/core-app/af-comms.css'
+const CommsDrawer = dynamic(() => import('./CommsDrawer'), {
+  ssr: false,
+  loading: () => <div className="af-cm-loading" role="status">Opening chat…</div>,
+})
+const SupportModal = dynamic(() => import('@/components/core-app/support/SupportModal'), { ssr: false })
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { useChatBadge } from './useChatBadge'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
@@ -92,6 +100,7 @@ export function CommsDock({
   mentions = 0,
 }: CommsDockProps) {
   const { language } = useOptionalLanguage()
+  const m = messagesFor(coreWidgetsMessages, language)
   const { data: session } = useSession()
   /*
    * 🛑 THE DRAWER IS KEYED ON WHO IS SIGNED IN, AND next-auth BRIEFLY SAYS "NOBODY". Its client
@@ -111,6 +120,8 @@ export function CommsDock({
   if (liveUserId) lastUserId.current = liveUserId
   const userId = liveUserId ?? lastUserId.current
   const [open, setOpen] = useState(false)
+  const [hasOpened, setHasOpened] = useState(false)
+  useEffect(() => { if (open) setHasOpened(true) }, [open])
   const [tab, setTab] = useState<CommsTab>('chimmy')
   const [prefill, setPrefill] = useState<string | null>(null)
   const [leagueDraft, setLeagueDraft] = useState<CommsOpenDetail['leagueDraft']>(undefined)
@@ -222,14 +233,12 @@ export function CommsDock({
             if (launcher.consumeDragClick()) return
             setOpen(true)
           }}
-          title={language === 'es' ? 'Abrir chat · arrastra para mover' : 'Open chat · drag to move'}
+          title={m.commsDockTitle}
           aria-label={
             badge.mentions > 0
-              ? language === 'es'
-                ? `Abrir chat (${badge.mentions} menciones, ${badge.unread} sin leer)`
-                : `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
+              ? m.commsDockMentions(badge.mentions, badge.unread)
               : badge.unread > 0
-                ? language === 'es' ? `Abrir chat (${badge.unread} sin leer)` : `Open communications (${badge.unread} unread)`
+                ? m.commsDockUnread(badge.unread)
                 : coreUiCopy('Open communications', language)
           }
         >
@@ -254,7 +263,7 @@ export function CommsDock({
         </button>
       ) : null}
 
-      <CommsDrawer
+      {(open || hasOpened) && <CommsDrawer
         key={userId ?? 'anonymous'}
         userId={userId}
         rememberPlace
@@ -271,15 +280,15 @@ export function CommsDock({
         initialDraft={prefill}
         leagueDraft={leagueDraft}
         openRequest={openRequest}
-      />
+      />}
 
-      <SupportModal
+      {supportOpen && <SupportModal
         open={supportOpen}
         onClose={() => setSupportOpen(false)}
         defaultEmail={supportEmail}
         leagues={leagues.map((l) => ({ id: l.id, name: l.name }))}
         pageLeagueId={pageLeagueId}
-      />
+      />}
     </>
   )
 }

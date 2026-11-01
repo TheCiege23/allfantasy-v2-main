@@ -8,6 +8,11 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
     const inferredScoring =
       source.settings?.scoringType ??
       (source.league.isDevy ? 'devy' : source.league.sport === 'NCAAF' ? 'college' : null)
+    const seasonState = source.settings?.raw?.seasonState
+    const hasLiveSeasonState = seasonState === 'preseason' || seasonState === 'in_progress' || seasonState === 'complete'
+    const hasRosteredPlayers = source.teams.some((team) => team.rosterPlayerIds.length > 0)
+    const isPreDraft = hasLiveSeasonState && seasonState !== 'complete' &&
+      !hasRosteredPlayers && source.draftPicks.length === 0
 
     return {
       name: source.league.name,
@@ -27,9 +32,15 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       isDynasty: source.league.isDevy,
       // Same fix as Sleeper/ESPN/Yahoo/MFL: `League.status` has no DB default,
       // so a missing value here leaves imported leagues invisible on Dashboard.
-      // Fantrax's real signal is a season-year comparison (`FantraxImportLeague.isFinished`),
-      // consistent with a CSV snapshot upload — there is no live in-season flag.
-      status: source.league.isFinished ? 'complete' : 'in_season',
+      // A live league with no rostered players or made picks has not drafted yet.
+      // Preserve the old status behavior for CSV snapshots, which lack a live season state.
+      status: source.league.isFinished || seasonState === 'complete'
+        ? 'complete'
+        : isPreDraft
+          ? 'pre_draft'
+          : seasonState === 'preseason'
+            ? 'off_season'
+            : 'in_season',
       playoff_team_count: undefined,
       regular_season_length: source.schedule.length > 0 ? source.schedule.length : undefined,
       schedule_unit: 'week',

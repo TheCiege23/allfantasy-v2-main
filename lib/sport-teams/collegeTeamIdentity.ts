@@ -119,6 +119,20 @@ export function aliasesForTeam(team: CollegeTeamRecord): string[] {
  * "more important" team is exactly how "San Diego" quietly becomes San Diego
  * State on a scoreboard. If the string is ambiguous, the honest answer is that
  * we do not know which team it is.
+ *
+ * 🛑 ONE NARROW EXCEPTION: AN UNCLASSIFIED ROW DOES NOT GET TO VETO A FOOTBALL
+ * PROGRAM'S OWN NAME. CFBD's directory carries junior-college and club teams
+ * with `classification: null`, and three of them sat on an FBS school's name —
+ * measured on production 2026-10-31: "SOUTH FLORIDA STARS" lists "SOUTH
+ * FLORIDA" as an alternate name, "Charlotte" Saints (Faith NC) and "Troy"
+ * Vikings (Hudson Valley CC) share the school string outright. Each collision
+ * dropped the alias, so South Florida, Charlotte and Troy resolved to nothing:
+ * no fixture, no kickoff, no lineup lock and no crest for any of their players.
+ * So when an alias is contested and EXACTLY ONE claimant carries a
+ * classification (fbs / fcs / ii / iii) while every other is unclassified, the
+ * classified program keeps it. Two classified claimants — San Diego and San
+ * Diego State, or two "Miami"s — are still dropped, exactly as above; this is
+ * not a preference for the bigger program, only for a real one.
  */
 export function buildCollegeTeamIndex(teams: CollegeTeamRecord[]): CollegeTeamIndex {
   const claims = new Map<string, Set<number>>()
@@ -140,9 +154,13 @@ export function buildCollegeTeamIndex(teams: CollegeTeamRecord[]): CollegeTeamIn
     if (ids.size === 1) {
       const team = byId.get([...ids][0])
       if (team) byAlias.set(alias, team)
-    } else {
-      ambiguous.set(alias, ids.size)
+      continue
     }
+    const classified = [...ids]
+      .map((id) => byId.get(id))
+      .filter((t): t is CollegeTeamRecord => !!t && !!t.classification?.trim())
+    if (classified.length === 1) byAlias.set(alias, classified[0])
+    else ambiguous.set(alias, ids.size)
   }
 
   return { byAlias, ambiguous }
