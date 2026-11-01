@@ -48,7 +48,8 @@ import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
-import { readSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
+import { readSurvivorIslandScene, resolveSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
+import { tribalVotesDueFromSettings } from '@/lib/survivor/survivorCeremonySchedule'
 import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
 import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
 import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
@@ -122,7 +123,7 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true, survivorRevealMode: true },
+    select: { sport: true, name: true, survivorRevealMode: true, season: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
@@ -340,6 +341,8 @@ export async function GET(
       tribeShuffleImbalanceThreshold: config.tribeShuffleImbalanceThreshold,
       voteDeadlineDayOfWeek: config.voteDeadlineDayOfWeek,
       voteDeadlineTimeUtc: config.voteDeadlineTimeUtc,
+      // When votes are really due (the settings screen's vote day/time, as the scheduler reads it).
+      tribalVotesDue: tribalVotesDueFromSettings(leagueSettingsJson),
       selfVoteDisallowed: config.selfVoteDisallowed,
       tribalCouncilDayOfWeek: config.tribalCouncilDayOfWeek,
       tribalCouncilTimeUtc: config.tribalCouncilTimeUtc,
@@ -347,7 +350,8 @@ export async function GET(
       seasonThemeLabel: config.seasonThemeLabel,
       visualThemeId: config.visualThemeId,
       // The commissioner's island banner scene ('auto' follows the season), from league settings.
-      islandScene: readSurvivorIslandScene(leagueSettingsJson),
+      // 'rotate' resolves here to this season's scene (deterministic per league and season).
+      islandScene: resolveSurvivorIslandScene(readSurvivorIslandScene(leagueSettingsJson), leagueId, leagueMeta?.season ?? null),
       challengesSystemRun: config.challengesSystemRun,
       regularSeasonEndWeek: config.regularSeasonEndWeek,
       faqSeededAt: config.faqSeededAt,

@@ -41,6 +41,24 @@ const STATE_LABEL: Record<ReportLang, Record<string, string>> = {
   },
 }
 
+/** The finale's progress for the commissioner: counts only, never whose question or whose ballot. */
+export type FinaleReportProgress = {
+  questionsAsked: number
+  questionsAnswered: number
+  speechesPosted: number
+  finalists: number
+  votesIn: number
+  votesRequired: number
+}
+
+/** The jury/finale line in the commissioner's report while the finale is open. EN and ES. */
+export function finaleReportLine(p: FinaleReportProgress, lang: ReportLang = 'en'): string {
+  if (lang === 'es') {
+    return `Final: ${p.questionsAsked} ${p.questionsAsked === 1 ? 'pregunta' : 'preguntas'} del jurado, ${p.questionsAnswered} ${p.questionsAnswered === 1 ? 'respondida' : 'respondidas'}; ${p.speechesPosted} de ${p.finalists} discursos finales publicados; ${p.votesIn} de ${p.votesRequired} votos del jurado recibidos.`
+  }
+  return `Finale: ${p.questionsAsked} jury ${p.questionsAsked === 1 ? 'question' : 'questions'} asked, ${p.questionsAnswered} answered; ${p.speechesPosted} of ${p.finalists} closing speeches posted; ${p.votesIn} of ${p.votesRequired} jury votes in.`
+}
+
 export function chimmyWeeklyReportTitle(week: number, lang: ReportLang = 'en'): string {
   return lang === 'es' ? `La semana ${week} de Chimmy` : `Chimmy's week ${week}`
 }
@@ -50,7 +68,7 @@ export function chimmyWeeklyReportTitle(week: number, lang: ReportLang = 'en'): 
  * says whether Chimmy voted, never for whom, and never mentions an idol (the commissioner may be a
  * player, and who holds an idol is secret).
  */
-export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en', sideGameLine: string | null = null): string {
+export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en', sideGameLine: string | null = null, finaleLine: string | null = null): string {
   const es = lang === 'es'
   const lines = rows.map((r) => {
     const parts = [STATE_LABEL[lang][r.state] ?? r.state]
@@ -69,24 +87,28 @@ export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReport
   const intro = es
     ? `Esto es lo que hizo Chimmy por ${rows.length === 1 ? 'su equipo' : `sus ${rows.length} equipos`} en la semana ${week}.`
     : `Here is what Chimmy did for its ${rows.length === 1 ? 'team' : `${rows.length} teams`} in week ${week}.`
-  return [intro, ...lines, ...(sideGameLine ? [sideGameLine] : [])].join('\n')
+  // During the finale the report can go out with no Chimmy seat at all: then it is the finale line alone.
+  if (rows.length === 0) return [...(finaleLine ? [finaleLine] : []), ...(sideGameLine ? [sideGameLine] : [])].join('\n')
+  return [intro, ...lines, ...(sideGameLine ? [sideGameLine] : []), ...(finaleLine ? [finaleLine] : [])].join('\n')
 }
 
 /**
  * Send the week's Chimmy report to the commissioner, once per week (the alert's own dedupe), when
  * Chimmy runs at least one castaway. Called by the season runner as the week closes; best-effort.
  */
-export async function sendChimmyWeeklyReport(leagueId: string, week: number): Promise<boolean> {
+export async function sendChimmyWeeklyReport(leagueId: string, week: number, opts: { finale?: boolean; dedupeKey?: string } = {}): Promise<boolean> {
   const cast = await prisma.survivorPlayer.findMany({
     where: { leagueId, userId: { startsWith: SEAT_PREFIX } },
     select: { userId: true, displayName: true, playerState: true, redraftRosterId: true },
   })
-  if (cast.length === 0) return false
+  if (cast.length === 0 && !opts.finale) return false
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } })
   const lang: ReportLang = String(league?.language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'
   const managed = readManagedLineups(league?.settings)
   const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
-  if (chimmy.length === 0) return false
+  // The finale's progress (counts only). Best-effort: a failed read leaves the report as it was.
+  const finaleLine = opts.finale ? await loadFinaleReportProgress(leagueId).then((p) => (p ? finaleReportLine(p, lang) : null)).catch(() => null) : null
+  if (chimmy.length === 0 && !finaleLine) return false
 
   const userIds = chimmy.map((p) => p.userId)
   const councils = await prisma.survivorTribalCouncil.findMany({ where: { leagueId, week }, select: { id: true } })
@@ -123,12 +145,27 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
     }
   })
   const sent = await notifySurvivorCommissionerOnce(leagueId, 'chimmy_weekly_report', {
-    dedupeKey: String(week),
+    dedupeKey: opts.dedupeKey ?? String(week),
     week,
     title: chimmyWeeklyReportTitle(week, lang),
-    body: chimmyWeeklyReportBody(week, rows, lang, sideGames ? sideGameWeeklyReportLine(sideGames.input, lang) : null),
+    body: chimmyWeeklyReportBody(week, rows, lang, sideGames ? sideGameWeeklyReportLine(sideGames.input, lang) : null, finaleLine),
     deepLinkPath: `/survivor/${leagueId}`,
     urgency: 'medium',
   })
   return sent.sent
+}
+
+/** Counts for the finale line, from the jury Q&A fold and the finale state. Null when the finale is not open. */
+async function loadFinaleReportProgress(leagueId: string): Promise<FinaleReportProgress | null> {
+  const { loadJuryQaContext } = await import('./survivorJuryQaService')
+  const ctx = await loadJuryQaContext(leagueId)
+  if (!ctx.finale.open || ctx.finale.closed) return null
+  return {
+    questionsAsked: ctx.state.questions.length,
+    questionsAnswered: ctx.state.questions.filter((q) => q.answer).length,
+    speechesPosted: ctx.state.speeches.length,
+    finalists: ctx.finale.finalists.length,
+    votesIn: ctx.finale.votesSubmitted,
+    votesRequired: ctx.finale.votesRequired,
+  }
 }

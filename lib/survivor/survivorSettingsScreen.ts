@@ -106,10 +106,34 @@ export const SURVIVOR_CHALLENGE_SETTING_DEFAULTS = {
 /** The banner art in public/survivor/scenes/<scene>.svg, in the order the picker shows them. */
 export const SURVIVOR_ISLAND_SCENES = ['beach', 'tribal', 'merge', 'finale', 'exile', 'jungle', 'volcano', 'lagoon'] as const
 export type SurvivorIslandScene = (typeof SURVIVOR_ISLAND_SCENES)[number]
-export type SurvivorIslandScenePreference = SurvivorIslandScene | 'auto'
+/** 'auto' follows the season; 'rotate' picks a new scene every season (rotatingIslandScene). */
+export type SurvivorIslandScenePreference = SurvivorIslandScene | 'auto' | 'rotate'
 
 export function isSurvivorIslandScenePreference(value: unknown): value is SurvivorIslandScenePreference {
-  return value === 'auto' || (typeof value === 'string' && (SURVIVOR_ISLAND_SCENES as readonly string[]).includes(value))
+  return value === 'auto' || value === 'rotate' || (typeof value === 'string' && (SURVIVOR_ISLAND_SCENES as readonly string[]).includes(value))
+}
+
+/**
+ * The scene a 'rotate' league shows this season: a pure function of (leagueId, season), so it needs
+ * no rollover hook and never drifts. A stable hash of the league picks its starting scene; each
+ * season steps one place on, so consecutive seasons always differ (and two leagues rarely match).
+ * A season that is not a number counts as 0.
+ */
+export function rotatingIslandScene(leagueId: string, season: string | number | null | undefined): SurvivorIslandScene {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < leagueId.length; i++) {
+    hash ^= leagueId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  const year = Number.parseInt(String(season ?? ''), 10)
+  const step = Number.isFinite(year) ? year : 0
+  const n = SURVIVOR_ISLAND_SCENES.length
+  return SURVIVOR_ISLAND_SCENES[(((hash % n) + step) % n + n) % n]!
+}
+
+/** What the banner gets: a pinned scene, 'auto', or — for 'rotate' — this season's scene. */
+export function resolveSurvivorIslandScene(pref: SurvivorIslandScenePreference, leagueId: string, season: string | number | null | undefined): SurvivorIslandScene | 'auto' {
+  return pref === 'rotate' ? rotatingIslandScene(leagueId, season) : pref
 }
 
 /** The saved scene from a league's settings JSON; anything missing or unknown follows the season. */

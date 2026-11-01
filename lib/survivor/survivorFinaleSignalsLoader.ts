@@ -13,9 +13,9 @@ import { getJuryQaView } from './survivorJuryQaService'
  */
 export async function loadSurvivorFinaleSignals(userId: string, leagueIds: readonly string[], now = new Date()): Promise<DecisionOsAttentionSignal[]> {
   if (!leagueIds.length) return []
-  const leagues = await prisma.league.findMany({ where: { id: { in: [...leagueIds] }, survivorMode: true }, select: { id: true } }).catch(() => [])
+  const leagues = await prisma.league.findMany({ where: { id: { in: [...leagueIds] }, survivorMode: true }, select: { id: true, language: true } }).catch(() => [])
   const out: DecisionOsAttentionSignal[] = []
-  await Promise.all(leagues.map(async ({ id: leagueId }) => {
+  await Promise.all(leagues.map(async ({ id: leagueId, language }) => {
     try {
       const [qa, council] = await Promise.all([
         getJuryQaView(leagueId, userId, now).catch(() => null),
@@ -44,6 +44,7 @@ export async function loadSurvivorFinaleSignals(userId: string, leagueIds: reado
         speechWindowOpen: qa?.windows.speechState === 'open',
         ballotOwed,
         ballotsDueAt,
+        language,
       }))
     } catch {
       // honest degradation: no signal for this league

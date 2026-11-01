@@ -40,6 +40,8 @@ export interface SurvivorSummaryConfig {
   visualThemeId?: string | null
   /** Island banner scene picked by the commissioner; 'auto' (or absent) follows the season. */
   islandScene?: string | null
+  /** When Tribal votes are due (settings screen vote day/time, Eastern, less the finale's hours-before rule). */
+  tribalVotesDue?: { day: string; timeEt: string; hoursBefore: number } | null
   challengesSystemRun?: boolean
   regularSeasonEndWeek?: number | null
   faqSeededAt?: string | null
