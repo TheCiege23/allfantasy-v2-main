@@ -48,6 +48,8 @@ export async function GET(req: NextRequest) {
       crossTribeTrades: settings.crossTribeTrades,
       crossTribeCloseDay: settings.crossTribeCloseDay,
       crossTribeCloseTime: settings.crossTribeCloseTime,
+      crossTribeWindows: settings.crossTribeWindows,
+      tradeCheckFailureMode: settings.tradeCheckFailureMode,
       withinTribeUnplayedOnly: settings.withinTribeUnplayedOnly,
       playedLockUntilTribal: settings.playedLockUntilTribal,
       weeklyTradeFreezeEnabled: settings.weeklyTradeFreezeEnabled,

@@ -10,6 +10,7 @@ import { clockText, islandView, sportBall, tribeColor, type SportBall } from '@/
 import { shouldPollReading } from '@/lib/core-app/survivorVoteReading'
 import { SurvivorRulebook } from './SurvivorRulebook'
 import { SurvivorVoteReading } from './SurvivorVoteReading'
+import { castawayNameWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
 
 /** How often the banner refreshes the summary while a council's votes are being read. */
 export const READING_POLL_MS = 10_000
@@ -150,7 +151,7 @@ function TribeBoard({ summary }: { summary: SurvivorSummary }) {
           return (
             <div key={t.id} className="sv-tribe" data-mine={mine ? 'true' : undefined}>
               <div className="sv-tribe-h">
-                <strong style={{ color }}>{t.name}</strong>
+                <strong style={{ color }}>{castawayNameWithTribeEmoji(t.name, t.tribeEmoji, Boolean(summary.tribeEmojiInNames))}</strong>
                 <span className="sv-mono" style={{ color }}>{t.members.length}/{seats.length}</span>
               </div>
               <div className="sv-strip">

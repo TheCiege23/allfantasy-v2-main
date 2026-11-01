@@ -1,5 +1,7 @@
 'use client'
 
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import type { LeagueTradeAsset, LeagueTradeBlockPanelItem, LeagueTradeHistoryItem } from '@/components/league/types'
@@ -8,6 +10,7 @@ import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { Card, ScreenHead } from './NativeScreenParts'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { tradeCardState, tradeDeadlineState } from '@/lib/league-media/redraftScreens'
 import { RedraftDeadlineBar, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 import { DynastyPickChip } from '@/components/dynasty/DynastyPickChip'
@@ -66,6 +69,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
   const [busy, setBusy] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [counterTradeId, setCounterTradeId] = useState<string | null>(null)
   // Redraft (lib/league-media/redraftIdentity.ts): deadline bar from settings, proposal cards with their state.
   const rd = useRedraftScreen(league)
   const dynasty = usesDynastyBackground(league)
@@ -157,9 +161,16 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
     <div className="nls" data-testid="native-trades-screen" data-rd-screen={rd ? 'trades' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Trades`} title="Trade center">
         {!rd ? <span className="nls-chip">{deadline}</span> : null}
-        <button type="button" className="nls-btn" data-variant="primary" onClick={() => setBuilderOpen(true)}>Propose a trade</button>
+        <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Propose a trade</button>
       </ScreenHead>
 
+      {panel ? <section className="nls-trade-overview" aria-label="Trade activity overview">
+        <div><span>Incoming</span><strong>{offers.length}</strong></div>
+        <div><span>Sent</span><strong>{outgoing.length}</strong></div>
+        <div><span>On the block</span><strong>{block.length}</strong></div>
+        <div><span>Recent trades</span><strong>{recent.length}</strong></div>
+      </section> : null}
+      {isZombieLeagueLike(league) ? <p className="nls-zombie-trade-note">Survivors and Whisperers may trade. Zombies cannot trade.</p> : null}
       {rd ? <RedraftDeadlineBar state={deadlineState} currentWeek={league.currentWeek} /> : null}
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
@@ -207,7 +218,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
               ) : (
                 <>
                   <button type="button" className="nls-btn" data-variant="primary" disabled={busy === t.id} onClick={() => void act(t.id, 'accept')}>Accept</button>
-                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => setBuilderOpen(true)}>Counter</button>
+                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => { setCounterTradeId(isNativePlatform(league.platform) ? t.id : null); setBuilderOpen(true) }}>{isNativePlatform(league.platform) ? 'Counter' : 'Build new offer'}</button>
                   <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => void act(t.id, 'reject')}>Decline</button>
                   <button type="button" className="nls-btn" onClick={() => askChimmy(t)}>Ask Chimmy</button>
                 </>
@@ -223,7 +234,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
             <Card label="Build a trade">
               <p>Pick a partner, choose what you give and what you get, and AF grades the deal for both sides before you send it.</p>
               <div className="nls-actions nls-actions-top">
-                <button type="button" className="nls-btn" data-variant="primary" onClick={() => setBuilderOpen(true)}>Open trade builder</button>
+                <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Open trade builder</button>
               </div>
             </Card>
             <Card label="Your open offers">
@@ -276,7 +287,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         </div>
       ) : null}
 
-      <ProposeTradeModal open={builderOpen} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
+      <ProposeTradeModal open={builderOpen} counterTradeId={counterTradeId} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
     </div>
     </RedraftScreen>
   )

@@ -19,8 +19,12 @@ import {
   highBid,
   pickOutcome,
   poolBanned,
+  poolOutcomeWithTieRule,
   poolPickRefusal,
+  poolReuseRefusal,
   poolRevivesLeft,
+  poolUsedTeams,
+  teamGroupChoices,
   revivePoolEntry,
   settleTokenPoolPick,
   shopPurchaseRefusal,
@@ -29,6 +33,8 @@ import {
   type PoolEntryState,
 } from './survivorSideGameRules'
 import {
+  auctionPrizeDisadvantageError,
+  isDisadvantageKind,
   lockedSideGameKeys,
   mergeSurvivorSideGamesIntoSettings,
   readSideGamePrize,
@@ -50,6 +56,7 @@ import {
   loadCastaways,
   loadSideGameLeague,
   loadSideGameState,
+  loadSideGameTeamGroups,
   loadSideGameWeekGames,
   paySideGamePrize,
   type SideGameLeague,
@@ -143,8 +150,11 @@ export async function submitSurvivorPoolPick(args: { leagueId: string; userId: s
   const games = await loadSideGameWeekGames(prisma, league.sport, league.season, week)
   const game = games.find((g) => g.key === args.gameKey)
   if (!game) return no(404, m.gameNotFound)
-  const refusal = poolPickRefusal(league.sport, survivorPoolRuleForWeek(s, week), game, args.teamKey)
-  if (refusal) return no(400, poolRefusalText(refusal, survivorPoolRuleForWeek(s, week).conference, m))
+  const weekRule = survivorPoolRuleForWeek(s, week)
+  // Conference / division rules read our stored team data (SportsTeam) for every sport.
+  const groups = weekRule.rule === 'conference' || weekRule.rule === 'division' ? await loadSideGameTeamGroups(prisma, league.sport) : null
+  const refusal = poolPickRefusal(league.sport, weekRule, game, args.teamKey, groups)
+  if (refusal) return no(400, poolRefusalText(refusal, weekRule.rule === 'division' ? weekRule.division : weekRule.conference, m))
   if (!sideGamePickOpen(game, now)) return no(409, m.gameLocked)
   return inSideGameLock(args.leagueId, async (db) => {
     const state = await loadSideGameState(db, args.leagueId)
@@ -152,6 +162,7 @@ export async function submitSurvivorPoolPick(args: { leagueId: string; userId: s
     const entry = pool?.entry ?? EMPTY_POOL_ENTRY
     if (poolBanned(entry, s.survivorPoolRevives)) return no(409, m.poolBanned)
     if (!entry.alive) return no(409, m.poolOut)
+    if (poolReuseRefusal(s.survivorPoolNoReuse, poolUsedTeams(pool?.picks ?? [], week), args.teamKey)) return no(409, m.poolTeamUsed)
     const current = pool?.picks.find((p) => p.week === week && p.outcome == null)
     if (current) {
       const currentGame = games.find((g) => g.key === current.gameKey)
@@ -171,7 +182,10 @@ function poolRefusalText(r: NonNullable<ReturnType<typeof poolPickRefusal>>, con
     case 'not_in_conference': return m.poolNotInConference(conference)
     case 'not_away': return m.poolNotAway
     case 'not_allowed': return m.poolNotAllowed
-    case 'conference_unknown': return m.poolConferenceUnknown
+    case 'conference_unknown': return m.poolGroupUnknown
+    case 'not_in_division': return m.poolNotInDivision(conference)
+    case 'division_unknown': return m.poolDivisionUnknown
+    case 'team_used': return m.poolTeamUsed
     case 'not_in_game': return m.teamNotInGame
   }
 }
@@ -261,7 +275,8 @@ export async function settleSideGamePicksForGame(args: {
       for (const [userId, st] of state.pool) {
         const pick = st.picks.find((p) => p.week === week && p.gameKey === args.gameKey && p.outcome == null)
         if (!pick) continue
-        const outcome = pickOutcome(pick.teamKey, winner)
+        // The commissioner's tie rule turns a push into a loss or a win (the Token Pool keeps the push).
+        const outcome = poolOutcomeWithTieRule(pickOutcome(pick.teamKey, winner), s.survivorPoolTieRule)
         const entry = applyPoolOutcome(st.entry, outcome, week)
         await appendSideGameRow(db, state, {
           leagueId: league.id, entity: sideGameEntity.pool(userId), action: SIDE_GAME_ACTIONS.poolSettled, week,
@@ -321,6 +336,9 @@ export function validateCreateAuction(input: unknown, defaults: SurvivorSideGame
     if (!itemLabel) return { ok: false, error: `Item ${i + 1} needs a name.` }
     if (prize.kind === 'none') return { ok: false, error: `Item ${i + 1} needs a prize.` }
     if (['faab', 'score_bonus', 'auction_cash', 'tokens'].includes(prize.kind) && prize.amount < 1) return { ok: false, error: `Item ${i + 1} needs an amount.` }
+    // A disadvantage item only when the commissioner has turned that disadvantage on.
+    const disadvantage = auctionPrizeDisadvantageError(prize, defaults.disadvantagesEnabled)
+    if (disadvantage) return { ok: false, error: `Item ${i + 1}: ${disadvantage}` }
     items.push({ itemId: `item${i + 1}`, label: itemLabel, blind: it.blind === true, prize })
   }
   return {
@@ -444,6 +462,7 @@ export async function buySurvivorShopItem(args: { leagueId: string; userId: stri
     const me = await loadCastaway(db, args.leagueId, args.userId)
     if (!me) return no(403, m.notCastaway)
     if (prior) return { ok: true as const, purchaseId, me, duplicate: true }
+    if (item && isDisadvantageKind(item.kind) && !league.sideGames.disadvantagesEnabled.includes(item.kind)) return no(409, m.disadvantageOff)
     const refusal = shopPurchaseRefusal({ shopEnabled: league.sideGames.tokenShopEnabled, item, balance: me.tokenBalance })
     if (refusal === 'shop_closed') return no(409, m.shopClosed)
     if (refusal === 'not_for_sale') return no(404, m.shopNotForSale)
@@ -569,12 +588,13 @@ export interface SurvivorSideGameManagerView {
   week: number
   sport: string
   role: 'active' | 'exile' | 'out'
-  settings: Pick<SurvivorSideGameSettings, 'tokenPoolEnabled' | 'tokenPoolOpen' | 'tokenPoolMode' | 'tokenPoolWrongPick' | 'tokenPoolPicksPerWeek' | 'tokenShopEnabled' | 'survivorPoolEnabled' | 'survivorPoolStartWeek' | 'survivorPoolRevives' | 'survivorPoolPrize' | 'exileClaimMode' | 'exileBidBudget' | 'exileTokenFaabRate' | 'exileTokenFaabBasis' | 'auctionCurrency'>
+  settings: Pick<SurvivorSideGameSettings, 'tokenPoolEnabled' | 'tokenPoolOpen' | 'tokenPoolMode' | 'tokenPoolWrongPick' | 'tokenPoolPicksPerWeek' | 'tokenShopEnabled' | 'survivorPoolEnabled' | 'survivorPoolStartWeek' | 'survivorPoolRevives' | 'survivorPoolPrize' | 'exileClaimMode' | 'exileBidBudget' | 'exileTokenFaabRate' | 'exileTokenFaabBasis' | 'auctionCurrency'> & Partial<Pick<SurvivorSideGameSettings, 'survivorPoolTieRule' | 'survivorPoolMissedPick' | 'survivorPoolNoReuse'>>
   poolRule: ReturnType<typeof survivorPoolRuleForWeek>
   games: SideGameGameView[]
   tokens: number
   tokenPool: { pot: number; picks: Array<{ week: number; gameKey: string; teamKey: string; outcome: string | null }> }
-  pool: { entry: PoolEntryState; revivesLeft: number; banned: boolean; pick: { gameKey: string; teamKey: string; outcome: string | null } | null }
+  /** `usedTeams`: the manager's OWN season-long used-team list (shown when "no reusing a team" is on). */
+  pool: { entry: PoolEntryState; revivesLeft: number; banned: boolean; pick: { gameKey: string; teamKey: string; outcome: string | null } | null; usedTeams?: string[] }
   shop: Array<{ id: string; kind: string; cost: number; amount: number; powerType: string }>
   purchases: Array<{ purchaseId: string; itemId: string; status: string; at: string }>
   auctions: Array<{
@@ -622,6 +642,7 @@ export async function loadSurvivorSideGameView(leagueId: string, userId: string,
       survivorPoolStartWeek: s.survivorPoolStartWeek, survivorPoolRevives: s.survivorPoolRevives, survivorPoolPrize: s.survivorPoolPrize,
       exileClaimMode: s.exileClaimMode, exileBidBudget: s.exileBidBudget, exileTokenFaabRate: s.exileTokenFaabRate, exileTokenFaabBasis: s.exileTokenFaabBasis,
       auctionCurrency: s.auctionCurrency,
+      survivorPoolTieRule: s.survivorPoolTieRule, survivorPoolMissedPick: s.survivorPoolMissedPick, survivorPoolNoReuse: s.survivorPoolNoReuse,
     },
     poolRule: survivorPoolRuleForWeek(s, week),
     games: games.map((g) => ({
@@ -630,7 +651,11 @@ export async function loadSurvivorSideGameView(leagueId: string, userId: string,
     })),
     tokens: me.tokenBalance,
     tokenPool: { pot: tp?.pot ?? 0, picks: (tp?.picks ?? []).filter((p) => p.week >= week - 1).map((p) => ({ week: p.week, gameKey: p.gameKey, teamKey: p.teamKey, outcome: p.outcome })) },
-    pool: { entry, revivesLeft: poolRevivesLeft(entry, s.survivorPoolRevives), banned: poolBanned(entry, s.survivorPoolRevives), pick: poolPick ? { gameKey: poolPick.gameKey, teamKey: poolPick.teamKey, outcome: poolPick.outcome } : null },
+    pool: {
+      entry, revivesLeft: poolRevivesLeft(entry, s.survivorPoolRevives), banned: poolBanned(entry, s.survivorPoolRevives),
+      pick: poolPick ? { gameKey: poolPick.gameKey, teamKey: poolPick.teamKey, outcome: poolPick.outcome } : null,
+      usedTeams: poolUsedTeams(pool?.picks ?? [], week),
+    },
     shop: s.tokenShopEnabled ? s.tokenShopItems.filter((i) => i.enabled).map((i) => ({ id: i.id, kind: i.kind, cost: i.cost, amount: i.amount, powerType: i.powerType })) : [],
     purchases: state.purchases.filter((p) => p.userId === userId).map((p) => ({ purchaseId: p.purchaseId, itemId: p.itemId, status: p.status, at: p.at })),
     auctions: [...state.auctions.values()]
@@ -665,6 +690,8 @@ export interface SurvivorSideGameAdminView {
   auctions: Array<AuctionRecord & { bidCount: number }>
   pendingPurchases: number
   castaways: Array<{ userId: string; displayName: string; rosterId: string | null; playerState: string; auctionCash: number }>
+  /** The conferences and divisions our stored team data has for this sport (the pool rule's choices). */
+  poolGroups?: { conferences: string[]; divisions: string[] }
 }
 
 /** The Commissioner Hub view: every side game's state. Bids are shown to the commissioner only. */
@@ -672,11 +699,12 @@ export async function loadSurvivorSideGameAdminView(leagueId: string): Promise<S
   const league = await loadSideGameLeague(prisma, leagueId)
   if (!league) return null
   const { week } = await currentSurvivorWeek(prisma, leagueId)
-  const [state, games, castaways, lockCtx] = await Promise.all([
+  const [state, games, castaways, lockCtx, groups] = await Promise.all([
     loadSideGameState(prisma, leagueId),
     week > 0 ? loadSideGameWeekGames(prisma, league.sport, league.season, week) : Promise.resolve([]),
     loadCastaways(prisma, leagueId),
     sideGameLockContext(leagueId),
+    loadSideGameTeamGroups(prisma, league.sport).catch(() => null),
   ])
   const s = league.sideGames
   const open = new Map<string, number>()
@@ -696,6 +724,7 @@ export async function loadSurvivorSideGameAdminView(leagueId: string): Promise<S
     auctions: [...state.auctions.values()].map((a) => ({ ...a, bidCount: a.bids.length })),
     pendingPurchases: state.purchases.filter((p) => p.status === 'pending').length,
     castaways: castaways.map((c) => ({ userId: c.userId, displayName: c.displayName, rosterId: c.rosterId, playerState: c.playerState, auctionCash: auctionCashOf(state, c.rosterId) })),
+    poolGroups: teamGroupChoices(league.sport, groups),
   }
 }
 
@@ -726,6 +755,7 @@ export async function loadSideGameGroundingLine(leagueId: string, userId: string
       poolBanned: view.pool.banned,
       poolPickedThisWeek: Boolean(view.pool.pick),
       pendingPurchases: view.purchases.filter((p) => p.status === 'pending').length,
+      poolUsedTeams: view.pool.usedTeams ?? [],
     },
     openAuctions: view.auctions.filter((a) => a.takingBids).map((a) => ({
       label: a.label, closesAt: easternWhen(new Date(a.closesAt), 'en'), currency: a.currency, mode: a.mode, myBids: a.items.filter((i) => i.myBid != null).length,

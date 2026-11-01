@@ -5070,6 +5070,7 @@ export const translationsEsParity: Record<string, string> = {
   "settingsNav.dynasty.picks": "Draft de novatos y selecciones",
   "settingsNav.dynasty.trades": "Intercambios",
   "settingsNav.dynasty.offseason": "Pretemporada y nueva temporada",
+  "settingsNav.survivor.governance": "Reglas y conducta",
   "taxiPanel.title": "Qué cambia esto",
   "taxiPanel.off": "El escuadrón taxi está desactivado: ningún equipo puede guardar jugadores en él.",
   "taxiPanel.slotsOne": "Cada equipo puede guardar 1 jugador en su escuadrón taxi.",

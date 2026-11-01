@@ -102,7 +102,7 @@ function ExileStatus({ data }: { data: ExileStatusTile }) {
     <ul className="space-y-1.5 text-sm text-white/80">
       <li>Return: <strong>end of week {data.returnWeek}</strong>{data.weeksUntilReturn != null ? ` (${data.weeksUntilReturn === 0 ? 'this week' : `in ${data.weeksUntilReturn} week${data.weeksUntilReturn === 1 ? '' : 's'}`})` : ''}</li>
       <li>Tokens needed to come back: <strong>{data.tokensNeeded}</strong>, and the most of anyone on Exile</li>
-      <li>On Exile now: <strong>{data.onExile}</strong></li>
+      <li>On Exile now: <strong>{data.onExile == null ? 'secret in this league' : data.onExile}</strong></li>
       <li>{data.you.onExile ? <>Your tokens: <strong>{data.you.tokens}</strong> of {data.tokensNeeded}</> : 'You are not on Exile. Other managers’ token counts stay private.'}</li>
     </ul>
   )

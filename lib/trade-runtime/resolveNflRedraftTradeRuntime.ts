@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { checkSurvivorTradeRules, type SurvivorTradeRuleCheck } from '@/lib/survivor/survivorTradeRuleHook'
-import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
@@ -557,6 +559,8 @@ async function assertSurvivorTradeRulesOpen(
   leagueId: string,
   trade: { proposerRosterId: string; receiverRosterId: string; assets: ReadonlyArray<{ assetType: string; playerId?: string | null; playerName?: string | null; fromRosterId: string; toRosterId: string }> },
   commissionerOverride: boolean | undefined,
+  /** Settlement (not a proposal): a Survivor "hold for the commissioner" stops it here, unexecuted. */
+  atSettlement = false,
 ): Promise<SurvivorTradeRuleCheck | null> {
   if (commissionerOverride) return null
   const check = await checkSurvivorTradeRules({
@@ -566,6 +570,9 @@ async function assertSurvivorTradeRulesOpen(
     players: trade.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
   })
   if (!check.ok) throw new Error(check.message)
+  // The check could not run and the league holds such trades: it stays pending for the commissioner,
+  // whose override (commissionerOverride) executes it. Never settled on an unchecked read.
+  if (atSettlement && check.holdForCommissioner) throw new Error(governanceCopy(await survivorLeagueLanguage(leagueId)).tradeHeldForCommissioner)
   return check
 }
 
@@ -678,7 +685,7 @@ async function applyExecutedTrade(input: {
 
   const proposal = input.state.proposals.find((row) => row.proposalId === input.proposalId)
   if (!proposal) throw new Error('proposal_not_found')
-  const survivorCheck = await assertSurvivorTradeRulesOpen(input.state.leagueId, proposal, input.commissionerOverride)
+  const survivorCheck = await assertSurvivorTradeRulesOpen(input.state.leagueId, proposal, input.commissionerOverride, true)
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const claimed = await tx.redraftTradeProposal.updateMany({
@@ -754,8 +761,10 @@ async function applyExecutedTrade(input: {
     details: { proposalId: input.proposalId, rosterImpact: execution.rosterImpact },
   })
   // Survivor: the free-trade token this trade needed is spent now that it has executed. Never throws.
-  if (survivorCheck?.ok && survivorCheck.bypassRequired) {
-    await redeemSurvivorTradeBypass({ leagueId: input.state.leagueId, week: survivorCheck.week ?? 0, tradeRef: `redraft:${input.proposalId}`, source: survivorCheck.bypassSource, actorUserId: input.actorUserId ?? null })
+  // A commissioner override (force or approve) never spends a held token: survivorBypassSourceToRedeem.
+  const survivorRedeemSource = survivorBypassSourceToRedeem(survivorCheck, { commissionerOverride: input.commissionerOverride === true })
+  if (survivorRedeemSource && survivorCheck?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: input.state.leagueId, week: survivorCheck.week ?? 0, tradeRef: `redraft:${input.proposalId}`, source: survivorRedeemSource, actorUserId: input.actorUserId ?? null })
   }
   const next = await resolveNflRedraftTradeRuntime({ seasonId: input.state.seasonId, week: input.state.week })
   if (!next.ok) throw new Error(next.reason)

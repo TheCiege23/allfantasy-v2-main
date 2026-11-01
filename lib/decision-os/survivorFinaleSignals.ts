@@ -33,9 +33,22 @@ export interface SurvivorFinaleSignalInputs {
   /** Tribal: the viewer can vote, has not, and ballots are due at this time. */
   ballotOwed: boolean
   ballotsDueAt: string | null
+  /** League.language: titles and copy follow it (English / Spanish), like the newer Survivor signals. */
+  language?: string | null
+}
+
+const isEs = (language: string | null | undefined) => String(language ?? '').toLowerCase().startsWith('es')
+
+/** The Spanish X in "cierra en X". */
+export function formatTimeLeftEs(ms: number): string {
+  if (ms <= 0) return 'ya'
+  if (ms < HOUR_MS) return `${Math.max(1, Math.round(ms / 60_000))} min`
+  if (ms < 48 * HOUR_MS) return `${Math.round(ms / HOUR_MS)} h`
+  return `${Math.round(ms / (24 * HOUR_MS))} días`
 }
 
 const HOUR = 3_600_000
+const HOUR_MS = HOUR
 
 /** "45 min", "3 h", "2 days" — the X in "closes in X". */
 export function formatTimeLeft(ms: number): string {
@@ -74,6 +87,7 @@ const left = (deadline: string | null, now: Date) => (deadline ? formatTimeLeft(
 const future = (deadline: string | null, now: Date) => !deadline || new Date(deadline).getTime() > now.getTime()
 
 export function deriveSurvivorFinaleSignals(input: SurvivorFinaleSignalInputs): DecisionOsAttentionSignal[] {
+  if (isEs(input.language)) return deriveSurvivorFinaleSignalsEs(input)
   const out: DecisionOsAttentionSignal[] = []
   const { now } = input
   if (input.questionsToAsk > 0 && input.questionWindowOpen && future(input.questionsDeadline, now)) {
@@ -102,6 +116,41 @@ export function deriveSurvivorFinaleSignals(input: SurvivorFinaleSignalInputs): 
       `Votes due in ${left(input.ballotsDueAt, now)}`,
       'You have not voted at this Tribal Council yet. A ballot after the due time does not count.',
       'Vote privately on the Tribal Council screen or with @Chimmy vote.'))
+  }
+  return out
+}
+
+/** The same four signals, same ids and severities, worded in Spanish. */
+function deriveSurvivorFinaleSignalsEs(input: SurvivorFinaleSignalInputs): DecisionOsAttentionSignal[] {
+  const out: DecisionOsAttentionSignal[] = []
+  const { now } = input
+  const leftEs = (deadline: string | null) => (deadline ? formatTimeLeftEs(new Date(deadline).getTime() - now.getTime()) : null)
+  if (input.questionsToAsk > 0 && input.questionWindowOpen && future(input.questionsDeadline, now)) {
+    const x = leftEs(input.questionsDeadline)
+    out.push(signal(input, 'survivor_jury_question_window', input.questionsDeadline,
+      x ? `Las preguntas del jurado cierran en ${x}` : 'Haz tu pregunta del jurado a los finalistas',
+      `Todavía puedes hacer una pregunta a ${input.questionsToAsk === 1 ? '1 finalista' : `${input.questionsToAsk} finalistas`}.`,
+      'Abre la sala del jurado y haz tu pregunta.'))
+  }
+  if (input.questionsToAnswer > 0 && input.answerWindowOpen && future(input.answersDeadline, now)) {
+    const x = leftEs(input.answersDeadline)
+    out.push(signal(input, 'survivor_finalist_answer_due', input.answersDeadline,
+      x ? `Responde al jurado — quedan ${x}` : 'Responde al jurado',
+      input.questionsToAnswer === 1 ? 'Una pregunta del jurado espera tu respuesta.' : `${input.questionsToAnswer} preguntas del jurado esperan tu respuesta.`,
+      'Abre la sala del jurado y responde.'))
+  }
+  if (input.speechMissing && input.speechWindowOpen && future(input.speechesDeadline, now)) {
+    const x = leftEs(input.speechesDeadline)
+    out.push(signal(input, 'survivor_closing_speech', input.speechesDeadline,
+      x ? `Escribe tu discurso final — quedan ${x}` : 'Escribe tu discurso final',
+      'Cada finalista publica un discurso final para el jurado antes de que vote.',
+      'Abre la sala del jurado y publica tu discurso final.'))
+  }
+  if (input.ballotOwed && input.ballotsDueAt && future(input.ballotsDueAt, now)) {
+    out.push(signal(input, 'survivor_votes_due', input.ballotsDueAt,
+      `Los votos vencen en ${leftEs(input.ballotsDueAt)}`,
+      'Todavía no votaste en este Consejo Tribal. Un voto después de la hora límite no cuenta.',
+      'Vota en privado en la pantalla del Consejo Tribal o con @Chimmy vote.'))
   }
   return out
 }

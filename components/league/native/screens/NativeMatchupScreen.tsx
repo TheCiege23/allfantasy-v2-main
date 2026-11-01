@@ -55,11 +55,17 @@ type ScreenProps = { league: UserLeague; onSelectTab: (id: string) => void }
 
 export function NativeMatchupScreen(props: ScreenProps) {
   const rd = useRedraftScreen(props.league)
-  return (
-    <RedraftScreen identity={rd}>
-      {isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}
-    </RedraftScreen>
-  )
+  const state = String(props.league.lifecycleState ?? props.league.status ?? '').toLowerCase()
+  if (['setup', 'pre_draft', 'drafting', 'in_progress'].includes(state)) {
+    return <RedraftScreen identity={rd}><div className="nls" data-testid="native-matchup-screen">
+      <ScreenHead eyebrow={`${props.league.name} · Matchup`} title="Your season starts with the draft" />
+      <Card label="Matchups are coming" tone="accent">
+        <p>Finish the draft to fill your roster and get ready for weekly matchups.</p>
+        <div className="nls-actions"><button type="button" className="nls-btn" data-variant="primary" onClick={() => props.onSelectTab('draft')}>Open Draft HQ</button></div>
+      </Card>
+    </div></RedraftScreen>
+  }
+  return <RedraftScreen identity={rd}>{isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}</RedraftScreen>
 }
 
 /**

@@ -47,8 +47,9 @@ export async function GET(req: NextRequest) {
     const pool = cast.filter((c) => c.redraftRosterId && (r.spec.type === 'tribemate_points'
       ? (c.redraftRosterId !== rosterId || r.spec.allowSelf === true) && (!me?.tribeId || c.tribeId === me.tribeId)
       : c.redraftRosterId !== rosterId && (!me?.tribeId || c.tribeId !== me.tribeId)))
-    // After the merge everyone shares one tribe: a steal may then target anyone else.
-    const list = pool.length || r.spec.type !== 'steal' ? pool : cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== rosterId)
+    // After the merge everyone shares one tribe: a steal (or a disadvantage) may then target anyone else.
+    const aimed = r.spec.type === 'steal' || r.spec.type === 'opponent_penalty' || r.spec.type === 'vote_taken' || r.spec.type === 'forced_bench'
+    const list = pool.length || !aimed ? pool : cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== rosterId)
     return list.map((c) => ({ rosterId: c.redraftRosterId!, name: c.displayName })).sort((a, b) => a.name.localeCompare(b.name))
   }
   return NextResponse.json({
@@ -82,7 +83,9 @@ export async function POST(req: NextRequest) {
   if (!(await resolveLeagueAccess(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const rosterId = await myRoster(leagueId, userId)
   if (!rosterId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const result = await chooseSurvivorRewardTarget({ leagueId, rewardId, actorRosterId: rosterId, targetRosterId, actorUserId: userId, chosenBy: 'manager' })
+  // A forced bench may also name the opponent's player (default: their first starter).
+  const targetPlayerId = typeof body.targetPlayerId === 'string' && body.targetPlayerId.trim() ? body.targetPlayerId.trim().slice(0, 128) : null
+  const result = await chooseSurvivorRewardTarget({ leagueId, rewardId, actorRosterId: rosterId, targetRosterId, targetPlayerId, actorUserId: userId, chosenBy: 'manager' })
   if (!result.ok) {
     const status = result.code === 'invalid' ? 400 : result.code === 'forbidden' ? 403 : result.code === 'not_found' ? 404 : 409
     return NextResponse.json({ error: result.error, code: result.code }, { status })

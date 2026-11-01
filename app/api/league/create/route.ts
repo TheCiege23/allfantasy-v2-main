@@ -1320,6 +1320,7 @@ export async function POST(req: Request) {
         sport,
         leagueVariant: resolvedVariant,
         ...(requestedLeagueType ? { leagueType: requestedLeagueType } : {}),
+        ...(String(requestedLeagueType ?? '').toLowerCase() === 'zombie' ? { waiverType: String(initialSettings.waiver_type ?? 'fcfs'), waiverHours: 0 } : {}),
         avatarUrl: isGuillotine ? '/guillotine/Guillotine.png' : undefined,
         timezone: leagueTimezone,
         settings: initialSettings,

@@ -33,6 +33,7 @@ export const rewardsHubMessages = defineMessages({
       score_bonus: 'Points added', score_penalty: 'Points taken', faab_grant: 'FAAB given', faab_penalty: 'FAAB taken',
       faab_transfer: 'FAAB from one tribe to another', tribemate_points: 'Points on a tribemate', free_trade_token: 'Free trade',
       steal_blocker: 'Steal blocker', steal: 'Steal', advantage: 'Advantage',
+      opponent_penalty: 'Points taken from an opponent', vote_taken: "An opponent's vote taken", forced_bench: "An opponent's player benched",
     } as Record<string, string>)[t] ?? t,
     status: (s: string): string => ({ applied: 'Paid', awaiting_choice: 'Waiting for a choice', deferred: 'Deferred', available: 'Held', consumed: 'Used', blocked: 'Blocked', reversed: 'Reversed', expired: 'Lapsed' } as Record<string, string>)[s] ?? s,
     source: (k: string): string => ({ challenge: 'Challenge', weekly_prize: 'Weekly prize', auction: 'Auction', pool: 'Survivor Pool', exile: 'Exile', commissioner: 'Commissioner', other: 'Other' } as Record<string, string>)[k] ?? k,
@@ -58,6 +59,7 @@ export const rewardsHubMessages = defineMessages({
       score_bonus: 'Puntos sumados', score_penalty: 'Puntos restados', faab_grant: 'FAAB entregado', faab_penalty: 'FAAB retirado',
       faab_transfer: 'FAAB de una tribu a otra', tribemate_points: 'Puntos para un compañero', free_trade_token: 'Intercambio libre',
       steal_blocker: 'Bloqueador de robos', steal: 'Robo', advantage: 'Ventaja',
+      opponent_penalty: 'Puntos restados a un rival', vote_taken: 'Voto quitado a un rival', forced_bench: 'Jugador rival a la banca',
     } as Record<string, string>)[t] ?? t,
     status: (s: string): string => ({ applied: 'Pagada', awaiting_choice: 'Esperando una elección', deferred: 'Aplazada', available: 'En poder', consumed: 'Usada', blocked: 'Bloqueada', reversed: 'Anulada', expired: 'Vencida' } as Record<string, string>)[s] ?? s,
     source: (k: string): string => ({ challenge: 'Reto', weekly_prize: 'Premio semanal', auction: 'Subasta', pool: 'Pozo Survivor', exile: 'Exilio', commissioner: 'Comisionado', other: 'Otro' } as Record<string, string>)[k] ?? k,
@@ -92,8 +94,10 @@ type GrantDraft = {
 }
 
 const inputCls = 'w-full rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm text-white'
-const POINT_TYPES = new Set(['score_bonus', 'score_penalty', 'tribemate_points'])
-const AMOUNT_TYPES = new Set(['score_bonus', 'score_penalty', 'faab_grant', 'faab_penalty', 'faab_transfer', 'tribemate_points', 'steal'])
+const POINT_TYPES = new Set(['score_bonus', 'score_penalty', 'tribemate_points', 'opponent_penalty'])
+const AMOUNT_TYPES = new Set(['score_bonus', 'score_penalty', 'faab_grant', 'faab_penalty', 'faab_transfer', 'tribemate_points', 'steal', 'opponent_penalty'])
+/** Exile's disadvantages (side-game auctions / token shop): the holder aims them at an opponent. */
+const OPPONENT_TYPES = new Set(['opponent_penalty', 'vote_taken', 'forced_bench'])
 
 /** The reward spec the server's reward API takes, from the form. Pure; exported for tests. */
 export function grantDraftToSpec(d: GrantDraft): SurvivorRewardSpec {
@@ -110,6 +114,10 @@ export function grantDraftToSpec(d: GrantDraft): SurvivorRewardSpec {
     case 'steal_blocker': return { type: 'steal_blocker', rosterId: d.rosterId }
     case 'steal': return { type: 'steal', thiefRosterId: d.rosterId, what: d.what, amount: n, targetRosterId: target }
     case 'advantage': return { type: 'advantage', rosterId: d.rosterId, powerType: d.powerType }
+    // Disadvantages: the holder is the chooser; an empty target leaves the choice pending.
+    case 'opponent_penalty': return { type: 'opponent_penalty', chooserRosterId: d.rosterId, points: n, targetRosterId: target }
+    case 'vote_taken': return { type: 'vote_taken', chooserRosterId: d.rosterId, targetRosterId: target }
+    case 'forced_bench': return { type: 'forced_bench', chooserRosterId: d.rosterId, targetRosterId: target }
   }
 }
 
@@ -136,7 +144,7 @@ function GrantForm({ leagueId, info, onDone }: { leagueId: string; info: CastInf
   const set = <K extends keyof GrantDraft>(k: K, v: GrantDraft[K]) => { setError(null); setD((cur) => ({ ...cur, [k]: v })) }
   const active = info.cast.filter((c) => c.state === 'active')
   const isTransfer = d.type === 'faab_transfer'
-  const needsTarget = d.type === 'steal' || d.type === 'tribemate_points'
+  const needsTarget = d.type === 'steal' || d.type === 'tribemate_points' || OPPONENT_TYPES.has(d.type)
   const ready = isTransfer ? Boolean(d.fromTribeId && d.toTribeId && d.fromTribeId !== d.toTribeId) : Boolean(d.rosterId)
   async function submit() {
     setBusy(true)

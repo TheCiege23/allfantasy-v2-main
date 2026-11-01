@@ -52,7 +52,10 @@ describe('GET /api/zombie/whisperer', () => {
   it('hides the Whisperer from a member of a secret league even though the record says revealed', async () => {
     const res = await getAs('user-member')
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ whisperer: { message: 'Whisperer identity hidden this season.' } })
+    expect(res.body).toEqual({
+      whisperer: { message: 'Whisperer identity hidden this season.' },
+      whisperers: [{ message: 'Whisperer identity hidden this season.' }],
+    })
     expect(res.text).not.toContain(WHISPERER_NAME)
   })
 

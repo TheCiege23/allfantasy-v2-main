@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { ExileBossBoard } from '@/components/survivor/late/ExileBossBoard'
+import { exilePageVisibility } from '@/lib/survivor/survivorExileSecrecy'
 
 type ExileGet = {
   island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean; bossTokenResetOnWin?: boolean } | null
@@ -33,9 +34,17 @@ export default function SurvivorExilePage() {
   }, [leagueId])
 
   const island = data?.island
-  const exiledCount = (ctx.season?.players ?? []).filter((p) => p.playerState === 'exile').length
   const isExile = ctx.playerState === 'exile'
+  // Exile secrecy: the season payload already says whether THIS viewer may know who is on Exile
+  // (exiles and a non-playing host may). Anyone else sees no count and no names.
+  const secrecy = exilePageVisibility({
+    membershipHidden: ctx.season?.exileMembershipHidden === true,
+    viewerIsExile: isExile,
+    nonPlayingCommissioner: false,
+    players: ctx.season?.players ?? [],
+  })
   const viewerSummary = !isExile && (!ctx.isCommissioner || ctx.survivorFairPlayActive)
+  const weekLabel = data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek
 
   return (
     <div
@@ -54,8 +63,8 @@ export default function SurvivorExilePage() {
       <header className="relative">
         <p className="sv-kicker text-[12px] !text-violet-200">🏚 Exile Island</p>
         <h1 className="sv-h mt-1 text-2xl uppercase md:text-3xl">Isolation · Grind · Return</h1>
-        <p className="mt-2 text-[13px] text-white/50">
-          {exiledCount} players marooned · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}
+        <p className="mt-2 text-[13px] text-white/50" data-testid="survivor-exile-headcount">
+          {secrecy.showCount ? `${secrecy.count} players marooned · Week ${weekLabel}` : `Who is on Exile is secret · Week ${weekLabel}`}
         </p>
       </header>
 
@@ -68,7 +77,9 @@ export default function SurvivorExilePage() {
       {viewerSummary ? (
         <section className="relative mt-6 survivor-panel rounded-2xl p-5">
           <p className="text-[14px] text-white/75">The main island only sees a summary.</p>
-          <p className="mt-2 text-[12px] text-white/45">Token math and exile challenges stay private to exiles.</p>
+          <p className="mt-2 text-[12px] text-white/45">
+            {secrecy.showCount ? 'Token math and exile challenges stay private to exiles.' : 'In this league nobody outside Exile knows who is there. Token math and exile challenges stay private to exiles.'}
+          </p>
         </section>
       ) : null}
 
@@ -122,7 +133,7 @@ export default function SurvivorExilePage() {
           <section className="relative mt-6 survivor-panel rounded-2xl p-4">
             <p className="sv-kicker text-[11px]">Exile managers</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {(ctx.season?.players ?? [])
+              {(secrecy.showMembers ? ctx.season?.players ?? [] : [])
                 .filter((p) => p.playerState === 'exile')
                 .map((p) => (
                   <span key={p.userId} className="rounded-full border border-violet-500/25 px-3 py-1 text-[12px] text-white/80">

@@ -27,6 +27,7 @@ export async function resolveWhispererViewer(leagueId: string, userId: string): 
         select: {
           whispererIsPublic: true,
           whispererRecord: { select: { userId: true, isPubliclyRevealed: true } },
+          coWhisperers: { select: { userId: true, isPubliclyRevealed: true } },
         },
       }),
       getLeagueRole(leagueId, userId).catch(() => null),
@@ -39,16 +40,16 @@ export async function resolveWhispererViewer(leagueId: string, userId: string): 
 
     const rosterIds = new Set(whispererTeams.map((team) => team.rosterId))
     const recordUserId = league?.whispererRecord?.userId ?? null
-    const userIds = new Set(recordUserId ? [recordUserId] : [])
+    const userIds = new Set([...(recordUserId ? [recordUserId] : []), ...(league?.coWhisperers ?? []).map((record) => record.userId)])
     const viewerIsWhisperer =
-      (recordUserId != null && recordUserId === userId) || (viewerRoster != null && rosterIds.has(viewerRoster.id))
+      userIds.has(userId) || (viewerRoster != null && rosterIds.has(viewerRoster.id))
 
     return {
       canSee: canViewerSeeWhisperer({
         whispererIsPublic: league?.whispererIsPublic,
         isPubliclyRevealed: league?.whispererRecord?.isPubliclyRevealed,
         viewerIsCommissioner: role === 'commissioner',
-        viewerIsWhisperer,
+        viewerIsWhisperer: (league?.coWhisperers?.length ?? 0) === 0 && viewerIsWhisperer,
       }),
       identity: { rosterIds, userIds },
     }

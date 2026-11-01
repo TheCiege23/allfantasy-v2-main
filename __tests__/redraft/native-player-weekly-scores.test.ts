@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
   league: { findFirst: vi.fn() },
-  redraftMatchup: { findFirst: vi.fn(), update: vi.fn() },
+  redraftMatchup: { findFirst: vi.fn(), findUniqueOrThrow: vi.fn(async () => ({ lineupSnapshots: {} })), update: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   playerWeeklyScore: { findUnique: vi.fn() },
@@ -19,6 +19,8 @@ const db = vi.hoisted(() => ({
   $transaction: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+const zombieBonus = vi.hoisted(() => ({ receipt: null as any }))
+vi.mock('@/lib/zombie/beta2025ItemService', () => ({ lockItemLeague: vi.fn(async () => undefined), itemTransaction: async (run: any) => run(db), loadBetaItemScoreReceipt: vi.fn(async () => zombieBonus.receipt) }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({
   leagueUsesDevyEngine: vi.fn(async () => false),
   calculateOfficialTeamScore: vi.fn(),
@@ -247,6 +249,21 @@ describe('updateMatchupScores → league_player_weekly_scores', () => {
     const starterSum = rows.filter((r) => r.rosterId === nativeRosterSeat('cm1home') && r.isStarter).reduce((n, r) => n + r.points, 0)
     expect(Math.round(starterSum * 100) / 100).toBe(data.homeScore)
     expect(data.lineupSnapshots.redraftScoring.home.playerPoints).toBeUndefined()
+  })
+
+  it('adds Zombie item bonuses once without changing player points or the unboosted award score', async () => {
+    const t = arrange({ bestBallMode: false, leagueVariant: 'zombie' })
+    const side = (id: string, bonus: number) => ({ rosterId: id, role: 'Survivor', weaponIds: [], serumIds: [], bombId: null, weaponBonus: bonus, serumBonus: 0, bonus })
+    zombieBonus.receipt = { policy: 'beta_2025', home: side('home', 18), away: side('away', 10) }
+    await updateMatchupScores('m1'); await updateMatchupScores('m1')
+    const first = db.redraftMatchup.update.mock.calls[0]![0].data
+    const second = db.redraftMatchup.update.mock.calls[1]![0].data
+    const base = [...t.rows.values()].filter(r => r.rosterId === nativeRosterSeat('cm1home') && r.isStarter).reduce((n, r) => n + r.points, 0)
+    expect(first.homeScore).toBe(Math.round((base + 18) * 100) / 100)
+    expect(second.homeScore).toBe(first.homeScore)
+    expect(second.lineupSnapshots.zombieItems.homeBaseScore).toBe(Math.round(base * 100) / 100)
+    expect(second.lineupSnapshots.zombieItems.home.bonus).toBe(18)
+    zombieBonus.receipt = null
   })
 
   it('best ball marks the lineup the system started as starters', async () => {

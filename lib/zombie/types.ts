@@ -16,6 +16,7 @@ export interface ZombieLeagueConfigLoaded {
   infectionLossToWhisperer: boolean
   infectionLossToZombie: boolean
   serumReviveCount: number
+  autoSerumRevive: boolean
   serumAwardHighScore: boolean
   serumAwardOnBashMaul: boolean
   serumUseBeforeLastStarter: boolean

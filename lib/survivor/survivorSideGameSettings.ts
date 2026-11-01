@@ -38,7 +38,7 @@ export type TokenPoolWrongPick = (typeof TOKEN_POOL_WRONG_PICK)[number]
  * A prize a side game pays. Everything but `auction_cash` and `tokens` is a reward-API spec
  * (`applySurvivorReward`); those two are side-game balances.
  */
-export const SIDE_GAME_PRIZE_KINDS = ['none', 'faab', 'score_bonus', 'advantage', 'free_trade_token', 'steal_blocker', 'auction_cash', 'tokens'] as const
+export const SIDE_GAME_PRIZE_KINDS = ['none', 'faab', 'score_bonus', 'advantage', 'free_trade_token', 'steal_blocker', 'auction_cash', 'tokens', 'opponent_penalty', 'vote_taken', 'forced_bench'] as const
 export type SideGamePrizeKind = (typeof SIDE_GAME_PRIZE_KINDS)[number]
 
 export interface SideGamePrize {
@@ -50,8 +50,20 @@ export interface SideGamePrize {
   samePositionOnly: boolean
 }
 
+/**
+ * Disadvantage items: the winner (or buyer) hurts an opponent they choose, through the reward API's
+ * choice flow (`chooseSurvivorRewardTarget`). `opponent_penalty`: `amount` points off the chosen
+ * opponent's week. `vote_taken`: the chosen opponent's vote at their next Tribal Council does not
+ * count. `forced_bench`: one of the chosen opponent's players cannot start that week (Survivor-only
+ * lineup and score checks, lib/survivor/survivorForcedBench.ts). Each is OFF until the commissioner
+ * enables it (`disadvantagesEnabled`).
+ */
+export const SIDE_GAME_DISADVANTAGE_KINDS = ['opponent_penalty', 'vote_taken', 'forced_bench'] as const
+export type SideGameDisadvantageKind = (typeof SIDE_GAME_DISADVANTAGE_KINDS)[number]
+export const isDisadvantageKind = (kind: string): kind is SideGameDisadvantageKind => (SIDE_GAME_DISADVANTAGE_KINDS as readonly string[]).includes(kind)
+
 /** What the shop may sell. Each is delivered through the reward API. */
-export const TOKEN_SHOP_KINDS = ['advantage', 'free_trade_token', 'steal_blocker', 'faab', 'score_bonus'] as const
+export const TOKEN_SHOP_KINDS = ['advantage', 'free_trade_token', 'steal_blocker', 'faab', 'score_bonus', 'opponent_penalty', 'vote_taken', 'forced_bench'] as const
 export type TokenShopKind = (typeof TOKEN_SHOP_KINDS)[number]
 
 export interface TokenShopItem {
@@ -67,10 +79,22 @@ export interface TokenShopItem {
   samePositionOnly: boolean
 }
 
-export const SURVIVOR_POOL_RULES = ['any', 'conference', 'away_only', 'allowed_list'] as const
+export const SURVIVOR_POOL_RULES = ['any', 'conference', 'away_only', 'allowed_list', 'division'] as const
 export type SurvivorPoolRule = (typeof SURVIVOR_POOL_RULES)[number]
+/** The NFL's two conferences. Other sports name theirs from our stored `SportsTeam.conference`. */
 export const SURVIVOR_POOL_CONFERENCES = ['AFC', 'NFC'] as const
-export type SurvivorPoolConference = (typeof SURVIVOR_POOL_CONFERENCES)[number]
+/** A conference name: AFC / NFC, or any name our stored team data uses ("Eastern", "SEC"). */
+export type SurvivorPoolConference = string
+
+/** A tied game in the Survivor Pool: nothing happens (push, today), it knocks you out (loss), or it counts as a win. */
+export const SURVIVOR_POOL_TIE_RULES = ['push', 'loss', 'win'] as const
+export type SurvivorPoolTieRule = (typeof SURVIVOR_POOL_TIE_RULES)[number]
+/** A week with no pick: nothing (today), it counts as a loss, or it uses a revive. */
+export const SURVIVOR_POOL_MISSED_PICK = ['none', 'loss', 'revive'] as const
+export type SurvivorPoolMissedPick = (typeof SURVIVOR_POOL_MISSED_PICK)[number]
+/** The original league's "removed if exposed" rule, applied only by the commissioner from the Hub. */
+export const EXILE_EXPOSURE_RULES = ['off', 'remove', 'strike'] as const
+export type ExileExposureRule = (typeof EXILE_EXPOSURE_RULES)[number]
 
 /** One week's variant ("away teams only", "red uniforms" = an allowed-team list). */
 export interface SurvivorPoolWeekRule {
@@ -78,6 +102,8 @@ export interface SurvivorPoolWeekRule {
   rule: SurvivorPoolRule
   conference?: SurvivorPoolConference
   allowedTeams?: string[]
+  /** `division` weeks: the division name (from our stored team data; NFL divisions built in). */
+  division?: string
 }
 
 export const AUCTION_CURRENCIES = ['faab', 'auction_cash'] as const
@@ -127,6 +153,20 @@ export interface SurvivorSideGameSettings {
   survivorPoolPrize: SideGamePrize
   /** Times a manager may come back after a wrong pick; after that they are banned from the pool. */
   survivorPoolRevives: number
+  /** The `division` rule's division (a name from our stored team data). */
+  survivorPoolDivision: string
+  /** What a tied game does to a Survivor Pool pick. `push` is today's behaviour. */
+  survivorPoolTieRule: SurvivorPoolTieRule
+  /** What a week with no pick does once that week's games have all kicked off. `none` is today's. */
+  survivorPoolMissedPick: SurvivorPoolMissedPick
+  /** No reusing a team: each manager may pick a team once per season. */
+  survivorPoolNoReuse: boolean
+  // ── Disadvantages ───────────────────────────────────────────────────────────────
+  /** The disadvantage items the commissioner allows in auctions and the shop. Empty: none (today). */
+  disadvantagesEnabled: SideGameDisadvantageKind[]
+  // ── Exile exposure ──────────────────────────────────────────────────────────────
+  /** "Removed if exposed": what the commissioner's Hub action does to a manager who exposed an exile. */
+  exileExposureRule: ExileExposureRule
   // ── Auction Week ────────────────────────────────────────────────────────────────
   auctionCurrency: AuctionCurrency
   /** Auction cash handed to each active castaway when an auction opens. 0 = only what they have earned. */
@@ -187,6 +227,12 @@ export const SURVIVOR_SIDE_GAME_DEFAULTS: SurvivorSideGameSettings = {
   survivorPoolWeekRules: [],
   survivorPoolPrize: DEFAULT_SIDE_GAME_PRIZE,
   survivorPoolRevives: 2,
+  survivorPoolDivision: '',
+  survivorPoolTieRule: 'push',
+  survivorPoolMissedPick: 'none',
+  survivorPoolNoReuse: false,
+  disadvantagesEnabled: [],
+  exileExposureRule: 'off',
   auctionCurrency: 'faab',
   auctionCashPerAuction: 0,
 }
@@ -198,6 +244,14 @@ const rec = (v: unknown): Rec => (v && typeof v === 'object' && !Array.isArray(v
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const ITEM_ID = /^[a-z0-9_]{1,32}$/
 const TEAM = /^[A-Za-z0-9 .'&-]{2,40}$/
+/** A conference / division name as our stored team data spells it ("AFC East", "Pacific", "Big Ten"). */
+const GROUP = /^[\p{L}0-9 .'&()/-]{1,40}$/u
+
+function readGroup(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  const v = value.trim().replace(/\s+/g, ' ')
+  return GROUP.test(v) ? v : fallback
+}
 
 function oneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
   return typeof value === 'string' && (options as readonly string[]).includes(value) ? (value as T) : fallback
@@ -248,7 +302,7 @@ function readShopItem(value: unknown): TokenShopItem | null {
     kind,
     enabled: bool(r.enabled, false),
     cost: intIn(r.cost, SIDE_GAME_LIMITS.tokenShopCost, 1),
-    amount: intIn(r.amount, [0, kind === 'score_bonus' ? SURVIVOR_REWARD_LIMITS.points : SURVIVOR_REWARD_LIMITS.faab], 0),
+    amount: intIn(r.amount, [0, kind === 'score_bonus' || kind === 'opponent_penalty' ? SURVIVOR_REWARD_LIMITS.points : SURVIVOR_REWARD_LIMITS.faab], 0),
     powerType: oneOf(r.powerType, SURVIVOR_REWARD_ADVANTAGE_POWERS, 'extra_vote'),
     samePositionOnly: bool(r.samePositionOnly, false),
   }
@@ -273,8 +327,9 @@ function readWeekRule(value: unknown): SurvivorPoolWeekRule | null {
   return {
     week: r.week,
     rule,
-    ...(rule === 'conference' ? { conference: oneOf(r.conference, SURVIVOR_POOL_CONFERENCES, 'AFC') } : {}),
+    ...(rule === 'conference' ? { conference: readGroup(r.conference, 'AFC') } : {}),
     ...(rule === 'allowed_list' ? { allowedTeams: readTeams(r.allowedTeams) } : {}),
+    ...(rule === 'division' ? { division: readGroup(r.division, '') } : {}),
   }
 }
 
@@ -318,11 +373,19 @@ export function readSurvivorSideGameSettings(leagueSettings: unknown, opts: { ha
     survivorPoolEnabled: bool(raw.survivorPoolEnabled, d.survivorPoolEnabled),
     survivorPoolStartWeek: intIn(raw.survivorPoolStartWeek, SIDE_GAME_LIMITS.survivorPoolStartWeek, d.survivorPoolStartWeek),
     survivorPoolRule: oneOf(raw.survivorPoolRule, SURVIVOR_POOL_RULES, d.survivorPoolRule),
-    survivorPoolConference: oneOf(raw.survivorPoolConference, SURVIVOR_POOL_CONFERENCES, d.survivorPoolConference),
+    survivorPoolConference: readGroup(raw.survivorPoolConference, d.survivorPoolConference),
     survivorPoolAllowedTeams: readTeams(raw.survivorPoolAllowedTeams),
     survivorPoolWeekRules: weekRules,
     survivorPoolPrize: raw.survivorPoolPrize === undefined ? d.survivorPoolPrize : readSideGamePrize(raw.survivorPoolPrize),
     survivorPoolRevives: intIn(raw.survivorPoolRevives, SIDE_GAME_LIMITS.survivorPoolRevives, d.survivorPoolRevives),
+    survivorPoolDivision: readGroup(raw.survivorPoolDivision, d.survivorPoolDivision),
+    survivorPoolTieRule: oneOf(raw.survivorPoolTieRule, SURVIVOR_POOL_TIE_RULES, d.survivorPoolTieRule),
+    survivorPoolMissedPick: oneOf(raw.survivorPoolMissedPick, SURVIVOR_POOL_MISSED_PICK, d.survivorPoolMissedPick),
+    survivorPoolNoReuse: bool(raw.survivorPoolNoReuse, d.survivorPoolNoReuse),
+    disadvantagesEnabled: Array.isArray(raw.disadvantagesEnabled)
+      ? SIDE_GAME_DISADVANTAGE_KINDS.filter((k) => (raw.disadvantagesEnabled as unknown[]).includes(k))
+      : d.disadvantagesEnabled,
+    exileExposureRule: oneOf(raw.exileExposureRule, EXILE_EXPOSURE_RULES, d.exileExposureRule),
     auctionCurrency: oneOf(raw.auctionCurrency, AUCTION_CURRENCIES, d.auctionCurrency),
     auctionCashPerAuction: intIn(raw.auctionCashPerAuction, SIDE_GAME_LIMITS.auctionCash, d.auctionCashPerAuction),
   }
@@ -335,6 +398,7 @@ export function survivorPoolRuleForWeek(s: SurvivorSideGameSettings, week: numbe
     rule: v?.rule ?? s.survivorPoolRule,
     conference: v?.conference ?? s.survivorPoolConference,
     allowedTeams: v?.allowedTeams ?? s.survivorPoolAllowedTeams,
+    division: v?.division ?? s.survivorPoolDivision,
   }
 }
 
@@ -353,6 +417,8 @@ export interface SurvivorSideGameLockContext {
  */
 export const SIDE_GAME_KEYS_LOCKED_AT_SEASON_START: readonly SurvivorSideGameKey[] = [
   'exileTokenFaabRate', 'exileTokenFaabBasis', 'tokenPoolMode', 'survivorPoolRevives', 'survivorPoolStartWeek',
+  // Changing these mid-season would re-judge weeks already played (a used-team list, a tie or a miss).
+  'survivorPoolNoReuse', 'survivorPoolTieRule', 'survivorPoolMissedPick',
 ]
 
 export function lockedSideGameKeys(ctx: SurvivorSideGameLockContext): SurvivorSideGameKey[] {
@@ -388,6 +454,11 @@ export function validateSurvivorSideGamePatch(current: SurvivorSideGameSettings,
   if (merged.survivorPoolEnabled && merged.survivorPoolPrize.kind !== 'none' && ['faab', 'score_bonus', 'auction_cash', 'tokens'].includes(merged.survivorPoolPrize.kind) && merged.survivorPoolPrize.amount < 1) {
     return { ok: false, error: 'Give the Survivor Pool prize an amount of at least 1.', code: 'invalid' }
   }
+  const disadvantageError = sideGameDisadvantageError(merged)
+  if (disadvantageError) return { ok: false, error: disadvantageError, code: 'invalid' }
+  if (merged.survivorPoolEnabled && merged.survivorPoolRule === 'division' && !merged.survivorPoolDivision) {
+    return { ok: false, error: 'Choose the division for the Survivor Pool division rule.', code: 'invalid' }
+  }
   const out: Partial<SurvivorSideGameSettings> = {}
   for (const key of keys as SurvivorSideGameKey[]) (out as Rec)[key] = merged[key]
   return { ok: true, settings: merged, patch: out }
@@ -401,7 +472,31 @@ function normalizeForCompare(key: SurvivorSideGameKey, value: unknown): unknown 
   if (key === 'survivorPoolPrize') return readSideGamePrize(value)
   if (key === 'tokenShopItems' && Array.isArray(value)) return value.map((i) => readShopItem(i) ?? i)
   if (key === 'exileBenchSlots') return value
+  if (key === 'disadvantagesEnabled' && Array.isArray(value)) return [...new Set(value)].sort()
+  if ((key === 'survivorPoolConference' || key === 'survivorPoolDivision') && typeof value === 'string') return value.trim().replace(/\s+/g, ' ')
   return value
+}
+
+/**
+ * A disadvantage sold in the shop (or offered as the pool prize) must be one the commissioner
+ * enabled, and a point penalty needs points. One check for the settings save and the auction builder.
+ */
+export function sideGameDisadvantageError(s: Pick<SurvivorSideGameSettings, 'disadvantagesEnabled' | 'tokenShopItems' | 'survivorPoolPrize'>): string | null {
+  for (const item of s.tokenShopItems) {
+    if (!item.enabled || !isDisadvantageKind(item.kind)) continue
+    if (!s.disadvantagesEnabled.includes(item.kind)) return `Turn on the ${item.kind.replace(/_/g, ' ')} disadvantage before selling it.`
+    if (item.kind === 'opponent_penalty' && item.amount < 1) return 'Give the point-penalty item at least 1 point.'
+  }
+  if (isDisadvantageKind(s.survivorPoolPrize.kind)) return 'A disadvantage cannot be the Survivor Pool prize.'
+  return null
+}
+
+/** May this auction item's prize be offered? Null when it may. */
+export function auctionPrizeDisadvantageError(prize: SideGamePrize, enabled: readonly SideGameDisadvantageKind[]): string | null {
+  if (!isDisadvantageKind(prize.kind)) return null
+  if (!enabled.includes(prize.kind)) return `The ${prize.kind.replace(/_/g, ' ')} disadvantage is turned off in this league.`
+  if (prize.kind === 'opponent_penalty' && (prize.amount < 1 || prize.amount > SURVIVOR_REWARD_LIMITS.points)) return `A point penalty is 1 to ${SURVIVOR_REWARD_LIMITS.points} points.`
+  return null
 }
 
 export function mergeSurvivorSideGamesIntoSettings(leagueSettings: unknown, next: SurvivorSideGameSettings): Record<string, unknown> {

@@ -133,7 +133,8 @@ export async function GET(req: NextRequest) {
     access.isParticipatingCommissioner ||
     Boolean(settingsJson.survivor_commissioner_fair_play_limited_visibility && access.isParticipant)
 
-  const canSeeExile = canSeeExileMembership({ hidden: exileMembershipHidden(league?.settings), viewerState: me?.playerState, nonPlayingCommissioner: false })
+  // Exiles and a commissioner who is NOT playing may see who is on Exile; everyone else may not.
+  const canSeeExile = canSeeExileMembership({ hidden: exileMembershipHidden(league?.settings), viewerState: me?.playerState, nonPlayingCommissioner: Boolean(access.isNonParticipatingCommissionerHost) })
   const payload = {
     exileMembershipHidden: !canSeeExile,
     phase: league?.survivorPhase,
@@ -143,7 +144,9 @@ export async function GET(req: NextRequest) {
       const emblem = resolveTribeEmblem(tribe, String(league?.sport ?? 'NFL'))
       return { ...tribe, emoji: extractLeadingTribeIcon(tribe.name), logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
     }),
-    players: access.decisions.canSeeHiddenIdolAssignments ? players : players.map(p => ({
+    players: access.decisions.canSeeHiddenIdolAssignments
+      ? players.map(p => (canSeeExile ? p : { ...p, playerState: exileSafePlayerState(p.playerState, false) }))
+      : players.map(p => ({
       id: p.id, userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl,
       // Exile secrecy: someone not on Exile sees an exiled castaway as simply eliminated.
       tribeId: p.tribeId, playerState: exileSafePlayerState(p.playerState, canSeeExile), eliminatedWeek: p.eliminatedWeek,

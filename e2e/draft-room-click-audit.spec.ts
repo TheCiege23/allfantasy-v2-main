@@ -1892,7 +1892,11 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelPanel = page.locator('[data-testid="draft-intel-queue-panel"]:visible').first()
+    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
+    await expect(intelligenceDetails).toBeVisible()
+    await expect(intelligenceDetails).not.toHaveAttribute('open', '')
+    await intelligenceDetails.locator('summary').click()
+    const intelPanel = intelligenceDetails.getByTestId('draft-intel-queue-panel')
     await expect(intelPanel).toBeVisible()
     const intelHeadline = page.locator('[data-testid="draft-intel-headline"]:visible').first()
     if (!(await intelHeadline.isVisible({ timeout: 1_000 }).catch(() => false))) {

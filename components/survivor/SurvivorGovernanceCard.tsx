@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { survivorGovernanceMessages } from '@/lib/survivor/survivorGovernanceUiMessages'
+import { survivorTradeWindowText, type TradeWindowJson } from '@/lib/survivor/survivorTradeWindowText'
 
 type Payload = {
   rules: { tradeRulesEnabled: boolean; strikeLimit: number; alliancesEnabled: boolean; allianceMaxSize: number }
-  tradeWindow: { crossTribeOpen: boolean; crossTribeClosesAt: string | null; frozen: boolean } | null
+  tradeWindow: TradeWindowJson | null
   me: { playerState: string; canFormAlliance: boolean } | null
   myStrikes: { id: string; reason: string }[]
   alliances: { channelId: string; name: string; hostReads: boolean; readOnly: boolean; members: { userId: string; displayName: string; canPost: boolean }[] }[]
@@ -63,7 +64,7 @@ export function SurvivorGovernanceCard({ leagueId }: { leagueId: string }) {
   const r = data.rules
   if (!r.tradeRulesEnabled && !r.alliancesEnabled && data.myStrikes.length === 0) return null
   const tw = data.tradeWindow
-  const closes = tw?.crossTribeClosesAt ? new Date(tw.crossTribeClosesAt).toLocaleString(getAppIntlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : null
+  const eastern = (iso: string) => new Date(iso).toLocaleString(getAppIntlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
   const maxInvites = Math.max(1, r.allianceMaxSize - 1)
 
   return (
@@ -71,7 +72,7 @@ export function SurvivorGovernanceCard({ leagueId }: { leagueId: string }) {
       <span className="svh-lbl">{m.cardTitle}</span>
       {r.tradeRulesEnabled && tw && data.me?.playerState === 'active' && (
         <p className="svh-sub svh-sm" data-testid="survivor-governance-card-trades">
-          {tw.frozen ? m.tradeFrozen : closes ? m.tradeWindowOpen(closes) : tw.crossTribeOpen ? m.crossAllowed : m.tradeWindowClosed}
+          {survivorTradeWindowText(m, tw, eastern)}
         </p>
       )}
       <p className="svh-sub svh-sm" data-testid="survivor-governance-card-strikes">

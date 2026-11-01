@@ -6,7 +6,10 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 import type { TraySnap } from '@/lib/draft-room/mobileTraySnap'
 import { DraftMobileTray } from './DraftMobileTray'
+import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import './draft-mobile.css'
+import './draft-desktop.css'
+import './draft-workspace.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
 const DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'
@@ -33,6 +36,8 @@ export type DraftRoomShellProps = {
    * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.
    */
   surfaceVariant?: 'default' | 'redraft_snake' | 'dynasty'
+  /** Reserve usable desktop pool space for drafts with a pick-order board. */
+  playerSpacePriority?: boolean
   topBar: ReactNode
   managerStrip: ReactNode
   auctionStrip?: ReactNode
@@ -87,6 +92,7 @@ const MOBILE_TABS = [
 
 export function DraftRoomShell({
   surfaceVariant = 'default',
+  playerSpacePriority = false,
   topBar,
   managerStrip,
   draftBoard,
@@ -108,15 +114,37 @@ export function DraftRoomShell({
   bottomBar,
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
-  const [dockSize, setDockSize] = useState<DraftDockSize>('half')
+  const [dockSize, setDockSize] = useState<DraftDockSize>(playerSpacePriority ? 'tall' : 'half')
   const bottomDockExpanded = dockSize !== 'min'
+  const [boardHidden, setBoardHidden] = useState(false)
+  const boardSize = boardHidden ? 'hidden' : dockSize === 'tall' ? 'compact' : 'balanced'
+  // iOS's keyboard changes the visual viewport independently of layout viewport units.
+  // Keep the bottom navigation above it, without blocking pinch zoom.
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const root = layoutRef.current?.closest<HTMLElement>('[data-testid="draft-room-shell"]')
+    const update = () => {
+      if (viewport.scale === 1 && window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY).matches) {
+        root?.style.setProperty('--draft-visible-height', `${viewport.height}px`)
+      } else root?.style.removeProperty('--draft-visible-height')
+    }
+    update()
+    viewport.addEventListener('resize', update)
+    window.addEventListener('resize', update)
+    return () => {
+      viewport.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+      root?.style.removeProperty('--draft-visible-height')
+    }
+  }, [])
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
   useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 768px)')
-    const closeOnDesktop = () => { if (desktop.matches) setMobileToolsOpen(false) }
-    desktop.addEventListener('change', closeOnDesktop)
-    return () => desktop.removeEventListener('change', closeOnDesktop)
+    const phone = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
+    const closeOnDesktop = () => { if (!phone.matches) setMobileToolsOpen(false) }
+    phone.addEventListener('change', closeOnDesktop)
+    return () => phone.removeEventListener('change', closeOnDesktop)
   }, [])
   const selectMobileTab = (tab: MobileDraftTab) => {
     setMobileToolsOpen(false)
@@ -147,13 +175,22 @@ export function DraftRoomShell({
 
   useEffect(() => {
     try {
+      const savedBoard = window.localStorage.getItem('af:draft-board-size')
       const saved = window.localStorage.getItem(DOCK_SIZE_PREF_KEY)
       if (saved === 'min' || saved === 'half' || saved === 'tall') {
         setDockSize(saved)
+        setBoardHidden(savedBoard === 'hidden' && saved !== 'min')
         return
       }
-      // Older two-state preference: '0' meant collapsed.
-      if (window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY) === '0') setDockSize('min')
+      // Older two-state preference: '0' meant collapsed, even with a saved board size.
+      if (window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY) === '0') {
+        setDockSize('min')
+        return
+      }
+      if (savedBoard === 'compact' || savedBoard === 'balanced' || savedBoard === 'hidden') {
+        setDockSize(savedBoard === 'balanced' ? 'half' : 'tall')
+        setBoardHidden(savedBoard === 'hidden')
+      }
     } catch {
       /* ignore */
     }
@@ -161,7 +198,9 @@ export function DraftRoomShell({
 
   const persistDockSize = useCallback((next: DraftDockSize) => {
     setDockSize(next)
+    setBoardHidden(false)
     try {
+      window.localStorage.setItem('af:draft-board-size', next === 'tall' ? 'compact' : 'balanced')
       window.localStorage.setItem(DOCK_SIZE_PREF_KEY, next)
       window.localStorage.setItem(BOTTOM_DOCK_PREF_KEY, next === 'min' ? '0' : '1')
     } catch {
@@ -181,8 +220,8 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = visibleTabs.filter((tab) => ['board', 'players', 'queue', 'chat'].includes(tab.id))
-  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'chat'].includes(tab.id))
+  const primaryMobileTabs = ['players', 'board', 'queue', 'roster', 'chat'].flatMap(id => visibleTabs.filter(tab => tab.id === id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'roster', 'chat'].includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -208,6 +247,8 @@ export function DraftRoomShell({
 
   return (
     <div
+      data-board-size={boardSize}
+      data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
       className={`draft-touch-room ${surfaceClass}`}
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="draft-room-shell"
@@ -231,6 +272,24 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
+          <div className="draft-board-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0a1425] px-3"
+            data-testid="draft-board-size-controls">
+            <span className="text-sm font-semibold text-slate-200">Draft workspace</span>
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              Board
+              <select aria-label="Draft board size" data-testid="draft-board-size"
+                value={boardSize} onChange={event => {
+                  const value = event.target.value as 'compact' | 'balanced' | 'hidden'
+                  persistDockSize(value === 'balanced' ? 'half' : 'tall')
+                  if (value === 'hidden') {
+                    setBoardHidden(true)
+                    try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
+                  }
+                }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
+                <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>
+              </select>
+            </label>
+          </div>
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
@@ -439,6 +498,13 @@ export function DraftRoomShell({
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
         data-tray-snap={traySnap}
+        onKeyDown={event => {
+          if (event.key !== 'Escape' || !mobileToolsOpen) return
+          event.preventDefault()
+          event.stopPropagation()
+          setMobileToolsOpen(false)
+          event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus()
+        }}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide
@@ -467,11 +533,8 @@ export function DraftRoomShell({
           onRequestCollapse={collapseTray}
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
-          fullOnInputFocus={mobileTab === 'chat'}
-          // Lists and the conversation open full: at half (~325px on a Pixel 7) Players showed ~2 cards,
-          // Queue 0.8 of a row, and Chat ~1.5 messages above its composer. Chat already went full on
-          // focus; opening there saves the user the first tap.
-          openSnap={mobileTab === 'players' || mobileTab === 'queue' || mobileTab === 'chat' ? 'full' : 'half'}
+          fullOnInputFocus
+          preferredOpenSnap={mobileTab === 'players' || mobileTab === 'queue' || mobileTab === 'chat' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -481,7 +544,6 @@ export function DraftRoomShell({
           {secondaryMobileTabs.length > 0 && mobileToolsOpen ? (
             <div
               id="draft-mobile-tools"
-              onKeyDown={(event) => { if (event.key === 'Escape') { setMobileToolsOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus() } }}
               className="max-h-[35dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-[#060d1f] px-2 py-2"
               data-testid="draft-mobile-quick-dock"
             >
@@ -568,7 +630,7 @@ export function DraftRoomShell({
               {mobileTab === 'players' && (
                 <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="draft-mobile-players-sheet">
                   <div
-                    className="flex min-h-0 flex-1 flex-col min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    className="h-full min-h-0 min-w-0 overflow-hidden flex flex-1 flex-col"
                     data-testid="draft-mobile-players-scroll"
                   >
                     {playerPanel}

@@ -262,14 +262,14 @@ function SleeperRow(props: SleeperRowProps) {
               teamLogoUrl={teamLogoUrl}
               teamAbbr={p.team ?? null}
               position={p.position}
-              size={28}
+              size={40}
               testIdBase={`${testIdBase}-avatar`}
               highlighted={selected}
             />
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="flex min-w-0 items-center gap-1">
                 <span
-                  className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-tight text-white"
+                  className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-white"
                   data-testid={`${testIdBase}-name`}
                   title={nameTitle}
                 >
@@ -312,6 +312,7 @@ function SleeperRow(props: SleeperRowProps) {
                     className="flex-shrink-0 rounded px-1 py-px"
                   />
                 ) : null}
+                {p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
@@ -320,7 +321,7 @@ function SleeperRow(props: SleeperRowProps) {
                     title={aiOverlaySignal?.reason ?? aiOverlaySignal?.strategyNote ?? undefined}
                     data-testid={`${testIdBase}-ai-badge`}
                   >
-                    <Sparkles className="h-2.5 w-2.5" />
+                    <Sparkles className="h-3.5 w-3.5" />
                     {badgeLabel}
                   </span>
                   {aiOverlaySignal?.scarcityLevel ? (
@@ -329,7 +330,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title="Positional scarcity warning"
                       data-testid={`${testIdBase}-ai-scarcity`}
                     >
-                      <TrendingUp className="h-2.5 w-2.5" />
+                      <TrendingUp className="h-3.5 w-3.5" />
                       Scarcity
                     </span>
                   ) : null}
@@ -339,7 +340,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title="Tier-drop alert"
                       data-testid={`${testIdBase}-ai-tier-drop`}
                     >
-                      <AlertTriangle className="h-2.5 w-2.5" />
+                      <AlertTriangle className="h-3.5 w-3.5" />
                       Tier drop
                     </span>
                   ) : null}
@@ -353,7 +354,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title={aiOverlaySignal.boomBust === 'boom' ? 'Boom potential' : 'Bust risk'}
                       data-testid={`${testIdBase}-ai-boom-bust`}
                     >
-                      <Flame className="h-2.5 w-2.5" />
+                      <Flame className="h-3.5 w-3.5" />
                       {aiOverlaySignal.boomBust === 'boom' ? 'Boom' : 'Bust'}
                     </span>
                   ) : null}
@@ -515,13 +516,13 @@ function SleeperRow(props: SleeperRowProps) {
               }}
               aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
               data-testid={`${testIdBase}-compare`}
-              className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
                 isCompareAnchor
                   ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
                   : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
               }`}
             >
-              <GitCompare className="h-2.5 w-2.5" />
+              <GitCompare className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -536,7 +537,7 @@ function SleeperRow(props: SleeperRowProps) {
               aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
               data-testid={`${testIdBase}-queue`}
               data-queued={queued ? 'true' : 'false'}
-              className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
                 drafted
                   ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
                   : queued
@@ -546,7 +547,7 @@ function SleeperRow(props: SleeperRowProps) {
               title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
             >
               {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
-              {queued && !drafted ? <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-2.5 w-2.5" aria-hidden />}
+              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
             </button>
             {canNominate && onNominateRequest ? (
               <button
@@ -556,7 +557,7 @@ function SleeperRow(props: SleeperRowProps) {
                   onNominateRequest()
                 }}
                 data-testid={`${testIdBase}-nominate`}
-                className="draft-live-action-btn inline-flex h-[22px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[11px] font-semibold text-amber-100 hover:brightness-110"
+                className="draft-live-action-btn inline-flex h-[40px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[11px] font-semibold text-amber-100 hover:brightness-110"
               >
                 Nominate
               </button>
@@ -571,7 +572,7 @@ function SleeperRow(props: SleeperRowProps) {
                 }}
                 title={drafted ? 'Player already drafted' : !canDraft ? 'Not your turn' : 'Draft this player'}
                 data-testid={`${testIdBase}-draft`}
-                className={`draft-live-action-btn inline-flex h-[22px] items-center rounded-md border px-2 text-[11px] font-semibold transition ${
+                className={`draft-live-action-btn inline-flex h-[40px] items-center rounded-md border px-2 text-[11px] font-semibold transition ${
                   drafted
                     ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/30'
                     : !canDraft
@@ -613,6 +614,14 @@ function SleeperRow(props: SleeperRowProps) {
   return (
     <div
       role="row"
+      tabIndex={0}
+      aria-label={`View ${p.name} player details`}
+      onKeyDown={event => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          if (!drafted) onSelect()
+        }
+      }}
       data-testid={testIdBase}
       data-drafted={drafted ? 'true' : 'false'}
       data-selected={selected ? 'true' : 'false'}

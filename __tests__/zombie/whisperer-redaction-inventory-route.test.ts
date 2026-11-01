@@ -13,12 +13,16 @@ vi.mock('next-auth', () => ({ getServerSession: hm.getServerSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    redraftSeason: { findFirst: vi.fn(async () => null) },
+    league: { findUnique: vi.fn(async () => ({ id: 'league-1', leagueVariant: 'zombie' })) },
+    zombieLeagueConfig: { findUnique: vi.fn(async () => null) },
     zombieLeague: { findUnique: vi.fn(async () => ({ id: 'zl-1', sport: 'NFL', currentWeek: 3, isPaid: false })) },
     roster: { findFirst: vi.fn(async () => ({ id: 'roster-2' })) },
     zombieLeagueTeam: { findUnique: vi.fn(async () => ({ status: 'Survivor', items: [] })) },
     zombieWeeklyResolution: { findUnique: vi.fn(async () => null) },
     zombieChimmyAction: { findMany: vi.fn(async () => []) },
     whispererRecord: { findUnique: vi.fn(async () => ({ userId: W_USER, ambushesRemaining: 2 })) },
+    zombieCoWhisperer: { findUnique: vi.fn(async () => null) },
     zombieBashingEvent: { findFirst: vi.fn(async () => null) },
   },
 }))

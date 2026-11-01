@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Input, Select, SettingsRow, SettingsSection, Toggle } from '../../../tabs/settings/components'
 import { useMessages } from '@/components/i18n/useMessages'
 import {
+  SURVIVOR_CROSS_TRIBE_WINDOW_MAX,
   SURVIVOR_GOVERNANCE_DAYS,
   SURVIVOR_GOVERNANCE_DEFAULTS,
   SURVIVOR_GOVERNANCE_LIMITS,
+  crossTribeWindowPresetsFor,
+  type SurvivorCrossTribeWindow,
   type SurvivorGovernanceKey,
   type SurvivorGovernanceSettings,
   type SurvivorScheduledSwap,
@@ -15,7 +18,7 @@ import {
 import { survivorGovernanceMessages } from '@/lib/survivor/survivorGovernanceUiMessages'
 import type { SurvivorSettingsPanelProps } from './types'
 
-type Loaded = { settings: SurvivorGovernanceSettings; locked: SurvivorGovernanceKey[]; context?: { currentWeek: number; firstWeek: number } }
+type Loaded = { settings: SurvivorGovernanceSettings; locked: SurvivorGovernanceKey[]; context?: { currentWeek: number; firstWeek: number }; sport?: string | null }
 
 const range = (min: number, max: number) => Array.from({ length: max - min + 1 }, (_, i) => min + i)
 
@@ -90,6 +93,12 @@ export function SurvivorGovernancePanel({ leagueId, canEdit }: SurvivorSettingsP
     set('swapSchedule', [...draft.swapSchedule, added].sort((a, b) => a.week - b.week))
   }
   const dayOptions = SURVIVOR_GOVERNANCE_DAYS.map((d) => <option key={d} value={d}>{m.day(d)}</option>)
+  // Cross-tribe windows (1–3 a week). An older saved league reads as one Tribal-opened window.
+  const windows: SurvivorCrossTribeWindow[] = draft.crossTribeWindows?.length ? draft.crossTribeWindows : SURVIVOR_GOVERNANCE_DEFAULTS.crossTribeWindows
+  const setWindows = (next: SurvivorCrossTribeWindow[]) => set('crossTribeWindows', next.map(normalizeWindow))
+  const updateWindow = (index: number, next: Partial<SurvivorCrossTribeWindow>) => setWindows(windows.map((w, i) => (i === index ? { ...w, ...next } : w)))
+  const presets = crossTribeWindowPresetsFor(loaded?.sport)
+  const windowsOff = off || !draft.tradeRulesEnabled
 
   return (
     <div className="space-y-5 px-6 py-6 text-[13px] text-white/85" data-testid="survivor-governance-panel">
@@ -172,15 +181,62 @@ export function SurvivorGovernancePanel({ leagueId, canEdit }: SurvivorSettingsP
             <option value="banned">{m.crossBanned}</option>
           </Select>} />
         {draft.crossTribeTrades === 'window' && (
-          <SettingsRow label={m.crossClose} description={m.crossCloseHelp} control={
-            <div className="flex gap-2">
-              <Select value={draft.crossTribeCloseDay} disabled={off || !draft.tradeRulesEnabled} onChange={(v) => set('crossTribeCloseDay', v as SurvivorGovernanceSettings['crossTribeCloseDay'])}>{dayOptions}</Select>
-              <Input type="time" value={draft.crossTribeCloseTime} disabled={off || !draft.tradeRulesEnabled} onChange={(e) => set('crossTribeCloseTime', e.target.value)} aria-label={m.crossClose} />
-            </div>} />
+          <div className="space-y-2 rounded-xl border border-white/[0.06] p-3" data-testid="survivor-governance-windows">
+            <p className="text-[12px] text-white/80">{m.crossWindowsTitle}</p>
+            <p className="text-[11px] text-white/50">{m.crossWindowsHelp}</p>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/60">
+              <span>{m.crossPresets}</span>
+              {presets.map((preset) => (
+                <button key={preset.id} type="button" disabled={windowsOff} onClick={() => setWindows(preset.windows)} data-testid={`survivor-governance-window-preset-${preset.id}`}
+                  className="rounded-lg border border-white/15 px-2 py-1 text-white/80 hover:bg-white/5 disabled:opacity-40">
+                  {preset.id === 'original_nfl' ? m.crossPresetOriginal : m.crossPresetSingle}
+                </button>
+              ))}
+            </div>
+            {windows.map((w, index) => (
+              <div key={index} className="flex flex-wrap items-end gap-2" data-testid={`survivor-governance-window-${index}`}>
+                <span className="text-[11px] text-white/60">{m.crossWindowN(index + 1)}</span>
+                <label className="flex flex-col gap-1 text-[11px] text-white/60">{m.crossOpensOn}
+                  <Select value={w.opensOn} disabled={windowsOff} onChange={(v) => updateWindow(index, v === 'time' ? { opensOn: 'time', openDay: w.openDay ?? 'Friday', openTime: w.openTime ?? '00:00' } : { opensOn: 'tribal' })}>
+                    <option value="tribal">{m.crossOpensTribal}</option>
+                    <option value="time">{m.crossOpensTime}</option>
+                  </Select>
+                </label>
+                {w.opensOn === 'time' && (
+                  <label className="flex flex-col gap-1 text-[11px] text-white/60">{m.crossOpenAt}
+                    <div className="flex gap-2">
+                      <Select value={w.openDay ?? 'Friday'} disabled={windowsOff} onChange={(v) => updateWindow(index, { openDay: v as SurvivorCrossTribeWindow['closeDay'] })}>{dayOptions}</Select>
+                      <Input type="time" value={w.openTime ?? '00:00'} disabled={windowsOff} onChange={(e) => updateWindow(index, { openTime: e.target.value })} aria-label={`${m.crossWindowN(index + 1)} ${m.crossOpenAt}`} />
+                    </div>
+                  </label>
+                )}
+                <label className="flex flex-col gap-1 text-[11px] text-white/60">{m.crossClose}
+                  <div className="flex gap-2">
+                    <Select value={w.closeDay} disabled={windowsOff} onChange={(v) => updateWindow(index, { closeDay: v as SurvivorCrossTribeWindow['closeDay'] })}>{dayOptions}</Select>
+                    <Input type="time" value={w.closeTime} disabled={windowsOff} onChange={(e) => updateWindow(index, { closeTime: e.target.value })} aria-label={`${m.crossWindowN(index + 1)} ${m.crossClose}`} />
+                  </div>
+                </label>
+                {windows.length > 1 && (
+                  <button type="button" disabled={windowsOff} onClick={() => setWindows(windows.filter((_, i) => i !== index))} className="text-[11px] text-rose-300 disabled:opacity-40">{m.crossRemoveWindow}</button>
+                )}
+              </div>
+            ))}
+            {windows.length < SURVIVOR_CROSS_TRIBE_WINDOW_MAX && (
+              <button type="button" disabled={windowsOff} onClick={() => setWindows([...windows, { opensOn: 'time', openDay: 'Friday', openTime: '00:00', closeDay: 'Sunday', closeTime: '13:00' }])}
+                data-testid="survivor-governance-window-add" className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-white/80 disabled:opacity-40">
+                {m.crossAddWindow}
+              </button>
+            )}
+          </div>
         )}
         <SettingsRow label={m.withinTribeUnplayedOnly} control={<Toggle checked={draft.withinTribeUnplayedOnly} disabled={off || !draft.tradeRulesEnabled} onChange={(v) => set('withinTribeUnplayedOnly', v)} />} />
         <SettingsRow label={m.playedLockUntilTribal} control={<Toggle checked={draft.playedLockUntilTribal} disabled={off || !draft.tradeRulesEnabled} onChange={(v) => set('playedLockUntilTribal', v)} />} />
         <SettingsRow label={m.weeklyFreeze} description={m.weeklyFreezeHelp} control={<Toggle checked={draft.weeklyTradeFreezeEnabled} disabled={off || !draft.tradeRulesEnabled} onChange={(v) => set('weeklyTradeFreezeEnabled', v)} />} />
+        <SettingsRow label={m.failureModeTitle} description={m.failureModeHelp} control={
+          <Select value={draft.tradeCheckFailureMode ?? 'allow'} disabled={off || !draft.tradeRulesEnabled} onChange={(v) => set('tradeCheckFailureMode', v as SurvivorGovernanceSettings['tradeCheckFailureMode'])}>
+            <option value="allow">{m.failureModeAllow}</option>
+            <option value="hold">{m.failureModeHold}</option>
+          </Select>} />
         {draft.weeklyTradeFreezeEnabled && (
           <SettingsRow label={m.weeklyFreezeAt} control={
             <div className="flex gap-2">
@@ -197,6 +253,7 @@ export function SurvivorGovernancePanel({ leagueId, canEdit }: SurvivorSettingsP
             <option value="rooks_vs_vets">{m.splitRooksVets}</option>
           </Select>} />
         {locked('tribeSplit') && <p className="text-[11px] text-white/40" data-testid="survivor-governance-split-locked">{m.locked}</p>}
+        <SettingsRow label={m.experienceCrossLeague} description={m.experienceCrossLeagueHelp} control={<Toggle checked={Boolean(draft.experienceCrossLeague)} disabled={off} onChange={(v) => set('experienceCrossLeague', v)} />} />
       </SettingsSection>
 
       <SettingsSection id="sv-gov-week1" title={m.weekOneTitle} description={m.weekOneDesc}>
@@ -220,6 +277,12 @@ export function SurvivorGovernancePanel({ leagueId, canEdit }: SurvivorSettingsP
       </div>
     </div>
   )
+}
+
+function normalizeWindow(w: SurvivorCrossTribeWindow): SurvivorCrossTribeWindow {
+  return w.opensOn === 'time'
+    ? { opensOn: 'time', openDay: w.openDay ?? 'Friday', openTime: w.openTime ?? '00:00', closeDay: w.closeDay, closeTime: w.closeTime }
+    : { opensOn: 'tribal', closeDay: w.closeDay, closeTime: w.closeTime }
 }
 
 function normalizeSwap(swap: SurvivorScheduledSwap): SurvivorScheduledSwap {

@@ -62,7 +62,17 @@ import {
   weeklyPrizesFromForm,
   realGameSettingsFromForm,
   SURVIVOR_CHALLENGE_SETTING_DEFAULTS,
+  changedSideGameScreenKeys,
+  sideGamePatchError,
+  sideGamesForScreen,
 } from '@/lib/survivor/survivorSettingsScreen'
+import {
+  lockedSideGameKeys,
+  readSurvivorSideGameSettings,
+  SURVIVOR_SIDE_GAMES_KEY,
+  validateSurvivorSideGamePatch,
+  type SurvivorSideGameKey,
+} from '@/lib/survivor/survivorSideGameSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,6 +127,8 @@ export interface SurvivorSettingsScreenState {
   commissionerPlays: boolean
   /** League.language ('en' | 'es'): validation errors follow it, on the server and on the screen. */
   language?: 'en' | 'es'
+  /** Side-game keys locked this season (the side games' own lock rule, shared with league settings → Exile). */
+  sideGameLocked?: SurvivorSideGameKey[]
 }
 
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
@@ -133,11 +145,13 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
   const plan = readSurvivorFullSeasonPlan(settings)
   const prizes = readSurvivorWeeklyPrizes(settings)
   const realGame = readRealGameSettings(settings)
-  const [draftStarted, assigned, idolView] = await Promise.all([
+  const [draftStarted, assigned, idolView, sideGameLockCtx] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
     getSurvivorIdolSetupView(leagueId, { isCommissioner: true, canSeeDraw: viewer.canSeeDraw }),
+    import('@/lib/survivor/survivorSideGameService').then((m) => m.sideGameLockContext(leagueId)).catch(() => ({ draftStarted: true, seasonStarted: true })), // fail closed: locks hold
   ])
+  const sideGames = readSurvivorSideGameSettings(settings, { harshTokenLoss: league.survivorExileHarshTokenLoss })
   const firstWeek = plan?.startWeek ?? 1
   const lastWeek = plan?.endWeek ?? 13
   return {
@@ -185,8 +199,10 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       payInTribeWeeksAfterMerge: prizes.payInTribeWeeksAfterMerge,
       thievesCannotStealFromEachOther: readThievesCannotStealFromEachOther(settings),
       prizePhaseRules: readPrizePhaseRules(settings),
+      sideGames: sideGamesForScreen(sideGames),
     },
-    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL') },
+    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL'), sideGames },
+    sideGameLocked: lockedSideGameKeys(sideGameLockCtx),
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
     chimmyBossAvailable: late.exileBossMode === 'chimmy_roster',
     commissionerPlays: foundation.commissionerParticipationMode === 'participating_player',
@@ -229,6 +245,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const detailed = settingsFormErrors(next, state.context, messagesFor(settingsErrorMessages, state.language ?? 'en'))
   if (detailed.length) {
     return NextResponse.json({ error: detailed[0]!.message, code: detailed[0]!.code, errors: detailed.map(e => e.message), codes: detailed.map(e => e.code) }, { status: 422 })
+  }
+
+  // The key side games: the SAME validator and season locks league settings → Exile saves with.
+  let sideGamePatchResult: Extract<ReturnType<typeof validateSurvivorSideGamePatch>, { ok: true }> | null = null
+  const sideKeys = changedSideGameScreenKeys(state.form.sideGames, next.sideGames)
+  if (sideKeys.length && next.sideGames && state.context.sideGames) {
+    const patch: Rec = {}
+    for (const k of sideKeys) patch[k] = next.sideGames[k]
+    const checked = validateSurvivorSideGamePatch(state.context.sideGames, patch, state.sideGameLocked ?? [])
+    if (!checked.ok) {
+      // The same bilingual `{ error, code }` shape as every other refusal from this route.
+      const e = sideGamePatchError(checked, Object.keys(patch), messagesFor(settingsErrorMessages, lang))
+      return NextResponse.json({ error: e.message, code: e.code }, { status: checked.code === 'locked' ? 409 : 422 })
+    }
+    sideGamePatchResult = checked
   }
 
   const has = (key: keyof SurvivorSettingsForm) => changed.includes(key)
@@ -287,6 +318,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       const rules = validatePrizePhaseRules(next.prizePhaseRules, 'en')
       if (rules.ok) latePatch[SURVIVOR_PRIZE_PHASE_RULES_KEY] = rules.rules
     }
+    // Re-validated against the side games stored INSIDE this transaction, so a concurrent save from
+    // league settings → Exile is merged rather than overwritten.
+    if (sideGamePatchResult) {
+      const stored = readSurvivorSideGameSettings(current, { harshTokenLoss: state.form.exileHarshTokenLoss })
+      const merged = validateSurvivorSideGamePatch(stored, sideGamePatchResult.patch, state.sideGameLocked ?? [])
+      if (!merged.ok) {
+        const sideGameError = sideGamePatchError(merged, Object.keys(sideGamePatchResult.patch), messagesFor(settingsErrorMessages, lang))
+        return { ok: false as const, status: merged.code === 'locked' ? 409 : 422, error: merged.error, sideGameError }
+      }
+      latePatch[SURVIVOR_SIDE_GAMES_KEY] = merged.settings
+    }
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}
@@ -320,6 +362,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     })
     return { ok: true as const, nextFoundation }
   })
+  // A side-game refusal from inside the transaction keeps its own bilingual `{ error, code }`.
+  if (!outcome.ok && 'sideGameError' in outcome && outcome.sideGameError) {
+    return NextResponse.json({ error: outcome.sideGameError.message, code: outcome.sideGameError.code }, { status: outcome.status })
+  }
   if (!outcome.ok) return refuse(lang, 'idolSaveFailed', outcome.status, {}, typeof outcome.error === 'string' ? outcome.error : '')
 
   const f = outcome.nextFoundation

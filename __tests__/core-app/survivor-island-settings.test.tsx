@@ -26,8 +26,8 @@ const started = { draftStarted: true, finalistLocked: true, tribesLocked: true }
 const state = (over: Partial<SurvivorSettingsForm> = {}, locks = open): IslandSettingsState => ({ form: form(over), locks, context: { managers: 12, firstWeek: 1, lastWeek: 13 } })
 
 describe('scene preference', () => {
-  it('offers follow-the-season first, then all eight scenes', () => {
-    expect(ISLAND_SCENE_CHOICES).toEqual(['auto', 'beach', 'tribal', 'merge', 'finale', 'exile', 'jungle', 'volcano', 'lagoon'])
+  it('offers follow-the-season first, a new scene each season, then all eight scenes', () => {
+    expect(ISLAND_SCENE_CHOICES).toEqual(['auto', 'rotate', 'beach', 'tribal', 'merge', 'finale', 'exile', 'jungle', 'volcano', 'lagoon'])
     expect(sceneArt('auto')).toBe('/survivor/scenes/beach.svg')
     expect(sceneArt('volcano')).toBe('/survivor/scenes/volcano.svg')
   })
@@ -116,7 +116,7 @@ describe('Island control editors', () => {
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Volcano' }).getAttribute('aria-checked')).toBe('true'))
     expect(posts).toHaveLength(1)
     expect(posts[0].form).toEqual({ ...form(), islandScene: 'volcano' })
-    expect(screen.getAllByRole('radio')).toHaveLength(9)
+    expect(screen.getAllByRole('radio')).toHaveLength(10) // auto, rotate and the eight scenes
   })
 
   it('edits the vote deadline inline, posts the whole form, then re-reads the rulebook', async () => {

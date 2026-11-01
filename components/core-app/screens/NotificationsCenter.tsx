@@ -11,6 +11,7 @@ import type {
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
 import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
+import { FinalScoreLogos } from '@/components/notifications/FinalScoreLogos'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
@@ -123,6 +124,7 @@ function Row({
             </span>
           ) : null}
         </span>
+        <FinalScoreLogos type={row.type ?? ''} meta={row.meta} />
         {/* The specific reason. Never "you have an update". */}
         <span className="af-nt-detail">{copy(row.detail)}</span>
         {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? m.matchingNotices(row.relatedIds.length) : ''}</span> : null}

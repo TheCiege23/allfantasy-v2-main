@@ -154,3 +154,15 @@ describe('withBoardDetail', () => {
     ])
   })
 })
+
+it('does not disclose a hidden Whisperer through the role-specific six-unit win award', () => {
+  const context = { policy: 'beta_2025' as const, openingByRoster: { a: 10, b: 20 }, statusByRoster: { a: 'Survivor', b: 'Whisperer' } }
+  const views = buildZombieMatchups({
+    results: [{matchupId:'m',homeRosterId:'a',awayRosterId:'b',homeScore:95,awayScore:90,final:true}],
+    statusOf: () => 'Survivor', nameOf: id => id, infected: [],
+    rules: {bashingThreshold:60,maulingThreshold:60}, lossToZombieInfects: true,
+    winningsContext: context, winningsPolicy:'beta_2025', hideWinningsOf: id => id === 'b',
+  })
+  expect(views[0].winAward).toBeUndefined()
+  expect(views[0].transfer).toBeNull()
+})

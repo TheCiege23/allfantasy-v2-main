@@ -18,7 +18,8 @@ export interface SurvivorSideGameSignalInput {
   /** The earliest kickoff still open this week (ISO), or null when nothing is left to pick. */
   nextLockAt: string | null
   tokenPool: { enabled: boolean; open: boolean; picksLeft: number; pot: number; streak: boolean } | null
-  pool: { enabled: boolean; started: boolean; alive: boolean; banned: boolean; picked: boolean; revivesLeft: number } | null
+  /** `missedPick`: the commissioner's missed-pick rule — a miss that costs something makes the pick urgent. */
+  pool: { enabled: boolean; started: boolean; alive: boolean; banned: boolean; picked: boolean; revivesLeft: number; missedPick?: 'none' | 'loss' | 'revive' } | null
   auctions: ReadonlyArray<{ auctionId: string; label: string; closesAt: string; takingBids: boolean; myBids: number }>
   shop: { open: boolean; tokens: number; cheapest: number | null } | null
   exileBid: { week: number; closesAt: string; hasBid: boolean } | null
@@ -63,10 +64,17 @@ export function deriveSurvivorSideGameSignals(inputs: readonly SurvivorSideGameS
     const pool = input.pool
     if (pool?.enabled && pool.started && input.role === 'active') {
       if (pool.alive && !pool.picked && lockSoon) {
-        const urgent = hoursUntil(lockSoon, now) <= 12
+        // A miss that costs you (a loss or a revive) is more than a lost prize: raise it a level.
+        const costly = pool.missedPick === 'loss' || pool.missedPick === 'revive'
+        const urgent = hoursUntil(lockSoon, now) <= 12 || (costly && hoursUntil(lockSoon, now) <= 24)
+        const missText = pool.missedPick === 'loss'
+          ? (sp ? ' Sin elección, cuenta como derrota.' : ' No pick counts as a loss.')
+          : pool.missedPick === 'revive'
+            ? (sp ? ' Sin elección, gastas una resurrección.' : ' No pick uses a revive.')
+            : (sp ? ' Sin elección no ganas el premio.' : ' No pick, no prize.')
         out.push(signal(input, now, `pool_pick:${input.week}`, urgent ? 'high' : 'medium',
           sp ? (urgent ? 'Tu elección del Pozo Survivor vence hoy' : 'Haz tu elección del Pozo Survivor') : (urgent ? 'Survivor Pool pick due tonight' : 'Make your Survivor Pool pick'),
-          sp ? `El primer partido de la semana ${input.week} empieza ${when(lockSoon, now, true)}. Sin elección no ganas el premio.` : `Week ${input.week}'s first game kicks off ${when(lockSoon, now, false)}. No pick, no prize.`,
+          sp ? `El primer partido de la semana ${input.week} empieza ${when(lockSoon, now, true)}.${missText}` : `Week ${input.week}'s first game kicks off ${when(lockSoon, now, false)}.${missText}`,
           sp ? 'Abre Survivor y elige un equipo ganador.' : 'Open Survivor and pick a winning team.'))
       } else if (!pool.alive && !pool.banned && pool.revivesLeft > 0) {
         out.push(signal(input, now, `pool_revive:${input.week}`, 'low',

@@ -91,6 +91,18 @@ async function validateRedraftTradeProposalCore(
   input: RedraftProposalValidationInput,
   db: ValidationDb,
 ): Promise<RedraftProposalValidation> {
+  const itemAssets = input.assets.filter(a => a.assetType === 'zombie_item')
+  if (itemAssets.length) {
+    try {
+      await (await import('@/lib/zombie/beta2025ItemTrades')).validateBetaTradeItems(db as never, input.leagueId, [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])], itemAssets)
+    } catch (error) {
+      return { ok: false, code: 'ZOMBIE_ITEM_TRADE_INVALID', message: error instanceof Error ? error.message : 'Item trade is unavailable.', source: 'league_runtime' }
+    }
+    // The normal runtime still checks deadlines, move locks, players, FAAB and roster limits.
+    // The synthetic consideration exists only in this validation call; real inventory assets are stored.
+    const ordinary = input.assets.filter(a => a.assetType !== 'zombie_item')
+    input = { ...input, assets: ordinary.length ? ordinary : [{ assetType: 'future_consideration', fromRosterId: input.proposerRosterId, toRosterId: input.receiverRosterId }] }
+  }
   const runtime = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (runtime.ok) {
     const result = validateNflRedraftTradeProposal({

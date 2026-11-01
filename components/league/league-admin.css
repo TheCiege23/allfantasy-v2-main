@@ -259,3 +259,13 @@ html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af
 /* Cards: one radius and line weight, as .lsh-field-card. */
 .af-league-admin :is([class^='bg-[#0d1526]'], [class*=' bg-[#0d1526]']) { background-color: var(--surface); }
 .af-league-admin :is([class^='bg-[#0a1228]'], [class*=' bg-[#0a1228]'], [class^='bg-[#0d1526]'], [class*=' bg-[#0d1526]']):is([class^='rounded-xl'], [class*=' rounded-xl'], [class^='rounded-2xl'], [class*=' rounded-2xl']) { border-radius: 14px; border-color: var(--line); }
+
+/* Commissioner center: a persistent section menu and compact action rows. */
+.af-league-admin .af-admin-settings-layout { display:grid; grid-template-columns:minmax(180px,220px) minmax(0,1fr); gap:24px; align-items:start; }
+.af-league-admin .af-admin-section-nav { position:sticky; top:12px; display:flex; flex-direction:column; gap:4px; padding:10px; background:var(--surface); border:1px solid var(--line2); border-radius:14px; }
+.af-league-admin .af-admin-section-nav a { display:flex; width:100%; min-height:44px; padding:10px 12px; border:0; background:transparent; font-size:13px; font-weight:650; }
+.af-league-admin .af-admin-section-nav a:hover, .af-league-admin .af-admin-section-nav a:focus-visible { background:var(--accent-soft); color:var(--accent); }
+.af-league-admin .af-admin-sections { min-width:0; display:flex; flex-direction:column; gap:24px; }
+.af-league-admin .af-admin-action-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
+.af-league-admin .af-admin-action { min-height:108px; padding:16px; }
+@media(max-width:767px) { .af-league-admin .af-admin-settings-layout { grid-template-columns:minmax(0,1fr); gap:16px; } .af-league-admin .af-admin-section-nav { position:static; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; padding:6px; } .af-league-admin .af-admin-section-nav a { width:auto; flex:0 0 auto; } }
