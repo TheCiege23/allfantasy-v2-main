@@ -13,9 +13,12 @@ import type { RivalRow } from '@/lib/core-app/dash3aPanels'
 import type { LeagueHomeData } from '@/lib/core-app/leagueHome'
 
 const lang = vi.hoisted(() => ({ language: 'en' }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({
-  useOptionalLanguage: () => ({ language: lang.language }),
-}))
+vi.mock('@/components/i18n/LanguageProviderClient', async () => {
+  // The real catalog: CustomizeLeagueLink reads its label through `t`.
+  const { translations: dict } = await import('@/lib/i18n/translations')
+  const t = (k: string) => dict[lang.language]?.[k] ?? dict.en[k] ?? k
+  return { useOptionalLanguage: () => ({ language: lang.language, t }) }
+})
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ prefetch() {}, push() {}, replace() {}, refresh() {} }),
   usePathname: () => '/core',
