@@ -1568,6 +1568,12 @@ export async function executeLeagueSettingsPatch(
     },
   })
 
+  if (body.draftDateUtc !== undefined && patchOptions?.source !== 'tournament' &&
+      updated?.draftDateUtc && updated.draftDateUtc.getTime() !== league.leagueSettings?.draftDateUtc?.getTime()) {
+    const { notifyDraftTimeSet } = await import('@/lib/draft-notifications')
+    await notifyDraftTimeSet(leagueId, updated.draftDateUtc).catch((e) => console.error('[league/settings] draft time notification failed', e))
+  }
+
   return NextResponse.json({
     success: true,
     updatedFields: [...new Set(updatedFieldNames)],

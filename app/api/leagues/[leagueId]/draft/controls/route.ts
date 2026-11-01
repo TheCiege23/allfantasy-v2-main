@@ -49,7 +49,6 @@ import {
   notifyDraftIntelPostDraftRecap,
   notifyDraftIntelQueueReady,
   notifyDraftIntelTierBreak,
-  notifyDraftStartingSoon,
 } from '@/lib/draft-notifications'
 import {
   publishDraftIntelForUpcomingManagers,
@@ -246,7 +245,6 @@ export async function POST(
         }
         return NextResponse.json({ error: 'Cannot start draft' }, { status: 400 })
       }
-      void notifyDraftStartingSoon(leagueId)
       await runKeeperAutomationTick(leagueId).catch(() => {})
       await runSlowDraftAutomationTick(leagueId).catch(() => {})
       const snapshot = await buildSessionSnapshot(leagueId)
@@ -295,8 +293,6 @@ export async function POST(
       const _pauseStart = Date.now()
       const ok = await pauseDraftSession(leagueId, userId)
       if (!ok) return NextResponse.json({ error: 'Cannot pause draft' }, { status: 400 })
-      const { notifyDraftPaused } = await import('@/lib/draft-notifications')
-      notifyDraftPaused(leagueId).catch(() => {})
       // skipRepair: repair/reconcile not needed for a status-only transition.
       // No withViewerSession: viewer-scoped fields are unchanged on pause;
       // client mergeDraftSessionSnapshot preserves them from the prior state.
@@ -320,8 +316,6 @@ export async function POST(
       }
       const ok = await resumeDraftSession(leagueId)
       if (!ok) return NextResponse.json({ error: 'Cannot resume draft' }, { status: 400 })
-      const { notifyDraftResumed } = await import('@/lib/draft-notifications')
-      notifyDraftResumed(leagueId).catch(() => {})
       // skipRepair: repair/reconcile not needed for a status-only transition.
       const snapshot = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
       console.info('[draft-perf] resume controls total', { leagueId, ms: Date.now() - _resumeStart })
@@ -650,7 +644,7 @@ export async function POST(
       void notifyAutoPickFired(leagueId, onClockRosterId, selectedCandidate.playerName)
       void notifyDraftIntelPickConfirmation(leagueId, onClockRosterId, selectedCandidate.playerName).catch(() => {})
       void notifyDraftIntelOrphanTeamPick(leagueId, selectedCandidate.playerName).catch(() => {})
-      void notifyOnTheClockAfterPick(leagueId)
+      await notifyOnTheClockAfterPick(leagueId)
       const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)
       void (async () => {
         const states = await publishDraftIntelForUpcomingManagers({

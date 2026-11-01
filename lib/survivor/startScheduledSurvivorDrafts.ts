@@ -6,7 +6,6 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { withControlLock } from '@/lib/draft/draftLock'
 import { startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
-import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { enqueueNotification } from './notificationEngine'
 import {
   holdGuillotineScheduledDraft,
@@ -95,7 +94,6 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
       } else if (locked.value.ok) {
         summary.started++
         // A manual start notifies from the controls route; a scheduled one has no caller to do it.
-        await notifyDraftStartingSoon(leagueId).catch(() => {})
       } else if (locked.value.reason === 'SURVIVOR_CAST_INCOMPLETE') {
         // A commissioner can claim the remaining seats and the next tick retries.
         summary.skipped++

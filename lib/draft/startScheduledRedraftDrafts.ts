@@ -6,7 +6,6 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { withControlLock } from '@/lib/draft/draftLock'
 import { buildSlotOrderForLeague, startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { SCHEDULED_REDRAFT_SPORTS, startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
-import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { logStructured } from '@/lib/logging/structured'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
@@ -116,7 +115,6 @@ async function startDueDraft(
       summary.started++
       logStructured('info', log.event, 'started', { leagueId, sport: log.sport })
       // A manual start notifies from the controls route; a scheduled one has no caller to do it.
-      await notifyDraftStartingSoon(leagueId).catch(() => {})
     } else if (locked.value.reason === 'session_not_ready') {
       // Lost the conditional claim to another start: someone else started it.
       skip(null)
