@@ -24,7 +24,7 @@ for (const job of jobs) {
       counts[row.outcome] = (counts[row.outcome] ?? 0) + 1
       return counts
     }, {})
-    console.log(JSON.stringify({ job, applied: result.applied, outcomes,
+    console.log(JSON.stringify({ job, applied: result.applied, outcomes, experience: result.experience ?? null,
       ...(job.sport === "nba_cup" ? { gamesPublished: result.gamesPublished ?? 0, poolsUpdated: result.poolsUpdated ?? 0, providerFailures: (result.failures ?? []).length } : {}),
     }))
     if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score)$/.test(row.outcome))) {
