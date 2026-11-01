@@ -46,7 +46,7 @@
 
 /* The playoff line, labelled, in the sport colour; the bye line a quieter dashed rule above it.
  * Scoped to the table row: `.af-stb-line` is also the history chart's SVG series class. */
-.af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line td{border-top:2px solid var(--rd-accent);background:var(--rd-surface-elev)}
+.af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line td{border-top:2px dashed var(--rd-accent);background:var(--rd-surface-elev)}
 .af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line[data-line='bye'] td{border-top:2px dashed var(--rd-accent-line);background:transparent}
 .af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line .af-stb-linetext{color:var(--rd-accent-text);font-weight:800;letter-spacing:.06em}
 

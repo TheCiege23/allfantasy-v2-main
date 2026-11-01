@@ -128,6 +128,24 @@ export const standingsScreenMessages = defineMessages({
 
 export const standingsBoardMessages = defineMessages({
   en: {
+    // ── 2026-11 redesign: Diff and AF columns, the playoff picture ──
+    diffAbbrev: 'Diff',
+    diffTitle: 'Points for minus points against',
+    powerColAbbrev: 'AF',
+    powerColTitle: 'AllFantasy power rank, and its move since last week',
+    playoffPicture: 'Playoff picture',
+    pictureNote: (assumed: boolean) =>
+      `The field if the season ended today, from the table above.${assumed ? ' This league does not publish its playoff size, so the field is the usual one for its platform.' : ''} First-round pairings are the league’s to set, so they are not drawn.`,
+    byeSeeds: (byes: number) => (byes === 1 ? 'First-round bye' : `First-round byes · top ${byes}`),
+    playingRoundOne: 'Playing the first round',
+    seedLabel: (seed: number) => `Seed ${seed}`,
+    raceTitle: 'Race for the last spot',
+    raceHolding: 'Holding it',
+    raceChasing: 'Chasing',
+    raceGamesBack: (gb: string) => `${gb} back`,
+    raceLevel: 'level, out on the tiebreak',
+    raceOdds: 'playoff odds',
+    raceNone: 'Nobody is still chasing the last spot.',
     // ── Form / StreakCell ──
     formLabel: (form: readonly string[]) => `Last ${form.length}: ${form.join(' ')}`,
     /** W/L/T, as the Last 5 column prints it. */
@@ -194,6 +212,23 @@ export const standingsBoardMessages = defineMessages({
     tiebreak: (english: string, _rebuild: () => string | null): string => english,
   },
   es: {
+    diffAbbrev: 'Dif.',
+    diffTitle: 'Puntos a favor menos puntos en contra',
+    powerColAbbrev: 'AF',
+    powerColTitle: 'Posición en el ranking de poder de AllFantasy y su cambio desde la semana pasada',
+    playoffPicture: 'Panorama de playoffs',
+    pictureNote: (assumed) =>
+      `Los clasificados si la temporada terminara hoy, según la tabla de arriba.${assumed ? ' Esta liga no publica cuántos equipos van a playoffs, así que se usa lo habitual en su plataforma.' : ''} Los cruces de la primera ronda los define la liga, así que no se dibujan.`,
+    byeSeeds: (byes) => (byes === 1 ? 'Descanso en primera ronda' : `Descanso en primera ronda · los primeros ${byes}`),
+    playingRoundOne: 'Juegan la primera ronda',
+    seedLabel: (seed) => `Puesto ${seed}`,
+    raceTitle: 'La pelea por el último puesto',
+    raceHolding: 'Lo ocupa',
+    raceChasing: 'Lo persiguen',
+    raceGamesBack: (gb) => `a ${gb}`,
+    raceLevel: 'empatado, fuera por el desempate',
+    raceOdds: 'probabilidad de playoffs',
+    raceNone: 'Nadie persigue ya el último puesto.',
     formLabel: (form) => `Últimos ${form.length}: ${form.map((r) => r === 'W' ? 'victoria' : r === 'L' ? 'derrota' : 'empate').join(', ')}`,
     resultLetter: (r) => (r === 'W' ? 'G' : r === 'L' ? 'P' : 'E'),
     sosNoneLeft: 'No quedan rivales modelados que clasificar',

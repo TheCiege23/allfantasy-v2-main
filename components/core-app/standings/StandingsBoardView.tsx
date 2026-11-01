@@ -226,6 +226,20 @@ function boardStatus(t: BoardTeam): 'clinched' | 'eliminated' | null {
   return t.zone === 'eliminated' ? 'eliminated' : null
 }
 
+/** "+124.6" / "−38.2" — points for minus points against; a dash without head-to-head games. */
+function diffText(t: BoardTeam): string {
+  if (t.pointsAgainst == null) return '—'
+  const d = t.pointsFor - t.pointsAgainst
+  const abs = Math.abs(d).toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return d > 0 ? `+${abs}` : d < 0 ? `−${abs}` : abs
+}
+
+function diffTone(t: BoardTeam): 'good' | 'bad' | undefined {
+  if (t.pointsAgainst == null) return undefined
+  const d = t.pointsFor - t.pointsAgainst
+  return d > 0 ? 'good' : d < 0 ? 'bad' : undefined
+}
+
 /** The same thresholds the cross-league standings board colours its odds by. */
 function oddsTone(pct: number): 'good' | 'warn' | 'bad' {
   if (pct >= 60) return 'good'
@@ -476,10 +490,10 @@ function OfficialTable({
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
-  /* W-L, Pct, GB, PA, Last 5 and Streak come with head-to-head; PF and Move are always there. */
+  /* W-L, Pct, GB, PA, Diff, Last 5 and Streak come with head-to-head; PF, Move and AF are always there. */
   const cols =
-    3 +
-    (h2h ? 6 : 0) +
+    4 +
+    (h2h ? 7 : 0) +
     (hasSplit ? 2 : 0) +
     (odds ? 2 : 0) +
     (hasNext ? 1 : 0) +
@@ -553,8 +567,17 @@ function OfficialTable({
                 PA
               </SortTh>
             ) : null}
+            {h2h ? (
+              <th scope="col" className="af-stb-n">
+                <abbr title={m.diffTitle}>{m.diffAbbrev}</abbr>
+              </th>
+            ) : null}
             <th scope="col" className="af-stb-n">
               {copy('Move')}
+            </th>
+            {/* AF Power beside the table's own order, so "where am I" and "how good am I" share a row. */}
+            <th scope="col" className="af-stb-n">
+              <abbr title={m.powerColTitle}>{m.powerColAbbrev}</abbr>
             </th>
             {h2h ? (
               <>
@@ -647,8 +670,19 @@ function OfficialTable({
                     ) : null}
                     <td className="af-stb-n af-num">{pts(t.pointsFor)}</td>
                     {h2h ? <td className="af-stb-n af-num">{pts(t.pointsAgainst)}</td> : null}
+                    {h2h ? (
+                      <td className="af-stb-n af-num af-stb-diff" data-tone={diffTone(t)}>
+                        {diffText(t)}
+                      </td>
+                    ) : null}
                     <td className="af-stb-n">
                       <Move value={t.seedMove} />
+                    </td>
+                    <td className="af-stb-n">
+                      <span className="af-stb-afrank">
+                        <span className="af-num">{t.powerRank}</span>
+                        <Move value={t.powerMove} />
+                      </span>
                     </td>
                     {h2h ? (
                       <>
@@ -1383,6 +1417,117 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
   )
 }
 
+/**
+ * The playoff picture (2026-11 redesign): the field if the season ended today, and the race for the
+ * last spot. Everything is read off the table — seeds, records, games back, and Season Outlook's odds
+ * when the page has them.
+ *
+ * ⚠ NO PAIRINGS. Whether the bracket reseeds, and who meets whom, is the league's setting, and /core does
+ * not have it for an imported league. Drawing "3 v 6" would be a bracket we made up, so the field is shown
+ * as byes and first-round teams, and the note says pairings are not drawn.
+ */
+function PlayoffPicture({
+  board,
+  odds,
+  field,
+  byes,
+}: {
+  board: StandingsBoard
+  odds: StandingsOdds | null
+  field: number
+  byes: number
+}) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
+  const bySeed = [...board.teams].sort((a, b) => a.seed - b.seed)
+  const inField = bySeed.slice(0, field)
+  const byeTeams = inField.slice(0, byes)
+  const roundOne = inField.slice(byes)
+  const holding = bySeed[field - 1] ?? null
+  /* The chasers: up to three teams below the line who have not been eliminated. */
+  const chasing = bySeed.slice(field).filter((t) => t.zone !== 'eliminated').slice(0, 3)
+
+  const seedCard = (t: BoardTeam) => (
+    <li key={t.rosterId} className="af-stb-seedcard" data-you={t.isYou ? 'true' : undefined} data-bye={t.seed <= byes ? 'true' : undefined}>
+      <span className="af-stb-seedno af-num" aria-label={m.seedLabel(t.seed)}>
+        {t.seed}
+      </span>
+      <span className="af-stb-seedname">
+        {t.name}
+        {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+      </span>
+      <span className="af-stb-seedrec af-num">{formatRecord(t.record)}</span>
+      {t.clinched ? <ZoneChip team={t} /> : null}
+    </li>
+  )
+
+  const raceRow = (t: BoardTeam, role: 'holding' | 'chasing') => {
+    const o = odds?.byRoster[t.rosterId] ?? null
+    const gb = t.gamesBack
+    return (
+      <li key={t.rosterId} className="af-stb-racerow" data-role={role} data-you={t.isYou ? 'true' : undefined}>
+        <span className="af-stb-seedno af-num">{t.seed}</span>
+        <span className="af-stb-racename">
+          {t.name}
+          {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+          <span className="af-stb-racemeta af-num">
+            {formatRecord(t.record)}
+            {role === 'chasing' && gb != null
+              ? ` · ${gb === 0 ? m.raceLevel : m.raceGamesBack(gamesBackText(gb))}`
+              : ''}
+          </span>
+        </span>
+        {o ? (
+          <span className="af-stb-raceodds" aria-label={m.raceOdds}>
+            <OddsCell team={t} odds={odds!} />
+          </span>
+        ) : null}
+      </li>
+    )
+  }
+
+  return (
+    <section className="af-stb-picture" aria-label={m.playoffPicture} data-testid="standings-playoff-picture">
+      <div className="af-stb-field">
+        {byeTeams.length > 0 ? (
+          <div className="af-stb-fieldcol">
+            <h3 className="af-label">{m.byeSeeds(byeTeams.length)}</h3>
+            <ol className="af-stb-seedlist">
+              {byeTeams.map(seedCard)}
+            </ol>
+          </div>
+        ) : null}
+        <div className="af-stb-fieldcol">
+          <h3 className="af-label">{m.playingRoundOne}</h3>
+          <ol className="af-stb-seedlist">
+            {roundOne.map(seedCard)}
+          </ol>
+        </div>
+      </div>
+      <p className="af-stb-small">{m.pictureNote(board.rules.playoffTeamsSource === 'assumed')}</p>
+
+      <div className="af-stb-race" data-testid="standings-race">
+        <h3 className="af-label">{m.raceTitle}</h3>
+        {holding && chasing.length > 0 ? (
+          <>
+            <p className="af-stb-racehead">{m.raceHolding}</p>
+            <ul className="af-stb-racelist">
+              {raceRow(holding, 'holding')}
+            </ul>
+            <p className="af-stb-racehead">{m.raceChasing}</p>
+            <ul className="af-stb-racelist">
+              {chasing.map((t) => raceRow(t, 'chasing'))}
+            </ul>
+          </>
+        ) : (
+          <p className="af-stb-small">{m.raceNone}</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function StandingsBoardView({
   board: finalBoard,
   initial,
@@ -1498,7 +1643,7 @@ export function StandingsBoardView({
         ? sort
         : DEFAULT_STANDINGS_SORT
       : DEFAULT_STANDINGS_SORT
-  const resorted = view === 'official' && (sortable.key !== 'seed' || sortable.dir !== 'asc')
+  const resorted = view !== 'power' && (sortable.key !== 'seed' || sortable.dir !== 'asc')
 
   const sorted = useMemo(
     () =>
@@ -1509,13 +1654,20 @@ export function StandingsBoardView({
   )
   const groups = groupTeams(sorted, board, division)
   /* The bye and playoff lines only mean something between rows in table order. */
-  const plain = view === 'official' && !resorted && groups.length === 1 && groups[0].key === 'all'
+  const plain = view !== 'power' && !resorted && groups.length === 1 && groups[0].key === 'all'
   const focusIds =
     division !== 'all' && division !== 'group' ? new Set(board.teams.filter((t) => t.division?.key === division).map((t) => t.rosterId)) : null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const withheld = board.projectionWithheld
   const you = board.teams.find((t) => t.isYou) ?? null
+  /*
+   * The playoff picture needs a playoff line to draw: head-to-head results, no elimination format, and
+   * at least one team on each side of the line. Anywhere else the option is not offered, and a URL asking
+   * for it falls back to the table.
+   */
+  const canPicture = board.hasHeadToHead && !elimination && field >= 2 && board.teams.length > field
+  const picture = view === 'playoffs' && canPicture
   const SORT_LABEL: Record<StandingsSortKey, string> = {
     seed: 'position',
     pct: 'winning percentage',
@@ -1532,12 +1684,17 @@ export function StandingsBoardView({
     <div className="af-stb" ref={containerRef}>
       <div className="af-stb-controls" role="group" aria-label={copy('Standings view')}>
         <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
-          <button type="button" role="radio" aria-checked={view === 'official'} onClick={() => setView('official')}>
+          <button type="button" role="radio" aria-checked={view === 'official' || (view === 'playoffs' && !canPicture)} onClick={() => setView('official')}>
             {copy('League table')}
           </button>
           <button type="button" role="radio" aria-checked={view === 'power'} onClick={() => setView('power')}>
             {copy('AF Power')}
           </button>
+          {canPicture ? (
+            <button type="button" role="radio" aria-checked={view === 'playoffs'} onClick={() => setView('playoffs')}>
+              {m.playoffPicture}
+            </button>
+          ) : null}
         </div>
         {live ? (
           <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which results')}>
@@ -1574,7 +1731,7 @@ export function StandingsBoardView({
       </div>
 
       <div className="af-stb-kind" data-view={view}>
-        {view === 'official' ? (
+        {view !== 'power' ? (
           <p>
             <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : m.platformTable(board.rules.platformLabel)}</strong>{' '}
             {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}{' '}
@@ -1602,7 +1759,7 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {view === 'official' && elimination ? (
+      {view !== 'power' && elimination ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           <li data-zone="playoff">
             <span aria-hidden>●</span> {copy('Safe — not in the bottom three this week')}
@@ -1614,7 +1771,7 @@ export function StandingsBoardView({
             <span aria-hidden>✕</span> {copy('Eliminated — already chopped')}
           </li>
         </ul>
-      ) : view === 'official' ? (
+      ) : view !== 'power' ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           {byes > 0 ? (
             <li data-zone="bye">
@@ -1641,7 +1798,7 @@ export function StandingsBoardView({
         </ul>
       ) : null}
 
-      {resorted ? (
+      {resorted && !picture ? (
         <p className="af-stb-sorted" role="status">
           Sorted by {SORT_LABEL[sortable.key]}
           {sortable.key === 'seed' ? ', last first' : ''}. The playoff line shows only in table order.{' '}
@@ -1651,9 +1808,11 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {layout === 'cards' ? (
-        <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} plain={plain} />
-      ) : view === 'official' ? (
+      {picture ? (
+        <PlayoffPicture board={board} odds={odds} field={field} byes={byes} />
+      ) : layout === 'cards' ? (
+        <Cards board={board} groups={groups} view={view === 'power' ? 'power' : 'official'} odds={odds} efficiency={efficiency} plain={plain} />
+      ) : view !== 'power' ? (
         <>
           <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.')}</p>
           <OfficialTable board={board} groups={groups} plain={plain} odds={odds} sort={sortable} onSort={chooseSort} />
@@ -1665,7 +1824,9 @@ export function StandingsBoardView({
         </>
       )}
 
-      {layout === 'table' && you ? <PinnedYou team={you} view={view} odds={odds} containerRef={containerRef} /> : null}
+      {layout === 'table' && you && !picture ? (
+        <PinnedYou team={you} view={view === 'power' ? 'power' : 'official'} odds={odds} containerRef={containerRef} />
+      ) : null}
 
       {/*
         The method, one tap away rather than five paragraphs under the table. Nothing is cut: every
@@ -1673,7 +1834,7 @@ export function StandingsBoardView({
       */}
       <details className="af-stb-notes af-stb-how">
         <summary>{m.howTitle}</summary>
-        {view === 'official' ? (
+        {view !== 'power' ? (
           <>
             <p>{explanation.record}</p>
             <p>{explanation.order}</p>
