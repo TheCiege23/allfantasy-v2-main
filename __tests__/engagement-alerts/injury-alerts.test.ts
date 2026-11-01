@@ -1,6 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({ impacts: vi.fn(), observation: vi.fn(), saveObservation: vi.fn(), injuries: vi.fn(), native: vi.fn(), rosters: vi.fn(), profile: vi.fn(), exists: vi.fn(), identity: vi.fn(), recipients: vi.fn(), dispatch: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { sportsDataCache: { findUnique: h.observation, upsert: h.saveObservation }, sportsInjury: { findMany: h.injuries }, redraftRosterPlayer: { findMany: h.native }, roster: { findMany: h.rosters }, userProfile: { findUnique: h.profile }, platformNotification: { findUnique: h.exists } } }))
+/*
+ * Observations are read in one batch (`findMany`) since P4/P5 stage A. The batch is answered from the
+ * same `h.observation` mock the per-row read used, so every scenario below keeps its meaning. Only
+ * observation keys are answered: the player-news gate's own `findMany` (told keys) keeps failing the
+ * way it did before this mock existed, which the gate treats as "nobody told yet".
+ */
+async function observationBatch({ where }: { where: { cacheKey: { in: string[] } } }) {
+  const keys = where.cacheKey.in
+  if (!keys.every((k) => k.startsWith('injury-observation:'))) throw new Error('not mocked')
+  const out: Array<{ cacheKey: string; data: unknown }> = []
+  for (const cacheKey of keys) {
+    const row = await h.observation({ where: { cacheKey } })
+    if (row) out.push({ cacheKey, data: row.data })
+  }
+  return out
+}
+vi.mock('@/lib/prisma', () => ({ prisma: { sportsDataCache: { findUnique: h.observation, findMany: observationBatch, upsert: h.saveObservation }, sportsInjury: { findMany: h.injuries }, redraftRosterPlayer: { findMany: h.native }, roster: { findMany: h.rosters }, userProfile: { findUnique: h.profile }, platformNotification: { findUnique: h.exists } } }))
 vi.mock('@/lib/notifications/playerNewsRecipients', () => ({ FINISHED_SEASON_STATUSES: ['completed'], resolvePlayerNewsIdentity: h.identity, resolvePlayerNewsRecipients: h.recipients }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
 /*
