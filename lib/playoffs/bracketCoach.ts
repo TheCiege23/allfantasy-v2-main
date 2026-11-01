@@ -30,7 +30,7 @@ export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival 
   const timeZone = validCoachTimeZone(zone)
   const myPicks = new Map(view.picks.map((pick) => [pick.seriesId, pick.pickTeamName]))
   const rivalPicks = new Map(rival?.picks.map((pick) => [pick.seriesId, pick.pickTeamName]) ?? [])
-  const finalized = Boolean(view.activeEntry?.isComplete)
+  const finalized = Boolean(view.activeEntry?.finalizedAt)
   const games: CoachGame[] = view.series.map((game) => {
     const selected = myPicks.get(game.id)
     const pick = selected && [game.homeTeamName, game.awayTeamName].includes(selected) ? selected : null
@@ -70,17 +70,17 @@ export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival 
     rivals: view.entries.filter((entry) => entry.isComplete && entry.finalizedAt && entry.id !== view.activeEntry?.id).slice(0, 100).map((entry) => ({ id: entry.id, name: entry.name, totalScore: entry.totalScore ?? 0 })),
   }
 }
-export type BracketCoach = ReturnType<typeof buildBracketCoach>
+export type BracketCoach = ReturnType<typeof buildBracketCoach> & { experience?: import("./bracketExperience").BracketExperience }
 
 /** Hypothetical wins change records only. They never invent scores, tiebreakers or qualifiers. */
-export function qualificationScenarios(series: PlayoffSeriesView[], season: number, selectedTeam: string) {
+export function qualificationScenarios(series: PlayoffSeriesView[], season: number, selectedTeam: string, locale = "en") {
   const team = cupTeamName(selectedTeam)
-  const groups = nbaCupGroupStandings(series, season)
+  const groups = nbaCupGroupStandings(series, season, locale)
   const group = groups.find((row) => row.teams.some((row) => row.team === team))
   if (!group) return []
   const describe = (winner: string, gameId: string) => {
     const hypothetical = series.map((game) => game.id === gameId ? { ...game, status: "final" as const, winnerTeamName: winner, liveHomeScore: null, liveAwayScore: null, providerGamesJson: {} } : game)
-    const row = nbaCupGroupStandings(hypothetical, season).flatMap((group) => group.teams).find((row) => row.team === team)!
+    const row = nbaCupGroupStandings(hypothetical, season, locale).flatMap((group) => group.teams).find((row) => row.team === team)!
     return { wins: row.wins, losses: row.losses, status: row.status, road: row.road, canWinGroup: row.canWinGroup, canFinishSecond: row.canFinishSecond }
   }
   const sameGroup = new Set(group.teams.map((row) => row.team))

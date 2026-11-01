@@ -1,4 +1,5 @@
 "use client"
+import { eligibleCoachPick } from "@/lib/playoffs/bracketCoach"
 
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
@@ -296,6 +297,8 @@ export default function MlbBracketBoard({
     [canLatePick, lockRule, singleGame, tournamentLocked, rollingCup],
   )
 
+  const scoringExcludedReasonFor = (game: PlayoffSeriesView): "draft" | "late" | null => !rollingCup || !picksBySeries.has(game.id) ? null : !view.activeEntry?.finalizedAt ? "draft" : !eligibleCoachPick(view,game,view.activeEntry.finalizedAt) ? "late" : null
+
   const renderMatch = (node: BracketNode) => {
     const s = node.series
     const resolved = isOfficial(s.homeTeamName) && isOfficial(s.awayTeamName)
@@ -306,7 +309,7 @@ export default function MlbBracketBoard({
     const showScore = cupState === "live" || cupState === "final"
     const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"
     return (
-      <div className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
+      <div id={`playoff-series-${s.id}`} className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
         {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></button> : null}
         <TeamRow
           series={s}
@@ -510,6 +513,7 @@ export default function MlbBracketBoard({
           </section> : null}
           {rollingCup ? (
             <CupGroupPlaySection
+              scoringExcludedReasonFor={scoringExcludedReasonFor}
               games={groupGames}
               groups={cupGroups}
               sport={sport}
@@ -626,6 +630,7 @@ export default function MlbBracketBoard({
           cupGroups={rollingCup ? cupGroups : undefined}
           cupGames={rollingCup ? groupGames : undefined}
           picked={picksBySeries.get(liveNode) ?? null}
+          scoringExcludedReason={scoringExcludedReasonFor(modalSeries)}
           locked={!bracketReady || Boolean(lockedReasonFor(modalSeries))}
           saving={saving === liveNode}
           onPick={(team) => { void savePick(modalSeries, team).then((ok) => { if (ok) setLiveNode(null) }) }}

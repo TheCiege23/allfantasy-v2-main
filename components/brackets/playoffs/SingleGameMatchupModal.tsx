@@ -13,9 +13,12 @@ import { teamColors } from "@/lib/playoffs/playoffTeamColors"
 import { countdown, teamTint, tipoffLabel } from "./cup/cupFormat"
 import "./af-playoff-bracket.css"
 import "./cup/af-nba-cup.css"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
 import ChimmyMatchupAdvice from "./ChimmyMatchupAdvice"
 
 type Props = {
+  scoringExcludedReason?: "draft" | "late" | null
   challengeId?: string
   series: PlayoffSeriesView
   sport: string
@@ -57,7 +60,8 @@ function Silhouette({ team, logoUrl, logoSport }: { team: string; logoUrl: strin
   return <img className="af-cup-silhouette" src={url} alt="" aria-hidden="true" onError={() => setFailed(true)} />
 }
 
-export default function SingleGameMatchupModal({ challengeId, series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose, cupGroups, cupGames }: Props) {
+export default function SingleGameMatchupModal({ challengeId, series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose, cupGroups, cupGames, scoringExcludedReason }: Props) {
+  const { language } = useOptionalLanguage(), companionCopy = bracketCompanionCopy(language)
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeRef.current?.focus()
@@ -221,7 +225,8 @@ export default function SingleGameMatchupModal({ challengeId, series, sport, pro
           <span className="af-cup-tag af-cup-tag--gold">+{points} pt{points === 1 ? "" : "s"}</span>
           {state === "live" ? <span className="af-cup-chip af-cup-chip--live"><span className="af-cup-dot" aria-hidden="true" />LIVE · {cupLiveClock(series)}</span> : null}
           {state === "final" ? <span className="af-cup-tag">Final</span> : null}
-          {pickResult?.status === "correct" ? <span className="af-cup-tag af-cup-tag--good">Your pick was right · +{pickResult.points}</span> : null}
+          {picked && scoringExcludedReason ? <span className="af-cup-tag">{companionCopy.reasons[scoringExcludedReason]} · 0</span> : null}
+          {!scoringExcludedReason && pickResult?.status === "correct" ? <span className="af-cup-tag af-cup-tag--good">Your pick was right · +{pickResult.points}</span> : null}
           {pickResult?.status === "wrong" ? <span className="af-cup-tag af-cup-tag--bad">Your pick missed</span> : null}
           {state === "scheduled" && locked ? <span className="af-cup-tag">Picks locked</span> : null}
         </div>

@@ -23,3 +23,10 @@
 .af-coach th, .af-coach td { text-align: left; padding: 12px; border-bottom: 1px solid #35465e; min-width: 120px; }
 .af-coach caption { text-align: left; padding: 8px 0; }
 .af-coach-analysis { border-top: 1px solid #57718c; margin-top: 20px; padding-top: 16px; }
+.af-experience { border-top: 1px solid #57718c; padding-top: 12px; margin-top: 16px; }
+.af-coach-checklist { background: #14283a; border: 1px solid #57718c; border-radius: 14px; padding: 16px; }
+.af-coach-steps { display: flex; gap: 12px; flex-wrap: wrap; padding: 0; list-style: none; }
+.af-coach .af-coach-checkbox { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.af-coach-checkbox input { width: 20px; height: 20px; accent-color: #72e0ce; }
+.af-coach fieldset { border: 0; padding: 0; min-width: 0; }
+.af-coach tr[aria-current="true"] { background: #16413d; }

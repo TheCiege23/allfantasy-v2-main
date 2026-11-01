@@ -10,6 +10,7 @@ import "./af-nba-cup.css"
 type Filter = "next" | "results" | "all"
 
 export type CupGroupPlaySectionProps = {
+  scoringExcludedReasonFor?: (game: PlayoffSeriesView) => "draft" | "late" | null
   games: PlayoffSeriesView[]
   groups: CupGroup[]
   sport: string
@@ -33,7 +34,7 @@ function startMs(game: PlayoffSeriesView): number {
  * "Live & upcoming"; finished games move to Results so the next pick is always
  * at the top.
  */
-export default function CupGroupPlaySection({ games, groups, sport, picks, teamLogos, savingId, lockedReasonFor, onPick, onOpen }: CupGroupPlaySectionProps) {
+export default function CupGroupPlaySection({ games, groups, sport, picks, teamLogos, savingId, lockedReasonFor, onPick, onOpen, scoringExcludedReasonFor }: CupGroupPlaySectionProps) {
   const [filter, setFilter] = useState<Filter>("next")
   const live = useMemo(() => games.filter((g) => cupGameState(g) === "live").sort((a, b) => startMs(a) - startMs(b)), [games])
   const finals = games.filter((g) => cupGameState(g) === "final").length
@@ -111,6 +112,7 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
               <CupGameCard
                 key={game.id}
                 series={game}
+                scoringExcludedReason={scoringExcludedReasonFor?.(game) ?? null}
                 sport={sport}
                 pick={picks.get(game.id) ?? null}
                 teamLogos={teamLogos}

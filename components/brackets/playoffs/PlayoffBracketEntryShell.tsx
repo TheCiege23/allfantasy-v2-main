@@ -271,7 +271,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
                 onClick={handleSubmit}
                 disabled={!canSubmit || submitting}
                 title={canSubmit ? undefined : pastDeadline ? "The first game has started." : isLiveSingleGame && !validGuess ? "Enter a final game combined score." : submitBlockedMessage}
-                data-testid="pb-submit"
+                id="bracket-finalize" data-testid="pb-submit"
               >
                 {submitting
                   ? "Submitting…"

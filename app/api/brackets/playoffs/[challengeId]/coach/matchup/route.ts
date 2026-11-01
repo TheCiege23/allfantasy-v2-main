@@ -18,7 +18,7 @@ async function handle(request: Request, context: { params: Promise<{ challengeId
   if (!body.success) return NextResponse.json({ error: "Invalid matchup request" }, { status: 400 })
   const { challengeId } = await context.params
   try {
-    const { view, evidence } = await loadMatchupEvidence({ challengeId, seriesId: body.data.seriesId, user: auth.user })
+    const { view, evidence } = await loadMatchupEvidence({ challengeId, seriesId: body.data.seriesId, user: auth.user, locale: body.data.locale })
     const headers = { "Cache-Control": "private, no-store", Vary: "Cookie, Authorization" }
     if (!body.data.generate) return NextResponse.json({ evidence, generative: false, analysis: null }, { headers })
     const daily = await consumeSharedRateLimit(`bracket-coach-ai:${auth.user.id}:${new Date().toISOString().slice(0, 10)}`, 30, 86400)

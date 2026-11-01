@@ -4,6 +4,8 @@ import { getPlayoffBracketView } from "./playoffService"
 import { buildBracketCoach, gameHasLocked, type CoachRival } from "./bracketCoach"
 import { buildMatchupEvidence, coachTeamKey, type CoachStoredGame, type CoachInjury } from "./bracketCoachEvidence"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
+import { loadBracketExperience } from "./bracketExperienceService"
+import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
 
 type CoachUser = { id: string; email?: string | null; name?: string | null }
 export class CoachAccessError extends Error { constructor(public status: number, message: string) { super(message) } }
@@ -28,9 +30,10 @@ export async function loadBracketCoach(input: { challengeId: string; entryId?: s
     }) : []
     rival = { id: selected.id, name: selected.name, totalScore: selected.totalScore ?? 0, finalizedAt: selected.finalizedAt, picks }
   }
-  return buildBracketCoach(view, rival, now, input.timeZone)
+  const experience = await loadBracketExperience(view)
+  return { ...buildBracketCoach(view, rival, now, input.timeZone), experience }
 }
-export async function loadMatchupEvidence(input: { challengeId: string; seriesId: string; user: CoachUser }) {
+export async function loadMatchupEvidence(input: { challengeId: string; seriesId: string; user: CoachUser; locale?: string }) {
   const view = await loadCoachView(input)
   const game = view.series.find((row) => row.id === input.seriesId)
   if (!game) throw new CoachAccessError(404, "Matchup not found")
@@ -52,7 +55,7 @@ export async function loadMatchupEvidence(input: { challengeId: string; seriesId
   }
   const injuries: CoachInjury[] = (injuryFeed?.facts ?? []).filter((row) => !row.stale && row.team && row.status && names.some((name) => coachTeamKey(name, sport) === coachTeamKey(row.team!, sport)))
     .map((row) => ({ player: row.playerName, team: row.team!, status: row.status!, reportedAt: row.reportedAt.toISOString(), source: row.source }))
-  const coverage = !injuryFeed || !injuryFeed.coverage.sourceAvailable || injuryFeed.feedStale ? "Current injury coverage is unavailable or stale; availability is unknown."
-    : "Only current verified injury reports are listed; absence of a report does not establish availability."
-  return { view, evidence: buildMatchupEvidence(view, game, stored, injuries, coverage, now.getTime()) }
+  const copy = bracketCompanionCopy(input.locale)
+  const coverage = !injuryFeed || !injuryFeed.coverage.sourceAvailable || injuryFeed.feedStale ? copy.evidence.injuryUnknown : copy.evidence.injuryKnown
+  return { view, evidence: buildMatchupEvidence(view, game, stored, injuries, coverage, now.getTime(), input.locale) }
 }
