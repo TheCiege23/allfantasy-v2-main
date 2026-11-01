@@ -1,5 +1,6 @@
 import "server-only"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
+import { dispatchNotification } from "@/lib/notifications/NotificationDispatcher"
 import { prisma } from "@/lib/prisma"
 import { sendSms } from "@/lib/twilio-client"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
@@ -119,6 +120,26 @@ async function dispatchWorldCupNotification(
           ...(input.meta ?? {}),
         },
       })
+      // The pool keeps its existing in-app and opt-in SMS behavior. The shared
+      // dispatcher adds preference-gated, durable push without writing a second
+      // in-app row or sending an unrequested email or text.
+      try {
+        await dispatchNotification({
+          userIds: [userId],
+          category: "bracket_updates",
+          productType: "bracket",
+          type: `world_cup_${input.type}`,
+          title: input.title,
+          body: input.body,
+          severity: input.severity ?? "low",
+          actionHref: `/brackets/world-cup/${encodeURIComponent(input.challengeId)}`,
+          dedupePrefix: input.sourceKeyPrefix,
+          skipChannels: { inApp: true, email: true, sms: true },
+          meta: { challengeId: input.challengeId, worldCupNotificationType: input.type, privateSafe: input.privateSafe ?? false, ...(input.meta ?? {}) },
+        })
+      } catch {
+        console.warn("[WorldCupNotifications] push dispatch failed", { type: input.type })
+      }
     } else {
       skippedReason = prefs.poolMuted
         ? "pool_muted"

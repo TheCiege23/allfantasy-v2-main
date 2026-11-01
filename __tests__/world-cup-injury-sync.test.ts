@@ -5,6 +5,7 @@ const injuryFindFirstMock = vi.hoisted(() => vi.fn())
 const injuryUpsertMock = vi.hoisted(() => vi.fn())
 const entryFindManyMock = vi.hoisted(() => vi.fn())
 const createPlatformNotificationMock = vi.hoisted(() => vi.fn())
+const dispatchNotificationMock = vi.hoisted(() => vi.fn())
 const recordProviderSyncMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/world-cup/worldCupDataProvider", async () => {
@@ -33,6 +34,9 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/platform/notification-service", () => ({
   createPlatformNotification: createPlatformNotificationMock,
+}))
+vi.mock("@/lib/notifications/NotificationDispatcher", () => ({
+  dispatchNotification: dispatchNotificationMock,
 }))
 
 vi.mock("@/lib/provider-sync-logger", () => ({
@@ -69,6 +73,7 @@ describe("syncWorldCupInjuries", () => {
       },
     ])
     createPlatformNotificationMock.mockResolvedValue(true)
+    dispatchNotificationMock.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
     recordProviderSyncMock.mockResolvedValue(undefined)
   })
 
@@ -94,6 +99,12 @@ describe("syncWorldCupInjuries", () => {
       }),
     }))
     expect(createPlatformNotificationMock).toHaveBeenCalledTimes(2)
+    expect(dispatchNotificationMock).toHaveBeenCalledTimes(2)
+    expect(dispatchNotificationMock).toHaveBeenCalledWith(expect.objectContaining({
+      category: "bracket_updates", type: "world_cup_injury_update",
+      actionHref: "/brackets/world-cup/challenge-1",
+      skipChannels: { inApp: true, email: true, sms: true },
+    }))
   })
 
   it("does not notify when the latest cached injury is unchanged", async () => {
@@ -105,6 +116,7 @@ describe("syncWorldCupInjuries", () => {
     expect(result.skipped).toBe(1)
     expect(result.notificationsCreated).toBe(0)
     expect(createPlatformNotificationMock).not.toHaveBeenCalled()
+    expect(dispatchNotificationMock).not.toHaveBeenCalled()
   })
 
   it("reports not tracked yet when the provider has no injury endpoint", async () => {

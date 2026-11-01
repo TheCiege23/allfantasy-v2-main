@@ -449,7 +449,7 @@ export const PROBES = {
    * that ever changes, request traffic writes this heartbeat and the probe stops meaning anything.
    */
   '/api/keeper/session': { heartbeat: 'cron-keeper-session' },
-  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
+  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
 

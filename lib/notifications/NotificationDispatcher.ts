@@ -49,7 +49,7 @@ export type DispatchNotificationParams = {
    * Used by ChimmyAlertEngine to respect per-alert channel filtering
    * (e.g. when applyChannelPrefs has already stripped email/sms/push).
    */
-  skipChannels?: { email?: boolean; sms?: boolean; push?: boolean }
+  skipChannels?: { inApp?: boolean; email?: boolean; sms?: boolean; push?: boolean }
   /**
    * A fully designed email for this dispatch — subject + leaf-escaped HTML from
    * a real renderer (the draftEmails / tradeGradeEmail family). Sent through
@@ -191,7 +191,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         profile.timezone
       )
 
-      if (catPrefs.inApp && availability.inApp) {
+      if (catPrefs.inApp && availability.inApp && !skipChannels?.inApp) {
         const stored = await createPlatformNotification({
           userId,
           leagueId: effectiveLeagueId,
@@ -209,7 +209,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           },
         })
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
-      } else set('inApp',{status:'suppressed',reason:'channel_off'})
+      } else set('inApp',{status:'suppressed',reason:skipChannels?.inApp?'caller_excluded':'channel_off'})
 
       const deadline = gameAlertDeadline(type, new Date(), meta?.expiresAt)
       const transportMessage = {

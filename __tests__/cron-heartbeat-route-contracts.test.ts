@@ -315,7 +315,7 @@ describe('every route jobName matches the freshness probe exactly', () => {
   it.each([
     ['/api/cron/waivers', 'cron-waivers'],
     ['/api/tournament/automation', 'cron-tournament-automation'],
-    ['/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn', 'cron-playoff-schedule-refresh'],
+    ['/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto', 'cron-playoff-schedule-refresh'],
   ])('%s is probed as %s', (cronPath, jobName) => {
     expect(PROBES[cronPath]?.heartbeat).toBe(jobName)
   })
@@ -380,7 +380,7 @@ describe('every route jobName matches the freshness probe exactly', () => {
     const expected = [
       PROBES['/api/cron/waivers'].heartbeat,
       PROBES['/api/tournament/automation'].heartbeat,
-      PROBES['/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn'].heartbeat,
+      PROBES['/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto'].heartbeat,
     ].sort()
     expect(observed).toEqual(expected)
   })
