@@ -8,13 +8,16 @@ import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlay
 import { definiteInactive,freshAutoSubsEvidence } from './nativeAutoSubsPolicy'
 import { dispatchTeamNotification } from './teamDeliveryReceipts'
 import { createHash } from 'node:crypto'
+import { isBestBallLeagueRow } from './leagueBestBall'
 import { planPlayerNews, markPlayerNewsTold, playerNewsDispatches, type PlayerNewsSubject } from '@/lib/notifications/playerNewsGate'
 import { statusBucket } from '@/lib/notifications/playerNewsStatus'
 export async function readTeamAlerts(leagueId:string,userId:string){
-  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId,null,{savedRosterOnly:true,alertPreviewOnly:true}),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true}})])
+  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId,null,{savedRosterOnly:true,alertPreviewOnly:true}),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true,bestBallMode:true,leagueVariant:true,leagueType:true}})])
   if(!data||!league)return {available:false,alerts:[]}
   if(!data.starters.available||!freshTeamAlertRoster(data.league.platform,league.lastSyncedAt,Date.now()))return {available:false,alerts:[]}
-  const alerts=buildTeamAlerts(data,league.settings,Date.now()),ids=[...new Set(alerts.flatMap(a=>a.playerId?[a.playerId]:[]))]
+  // Best ball sets its own lineup: a hurt starter is not a decision anybody can make.
+  const bestBall=isBestBallLeagueRow(league)
+  const alerts=buildTeamAlerts(data,league.settings,Date.now()).filter(a=>!(bestBall&&a.kind==='injury')),ids=[...new Set(alerts.flatMap(a=>a.playerId?[a.playerId]:[]))]
   const evidence=ids.length ? await findSportsPlayersForLeague(data.league.sport??data.starters.data.find(s=>s.player?.sport)?.player?.sport??'',data.league.platform,ids,{translated:true}) : new Map()
   for(const a of alerts){
     if(a.kind==='deadline'){a.observedAt=league.lastSyncedAt?.toISOString()??null;continue}
