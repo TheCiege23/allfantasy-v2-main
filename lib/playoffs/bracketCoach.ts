@@ -30,7 +30,7 @@ export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival 
   const timeZone = validCoachTimeZone(zone)
   const myPicks = new Map(view.picks.map((pick) => [pick.seriesId, pick.pickTeamName]))
   const rivalPicks = new Map(rival?.picks.map((pick) => [pick.seriesId, pick.pickTeamName]) ?? [])
-  const finalized = Boolean(view.activeEntry?.finalizedAt)
+  const finalized = Boolean(view.activeEntry?.isComplete && view.activeEntry.finalizedAt)
   const games: CoachGame[] = view.series.map((game) => {
     const selected = myPicks.get(game.id)
     const pick = selected && [game.homeTeamName, game.awayTeamName].includes(selected) ? selected : null

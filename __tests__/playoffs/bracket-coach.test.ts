@@ -43,6 +43,13 @@ describe("private bracket coach", () => {
     expect(result.recap.pointsEarned).toBe(0)
     expect(result.comparisons).toEqual([])
   })
+  it("does not award points to a filled entry without a finalization timestamp", () => {
+    const view = coachView(); view.activeEntry!.finalizedAt = null
+    const result = buildBracketCoach(view, null, now)
+    expect(result.entry?.finalized).toBe(false)
+    expect(result.tonight.every((game) => !game.eligible)).toBe(true)
+    expect(result.recap.pointsEarned).toBe(0)
+  })
   it("never reveals a filled but unsubmitted rival bracket", () => {
     const view = coachView(); view.challenge.sport = "nba"; view.entries[1].finalizedAt = null
     const result = buildBracketCoach(view, { id: "rival", name: "Unsubmitted", totalScore: 4, picks: [{ seriesId: "live", pickTeamName: "Atlanta Hawks" }] }, now)
