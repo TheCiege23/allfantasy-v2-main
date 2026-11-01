@@ -26,6 +26,7 @@ export function validCoachTimeZone(value: string | null): string {
 
 /** Rival picks enter only after their own game locks; drafts never enter comparisons or rooting. */
 export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival | null, now = Date.now(), zone = "America/New_York") {
+  if (rival && !rival.finalizedAt) rival = null
   const timeZone = validCoachTimeZone(zone)
   const myPicks = new Map(view.picks.map((pick) => [pick.seriesId, pick.pickTeamName]))
   const rivalPicks = new Map(rival?.picks.map((pick) => [pick.seriesId, pick.pickTeamName]) ?? [])
@@ -66,7 +67,7 @@ export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival 
     rival: rival ? { id: rival.id, name: rival.name, totalScore: rival.totalScore } : null,
     comparisons, rooting, recap: { games: recent, pointsEarned: recent.reduce((sum, game) => sum + game.earned, 0), pointsMissed: recent.reduce((sum, game) => sum + game.missed, 0),
       rounds: [...new Set(recent.map((game) => byId.get(game.id)!.round))].map((round) => ({ round, points: recent.filter((game) => byId.get(game.id)!.round === round).reduce((sum, game) => sum + game.earned, 0) })) },
-    rivals: view.entries.filter((entry) => entry.isComplete && entry.id !== view.activeEntry?.id).slice(0, 100).map((entry) => ({ id: entry.id, name: entry.name, totalScore: entry.totalScore ?? 0 })),
+    rivals: view.entries.filter((entry) => entry.isComplete && entry.finalizedAt && entry.id !== view.activeEntry?.id).slice(0, 100).map((entry) => ({ id: entry.id, name: entry.name, totalScore: entry.totalScore ?? 0 })),
   }
 }
 export type BracketCoach = ReturnType<typeof buildBracketCoach>

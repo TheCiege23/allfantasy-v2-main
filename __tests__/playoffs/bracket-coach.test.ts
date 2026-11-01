@@ -43,6 +43,13 @@ describe("private bracket coach", () => {
     expect(result.recap.pointsEarned).toBe(0)
     expect(result.comparisons).toEqual([])
   })
+  it("never reveals a filled but unsubmitted rival bracket", () => {
+    const view = coachView(); view.challenge.sport = "nba"; view.entries[1].finalizedAt = null
+    const result = buildBracketCoach(view, { id: "rival", name: "Unsubmitted", totalScore: 4, picks: [{ seriesId: "live", pickTeamName: "Atlanta Hawks" }] }, now)
+    expect(result.comparisons).toEqual([])
+    expect(result.rival).toBeNull()
+    expect(result.rivals).toEqual([])
+  })
   it("uses sport-scoped scoring and does not mistake live leads for earned points", () => {
     const view = coachView()
     view.series[0].liveHomeScore = 80; view.series[0].liveAwayScore = 60

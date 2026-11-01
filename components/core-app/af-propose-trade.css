@@ -1,0 +1,292 @@
+/*
+ * The guided "Propose trade" flow (components/core-app/screens/ProposeTradeFlow.tsx).
+ * Theme tokens from af-core.css throughout; the only colours defined here are the position tints of the
+ * player cards, one set for the dark themes (dark, AF) and one for light, each a soft fill with ink text
+ * so the label never sits in the tint itself. Text stays at or above the 11px floor.
+ * Phone = ≤720px (PHONE_QUERY in TradeAssetSheet.tsx, the breakpoint every /core trade surface uses).
+ */
+
+.af-ptf-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 6, 14, 0.62);
+}
+
+.af-ptf {
+  /* Position tints — dark and AF. */
+  --pt-qb: rgba(244, 114, 182, 0.2);
+  --pt-qb-line: rgba(244, 114, 182, 0.55);
+  --pt-rb: rgba(52, 211, 153, 0.18);
+  --pt-rb-line: rgba(52, 211, 153, 0.5);
+  --pt-wr: rgba(96, 165, 250, 0.2);
+  --pt-wr-line: rgba(96, 165, 250, 0.55);
+  --pt-te: rgba(251, 146, 60, 0.2);
+  --pt-te-line: rgba(251, 146, 60, 0.55);
+  --pt-k: rgba(250, 204, 21, 0.16);
+  --pt-k-line: rgba(250, 204, 21, 0.45);
+  --pt-def: rgba(148, 163, 184, 0.18);
+  --pt-def-line: rgba(148, 163, 184, 0.45);
+  --pt-idp: rgba(167, 139, 250, 0.18);
+  --pt-idp-line: rgba(167, 139, 250, 0.5);
+
+  display: flex;
+  flex-direction: column;
+  width: min(1320px, 100%);
+  max-height: min(900px, calc(100vh - 48px));
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow, 0 24px 64px rgba(0, 0, 0, 0.45));
+  overflow: hidden;
+}
+
+html[data-mode='light'] .af-ptf {
+  --pt-qb: #fde4ee;
+  --pt-qb-line: #f3a6c4;
+  --pt-rb: #dcf5ea;
+  --pt-rb-line: #8fd8b8;
+  --pt-wr: #e1ecfd;
+  --pt-wr-line: #9dbff4;
+  --pt-te: #feebd8;
+  --pt-te-line: #f6bd88;
+  --pt-k: #fbf3cf;
+  --pt-k-line: #e8d47a;
+  --pt-def: #eceff3;
+  --pt-def-line: #c3cbd6;
+  --pt-idp: #ece6fd;
+  --pt-idp-line: #c3b3f5;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.af-ptf-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.af-ptf-head h2 { margin: 2px 0 2px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; outline: none; }
+.af-ptf-head p { margin: 0; font-size: 13px; color: var(--muted); }
+.af-ptf-step { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.af-ptf-head-actions { display: flex; align-items: center; gap: 12px; }
+.af-ptf-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text2); cursor: pointer; }
+.af-ptf-check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.af-ptf-x {
+  width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface2); color: var(--text); font-size: 22px; line-height: 1; cursor: pointer;
+}
+
+/* ── Phone team strip ───────────────────────────────────────────────────── */
+.af-ptf-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); scrollbar-width: none;
+}
+.af-ptf-strip::-webkit-scrollbar { display: none; }
+.af-ptf-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 6px;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text2);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.af-ptf-chip[data-deal='true'] { border-color: var(--accent-line); }
+.af-ptf-chip[data-on='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+/* ── Body: grid of team columns (+ summary aside on desktop) ────────────── */
+.af-ptf-body { display: flex; flex: 1; min-height: 0; }
+.af-ptf-grid {
+  flex: 1; min-width: 0; display: flex; gap: 10px; padding: 16px 20px; overflow: auto;
+  align-items: flex-start;
+}
+.af-ptf-col {
+  flex: 0 0 168px; display: flex; flex-direction: column; gap: 8px; padding: 8px;
+  border-radius: 16px; border: 1px solid transparent;
+}
+.af-ptf[data-step='2'] .af-ptf-col { flex-basis: 196px; }
+.af-ptf-col[data-viewer='true'] { background: var(--surface2); border-color: var(--line); }
+.af-ptf-col[data-selected='true'] { background: var(--accent-soft); border-color: var(--accent-line); }
+
+.af-ptf-col-head {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; padding: 8px 4px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.af-ptf-col-head[data-static='true'] { cursor: default; }
+button.af-ptf-col-head:hover:not(:disabled) { background: var(--chip); }
+button.af-ptf-col-head:disabled { cursor: not-allowed; opacity: 0.6; }
+.af-ptf-col-name { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; font-size: 13px; font-weight: 700; }
+.af-ptf-col-name em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--muted); }
+.af-ptf-col[data-selected='true'] .af-ptf-col-name > span { color: var(--accent); }
+.af-ptf-col-cta { font-size: 12px; font-weight: 700; color: var(--accent); }
+.af-ptf-avatar {
+  width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--chip); border: 1px solid var(--line); color: var(--text2); font-size: 12px; font-weight: 800;
+}
+.af-ptf-chip .af-ptf-avatar { width: 30px; height: 30px; font-size: 11px; }
+
+/* ── Player cards ───────────────────────────────────────────────────────── */
+.af-ptf-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-ptf-card {
+  position: relative; display: flex; align-items: stretch;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); overflow: hidden;
+}
+.af-ptf-card[data-pos='qb'] { background: var(--pt-qb); border-color: var(--pt-qb-line); }
+.af-ptf-card[data-pos='rb'] { background: var(--pt-rb); border-color: var(--pt-rb-line); }
+.af-ptf-card[data-pos='wr'] { background: var(--pt-wr); border-color: var(--pt-wr-line); }
+.af-ptf-card[data-pos='te'] { background: var(--pt-te); border-color: var(--pt-te-line); }
+.af-ptf-card[data-pos='k'] { background: var(--pt-k); border-color: var(--pt-k-line); }
+.af-ptf-card[data-pos='def'] { background: var(--pt-def); border-color: var(--pt-def-line); }
+.af-ptf-card[data-pos='dl'],
+.af-ptf-card[data-pos='lb'],
+.af-ptf-card[data-pos='db'] { background: var(--pt-idp); border-color: var(--pt-idp-line); }
+.af-ptf-card[data-on='true'] { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.af-ptf-card-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-height: 52px; padding: 7px 10px; border: 0; background: transparent; color: var(--text);
+  font: inherit; text-align: left;
+}
+button.af-ptf-card-main { cursor: pointer; padding-right: 30px; }
+.af-ptf-card-eyebrow { font-size: 11px; font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.af-ptf-card-name { font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.af-ptf-card-tag {
+  margin-top: 3px; padding: 1px 6px; border-radius: 4px; background: var(--text); color: var(--surface);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.af-ptf-card-check {
+  position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--text2); display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 900; color: var(--surface);
+}
+.af-ptf-card[data-on='true'] .af-ptf-card-check { background: var(--accent); border-color: var(--accent); }
+.af-ptf-heart {
+  flex: none; width: 36px; min-height: 44px; border: 0; background: transparent; color: var(--text2);
+  font-size: 16px; cursor: pointer;
+}
+.af-ptf-heart[aria-pressed='true'] { color: var(--bad); }
+.af-ptf-empty { margin: 0; padding: 10px 4px; font-size: 12px; color: var(--muted); }
+
+/* ── Picks and FAAB (step 2) ────────────────────────────────────────────── */
+.af-ptf-extras { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.af-ptf-sub { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.af-ptf-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-ptf-picks .af-ptf-sub { flex-basis: 100%; }
+.af-ptf-pick {
+  min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface2); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.af-ptf-pick[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.af-ptf-pick:disabled { opacity: 0.55; cursor: not-allowed; }
+.af-ptf-faab-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.af-ptf-faab-row input {
+  width: 72px; min-height: 44px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+
+/* ── Summary ────────────────────────────────────────────────────────────── */
+.af-ptf-aside {
+  flex: 0 0 340px; padding: 16px 20px; border-left: 1px solid var(--line); overflow: auto; background: var(--bg);
+}
+.af-ptf-summary { display: flex; flex-direction: column; gap: 10px; }
+.af-ptf-summary h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.af-ptf-sum-team { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+.af-ptf-sum-team > b { display: block; margin-bottom: 8px; font-size: 14px; }
+.af-ptf-sum-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.af-ptf-sum-cols ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-ptf-sum-cols li { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 700; }
+.af-ptf-sum-cols small { font-size: 11px; font-weight: 500; color: var(--muted); }
+.af-ptf-to { display: flex; align-items: center; gap: 6px; }
+.af-ptf-to select {
+  min-height: 36px; max-width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface2); color: var(--text); font: inherit; font-size: 12px;
+}
+
+/* ── Review (step 3) ────────────────────────────────────────────────────── */
+.af-ptf-review { flex: 1; overflow: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+.af-ptf-value { margin: 0; font-size: 13px; color: var(--text2); }
+.af-ptf-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text2); }
+.af-ptf-field--inline { flex-direction: row; align-items: center; gap: 10px; }
+.af-ptf-field textarea,
+.af-ptf-field select {
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); color: var(--text);
+  font: inherit; font-size: 14px; padding: 10px 12px;
+}
+.af-ptf-field select { min-height: 44px; padding: 0 10px; }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.af-ptf-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface);
+}
+.af-ptf-foot-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; color: var(--text2); }
+.af-ptf-foot-info b { font-size: 14px; color: var(--text); }
+.af-ptf-warn { color: var(--warn); }
+.af-ptf-foot-actions { display: flex; gap: 10px; flex: none; }
+.af-ptf-btn {
+  min-height: 48px; min-width: 112px; padding: 0 22px; border-radius: 999px; border: 1px solid var(--line2, var(--line));
+  background: transparent; color: var(--text); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer;
+}
+.af-ptf-btn--go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #04121a); }
+.af-ptf-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.af-ptf :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Phone sheet for the summary (step 2) ───────────────────────────────── */
+.af-ptf-sheet { border-top: 1px solid var(--line); background: var(--bg); padding: 0 16px; max-height: 50vh; overflow: auto; }
+.af-ptf-sheet[data-open='true'] { padding-bottom: 12px; }
+.af-ptf-sheet-handle {
+  width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--accent);
+  font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+
+/* ── Tablet: every column, narrower; the summary moves below ────────────── */
+@media (min-width: 721px) and (max-width: 1099px) {
+  .af-ptf-backdrop { padding: 12px; }
+  .af-ptf-col { flex-basis: 140px; }
+  .af-ptf[data-step='2'] .af-ptf-col { flex-basis: 168px; }
+  .af-ptf-card-name { font-size: 13px; }
+  .af-ptf-body { flex-direction: column; overflow: auto; }
+  .af-ptf-grid { flex: none; }
+  .af-ptf-aside { flex: none; border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ── Phone: full screen, one roster at a time ───────────────────────────── */
+@media (max-width: 720px) {
+  .af-ptf-backdrop { padding: 0; align-items: stretch; }
+  .af-ptf { width: 100%; max-height: none; height: 100%; border-radius: 0; border: 0; }
+  .af-ptf-head { padding: 14px 16px 10px; }
+  .af-ptf-head h2 { font-size: 18px; }
+  .af-ptf-head p { display: none; }
+  .af-ptf-grid { padding: 12px 16px; }
+  .af-ptf-col,
+  .af-ptf[data-step='2'] .af-ptf-col { flex: 1 1 auto; }
+  .af-ptf-col-head { flex-direction: row; justify-content: space-between; }
+  .af-ptf-col-name { flex-direction: row; text-align: left; }
+  .af-ptf-review { padding: 12px 16px; }
+  .af-ptf-sum-cols { grid-template-columns: minmax(0, 1fr); }
+  .af-ptf-foot { flex-direction: column; align-items: stretch; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .af-ptf-foot-actions > .af-ptf-btn { flex: 1; }
+}
+
+/* ── The launch bar on the Trade Center ─────────────────────────────────── */
+.af-ptf-launch {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  margin-top: 18px; padding: 14px 18px; border-radius: 16px;
+  border: 1px solid var(--accent-line); background: var(--accent-soft);
+}
+.af-ptf-launch > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.af-ptf-launch b { font-size: 15px; color: var(--text); }
+.af-ptf-launch span { font-size: 13px; color: var(--text2); }
+.af-ptf-launch-btn {
+  min-height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: var(--accent);
+  color: var(--accent-ink, #04121a); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer;
+}
+.af-ptf-launch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 720px) {
+  .af-ptf-launch-btn { width: 100%; }
+}

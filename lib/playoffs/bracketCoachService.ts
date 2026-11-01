@@ -17,8 +17,8 @@ export async function loadCoachView(input: { challengeId: string; entryId?: stri
 export async function loadBracketCoach(input: { challengeId: string; entryId?: string | null; rivalId?: string | null; timeZone?: string; user: CoachUser }) {
   const view = await loadCoachView(input)
   const now = Date.now()
-  const selected = input.rivalId ? view.entries.find((row) => row.id === input.rivalId && row.isComplete && row.id !== view.activeEntry?.id)
-    : view.entries.filter((row) => row.isComplete && row.id !== view.activeEntry?.id).sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))[0]
+  const selected = input.rivalId ? view.entries.find((row) => row.id === input.rivalId && row.isComplete && row.finalizedAt && row.id !== view.activeEntry?.id)
+    : view.entries.filter((row) => row.isComplete && row.finalizedAt && row.id !== view.activeEntry?.id).sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))[0]
   if (input.rivalId && !selected) throw new CoachAccessError(404, "Finalized comparison bracket not found in this pool")
   let rival: CoachRival | null = null
   if (selected && view.activeEntry) {
