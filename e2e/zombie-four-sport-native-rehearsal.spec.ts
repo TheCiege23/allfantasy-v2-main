@@ -1,4 +1,4 @@
-import { separateFixtureWhisperers, seedFinalNflFixtureTotals } from './helpers/zombie-current-policy-fixture'
+import { separateFixtureWhisperers, seedFinalNflFixtureTotals, fixtureNflDraftPositions } from './helpers/zombie-current-policy-fixture'
 import { startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { createZombieLeague } from '../lib/zombie/setupEngine'
 import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
@@ -141,7 +141,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
 
       const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId } })
       await prisma.draftPick.deleteMany({ where: { sessionId: draft.id } })
-      const positions = sport === 'NFL' ? ['QB', 'RB', 'WR', 'TE', 'K'] :
+      const positions = sport === 'NFL' ? await fixtureNflDraftPositions(leagueId) :
         sport === 'NBA' ? ['PG', 'SG', 'SF', 'PF', 'C'] :
         sport === 'NHL' ? ['C', 'LW', 'RW', 'D', 'G'] : ['P', 'C', '1B', '2B', 'SS', 'OF']
       await prisma.draftPick.createMany({ data: Array.from({ length: draft.rounds * 8 }, (_, i) => {
@@ -151,7 +151,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
         return {
           sessionId: draft.id, overall: i + 1, round: round + 1, slot: owner + 1,
           rosterId: rosters[owner].id, playerId: `${marker}-${sport}-${i}`,
-          playerName: `Fixture Player ${i + 1}`, position: positions[round % positions.length],
+          playerName: `Fixture Player ${i + 1}`, position: sport === 'NFL' ? (positions[round] ?? 'RB') : positions[round % positions.length],
           sportType: sport, source: 'simulation_fixture',
         }
       }) })
