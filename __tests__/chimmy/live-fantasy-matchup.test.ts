@@ -9,7 +9,7 @@ const h = vi.hoisted(() => ({
   importedTeams: vi.fn(),
   freshCategory: vi.fn(),
   freshEspn: vi.fn(),
-  freshMfl: vi.fn(), freshFleaflicker: vi.fn(), freshFantrax: vi.fn(), fantraxSnapshot: vi.fn(),
+  freshMfl: vi.fn(), freshFleaflicker: vi.fn(), freshFleaflickerStandings: vi.fn(), freshFantrax: vi.fn(), fantraxSnapshot: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
@@ -27,7 +27,8 @@ vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
 vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooCategoryMatchupForWeek: h.freshCategory }))
 vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnScheduleForSync: h.freshEspn }))
 vi.mock('@/lib/league-import/mfl/MflLeagueFetchService', () => ({ fetchMflScheduleForSync: h.freshMfl }))
-vi.mock('@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService', () => ({ fetchFleaflickerScoreboard: h.freshFleaflicker }))
+vi.mock('@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService', () => ({
+  fetchFleaflickerScoreboard: h.freshFleaflicker, fetchFleaflickerStandings: h.freshFleaflickerStandings }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxMatchupScores: h.freshFantrax }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/core-app/weeklyCapabilities')>(),
@@ -59,6 +60,7 @@ beforeEach(() => {
   h.freshEspn.mockResolvedValue([])
   h.freshMfl.mockResolvedValue({ schedule: [] })
   h.freshFleaflicker.mockResolvedValue({ week: null })
+  h.freshFleaflickerStandings.mockResolvedValue({ season: 2026, divisions: [] })
   h.freshFantrax.mockResolvedValue({ ok: false })
   h.fantraxSnapshot.mockResolvedValue(null)
 })
@@ -146,6 +148,43 @@ describe('selected league live fantasy matchup', () => {
     expect(out).toContain('ESPN stat 5: you 12.00, opponent 16.00')
     expect(out).toContain('ESPN current-week matchup cumulativeScore.scoreByStat')
     expect(out).not.toContain('fantasy points:')
+  })
+
+  it('reads played Fantrax category totals only after an exact roster-name join', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Fantrax Cats', sport: 'NHL', season: 2026,
+      platform: 'fantrax', platformLeagueId: 'snapshot-1', leagueType: 'categories', settings: {} })
+    h.board.mockResolvedValue({ leagueBoard: { yourRosterId: '2', yours: { week: 2 } }, eliminationWeeks: [] })
+    h.fantraxSnapshot.mockResolvedValue({ sourceLeagueId: 'source-1' })
+    h.importedTeams.mockResolvedValue([{ externalId: '1', teamName: 'Home', ownerName: null },
+      { externalId: '2', teamName: 'Rival', ownerName: null }])
+    h.freshFantrax.mockResolvedValue({ ok: true, data: { period: 2, matchups: [{
+      away: { teamId: 'a', teamName: 'Rival', score: 4, gamesPlayed: 3, categories: { G: 7, A: 11 } },
+      home: { teamId: 'h', teamName: 'Home', score: 6, gamesPlayed: 4, categories: { G: 9, A: 12 } },
+    }] } })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('Fantrax stat G: you 7.00, opponent 9.00')
+    expect(out).toContain('Fantrax current-period matchup category values')
+    expect(out).not.toContain('your team 4.00')
+  })
+
+  it('shows verified Fleaflicker roto season category values for the claimed team', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Flea Roto', sport: 'MLB', season: 2026,
+      platform: 'fleaflicker', platformLeagueId: '123', leagueType: 'roto', settings: {} })
+    h.importedTeams.mockResolvedValue([{ externalId: '2', teamName: 'Mine', ownerName: null,
+      claimedByUserId: 'u1', currentRank: 2, pointsFor: 30, wins: 0, losses: 0, ties: 0,
+      lastUpdatedAt: new Date('2026-11-01T20:00:00Z') },
+      { externalId: '3', teamName: 'Other', ownerName: null,
+        claimedByUserId: null, currentRank: 1, pointsFor: 35, wins: 0, losses: 0, ties: 0,
+        lastUpdatedAt: new Date('2026-11-01T20:00:00Z') }])
+    h.freshFleaflickerStandings.mockResolvedValue({ season: 2026, divisions: [{ teams: [{ id: 2,
+      name: 'Mine', roto: { overallRank: 2, statValues: [
+        { category: { id: 1, abbreviation: 'HR' }, value: { value: 80 }, rank: 2 },
+        { category: { id: 2, abbreviation: 'ERA' }, value: { value: 3.2 }, rank: 1 },
+      ] } }] }] })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('HR 80.00 (rank 2)')
+    expect(out).toContain('ERA 3.20 (rank 1)')
+    expect(out).toContain('season-to-date rotisserie stat values')
   })
 
   it('uses an authorized current-week provider point score ahead of the older board', async () => {

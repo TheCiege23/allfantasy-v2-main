@@ -3,15 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({ league: vi.fn(), career: vi.fn(), roster: vi.fn(), matchups: vi.fn(),
   nativePlayers: vi.fn(), sportsPlayers: vi.fn(), identities: vi.fn(), scores: vi.fn(),
-  teams: vi.fn(), categoryCache: vi.fn(), board: vi.fn(), seasonFacts: vi.fn() }))
+  teams: vi.fn(), categoryCache: vi.fn(), board: vi.fn(), seasonFacts: vi.fn(), dynastySeason: vi.fn(),
+  fantraxSnapshot: vi.fn(), freshFantrax: vi.fn(), freshFlea: vi.fn(), freshFleaScore: vi.fn(),
+  freshMfl: vi.fn(), freshEspn: vi.fn(), freshYahoo: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league },
   redraftRoster: { findMany: h.roster }, redraftMatchup: { findMany: h.matchups },
   redraftRosterPlayer: { findMany: h.nativePlayers }, sportsPlayer: { findMany: h.sportsPlayers },
   playerIdentityMap: { findMany: h.identities }, leaguePlayerWeeklyScore: { findMany: h.scores },
   leagueTeam: { findMany: h.teams }, sportsDataCache: { findMany: h.categoryCache },
-  seasonStandingFact: { findMany: h.seasonFacts } } }))
+  seasonStandingFact: { findMany: h.seasonFacts }, leagueDynastySeason: { findFirst: h.dynastySeason },
+  fantraxLeague: { findUnique: h.fantraxSnapshot } } }))
 vi.mock('@/lib/core-app/careerRecords', () => ({ loadCareerGames: h.career }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
+vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxMatchupScores: h.freshFantrax }))
+vi.mock('@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService', () => ({
+  fetchFleaflickerStandings: h.freshFlea, fetchFleaflickerScoreboard: h.freshFleaScore }))
+vi.mock('@/lib/league-import/mfl/MflLeagueFetchService', () => ({ fetchMflScheduleForSync: h.freshMfl }))
+vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnScheduleForSync: h.freshEspn }))
+vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooCategoryMatchupForWeek: h.freshYahoo }))
 
 import { buildLeagueFantasyHistoryContext } from '@/lib/chimmy/leagueFantasyHistoryGrounding'
 
@@ -33,6 +42,14 @@ beforeEach(() => {
   h.categoryCache.mockResolvedValue([])
   h.board.mockResolvedValue({ leagueBoard: null })
   h.seasonFacts.mockResolvedValue([])
+  h.dynastySeason.mockResolvedValue(null)
+  h.fantraxSnapshot.mockResolvedValue(null)
+  h.freshFantrax.mockResolvedValue({ ok: false })
+  h.freshFlea.mockResolvedValue({ season: 2025, divisions: [] })
+  h.freshFleaScore.mockResolvedValue({ week: null })
+  h.freshMfl.mockResolvedValue({ schedule: [] })
+  h.freshEspn.mockResolvedValue([])
+  h.freshYahoo.mockResolvedValue(null)
 })
 
 describe('selected-league fantasy history', () => {
@@ -133,5 +150,59 @@ describe('selected-league fantasy history', () => {
     const out = await buildLeagueFantasyHistoryContext({ leagueId: 'L1', userId: 'u1', season: 2025 })
     expect(out).toContain('2025: 2. Current Name')
     expect(out).toContain('no past manager identity is inferred')
+  })
+
+  it('shows older imported season standings without attributing old teams to this user', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'MFL History', sport: 'NFL', season: 2026,
+      platform: 'mfl', platformLeagueId: 'P1', leagueType: 'redraft', settings: {} })
+    h.career.mockResolvedValue({ games: [] })
+    h.seasonFacts.mockResolvedValue([
+      { season: 2022, teamId: '0001', rank: 1, wins: 9, losses: 4, ties: 0, pointsFor: 1500 },
+      { season: 2022, teamId: '0002', rank: 2, wins: 8, losses: 5, ties: 0, pointsFor: 1400 },
+    ])
+    const out = await buildLeagueFantasyHistoryContext({ leagueId: 'L1', userId: 'u1', season: 2022 })
+    expect(out).toContain('2022: rank 1 team 0001 9-4-0 W-L-T')
+    expect(out).toContain('current team claim does not establish who managed them then')
+    expect(out).not.toContain('(you)')
+  })
+
+  it('reads a previous Fantrax season category week through its historical snapshot', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Old Cats', sport: 'NHL', season: 2026,
+      platform: 'fantrax', platformLeagueId: 'current-snapshot', leagueType: 'categories', settings: {} })
+    h.dynastySeason.mockResolvedValue({ platformLeagueId: 'old-snapshot' })
+    h.fantraxSnapshot.mockResolvedValue({ sourceLeagueId: 'old-provider-id', season: 2024 })
+    h.freshFantrax.mockResolvedValue({ ok: true, data: { period: 7, matchups: [{
+      away: { teamId: 'a', gamesPlayed: 2, categories: { G: 10, A: 20 } },
+      home: { teamId: 'b', gamesPlayed: 2, categories: { G: 11, A: 19 } },
+    }] } })
+    const out = await buildLeagueFantasyHistoryContext({ leagueId: 'L1', userId: 'u1', season: 2024, week: 7 })
+    expect(out).toContain('2024 week 7')
+    expect(out).toContain('Team a vs team b')
+    expect(out).toContain('Historical team IDs are not attributed')
+    expect(h.freshFantrax).toHaveBeenCalledWith('old-provider-id', 7)
+  })
+
+  it('rejects a historical Fantrax snapshot linked to the wrong season', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Old Cats', sport: 'NHL', season: 2026,
+      platform: 'fantrax', platformLeagueId: 'current-snapshot', leagueType: 'categories', settings: {} })
+    h.dynastySeason.mockResolvedValue({ platformLeagueId: 'old-snapshot' })
+    h.fantraxSnapshot.mockResolvedValue({ sourceLeagueId: 'wrong-year', season: 2023 })
+    const out = await buildLeagueFantasyHistoryContext({ leagueId: 'L1', userId: 'u1', season: 2024, week: 7 })
+    expect(out).toContain('2024 category totals are not on file')
+    expect(h.freshFantrax).not.toHaveBeenCalled()
+  })
+
+  it('reads an older MFL scoring week beyond stored Career games without changing padded franchise IDs', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'MFL History', sport: 'NFL', season: 2026,
+      platform: 'mfl', platformLeagueId: 'current-id', leagueType: 'redraft', settings: {} })
+    h.career.mockResolvedValue({ games: [] })
+    h.dynastySeason.mockResolvedValue({ platformLeagueId: 'old-id' })
+    h.freshMfl.mockResolvedValue({ schedule: [{ season: 2021, week: 5, matchups: [
+      { franchiseId1: '0001', franchiseId2: '0002', points1: 113, points2: 108 },
+    ] }] })
+    const out = await buildLeagueFantasyHistoryContext({ leagueId: 'L1', userId: 'u1', season: 2021, week: 5 })
+    expect(out).toContain('Team 0001 113.00–108.00 team 0002')
+    expect(out).toContain('team IDs are not attributed to the current manager')
+    expect(h.freshMfl).toHaveBeenCalledWith('u1', 'old-id', 2021)
   })
 })

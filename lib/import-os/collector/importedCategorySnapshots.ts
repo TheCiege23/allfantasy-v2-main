@@ -36,7 +36,7 @@ export function verifiedCategoryPairs(
     const keys1 = Object.keys(match.categories1).sort()
     const keys2 = Object.keys(match.categories2).sort()
     if (keys1.length < 2 || keys1.length > 40 || keys1.join(',') !== keys2.join(',') ||
-      keys1.some((key) => !/^\d{1,4}$/.test(key) || !Number.isFinite(match.categories1![key]) || !Number.isFinite(match.categories2![key]))) continue
+      keys1.some((key) => !/^[A-Za-z0-9_. -]{1,40}$/.test(key) || !Number.isFinite(match.categories1![key]) || !Number.isFinite(match.categories2![key]))) continue
     pairs.push({ roster1, roster2, categories1: match.categories1, categories2: match.categories2 })
   }
   return pairs

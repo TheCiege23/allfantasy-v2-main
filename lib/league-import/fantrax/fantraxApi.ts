@@ -738,6 +738,8 @@ export type FantraxMatchupSide = {
    * already been burnt by on standings.
    */
   gamesPlayed: number
+  /** Raw category totals, only when the provider supplies a numeric value for each category. */
+  categories?: Record<string, number>
 }
 
 export type FantraxPeriodScore = {
@@ -752,12 +754,61 @@ function parseMatchupSide(raw: unknown): FantraxMatchupSide | null {
   if (!teamId) return null
   const score = Number(row.score)
   const gamesPlayed = Number(row.gamesPlayed)
+  const categories = parseFantraxCategoryTotals(row.categories)
   return {
     teamId,
     teamName: String(row.teamName ?? '').trim(),
     score: Number.isFinite(score) ? score : 0,
     gamesPlayed: Number.isFinite(gamesPlayed) ? gamesPlayed : 0,
+    ...(Object.keys(categories).length ? { categories } : {}),
   }
+}
+
+/** A missing/approximate category value is never converted to zero. */
+function numericCategoryValue(raw: unknown): number | null {
+  let value = raw
+  for (let depth = 0; depth < 3 && value && typeof value === 'object' && !Array.isArray(value); depth++) {
+    value = (value as Record<string, unknown>).value
+  }
+  if (value === '' || value == null || (typeof value !== 'string' && typeof value !== 'number')) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+export function parseFantraxCategoryTotals(raw: unknown): Record<string, number> {
+  if (!Array.isArray(raw)) return {}
+  const totals: Record<string, number> = {}
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const item = entry as Record<string, unknown>
+    const category = item.category && typeof item.category === 'object' && !Array.isArray(item.category)
+      ? item.category as Record<string, unknown> : item
+    const key = String(category.id ?? category.categoryId ?? category.name ?? category.abbreviation ?? '').trim()
+    const value = numericCategoryValue(item.value)
+    if (!/^[A-Za-z0-9_. -]{1,40}$/.test(key) || value == null || Object.hasOwn(totals, key)) continue
+    totals[key] = value
+  }
+  return totals
+}
+
+function parsePairCategoryTotals(raw: unknown): { away: Record<string, number>; home: Record<string, number> } {
+  if (!Array.isArray(raw)) return { away: {}, home: {} }
+  const away: Record<string, number> = {}
+  const home: Record<string, number> = {}
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const item = entry as Record<string, unknown>
+    const category = item.category && typeof item.category === 'object' && !Array.isArray(item.category)
+      ? item.category as Record<string, unknown> : item
+    const key = String(category.id ?? category.categoryId ?? category.name ?? category.abbreviation ?? '').trim()
+    if (!/^[A-Za-z0-9_. -]{1,40}$/.test(key)) continue
+    const awayValue = parseFantraxCategoryTotals([{ id: key, value: item.away }])[key]
+    const homeValue = parseFantraxCategoryTotals([{ id: key, value: item.home }])[key]
+    if (awayValue == null || homeValue == null || Object.hasOwn(away, key)) continue
+    away[key] = awayValue
+    home[key] = homeValue
+  }
+  return { away, home }
 }
 
 /**
@@ -796,11 +847,17 @@ export async function getFantraxMatchupScores(
   const matchups: FantraxPeriodScore['matchups'] = []
   for (const entry of list) {
     if (entry === null || typeof entry !== 'object') continue
-    const away = parseMatchupSide((entry as Record<string, unknown>).away)
-    const home = parseMatchupSide((entry as Record<string, unknown>).home)
+    const raw = entry as Record<string, unknown>
+    const away = parseMatchupSide(raw.away)
+    const home = parseMatchupSide(raw.home)
     /* A half-read pairing cannot be attached to a fixture, so it is dropped
        rather than stored against one side. */
     if (!away || !home) continue
+    if (!Object.keys(away.categories ?? {}).length && !Object.keys(home.categories ?? {}).length) {
+      const pair = parsePairCategoryTotals(raw.categories)
+      if (Object.keys(pair.away).length) away.categories = pair.away
+      if (Object.keys(pair.home).length) home.categories = pair.home
+    }
     matchups.push({ away, home })
   }
 
@@ -932,13 +989,14 @@ export async function fetchFantraxScheduleWithScores(
   position: FantraxSeasonPosition | null
   periodsRead: number
   periodsFailed: number
+  periodScores: FantraxPeriodScore[]
 }> {
   const rows = flattenFantraxSchedule(info)
   const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
 
   const maxPeriods = options?.maxPeriods ?? 30
   const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
-  if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0 }
+  if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0, periodScores: [] }
 
   const wanted = Array.from({ length: through }, (_, i) => i + 1)
   const results = await Promise.all(wanted.map((p) => getFantraxMatchupScores(leagueId, p)))
@@ -955,6 +1013,7 @@ export async function fetchFantraxScheduleWithScores(
     position,
     periodsRead: scored.length,
     periodsFailed,
+    periodScores: scored,
   }
 }
 

@@ -5,8 +5,15 @@ import { loadCareerGames } from '@/lib/core-app/careerRecords'
 import { NO_CAREER_FILTER } from '@/lib/core-app/careerModel'
 import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
 import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
-import { importedCategoryCacheKey, parseImportedCategoryPairs } from '@/lib/import-os/collector/importedCategorySnapshots'
+import { importedCategoryCacheKey, parseImportedCategoryPairs, verifiedCategoryPairs, yahooRosterId,
+  type ImportedCategoryPair } from '@/lib/import-os/collector/importedCategorySnapshots'
 import { getWeekBoard } from '@/lib/core-app/weekBoard'
+import { fetchYahooCategoryMatchupForWeek } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
+import { fetchEspnScheduleForSync } from '@/lib/league-import/espn/EspnLeagueFetchService'
+import { getFantraxMatchupScores } from '@/lib/league-import/fantrax/fantraxApi'
+import { fetchFleaflickerStandings, fetchFleaflickerScoreboard } from '@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService'
+import { fetchMflScheduleForSync } from '@/lib/league-import/mfl/MflLeagueFetchService'
+import { fleaflickerRotoCategoryRows } from '@/lib/import-os/collector/fleaflickerRotoCategories'
 
 async function playerFantasyHistory(args: { league: { id: string; name: string | null; sport: string; platform: string | null;
   platformLeagueId: string | null; leagueType: string | null; settings: unknown }; player: string;
@@ -61,10 +68,14 @@ async function importedCategoryHistory(args: { league: { id: string; name: strin
   season: number | null; week: number | null; limit: number }): Promise<string> {
   const { league } = args
   const provider = String(league.platform ?? '').toLowerCase()
-  if (!['yahoo', 'espn'].includes(provider) || !league.platformLeagueId) {
+  if (!['yahoo', 'espn', 'fantrax'].includes(provider) || !league.platformLeagueId) {
     return `No verified imported category snapshots are stored for ${league.name} from ${provider || 'this provider'}.`
   }
   if (args.season != null && args.season !== league.season) {
+    if (args.week != null && args.season < league.season) {
+      const older = await olderImportedCategoryWeek(league, provider, args.userId, args.season, args.week)
+      if (older) return older
+    }
     return `The imported category snapshots for ${league.name} are tied to its connected ${league.season} season; ${args.season} category totals are not on file.`
   }
   const claimed = await prisma.leagueTeam.findMany({ where: { leagueId: league.id, claimedByUserId: args.userId },
@@ -98,6 +109,134 @@ async function importedCategoryHistory(args: { league: { id: string; name: strin
   if (!shown.length) return `No verified ${provider.toUpperCase()} category totals are stored for your team in ${league.name}${args.week ? ` week ${args.week}` : ''}. Missing totals are a data gap.`
   return [`IMPORTED CATEGORY HISTORY — ${league.name} (${league.sport}).`, ...shown.map((row) => row.text),
     `Source: stored ${provider.toUpperCase()} matchup category snapshots. Fetch time is shown where recorded; final status, category winners and fantasy points are not inferred.`].join('\n')
+}
+
+async function olderImportedCategoryWeek(league: { id: string; name: string | null; sport: string;
+  platformLeagueId: string | null }, provider: string, userId: string, season: number, week: number): Promise<string | null> {
+  const linked = await prisma.leagueDynastySeason.findFirst({ where: { leagueId: league.id, season },
+    select: { platformLeagueId: true } })
+  if (!linked?.platformLeagueId) return null
+  let pairs: ImportedCategoryPair[] = []
+  try {
+    if (provider === 'fantrax') {
+      const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: linked.platformLeagueId },
+        select: { sourceLeagueId: true, season: true } })
+      if (!snapshot?.sourceLeagueId || snapshot.season !== season) return null
+      const response = await getFantraxMatchupScores(snapshot.sourceLeagueId, week)
+      if (!response.ok || response.data.period !== week) return null
+      pairs = verifiedCategoryPairs(response.data.matchups.filter((m) =>
+        m.away.gamesPlayed > 0 || m.home.gamesPlayed > 0).map((m) => ({
+        teamId1: m.away.teamId, teamId2: m.home.teamId,
+        categories1: m.away.categories, categories2: m.home.categories,
+      })), (id) => id)
+    } else if (provider === 'espn') {
+      const schedule = await fetchEspnScheduleForSync(userId, linked.platformLeagueId, season)
+      const entry = schedule.find((row) => row.season === season && row.week === week)
+      pairs = entry ? verifiedCategoryPairs(entry.matchups, (id) => id) : []
+    } else if (provider === 'yahoo') {
+      const response = await fetchYahooCategoryMatchupForWeek(userId, linked.platformLeagueId, season, week)
+      pairs = response?.season === season && response.week === week
+        ? verifiedCategoryPairs(response.matchups.map((m) => ({ teamId1: m.teamKey1, teamId2: m.teamKey2,
+          categories1: m.categories1, categories2: m.categories2 })), yahooRosterId) : []
+    }
+  } catch { return null }
+  if (!pairs.length) return null
+  return [`HISTORICAL ${provider.toUpperCase()} CATEGORY MATCHUPS — ${league.name}, ${season} week ${week}.`,
+    ...pairs.slice(0, 20).map((pair) => `Team ${pair.roster1} vs team ${pair.roster2}: ${Object.keys(pair.categories1)
+      .sort().map((id) => `stat ${id} ${pair.categories1[id]!.toFixed(2)}–${pair.categories2[id]!.toFixed(2)}`).join('; ')}.`),
+    `Source: ${provider.toUpperCase()} season-verified historical matchup response. Historical team IDs are not attributed to today's manager; category winners and final status are not inferred.`].join('\n')
+}
+
+/** Older imported seasons are league records; today's team claim does not prove past ownership. */
+async function archivedLeagueSeasons(league: { id: string; name: string | null; sport: string; season: number },
+  season: number | null, week: number | null, limit: number): Promise<string | null> {
+  if (week != null || season != null && season >= league.season) return null
+  const facts = await prisma.seasonStandingFact.findMany({ where: { leagueId: league.id,
+    season: season == null ? { lt: league.season } : season },
+    select: { season: true, teamId: true, rank: true, wins: true, losses: true, ties: true,
+      pointsFor: true }, orderBy: [{ season: 'desc' }, { rank: 'asc' }], take: 500 })
+  const seasons = [...new Set(facts.map((fact) => fact.season))].slice(0, limit)
+  const lines: string[] = []
+  for (const year of seasons) {
+    const rows = facts.filter((fact) => fact.season === year)
+    if (rows.length < 2 || !rows.some((row) => row.wins || row.losses || row.ties || row.pointsFor !== 0)) continue
+    lines.push(`${year}: ${rows.slice(0, 8).map((row) =>
+      `${row.rank && row.rank > 0 ? `rank ${row.rank} ` : ''}team ${row.teamId} ${row.wins}-${row.losses}-${row.ties} W-L-T, provider points-for ${row.pointsFor.toFixed(2)}`).join('; ')}.`)
+  }
+  if (!lines.length) return null
+  return [`OLDER LEAGUE SEASONS — ${league.name} (${league.sport}).`, ...lines,
+    'Source: imported season standing facts. Team IDs and records belong to those historical seasons; a current team claim does not establish who managed them then. Provider points-for is not interpreted as category totals.'].join('\n')
+}
+
+async function olderFleaflickerRotoValues(league: { name: string | null; sport: string;
+  season: number; platform: string | null; platformLeagueId: string | null }, season: number | null): Promise<string | null> {
+  if (String(league.platform).toLowerCase() !== 'fleaflicker' || season == null || season >= league.season ||
+    !/^\d+$/.test(league.platformLeagueId ?? '') || !['NFL', 'MLB', 'NBA', 'NHL'].includes(league.sport.toUpperCase())) return null
+  try {
+    const body = await fetchFleaflickerStandings(league.sport.toUpperCase() as 'NFL' | 'MLB' | 'NBA' | 'NHL',
+      Number(league.platformLeagueId), season)
+    const rows = fleaflickerRotoCategoryRows(body).slice(0, 12)
+    if (!rows.length) return null
+    return [`FLEAFLICKER ${season} ROTO CATEGORY ARCHIVE — ${league.name}.`,
+      ...rows.map((row) => `Team ${row.teamId}${row.rank ? `, rank ${row.rank}` : ''}: ${row.categories.slice(0, 20)
+        .map((category) => `${category.label} ${category.value.toFixed(2)}`).join('; ')}.`),
+      'Source: Fleaflicker season-verified historical standings. Values are season totals; current ownership does not prove who managed an older team.'].join('\n')
+  } catch { return null }
+}
+
+async function olderProviderPointWeek(league: { id: string; name: string | null; sport: string;
+  season: number; platform: string | null; platformLeagueId: string | null }, userId: string,
+  season: number | null, week: number | null): Promise<string | null> {
+  if (season == null || season >= league.season || week == null || nativeWeeklyLeague(league)) return null
+  const provider = String(league.platform ?? '').toLowerCase()
+  const linked = provider === 'fleaflicker' ? null : await prisma.leagueDynastySeason.findFirst({
+    where: { leagueId: league.id, season }, select: { platformLeagueId: true } })
+  const providerLeagueId = provider === 'fleaflicker' ? league.platformLeagueId : linked?.platformLeagueId
+  if (!providerLeagueId) return null
+  type Result = { team1: string; team2: string; score1: number; score2: number }
+  let pairs: Result[] = []
+  try {
+    if (provider === 'mfl') {
+      const response = await fetchMflScheduleForSync(userId, providerLeagueId, season)
+      pairs = response.schedule.filter((row) => row.season === season && row.week === week)
+        .flatMap((row) => row.matchups.map((m) => ({ team1: m.franchiseId1, team2: m.franchiseId2,
+          score1: m.points1, score2: m.points2 }))) as Result[]
+    } else if (provider === 'espn') {
+      const response = await fetchEspnScheduleForSync(userId, providerLeagueId, season)
+      pairs = response.filter((row) => row.season === season && row.week === week)
+        .flatMap((row) => row.matchups.map((m) => ({ team1: m.teamId1, team2: m.teamId2 ?? '',
+          score1: m.points1, score2: m.points2 }))) as Result[]
+    } else if (provider === 'yahoo') {
+      const response = await fetchYahooCategoryMatchupForWeek(userId, providerLeagueId, season, week)
+      pairs = response?.season === season && response.week === week
+        ? response.matchups.map((m) => ({ team1: yahooRosterId(m.teamKey1) ?? '',
+          team2: m.teamKey2 ? yahooRosterId(m.teamKey2) ?? '' : '', score1: m.points1, score2: m.points2 })) as Result[] : []
+    } else if (provider === 'fleaflicker' && /^\d+$/.test(providerLeagueId) &&
+      ['NFL', 'MLB', 'NBA', 'NHL'].includes(league.sport.toUpperCase())) {
+      const response = await fetchFleaflickerScoreboard(league.sport.toUpperCase() as 'NFL' | 'MLB' | 'NBA' | 'NHL',
+        Number(providerLeagueId), season, week)
+      pairs = response.week?.season === season && response.week.week === week
+        ? response.week.games.filter((game) => game.isFinalScore === true)
+          .map((game) => ({ team1: String(game.home.id), team2: String(game.away.id),
+            score1: game.homeScore?.score?.value, score2: game.awayScore?.score?.value })) as Result[] : []
+    } else if (provider === 'fantrax') {
+      const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: providerLeagueId },
+        select: { sourceLeagueId: true, season: true } })
+      if (!snapshot?.sourceLeagueId || snapshot.season !== season) return null
+      const response = await getFantraxMatchupScores(snapshot.sourceLeagueId, week)
+      pairs = response.ok && response.data.period === week
+        ? response.data.matchups.filter((match) => match.away.gamesPlayed > 0 || match.home.gamesPlayed > 0)
+          .map((match) => ({ team1: match.away.teamId, team2: match.home.teamId,
+            score1: match.away.score, score2: match.home.score })) : []
+    }
+  } catch { return null }
+  const shown = pairs.filter((pair) => pair.team1 && pair.team2 && pair.team1 !== pair.team2 &&
+    Number.isFinite(pair.score1) && Number.isFinite(pair.score2) &&
+    (provider === 'fantrax' || provider === 'fleaflicker' || pair.score1 !== 0 || pair.score2 !== 0)).slice(0, 30)
+  if (!shown.length) return null
+  return [`HISTORICAL ${provider.toUpperCase()} FANTASY SCOREBOARD — ${league.name}, ${season} week ${week}.`,
+    ...shown.map((pair) => `Team ${pair.team1} ${pair.score1.toFixed(2)}–${pair.score2.toFixed(2)} team ${pair.team2}.`),
+    'Source: season-verified provider matchup response. These are league scores, not box scores; team IDs are not attributed to the current manager.'].join('\n')
 }
 
 async function importedRotoHistory(args: { league: { id: string; name: string | null; sport: string };
@@ -185,18 +324,27 @@ export async function buildLeagueFantasyHistoryContext(args: {
   const limit = Math.min(20, Math.max(1, Number.isInteger(args.limit) ? args.limit! : 8))
   if (args.player?.trim()) return playerFantasyHistory({ league, player: args.player, season, week, limit })
   const format = weeklyFormat(league)
+  const archive = format === 'roto' ? null : await archivedLeagueSeasons(league, season, week, limit)
   if (format === 'categories' || format === 'roto') {
-    if (!nativeWeeklyLeague(league)) return format === 'categories'
+    if (!nativeWeeklyLeague(league)) {
+      const detail = format === 'categories'
       ? importedCategoryHistory({ league, userId: args.userId, season, week, limit })
       : importedRotoHistory({ league, season, week, limit })
-    return nativeCategoryHistory({ leagueId: league.id, userId: args.userId, leagueName, format, season, week, limit })
+      const flea = format === 'roto' && week == null ? await olderFleaflickerRotoValues(league, season) : null
+      return [await detail, flea, archive].filter(Boolean).join('\n\n')
+    }
+    return [await nativeCategoryHistory({ leagueId: league.id, userId: args.userId, leagueName, format, season, week, limit }), archive].filter(Boolean).join('\n\n')
   }
   const filter = { ...NO_CAREER_FILTER, league: leagueName.toLowerCase(),
     fromSeason: season, toSeason: season }
   const result = await loadCareerGames(args.userId, filter)
   const games = result.games.filter((g) => g.leagueId === league.id && (season == null || g.season === season) && (week == null || g.week === week))
     .sort((a, b) => b.season - a.season || b.week - a.week)
-  if (!games.length) return `No played head-to-head matchup is stored for your team in ${leagueName}${season ? ` in ${season}` : ''}${week ? ` week ${week}` : ''}. This is a data gap, not proof no game happened. Elimination formats may have weekly scores without pairings.`
+  if (!games.length) {
+    const providerWeek = await olderProviderPointWeek(league, args.userId, season, week)
+    return [providerWeek, archive].filter(Boolean).join('\n\n') ||
+      `No played head-to-head matchup is stored for your team in ${leagueName}${season ? ` in ${season}` : ''}${week ? ` week ${week}` : ''}. This is a data gap, not proof no game happened. Elimination formats may have weekly scores without pairings.`
+  }
   const shown = games.slice(0, limit)
   const w = games.filter((g) => g.result === 'W').length
   const l = games.filter((g) => g.result === 'L').length
@@ -206,5 +354,5 @@ export async function buildLeagueFantasyHistoryContext(args: {
   for (const g of shown) lines.push(`${g.season} week ${g.week}: ${g.result} ${g.myScore.toFixed(2)}–${g.oppScore.toFixed(2)} versus ${g.oppName ?? 'unnamed opponent'}.`)
   if (shown.length < games.length) lines.push(`Showing ${shown.length} of ${games.length} played results; ask for a season or week to narrow this history.`)
   lines.push('Source: Career matchup facts for backfilled seasons, with current-season weekly matchups only where facts are absent. Unplayed 0–0 fixtures are excluded. Historical roster membership and per-player fantasy scoring are not implied by team results.')
-  return lines.join('\n')
+  return [lines.join('\n'), archive].filter(Boolean).join('\n\n')
 }

@@ -10,8 +10,11 @@ import { fetchYahooCategoryMatchupForWeek } from '@/lib/league-import/yahoo/Yaho
 import { fetchEspnScheduleForSync } from '@/lib/league-import/espn/EspnLeagueFetchService'
 import { fetchMflScheduleForSync } from '@/lib/league-import/mfl/MflLeagueFetchService'
 import { fetchFleaflickerScoreboard } from '@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService'
+import { fetchFleaflickerStandings } from '@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService'
+import { fleaflickerRotoCategoryRows } from '@/lib/import-os/collector/fleaflickerRotoCategories'
 import { getFantraxMatchupScores } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { fantraxCategoryPairs } from '@/lib/import-os/collector/fantraxCategorySnapshots'
 
 function yahooCategoryLabels(settings: unknown): Map<string, string> {
   const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
@@ -101,7 +104,9 @@ async function freshImportedPointScore(args: { provider: string; userId: string;
 async function importedCategoryMatchup(league: { id: string; name: string | null; sport: string; season: number;
   platform: string | null; platformLeagueId: string | null; settings?: unknown }, userId: string): Promise<string> {
   const provider = String(league.platform ?? '').toLowerCase()
-  if (!['yahoo', 'espn'].includes(provider) || !league.platformLeagueId) {
+  if (!['yahoo', 'espn', 'fantrax'].includes(provider) || !league.platformLeagueId) {
+    if (provider === 'mfl') return `${league.name} uses category scoring, but the connected MFL schedule reports team points without verified per-category totals. Those points cannot be treated as category results.`
+    if (provider === 'fleaflicker') return `${league.name} uses category scoring, but the connected Fleaflicker weekly scoreboard has no verified head-to-head category totals. Its rotisserie standings are a separate season view.`
     return `${league.name} uses category scoring. Verified provider category totals are not available for this connection; no points score is asserted.`
   }
   const board = await getWeekBoard(userId, [{ ...league, platform: String(league.platform ?? '') }], league.id)
@@ -110,22 +115,36 @@ async function importedCategoryMatchup(league: { id: string; name: string | null
   if (!week || !rosterId) return `No current ${provider.toUpperCase()} category pairing is verified for your roster in ${league.name}.`
   let pair: ImportedCategoryPair | undefined
   let fetchedAt: Date | null = null
-  let source = provider === 'yahoo' ? 'stored Yahoo matchup team_stats' : 'stored ESPN matchup cumulativeScore.scoreByStat'
+  let source = provider === 'yahoo' ? 'stored Yahoo matchup team_stats'
+    : provider === 'espn' ? 'stored ESPN matchup cumulativeScore.scoreByStat'
+      : 'stored Fantrax matchup category values'
   try {
     if (provider === 'yahoo') {
       const fresh = await fetchYahooCategoryMatchupForWeek(userId, league.platformLeagueId, league.season, week)
       if (fresh) pair = verifiedCategoryPairs(fresh.matchups.map((m) => ({
         teamId1: m.teamKey1, teamId2: m.teamKey2, categories1: m.categories1, categories2: m.categories2,
       })), yahooRosterId).find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
-    } else {
+    } else if (provider === 'espn') {
       const fresh = (await fetchEspnScheduleForSync(userId, league.platformLeagueId, league.season))
-        .find((entry) => entry.week === week)
+        .find((entry) => entry.season === league.season && entry.week === week)
       if (fresh) pair = verifiedCategoryPairs(fresh.matchups, (id) => id)
         .find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
+    } else {
+      const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: league.platformLeagueId },
+        select: { sourceLeagueId: true } })
+      if (snapshot?.sourceLeagueId) {
+        const teams = await prisma.leagueTeam.findMany({ where: { leagueId: league.id },
+          select: { externalId: true, teamName: true, ownerName: true }, take: 100 })
+        const response = await getFantraxMatchupScores(snapshot.sourceLeagueId, week)
+        if (response.ok && response.data.period === week) pair = fantraxCategoryPairs(response.data, teams)
+          .find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
+      }
     }
     if (pair) {
       fetchedAt = new Date()
-      source = provider === 'yahoo' ? 'Yahoo current-week scoreboard team_stats' : 'ESPN current-week matchup cumulativeScore.scoreByStat'
+      source = provider === 'yahoo' ? 'Yahoo current-week scoreboard team_stats'
+        : provider === 'espn' ? 'ESPN current-week matchup cumulativeScore.scoreByStat'
+          : 'Fantrax current-period matchup category values'
     }
   } catch { /* A member may lack provider credentials; retain the collector's last verified snapshot. */ }
   if (!pair) {
@@ -150,9 +169,9 @@ async function importedCategoryMatchup(league: { id: string; name: string | null
   }
   const labels = provider === 'yahoo' ? yahooCategoryLabels(league.settings) : new Map<string, string>()
   for (const id of Object.keys(own).sort((a, b) => Number(a) - Number(b)).slice(0, 40)) {
-    lines.push(`${labels.get(id) ?? `${provider === 'yahoo' ? 'Yahoo' : 'ESPN'} stat ${id}`}: you ${own[id]!.toFixed(2)}, opponent ${other[id]!.toFixed(2)}.`)
+    lines.push(`${labels.get(id) ?? `${provider === 'yahoo' ? 'Yahoo' : provider === 'espn' ? 'ESPN' : 'Fantrax'} stat ${id}`}: you ${own[id]!.toFixed(2)}, opponent ${other[id]!.toFixed(2)}.`)
   }
-  lines.push(`Source: ${source}. Stat IDs are ${provider.toUpperCase()} category IDs; direction and category wins are not inferred from raw totals. These are not fantasy point totals.`)
+  lines.push(`Source: ${source}. ${provider === 'fantrax' ? 'Stat keys are Fantrax category IDs or abbreviations' : `Stat IDs are ${provider.toUpperCase()} category IDs`}; direction and category wins are not inferred from raw totals. These are not fantasy point totals.`)
   return lines.join('\n')
 }
 
@@ -191,7 +210,7 @@ async function nativeRotoStandings(league: { id: string; name: string | null; sp
 }
 
 async function importedRotoStandings(league: { id: string; name: string | null; sport: string; season: number;
-  platform: string | null }, userId: string): Promise<string> {
+  platform: string | null; platformLeagueId?: string | null }, userId: string): Promise<string> {
   const rows = await prisma.leagueTeam.findMany({ where: { leagueId: league.id },
     select: { externalId: true, teamName: true, ownerName: true, claimedByUserId: true,
       currentRank: true, pointsFor: true, wins: true, losses: true, ties: true, lastUpdatedAt: true },
@@ -213,6 +232,20 @@ async function importedRotoStandings(league: { id: string; name: string | null; 
   if (asOf && Date.now() - asOf.getTime() > 15 * 60_000) lines.push('These standings may be stale; they are not a live category update.')
   for (const row of ranked.slice(0, 20)) {
     lines.push(`${row.currentRank}. ${row.teamName || row.ownerName || 'Unnamed team'}${row.claimedByUserId === userId ? ' (you)' : ''}.`)
+  }
+  if (String(league.platform).toLowerCase() === 'fleaflicker' && /^\d+$/.test(league.platformLeagueId ?? '') &&
+    ['NFL', 'MLB', 'NBA', 'NHL'].includes(league.sport.toUpperCase())) {
+    try {
+      const standings = await fetchFleaflickerStandings(league.sport.toUpperCase() as 'NFL' | 'MLB' | 'NBA' | 'NHL',
+        Number(league.platformLeagueId), league.season)
+      const own = fleaflickerRotoCategoryRows(standings).find((row) => row.teamId === mine[0]!.externalId)
+      if (own) {
+        lines.push(`Fleaflicker season category values fetched ${new Date().toISOString()}: ${own.categories.slice(0, 20)
+          .map((category) => `${category.label} ${category.value.toFixed(2)}${category.rank ? ` (rank ${category.rank})` : ''}`)
+          .join('; ')}.`)
+        lines.push('These are season-to-date rotisserie stat values, not weekly matchup totals.')
+      }
+    } catch { lines.push('Current Fleaflicker roto category values could not be verified from the provider.') }
   }
   lines.push(`Source: stored ${String(league.platform ?? 'provider').toUpperCase()} imported league standings. Category totals and rank points are not on file here; only the imported placement is shown.`)
   return lines.join('\n')
