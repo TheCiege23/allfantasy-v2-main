@@ -114,7 +114,7 @@ async function startDueDraft(
     } else if (locked.value.ok) {
       summary.started++
       logStructured('info', log.event, 'started', { leagueId, sport: log.sport })
-      // A manual start notifies from the controls route; a scheduled one has no caller to do it.
+      // startDraftSession sends the lifecycle alert for manual and scheduled starts.
     } else if (locked.value.reason === 'session_not_ready') {
       // Lost the conditional claim to another start: someone else started it.
       skip(null)

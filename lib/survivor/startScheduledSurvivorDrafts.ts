@@ -93,7 +93,7 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
       } else if (locked.value.ok) {
         summary.started++
-        // A manual start notifies from the controls route; a scheduled one has no caller to do it.
+        // startDraftSession sends the lifecycle alert for manual and scheduled starts.
       } else if (locked.value.reason === 'SURVIVOR_CAST_INCOMPLETE') {
         // A commissioner can claim the remaining seats and the next tick retries.
         summary.skipped++
