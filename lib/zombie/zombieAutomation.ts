@@ -1,3 +1,4 @@
+import { autoReviveBetaZombies } from './beta2025ItemSettlement'
 import { prisma } from '@/lib/prisma'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { processExpiredBashingDecisionsForAll } from '@/lib/zombie/bashingEngine'
@@ -71,6 +72,8 @@ export async function runZombieHousekeeping(): Promise<{
     errors.push(`leagues: ${why(e)}`)
   }
   for (const z of active) {
+    const current = await prisma.zombieLeague.findUnique({ where: { id: z.id }, select: { sport: true, currentWeek: true } })
+    if (current?.sport === 'NFL') await autoReviveBetaZombies(z.leagueId, current.currentWeek).catch((e) => errors.push(`${z.id} auto-revive: ${why(e)}`))
     await scheduleWeeklyUpdate(z.leagueId).catch((e) => errors.push(`${z.id} weekly-update: ${why(e)}`))
     await deliverPendingAnimations(z.leagueId).catch((e) => errors.push(`${z.id} animations: ${why(e)}`))
   }

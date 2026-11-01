@@ -411,7 +411,7 @@ export default function DispersalDraftLivePage() {
               type="button"
               disabled={pickBusy}
               onClick={() => void startDraft()}
-              className="mt-3 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-xs font-bold text-cyan-100"
+              className="mt-3 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-xs font-bold text-[var(--badge-text-cyan)]"
             >
               Start dispersal draft
             </button>
@@ -437,7 +437,7 @@ export default function DispersalDraftLivePage() {
                 key={k}
                 type="button"
                 onClick={() => setTab(k)}
-                className={`rounded-full px-2 py-1 ${tab === k ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/5 text-white/55'}`}
+                className={`rounded-full px-2 py-1 ${tab === k ? 'bg-cyan-500/20 text-[var(--badge-text-cyan)]' : 'bg-white/5 text-white/55'}`}
               >
                 {k === 'all'
                   ? 'All'
@@ -472,7 +472,7 @@ export default function DispersalDraftLivePage() {
                             type="button"
                             disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                             onClick={() => void submitPick(a.id)}
-                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
+                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-[var(--badge-text-cyan)] disabled:opacity-30"
                           >
                             Pick →
                           </button>
@@ -519,7 +519,7 @@ export default function DispersalDraftLivePage() {
                       type="button"
                       disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                       onClick={() => void submitPick(a.id)}
-                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
+                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-[var(--badge-text-cyan)] disabled:opacity-30"
                     >
                       Pick →
                     </button>

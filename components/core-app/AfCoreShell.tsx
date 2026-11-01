@@ -793,8 +793,8 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * ⚠ WHAT WENT WITH IT: the per-league RE-SYNC BUTTON. `/api/league/sync` and
      * `/api/league/sleeper-sync` still exist and still work — nothing in the UI
      * calls them now, and sleeper-sync has no caller at all. If re-sync wants a
-     * home again, the 'sync' entry below is it: /core/sync already owns "is THIS
-     * league current".
+     * home again, /core/sync already owns "is THIS league current" — reached from
+     * in-page links, not the rail (see the note where its rail entry used to be).
      */
     { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
     /*
@@ -897,19 +897,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
           : undefined,
     },
     /*
-     * League-scoped only. Without a league this is the account-wide connections
-     * page's job, and the nav sends you there rather than to an empty shell.
+     * ⚠ NO 'sync' ENTRY, FOR ANY LEAGUE — removed 2026-10-31 at the owner's request.
+     * /core/sync still renders and is still linked from My team's "re-sync" note and
+     * the commissioner hub's "Re-sync this league"; only the rail entry went. The
+     * `urgencyBadges.sync` count it used to show now has no reader here.
      */
-    {
-      key: 'sync',
-      label: 'Sync',
-      glyph: '↻',
-      href: props.selectedLeagueId
-        ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/leagues',
-      /* Leagues whose data has gone stale, by the issues queue's own rule (isStaleLeague). */
-      badge: urgencyBadge(props.urgencyBadges?.sync),
-    },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
     // Full page outside /core, like My Leagues and League Sync above. The rail's
     // bottom profile tile was the only way there — a single-letter tile nobody
@@ -960,12 +952,8 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'manage',
     heading: 'Manage',
-    /*
-     * 'sync' is THIS league's freshness. The account-wide 'league-sync' page it
-     * used to sit beside is retired — see the rail note above — so this is now
-     * the only sync entry, and it answers a per-league question only.
-     */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
+    /* No sync entry: both the account-wide page and the per-league rail item are gone. */
+    keys: ['commissioner', 'notifications', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
   },
 ]
 

@@ -38,6 +38,24 @@ export const leagueHomeMessages = defineMessages({
     readOnlyNote: (platformLabel: string) => `Make changes in ${platformLabel} — AllFantasy only reads your league.`,
 
     // All leagues
+    // KPI row (homeKpis.ts)
+    kpisLabel: 'Your season at a glance',
+    kpiRecord: 'Record',
+    kpiRankOf: (rank: number, teams: number | null) => {
+      const mod100 = rank % 100
+      const suffix = mod100 >= 11 && mod100 <= 13 ? 'th' : rank % 10 === 1 ? 'st' : rank % 10 === 2 ? 'nd' : rank % 10 === 3 ? 'rd' : 'th'
+      return teams ? `${rank}${suffix} of ${teams}` : `${rank}${suffix}`
+    },
+    kpiPointsFor: 'Points for',
+    kpiVsAverage: (diff: number) => `${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} vs league average`,
+    kpiFaab: 'FAAB left',
+    kpiFaabNote: 'Free-agent budget for this season',
+    kpiDeadline: 'Trade deadline',
+    kpiDeadlineWeek: (week: number) => `Week ${week}`,
+
+    // Needs your attention
+    attentionTitle: 'Needs your attention',
+
     otherLeagueIssues: (n: number) =>
       `${n} more ${n === 1 ? 'issue lives' : 'issues live'} outside this league.`,
   },
@@ -64,6 +82,18 @@ export const leagueHomeMessages = defineMessages({
     askWeekPrefill: (week, leagueName) =>
       `Explícame la semana ${week} en ${leagueName}: ¿qué enfrentamientos están más ajustados, dónde puede haber sorpresas y qué debo vigilar en mi partido?`,
     readOnlyNote: (platformLabel) => `Haz los cambios en ${platformLabel}; AllFantasy solo consulta tu liga.`,
+
+    kpisLabel: 'Tu temporada de un vistazo',
+    kpiRecord: 'Récord',
+    kpiRankOf: (rank, teams) => (teams ? `${rank}.º de ${teams}` : `${rank}.º`),
+    kpiPointsFor: 'Puntos a favor',
+    kpiVsAverage: (diff) => `${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} frente a la media de la liga`,
+    kpiFaab: 'FAAB restante',
+    kpiFaabNote: 'Presupuesto para agentes libres de esta temporada',
+    kpiDeadline: 'Límite de intercambios',
+    kpiDeadlineWeek: (week) => `Semana ${week}`,
+
+    attentionTitle: 'Requiere tu atención',
 
     otherLeagueIssues: (n) =>
       `${n} ${n === 1 ? 'asunto pendiente está' : 'asuntos pendientes están'} fuera de esta liga.`,

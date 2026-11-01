@@ -8,6 +8,7 @@
  */
 
 import { SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
+import { balancedSizes, experienceSplitOrder } from './survivorExperience'
 
 export type TribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 
@@ -37,6 +38,12 @@ export interface ComputeTribeAssignmentInput {
   manualMapping?: Record<string, number> | null
   /** Draft-pattern mode: ordered userIds (draft order). Missing → limited-data. */
   draftOrder?: string[] | null
+  /**
+   * Random mode, Rooks vs Vets: userId -> rookie/veteran. Rookies fill the first tribes and veterans
+   * the last, in blocks, so with two tribes it is rookies against veterans; uneven counts share the
+   * boundary tribe. Omitted: the ordinary balanced random draw.
+   */
+  experience?: Record<string, 'rookie' | 'veteran'> | null
 }
 
 /** Deterministic PRNG (mulberry32) so seeded random assignment is reproducible. */
@@ -73,6 +80,17 @@ function distributeBalanced(orderedUserIds: string[], tribeCount: number, capaci
     while (capacities && tribes[next % tribeCount].memberUserIds.length >= capacities[next % tribeCount]) next++
     tribes[next % tribeCount].memberUserIds.push(userId)
     next++
+  }
+  return tribes
+}
+
+/** Fill each tribe to its size in turn, so neighbours in the order share a tribe. */
+function distributeInBlocks(orderedUserIds: string[], sizes: number[]): AssignmentTribe[] {
+  const tribes = emptyTribes(sizes.length)
+  let slot = 0
+  for (const userId of orderedUserIds) {
+    while (slot < sizes.length - 1 && tribes[slot].memberUserIds.length >= sizes[slot]) slot++
+    tribes[slot].memberUserIds.push(userId)
   }
   return tribes
 }
@@ -138,6 +156,10 @@ export function computeTribeAssignment(input: ComputeTribeAssignmentInput): Trib
   // random (default)
   const seed = Number.isFinite(input.seed as number) ? (input.seed as number) : Math.floor(Math.random() * 2_147_483_647)
   const shuffled = deterministicShuffle(userIds, seed)
+  if (input.experience) {
+    const order = experienceSplitOrder(shuffled, input.experience)
+    return { ok: true, mode: 'random', tribes: distributeInBlocks(order, capacities ?? balancedSizes(order.length, tribeCount)), seed }
+  }
   return { ok: true, mode: 'random', tribes: distributeBalanced(shuffled, tribeCount, capacities), seed }
 }
 

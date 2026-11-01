@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import type { AutomaticChangeRow } from '@/lib/lineup-automation/automaticChangeUndoService'
 
 /**
@@ -11,8 +12,7 @@ import type { AutomaticChangeRow } from '@/lib/lineup-automation/automaticChange
  * game has started. Hidden when there is nothing in the last 14 days.
  */
 export function AutomaticChangesLog({ leagueId, className, onUndone }: { leagueId: string; className?: string; onUndone?: () => void }) {
-  const { language } = useOptionalLanguage()
-  const t = (en: string, es: string) => (language === 'es' ? es : en)
+  const { language, t } = useOptionalLanguage()
   const [rows, setRows] = useState<AutomaticChangeRow[] | null>(null)
   const [commissioner, setCommissioner] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
@@ -41,11 +41,11 @@ export function AutomaticChangesLog({ leagueId, className, onUndone }: { leagueI
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auditId: id }) })
       const body = (await r.json().catch(() => ({}))) as { message?: string; error?: string }
       if (!r.ok) throw new Error(body.error || '')
-      setMessage(t('Undone — the players are back where they were.', 'Deshecho: los jugadores volvieron a donde estaban.'))
+      setMessage(t('league.autoChanges.undoneMessage'))
       onUndone?.()
       await load()
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('Could not undo. Refresh and try again.', 'No se pudo deshacer. Actualiza e inténtalo de nuevo.'))
+      setMessage(e instanceof Error && e.message ? e.message : t('league.autoChanges.undoFailed'))
     } finally {
       setBusy(null)
     }
@@ -54,29 +54,26 @@ export function AutomaticChangesLog({ leagueId, className, onUndone }: { leagueI
   if (!rows || rows.length === 0) return null
   return (
     <details className={className} data-testid="automatic-changes-log">
-      <summary>{t('Recent automatic changes', 'Cambios automáticos recientes')}</summary>
+      <summary>{t('league.autoChanges.title')}</summary>
       <ul>
         {rows.map((r) => (
           <li key={r.id} data-testid={`automatic-change-${r.id}`}>
             <span>
-              {new Date(r.at).toLocaleDateString(language === 'es' ? 'es' : 'en', { month: 'short', day: 'numeric' })}
+              {new Date(r.at).toLocaleDateString(getIntlLocale(language), { month: 'short', day: 'numeric' })}
               {commissioner && r.teamName ? ` · ${r.teamName}` : ''} — {r.message}
             </span>{' '}
             {r.undone ? (
-              <em>{t('Undone', 'Deshecho')}</em>
+              <em>{t('league.autoChanges.undone')}</em>
             ) : r.undoable ? (
               <button type="button" className="af-btn" disabled={busy !== null} onClick={() => void undo(r.id)} data-testid={`undo-${r.id}`}>
-                {busy === r.id ? t('Undoing…', 'Deshaciendo…') : t('Undo', 'Deshacer')}
+                {busy === r.id ? t('league.autoChanges.undoing') : t('league.autoChanges.undo')}
               </button>
             ) : null}
           </li>
         ))}
       </ul>
       <p className="nls-muted">
-        {t(
-          'Undo is offered on the latest change while the lineup is untouched since and no moved player’s game has started.',
-          'Puedes deshacer el último cambio mientras la alineación siga igual y no haya empezado el partido de ningún jugador movido.',
-        )}
+        {t('league.autoChanges.note')}
       </p>
       {message ? <p role="status">{message}</p> : null}
     </details>

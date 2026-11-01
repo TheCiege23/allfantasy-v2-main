@@ -234,9 +234,16 @@ export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
     finals: "Stanley Cup",
   },
   nba_cup: {
+    cup_group_play: "Group Play",
     cup_quarterfinals: "Quarterfinals",
     cup_semifinals: "Semifinals",
     cup_championship: "Championship",
+  },
+  nfl: {
+    nfl_wild_card: "Wild Card",
+    nfl_divisional: "Divisional",
+    nfl_conference: "Conference",
+    nfl_super_bowl: "Super Bowl",
   },
   ncaaf: {
     cfp_first_round: "First Round",
@@ -262,6 +269,10 @@ export function sideLabel(conference: string | null): string {
       return "Eastern Conference"
     case "west":
       return "Western Conference"
+    case "afc":
+      return "AFC"
+    case "nfc":
+      return "NFC"
     case "upper":
       return "Upper Bracket"
     case "lower":

@@ -54,7 +54,7 @@ import { ensureDynastyNextSeason } from '@/lib/redraft/offseason/startDynastyNew
 import { computeRookieDraftOrder } from '@/lib/league/rookieDraftOrder'
 import type { InMemoryPrisma } from './inMemoryPrisma'
 
-export type SimSport = 'NFL' | 'MLB' | 'NBA' | 'NHL'
+export type SimSport = 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'SOCCER'
 
 export type FullSeasonSimInput = {
   sport: SimSport
@@ -173,9 +173,9 @@ const PITCHERS = new Set(['SP', 'RP', 'P'])
 /** Positions a daily UTIL slot cannot take: pitchers, and NHL goalies. */
 const NOT_UTIL = new Set([...PITCHERS, 'G'])
 
-/** Every sport but NFL sets lineups and scores by the day (lib/redraft/dailyLineups.ts). */
+/** Only these sports use the opt-in daily lineup path in this harness. */
 function isDailySport(sport: SimSport): boolean {
-  return sport !== 'NFL'
+  return sport === 'MLB' || sport === 'NBA' || sport === 'NHL'
 }
 
 /** The calendar day in New York of an instant, as the UTC-midnight date key the daily rows use. */
@@ -300,7 +300,7 @@ function dailyNormalizer(sport: SimSport): (raw: unknown) => NormalizedGameStats
 }
 
 const DAILY_BENCH: Partial<Record<SimSport, string[]>> = { MLB: ['OF', 'SP'], NBA: ['PG', 'C'], NHL: ['C', 'G'] }
-const FREE_AGENT_POSITION: Record<SimSport, string> = { NFL: 'WR', MLB: 'OF', NBA: 'PG', NHL: 'C' }
+const FREE_AGENT_POSITION: Record<SimSport, string> = { NFL: 'WR', MLB: 'OF', NBA: 'PG', NHL: 'C', SOCCER: 'FWD' }
 
 export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: FullSeasonSimInput): Promise<FullSeasonSimResult> {
   db.reset()
@@ -495,8 +495,15 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
       // A tie week: the line depends on the position alone, so every team's lineup scores the same.
       const skill = tie ? 5 : info.rosterId ? skillByRoster.get(info.rosterId) ?? 5 : 5
       const rng = rngFor(seed, tie ? `stats:${info.position}:${week}` : `stats:${playerId}:${week}`)
-      if (sport === 'NFL') {
-        await p.playerWeeklyScore.create({ data: { playerId, week, season: seasonYear, sport, stats: nflWeekStats(info.position, rng, skill), isFinalized: true } })
+      if (sport === 'NFL' || sport === 'SOCCER') {
+        const stats = sport === 'NFL' ? nflWeekStats(info.position, rng, skill) : {
+          appearance: 1, minutes_played: 90, goals: info.position === 'FWD' && rng() < 0.25 + skill / 200 ? 1 : 0,
+          assists: rng() < 0.2 ? 1 : 0, shots: int(rng, 0, 4), shots_on_target: int(rng, 0, 2),
+          clean_sheet_def: info.position === 'DEF' && rng() < 0.25 ? 1 : 0,
+          clean_sheet_gk: info.position === 'GK' && rng() < 0.25 ? 1 : 0,
+          saves: info.position === 'GK' ? int(rng, 1, 6) : 0,
+        }
+        await p.playerWeeklyScore.create({ data: { playerId, week, season: seasonYear, sport, stats, isFinalized: true } })
         continue
       }
       const normalize = dailyNormalizer(sport)
@@ -525,7 +532,7 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   const expectedRosterScore = (rosterId: string, week: number): number => {
     const players = db.table('redraftRosterPlayer').filter((r) => r.rosterId === rosterId)
     let total = 0
-    if (sport === 'NFL') {
+    if (sport === 'NFL' || sport === 'SOCCER') {
       for (const pl of players) {
         if (pl.droppedAt != null || !isScoringStarterSlot(pl.slotType)) continue
         const row = db.table('playerWeeklyScore').find((r) => r.playerId === pl.playerId && r.week === week)

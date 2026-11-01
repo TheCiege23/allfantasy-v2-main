@@ -2,7 +2,7 @@
  * Coverage for the Phase 7 premium /brackets hub restoration.
  *
  * Verifies:
- *  - The page source contains every major section (the v3 playoff hero,
+ *  - The page source contains every major section (the approved bracket workspace,
  *    how-it-works, sports grid, AI features strip, footer), and the World
  *    Cup is switched off as a destination (owner call, 2026-10-01).
  *  - All visible static labels are routed through `t("brk.hub.*")` —
@@ -13,7 +13,7 @@
  *    WC poster, WC video) actually exist in `public/`. This is the
  *    "asset fallback" guarantee from the brief — if a future commit
  *    removes one of these without updating the hub, the test fires.
- *  - The page is a pure server component: no `"use client"`, no
+ *  - The page remains a server preference shell: no `"use client"`, no
  *    `useSession`, no `useState`, no Prisma import. (The emergency
  *    hardening that pre-dated this rebuild was caused exactly by a
  *    client-island `useSession` hydration race; this test keeps that
@@ -21,8 +21,7 @@
  *  - The page reuses `resolveServerRenderPreferences` (the safe
  *    server-only locale resolver already shipping on
  *    /brackets/world-cup pages).
- *  - The page is still wrapped in `mode-readable` so the previous
- *    readability pass still applies in light mode.
+ *  - The workspace owns a scoped dark canvas and readable text in every mode.
  *  - No new app route / page files were added; the existing
  *    `app/brackets/page.tsx` is still the only `page.tsx` under
  *    `app/brackets/` at the root.
@@ -46,40 +45,39 @@ function readSource(rel: string): string {
 }
 
 const HUB_SRC = readSource("app/brackets/page.tsx")
+const WORKSPACE_SRC = readSource("components/brackets/BracketExperienceHub.tsx")
+const WORKSPACE_CSS = readSource("components/brackets/bracket-experience.css")
 
 // ── Section presence ──────────────────────────────────────────────────────
 
 describe("brackets hub restore: section coverage", () => {
-  it("v3 playoff hero renders open-now badge, two-line title, subtitle, sport CTAs, and the up-next row", () => {
-    // Stable test ID for smoke targeting.
-    expect(HUB_SRC).toContain('data-testid="brackets-hub-hero"')
-    // Open-now emerald badge for published bracket leagues.
-    expect(HUB_SRC).toContain('data-testid="brackets-hub-open-badge"')
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.openBadge")`)
-    // Two-line title (white line 1, cyan→purple gradient line 2).
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.titleLine1")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.titleLine2")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.subtitle")`)
-    // One CTA per sport that is creatable now, plus the generic join.
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.mlb")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.nhl")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.cfp")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.nbaCup")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.cta.joinWithCode")`)
-    // Only NFL remains in the up-next row.
-    expect(HUB_SRC).toContain('data-testid="brackets-hub-up-next"')
-    expect(HUB_SRC).toContain(`t("brk.hub.v3.upNext.nfl")`)
-    // Top wordmark + Dashboard pill.
+  it("server shell mounts the approved workspace with localized hero and tournament controls", () => {
+    expect(HUB_SRC).toContain("<BracketExperienceHub")
+    expect(HUB_SRC).toContain("language={language}")
+    // The tab order comes from the calendar, computed once on the server.
+    expect(HUB_SRC).toContain("orderHubTournaments(new Date())")
+    expect(WORKSPACE_SRC).toContain('data-testid="brackets-hub-hero"')
+    expect(WORKSPACE_SRC).toContain("bracketExperienceCopy(language)")
+    for (const label of ["eyebrow", "title", "titleEnd", "subtitle", "create", "join"]) {
+      expect(WORKSPACE_SRC).toContain(`{copy.${label}}`)
+    }
+    for (const sport of ["mlb", "nhl"]) {
+      expect(WORKSPACE_SRC).toContain(`data-testid="brackets-hub-cta-${sport}"`)
+    }
+    // The tournament switch builds its test ids per tab.
+    for (const sport of ["cfp", "nba-cup", "nfl"]) {
+      expect(WORKSPACE_SRC).toContain(`"brackets-hub-cta-${sport}"`)
+    }
     expect(HUB_SRC).toContain(`t("brk.hub.logoAlt")`)
     expect(HUB_SRC).toContain(`t("brk.hub.heroDashboard")`)
   })
 
-  it("hero CTAs open published playoff pools and the generic join", () => {
-    expect(HUB_SRC).toContain(`href={playoffPoolHref("MLB")}`)
-    expect(HUB_SRC).toContain(`href={playoffPoolHref("NHL")}`)
-    expect(HUB_SRC).toContain(`href={playoffPoolHref("NCAAF")}`)
-    expect(HUB_SRC).toContain(`href={playoffPoolHref("NBA_CUP")}`)
-    expect(HUB_SRC).toContain(`href="/brackets/join"`)
+  it("workspace creation follows the selected tournament and keeps MLB, NHL and join destinations", () => {
+    expect(WORKSPACE_SRC).toContain('{ ncaaf: "NCAAF", nba_cup: "NBA_CUP", nfl: "NFL" }')
+    expect(WORKSPACE_SRC).toContain("href={createHref(sport)}")
+    expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=MLB&challengeType=playoff_challenge"')
+    expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=NHL&challengeType=playoff_challenge"')
+    expect(WORKSPACE_SRC).toContain('href="/brackets/join"')
   })
 
   it("the World Cup is switched off as a destination (owner call, 2026-10-01)", () => {
@@ -140,12 +138,13 @@ describe("brackets hub restore: section coverage", () => {
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NHL")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NCAAF")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NBA_CUP")`)
+    // NFL playoff pools are creatable (playoff engine sport "nfl"), no longer "January".
+    expect(HUB_SRC).toContain(`href: playoffPoolHref("NFL")`)
     expect(HUB_SRC).toContain(`<Link key={key} href={href}`)
     // Status labels: live / ended / a month for up-next / generic coming soon.
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusLive")`)
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusEnded")`)
     expect(HUB_SRC).toContain(`t(soonLabelKey ?? "brk.hub.sports.statusComingSoon")`)
-    expect(HUB_SRC).toContain(`soonLabelKey: "brk.hub.sports.statusJanuary"`)
   })
 
   it("AI features strip renders all 6 features", () => {
@@ -425,7 +424,7 @@ describe("brackets hub restore: asset paths exist in public/", () => {
 // ── Server-component / hydration safety fence ────────────────────────────
 
 describe("brackets hub restore: server component safety fence", () => {
-  it("page is a pure server component — no client islands", () => {
+  it("page keeps server preference resolution outside the client workspace", () => {
     expect(HUB_SRC).not.toMatch(/^"use client"/m)
     // Match the function call form, not the substring (JSDoc legitimately
     // mentions "useSession" / "useState" when explaining what we DON'T do).
@@ -445,13 +444,13 @@ describe("brackets hub restore: server component safety fence", () => {
     expect(HUB_SRC).toContain(`makeBracketsT`)
   })
 
-  it("page keeps the mode-readable wrapper for light-mode rescue", () => {
-    expect(HUB_SRC).toContain(`className="mode-readable`)
-    // Base canvas stays `bg-[#05070b]` (the dark hex covered by the
-    // mode-readable rescue layer in globals.css); the deep-teal feel
-    // comes from the rgba(20,184,166,…) radial-gradient overlay
-    // layered on top, which only renders in dark + AF modes anyway.
-    expect(HUB_SRC).toContain("bg-[#05070b]")
+  it("page owns the approved dark canvas without the global light-mode rescue override", () => {
+    expect(HUB_SRC).toContain('className="af-bracket-experience ')
+    expect(HUB_SRC).not.toMatch(/className="[^"]*\bmode-readable\b/)
+    expect(WORKSPACE_SRC).toContain('import "./bracket-experience.css"')
+    const canvas = WORKSPACE_CSS.match(/\.af-bracket-experience\s*\{([^}]+)\}/)?.[1]
+    expect(canvas).toContain("#071519")
+    expect(canvas).toContain("color: #eafff6")
   })
 
   it("page does NOT import the dev Google Translate batch script", () => {

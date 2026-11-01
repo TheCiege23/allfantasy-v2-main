@@ -75,12 +75,21 @@ describe('Trade Center partner ranking', () => {
     expect(document.querySelector('.af-tc-fits')).toBeNull()
   })
 
-  it('renders the suggestions inside the "You get" step block, with the gaps', () => {
+  it('renders the suggestions inside the folded "Trade ideas" section, with the gaps', () => {
     render(<TradeCenter league={LEAGUE} />)
     const fits = document.querySelector('.af-tc-fits')!
-    expect(fits.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('get')
+    expect(fits.closest('details.af-tc-ideas')).not.toBeNull()
     expect(fits.textContent).toContain('Charlie')
     expect(fits.textContent).toContain('Trade history is not on file')
+  })
+
+  it('"All managers": every other team in one select, by name, with its record — and it selects the chip too', () => {
+    render(<TradeCenter league={LEAGUE} />)
+    const select = document.querySelector('.af-tc-partner-select select') as HTMLSelectElement
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose a manager…', 'Bravo (0–0)', 'Charlie (0–0)', 'Delta (0–0)'])
+    fireEvent.change(select, { target: { value: 'r4' } })
+    const on = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.getAttribute('data-on') === 'true')
+    expect(on?.textContent).toBe('Delta')
   })
 
   it('choosing a partner from a card selects the same team as its chip', () => {
@@ -90,16 +99,15 @@ describe('Trade Center partner ranking', () => {
     expect(on?.textContent).toBe('Charlie')
   })
 
-  it('🛑 "Start with this deal" loads BOTH sides from the right rosters, sets the partner, and opens Review', () => {
+  it('🛑 "Start with this deal" loads BOTH sides from the right rosters and sets the partner', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByText('Start with this deal'))
 
     // Deal rows only (`div.af-tc-row[data-kind]`): the roster list below uses the same name class.
     const names = (side: string) =>
-      [...container.querySelectorAll(`.af-tc-team[data-mstep='${side}'] div.af-tc-row[data-kind] .af-tc-row-name`)].map((n) => n.textContent)
+      [...container.querySelectorAll(`.af-tc-team[data-side='${side}'] div.af-tc-row[data-kind] .af-tc-row-name`)].map((n) => n.textContent)
     expect(names('give')).toEqual(['Receiver'])
     expect(names('get')).toEqual(['Runner'])
-    expect(container.querySelector('.af-tc')?.getAttribute('data-mobile-step')).toBe('review')
     const on = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.getAttribute('data-on') === 'true')
     expect(on?.textContent).toBe('Charlie')
     expect(document.body.textContent).toContain('Started from a suggested deal with Charlie')
@@ -166,10 +174,10 @@ describe('Trade Center — trade depth paywall', () => {
     /*
      * The breakdown SECTION, not its heading text. This asserted the string "Decision OS · this
      * deal", so renaming that label to "This deal" — internal jargon a user should never see —
-     * failed a test about the PAYWALL. `[data-mstep='review']` is what distinguishes this section
+     * failed a test about the PAYWALL. `[data-section='breakdown']` is what distinguishes this section
      * from the trade finder, which reuses the same `.af-tc-dos` class.
      */
-    expect(document.querySelector(".af-tc-dos[data-mstep='review']")).toBeNull()
+    expect(document.querySelector(".af-tc-dos[data-section='breakdown']")).toBeNull()
     expect(document.body.textContent).not.toContain('You sell a starter for depth you do not need.')
   })
 
@@ -177,7 +185,7 @@ describe('Trade Center — trade depth paywall', () => {
     render(<TradeCenter league={LEAGUE} depthAccess={PRELAUNCH} />)
     expect(document.querySelector('.af-tc-fits')).not.toBeNull()
     await analyze()
-    expect(document.querySelector(".af-tc-dos[data-mstep='review']")).not.toBeNull()
+    expect(document.querySelector(".af-tc-dos[data-section='breakdown']")).not.toBeNull()
     expect(document.body.textContent).toContain('You sell a starter for depth you do not need.')
     expect(screen.getByTestId('core-free-until-trade_depth')).toHaveTextContent('Free until Oct 15 — then AF Pro')
     expect(screen.queryByTestId('core-lock-trade_depth')).toBeNull()

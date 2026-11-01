@@ -22,6 +22,7 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
 import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
+import { loadSurvivorFormatSignals } from '@/lib/survivor/survivorFormatSignals'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,9 +85,17 @@ export async function GET() {
   // line. Read once here from the same rows; null (never a throw) when the career read fails.
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
+  // Survivor leagues: ONE format-signal argument carries every Survivor signal source — the
+  // manager's own reward state (a choice to make, a free trade held, a prize won), the governance
+  // signals (trade window closing, the viewer's strikes, a swap this week), the finale/Tribal
+  // deadlines (votes due, closing speech), open challenges ("locks in 2h, you haven't answered") and
+  // the side games (a pool pick due, an auction closing, the shop open, Exile claims closing).
+  // Started, not awaited, like career; every source is read in parallel inside the loader and fails
+  // closed to [] on its own, so one source failing never hides another and this never throws.
+  const survivorSignals = loadSurvivorFormatSignals({ userId, leagueIds, now })
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career, survivorSignals),
     countDraftsApproaching(leagueIds, now),
   ])
 

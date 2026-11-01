@@ -35,6 +35,7 @@ import { pickAttendingTribeId, resolveWeekImmuneTribeIds } from './survivorCounc
 import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { getActiveSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { postImmunityWinLine } from './leagueChatPoster'
+import { survivorWeekOneExclusion, survivorWeekOneStartDay } from './survivorWeekOneScoring'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
 export async function sumRedraftStartersFantasy(
@@ -57,8 +58,30 @@ export async function sumRedraftStartersFantasy(
     where: { id: bridge.redraftRosterId, seasonId: season.id, leagueId: season.leagueId }, select: { id: true },
   })
   if (!actual) return { pts: 0, allFinalized: false }
-  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season })
-  return { pts: score.points, allFinalized: score.starterCount > 0 && score.scoredStarterCount === score.starterCount && score.missingPlayerIds.length === 0 && score.allFinal }
+  // The commissioner's week-1 window ("Thursday and Friday players will not count"): Survivor's own
+  // week-1 total only, never the base league's matchup score (lib/survivor/survivorWeekOneScoring.ts).
+  const weekOneStartDay = league ? survivorWeekOneStartDay(league, week) : null
+  // A "forced bench" disadvantage (lib/survivor/survivorForcedBench.ts): that player's points from a
+  // starting slot do not count toward Survivor's score this week, even if the lineup saves let him in.
+  const benched = league?.survivorMode
+    ? await import('./survivorForcedBench').then((m) => m.loadForcedBench(season.leagueId, rosterId, week)).catch(() => new Set<string>())
+    : new Set<string>()
+  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season, ...(weekOneStartDay || benched.size ? { collectPlayerPoints: true } : {}) })
+  const allFinalized = score.starterCount > 0 && score.scoredStarterCount === score.starterCount && score.missingPlayerIds.length === 0 && score.allFinal
+  if (benched.size && score.playerPoints) {
+    const { forcedBenchStarterPoints } = await import('./survivorForcedBench')
+    const off = forcedBenchStarterPoints(score.playerPoints, benched)
+    if (off) score.points = Math.round((score.points - off) * 100) / 100
+  }
+  if (weekOneStartDay && score.playerPoints) {
+    const excluded = await survivorWeekOneExclusion({ sport: String(league?.sport ?? 'NFL'), season: season.season, week, startDay: weekOneStartDay, redraftRosterId: actual.id, playerPoints: benched.size ? score.playerPoints.filter((p) => !benched.has(p.playerId)) : score.playerPoints })
+      .catch((error) => {
+        console.warn('[survivor] week-1 window not applied', error instanceof Error ? error.message : error)
+        return 0
+      })
+    return { pts: Math.round((score.points - excluded) * 100) / 100, allFinalized }
+  }
+  return { pts: score.points, allFinalized }
 }
 
 export async function getOrCreateSurvivorGameState(leagueId: string): Promise<SurvivorGameState> {
@@ -461,6 +484,7 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
         totals: immunity.totals,
         tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
         immuneTribeIds: [...immunity.immuneTribeIds, ...progress.attendedTribeIds],
+        tieBreak: immunity.tieBreak,
       }) ?? losingTribe
     }
     const merged = !surprise && (Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase))

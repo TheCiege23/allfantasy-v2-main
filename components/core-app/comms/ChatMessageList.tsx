@@ -28,6 +28,9 @@ import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
 import { ChimmyVerdictChip } from './ChimmyAnswerPolish'
 import { readAnswerPolish } from '@/lib/chimmy/answerPolish'
+import { readSurvivorHostCard, type SurvivorHostCard } from '@/lib/core-app/survivorChatCard'
+import { survivorChatMessages } from '@/lib/core-app/messages/survivorChat'
+import { useMessages } from '@/components/i18n/useMessages'
 import {
   describeReactors,
   initialsFor,
@@ -129,6 +132,12 @@ export type ChatMessageListProps = {
   onReport?: (m: ChatListMessage, reason: ReportReason) => Promise<void>
   /** Somebody else's message only. Reject to keep the sheet open with the reason on it. */
   onBlock?: (m: ChatListMessage) => Promise<void>
+  /**
+   * A message that is still a message (it keeps its bubble, reactions and replies) but carries a
+   * league event — the redraft chat's Chimmy trade take and weekly recap. Stamped on the row as
+   * `data-event-kind` for styling; absent (the default everywhere else) stamps nothing.
+   */
+  eventKindFor?: (m: ChatListMessage) => string | null
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
@@ -161,6 +170,41 @@ function ChimmyAvatar() {
   return (
     <span className="af-cm-avatar af-cm-avatar-chimmy" aria-hidden="true" data-testid="chimmy-avatar">
       <Sparkles size={16} aria-hidden />
+    </span>
+  )
+}
+
+/** A small lit torch: the Survivor host's mark in league chat. */
+export function SurvivorTorchIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2.5c-2.4 2.3-3.3 4.4-2.4 6.3.6 1.2 1.6 1.7 2.4 1.7s1.8-.5 2.4-1.7c.9-1.9 0-4-2.4-6.3Z" fill="currentColor" />
+      <path d="M12 5.8c-.9 1-1.2 1.9-.8 2.7.2.4.5.6.8.6s.6-.2.8-.6c.4-.8.1-1.7-.8-2.7Z" fill="#ffd47a" />
+      <path d="M8.6 11.2h6.8l-1.2 2.4H9.8Z" fill="#8a5a2b" />
+      <rect x="10.9" y="13.6" width="2.2" height="8" rx="1" fill="#6b4422" />
+    </svg>
+  )
+}
+
+/** The Survivor host's face in league chat: the torch, never a user's photo. */
+function SurvivorHostAvatar() {
+  return (
+    <span className="af-cm-avatar af-cm-avatar-chimmy af-cm-avatar-sv-host" aria-hidden="true" data-testid="survivor-host-avatar">
+      <SurvivorTorchIcon size={16} />
+    </span>
+  )
+}
+
+/** "🔥 HOST · Chimmy", or "🔥 CASTAWAY · <seat>" when Chimmy speaks for a castaway it runs. */
+function SurvivorHostByline({ card }: { card: SurvivorHostCard }) {
+  const m = useMessages(survivorChatMessages)
+  return (
+    <span className="af-cm-msg-author af-cm-sv-host-byline" data-testid="survivor-host-byline">
+      <span className="af-cm-sv-host-role">
+        <SurvivorTorchIcon size={11} />
+        {card.castawayName ? m.castaway : m.host}
+      </span>
+      <span className="af-cm-sv-host-name">{card.castawayName ?? CHIMMY_DISPLAY_NAME}</span>
     </span>
   )
 }
@@ -239,6 +283,7 @@ export function ChatMessageList({
   scrollTestId,
   onReport,
   onBlock,
+  eventKindFor,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -399,6 +444,9 @@ export function ChatMessageList({
            * never "mine" — not even for the commissioner — whatever id the wire carries.
            */
           const chimmy = isChimmyAuthored(m.metadata)
+          /* A Survivor host line (bridge-mirrored, Chimmy-marked) is drawn as an island card. Style only. */
+          const svHost = chimmy ? readSurvivorHostCard(m.metadata) : null
+          const speaker = svHost?.castawayName ?? CHIMMY_DISPLAY_NAME
           const chimmyVerdict = chimmy && !isDeletedMessage(m.metadata) ? readAnswerPolish(m.metadata).verdict : null
           const mine = item.mine && !chimmy
           const deleted = isDeletedMessage(m.metadata)
@@ -426,11 +474,16 @@ export function ChatMessageList({
               data-flash={flashId === m.id || undefined}
               data-menu={menuFor === m.id || undefined}
               data-chimmy={chimmy || undefined}
+              data-survivor-host={svHost ? 'true' : undefined}
+              data-survivor-content={svHost?.contentType}
               data-pending={m.pending || undefined}
+              data-event-kind={(!deleted && eventKindFor?.(m)) || undefined}
             >
               {!mine ? (
                 item.startsRun ? (
-                  chimmy ? (
+                  svHost ? (
+                    <SurvivorHostAvatar />
+                  ) : chimmy ? (
                     <ChimmyAvatar />
                   ) : (
                     <MessageAvatar name={m.authorName} url={m.avatarUrl} />
@@ -442,7 +495,9 @@ export function ChatMessageList({
 
               <div className="af-cm-col">
                 {!mine && item.startsRun ? (
-                  chimmy ? (
+                  svHost ? (
+                    <SurvivorHostByline card={svHost} />
+                  ) : chimmy ? (
                     <ChimmyByline label={chimmyMomentLabelOf(m.metadata)} />
                   ) : (
                     <span className="af-cm-msg-author">{m.authorName}</span>
@@ -455,7 +510,7 @@ export function ChatMessageList({
                   data-deleted={deleted || undefined}
                   tabIndex={0}
                   role="article"
-                  aria-label={`${mine ? 'You' : chimmy ? CHIMMY_DISPLAY_NAME : m.authorName}${time ? `, ${time}` : ''}${deleted ? ', deleted' : ''}. Press Enter for actions.`}
+                  aria-label={`${mine ? 'You' : chimmy ? speaker : m.authorName}${time ? `, ${time}` : ''}${deleted ? ', deleted' : ''}. Press Enter for actions.`}
                   title={formatChatMessageTimestampFull(m.createdAt) || undefined}
                   onClick={(e) => {
                     if (swallowClickFor.current === m.id) {

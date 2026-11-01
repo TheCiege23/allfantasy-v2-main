@@ -40,7 +40,6 @@ describe('mobile draft tray', () => {
   it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-more'))
     fireEvent.click(screen.getByTestId('draft-mobile-tab-roster'))
     expect(tray().getAttribute('data-snap')).toBe('half')
     expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('roster')

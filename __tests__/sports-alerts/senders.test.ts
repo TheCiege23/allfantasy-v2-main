@@ -101,21 +101,21 @@ describe('breaking news', () => {
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('ignores untrusted outlets and opinion pieces', async () => {
+  it('ignores untrusted outlets and clickbait excluded from the admin newsroom', async () => {
     h.newsFind.mockResolvedValue([
       news({ sourceUrl: 'https://nfltraderumors.co/x' }),
-      news({ id: 'n3', title: 'Why the Texans traded for Marvin Harrison Jr.' }),
+      news({ id: 'n3', title: 'How to watch the Texans game on TV' }),
     ])
     const r = await dispatchBreakingNewsAlerts({ now: NOW })
     expect(r.candidates).toBe(0)
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('sends an ordinary signing to the team’s followers only', async () => {
+  it('sends an ordinary signing to the sport audience and team followers', async () => {
     h.newsFind.mockResolvedValue([news({ title: 'Texans sign veteran long snapper' })])
     await dispatchBreakingNewsAlerts({ now: NOW })
-    expect(h.players).not.toHaveBeenCalled()
-    expect(h.dispatch.mock.calls[0][0].userIds).toEqual(['u-fan'])
+    expect(h.players).toHaveBeenCalledWith('NFL')
+    expect(h.dispatch.mock.calls[0][0].userIds).toEqual(['u-fan', 'u-player-1', 'u-player-2'])
   })
 })
 

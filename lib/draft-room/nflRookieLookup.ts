@@ -159,8 +159,8 @@ function normPos(pos: string | null | undefined): string {
  * persisted compact map in `SportsDataCache`. On Sleeper success the compact
  * map is written to `SportsDataCache` asynchronously (fire-and-forget).
  */
-export async function loadNflRookieLookup(): Promise<NflRookieLookupResult> {
-  if (dbFirstMode.useDbCacheOnly || dbFirstMode.disableLiveApiOnPageLoad) {
+export async function loadNflRookieLookup(options: { allowLive?: boolean } = {}): Promise<NflRookieLookupResult> {
+  if (options.allowLive === false || dbFirstMode.useDbCacheOnly || dbFirstMode.disableLiveApiOnPageLoad) {
     const cached = await loadYearsExpFromDb()
     return { lookup: cached ?? EMPTY_LOOKUP, fetchSource: 'sportsdatacache_compact' }
   }

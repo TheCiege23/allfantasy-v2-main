@@ -44,6 +44,7 @@ import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
+import { SelectionCheck } from '@/components/ui/selection-check'
 import { TE_PREMIUM_POINT_OPTIONS } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
@@ -171,6 +172,11 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
     : translated
 }
 
+function chooseSurvivorTribeCount(teamCount: number, current: number): number {
+  const options = getSurvivorTribeOptions(teamCount)
+  return options.includes(current) ? current : (options[0] ?? 2)
+}
+
 export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
   // A format the manager has not picked follows the sport's default. A picked format is kept when
   // the new sport allows it; one it does not (guillotine is not offered for NCAAB or soccer) falls
@@ -203,10 +209,11 @@ export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSp
     scoringPresetId,
     teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
@@ -241,10 +248,11 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     draftType,
     teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
@@ -959,12 +967,15 @@ export function LeagueBasicsStep({
                 <button key={option.value} type="button"
                   aria-pressed={state.survivorCommissionerParticipationMode === option.value}
                   onClick={() => onChange({ survivorCommissionerParticipationMode: option.value })}
-                  className={cx('min-h-12 rounded-xl border p-3 text-left transition',
+                  className={cx('flex min-h-12 items-start gap-3 rounded-xl border p-3 text-left transition',
                     state.survivorCommissionerParticipationMode === option.value
                       ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
                   data-testid={`g30-survivor-role-${option.value}`}>
-                  <span className="block text-sm font-bold">{option.label}</span>
-                  <span className="block text-xs text-[color:var(--text-secondary)]">{option.hint}</span>
+                  <SelectionCheck selected={state.survivorCommissionerParticipationMode === option.value} className="mt-0.5" testId={`g30-survivor-role-${option.value}-check`} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">{option.label}</span>
+                    <span className="block text-xs text-[color:var(--text-secondary)]">{option.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -975,10 +986,13 @@ export function LeagueBasicsStep({
               {getSurvivorTribeOptions(state.teamCount).map((count) => (
                 <button key={count} type="button" aria-pressed={state.survivorTribeCount === count}
                   onClick={() => onChange({ survivorTribeCount: count })}
-                  className={cx('min-h-11 min-w-12 rounded-xl border px-4 text-sm font-bold',
+                  className={cx('inline-flex min-h-11 min-w-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold',
                     state.survivorTribeCount === count
                       ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
-                  data-testid={`g30-survivor-tribes-${count}`}>{count}</button>
+                  data-testid={`g30-survivor-tribes-${count}`}>
+                  <SelectionCheck selected={state.survivorTribeCount === count} size="sm" testId={`g30-survivor-tribes-${count}-check`} />
+                  {count}
+                </button>
               ))}
             </div>
           </div>

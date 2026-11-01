@@ -66,7 +66,7 @@ function hasAfCommissionerSub(userId: string): Promise<boolean> {
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
-type DraftOrderTeamSlot = { position: number; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
+type DraftOrderTeamSlot = { position: number; teamId: string | null; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
 
 /**
  * The draft order as the settings panel lists it: the saved `LeagueSettings.draftOrderSlots` when
@@ -91,16 +91,16 @@ async function loadDraftOrderTeams(leagueId: string, savedSlots: unknown, league
       const team = ownerId ? byId.get(ownerId) : undefined
       if (team && !used.has(team.id)) {
         used.add(team.id)
-        out.push({ position: out.length + 1, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
+        out.push({ position: out.length + 1, teamId: team.id, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
       }
     }
   }
   for (const t of teams) {
     if (used.has(t.id)) continue
-    out.push({ position: out.length + 1, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
+    out.push({ position: out.length + 1, teamId: t.id, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
   }
   const size = typeof leagueSize === 'number' && leagueSize > 0 ? leagueSize : out.length
-  while (out.length < size) out.push({ position: out.length + 1, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
+  while (out.length < size) out.push({ position: out.length + 1, teamId: null, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
   return out
 }
 
@@ -638,7 +638,11 @@ export async function PATCH(
       ])
     }
 
+    let draftTimeToNotify: Date | null = null
     if (hasLeagueSettings) {
+      const priorDraftTime = body.draftDate !== undefined
+        ? (await prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }))?.draftDateUtc ?? null
+        : null
       const lsRow = await prisma.leagueSettings.upsert({
         where: { leagueId },
         create: { leagueId, ...(lsPatch as unknown as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId'>) },
@@ -651,6 +655,7 @@ export async function PATCH(
       }
       // A tournament conference league's new draft time goes back onto the tournament's record for it.
       if (body.draftDate !== undefined) {
+        if (lsRow.draftDateUtc && lsRow.draftDateUtc.getTime() !== priorDraftTime?.getTime()) draftTimeToNotify = lsRow.draftDateUtc
         await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
           console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
         )
@@ -663,6 +668,10 @@ export async function PATCH(
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
       ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
+    if (draftTimeToNotify) {
+      const { notifyDraftTimeSet } = await import('@/lib/draft-notifications')
+      await notifyDraftTimeSet(leagueId, draftTimeToNotify).catch((e) => console.error('[draft/settings] time notification failed', e))
+    }
     // After the settings write above, which rewrites League.settings wholesale.
     if (roundsManual !== null) {
       await markDraftRoundsManual(leagueId, roundsManual).catch((e) =>

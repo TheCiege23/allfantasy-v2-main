@@ -146,7 +146,12 @@ async function handle(req: NextRequest) {
       if (fromDate || toDate || budget.exhausted() || !candidates.includes(sport)) return
       try {
         // Baseball is a calendar-year season. College basketball and soccer span two years.
-        const season = sport === "MLB" ? new Date().getUTCFullYear() : currentScheduleSeason()
+        const now = new Date()
+        // Soccer's next season can be published in June. Verify it before August so its
+        // 38 gameweeks are ready when dynasty leagues roll forward.
+        const season = sport === "MLB" ? now.getUTCFullYear()
+          : sport === "SOCCER" ? now.getUTCFullYear() - (now.getUTCMonth() < 5 ? 1 : 0)
+            : currentScheduleSeason()
         const result = await syncRiSeasonSchedule({ sport, season, db: prisma as never })
         schedule = { ...(schedule ?? {}), [sport]: result }
       } catch (err) {
@@ -159,6 +164,9 @@ async function handle(req: NextRequest) {
     await syncSchedule("MLB")
     // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
     await syncSchedule("NCAAB")
+    // Three verified soccer slates define future gameweeks and keep the current
+    // finalizer complete. Fetch them before the stat sweep spends the budget.
+    await syncSchedule("SOCCER")
 
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
@@ -238,20 +246,6 @@ async function handle(req: NextRequest) {
         }
       }
     }
-
-    /*
-     * THE NCAAB SEASON SCHEDULE, for the week finalizer (lib/sports-data/riSeasonSchedule.ts):
-     * every SportsGame schedule for college basketball is incomplete, so a week there cannot be
-     * judged "all games final". One RI call per scheduled run; skipped for an explicit date-range
-     * backfill. It runs before the stat sweep can exhaust the budget. Folded into this daily RI pass rather than a new route or
-     * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
-     * publishes it — writes nothing and is simply reported.
-     *
-     * SOCCER rides the same pass (three calls: EPL, La Liga, Serie A — all or nothing, see
-     * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
-     * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
-     */
-    await syncSchedule("SOCCER")
 
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),

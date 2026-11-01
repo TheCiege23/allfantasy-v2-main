@@ -17,8 +17,8 @@ export function VoteSubmissionCard({
   const [step, setStep] = useState<'pick' | 'confirm' | 'done'>('pick')
 
   return (
-    <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.07] p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-violet-200">🗳 Elimination Council</p>
+    <div className="sv-chimmy-card rounded-xl border p-4">
+      <p className="sv-kicker text-[11px]">🗳 Elimination Council</p>
       <p className="mt-1 text-[13px] text-white/80">Cast a private ballot — nothing is public until the reveal.</p>
       {error ? <p role="alert" className="mt-2 text-sm text-rose-200">{error}</p> : null}
       {step === 'done' ? (
@@ -38,7 +38,7 @@ export function VoteSubmissionCard({
             </button>
             <button
               type="button"
-              className="min-h-[44px] flex-1 rounded-lg bg-sky-500/80 text-[13px] font-semibold text-white"
+              className="min-h-[44px] flex-1 rounded-lg bg-[var(--survivor-torch,#f0a35e)] text-[13px] font-semibold text-[#1a0f05] hover:bg-[#f4b47a] disabled:opacity-50"
               disabled={busy || disabled}
               onClick={async () => {
                 setBusy(true)
@@ -64,9 +64,9 @@ export function VoteSubmissionCard({
                   setSel(t.id)
                   setStep('confirm')
                 }}
-                className="flex min-h-[48px] w-full items-center gap-3 rounded-lg border border-white/10 bg-black/30 px-3 text-left text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex min-h-[48px] w-full items-center gap-3 rounded-lg border border-white/10 bg-black/30 px-3 text-left text-[13px] text-white hover:border-[rgba(240,163,94,0.55)] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(240,163,94,0.13)] text-sm font-semibold text-[#f6d3ae]">
                   {t.name.slice(0, 1)}
                 </span>
                 <span className="flex-1">{t.name}</span>
