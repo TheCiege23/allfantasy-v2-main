@@ -1,0 +1,45 @@
+/*
+ * The two-sided bracket funnel: outer rounds at both edges, narrowing to the
+ * championship in the middle. Uses the bracket hub's palette (bracket-experience.css),
+ * which is the same dark canvas in light, dark and AF modes by design.
+ *
+ * Every @media block is at the bottom of this file, never nested.
+ */
+.af-fn { padding: 18px 20px 6px; overflow-x: auto; overscroll-behavior-x: contain; }
+.af-fn-sides { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: #77dfb8; font-size: 11px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.af-fn-tree {
+  --fn-row: 118px;
+  display: grid;
+  gap: 0 22px;
+  align-items: stretch;
+  min-height: calc(var(--fn-rows) * var(--fn-row) + 40px);
+}
+.af-fn-col, .af-fn-final { display: flex; flex-direction: column; min-width: 0; }
+.af-fn-col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin: 0 0 10px; font-size: 11px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; color: #b0cfc8; }
+.af-fn-col[data-side="right"] .af-fn-col-head { flex-direction: row-reverse; }
+.af-fn-pts { color: #70ecc0; white-space: nowrap; }
+/* Even spacing is what makes each round sit centred between the games feeding it. */
+.af-fn-col-games { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; }
+
+.af-fn-game { position: relative; display: block; border: 1px solid #3c6b64; border-radius: 11px; background: #173737; color: #eafff6; text-decoration: none; transition: border-color .15s, background .15s; }
+a.af-fn-game:hover { border-color: #70ecc0; background: #1b4241; }
+.af-fn-game-head { display: block; padding: 6px 9px; background: #1c4140; border-radius: 10px 10px 0 0; color: #acd0c5; font-size: 11px; font-weight: 750; }
+.af-fn-team { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 9px; border-top: 1px solid #2a5450; font-size: 12.5px; }
+.af-fn-seed { min-width: 16px; color: #9fc2bb; font-size: 11px; }
+.af-fn-name { flex: 1; min-width: 0; font-weight: 700; color: #d1e9e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Connector stubs toward the centre — the funnel's lines. */
+.af-fn-game[data-side="left"]::after,
+.af-fn-game[data-side="right"]::after { content: ""; position: absolute; top: 50%; width: 22px; border-top: 2px solid #3c6b64; }
+.af-fn-game[data-side="left"]::after { right: -23px; }
+.af-fn-game[data-side="right"]::after { left: -23px; }
+.af-fn-col[data-side="right"] .af-fn-team { flex-direction: row-reverse; text-align: right; }
+
+.af-fn-final { justify-content: center; align-items: stretch; gap: 10px; padding: 18px 14px; border-radius: 18px; border: 1px solid #5db69a; background: #12332f; box-shadow: 0 0 0 6px rgba(112, 236, 192, .06); align-self: center; }
+.af-fn-final-head { justify-content: center; flex-direction: column; align-items: center; text-align: center; color: #ffd98a; margin: 0; }
+.af-fn-trophy { align-self: center; width: 34px; height: 34px; color: #ffd98a; }
+.af-fn-game[data-side="final"] { border-color: #70ecc0; }
+
+@media (max-width: 640px) {
+  .af-fn { padding: 14px 15px 4px; }
+}

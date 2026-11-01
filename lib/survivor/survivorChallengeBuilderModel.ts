@@ -47,23 +47,57 @@ export const CHALLENGE_BUILDER_KINDS = [
   'anytime_td',
   'custom_choice',
   'custom_number',
+  // From the original league (added later). Settlement per kind — see `challengeSettlementSource`:
+  // first TD scorer and last score type are settled by the commissioner (we store final scores, not
+  // play-by-play); position leaders settle from PlayerWeeklyScore; a sweep is settled by hand; a
+  // puzzle settles itself by exact match or is settled by hand.
+  'first_td_scorer',
+  'last_score_type',
+  'position_leader',
+  'sweep',
+  'puzzle',
 ] as const
 export type ChallengeBuilderKind = (typeof CHALLENGE_BUILDER_KINDS)[number]
 
 export type ChallengeBuilderScope = 'individual' | 'tribe'
 export type ChallengeBuilderStatus = 'scheduled' | 'open' | 'locked' | 'settling' | 'complete' | 'cancelled'
-export type ChallengeInputKind = 'number' | 'choice'
+export type ChallengeInputKind = 'number' | 'choice' | 'text' | 'sweep'
 
-/** Number kinds rank answers by distance; choice kinds have right and wrong answers. */
+/**
+ * Number kinds rank answers by distance; choice kinds have right and wrong answers; a puzzle takes a
+ * typed answer; a sweep takes one pick per prop.
+ */
 export function challengeInputKind(kind: ChallengeBuilderKind): ChallengeInputKind {
+  if (kind === 'puzzle') return 'text'
+  if (kind === 'sweep') return 'sweep'
   return kind === 'game_total_closest' || kind === 'closest_without_going_over' || kind === 'custom_number' ? 'number' : 'choice'
 }
 
-/** Where the true answer can come from without a person. */
+/** Kinds that are always settled by the commissioner: nothing we store answers them. */
+const MANUAL_KINDS: ReadonlySet<string> = new Set(['custom_choice', 'custom_number', 'first_td_scorer', 'last_score_type', 'sweep'])
+
+/** Where the true answer can come from without a person (kind-level; see `challengeSettlementSource`). */
 export function challengeAutoSource(kind: ChallengeBuilderKind, hasGame: boolean): 'game' | 'player_stat' | 'manual' {
-  if (kind === 'player_stat_over_under' || kind === 'anytime_td') return 'player_stat'
-  if (kind === 'custom_choice' || kind === 'custom_number') return 'manual'
+  if (kind === 'player_stat_over_under' || kind === 'anytime_td' || kind === 'position_leader') return 'player_stat'
+  if (MANUAL_KINDS.has(kind) || kind === 'puzzle') return 'manual'
   return hasGame ? 'game' : 'manual'
+}
+
+export type ChallengeSettlementSource = 'game' | 'player_stat' | 'position_leader' | 'exact_answer' | 'manual'
+
+/**
+ * How THIS challenge settles: from a stored game final, a stored player week, the stored weekly
+ * fantasy points at a position, an exact match against the commissioner's puzzle answer — or by the
+ * commissioner. Sport-aware: a player prop whose stat we do not store for that sport is manual.
+ */
+export function challengeSettlementSource(config: Pick<ChallengeBuilderConfig, 'kind' | 'game' | 'player'> & Partial<Pick<ChallengeBuilderConfig, 'puzzle'>>): ChallengeSettlementSource {
+  const kind = config.kind
+  if (MANUAL_KINDS.has(kind)) return 'manual'
+  if (kind === 'puzzle') return config.puzzle?.settle === 'exact' ? 'exact_answer' : 'manual'
+  if (kind === 'position_leader') return 'position_leader'
+  if (kind === 'anytime_td') return config.player && anytimeStatSupported(config.player.sport) ? 'player_stat' : 'manual'
+  if (kind === 'player_stat_over_under') return config.player && playerStatSupported(config.player.sport, config.player.stat) ? 'player_stat' : 'manual'
+  return config.game ? 'game' : 'manual'
 }
 
 /** Kinds that need a stored game (closest without going over may instead take a typed target). */
@@ -77,10 +111,80 @@ export function challengeNeedsGame(kind: ChallengeBuilderKind): boolean {
  * store a touchdown, so they get a manual settle instead.
  */
 export const CHALLENGE_PLAYER_STATS = ['fantasy_points', 'pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'] as const
-export type ChallengePlayerStat = (typeof CHALLENGE_PLAYER_STATS)[number]
+/** A stat key: one of `CHALLENGE_PLAYER_STATS`, or one of the sport's own (`CHALLENGE_SPORT_STATS`). */
+export type ChallengePlayerStat = string
 export const NFL_ONLY_PLAYER_STATS: readonly ChallengePlayerStat[] = ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td']
 
-export type ChallengeOption = { id: string; label: string }
+/**
+ * The per-player stats each sport STORES in `PlayerWeeklyScore.stats`, read from the ingestion code
+ * (no provider was called to decide this — lib/redraft/playerWeeklyScoreService.ts writes them):
+ *  - NFL: `normalizeNflWeeklyStats` keys (lib/scoring-runtime/nflStatNormalization.ts).
+ *  - NCAAF: the CFBD aggregate (ncaafStatNormalization.ts: pass_yds, rush_td, rec, kr_td…).
+ *  - NBA / NCAAB / NHL / MLB / SOCCER: the daily-sport aggregates (dailySportStatNormalization.ts,
+ *    mlbStatNormalization.ts, soccerStatNormalization.ts), stored under the scoring config's keys.
+ * A stat listed here settles itself; any other stat on that sport is settled by the commissioner.
+ * `fantasy_points` (the row's `fantasyPts`) settles for every sport.
+ */
+export const CHALLENGE_SPORT_STATS: Readonly<Record<string, readonly string[]>> = {
+  NFL: ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'],
+  NCAAF: ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'],
+  NBA: ['pts', 'reb', 'ast', 'threes', 'stl', 'blk'],
+  NCAAB: ['pts', 'reb', 'ast', 'threes', 'stl', 'blk'],
+  NHL: ['g', 'a', 'sog', 'ppp', 'blks', 'hits', 'g_sv'],
+  MLB: ['h', 'hr', 'rbi', 'r', 'sb', 'so'],
+  SOCCER: ['goals', 'assists', 'shots_on_target', 'saves'],
+}
+
+/**
+ * "Anytime" scorer per sport, from the stored keys: a touchdown (NFL rush/rec/fumble TD; NCAAF
+ * rush/rec/return TD), a goal (NHL, soccer), a home run (MLB). NBA and NCAAB store no such event:
+ * an anytime prop there is settled by the commissioner.
+ */
+export const CHALLENGE_ANYTIME_KEYS: Readonly<Record<string, readonly string[]>> = {
+  NFL: ['rush_td', 'rec_td', 'fumble_td'],
+  NCAAF: ['rush_td', 'rec_td', 'kr_td', 'pr_td'],
+  NHL: ['g'],
+  SOCCER: ['goals'],
+  MLB: ['hr'],
+}
+
+/** Our sport key for a stored sport spelling (`NCAAFB` → `NCAAF`, `NCAABB` → `NCAAB`). */
+export function challengeSportKey(sport: string | null | undefined): string {
+  const s = String(sport ?? '').trim().toUpperCase()
+  if (s === 'NCAAFB') return 'NCAAF'
+  if (s === 'NCAABB') return 'NCAAB'
+  return s
+}
+
+/** The stats a commissioner can pick for a player in this sport (fantasy points first). */
+export function challengeStatsForSport(sport: string | null | undefined): string[] {
+  return ['fantasy_points', ...(CHALLENGE_SPORT_STATS[challengeSportKey(sport)] ?? [])]
+}
+
+/** True when that stat is stored for that sport, so the challenge settles itself. */
+export function playerStatSupported(sport: string | null | undefined, stat: string): boolean {
+  return stat === 'fantasy_points' || (CHALLENGE_SPORT_STATS[challengeSportKey(sport)] ?? []).includes(stat)
+}
+
+export function anytimeStatSupported(sport: string | null | undefined): boolean {
+  return Boolean(CHALLENGE_ANYTIME_KEYS[challengeSportKey(sport)])
+}
+
+/** Every stat a player prop may name: the legacy list plus every sport's own. */
+const ALL_PLAYER_STATS: ReadonlySet<string> = new Set([...CHALLENGE_PLAYER_STATS, ...Object.values(CHALLENGE_SPORT_STATS).flat()])
+
+export type ChallengeOption = { id: string; label: string; /** Position leaders: the player this option is. */ playerId?: string }
+
+/** One prop of a sweep: its own question and options. */
+export type ChallengeSweepProp = { id: string; question: string; options: ChallengeOption[] }
+
+/** A puzzle: the commissioner's answer (never shown to managers before the result). */
+export type ChallengePuzzle = { answer: string; mode: 'first_correct' | 'fastest'; settle: 'exact' | 'manual' }
+
+/** Position leaders: who scores the most fantasy points at `position` in that sport week. */
+export type ChallengePositionRef = { sport: string; season: number; statWeek: number; position: string }
+
+export const LAST_SCORE_TYPES = ['touchdown', 'field_goal', 'safety'] as const
 
 export type ChallengeGameRef = {
   sport: string
@@ -152,6 +256,12 @@ export type ChallengeBuilderConfig = {
   allOverRule: ClosestAllOverRule
   opensAt: string
   locksAt: string
+  /** Sweep: the props (all must hit). */
+  props?: ChallengeSweepProp[]
+  /** Sweep: place 2 pays one miss, place 3 two misses… (off: only a perfect card pays). */
+  sweepTiered?: boolean
+  puzzle?: ChallengePuzzle | null
+  position?: ChallengePositionRef | null
 }
 
 export const CHALLENGE_BUILDER_LIMITS = {
@@ -164,6 +274,8 @@ export const CHALLENGE_BUILDER_LIMITS = {
   deferWeeks: 4,
   wagerMax: { points: 200, faab: 200 },
   number: 100000,
+  props: 8,
+  textAnswer: 200,
 } as const
 
 export const DEFAULT_CHALLENGE_FAAB_WEEKLY_CAP = 40
@@ -211,6 +323,13 @@ const ERRORS = {
   wagerKind: ['Wagers are for right-or-wrong questions.', 'Las apuestas son para preguntas de acierto o fallo.'],
   faabCap: (cap: number) => [`Challenge FAAB is capped at $${cap} per winner per week (league setting).`, `El FAAB de los retos tiene un tope de $${cap} por ganador y semana (ajuste de la liga).`],
   locked: ['This challenge can no longer be changed.', 'Este reto ya no se puede cambiar.'],
+  sweep: ['A sweep needs 2 to 8 props, each with a question and 2 to 8 distinct options.', 'Un pleno necesita de 2 a 8 apuestas, cada una con su pregunta y de 2 a 8 opciones distintas.'],
+  sweepPlaces: ['A sweep pays place 1 for a perfect card; with tiers on, place 2 is one miss, place 3 two misses, and so on.', 'Un pleno paga el puesto 1 por acertarlo todo; con niveles, el puesto 2 es un fallo, el 3 dos fallos, y así.'],
+  puzzle: ['A puzzle needs its answer (up to 200 characters) and how it is won.', 'Un acertijo necesita su respuesta (hasta 200 caracteres) y cómo se gana.'],
+  puzzlePlaces: ['“First correct” pays one place; “fastest” pays up to 5 places in the order they were solved.', '«El primero en acertar» paga un puesto; «el más rápido» paga hasta 5 puestos en el orden en que se resolvió.'],
+  position: ['Pick a position, a stat week and 2 to 8 players at it.', 'Elige una posición, una semana de estadísticas y de 2 a 8 jugadores de esa posición.'],
+  phaseType: ['That prize is not allowed in this phase of the season.', 'Ese premio no está permitido en esta fase de la temporada.'],
+  phaseRules: ['Prize rules per phase: tribe FAAB transfers are pre-merge only, and each phase must name known prize types.', 'Reglas de premios por fase: las transferencias de FAAB entre tribus son solo antes de la fusión, y cada fase debe usar tipos de premio conocidos.'],
   answered: ['Answers are in: only the title, question, prizes and a later lock time can change now.', 'Ya hay respuestas: ahora solo se pueden cambiar el título, la pregunta, los premios y retrasar el cierre.'],
 } as const
 
@@ -221,6 +340,99 @@ export function challengeError(code: ChallengeErrorCode, lang: ChallengeLang, ar
   const entry = ERRORS[code]
   const pair = typeof entry === 'function' ? entry(arg ?? 0) : entry
   return { code, message: lang === 'es' ? pair[1] : pair[0] }
+}
+
+// ── Prize types per phase ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which prize types a challenge (or the Hub's "grant a reward") may hand out in each phase of the
+ * season. The commissioner can narrow each phase (`League.settings.survivorPrizePhaseRules`).
+ *
+ * Two rules are STRUCTURAL and hold whatever the commissioner picks (they were implicit before):
+ *  - tribe-scope prizes only before the merge — a tribe challenge, and so "FAAB from the other
+ *    tribes" (`faab_transfer`), exists only while tribes do;
+ *  - immunity is only ever an individual prize.
+ * The defaults are exactly today's behaviour: every type before the merge; every type but the
+ * tribe FAAB transfer after it and at the finale. Penalties (points or FAAB taken) are not prizes
+ * and are never restricted.
+ */
+export const SURVIVOR_PRIZE_PHASES = ['pre_merge', 'post_merge', 'finale'] as const
+export type SurvivorPrizePhase = (typeof SURVIVOR_PRIZE_PHASES)[number]
+export type SurvivorPrizePhaseRules = Record<SurvivorPrizePhase, ChallengePrizeType[]>
+export const SURVIVOR_PRIZE_PHASE_RULES_KEY = 'survivorPrizePhaseRules'
+
+/** Prize types that need tribe scope (so only exist before the merge). */
+export const TRIBE_ONLY_PRIZE_TYPES: readonly ChallengePrizeType[] = ['faab_transfer']
+/** Prize types that need individual scope. */
+export const INDIVIDUAL_ONLY_PRIZE_TYPES: readonly ChallengePrizeType[] = ['immunity']
+
+export function defaultPrizePhaseRules(): SurvivorPrizePhaseRules {
+  const all = [...CHALLENGE_PRIZE_TYPES]
+  const merged = all.filter((t) => !TRIBE_ONLY_PRIZE_TYPES.includes(t))
+  return { pre_merge: all, post_merge: merged, finale: [...merged] }
+}
+
+/** Survivor phase → prize phase. Unknown phases follow the merge flag. */
+export function prizePhaseOf(phase: string | null | undefined, merged: boolean): SurvivorPrizePhase {
+  if (phase === 'finale') return 'finale'
+  if (phase === 'pre_merge' || phase === 'post_swap') return merged ? 'post_merge' : 'pre_merge'
+  return merged || (phase != null && phase !== '') ? 'post_merge' : 'pre_merge'
+}
+
+/** The league's rules; junk, missing or structurally impossible entries read as the defaults. */
+export function readPrizePhaseRules(leagueSettings: unknown): SurvivorPrizePhaseRules {
+  const root = leagueSettings && typeof leagueSettings === 'object' && !Array.isArray(leagueSettings) ? (leagueSettings as Record<string, unknown>) : {}
+  const checked = validatePrizePhaseRules(root[SURVIVOR_PRIZE_PHASE_RULES_KEY], 'en')
+  return checked.ok ? checked.rules : defaultPrizePhaseRules()
+}
+
+/** Validate a commissioner's per-phase rules (an object of type lists). Missing phases = defaults. */
+export function validatePrizePhaseRules(raw: unknown, lang: ChallengeLang): { ok: true; rules: SurvivorPrizePhaseRules } | { ok: false; error: ChallengeError } {
+  const defaults = defaultPrizePhaseRules()
+  if (raw == null) return { ok: true, rules: defaults }
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: challengeError('phaseRules', lang) }
+  const r = raw as Record<string, unknown>
+  const out = { ...defaults }
+  for (const phase of SURVIVOR_PRIZE_PHASES) {
+    if (r[phase] == null) continue
+    const list = r[phase]
+    if (!Array.isArray(list) || list.some((t) => !(CHALLENGE_PRIZE_TYPES as readonly unknown[]).includes(t))) return { ok: false, error: challengeError('phaseRules', lang) }
+    const types = CHALLENGE_PRIZE_TYPES.filter((t) => (list as unknown[]).includes(t))
+    if (phase !== 'pre_merge' && types.some((t) => TRIBE_ONLY_PRIZE_TYPES.includes(t))) return { ok: false, error: challengeError('phaseRules', lang) }
+    out[phase] = types
+  }
+  return { ok: true, rules: out }
+}
+
+const PRIZE_TYPE_LABEL: Record<ChallengeLang, Record<ChallengePrizeType, string>> = {
+  en: { score_bonus: 'points', faab_grant: 'FAAB', faab_transfer: 'FAAB from the other tribes', tribemate_points: 'points on a tribemate', free_trade_token: 'a free trade', steal_blocker: 'a steal blocker', steal: 'a steal', advantage: 'an advantage', immunity: 'immunity' },
+  es: { score_bonus: 'puntos', faab_grant: 'FAAB', faab_transfer: 'FAAB de las otras tribus', tribemate_points: 'puntos para un compañero', free_trade_token: 'un intercambio libre', steal_blocker: 'un bloqueador de robos', steal: 'un robo', advantage: 'una ventaja', immunity: 'inmunidad' },
+}
+const PRIZE_PHASE_LABEL: Record<ChallengeLang, Record<SurvivorPrizePhase, string>> = {
+  en: { pre_merge: 'before the merge', post_merge: 'after the merge', finale: 'at the finale' },
+  es: { pre_merge: 'antes de la fusión', post_merge: 'después de la fusión', finale: 'en la final' },
+}
+
+export function prizePhaseLabel(phase: SurvivorPrizePhase, lang: ChallengeLang): string {
+  return PRIZE_PHASE_LABEL[lang][phase]
+}
+
+/** Null when that prize type may be handed out in that phase; otherwise a clear EN/ES refusal. */
+export function prizePhaseError(type: ChallengePrizeType, phase: SurvivorPrizePhase, rules: SurvivorPrizePhaseRules, lang: ChallengeLang): ChallengeError | null {
+  if (rules[phase].includes(type) && !(phase !== 'pre_merge' && TRIBE_ONLY_PRIZE_TYPES.includes(type))) return null
+  const what = PRIZE_TYPE_LABEL[lang][type]
+  const when = PRIZE_PHASE_LABEL[lang][phase]
+  return {
+    code: 'phaseType',
+    message: lang === 'es'
+      ? `${what.charAt(0).toUpperCase()}${what.slice(1)} no se puede dar como premio ${when} (reglas de premios de la liga).`
+      : `${what.charAt(0).toUpperCase()}${what.slice(1)} cannot be given as a prize ${when} (league prize rules).`,
+  }
+}
+
+/** The prize type a reward-API spec is, or null for a penalty (never restricted). */
+export function prizeTypeOfRewardSpecType(type: string): ChallengePrizeType | null {
+  return (CHALLENGE_PRIZE_TYPES as readonly string[]).includes(type) ? (type as ChallengePrizeType) : null
 }
 
 // ── Eastern wall time ─────────────────────────────────────────────────────────────────────────────
@@ -278,6 +490,13 @@ export type ChallengeDraftInput = {
   uniqueAnswers?: unknown
   sealed?: unknown
   allOverRule?: unknown
+  /** Sweep: `[{ question, options: [label…] }]`. */
+  props?: unknown
+  sweepTiered?: unknown
+  /** Puzzle: `{ answer, mode, settle }`. */
+  puzzle?: unknown
+  /** Position leaders: `{ sport, season, statWeek, position }`; the options carry `playerId`s. */
+  position?: unknown
 }
 
 export type ChallengeDraftContext = {
@@ -288,6 +507,10 @@ export type ChallengeDraftContext = {
   faabWeeklyCap: number
   /** FAAB per winner already promised by other challenges this week. */
   otherFaabThisWeek: number
+  /** The season phase the prize is handed out in (default: from `merged`). */
+  prizePhase?: SurvivorPrizePhase
+  /** The commissioner's per-phase prize rules (default: today's rules). */
+  prizePhaseRules?: SurvivorPrizePhaseRules
 }
 
 export type ValidChallengeDraft = { title: string; week: number; config: ChallengeBuilderConfig; faabPerWinner: number }
@@ -350,14 +573,19 @@ function readWager(v: unknown): ChallengeWager | null | 'invalid' {
   return { currency: r.currency, min: min as number, max: max as number, winMultiplier: win, lossFraction: loss }
 }
 
-function readOptions(v: unknown): ChallengeOption[] | null {
+function readOptions(v: unknown, withPlayers = false): ChallengeOption[] | null {
   if (!Array.isArray(v)) return null
   const out: ChallengeOption[] = []
   for (const [i, raw] of v.entries()) {
     const label = typeof raw === 'string' ? raw.trim() : str(rec(raw).label)
     if (!label || label.length > CHALLENGE_BUILDER_LIMITS.optionLabel) return null
-    out.push({ id: `o${i + 1}`, label })
+    if (withPlayers) {
+      const playerId = str(rec(raw).playerId)
+      if (!playerId || playerId.length > 128) return null
+      out.push({ id: `o${i + 1}`, label, playerId })
+    } else out.push({ id: `o${i + 1}`, label })
   }
+  if (withPlayers && new Set(out.map((o) => o.playerId)).size !== out.length) return null
   const labels = new Set(out.map((o) => o.label.toLowerCase()))
   if (out.length < 2 || out.length > CHALLENGE_BUILDER_LIMITS.options || labels.size !== out.length) return null
   return out
@@ -374,9 +602,58 @@ function readPlayer(v: unknown): ChallengePlayerRef | null {
   const r = rec(v)
   const stat = str(r.stat) as ChallengePlayerStat
   const season = r.season, statWeek = r.statWeek
-  if (!str(r.playerId) || !str(r.playerName) || !str(r.sport) || !(CHALLENGE_PLAYER_STATS as readonly string[]).includes(stat)) return null
+  if (!str(r.playerId) || !str(r.playerName) || !str(r.sport) || !ALL_PLAYER_STATS.has(stat)) return null
   if (!isNum(season) || !Number.isInteger(season) || season < 2000 || season > 2100 || !isNum(statWeek) || !Number.isInteger(statWeek) || statWeek < 0 || statWeek > 60) return null
-  return { playerId: str(r.playerId), playerName: str(r.playerName).slice(0, 80), sport: str(r.sport).toUpperCase(), season, statWeek, stat }
+  const sport = str(r.sport).toUpperCase()
+  // A sport's own stat only on that sport; the legacy (football) list stays pickable everywhere,
+  // settled by the commissioner where that sport does not store it.
+  if (!(CHALLENGE_PLAYER_STATS as readonly string[]).includes(stat) && !playerStatSupported(sport, stat)) return null
+  return { playerId: str(r.playerId), playerName: str(r.playerName).slice(0, 80), sport, season, statWeek, stat }
+}
+
+function readPosition(v: unknown): ChallengePositionRef | null {
+  const r = rec(v)
+  const position = str(r.position).toUpperCase()
+  const season = r.season, statWeek = r.statWeek
+  if (!str(r.sport) || !/^[A-Z0-9]{1,4}$/.test(position)) return null
+  if (!isNum(season) || !Number.isInteger(season) || season < 2000 || season > 2100 || !isNum(statWeek) || !Number.isInteger(statWeek) || statWeek < 0 || statWeek > 60) return null
+  return { sport: str(r.sport).toUpperCase(), season, statWeek, position }
+}
+
+function readProps(v: unknown): ChallengeSweepProp[] | null {
+  if (!Array.isArray(v) || v.length < 2 || v.length > CHALLENGE_BUILDER_LIMITS.props) return null
+  const out: ChallengeSweepProp[] = []
+  for (const [i, raw] of v.entries()) {
+    const r = rec(raw)
+    const question = str(r.question)
+    const options = readOptions(r.options)
+    if (!question || question.length > 300 || !options) return null
+    out.push({ id: `p${i + 1}`, question, options })
+  }
+  return out
+}
+
+function readPuzzle(v: unknown): ChallengePuzzle | null {
+  const r = rec(v)
+  const answer = str(r.answer)
+  if (!answer || answer.length > CHALLENGE_BUILDER_LIMITS.textAnswer || !normalizeAnswerText(answer)) return null
+  return { answer, mode: r.mode === 'fastest' ? 'fastest' : 'first_correct', settle: r.settle === 'manual' ? 'manual' : 'exact' }
+}
+
+/**
+ * The comparable form of a typed answer ("exact match"): case, accents, punctuation and extra
+ * spaces do not count — "Tom Brady!" matches "tom   brady".
+ */
+export function normalizeAnswerText(text: string): string {
+  return String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
+
+export function lastScoreLabel(id: string, lang: ChallengeLang): string {
+  const es = lang === 'es'
+  if (id === 'touchdown') return es ? 'Touchdown' : 'Touchdown'
+  if (id === 'field_goal') return es ? 'Gol de campo' : 'Field goal'
+  if (id === 'safety') return es ? 'Safety' : 'Safety'
+  return id
 }
 
 /** FAAB one winner can collect from this challenge: the richest place's FAAB grants. */
@@ -391,6 +668,8 @@ export function faabPerWinner(prizes: readonly ChallengePrizePlace[]): number {
 export function validateChallengeDraft(input: ChallengeDraftInput, ctx: ChallengeDraftContext): { ok: true; draft: ValidChallengeDraft } | { ok: false; error: ChallengeError } {
   const L = ctx.lang
   const bad = (code: ChallengeErrorCode, arg?: number) => ({ ok: false as const, error: challengeError(code, L, arg) })
+  const prizePhase: SurvivorPrizePhase = ctx.prizePhase ?? (ctx.merged ? 'post_merge' : 'pre_merge')
+  const phaseRules = ctx.prizePhaseRules ?? defaultPrizePhaseRules()
   const title = str(input.title)
   if (!title || title.length > CHALLENGE_BUILDER_LIMITS.title) return bad('title')
   const question = str(input.question)
@@ -409,17 +688,35 @@ export function validateChallengeDraft(input: ChallengeDraftInput, ctx: Challeng
 
   const input_ = challengeInputKind(kind)
   let game: ChallengeGameRef | null = null
-  if (challengeNeedsGame(kind) || (kind === 'closest_without_going_over' && input.game)) {
+  // First TD scorer / last score type may name the game (its kickoff bounds the lock); optional.
+  const optionalGame = kind === 'closest_without_going_over' || kind === 'first_td_scorer' || kind === 'last_score_type'
+  if (challengeNeedsGame(kind) || (optionalGame && input.game)) {
     game = readGame(input.game)
     if (!game) return bad('game')
     if (locks.getTime() > new Date(game.kickoff).getTime()) return bad('gameLock')
   }
   let player: ChallengePlayerRef | null = null
   if (kind === 'player_stat_over_under' || kind === 'anytime_td') {
+    // Every sport may run these; the ones we store stats for settle themselves (see
+    // `challengeSettlementSource`), the rest are settled by the commissioner.
     player = readPlayer(kind === 'anytime_td' ? { ...rec(input.player), stat: 'total_td' } : input.player)
     if (!player) return bad('player')
-    if (kind === 'anytime_td' && player.sport !== 'NFL') return bad('tdSport')
-    if (player.sport !== 'NFL' && NFL_ONLY_PLAYER_STATS.includes(player.stat)) return bad('statSport')
+  }
+  let position: ChallengePositionRef | null = null
+  let props: ChallengeSweepProp[] | undefined
+  let puzzle: ChallengePuzzle | null = null
+  if (kind === 'position_leader') {
+    position = readPosition(input.position)
+    if (!position) return bad('position')
+  }
+  if (kind === 'sweep') {
+    const read = readProps(input.props)
+    if (!read) return bad('sweep')
+    props = read
+  }
+  if (kind === 'puzzle') {
+    puzzle = readPuzzle(input.puzzle)
+    if (!puzzle) return bad('puzzle')
   }
   let line: number | null = null
   if (kind === 'game_total_over_under' || kind === 'player_stat_over_under') {
@@ -427,10 +724,16 @@ export function validateChallengeDraft(input: ChallengeDraftInput, ctx: Challeng
     line = input.line
   }
   let options: ChallengeOption[] = []
-  if (kind === 'custom_choice') {
+  if (kind === 'custom_choice' || kind === 'first_td_scorer') {
     const read = readOptions(input.options)
     if (!read) return bad('options')
     options = read
+  } else if (kind === 'position_leader') {
+    const read = readOptions(input.options, true)
+    if (!read) return bad('position')
+    options = read
+  } else if (kind === 'last_score_type') {
+    options = LAST_SCORE_TYPES.map((id) => ({ id, label: lastScoreLabel(id, L) }))
   } else if (kind === 'pick_winner' && game) {
     options = [{ id: game.awayAbbr, label: game.awayLabel }, { id: game.homeAbbr, label: game.homeLabel }]
   } else if (kind === 'game_total_over_under' || kind === 'player_stat_over_under') {
@@ -453,6 +756,8 @@ export function validateChallengeDraft(input: ChallengeDraftInput, ctx: Challeng
       if (!reward) return bad('reward')
       if (reward.type === 'faab_transfer' && scope !== 'tribe') return bad('transferScope')
       if (reward.type === 'immunity' && scope !== 'individual') return bad('immunityScope')
+      const phaseError = prizePhaseError(reward.type, prizePhase, phaseRules, L)
+      if (phaseError) return { ok: false as const, error: phaseError }
       rewards.push(reward)
     }
     seenPlaces.add(place)
@@ -460,16 +765,21 @@ export function validateChallengeDraft(input: ChallengeDraftInput, ctx: Challeng
   }
   prizes.sort((a, b) => a.place - b.place)
   if (input_ === 'choice' && prizes.some((p) => p.place !== 1)) return bad('choicePlaces')
+  const sweepTiered = kind === 'sweep' && input.sweepTiered === true
+  if (kind === 'sweep' && prizes.some((p) => p.place > (sweepTiered ? Math.min(CHALLENGE_BUILDER_LIMITS.places, props!.length) : 1))) return bad('sweepPlaces')
+  if (kind === 'puzzle' && puzzle!.mode === 'first_correct' && prizes.some((p) => p.place !== 1)) return bad('puzzlePlaces')
 
   const deferWeeks = input.deferWeeks == null ? 0 : input.deferWeeks
   if (!isNum(deferWeeks) || !Number.isInteger(deferWeeks) || deferWeeks < 0 || deferWeeks > CHALLENGE_BUILDER_LIMITS.deferWeeks) return bad('defer')
   if (deferWeeks > 0 && prizes.some((p) => p.rewards.some((r) => r.type === 'immunity'))) return bad('immunityDefer')
 
+  // Right-or-wrong kinds (a choice, or a sweep card that hits or misses) may carry a penalty or a wager.
+  const rightOrWrong = input_ === 'choice' || input_ === 'sweep'
   const missPenalty = readPenalty(input.missPenalty)
-  if (missPenalty === 'invalid' || (missPenalty && input_ !== 'choice')) return bad('penalty')
+  if (missPenalty === 'invalid' || (missPenalty && !rightOrWrong)) return bad('penalty')
   const wager = readWager(input.wager)
   if (wager === 'invalid') return bad('wager')
-  if (wager && input_ !== 'choice') return bad('wagerKind')
+  if (wager && !rightOrWrong) return bad('wagerKind')
 
   const perWinner = faabPerWinner(prizes)
   if (perWinner > 0 && ctx.otherFaabThisWeek + perWinner > ctx.faabWeeklyCap) return bad('faabCap', ctx.faabWeeklyCap)
@@ -485,6 +795,9 @@ export function validateChallengeDraft(input: ChallengeDraftInput, ctx: Challeng
         builder: 1, kind, scope, question, options, game, player, line, prizes, deferWeeks,
         missPenalty, wager, uniqueAnswers: input.uniqueAnswers === true, sealed: input.sealed === true, allOverRule,
         opensAt: opens.toISOString(), locksAt: locks.toISOString(),
+        ...(props ? { props, sweepTiered } : {}),
+        ...(puzzle ? { puzzle } : {}),
+        ...(position ? { position } : {}),
       },
     },
   }
@@ -513,6 +826,9 @@ export function readChallengeBuilderConfig(value: unknown): ChallengeBuilderConf
     allOverRule: c.allOverRule === 'no_winner' ? 'no_winner' : 'closest_overall',
     opensAt: String(c.opensAt ?? ''),
     locksAt: String(c.locksAt ?? ''),
+    ...(Array.isArray(c.props) ? { props: c.props.filter((p) => typeof p?.id === 'string' && Array.isArray(p?.options)), sweepTiered: c.sweepTiered === true } : {}),
+    ...(c.puzzle && typeof c.puzzle === 'object' && typeof c.puzzle.answer === 'string' ? { puzzle: { answer: c.puzzle.answer, mode: c.puzzle.mode === 'fastest' ? 'fastest' as const : 'first_correct' as const, settle: c.puzzle.settle === 'manual' ? 'manual' as const : 'exact' as const } } : {}),
+    ...(c.position && typeof c.position === 'object' ? { position: c.position } : {}),
   }
 }
 
@@ -522,7 +838,7 @@ export const CHALLENGE_EDITABLE_WITH_ANSWERS = ['title', 'question', 'prizes', '
 /** Null when `next` only changes what `CHALLENGE_EDITABLE_WITH_ANSWERS` allows. */
 export function editAfterAnswersError(prev: ChallengeBuilderConfig, next: ChallengeBuilderConfig, lang: ChallengeLang): ChallengeError | null {
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-  const fixed: (keyof ChallengeBuilderConfig)[] = ['kind', 'scope', 'options', 'game', 'player', 'line', 'missPenalty', 'wager', 'uniqueAnswers', 'sealed', 'allOverRule', 'opensAt']
+  const fixed: (keyof ChallengeBuilderConfig)[] = ['kind', 'scope', 'options', 'game', 'player', 'line', 'missPenalty', 'wager', 'uniqueAnswers', 'sealed', 'allOverRule', 'opensAt', 'props', 'sweepTiered', 'puzzle', 'position']
   if (fixed.some((k) => !same(prev[k], next[k]))) return challengeError('answered', lang)
   if (new Date(next.locksAt).getTime() < new Date(prev.locksAt).getTime()) return challengeError('answered', lang)
   return null
@@ -530,7 +846,7 @@ export function editAfterAnswersError(prev: ChallengeBuilderConfig, next: Challe
 
 // ── Answers ───────────────────────────────────────────────────────────────────────────────────────
 
-export type ChallengeAnswer = { optionId: string } | { value: number }
+export type ChallengeAnswer = { optionId: string } | { value: number } | { text: string } | { picks: Record<string, string> }
 export type ChallengeSubmission = { answer: ChallengeAnswer; wager: number | null }
 
 /** Validate a manager's answer (and stake). */
@@ -538,7 +854,22 @@ export function validateChallengeAnswer(config: ChallengeBuilderConfig, raw: unk
   const r = rec(raw)
   const es = lang === 'es'
   let answer: ChallengeAnswer
-  if (challengeInputKind(config.kind) === 'number') {
+  const inputKind = challengeInputKind(config.kind)
+  if (inputKind === 'text') {
+    const text = str(r.text)
+    if (!text || text.length > CHALLENGE_BUILDER_LIMITS.textAnswer || !normalizeAnswerText(text)) return { ok: false, error: es ? 'Escribe tu respuesta (hasta 200 caracteres).' : 'Type your answer (up to 200 characters).' }
+    answer = { text }
+  } else if (inputKind === 'sweep') {
+    const raw = rec(r.picks)
+    const picks: Record<string, string> = {}
+    for (const prop of config.props ?? []) {
+      const id = str(raw[prop.id])
+      if (!prop.options.some((o) => o.id === id)) return { ok: false, error: es ? 'Elige una opción en cada apuesta.' : 'Make a pick on every prop.' }
+      picks[prop.id] = id
+    }
+    if (!Object.keys(picks).length) return { ok: false, error: es ? 'Elige una opción en cada apuesta.' : 'Make a pick on every prop.' }
+    answer = { picks }
+  } else if (inputKind === 'number') {
     const v = typeof r.value === 'string' && r.value.trim() ? Number(r.value) : r.value
     if (!isNum(v) || v < 0 || v > CHALLENGE_BUILDER_LIMITS.number || !twoDp(v)) return { ok: false, error: es ? 'Escribe un número (hasta dos decimales).' : 'Enter a number (up to two decimals).' }
     answer = { value: v }
@@ -561,19 +892,31 @@ export function validateChallengeAnswer(config: ChallengeBuilderConfig, raw: unk
 
 /** The comparable form of an answer, for "no two entrants may give the same answer". */
 export function answerKey(answer: ChallengeAnswer): string {
-  return 'optionId' in answer ? `o:${answer.optionId}` : `n:${answer.value}`
+  if ('optionId' in answer) return `o:${answer.optionId}`
+  if ('text' in answer) return `t:${normalizeAnswerText(answer.text)}`
+  if ('picks' in answer) return `s:${Object.keys(answer.picks).sort().map((k) => `${k}=${answer.picks[k]}`).join(',')}`
+  return `n:${answer.value}`
 }
 
 export function readSubmission(value: unknown): ChallengeSubmission | null {
   const r = rec(value)
   const a = rec(r.answer)
-  const answer: ChallengeAnswer | null = typeof a.optionId === 'string' ? { optionId: a.optionId } : isNum(a.value) ? { value: a.value } : null
+  const picks = rec(a.picks)
+  const answer: ChallengeAnswer | null = typeof a.optionId === 'string' ? { optionId: a.optionId }
+    : isNum(a.value) ? { value: a.value }
+      : typeof a.text === 'string' ? { text: a.text }
+        : a.picks && Object.values(picks).every((x) => typeof x === 'string') ? { picks: picks as Record<string, string> }
+          : null
   return answer ? { answer, wager: isNum(r.wager) ? r.wager : null } : null
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────────────────────────
 
-export type ChallengeTruth = { optionId: string } | { value: number }
+/**
+ * The true answer. A choice may carry ties (`tiedOptionIds`: position leaders tied on points — every
+ * tied option is right); a puzzle's truth is its answer text; a sweep's is one option per prop.
+ */
+export type ChallengeTruth = { optionId: string; tiedOptionIds?: string[] } | { value: number } | { text: string } | { picks: Record<string, string> }
 export type ChallengeEntry = { entrantId: string; submission: ChallengeSubmission; submittedAt: Date | string }
 
 export type ChallengeScore = {
@@ -587,9 +930,12 @@ export type ChallengeScore = {
 
 /** Who placed. Ties share a place (the island blesses both). */
 export function scoreChallenge(config: ChallengeBuilderConfig, entries: readonly ChallengeEntry[], truth: ChallengeTruth): ChallengeScore {
-  if (challengeInputKind(config.kind) === 'choice') {
-    const id = 'optionId' in truth ? truth.optionId : null
-    const correctIds = entries.filter((e) => 'optionId' in e.submission.answer && e.submission.answer.optionId === id).map((e) => e.entrantId).sort()
+  const inputKind = challengeInputKind(config.kind)
+  if (inputKind === 'sweep') return scoreSweep(config, entries, truth)
+  if (inputKind === 'text') return scorePuzzle(config, entries, truth)
+  if (inputKind === 'choice') {
+    const right = new Set('optionId' in truth ? [truth.optionId, ...(truth.tiedOptionIds ?? [])] : [])
+    const correctIds = entries.filter((e) => 'optionId' in e.submission.answer && right.has(e.submission.answer.optionId)).map((e) => e.entrantId).sort()
     const correct = new Set(correctIds)
     const wrongIds = entries.map((e) => e.entrantId).filter((x) => !correct.has(x)).sort()
     return { places: correctIds.length ? [{ place: 1, entrantIds: correctIds }] : [], correctIds, wrongIds, ranked: [] }
@@ -619,6 +965,68 @@ export function scoreChallenge(config: ChallengeBuilderConfig, entries: readonly
     lastDistance = r.distance
   }
   return { places, correctIds: places[0]?.entrantIds ?? [], wrongIds: [], ranked }
+}
+
+/**
+ * A sweep: every prop must hit for place 1. With tiers, place 2 is one miss, place 3 two misses…
+ * (up to 5 places, never down to zero right). Everyone short of a perfect card is "wrong" (a miss
+ * penalty or a lost wager).
+ */
+function scoreSweep(config: ChallengeBuilderConfig, entries: readonly ChallengeEntry[], truth: ChallengeTruth): ChallengeScore {
+  const props = config.props ?? []
+  const picks = 'picks' in truth ? truth.picks : null
+  if (!picks || !props.length) return { places: [], correctIds: [], wrongIds: [], ranked: [] }
+  const n = props.length
+  const hits = new Map<string, number>()
+  for (const e of entries) {
+    const a = e.submission.answer
+    if (!('picks' in a)) continue
+    hits.set(e.entrantId, props.filter((p) => picks[p.id] != null && a.picks[p.id] === picks[p.id]).length)
+  }
+  const maxPlaces = config.sweepTiered ? Math.min(CHALLENGE_BUILDER_LIMITS.places, n) : 1
+  const places: ChallengeScore['places'] = []
+  for (let k = 0; k < maxPlaces; k++) {
+    const ids = [...hits].filter(([, h]) => h === n - k && h > 0).map(([id]) => id).sort()
+    if (ids.length) places.push({ place: k + 1, entrantIds: ids })
+  }
+  const correctIds = [...hits].filter(([, h]) => h === n).map(([id]) => id).sort()
+  const perfect = new Set(correctIds)
+  const wrongIds = entries.map((e) => e.entrantId).filter((id) => !perfect.has(id)).sort()
+  return { places, correctIds, wrongIds, ranked: [] }
+}
+
+/**
+ * A puzzle: correct = the typed answer matches the commissioner's (normalized: case, accents,
+ * punctuation and spacing do not count). "First correct" pays the earliest correct entry; "fastest"
+ * pays places 1–5 in the order they were solved. Ties on the instant break on entrant id.
+ */
+function scorePuzzle(config: ChallengeBuilderConfig, entries: readonly ChallengeEntry[], truth: ChallengeTruth): ChallengeScore {
+  const want = 'text' in truth ? normalizeAnswerText(truth.text) : ''
+  if (!want) return { places: [], correctIds: [], wrongIds: [], ranked: [] }
+  const at = (d: Date | string) => new Date(d).getTime()
+  const correct = entries
+    .filter((e) => 'text' in e.submission.answer && normalizeAnswerText(e.submission.answer.text) === want)
+    .sort((a, b) => at(a.submittedAt) - at(b.submittedAt) || a.entrantId.localeCompare(b.entrantId))
+  const paid = config.puzzle?.mode === 'fastest' ? correct.slice(0, CHALLENGE_BUILDER_LIMITS.places) : correct.slice(0, 1)
+  const correctSet = new Set(correct.map((e) => e.entrantId))
+  return {
+    places: paid.map((e, i) => ({ place: i + 1, entrantIds: [e.entrantId] })),
+    correctIds: correct.map((e) => e.entrantId),
+    wrongIds: entries.map((e) => e.entrantId).filter((id) => !correctSet.has(id)).sort(),
+    ranked: [],
+  }
+}
+
+/**
+ * Position leaders: the option whose player scored the most stored fantasy points that week. Every
+ * option tied on the top score is right. Null when no option has a number at all.
+ */
+export function positionLeaderTruth(options: readonly ChallengeOption[], pointsByPlayer: ReadonlyMap<string, number>): ChallengeTruth | null {
+  const scored = options.filter((o) => o.playerId && Number.isFinite(pointsByPlayer.get(o.playerId)))
+  if (!scored.length) return null
+  const best = Math.max(...scored.map((o) => pointsByPlayer.get(o.playerId!)!))
+  const top = scored.filter((o) => pointsByPlayer.get(o.playerId!) === best).map((o) => o.id)
+  return { optionId: top[0]!, ...(top.length > 1 ? { tiedOptionIds: top.slice(1) } : {}) }
 }
 
 /** O/U and anytime-TD truths from a stored number. A push (exactly on the line) is void. */
@@ -745,9 +1153,13 @@ export function describePrizeReward(r: ChallengePrizeReward, lang: ChallengeLang
 }
 
 /** "1st: $50 FAAB per player · 2nd: +10 points (pays in week 7)". */
-export function describeChallengePrizes(config: Pick<ChallengeBuilderConfig, 'prizes' | 'scope' | 'deferWeeks' | 'missPenalty' | 'wager'>, lang: ChallengeLang, week?: number): string {
+export function describeChallengePrizes(config: Pick<ChallengeBuilderConfig, 'prizes' | 'scope' | 'deferWeeks' | 'missPenalty' | 'wager'> & Partial<Pick<ChallengeBuilderConfig, 'kind' | 'props' | 'sweepTiered'>>, lang: ChallengeLang, week?: number): string {
   const es = lang === 'es'
-  const ord = (n: number) => (es ? `${n}.º` : n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`)
+  const sweepN = config.kind === 'sweep' ? config.props?.length ?? 0 : 0
+  // A tiered sweep's places are "number right": 1st = all N, 2nd = N−1…
+  const ord = (n: number) => (sweepN && config.sweepTiered
+    ? (es ? `${sweepN - n + 1}/${sweepN} aciertos` : `${sweepN - n + 1}/${sweepN} right`)
+    : es ? `${n}.º` : n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`)
   const single = config.prizes.length === 1 && config.prizes[0]!.place === 1
   const parts = config.prizes.map((p) => `${single ? '' : `${ord(p.place)}: `}${p.rewards.map((r) => describePrizeReward(r, lang, config.scope)).join(' + ')}`)
   let line = parts.join(' · ')

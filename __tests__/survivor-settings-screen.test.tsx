@@ -13,6 +13,10 @@ import {
   validateSettingsForm,
   type SurvivorSettingsForm,
 } from '@/lib/survivor/survivorSettingsScreen'
+import { defaultPrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { settingsFormErrors } from '@/lib/survivor/survivorSettingsScreen'
+import { settingsErrorMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { messagesFor } from '@/lib/i18n/messages'
 
 const m = vi.hoisted(() => ({
   session: { user: { id: 'commish' } } as { user?: { id?: string } } | null,
@@ -54,6 +58,7 @@ function form(over: Partial<SurvivorSettingsForm> = {}): SurvivorSettingsForm {
     coCommissionerMode: 'disabled', mergeNamingMode: 'commissioner', juryEnabled: true, tribeChatsEnabled: true, exileHarshTokenLoss: false, houseRules: '',
     winningTribeFaabPerPlayer: 0, topScorerReward: 'none', topScorerAmount: 0, topScorerPowerType: 'extra_vote', tribeTieBreakPosition: 'none',
     realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40,
+    payInTribeWeeksAfterMerge: false, thievesCannotStealFromEachOther: false, prizePhaseRules: defaultPrizePhaseRules(),
     ...over,
   }
 }
@@ -114,6 +119,83 @@ describe('settings model', () => {
   it('rejects a partial form', () => {
     expect(parseSettingsForm({ ...form(), tribeCount: undefined })).toBeNull()
     expect(parseSettingsForm(form())).toEqual(form())
+  })
+})
+
+describe('settings-screen API refusals follow League.language with a stable code', () => {
+  const MSG = {
+    en: {
+      unauthorized: 'Unauthorized', commissionerOnly: 'Commissioner access required', leagueNotFound: 'League not found',
+      unknownScene: 'Unknown island scene.', malformedForm: 'Send the whole settings form.',
+      settingsLocked: 'These settings locked when the draft started. Only the settings marked "Editable all season" can change during the season.',
+      chimmyBossUnavailable: "Chimmy's roster boss is only kept for leagues that already use it.",
+      playingCommissionerManualTribes: 'A playing commissioner must use system-run tribe formation.',
+      idolSaveFailed: 'Idol count out of range.',
+    },
+    es: {
+      unauthorized: 'No has iniciado sesión.', commissionerOnly: 'Solo el comisionado puede hacer esto.', leagueNotFound: 'No se encontró la liga.',
+      unknownScene: 'Escena de la isla desconocida.', malformedForm: 'Envía el formulario de ajustes completo.',
+      settingsLocked: 'Estos ajustes se bloquearon al empezar el draft. Durante la temporada solo pueden cambiar los marcados como «Editable toda la temporada».',
+      chimmyBossUnavailable: 'El jefe con la plantilla de Chimmy solo se mantiene en las ligas que ya lo usan.',
+      playingCommissionerManualTribes: 'Un comisionado que juega debe usar la formación de tribus del sistema.',
+      idolSaveFailed: 'No se pudo guardar la configuración de ídolos.',
+    },
+  } as const
+  const league = (language: string, settings = storedSettings()) => m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings, survivorSwapWeek: 5, survivorFinal3: true, language }))
+  const expectRefusal = async (res: Response, status: number, code: keyof typeof MSG.en, lang: 'en' | 'es') => {
+    expect(res.status).toBe(status)
+    expect(await res.json()).toMatchObject({ error: MSG[lang][code], code })
+  }
+
+  for (const lang of ['en', 'es'] as const) {
+    it(`[${lang}] signed out (401), not commissioner (403), no league (404)`, async () => {
+      league(lang)
+      m.session = null
+      await expectRefusal(await POST(req({ form: form() }), params), 401, 'unauthorized', lang)
+      m.session = { user: { id: 'commish' } }
+      m.access = { isLeagueMember: true, decisions: { canUpdateSettings: false } }
+      await expectRefusal(await GET(req({}), params), 403, 'commissionerOnly', lang)
+      await expectRefusal(await POST(req({ form: form() }), params), 403, 'commissionerOnly', lang)
+      m.access = null
+      await expectRefusal(await POST(req({ form: form() }), params), 404, 'leagueNotFound', lang)
+    })
+
+    it(`[${lang}] an unknown island scene and a malformed form (400)`, async () => {
+      league(lang)
+      await expectRefusal(await POST(req({ form: { ...form(), islandScene: 'moon' } }), params), 400, 'unknownScene', lang)
+      await expectRefusal(await POST(req({ form: { ...form(), tribeCount: undefined } }), params), 400, 'malformedForm', lang)
+      await expectRefusal(await POST(req({}), params), 400, 'malformedForm', lang)
+    })
+
+    it(`[${lang}] settings locked (409, keeps the locked keys)`, async () => {
+      league(lang)
+      m.draftStarted = true
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      const res = await POST(req({ form: { ...before, idolCount: 8 } }), params)
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: MSG[lang].settingsLocked, code: 'settingsLocked', locked: ['idolCount'] })
+    })
+
+    it(`[${lang}] a playing commissioner choosing manual tribes (409) and Chimmy's boss for a new league (422)`, async () => {
+      league(lang, storedSettings({ commissionerParticipationMode: 'participating_player', exileBossMode: 'median' }))
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      await expectRefusal(await POST(req({ form: { ...before, tribeFormation: 'commissioner_manual' } }), params), 409, 'playingCommissionerManualTribes', lang)
+      await expectRefusal(await POST(req({ form: { ...before, exileBossMode: 'chimmy_roster' } }), params), 422, 'chimmyBossUnavailable', lang)
+      expect(m.tx.league.update).not.toHaveBeenCalled()
+    })
+
+    it(`[${lang}] a refused idol save inside the transaction`, async () => {
+      league(lang)
+      m.idolSave.mockResolvedValue({ ok: false, status: 400, error: 'Idol count out of range.' })
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      await expectRefusal(await POST(req({ form: { ...before, idolCount: 8 } }), params), 400, 'idolSaveFailed', lang)
+    })
+  }
+
+  it('a missing league id is refused in English (there is no league to ask) with its code', async () => {
+    const res = await POST(req({ form: form() }), { params: Promise.resolve({ leagueId: '' }) })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Missing leagueId', code: 'missingLeague' })
   })
 })
 
@@ -248,6 +330,71 @@ describe('weekly prizes, house rules and the newly exposed settings', () => {
     expect((await bad.json()).error).toMatch(/challenge FAAB cap/)
     expect((await POST(req({ form: { ...before, realGamePrizeType: 'faab', realGamePrizeAmount: 99 } }), params)).status).toBe(422)
     expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('reward rules: today’s behaviour by default, editable all season, written to their own keys; a tribe prize after the merge is refused', async () => {
+    m.draftStarted = true
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    expect(before).toMatchObject({ payInTribeWeeksAfterMerge: false, thievesCannotStealFromEachOther: false, prizePhaseRules: defaultPrizePhaseRules() })
+    const rules = { ...defaultPrizePhaseRules(), finale: ['score_bonus', 'faab_grant', 'immunity'] }
+    const res = await POST(req({ form: { ...before, payInTribeWeeksAfterMerge: true, thievesCannotStealFromEachOther: true, prizePhaseRules: rules } }), params)
+    expect(res.status).toBe(200)
+    const settings = m.tx.league.update.mock.calls[0][0].data.settings
+    expect(settings).toMatchObject({
+      survivorThievesCannotStealFromEachOther: true,
+      survivorPrizePhaseRules: { finale: ['score_bonus', 'faab_grant', 'immunity'] },
+      survivorWeeklyPrizes: { payInTribeWeeksAfterMerge: true },
+    })
+    m.tx.league.update.mockClear()
+    const bad = await POST(req({ form: { ...before, prizePhaseRules: { ...defaultPrizePhaseRules(), post_merge: ['faab_transfer'] } } }), params)
+    expect(bad.status).toBe(422)
+    expect((await bad.json()).error).toMatch(/pre-merge only/)
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('validation errors follow League.language with a stable code (EN and ES)', async () => {
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true, language: 'en' }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    const en = await POST(req({ form: { ...before, topScorerReward: 'faab', topScorerAmount: 0, challengeFaabWeeklyCap: 0 } }), params)
+    expect(en.status).toBe(422)
+    expect(await en.json()).toEqual({
+      error: "The top scorer's FAAB must be a whole amount from $1 to $1000.", code: 'topFaab',
+      errors: ["The top scorer's FAAB must be a whole amount from $1 to $1000.", 'The weekly challenge FAAB cap is $1 to $1000.'], codes: ['topFaab', 'faabCap'],
+    })
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true, language: 'es' }))
+    const state = await (await GET(req({}), params)).json()
+    expect(state.language).toBe('es')
+    const es = await POST(req({ form: { ...before, topScorerReward: 'faab', topScorerAmount: 0, challengeFaabWeeklyCap: 0 } }), params)
+    expect(es.status).toBe(422)
+    expect(await es.json()).toEqual({
+      error: 'El FAAB del máximo anotador debe ser una cantidad entera de $1 a $1000.', code: 'topFaab',
+      errors: ['El FAAB del máximo anotador debe ser una cantidad entera de $1 a $1000.', 'El tope semanal de FAAB de los retos es de $1 a $1000.'], codes: ['topFaab', 'faabCap'],
+    })
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('every validator code renders in Spanish (no English left in an ES league)', () => {
+    const es = messagesFor(settingsErrorMessages, 'es')
+    const bad = form({ tribeCount: 9, idolCount: 3, voteDay: 'Someday', voteTime: 'x', exileReturnTokens: 0, exileBossMode: 'topN', exileBossTopN: 99, swapWeek: 1, houseRules: 'x'.repeat(5000), winningTribeFaabPerPlayer: -1, tribeTieBreakPosition: 'ZZ', realGamePerWeek: 3 as never, prizePhaseRules: { post_merge: ['faab_transfer'] } as never })
+    const errors = settingsFormErrors(bad, ctx, es)
+    expect(errors.map(e => e.code)).toEqual(['tribeCount', 'idolCount', 'voteDay', 'voteTime', 'exileTokens', 'bossTopN', 'swapAfterFirst', 'houseRules', 'tribeFaab', 'tieBreak', 'realPerWeek', 'phaseRules'])
+    expect(errors.find(e => e.code === 'tribeCount')!.message).toBe('Elige entre 2 y 5 tribus.')
+    expect(errors.find(e => e.code === 'houseRules')!.message).toBe('Las reglas de la casa pueden tener como máximo 4000 caracteres.')
+    expect(errors.map(e => e.message).join(' ')).not.toMatch(/Choose|Pick|must|between/)
+    // English is unchanged for existing callers.
+    expect(validateSettingsForm(bad, ctx)[0]).toBe('Choose between 2 and 5 tribes.')
+  })
+
+  it('the screen shows validation errors in the league’s language', async () => {
+    const state = { leagueName: 'Liga', form: form(), context: ctx, locks: { draftStarted: false, finalistLocked: false, tribesLocked: false }, chimmyBossAvailable: false, commissionerPlays: false, language: 'es' }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(state), { status: 200 })))
+    render(<SurvivorSettingsScreen leagueId="L1" backHref="/league/L1" />)
+    await waitFor(() => expect(screen.getByTestId('survivor-settings-screen')).toBeTruthy())
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Increase swap week' }))
+    expect(screen.getByTestId('survivor-settings-errors').textContent).toContain('El intercambio debe ser antes de la fusión.')
+    expect(screen.getByTestId('survivor-settings-errors').textContent).not.toContain('The swap must come before the merge.')
+    vi.unstubAllGlobals()
   })
 
   it('rejects an invalid prize (422) and a junk co-commissioner mode (400)', async () => {
