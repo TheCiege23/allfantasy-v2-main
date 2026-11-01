@@ -142,8 +142,11 @@ export default function ZombieLeagueShell({
         : t('zombie.shell.ready')
   const dangerStateLabel = hordeCount > survivorCount ? t('zombie.shell.escalating') : t('zombie.shell.contained')
 
-  function openOps() {
-    if (showComm) setOpsOpen(true)
+  function openOps(event?: { currentTarget: HTMLElement }) {
+    if (!showComm) return
+    // Safari does not focus a clicked button; the modal needs its trigger to restore focus on close.
+    event?.currentTarget.focus()
+    setOpsOpen(true)
   }
 
   async function refreshMeta() {

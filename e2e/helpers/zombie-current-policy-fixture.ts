@@ -45,6 +45,15 @@ export async function seedFinalNflFixtureTotals(leagueId: string, seasonId: stri
   const links = await reconcileRosterRedraftLinks(leagueId)
   if (links.unlinked) throw new Error(`Synthetic roster links remain missing: ${links.unlinked}`)
   const rosterIds = [...targets.keys()]
+  const club = `ZOMBIE_FIXTURE_${leagueId}`
+  const externalId = `zombie-fixture:${leagueId}:${season}:${week}`
+  const kickoff = new Date(Date.now() - 3_600_000)
+  await prisma.sportsGame.upsert({
+    where: { sport_externalId_source: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture' } },
+    create: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture', homeTeam: club, awayTeam: `${club}_AWAY`, season, seasonType: 'regular', week, status: 'final', startTime: kickoff, expiresAt: new Date(Date.now() + 86_400_000) },
+    update: {},
+  })
+  await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, data: { team: club } })
   const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: rosterIds }, droppedAt: null } })
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId } })
   const template = await getRosterTemplateForLeague('NFL', getFormatTypeForVariant('NFL', league.leagueVariant ?? undefined), leagueId)
