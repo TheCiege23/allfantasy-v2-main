@@ -46,6 +46,32 @@ export interface SurvivorScheduledSwap {
 export const SURVIVOR_CROSS_TRIBE_TRADE_MODES = ['allowed', 'window', 'banned'] as const
 export type SurvivorCrossTribeTradeMode = (typeof SURVIVOR_CROSS_TRIBE_TRADE_MODES)[number]
 
+/**
+ * One cross-tribe trade window in `window` mode. It opens when that week's Tribal Council closes
+ * (`tribal`) or at a weekday/time (ET), and closes at a weekday/time (ET). Up to three a week: the
+ * original league allowed cross-tribe trades "before Thursday Night Football and before Sunday 1pm".
+ *
+ * BACKWARD COMPATIBLE: a league saved before windows existed has only `crossTribeCloseDay/Time`; it
+ * reads as ONE window opened by Tribal Council. Those two keys are kept in step with the FIRST window
+ * on every save, so anything still reading them sees the same close it always did.
+ */
+export const SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS = ['tribal', 'time'] as const
+export type SurvivorCrossTribeWindowOpener = (typeof SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS)[number]
+export interface SurvivorCrossTribeWindow {
+  opensOn: SurvivorCrossTribeWindowOpener
+  /** `time` only. */
+  openDay?: SurvivorGovernanceDay
+  /** `time` only, HH:MM ET. */
+  openTime?: string
+  closeDay: SurvivorGovernanceDay
+  closeTime: string
+}
+export const SURVIVOR_CROSS_TRIBE_WINDOW_MAX = 3
+
+/** What the trade check does when it cannot run (a database read failed). */
+export const SURVIVOR_TRADE_CHECK_FAILURE_MODES = ['allow', 'hold'] as const
+export type SurvivorTradeCheckFailureMode = (typeof SURVIVOR_TRADE_CHECK_FAILURE_MODES)[number]
+
 export const SURVIVOR_TRIBE_SPLITS = ['none', 'rooks_vs_vets'] as const
 export type SurvivorTribeSplit = (typeof SURVIVOR_TRIBE_SPLITS)[number]
 
@@ -65,6 +91,10 @@ export interface SurvivorGovernanceSettings {
   /** `window` mode: cross-tribe trades open after Tribal Council and close at this day/time (ET). */
   crossTribeCloseDay: SurvivorGovernanceDay
   crossTribeCloseTime: string
+  /** `window` mode: 1–3 weekly windows. The first one's close mirrors `crossTribeCloseDay/Time`. */
+  crossTribeWindows: SurvivorCrossTribeWindow[]
+  /** The trade check could not run: `allow` the trade (the old behaviour) or `hold` it for the commissioner. */
+  tradeCheckFailureMode: SurvivorTradeCheckFailureMode
   /** Within a tribe, only players who have not played yet this week may be traded. */
   withinTribeUnplayedOnly: boolean
   /** A player who has played this week cannot be traded until that week's Tribal Council is over. */
@@ -76,6 +106,12 @@ export interface SurvivorGovernanceSettings {
   tribeSplit: SurvivorTribeSplit
   /** Commissioner's manual flags; win over anything read from earlier seasons. userId → experience. */
   experienceOverrides: Record<string, SurvivorExperience>
+  /**
+   * Off by default (privacy). On: a castaway who played an earlier Survivor season in ANY league on
+   * AllFantasy (our own SurvivorPlayer rows) counts as a veteran. Only rookie/veteran is ever shown,
+   * never which leagues. The manual flag still wins.
+   */
+  experienceCrossLeague: boolean
   /** Week 1 counts only games on or after this Eastern weekday. Null: the whole week counts. */
   weekOneScoringStartDay: SurvivorGovernanceDay | null
   /** Display only: show each castaway's tribe emoji beside their name on Survivor screens. */
@@ -102,6 +138,8 @@ export const SURVIVOR_GOVERNANCE_DEFAULTS: SurvivorGovernanceSettings = {
   crossTribeTrades: 'window',
   crossTribeCloseDay: 'Thursday',
   crossTribeCloseTime: '19:00',
+  crossTribeWindows: [{ opensOn: 'tribal', closeDay: 'Thursday', closeTime: '19:00' }],
+  tradeCheckFailureMode: 'allow',
   withinTribeUnplayedOnly: true,
   playedLockUntilTribal: true,
   weeklyTradeFreezeEnabled: false,
@@ -109,6 +147,7 @@ export const SURVIVOR_GOVERNANCE_DEFAULTS: SurvivorGovernanceSettings = {
   weeklyTradeFreezeTime: '23:59',
   tribeSplit: 'none',
   experienceOverrides: {},
+  experienceCrossLeague: false,
   weekOneScoringStartDay: null,
   tribeEmojiInNames: false,
 }
@@ -161,6 +200,49 @@ export function readScheduledSwap(value: unknown): SurvivorScheduledSwap | null 
   return swap
 }
 
+/** Normalise one cross-tribe window; null when it cannot be a valid window. */
+export function readCrossTribeWindow(value: unknown): SurvivorCrossTribeWindow | null {
+  const r = rec(value)
+  if (!isDay(r.closeDay) || typeof r.closeTime !== 'string' || !TIME.test(r.closeTime)) return null
+  const opensOn = r.opensOn === undefined ? 'tribal' : r.opensOn
+  if (opensOn === 'tribal') return { opensOn: 'tribal', closeDay: r.closeDay, closeTime: r.closeTime }
+  if (opensOn !== 'time' || !isDay(r.openDay) || typeof r.openTime !== 'string' || !TIME.test(r.openTime)) return null
+  if (r.openDay === r.closeDay && r.openTime === r.closeTime) return null
+  return { opensOn: 'time', openDay: r.openDay, openTime: r.openTime, closeDay: r.closeDay, closeTime: r.closeTime }
+}
+
+/** The stored windows, or the legacy single close read as one Tribal-opened window. */
+function readCrossTribeWindows(g: Rec, closeDay: SurvivorGovernanceDay, closeTime: string): SurvivorCrossTribeWindow[] {
+  if (Array.isArray(g.crossTribeWindows)) {
+    const windows = g.crossTribeWindows.map(readCrossTribeWindow).filter((w): w is SurvivorCrossTribeWindow => w != null).slice(0, SURVIVOR_CROSS_TRIBE_WINDOW_MAX)
+    if (windows.length > 0) return windows
+  }
+  return [{ opensOn: 'tribal', closeDay, closeTime }]
+}
+
+/**
+ * Commissioner presets for the windows, by sport. NFL: the original league's two windows — after
+ * Tribal Council until Thursday Night Football kicks off (8:15 PM ET), then from Friday 12:00 AM ET
+ * until the Sunday 1 PM games. Other sports play most days, so a "before the big slate" preset would be
+ * invented: they get the single default window only.
+ */
+export interface SurvivorCrossTribeWindowPreset {
+  id: 'original_nfl' | 'single_default'
+  windows: SurvivorCrossTribeWindow[]
+}
+
+export const SURVIVOR_ORIGINAL_NFL_TRADE_WINDOWS: SurvivorCrossTribeWindow[] = [
+  { opensOn: 'tribal', closeDay: 'Thursday', closeTime: '20:15' },
+  { opensOn: 'time', openDay: 'Friday', openTime: '00:00', closeDay: 'Sunday', closeTime: '13:00' },
+]
+
+export function crossTribeWindowPresetsFor(sport: string | null | undefined): SurvivorCrossTribeWindowPreset[] {
+  const single: SurvivorCrossTribeWindowPreset = { id: 'single_default', windows: SURVIVOR_GOVERNANCE_DEFAULTS.crossTribeWindows.map((w) => ({ ...w })) }
+  return String(sport ?? '').toUpperCase() === 'NFL'
+    ? [{ id: 'original_nfl', windows: SURVIVOR_ORIGINAL_NFL_TRADE_WINDOWS.map((w) => ({ ...w })) }, single]
+    : [single]
+}
+
 function readExperience(value: unknown): Record<string, SurvivorExperience> {
   const out: Record<string, SurvivorExperience> = {}
   for (const [userId, flag] of Object.entries(rec(value))) {
@@ -173,6 +255,8 @@ function readExperience(value: unknown): Record<string, SurvivorExperience> {
 export function readSurvivorGovernanceSettings(leagueSettings: unknown): SurvivorGovernanceSettings {
   const g = rec(rec(leagueSettings)[SURVIVOR_GOVERNANCE_KEY])
   const d = SURVIVOR_GOVERNANCE_DEFAULTS
+  const closeDay = isDay(g.crossTribeCloseDay) ? g.crossTribeCloseDay : d.crossTribeCloseDay
+  const closeTime = typeof g.crossTribeCloseTime === 'string' && TIME.test(g.crossTribeCloseTime) ? g.crossTribeCloseTime : d.crossTribeCloseTime
   const swaps = Array.isArray(g.swapSchedule) ? g.swapSchedule.map(readScheduledSwap).filter((s): s is SurvivorScheduledSwap => s != null) : []
   const byWeek = new Map<number, SurvivorScheduledSwap>()
   for (const swap of swaps) if (!byWeek.has(swap.week)) byWeek.set(swap.week, swap)
@@ -186,8 +270,10 @@ export function readSurvivorGovernanceSettings(leagueSettings: unknown): Survivo
     strikeAutoRemove: bool(g.strikeAutoRemove, d.strikeAutoRemove),
     tradeRulesEnabled: bool(g.tradeRulesEnabled, d.tradeRulesEnabled),
     crossTribeTrades: oneOf(g.crossTribeTrades, SURVIVOR_CROSS_TRIBE_TRADE_MODES, d.crossTribeTrades),
-    crossTribeCloseDay: isDay(g.crossTribeCloseDay) ? g.crossTribeCloseDay : d.crossTribeCloseDay,
-    crossTribeCloseTime: typeof g.crossTribeCloseTime === 'string' && TIME.test(g.crossTribeCloseTime) ? g.crossTribeCloseTime : d.crossTribeCloseTime,
+    crossTribeCloseDay: closeDay,
+    crossTribeCloseTime: closeTime,
+    crossTribeWindows: readCrossTribeWindows(g, closeDay, closeTime),
+    tradeCheckFailureMode: oneOf(g.tradeCheckFailureMode, SURVIVOR_TRADE_CHECK_FAILURE_MODES, d.tradeCheckFailureMode),
     withinTribeUnplayedOnly: bool(g.withinTribeUnplayedOnly, d.withinTribeUnplayedOnly),
     playedLockUntilTribal: bool(g.playedLockUntilTribal, d.playedLockUntilTribal),
     weeklyTradeFreezeEnabled: bool(g.weeklyTradeFreezeEnabled, d.weeklyTradeFreezeEnabled),
@@ -195,6 +281,7 @@ export function readSurvivorGovernanceSettings(leagueSettings: unknown): Survivo
     weeklyTradeFreezeTime: typeof g.weeklyTradeFreezeTime === 'string' && TIME.test(g.weeklyTradeFreezeTime) ? g.weeklyTradeFreezeTime : d.weeklyTradeFreezeTime,
     tribeSplit: oneOf(g.tribeSplit, SURVIVOR_TRIBE_SPLITS, d.tribeSplit),
     experienceOverrides: readExperience(g.experienceOverrides),
+    experienceCrossLeague: bool(g.experienceCrossLeague, d.experienceCrossLeague),
     weekOneScoringStartDay: isDay(g.weekOneScoringStartDay) ? g.weekOneScoringStartDay : null,
     tribeEmojiInNames: bool(g.tribeEmojiInNames, d.tribeEmojiInNames),
   }
@@ -257,7 +344,7 @@ export function validateSurvivorGovernancePatch(
   const bad = (error: string): GovernancePatchResult => ({ ok: false, code: 'invalid', error })
 
   for (const key of ['alliancesEnabled', 'allianceSameTribeOnly', 'allianceHostCanRead', 'strikeAutoRemove', 'tradeRulesEnabled',
-    'withinTribeUnplayedOnly', 'playedLockUntilTribal', 'weeklyTradeFreezeEnabled', 'tribeEmojiInNames'] as const) {
+    'withinTribeUnplayedOnly', 'playedLockUntilTribal', 'weeklyTradeFreezeEnabled', 'tribeEmojiInNames', 'experienceCrossLeague'] as const) {
     if (!(key in body)) continue
     if (typeof body[key] !== 'boolean') return bad(`${key} must be on or off.`)
     patch[key] = body[key] as boolean
@@ -287,6 +374,27 @@ export function validateSurvivorGovernancePatch(
       if (typeof body[timeKey] !== 'string' || !TIME.test(body[timeKey] as string)) return bad('Pick a time as HH:MM.')
       patch[timeKey] = body[timeKey] as string
     }
+  }
+  if ('tradeCheckFailureMode' in body) {
+    if (!(SURVIVOR_TRADE_CHECK_FAILURE_MODES as readonly unknown[]).includes(body.tradeCheckFailureMode)) return bad('If the trade check cannot run, allow the trade or hold it for the commissioner.')
+    patch.tradeCheckFailureMode = body.tradeCheckFailureMode as SurvivorTradeCheckFailureMode
+  }
+  if ('crossTribeWindows' in body) {
+    const raw = body.crossTribeWindows
+    if (!Array.isArray(raw) || raw.length < 1 || raw.length > SURVIVOR_CROSS_TRIBE_WINDOW_MAX) return bad(`Set between 1 and ${SURVIVOR_CROSS_TRIBE_WINDOW_MAX} cross-tribe windows a week.`)
+    const windows: SurvivorCrossTribeWindow[] = []
+    for (const entry of raw) {
+      const w = readCrossTribeWindow(entry)
+      if (!w) return bad('Each window closes at a day and time (HH:MM ET) and opens after Tribal Council or at a different day and time.')
+      windows.push(w)
+    }
+    patch.crossTribeWindows = windows
+    // The legacy single close mirrors the first window, for every reader of the old keys.
+    patch.crossTribeCloseDay = windows[0].closeDay
+    patch.crossTribeCloseTime = windows[0].closeTime
+  } else if (('crossTribeCloseDay' in patch || 'crossTribeCloseTime' in patch) && current.crossTribeWindows.length === 1 && current.crossTribeWindows[0].opensOn === 'tribal') {
+    // An older client editing the single close: keep the one window in step with it.
+    patch.crossTribeWindows = [{ opensOn: 'tribal', closeDay: patch.crossTribeCloseDay ?? current.crossTribeCloseDay, closeTime: patch.crossTribeCloseTime ?? current.crossTribeCloseTime }]
   }
   if ('tribeSplit' in body) {
     if (!(SURVIVOR_TRIBE_SPLITS as readonly unknown[]).includes(body.tribeSplit)) return bad('The tribe split is none or Rooks vs Vets.')

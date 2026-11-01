@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+import { holdRedraftProposalForCommissioner, survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 import { refreshCapProjections } from '@/lib/idp/capEngine'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
 import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
@@ -111,6 +113,21 @@ async function refuseIfSurvivorTradeRules(proposal: {
     players: proposal.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName, fromRosterId: a.fromRosterId })),
   })
   return check.ok ? null : NextResponse.json({ error: check.message, code: check.code }, { status: check.status })
+}
+
+/**
+ * The same check, also reporting a HOLD: the check could not run and the commissioner chose "hold it"
+ * (lib/survivor/survivorTradeCheckHold.ts). A held trade is sent to commissioner approval, never refused.
+ */
+async function survivorTradeRuleOutcome(proposal: Parameters<typeof refuseIfSurvivorTradeRules>[0]): Promise<{ refusal: NextResponse | null; hold: boolean }> {
+  const check = await checkSurvivorTradeRules({
+    leagueId: proposal.leagueId,
+    rosterIds: [proposal.proposerRosterId, proposal.receiverRosterId, ...proposal.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
+    rosterIdSpace: 'redraft',
+    players: proposal.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName, fromRosterId: a.fromRosterId })),
+  })
+  if (!check.ok) return { refusal: NextResponse.json({ error: check.message, code: check.code }, { status: check.status }), hold: false }
+  return { refusal: null, hold: Boolean(check.holdForCommissioner) }
 }
 
 /** Record the commissioner review a decision was made with (design step 6: "decision logged"). */
@@ -387,8 +404,9 @@ export async function POST(req: NextRequest) {
       // The move lock first, as the trade runtime orders it ahead of the deadline.
       const lockedAtAccept = await refuseIfMovesLocked(proposal.leagueId)
       if (lockedAtAccept) return lockedAtAccept
-      const survivorAtAccept = await refuseIfSurvivorTradeRules(proposal)
-      if (survivorAtAccept) return survivorAtAccept
+      const survivorAtAccept = await survivorTradeRuleOutcome(proposal)
+      if (survivorAtAccept.refusal) return survivorAtAccept.refusal
+      const survivorHeld = survivorAtAccept.hold
 
       /*
        * 🛑 THE DEADLINE BINDS AT ACCEPTANCE, AND THIS PATH NEVER CHECKED IT. A proposal made before the
@@ -478,11 +496,13 @@ export async function POST(req: NextRequest) {
        * the review sweep will not auto-pass it while its flag is open — the commissioner decides.
        */
       const holdLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { settings: true } })
-      const held = await shouldHoldAcceptedTrade({
+      const held = survivorHeld || await shouldHoldAcceptedTrade({
         leagueId: proposal.leagueId,
         settings: holdLeague?.settings,
         ref: { kind: 'redraft', proposalId: proposal.id },
       })
+      // Survivor "hold it for the commissioner": also marked, so the review-window sweep leaves it alone.
+      if (survivorHeld) await holdRedraftProposalForCommissioner({ leagueId: proposal.leagueId, proposalId: proposal.id, actorUserId: userId })
       if (held && proposal.vetoMode !== 'commissioner') {
         await prisma.redraftTradeProposal.updateMany({
           where: { id: proposal.id, status: 'pending', acceptedAt: null },
@@ -537,7 +557,9 @@ export async function POST(req: NextRequest) {
         tradeId: proposal.id,
         status: 'accepted',
         actorUserId: userId,
-        detail: held
+        detail: survivorHeld
+          ? governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner
+          : held
           ? 'The league integrity check flagged it, so it is held until the commissioner approves or vetoes it.'
           : proposal.vetoMode === 'league_vote'
             ? 'It goes to a league vote, and goes through when the review window ends unless the league vetoes it.'
@@ -686,8 +708,13 @@ export async function POST(req: NextRequest) {
     if (action === 'vote_approve') {
       const lockedAtVote = await refuseIfMovesLocked(proposal.leagueId)
       if (lockedAtVote) return lockedAtVote
-      const survivorAtVote = await refuseIfSurvivorTradeRules(proposal)
-      if (survivorAtVote) return survivorAtVote
+      const survivorAtVote = await survivorTradeRuleOutcome(proposal)
+      if (survivorAtVote.refusal) return survivorAtVote.refusal
+      if (survivorAtVote.hold) {
+        // The check could not run and the league holds such trades: the vote cannot settle it; the commissioner decides.
+        await holdRedraftProposalForCommissioner({ leagueId: proposal.leagueId, proposalId: proposal.id, actorUserId: userId })
+        return NextResponse.json({ error: governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner, code: 'SURVIVOR_TRADE_CHECK_HELD' }, { status: 409 })
+      }
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'

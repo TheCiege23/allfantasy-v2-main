@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { TribeShuffleView } from '@/lib/survivor/tribeSwapService'
-import { swapHeadline } from '@/lib/survivor/tribeSwapHeadline'
+import { castawayNameWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { tribeShuffleCopy, tribeShuffleMessages, type TribeShuffleMessages } from '@/lib/survivor/tribeShuffleMessages'
+import { useMessages } from '@/components/i18n/useMessages'
 import { TribeBuff } from './TribeBuff'
 import { LateAvatar, usePrefersReducedMotion } from './lateUi'
 import './late-season.css'
@@ -11,7 +13,8 @@ import './late-season.css'
 type Tab = 'swap' | 'merge'
 type SwapPhase = 'before' | 'drop' | 'after'
 
-function TribeColumn({ tribe, members, subtitle, names, phase, statusFor }: {
+function TribeColumn({ tribe, members, subtitle, names, phase, statusFor, m }: {
+  m: TribeShuffleMessages
   tribe: TribeShuffleView['tribes'][number]
   members: string[]
   subtitle: string
@@ -27,16 +30,16 @@ function TribeColumn({ tribe, members, subtitle, names, phase, statusFor }: {
           <p style={{ font: "700 22px 'Cinzel', serif", letterSpacing: '.04em', color: tribe.primary, overflowWrap: 'anywhere' }}>{tribe.name}</p>
           <p className="svl-t3" style={{ fontSize: 14 }}>{subtitle}</p>
         </div>
-        <span className="svl-chip">{members.length} manager{members.length === 1 ? '' : 's'}</span>
+        <span className="svl-chip">{m.managers(members.length)}</span>
       </div>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {members.map((rosterId, index) => {
           const status = statusFor(rosterId)
           return (
             <li key={`${phase}-${rosterId}`} className={`svl-member ${phase === 'after' ? 'svl-card-pop' : ''}`} style={phase === 'after' ? { animationDelay: `${index * 0.12}s` } : undefined}>
-              <LateAvatar id={rosterId} name={names[rosterId] ?? 'Manager'} ring={tribe.primary} />
+              <LateAvatar id={rosterId} name={names[rosterId] ?? m.manager} ring={tribe.primary} />
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{names[rosterId] ?? 'Manager'}</p>
+                <p style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{castawayNameWithTribeEmoji(names[rosterId] ?? m.manager, tribe.emoji, Boolean(tribe.emoji))}</p>
                 <p style={{ fontSize: 14, color: status.gold ? '#f1c95b' : 'var(--svl-t3)' }}>{status.text}</p>
               </div>
               <span
@@ -53,7 +56,7 @@ function TribeColumn({ tribe, members, subtitle, names, phase, statusFor }: {
   )
 }
 
-function SwapPanel({ view, onReveal, revealing, revealError }: { view: TribeShuffleView; onReveal: () => void; revealing: boolean; revealError: string | null }) {
+function SwapPanel({ view, onReveal, revealing, revealError, m }: { view: TribeShuffleView; onReveal: () => void; revealing: boolean; revealError: string | null; m: TribeShuffleMessages }) {
   const reduced = usePrefersReducedMotion()
   const swap = view.swap
   const revealed = Boolean(swap && !swap.sealed && swap.after)
@@ -77,20 +80,20 @@ function SwapPanel({ view, onReveal, revealing, revealError }: { view: TribeShuf
   for (const t of before) for (const id of t.rosterIds) oldTribe.set(id, t.tribeId)
   const statusFor = (rosterId: string, tribeId: string) => {
     const from = oldTribe.get(rosterId)
-    const fromName = from ? tribeById.get(from)?.name ?? 'another tribe' : null
-    if (phase !== 'after') return { text: fromName ? `Original ${fromName}` : 'Tribe member', gold: false }
-    if (from && from !== tribeId) return { text: `From ${fromName}`, gold: true }
-    return { text: `Stays in ${tribeById.get(tribeId)?.name ?? 'the tribe'}`, gold: false }
+    const fromName = from ? tribeById.get(from)?.name ?? m.anotherTribe : null
+    if (phase !== 'after') return { text: fromName ? m.original(fromName) : m.tribeMember, gold: false }
+    if (from && from !== tribeId) return { text: m.from(fromName ?? m.anotherTribe), gold: true }
+    return { text: m.staysIn(tribeById.get(tribeId)?.name ?? m.theTribe), gold: false }
   }
   const week = swap?.week ?? view.swapWeek
 
   if (!swap) {
     return (
       <section className="svl-card" style={{ padding: 22 }}>
-        <span className="svl-lbl" style={{ color: '#a99cf0' }}>{view.swapWeek ? `Week ${view.swapWeek} · Tribe swap` : 'Tribe swap'}</span>
-        <h3 className="svl-display" style={{ marginTop: 6 }}>No swap yet</h3>
+        <span className="svl-lbl" style={{ color: '#a99cf0' }}>{view.swapWeek ? m.weekSwapLabel(view.swapWeek) : m.tribeSwap}</span>
+        <h3 className="svl-display" style={{ marginTop: 6 }}>{m.noSwapYet}</h3>
         <p className="svl-t2" style={{ marginTop: 8 }}>
-          {view.swapWeek ? `The new tribes are drawn in week ${view.swapWeek} and stay sealed until that week's lineup lock.` : 'This league has no tribe swap scheduled.'}
+          {view.swapWeek ? m.swapScheduled(view.swapWeek) : m.noSwapScheduled}
         </p>
       </section>
     )
@@ -100,25 +103,25 @@ function SwapPanel({ view, onReveal, revealing, revealError }: { view: TribeShuf
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>
         <div style={{ flex: '1 1 280px' }}>
-          <span className="svl-lbl" style={{ color: '#a99cf0' }}>Week {week} · {phase === 'after' ? 'New tribes' : 'Tribe swap'}</span>
+          <span className="svl-lbl" style={{ color: '#a99cf0' }}>{m.weekLabel(week ?? '', phase === 'after' ? m.newTribes : m.tribeSwap)}</span>
           <h3 className="svl-display" style={{ marginTop: 4 }} aria-live="polite">
-            {phase === 'after' && swap.movedCount != null ? swapHeadline(swap.movedCount) : 'Drop your buffs'}
+            {phase === 'after' && swap.movedCount != null ? m.headline(swap.movedCount) : m.dropBuffs}
           </h3>
         </div>
         {swap.sealed ? (
           view.viewer.isCommissioner ? (
-            <button type="button" className="svl-btn svl-btn-gold" onClick={onReveal} disabled={revealing}>{revealing ? 'Revealing…' : 'Reveal the new tribes now'}</button>
+            <button type="button" className="svl-btn svl-btn-gold" onClick={onReveal} disabled={revealing}>{revealing ? m.revealing : m.revealNow}</button>
           ) : (
-            <span className="svl-chip">Sealed until {new Date(swap.revealAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+            <span className="svl-chip">{m.sealedUntil(new Date(swap.revealAt).toLocaleString(m.locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}</span>
           )
         ) : phase === 'before' ? (
-          <button type="button" className="svl-btn svl-btn-gold" onClick={play}>Drop your buffs</button>
+          <button type="button" className="svl-btn svl-btn-gold" onClick={play}>{m.dropBuffs}</button>
         ) : (
-          <button type="button" className="svl-btn" onClick={replay} disabled={phase === 'drop'}>Replay</button>
+          <button type="button" className="svl-btn" onClick={replay} disabled={phase === 'drop'}>{m.replay}</button>
         )}
       </div>
       {revealError ? <p role="alert" style={{ color: '#ff8a6a', fontSize: 13 }}>{revealError}</p> : null}
-      {swap.sealed ? <p className="svl-t2">The new tribes have been drawn on the server and stay sealed until the next lineup lock. Your tribe and tribe chat stay as they are until then.</p> : null}
+      {swap.sealed ? <p className="svl-t2">{m.sealedNote}</p> : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
         {columns.map((col) => {
           const tribe = tribeById.get(col.tribeId)
@@ -128,7 +131,8 @@ function SwapPanel({ view, onReveal, revealing, revealError }: { view: TribeShuf
               key={`${phase === 'after' ? 'a' : 'b'}-${col.tribeId}`}
               tribe={tribe}
               members={col.rosterIds}
-              subtitle={phase === 'after' ? `New ${tribe.name}` : 'Before the swap'}
+              m={m}
+              subtitle={phase === 'after' ? m.newTribe(tribe.name) : m.beforeSwap}
               names={view.names}
               phase={phase}
               statusFor={(rosterId) => statusFor(rosterId, col.tribeId)}
@@ -140,7 +144,7 @@ function SwapPanel({ view, onReveal, revealing, revealError }: { view: TribeShuf
   )
 }
 
-function MergePanel({ view, onName, busy, error }: { view: TribeShuffleView; onName: (name: string) => void; busy: boolean; error: string | null }) {
+function MergePanel({ view, onName, busy, error, m }: { view: TribeShuffleView; onName: (name: string) => void; busy: boolean; error: string | null; m: TribeShuffleMessages }) {
   const reduced = usePrefersReducedMotion()
   const merge = view.merge
   const [stage, setStage] = useState<'crests' | 'banner'>(reduced ? 'banner' : 'crests')
@@ -158,36 +162,36 @@ function MergePanel({ view, onName, busy, error }: { view: TribeShuffleView; onN
   if (!merge) {
     return (
       <section className="svl-card" style={{ padding: 22 }}>
-        <span className="svl-lbl" style={{ color: '#d9b45a' }}>{view.mergeWeek ? `Week ${view.mergeWeek} · The merge` : 'The merge'}</span>
-        <h3 className="svl-display" style={{ marginTop: 6 }}>The tribes are still apart</h3>
-        <p className="svl-t2" style={{ marginTop: 8 }}>When the merge arrives the tribes become one, immunity goes to the top single score each week, and everyone voted out from then on joins the jury.</p>
+        <span className="svl-lbl" style={{ color: '#d9b45a' }}>{view.mergeWeek ? m.weekMergeLabel(view.mergeWeek) : m.theMerge}</span>
+        <h3 className="svl-display" style={{ marginTop: 6 }}>{m.stillApart}</h3>
+        <p className="svl-t2" style={{ marginTop: 8 }}>{m.mergeExplainer}</p>
       </section>
     )
   }
   const crests = view.tribes.slice(0, 2)
-  const title = merge.named && merge.name ? `Welcome to ${merge.name}` : 'Welcome to the merge'
+  const title = merge.named && merge.name ? m.welcomeTo(merge.name) : m.welcomeMerge
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
       <section className="svl-card" style={{ flex: '2 1 520px', padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', background: 'radial-gradient(ellipse at 50% 40%, rgba(217,180,90,.14), transparent 60%), var(--svl-card)' }}>
-        <span className="svl-lbl" style={{ color: '#d9b45a' }}>{view.mergeWeek ? `Week ${view.mergeWeek} · ` : ''}The merge</span>
+        <span className="svl-lbl" style={{ color: '#d9b45a' }}>{view.mergeWeek ? m.weekMergeLabel(view.mergeWeek) : m.theMerge}</span>
         <div style={{ position: 'relative', height: 340, width: '100%', display: 'grid', placeItems: 'center' }}>
           {stage === 'crests' ? (
             <div style={{ display: 'flex', gap: 60 }} aria-hidden="true">
               {crests.map((t, i) => t.crestUrl ? <img key={t.id} src={t.crestUrl} alt="" width={120} height={120} className={i === 0 ? 'svl-crest-l' : 'svl-crest-r'} /> : null)}
             </div>
           ) : (
-            <img className="svl-banner-pop" src="/survivor/late/merge-banner.svg" alt="Merged tribe banner" style={{ height: 320, width: 'auto' }} />
+            <img className="svl-banner-pop" src="/survivor/late/merge-banner.svg" alt={m.mergedBanner} style={{ height: 320, width: 'auto' }} />
           )}
         </div>
         <h3 className="svl-display" style={{ fontSize: 'clamp(26px,4vw,40px)' }} aria-live="polite">{title}</h3>
-        <p className="svl-t2" style={{ fontSize: 16 }}>The tribes are now one. From here on it is every manager for themselves.</p>
-        <button type="button" className="svl-btn" onClick={replay}>Replay</button>
+        <p className="svl-t2" style={{ fontSize: 16 }}>{m.nowOne}</p>
+        <button type="button" className="svl-btn" onClick={replay}>{m.replay}</button>
       </section>
 
       <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }} aria-label="Name the merged tribe">
-          <span className="svl-lbl">Name the merged tribe</span>
-          <div role="radiogroup" aria-label="Suggested names" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }} aria-label={m.nameMerged}>
+          <span className="svl-lbl">{m.nameMerged}</span>
+          <div role="radiogroup" aria-label={m.suggestedNames} style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {(merge.named && merge.name ? [merge.name] : merge.suggestions).map((name) => (
               <button
                 key={name}
@@ -204,31 +208,31 @@ function MergePanel({ view, onName, busy, error }: { view: TribeShuffleView; onN
           </div>
           {!merge.named && (merge.canName || merge.canVote) ? (
             <button type="button" className="svl-btn svl-btn-gold" disabled={!choice || busy || choice === merge.myVote} onClick={() => choice && onName(choice)}>
-              {merge.canName ? (busy ? 'Saving…' : 'Name the tribe') : busy ? 'Voting…' : merge.myVote ? 'Change my vote' : 'Cast my vote'}
+              {merge.canName ? (busy ? m.saving : m.nameTribe) : busy ? m.voting : merge.myVote ? m.changeVote : m.castVote}
             </button>
           ) : null}
           {error ? <p role="alert" style={{ color: '#ff8a6a', fontSize: 13 }}>{error}</p> : null}
           <p className="svl-t3">
             {merge.named
-              ? 'The merged tribe has its name.'
+              ? m.hasName
               : merge.mode === 'manager_vote'
-                ? `The remaining managers vote. ${merge.votesIn} of ${merge.votersTotal} votes in; the last vote names the tribe.`
-                : 'The commissioner picks the name.'}{' '}
-            Three original names are suggested from the tribe name pool.
+                ? m.managersVote(merge.votesIn, merge.votersTotal)
+                : m.commissionerPicks}{' '}
+            {m.threeSuggested}
           </p>
         </section>
 
-        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }} aria-label="After the merge">
-          <span className="svl-lbl">After the merge</span>
-          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" width={36} height={36} /><span className="svl-t2">Immunity goes to the top single score each week.</span></p>
-          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><img src="/survivor/late/jury-icon.svg" alt="" width={36} height={36} /><span className="svl-t2">Everyone voted out from here on joins the jury.</span></p>
-          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><TribeBuff merge style={{ width: 40 }} /><span className="svl-t2">Everyone wears the gold merge buff.</span></p>
+        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }} aria-label={m.afterMerge}>
+          <span className="svl-lbl">{m.afterMerge}</span>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" width={36} height={36} /><span className="svl-t2">{m.immunityTop}</span></p>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><img src="/survivor/late/jury-icon.svg" alt="" width={36} height={36} /><span className="svl-t2">{m.juryFromHere}</span></p>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 12 }}><TribeBuff merge style={{ width: 40 }} /><span className="svl-t2">{m.goldBuff}</span></p>
         </section>
 
-        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }} aria-label="Managers in the merge">
-          <span className="svl-lbl">{merge.members.length} managers in the merge</span>
+        <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }} aria-label={m.managersInMerge}>
+          <span className="svl-lbl">{m.inMerge(merge.members.length)}</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {merge.members.map((rosterId) => <LateAvatar key={rosterId} id={rosterId} name={view.names[rosterId] ?? 'Manager'} ring="#d9b45a" />)}
+            {merge.members.map((rosterId) => <LateAvatar key={rosterId} id={rosterId} name={view.names[rosterId] ?? m.manager} ring="#d9b45a" />)}
           </div>
         </section>
       </div>
@@ -243,17 +247,20 @@ export function TribeShuffle({ leagueId, initialTab = 'swap' }: { leagueId: stri
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  // League.language once the view has loaded (sent with it); the app language until then.
+  const appM = useMessages(tribeShuffleMessages)
+  const m = view ? tribeShuffleCopy(view.language) : appM
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/survivor/tribes?leagueId=${encodeURIComponent(leagueId)}&view=shuffle`, { credentials: 'include' })
       const data = (await res.json()) as { view?: TribeShuffleView; error?: string }
-      if (!res.ok || !data.view) return setError(data.error ?? 'The tribe swap could not load.')
+      if (!res.ok || !data.view) return setError(data.error ?? appM.loadFailed)
       setView(data.view)
     } catch {
-      setError('The tribe swap could not load.')
+      setError(appM.loadFailed)
     }
-  }, [leagueId])
+  }, [leagueId, appM.loadFailed])
   useEffect(() => {
     if (leagueId) void load()
   }, [leagueId, load])
@@ -264,7 +271,7 @@ export function TribeShuffle({ leagueId, initialTab = 'swap' }: { leagueId: stri
     try {
       const res = await fetch('/api/survivor/tribes', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId, ...body }) })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) setActionError(data.error ?? 'That did not go through.')
+      if (!res.ok) setActionError(data.error ?? m.actionFailed)
       await load()
     } finally {
       setBusy(false)
@@ -274,45 +281,45 @@ export function TribeShuffle({ leagueId, initialTab = 'swap' }: { leagueId: stri
   return (
     <div className="svl" style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
       <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-        <Link href={`/survivor/${leagueId}`} aria-label="Back to the island" className="svl-btn" style={{ padding: '0 14px' }}>‹</Link>
+        <Link href={`/survivor/${leagueId}`} aria-label={m.backToIsland} className="svl-btn" style={{ padding: '0 14px' }}>‹</Link>
         <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <h1 className="svl-h1">Tribe swap and merge</h1>
-          <span className="svl-t2">The two mid-season shake-ups. Dates come from the league&apos;s Survivor settings.</span>
+          <h1 className="svl-h1">{m.title}</h1>
+          <span className="svl-t2">{m.subtitle}</span>
         </div>
-        <div className="svl-seg" role="tablist" aria-label="Swap or merge">
-          <button type="button" role="tab" aria-selected={tab === 'swap'} onClick={() => setTab('swap')}>Swap{view?.swapWeek ? ` · Week ${view.swapWeek}` : ''}</button>
-          <button type="button" role="tab" aria-selected={tab === 'merge'} onClick={() => setTab('merge')}>Merge{view?.mergeWeek ? ` · Week ${view.mergeWeek}` : ''}</button>
+        <div className="svl-seg" role="tablist" aria-label={m.swapOrMerge}>
+          <button type="button" role="tab" aria-selected={tab === 'swap'} onClick={() => setTab('swap')}>{m.swapTab}{view?.swapWeek ? m.tabWeek(view.swapWeek) : ''}</button>
+          <button type="button" role="tab" aria-selected={tab === 'merge'} onClick={() => setTab('merge')}>{m.mergeTab}{view?.mergeWeek ? m.tabWeek(view.mergeWeek) : ''}</button>
         </div>
       </header>
       {error ? <p role="alert" style={{ color: '#ff8a6a' }}>{error}</p> : null}
-      {!view && !error ? <p className="svl-t2">Loading…</p> : null}
+      {!view && !error ? <p className="svl-t2">{m.loading}</p> : null}
       {view && tab === 'swap' ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
           <div style={{ flex: '3 1 600px', minWidth: 0 }}>
-            <SwapPanel view={view} onReveal={() => post({ action: 'reveal_swap' })} revealing={busy} revealError={actionError} />
+            <SwapPanel m={m} view={view} onReveal={() => post({ action: 'reveal_swap' })} revealing={busy} revealError={actionError} />
           </div>
           <aside style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <section className="svl-card" style={{ padding: 18 }}>
-              <span className="svl-lbl">How the swap works</span>
+              <span className="svl-lbl">{m.howSwapWorks}</span>
               <ol style={{ margin: '12px 0 0', paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {['The new tribes are drawn at random on the server and sealed until the reveal.', 'Everyone drops their buff at the same time, then picks up their new one.', 'Idols travel with the manager. Tribe chat switches over at the next lock.'].map((text, i) => (
+                {[m.howStep1, m.howStep2, m.howStep3].map((text, i) => (
                   <li key={i} style={{ display: 'flex', gap: 12 }}><span style={{ color: '#d9b45a' }}>{i + 1}</span><span className="svl-t2">{text}</span></li>
                 ))}
               </ol>
             </section>
             <section className="svl-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <span className="svl-lbl">Buffs</span>
+              <span className="svl-lbl">{m.buffs}</span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                {view.tribes.map((t) => <TribeBuff key={t.id} primary={t.primary} secondary={t.secondary} style={{ width: 120 }} label={`${t.name} buff`} />)}
-                <TribeBuff merge style={{ width: 120 }} label="Merge buff" />
+                {view.tribes.map((t) => <TribeBuff key={t.id} primary={t.primary} secondary={t.secondary} style={{ width: 120 }} label={m.buffOf(t.name)} />)}
+                <TribeBuff merge style={{ width: 120 }} label={m.mergeBuff} />
               </div>
-              <p className="svl-t3" style={{ fontSize: 14 }}>One buff per tribe, coloured from the tribe&apos;s crest. Shown on the manager&apos;s card and profile. The gold one is the merge buff.</p>
+              <p className="svl-t3" style={{ fontSize: 14 }}>{m.buffsNote}</p>
             </section>
           </aside>
         </div>
       ) : null}
       {view && tab === 'merge' ? (
-        <MergePanel view={view} busy={busy} error={actionError} onName={(name) => post({ action: view.merge?.canName ? 'name_merge' : 'merge_name_vote', name })} />
+        <MergePanel m={m} view={view} busy={busy} error={actionError} onName={(name) => post({ action: view.merge?.canName ? 'name_merge' : 'merge_name_vote', name })} />
       ) : null}
     </div>
   )

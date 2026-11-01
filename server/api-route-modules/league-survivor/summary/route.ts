@@ -52,6 +52,7 @@ import { readSurvivorIslandScene, resolveSurvivorIslandScene } from '@/lib/survi
 import { tribalVotesDueFromSettings } from '@/lib/survivor/survivorCeremonySchedule'
 import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
 import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { tribeEmojiFor } from '@/lib/survivor/survivorTribeEmoji'
 import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
@@ -384,6 +385,8 @@ export async function GET(
       id: t.id,
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
+      // The tribe's emoji (its name's leading icon, else the catalogue mascot's) for `tribeEmojiInNames`.
+      tribeEmoji: tribeEmojiFor({ name: t.name, catalogId: 'catalogId' in t ? t.catalogId ?? null : null }),
       slotIndex: t.slotIndex,
       ...summaryTribeEmblem(t, leagueMeta?.sport),
       colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
@@ -517,6 +520,8 @@ export async function GET(
       .then(game => Boolean(game?.pausedSnapshot) || Boolean(game?.lastError?.startsWith('PAUSED:')))
       .catch(() => false),
     rosterDisplayNames,
+    // Display only: the commissioner's "tribe emoji in names" (before the merge), for screens that draw tribe names.
+    tribeEmojiInNames: readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged,
   }
 
   // This week's strategy for the viewer, from facts already in the payload (only their own idols).

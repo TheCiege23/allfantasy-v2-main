@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { castawayNameWithTribeEmoji } from "@/lib/survivor/survivorTribeEmoji"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -142,9 +143,11 @@ export default function LeagueChatPanel({
     let cancelled = false
     fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: "no-store" })
       .then(res => (res.ok ? res.json() : null))
-      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null }> } | null) => {
+      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null; tribeEmoji?: string | null }>; tribeEmojiInNames?: boolean } | null) => {
         const tribe = data?.tribes?.find(t => t.id === tribeId)
-        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name: tribe.name, markUrl: tribe.markUrl } : null)
+        // "Tribe emoji in names" (display only): the header shows the tribe's emoji beside its name.
+        const name = tribe ? castawayNameWithTribeEmoji(tribe.name, tribe.tribeEmoji, Boolean(data?.tribeEmojiInNames)) : ""
+        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name, markUrl: tribe.markUrl } : null)
       })
       .catch(() => { if (!cancelled) setTribeIcon(null) })
     return () => { cancelled = true }

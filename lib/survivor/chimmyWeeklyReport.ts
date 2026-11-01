@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readExileRoster } from './exileRosterRules'
 import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { castawayNameWithTribeEmoji, tribeEmojiFor } from './survivorTribeEmoji'
 
 const SEAT_PREFIX = 'orphan-'
 
@@ -110,7 +112,7 @@ export function chimmyWeeklyReportBody(
 export async function sendChimmyWeeklyReport(leagueId: string, week: number, opts: { finale?: boolean; dedupeKey?: string } = {}): Promise<boolean> {
   const cast = await prisma.survivorPlayer.findMany({
     where: { leagueId, userId: { startsWith: SEAT_PREFIX } },
-    select: { userId: true, displayName: true, playerState: true, redraftRosterId: true },
+    select: { userId: true, displayName: true, playerState: true, redraftRosterId: true, tribeId: true },
   })
   if (cast.length === 0 && !opts.finale) return false
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } })
@@ -121,6 +123,15 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number, opt
   const finaleLine = opts.finale ? await loadFinaleReportProgress(leagueId).then((p) => (p ? finaleReportLine(p, lang) : null)).catch(() => null) : null
   if (chimmy.length === 0 && !finaleLine) return false
 
+  // "Tribe emoji in names" (display only): a castaway still in a tribe shows its emoji, before the merge.
+  const emojiOn = readSurvivorGovernanceSettings(league?.settings).tribeEmojiInNames
+  const tribeRows = emojiOn
+    ? await prisma.survivorTribe.findMany({ where: { leagueId, id: { in: chimmy.map((p) => p.tribeId).filter((id): id is string => Boolean(id)) } }, select: { id: true, name: true, catalogId: true, isMerged: true } }).catch(() => [])
+    : []
+  const emojiName = (p: { displayName: string; tribeId: string | null; playerState: string }) => {
+    const tribe = p.playerState === 'active' ? tribeRows.find((t) => t.id === p.tribeId && !t.isMerged) : undefined
+    return castawayNameWithTribeEmoji(p.displayName, tribeEmojiFor(tribe ?? null), Boolean(tribe))
+  }
   const userIds = chimmy.map((p) => p.userId)
   const councils = await prisma.survivorTribalCouncil.findMany({ where: { leagueId, week }, select: { id: true } })
   const councilIds = councils.map((c) => c.id)
@@ -149,7 +160,7 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number, opt
     const team = readExileRoster(entries.find((e) => e.userId === p.userId)?.submittedLineup)?.team ?? null
     const played = sideGames?.chimmy.get(p.userId)
     return {
-      name: p.displayName,
+      name: emojiName(p),
       state: p.playerState,
       voted: voted.size,
       exileTeam: team,

@@ -10,6 +10,7 @@ import { weeklyPrizesActive, type SurvivorWeeklyPrizeSettings } from './survivor
 import { SURVIVOR_FINALE_DEFAULTS, type SurvivorFinaleSettings, type SurvivorFinaleWindows } from './survivorFinaleSettings'
 import { SURVIVOR_GOVERNANCE_DEFAULTS, type SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import { dayTimeLabel, governanceLang } from './survivorGovernanceCopy'
+import { crossTribeWindowsLabel } from './survivorGovernanceCopy'
 import type { SurvivorSideGameSettings } from './survivorSideGameSettings'
 import { answerSideGameRules, sideGameExileLines } from './survivorSideGameRulesAnswers'
 import { finalJuryStepRulesLine } from './survivorFinalJuryStep'
@@ -241,6 +242,10 @@ function governanceAnswer(topic: 'trades' | 'strikes' | 'alliances' | 'swaps', c
   const tribal = dayTimeLabel(ctx.language, ctx.settings.tribalCouncilDay, ctx.settings.tribalCouncilTime)
   const close = dayTimeLabel(ctx.language, g.crossTribeCloseDay, g.crossTribeCloseTime)
   const freeze = dayTimeLabel(ctx.language, g.weeklyTradeFreezeDay, g.weeklyTradeFreezeTime)
+  // Several weekly windows (or one opened at a set time): name every one of them.
+  const crossWindows = g.crossTribeWindows ?? []
+  const multiWindow = crossWindows.length > 1 || crossWindows[0]?.opensOn === 'time'
+  const windowsText = multiWindow ? crossTribeWindowsLabel(ctx.language, crossWindows) : ''
   const lines = (title: string, items: Array<string | false>) => [`**${title}**`, ...items.filter((x): x is string => Boolean(x)).map((x) => `• ${x}`)].join('\n')
   if (topic === 'trades') {
     if (!g.tradeRulesEnabled) {
@@ -251,19 +256,25 @@ function governanceAnswer(topic: 'trades' | 'strikes' | 'alliances' | 'swaps', c
     return es
       ? lines('Cambios', [
         g.crossTribeTrades === 'banned' ? 'Antes de la fusión no se permiten cambios entre tribus.'
+          : g.crossTribeTrades === 'window' && multiWindow ? `Los cambios entre tribus abren cada semana ${windowsText}; fuera de esas ventanas están cerrados.`
           : g.crossTribeTrades === 'window' ? `Los cambios entre tribus abren después del Consejo Tribal (${tribal} ET) y cierran ${close} ET cada semana.`
             : 'Los cambios entre tribus se permiten en cualquier momento.',
         g.withinTribeUnplayedOnly && 'Dentro de tu tribu puedes cambiar en cualquier momento a jugadores que todavía no han jugado esta semana.',
         g.playedLockUntilTribal && 'Un jugador que ya jugó esta semana no se puede cambiar hasta después del Consejo Tribal.',
+        (g.playedLockUntilTribal || g.withinTribeUnplayedOnly) && 'En una semana sin Consejo Tribal, ese bloqueo se levanta cuando termina el último partido de la semana (o cuando avanza la semana, si no se puede leer el resultado final).',
+        g.tradeCheckFailureMode === 'hold' && 'Si la revisión de reglas no puede hacerse, el cambio queda retenido hasta que el comisionado lo apruebe o lo vete.',
         g.weeklyTradeFreezeEnabled && `Los cambios se congelan ${freeze} ET y vuelven después del Consejo Tribal.`,
         'Después de la fusión todos son una tribu, así que solo aplican las reglas de jugadores que ya jugaron y la congelación.',
       ])
       : lines('Trades', [
         g.crossTribeTrades === 'banned' ? 'Trades between tribes are not allowed before the merge.'
+          : g.crossTribeTrades === 'window' && multiWindow ? `Trades between tribes are open each week ${windowsText}; outside those windows they are closed.`
           : g.crossTribeTrades === 'window' ? `Trades between tribes open after Tribal Council (${tribal} ET) and close ${close} ET each week.`
             : 'Trades between tribes are allowed at any time.',
         g.withinTribeUnplayedOnly && 'Within your tribe, you can trade players who have not played yet this week at any time.',
         g.playedLockUntilTribal && 'A player who has already played this week cannot be traded until after Tribal Council.',
+        (g.playedLockUntilTribal || g.withinTribeUnplayedOnly) && "In a week with no Tribal Council, that lock lifts once the week's last game is final (or when the week advances, if the final score cannot be read).",
+        g.tradeCheckFailureMode === 'hold' && 'If the trade-rule check cannot run, the trade is held for the commissioner to approve or veto.',
         g.weeklyTradeFreezeEnabled && `Trades freeze ${freeze} ET and reopen after Tribal Council.`,
         'After the merge everyone is one tribe, so only the played-player rule and the freeze still apply.',
       ])

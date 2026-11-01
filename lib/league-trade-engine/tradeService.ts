@@ -48,6 +48,7 @@ import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -58,7 +59,7 @@ async function assertSurvivorTradeRulesForAfTrade(
   leagueId: string,
   rosterIds: string[],
   items: ReadonlyArray<{ itemType: string; itemReference?: string | null; fromRosterId: string; metadata?: unknown }>,
-): Promise<void> {
+): Promise<{ holdForCommissioner: boolean }> {
   const check = await checkSurvivorTradeRules({
     leagueId,
     rosterIds,
@@ -69,6 +70,8 @@ async function assertSurvivorTradeRulesForAfTrade(
     }),
   })
   if (!check.ok) throw new CodedTradeError(check.code, check.message)
+  // The check could not run and the league holds such trades for the commissioner (acceptance only).
+  return { holdForCommissioner: Boolean(check.holdForCommissioner) }
 }
 
 async function fanout(leagueId: string, input: {
@@ -931,7 +934,10 @@ export async function acceptAfLeagueTrade(input: {
     kind: 'trade',
   })
   if (!rosterTxGateAccept.ok) throw new Error(rosterTxGateAccept.error)
-  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
+  const survivorAtAccept = await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
+  const survivorHeld = survivorAtAccept.holdForCommissioner
+  // The hold copy follows League.language (lib/survivor/survivorGovernanceCopy.ts).
+  const survivorHoldCopy = governanceCopy((league as { language?: string | null } | null)?.language)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
@@ -941,9 +947,10 @@ export async function acceptAfLeagueTrade(input: {
   const settings = resolveLeagueTradeSettings(league)
   // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
   // before it executes, goes to commissioner review whatever the league's review mode.
-  const held =
+  // Survivor "hold it for the commissioner" (the trade-rule check could not run) takes the same route.
+  const held = survivorHeld || (
     trade.reviewType !== 'commissioner' &&
-    (await shouldHoldAcceptedTrade({ leagueId: input.leagueId, settings: league.settings, ref: { kind: 'af', tradeId: trade.id } }))
+    (await shouldHoldAcceptedTrade({ leagueId: input.leagueId, settings: league.settings, ref: { kind: 'af', tradeId: trade.id } })))
   const reviewType = held ? 'commissioner' : trade.reviewType
 
   if (reviewType === 'instant') {
@@ -985,7 +992,9 @@ export async function acceptAfLeagueTrade(input: {
       proposerUserId: trade.proposedByUserId,
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
-      body: held
+      body: survivorHeld
+        ? survivorHoldCopy.tradeHeldForCommissioner
+        : held
         ? 'The league integrity check flagged it, so it is held for commissioner review before processing.'
         : 'It now goes to commissioner review before processing.',
     })
@@ -993,13 +1002,17 @@ export async function acceptAfLeagueTrade(input: {
       tradeId: trade.id,
       status: 'accepted',
       actorUserId: input.userId,
-      detail: held
+      detail: survivorHeld
+        ? survivorHoldCopy.tradeHeldForCommissioner
+        : held
         ? 'The league integrity check flagged it, so it is held for commissioner review.'
         : 'It goes to commissioner review before it processes.',
     })
     announceTradeInLeagueChat(
       trade.id,
-      held
+      survivorHeld
+        ? survivorHoldCopy.tradeHeldChat
+        : held
         ? 'Accepted. Held for commissioner review by the league integrity check.'
         : 'Accepted. It goes to commissioner review before it processes.',
     )

@@ -72,6 +72,8 @@ export interface SurvivorSummaryTribe {
   id: string
   name: string
   emoji?: string | null
+  /** The tribe's emoji for "tribe emoji in names" (leading icon, else catalogue mascot); shown only when `tribeEmojiInNames`. */
+  tribeEmoji?: string | null
   slotIndex: number
   members: { rosterId: string; isLeader: boolean }[]
   /** Voted-out castaways from this tribe, for the struck-through "Out · Wk N" rows. */
@@ -146,6 +148,8 @@ export interface SurvivorSummary {
   myRosterId?: string
   myTribeId?: string
   myTribeSource?: string | null
+  /** The commissioner's "tribe emoji in names" is on and the tribes have not merged (display only). */
+  tribeEmojiInNames?: boolean
   myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
   /** The league's idol expiry rule, as the holder reads it (survivorIdolExpiry). */
   idolExpiryText?: string | null
