@@ -237,7 +237,7 @@ export async function POST(
   }
   void notifyAutoPickFired(leagueId, rosterId, selected.playerName.trim())
   void notifyDraftIntelPickConfirmation(leagueId, rosterId, selected.playerName.trim()).catch(() => {})
-  void notifyOnTheClockAfterPick(leagueId)
+  await notifyOnTheClockAfterPick(leagueId)
 
   try {
     const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)

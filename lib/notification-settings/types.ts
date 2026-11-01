@@ -175,7 +175,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // Real-world breaking news (2026-10-15, lib/news/breakingNewsAlerts.ts): trades, signings, firings,
   // suspensions and season-ending injuries, from trusted outlets only, for the sports you play or the
   // teams you follow. Capped per person per day at the sender.
-  breaking_news: "Breaking news — trades, signings & major injuries",
+  breaking_news: "Sports news — injuries, trades & headlines",
   // Live game moments (2026-10-15, lib/live/gameMomentAlerts.ts): close finishes, overtime, and the
   // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
   // Teams you follow get every moment under "Teams you follow — scores" instead.

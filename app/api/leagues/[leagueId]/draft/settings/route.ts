@@ -638,7 +638,11 @@ export async function PATCH(
       ])
     }
 
+    let draftTimeToNotify: Date | null = null
     if (hasLeagueSettings) {
+      const priorDraftTime = body.draftDate !== undefined
+        ? (await prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }))?.draftDateUtc ?? null
+        : null
       const lsRow = await prisma.leagueSettings.upsert({
         where: { leagueId },
         create: { leagueId, ...(lsPatch as unknown as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId'>) },
@@ -651,6 +655,7 @@ export async function PATCH(
       }
       // A tournament conference league's new draft time goes back onto the tournament's record for it.
       if (body.draftDate !== undefined) {
+        if (lsRow.draftDateUtc && lsRow.draftDateUtc.getTime() !== priorDraftTime?.getTime()) draftTimeToNotify = lsRow.draftDateUtc
         await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
           console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
         )
@@ -663,6 +668,10 @@ export async function PATCH(
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
       ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
+    if (draftTimeToNotify) {
+      const { notifyDraftTimeSet } = await import('@/lib/draft-notifications')
+      await notifyDraftTimeSet(leagueId, draftTimeToNotify).catch((e) => console.error('[draft/settings] time notification failed', e))
+    }
     // After the settings write above, which rewrites League.settings wholesale.
     if (roundsManual !== null) {
       await markDraftRoundsManual(leagueId, roundsManual).catch((e) =>

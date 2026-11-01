@@ -33,6 +33,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { newsDeliveryKey } from '@/lib/news/newsroomFilter'
 import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import {
   playerNewsContentHash,
@@ -454,7 +455,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       orderBy: { publishedAt: 'desc' },
       take: limit,
       select: {
-        id: true, sport: true, playerName: true, team: true,
+        id: true, sport: true, playerName: true, team: true, publishedAt: true,
         headline: true, body: true, impact: true,
       },
     })
@@ -494,6 +495,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
+    const deliveryKey = newsDeliveryKey(row.sport, row.headline, row.publishedAt ?? new Date())
     /*
      * ⚠ CHECKED BEFORE THE STAMP, NOT AFTER. `stamped` means "considered", and the updateMany at
      * the end writes `notificationDispatchedAt` for everything in it — so a check placed even one
@@ -592,7 +594,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       }
       if(isInjury){
         injuryBatch.add(playerNewsDispatches({userIds:cappedFans,category:'followed_teams',type:'player_injury_update',
-          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:'player-news:'+row.id,
+          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:deliveryKey,
           meta:{team:clubAbbr,teamName,followedTeam:clubAbbr,teamNews:true,injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}, teamPlan, teamInfo),async(users,failed)=>{
           recipients+=users.size;teamFollowerRecipients+=users.size
           if(users.size){await recordToldAbout([...users],story,undefined,{storyOnly:true});await markPlayerNewsTold([...users],teamSubject);notified++}
@@ -608,7 +610,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { teamName, team: clubAbbr, sport: row.sport, newsCategory: category, followedTeam: clubAbbr, teamNews: true },
       }, teamPlan, teamInfo)
       if (!teamSent) {
@@ -798,7 +800,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
           type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
           title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
           actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
-          dedupePrefix: 'player-news:' + row.id + ':lineup', skipChannels: { sms: true },
+          dedupePrefix: deliveryKey + ':lineup', skipChannels: { sms: true },
           meta: { team: playerTeam ?? 'Players without a current team', sport: row.sport, newsCategory: category, injuryHeadline: row.headline,
             lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id,
             playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
@@ -807,10 +809,10 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       }
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
-        severity:'high' as const, dedupePrefix:'player-news:'+row.id,
+        severity:'high' as const, dedupePrefix:deliveryKey,
         meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
       // Rostered, no lineup change: the bell only, and not in the digest.
-      const bellOnly = { sms: true, email: true, push: true }
+      const bellOnly = { sms: true, email: true }
       for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts',skipChannels:bellOnly,meta:{...base.meta,lineupBellOnly:true}})
       if(gatedFollowersOnly.length)requests.push({...base,userIds:gatedFollowersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
       if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
@@ -856,7 +858,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category },
       }, plan, newsInfo, isStarter)
       if (!ok) { anyDispatchFailed = true; continue }
@@ -874,7 +876,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category, followed: true },
       }, plan, newsInfo)
       if (ok) {
@@ -893,7 +895,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a team follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: teamAbbr, sport: row.sport, newsCategory: category, followedTeam: teamAbbr },
       }, plan, newsInfo)
       if (ok) {
