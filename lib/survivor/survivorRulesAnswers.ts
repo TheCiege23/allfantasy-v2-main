@@ -111,13 +111,36 @@ const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
 const QUESTION = /\b(how|what|when|why|rules?|explain|does|do|can|is|are|which|who)\b|\?/
 
 /**
+ * Spanish topic words. A topic matches when its English OR its Spanish pattern does, and topics keep
+ * the English list's priority, so "¿cómo funciona el consejo tribal final?" is a jury question (jury
+ * comes before voting) and a side-game question that mentions votes stays a side-game question.
+ * Unicode-aware word edges (JS \b treats "ó" as a non-word character). Only Spanish-specific forms:
+ * "la final" / "finalistas", never a bare "final", so an English "what was the final score?" is not
+ * read as a finale question. Its own list, so the English patterns above stay untouched.
+ */
+const esWords = (words: string) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${words})(?![\\p{L}\\p{N}])`, 'u')
+const TOPIC_PATTERNS_ES: ReadonlyMap<SurvivorRulesTopic, RegExp> = new Map<SurvivorRulesTopic, RegExp>([
+  ['ties', esWords('empates?|empatad[oa]s?|piedras')],
+  ['idols', esWords('[íi]dolos?|disparo en la oscuridad')],
+  ['exile', esWords('exilio|isla del exilio|volver a la isla')],
+  ['jury', esWords('jurado|miembros? del jurado|la final|de la final|en la final|finalistas?|consejo tribal final|discursos? final(?:es)?|discurso de cierre|reuni[óo]n|qui[ée]n vot[óo] por qui[ée]n')],
+  ['merge', esWords('fusi[óo]n|fusionad[oa]s?')],
+  ['immunity', esWords('inmunidad|inmunes?')],
+  ['challenges', esWords('retos?|desaf[íi]os?|minijuegos?')],
+  ['schedule', esWords('hora l[íi]mite|ceremonia de la antorcha|semanas? de eliminaci[óo]n|cu[áa]ndo (?:se )?vota')],
+  ['voting', esWords('votos?|votar|votaci[óo]n(?:es)?|vot[ée]|consejo tribal|eliminad[oa]s?|papeletas?')],
+])
+
+const QUESTION_ES = new RegExp(`¿|(?<![\\p{L}])(?:c[óo]mo|qu[ée]|cu[áa]ndo|por qu[ée]|reglas?|expl[íi]ca(?:me)?|cu[áa]nt[oa]s?|qui[ée]n(?:es)?|d[óo]nde|puedo|se puede|funciona)(?![\\p{L}])`, 'u')
+
+/**
  * The rules topic a message asks about, or null when it is not a rules question. "How does Survivor
  * work" with no specific topic is the overview.
  */
 export function survivorRulesTopic(message: string): SurvivorRulesTopic | null {
   const text = message.toLowerCase().replace(/@chimmy\b/g, ' ').trim()
-  if (!text || !QUESTION.test(text)) return null
-  for (const [topic, pattern] of TOPIC_PATTERNS) if (pattern.test(text)) return topic
+  if (!text || !(QUESTION.test(text) || QUESTION_ES.test(text))) return null
+  for (const [topic, pattern] of TOPIC_PATTERNS) if (pattern.test(text) || TOPIC_PATTERNS_ES.get(topic)?.test(text)) return topic
   if (/\bsurvivor\b/.test(text) || /\b(rules|how (?:does|do) this league work)\b/.test(text)) return 'overview'
   return null
 }
