@@ -33,6 +33,9 @@ import { useState } from 'react'
 import { MessageSquare, Shield, Sparkles } from 'lucide-react'
 
 import LeagueChatPanel from '@/components/chat/LeagueChatPanel'
+import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
+import type { PinnedMatchupInput } from '@/lib/league-chat/redraftChatEvents'
+import './redraft-chat.css'
 
 export type LeagueChatSurfaceProps = {
   leagueId: string
@@ -45,6 +48,15 @@ export type LeagueChatSurfaceProps = {
   /** Imported leagues the user also has, for the "chat on their own platform" note. */
   importedLeagueCount: number
   onSendEveryone?: () => void
+  /**
+   * Redraft visual upgrade, batch A4: the native redraft league's sport theme
+   * (`resolveRedraftIdentity(league)?.sport`). Set, the surface carries `.rdc` and the chat takes the
+   * sport identity — redraft-chat.css, which is ALSO scoped under the workspace's
+   * `data-format=redraft`, so this alone never restyles anything outside a redraft workspace.
+   */
+  redraftSport?: RedraftSportTheme | null
+  /** Redraft only: the viewer's matchup from the league rail's snapshot (`leagueRail.matchups[leagueId]`). */
+  matchup?: PinnedMatchupInput | null
 }
 
 /**
@@ -106,6 +118,8 @@ export default function LeagueChatSurface({
   teamCount,
   importedLeagueCount,
   onSendEveryone,
+  redraftSport = null,
+  matchup = null,
 }: LeagueChatSurfaceProps) {
   const [showHostedHelp, setShowHostedHelp] = useState(false)
   const afHosted = isAfHostedPlatform(platform)
@@ -148,11 +162,21 @@ export default function LeagueChatSurface({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 lg:px-6" data-testid="league-chat-surface">
+    <div
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 lg:px-6${redraftSport ? ' rdc' : ''}`}
+      data-testid="league-chat-surface"
+      data-rd-chat={redraftSport ?? undefined}
+    >
       <header className="mb-4 flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-black text-white">League chat</h2>
+        <h2 className={redraftSport ? 'rdc-title text-xl font-black' : 'text-xl font-black text-white'}>League chat</h2>
         <span className="relative inline-flex items-center gap-1.5">
-          <span className="rounded-md border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#ffb8d1]">
+          <span
+            className={
+              redraftSport
+                ? 'rdc-hosted'
+                : 'rounded-md border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#ffb8d1]'
+            }
+          >
             AF-hosted
           </span>
           <button
@@ -173,7 +197,7 @@ export default function LeagueChatSurface({
         </span>
         {teamCount != null && teamCount > 0 ? (
           // Real membership. No online/offline split — see the header note.
-          <span className="font-mono text-xs text-white/40">{teamCount} members</span>
+          <span className={redraftSport ? 'rdc-members font-mono text-xs' : 'font-mono text-xs text-white/40'}>{teamCount} members</span>
         ) : null}
       </header>
 
@@ -196,6 +220,8 @@ export default function LeagueChatSurface({
             defaultOpen
             channels
             className="h-full min-h-[520px]"
+            redraftSport={redraftSport}
+            pinnedMatchup={matchup}
           />
         </div>
 

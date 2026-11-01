@@ -18,6 +18,10 @@ import { useAIAssistantAvailability } from "@/hooks/useAIAssistantAvailability"
 import "@/components/core-app/af-comms.css"
 import "./league-chat-channels.css"
 import { LEAGUE_CHAT_CHANNELS, type LeagueChatChannelId } from "@/lib/league-chat/leagueChatChannels"
+import type { ChatListMessage } from "@/components/core-app/comms/ChatMessageList"
+import type { RedraftSportTheme } from "@/lib/league-media/redraftIdentity"
+import { readRedraftChatEvent, type PinnedMatchupInput } from "@/lib/league-chat/redraftChatEvents"
+import { RedraftChatEventCard, RedraftChatPinnedScore } from "./RedraftChatEventCard"
 
 /**
  * The league page's chat: League chat · Messages · Chimmy.
@@ -52,6 +56,25 @@ type Props = {
    * gold #chimmy that opens the Chimmy thread). Opt-in so the dock and harnesses are unchanged.
    */
   channels?: boolean
+  /**
+   * A native redraft league's sport theme (lib/league-media/redraftIdentity.ts). Set, the league's
+   * events — trades, claims, scores, recaps — draw as event cards and the tab row follows the sport;
+   * absent (every other league, the dock, the harnesses) nothing changes. Styling is
+   * components/chat/redraft-chat.css, scoped under the workspace's redraft attributes.
+   */
+  redraftSport?: RedraftSportTheme | null
+  /** Redraft only: the viewer's matchup from the rail snapshot the page already loaded, pinned under the header. */
+  pinnedMatchup?: PinnedMatchupInput | null
+}
+
+/** Redraft league events (lib/league-chat/redraftChatEvents.ts): authorless notices → cards, Chimmy's → framed bubbles. */
+function renderRedraftEvent(m: ChatListMessage) {
+  const event = readRedraftChatEvent(m)
+  return event && event.presentation === "card" ? <RedraftChatEventCard event={event} createdAt={m.createdAt} /> : null
+}
+function redraftEventKind(m: ChatListMessage): string | null {
+  const event = readRedraftChatEvent(m)
+  return event && event.presentation === "bubble" ? event.kind : null
 }
 
 function buildDmChimmyPrompt(ask: ThreadAskChimmy): string {
@@ -77,6 +100,8 @@ export default function LeagueChatPanel({
   onClose,
   className = "",
   channels = false,
+  redraftSport = null,
+  pinnedMatchup = null,
 }: Props) {
   const { data: session } = useSession()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
@@ -165,7 +190,7 @@ export default function LeagueChatPanel({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={tribeIcon.markUrl} alt="" width={28} height={28} className="h-7 w-7 shrink-0 rounded-full" data-testid="tribe-chat-channel-icon" />
           ) : (
-            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: redraftSport ? "var(--rd-accent-text)" : "var(--accent-cyan-strong)" }} />
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
@@ -209,6 +234,9 @@ export default function LeagueChatPanel({
         </div>
       </header>
 
+      {/* Redraft: the viewer's matchup, pinned. Not in a tribe channel — that is not the league's room. */}
+      {redraftSport && !tribeSource ? <RedraftChatPinnedScore matchup={pinnedMatchup} /> : null}
+
       <div className="flex border-b px-2 py-1" style={{ borderColor: "var(--border)" }}>
         {tabs.map((tab) => (
           <button
@@ -218,8 +246,13 @@ export default function LeagueChatPanel({
             onClick={() => setActiveTab(tab.id)}
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors"
             style={{
-              background: activeTab === tab.id ? "color-mix(in srgb, var(--accent-cyan-strong) 12%, transparent)" : "transparent",
-              color: activeTab === tab.id ? "var(--accent-cyan-strong)" : "var(--muted2)",
+              background:
+                activeTab === tab.id
+                  ? redraftSport
+                    ? "var(--rd-accent-soft)"
+                    : "color-mix(in srgb, var(--accent-cyan-strong) 12%, transparent)"
+                  : "transparent",
+              color: activeTab === tab.id ? (redraftSport ? "var(--rd-accent-text)" : "var(--accent-cyan-strong)") : "var(--muted2)",
             }}
           >
             {tab.icon}
@@ -270,6 +303,8 @@ export default function LeagueChatPanel({
             surface="page"
             source={tribeSource}
             channel={channels && !tribeSource ? channel : null}
+            renderEvent={redraftSport && !tribeSource ? renderRedraftEvent : undefined}
+            eventKindFor={redraftSport && !tribeSource ? redraftEventKind : undefined}
           />
         </div>
       ) : null}

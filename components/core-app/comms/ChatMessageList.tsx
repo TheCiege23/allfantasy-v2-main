@@ -129,6 +129,12 @@ export type ChatMessageListProps = {
   onReport?: (m: ChatListMessage, reason: ReportReason) => Promise<void>
   /** Somebody else's message only. Reject to keep the sheet open with the reason on it. */
   onBlock?: (m: ChatListMessage) => Promise<void>
+  /**
+   * A message that is still a message (it keeps its bubble, reactions and replies) but carries a
+   * league event — the redraft chat's Chimmy trade take and weekly recap. Stamped on the row as
+   * `data-event-kind` for styling; absent (the default everywhere else) stamps nothing.
+   */
+  eventKindFor?: (m: ChatListMessage) => string | null
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
@@ -239,6 +245,7 @@ export function ChatMessageList({
   scrollTestId,
   onReport,
   onBlock,
+  eventKindFor,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -427,6 +434,7 @@ export function ChatMessageList({
               data-menu={menuFor === m.id || undefined}
               data-chimmy={chimmy || undefined}
               data-pending={m.pending || undefined}
+              data-event-kind={(!deleted && eventKindFor?.(m)) || undefined}
             >
               {!mine ? (
                 item.startsRun ? (

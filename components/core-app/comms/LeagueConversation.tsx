@@ -84,6 +84,14 @@ export type LeagueConversationProps = {
    * Absent = the whole league transcript, as the drawer has always read it.
    */
   channel?: LeagueChatChannelId | null
+  /**
+   * A league event drawn as a card across the conversation instead of as somebody's bubble
+   * (ChatMessageList `renderSystem`): return the card, or null for an ordinary message. Absent — the
+   * drawer, the draft room, every non-redraft league — draws every row as it always has.
+   */
+  renderEvent?: (m: ChatListMessage) => ReactNode | null
+  /** A message that keeps its bubble but carries a league event (ChatMessageList `eventKindFor`). */
+  eventKindFor?: (m: ChatListMessage) => string | null
 }
 
 type LeagueMessage = {
@@ -192,6 +200,8 @@ export function LeagueConversation({
   source = null,
   viewerId = null,
   channel = null,
+  renderEvent,
+  eventKindFor,
 }: LeagueConversationProps) {
   const tribe = typeof source === 'string' && source.startsWith('tribe_') ? source : null
   const room = `league:${leagueId}`
@@ -886,6 +896,8 @@ export function LeagueConversation({
           onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
+          renderSystem={renderEvent}
+          eventKindFor={eventKindFor}
           tagFor={(m) =>
             // 'broadcast' is server-owned (sanitizeClientMessageType turns it into 'text'): only a
             // commissioner announcement or the Survivor FAQ carries it. Same label the draft room uses.
