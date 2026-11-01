@@ -99,7 +99,7 @@ describe("league invite email", () => {
       name: '<a href="https://evil.example">Claim your prize</a>',
       settings: { inviteCode: "CODE1234", inviteExpiresAt: "2099-01-01T00:00:00Z" },
     })
-    m.emailsSend.mockResolvedValue({ error: null })
+    m.emailsSend.mockResolvedValue({ data: { id: 'email-id' }, error: null })
 
     const { POST } = await import("@/app/api/commissioner/leagues/[leagueId]/invite/send/route")
     const res = await POST(
