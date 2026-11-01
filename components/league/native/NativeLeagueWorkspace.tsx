@@ -11,7 +11,7 @@ import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
-import { dynastySeasonClock } from '@/lib/league-media/dynastySeasonClock'
+import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-media/dynastySeasonClock'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import type { RedraftSeasonFacts } from '@/lib/league-media/redraftSeasonTrack'
@@ -67,6 +67,12 @@ type Props = AppShellProps & {
    * lib/league-media/redraftSeasonTrack.ts.
    */
   seasonFacts?: Partial<RedraftSeasonFacts> | null
+  /**
+   * Dynasty leagues: the season clock computed by the shell from the raw league row (it has
+   * `createdAt`, which UserLeague does not). Absent — harnesses and previews — the header derives it
+   * from `league` with the same rule (lib/league-media/dynastySeasonClock.ts).
+   */
+  seasonClock?: DynastySeasonClock | null
 }
 const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, dynasty: Landmark, taxi: CarTaxiFront, picks: Ticket, more: CircleHelp, zombie: Skull, schedule: CalendarDays, intel: Radio, legacy: BookOpen }
 const memoryKey = (id: string) => `af:league-section:${id}`
@@ -118,7 +124,7 @@ function useLeagueUnread(enabled: boolean, refreshKey: unknown) {
 
 const SWITCHER_GROUP_ORDER = ['needs', 'live', 'other'] as const
 
-export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, seasonFacts = null, children, ...shell }: Props) {
+export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, seasonFacts = null, seasonClock: seasonClockProp, children, ...shell }: Props) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [savedScoring, setSavedScoring] = useState<string | null>(null)
@@ -163,7 +169,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
      non-dynasty league renders exactly what it did before. */
   const dynastyEra = usesDynastyBackground(league) && !guillotineBanner
   const { tInterpolate: tLangVars, t: tLang } = useOptionalLanguage()
-  const seasonClock = dynastyEra ? dynastySeasonClock(league) : null
+  const seasonClock = !dynastyEra ? null : seasonClockProp !== undefined ? seasonClockProp : dynastySeasonClock(league)
   const seasonClockText = !seasonClock ? '' : seasonClock.year != null
     ? tLangVars('dynastyEra.seasonClock.yearSeason', { year: seasonClock.year, season: seasonClock.season })
     : tLangVars('dynastyEra.seasonClock.seasonOnly', { season: seasonClock.season })
