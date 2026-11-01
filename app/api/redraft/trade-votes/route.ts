@@ -6,9 +6,10 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+import { checkSurvivorTradeRules, type SurvivorTradeRuleCheck } from '@/lib/survivor/survivorTradeRuleHook'
 import { holdRedraftProposalForCommissioner, survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import { refreshCapProjections } from '@/lib/idp/capEngine'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
 import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
@@ -69,6 +70,25 @@ async function finalizeAcceptedTrade(...args: Parameters<typeof finalizeRedraftT
   return r.ok ? NextResponse.json({ proposal: r.proposal, resolved: true }) : NextResponse.json({ error: r.error }, { status: r.status })
 }
 
+/**
+ * Settle, then spend the Survivor free-trade token the trade NEEDED (the hook's `bypassRequired`, read
+ * before the assets moved). Never on a commissioner approval — that is the override
+ * (`survivorBypassSourceToRedeem`). Idempotent per trade: the ref is `redraft:<proposalId>`, the same ref
+ * the trade runtime spends under, and `redeemSurvivorTradeToken` spends once per ref. Never throws.
+ */
+async function finalizeAndSpendSurvivorToken(
+  survivor: { check: SurvivorTradeRuleCheck | null; commissionerApproved: boolean },
+  ...args: Parameters<typeof finalizeRedraftTrade>
+) {
+  const r = await finalizeRedraftTrade(...args)
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+  const source = survivorBypassSourceToRedeem(survivor.check, { commissionerApproved: survivor.commissionerApproved })
+  if (source && survivor.check?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: args[0].leagueId, week: survivor.check.week ?? 0, tradeRef: `redraft:${args[0].id}`, source, actorUserId: args[3] ?? null })
+  }
+  return NextResponse.json({ proposal: r.proposal, resolved: true })
+}
+
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
 function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
   return hasLeagueCommissionerRights(leagueId, userId, 'trades')
@@ -105,29 +125,27 @@ async function refuseIfSurvivorTradeRules(proposal: {
   proposerRosterId: string
   receiverRosterId: string
   assets: Array<{ assetType: string; playerId: string | null; playerName: string | null; fromRosterId: string; toRosterId: string }>
-}): Promise<NextResponse | null> {
+}): Promise<{ refusal: NextResponse | null; check: SurvivorTradeRuleCheck }> {
   const check = await checkSurvivorTradeRules({
     leagueId: proposal.leagueId,
     rosterIds: [proposal.proposerRosterId, proposal.receiverRosterId, ...proposal.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
     rosterIdSpace: 'redraft',
     players: proposal.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName, fromRosterId: a.fromRosterId })),
   })
-  return check.ok ? null : NextResponse.json({ error: check.message, code: check.code }, { status: check.status })
+  // The check is kept so the settlement can spend a free-trade token the trade needed.
+  return { refusal: check.ok ? null : NextResponse.json({ error: check.message, code: check.code }, { status: check.status }), check }
 }
 
 /**
  * The same check, also reporting a HOLD: the check could not run and the commissioner chose "hold it"
  * (lib/survivor/survivorTradeCheckHold.ts). A held trade is sent to commissioner approval, never refused.
  */
-async function survivorTradeRuleOutcome(proposal: Parameters<typeof refuseIfSurvivorTradeRules>[0]): Promise<{ refusal: NextResponse | null; hold: boolean }> {
-  const check = await checkSurvivorTradeRules({
-    leagueId: proposal.leagueId,
-    rosterIds: [proposal.proposerRosterId, proposal.receiverRosterId, ...proposal.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
-    rosterIdSpace: 'redraft',
-    players: proposal.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName, fromRosterId: a.fromRosterId })),
-  })
-  if (!check.ok) return { refusal: NextResponse.json({ error: check.message, code: check.code }, { status: check.status }), hold: false }
-  return { refusal: null, hold: Boolean(check.holdForCommissioner) }
+async function survivorTradeRuleOutcome(
+  proposal: Parameters<typeof refuseIfSurvivorTradeRules>[0],
+): Promise<{ refusal: NextResponse | null; hold: boolean; check: SurvivorTradeRuleCheck }> {
+  // One check: the refusal, the hold, and the check itself (kept so the settlement can spend a token).
+  const { refusal, check } = await refuseIfSurvivorTradeRules(proposal)
+  return { refusal, hold: !refusal && check.ok && Boolean(check.holdForCommissioner), check }
 }
 
 /** Record the commissioner review a decision was made with (design step 6: "decision logged"). */
@@ -512,7 +530,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (proposal.vetoMode === 'no_veto') {
-        return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
+        return finalizeAndSpendSurvivorToken({ check: survivorAtAccept.check, commissionerApproved: false }, proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
       }
 
       /*
@@ -677,6 +695,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'vote_approve' || action === 'vote_veto') {
+    let survivorVoteCheck: SurvivorTradeRuleCheck | null = null
     if (proposal.vetoMode !== 'league_vote') {
       return NextResponse.json({ error: 'League vote mode not enabled for this proposal' }, { status: 409 })
     }
@@ -715,6 +734,7 @@ export async function POST(req: NextRequest) {
         await holdRedraftProposalForCommissioner({ leagueId: proposal.leagueId, proposalId: proposal.id, actorUserId: userId })
         return NextResponse.json({ error: governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner, code: 'SURVIVOR_TRADE_CHECK_HELD' }, { status: 409 })
       }
+      survivorVoteCheck = survivorAtVote.check
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'
@@ -789,7 +809,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (approveCount >= threshold) {
-      const accepted = await finalizeAcceptedTrade(
+      const accepted = await finalizeAndSpendSurvivorToken(
+        { check: survivorVoteCheck, commissionerApproved: false },
         proposal as ProposalWithAssets,
         proposerOwnerId,
         receiverOwnerId,

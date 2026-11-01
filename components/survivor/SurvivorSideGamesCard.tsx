@@ -71,13 +71,16 @@ export function SurvivorSideGamesCard({ leagueId }: { leagueId: string }) {
   const tpLeft = Math.max(0, s.tokenPoolPicksPerWeek - tpPicks.length)
   const openGames = view.games.filter((g) => g.open)
 
-  const gameRow = (kind: 'token_pool_pick' | 'pool_pick', g: (typeof view.games)[number], chosen: string | null, disabled: boolean) => (
+  // "No reusing a team": the manager's own season-long used list; a used team cannot be picked again.
+  const usedTeams = s.survivorPoolNoReuse ? view.pool.usedTeams ?? [] : []
+  const gameRow = (kind: 'token_pool_pick' | 'pool_pick', g: (typeof view.games)[number], chosen: string | null, disabled: boolean, used: readonly string[] = []) => (
     <div key={`${kind}-${g.key}`} className="flex flex-wrap items-center gap-2 text-xs" data-testid={`survivor-side-${kind}-${g.key}`}>
       <span className="min-w-[9rem] text-white/70">{g.awayTeam} {m.at} {g.homeTeam} · {when(g.startTime)}</span>
       {[g.awayKey, g.homeKey].map((team, i) => (
-        <button key={team} type="button" disabled={busy || disabled} onClick={() => void act({ action: kind, gameKey: g.key, teamKey: team })}
+        <button key={team} type="button" disabled={busy || disabled || used.includes(team)} onClick={() => void act({ action: kind, gameKey: g.key, teamKey: team })}
+          data-used={used.includes(team) ? 'true' : undefined}
           className={`rounded-lg border px-2 py-1 disabled:opacity-40 ${chosen === team ? 'border-emerald-400/60 text-emerald-200' : 'border-white/20'}`}>
-          {chosen === team ? `${m.picked}: ` : ''}{i === 0 ? g.awayTeam : g.homeTeam}
+          {chosen === team ? `${m.picked}: ` : ''}{i === 0 ? g.awayTeam : g.homeTeam}{used.includes(team) ? ` · ${m.usedTag}` : ''}
         </button>
       ))}
     </div>
@@ -106,13 +109,14 @@ export function SurvivorSideGamesCard({ leagueId }: { leagueId: string }) {
       {showPool && (
         <div className="space-y-2" data-testid="survivor-side-pool">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">{m.poolHeading}</h4>
-          <p className="text-[11px] text-white/50">{m.ruleThisWeek(view.poolRule.rule === 'conference' ? view.poolRule.conference : view.poolRule.rule === 'away_only' ? m.ruleAway : view.poolRule.rule === 'allowed_list' ? view.poolRule.allowedTeams.join(', ') : m.ruleAny)}</p>
+          <p className="text-[11px] text-white/50">{m.ruleThisWeek(view.poolRule.rule === 'conference' ? view.poolRule.conference : view.poolRule.rule === 'division' ? `${view.poolRule.division ?? ''}` : view.poolRule.rule === 'away_only' ? m.ruleAway : view.poolRule.rule === 'allowed_list' ? view.poolRule.allowedTeams.join(', ') : m.ruleAny)}</p>
           {view.pool.banned && <p className="text-[11px] text-rose-300">{m.poolBannedNote}</p>}
           {!view.pool.banned && !view.pool.entry.alive && (
             <p className="flex items-center gap-2 text-[11px]">{m.poolOutNote} {m.revivesLeft(view.pool.revivesLeft)}
               <button type="button" disabled={busy || view.pool.revivesLeft < 1} onClick={() => void act({ action: 'pool_revive' })} className="rounded-lg border border-white/20 px-2 py-0.5 disabled:opacity-40">{m.revive}</button></p>
           )}
-          {view.pool.entry.alive && openGames.map((g) => gameRow('pool_pick', g, view.pool.pick?.gameKey === g.key ? view.pool.pick.teamKey : null, false))}
+          {usedTeams.length > 0 && <p className="text-[11px] text-white/50" data-testid="survivor-side-pool-used">{m.usedTeams(usedTeams.join(', '))}</p>}
+          {view.pool.entry.alive && openGames.map((g) => gameRow('pool_pick', g, view.pool.pick?.gameKey === g.key ? view.pool.pick.teamKey : null, false, usedTeams))}
         </div>
       )}
 

@@ -209,6 +209,9 @@ export async function loadSurvivorPremiumTile(input: {
     case 'exile_status': {
       const onExile = viewer?.playerState === 'exile' && !pendingOut.has(userId)
       const own = onExile ? await prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId, userId } }, select: { tokenBalance: true } }) : null
+      // Exile secrecy: a viewer who may not know who is on Exile is not given the headcount either.
+      const { canSeeExileMembership, exileMembershipHidden } = await import('../survivorExileSecrecy')
+      const canSeeExile = canSeeExileMembership({ hidden: exileMembershipHidden(league.settings), viewerState: viewer?.playerState, nonPlayingCommissioner: Boolean(access.isNonParticipatingCommissionerHost) })
       return {
         ok: true,
         payload: {
@@ -218,7 +221,7 @@ export async function loadSurvivorPremiumTile(input: {
             returnWeek: settings.exileReturnWeek,
             tokensNeeded: settings.exileReturnTokens,
             currentWeek: week,
-            exileCount: players.filter(p => p.playerState === 'exile' && !pendingOut.has(p.userId)).length,
+            exileCount: canSeeExile ? players.filter(p => p.playerState === 'exile' && !pendingOut.has(p.userId)).length : null,
             viewer: { onExile, tokens: own?.tokenBalance ?? 0 },
           }),
         },

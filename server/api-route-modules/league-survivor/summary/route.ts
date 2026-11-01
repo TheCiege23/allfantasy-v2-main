@@ -440,7 +440,7 @@ export async function GET(
     exileMembershipHidden: !canSeeExileMembership({
       hidden: exileMembershipHidden(leagueSettingsRow?.settings),
       viewerState: myExileStatus ? 'exile' : null,
-      nonPlayingCommissioner: privacy.decisions.canSeeHiddenIdolAssignments,
+      nonPlayingCommissioner: privacy.isNonParticipatingCommissionerHost,
     }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null

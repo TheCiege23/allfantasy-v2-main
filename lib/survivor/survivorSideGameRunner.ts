@@ -20,16 +20,23 @@ import { prisma } from '@/lib/prisma'
 import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import {
+  applyMissedPoolPick,
+  auctionRefundDue,
   chimmyAuctionBid,
+  chimmyExileTeamBid,
   chimmySideGamePick,
   CHIMMY_TOKEN_POOL_CASH_OUT_AT,
+  EMPTY_POOL_ENTRY,
   poolPickRefusal,
+  poolReuseRefusal,
+  poolUsedTeams,
+  poolWeekLocked,
   resolveAuction,
   seasonRecords,
   sideGameWinnerKey,
 } from './survivorSideGameRules'
 import { survivorPoolRuleForWeek } from './survivorSideGameSettings'
-import { SIDE_GAME_ACTIONS, sideGameEntity, type AuctionRecord } from './survivorSideGameLedger'
+import { auctionRefundKey, SIDE_GAME_ACTIONS, sideGameEntity, type AuctionRecord } from './survivorSideGameLedger'
 import {
   appendSideGameRow,
   bidBalance,
@@ -39,19 +46,23 @@ import {
   loadSideGameLeague,
   loadSideGameSeasonGames,
   loadSideGameState,
+  loadSideGameTeamGroups,
   loadSideGameWeekGames,
   paySideGamePrize,
+  refundSideGameFaab,
   type SideGameLeague,
 } from './survivorSideGameStore'
 import {
   cashOutTokenPool,
   deliverShopPurchase,
   paySurvivorPoolPrize,
+  placeExileTeamBid,
   placeSurvivorAuctionBid,
   settleSideGamePicksForGame,
   submitSurvivorPoolPick,
   submitTokenPoolPick,
 } from './survivorSideGameService'
+import { sideGameCopy } from './survivorSideGameCopy'
 
 const SEAT_PREFIX = 'orphan-'
 
@@ -62,6 +73,8 @@ export interface SideGameStepResult {
   auctionsOpened: number
   auctionsSettled: number
   shopDelivered: number
+  poolMissed?: number
+  votesTaken?: number
   chimmy: Record<string, string>
 }
 
@@ -93,6 +106,16 @@ export async function runSurvivorSideGameStep(leagueId: string, week: number, no
   }
 
   out.shopDelivered = (await deliverPendingPurchases(league).catch(warn('shop delivery', leagueId))) ?? 0
+
+  if (league.sideGames.survivorPoolEnabled && league.sideGames.survivorPoolMissedPick !== 'none') {
+    out.poolMissed = (await judgeMissedPoolPicks(league, week, now).catch(warn('pool missed picks', leagueId))) ?? 0
+  }
+
+  // A held "vote taken" disadvantage lands on its target's next open Tribal Council.
+  {
+    const { applyPendingVoteTakenRewards } = await import('./survivorRewardEngine')
+    out.votesTaken = (await applyPendingVoteTakenRewards(leagueId).catch(warn('vote taken', leagueId)))?.length ?? 0
+  }
 
   {
     const { settleExileReturnFaab } = await import('./survivorExileLifecycle')
@@ -200,14 +223,18 @@ export async function settleAuction(league: SideGameLeague, auctionId: string, w
     const item = a.items.find((i) => i.itemId === award.itemId)
     const winner = castaways.find((c) => c.rosterId === award.rosterId)
     if (!item || !winner) continue
+    // A refunded award is finished: never charge or pay it again (a refund-then-pay would be free).
+    if (award.refunded) continue
+    const chargeKey = `auctioncharge:${a.auctionId}:${award.itemId}`
+    let charged = award.amount
     if (a.currency === 'faab') {
-      await chargeSideGameFaab({ leagueId: league.id, rosterId: award.rosterId, amount: award.amount, key: `auctioncharge:${a.auctionId}:${award.itemId}`, week, reason: `auction:${a.auctionId}:${award.itemId}` })
+      charged = await chargeSideGameFaab({ leagueId: league.id, rosterId: award.rosterId, amount: award.amount, key: chargeKey, week, reason: `auction:${a.auctionId}:${award.itemId}` })
     } else {
       await inSideGameLock(league.id, async (db) => {
         const state = await loadSideGameState(db, league.id)
         await appendSideGameRow(db, state, {
           leagueId: league.id, entity: sideGameEntity.cash(award.rosterId), action: SIDE_GAME_ACTIONS.cashDebit, week,
-          key: `auctioncharge:${a.auctionId}:${award.itemId}`, data: { amount: award.amount, reason: `auction:${a.auctionId}:${award.itemId}` },
+          key: chargeKey, data: { amount: award.amount, reason: `auction:${a.auctionId}:${award.itemId}` },
         })
       })
     }
@@ -215,8 +242,86 @@ export async function settleAuction(league: SideGameLeague, auctionId: string, w
       leagueId: league.id, prize: item.prize, rosterId: award.rosterId, userId: winner.userId, key: `auction:${a.auctionId}:${award.itemId}`, week, targetWeek: week,
       source: { kind: 'auction', id: a.auctionId, label: `${a.label}: ${item.label}` }, tokenCap: league.survivorTokenCap,
     })
-    if (!paid.ok) console.warn('[survivor-side-games] auction prize not paid', { leagueId: league.id, auctionId, itemId: award.itemId, error: paid.error })
+    if (paid.ok) continue
+    console.warn('[survivor-side-games] auction prize not paid', { leagueId: league.id, auctionId, itemId: award.itemId, error: paid.error })
+    const refund = auctionRefundDue({ charged, paid: false, permanentFailure: paid.permanent === true, alreadyRefunded: Boolean(award.refunded) })
+    if (refund > 0) await refundAuctionAward(league, a, { itemId: award.itemId, rosterId: award.rosterId, userId: winner.userId, itemLabel: item.label, chargeKey, amount: refund }, week)
   }
+}
+
+/**
+ * Give a winner back what they paid for a prize that could not be delivered — automatically,
+ * idempotently (one refund key per award), audited in the side-game ledger, and told to the winner
+ * privately by Chimmy in the league's language.
+ */
+export async function refundAuctionAward(
+  league: SideGameLeague,
+  a: Pick<AuctionRecord, 'auctionId' | 'label' | 'currency'>,
+  award: { itemId: string; rosterId: string; userId: string; itemLabel: string; chargeKey: string; amount: number },
+  week: number,
+): Promise<number> {
+  const key = auctionRefundKey(a.auctionId, award.itemId)
+  const refundOf = `${a.auctionId}:${award.itemId}`
+  const reason = `refund:auction:${a.auctionId}:${award.itemId}`
+  let refunded = 0
+  if (a.currency === 'faab') {
+    refunded = await refundSideGameFaab({ leagueId: league.id, rosterId: award.rosterId, chargeKey: award.chargeKey, key, week, reason, refundOf })
+  } else {
+    refunded = await inSideGameLock(league.id, async (db) => {
+      const state = await loadSideGameState(db, league.id)
+      const wrote = await appendSideGameRow(db, state, {
+        leagueId: league.id, entity: sideGameEntity.cash(award.rosterId), action: SIDE_GAME_ACTIONS.cashCredit, week, key, targetUserId: award.userId,
+        data: { amount: award.amount, reason, refundOf },
+      })
+      return wrote ? award.amount : 0
+    })
+  }
+  if (refunded > 0 && league.userId) {
+    const m = sideGameCopy(league.language)
+    const text = m.auctionRefunded(award.itemLabel, a.currency === 'faab' ? `$${refunded} FAAB` : `$${refunded} ${m.auctionCashWord}`)
+    await prisma.leagueChatMessage.create({
+      data: {
+        id: `survivor-auction-refund:${a.auctionId}:${award.itemId}`, leagueId: league.id, userId: league.userId,
+        message: text, type: 'system', isPrivate: true, visibleToUserId: award.userId, messageSubtype: 'chimmy_private',
+        metadata: { chimmyPrivateReply: true, survivorAuctionRefund: true, auctionId: a.auctionId, itemId: award.itemId },
+      },
+    }).catch((error: unknown) => console.warn('[survivor-side-games] refund note failed', { leagueId: league.id, error: error instanceof Error ? error.message : String(error) }))
+  }
+  return refunded
+}
+
+/**
+ * The missed-pick rule (`survivorPoolMissedPick`): once every game of the CURRENT week has kicked off,
+ * each castaway still in the pool with no pick that week takes the configured outcome — a loss, or a
+ * spent revive. Only the current week is judged, never a past one, so a manager who was on Exile last
+ * week (and could not pick) is never charged for it. Idempotent per (manager, week).
+ */
+export async function judgeMissedPoolPicks(league: SideGameLeague, week: number, now: Date): Promise<number> {
+  const s = league.sideGames
+  if (!s.survivorPoolEnabled || s.survivorPoolMissedPick === 'none' || week < Math.max(1, s.survivorPoolStartWeek)) return 0
+  const games = await loadSideGameWeekGames(prisma, league.sport, league.season, week)
+  if (!poolWeekLocked(games, now)) return 0
+  const castaways = (await loadCastaways(prisma, league.id)).filter((c) => c.playerState === 'active')
+  if (!castaways.length) return 0
+  return inSideGameLock(league.id, async (db) => {
+    const state = await loadSideGameState(db, league.id)
+    let judged = 0
+    for (const c of castaways) {
+      const pool = state.pool.get(c.userId)
+      if (pool?.picks.some((p) => p.week === week)) continue
+      const next = applyMissedPoolPick(pool?.entry ?? EMPTY_POOL_ENTRY, s.survivorPoolMissedPick, s.survivorPoolRevives, week)
+      if (!next) continue
+      const wrote = await appendSideGameRow(db, state, {
+        leagueId: league.id, entity: sideGameEntity.pool(c.userId), action: SIDE_GAME_ACTIONS.poolMissed, week,
+        key: `poolmiss:${c.userId}:${week}`, targetUserId: c.userId, data: { week, entry: next, rule: s.survivorPoolMissedPick },
+      })
+      if (wrote) {
+        state.pool.set(c.userId, { entry: next, picks: pool?.picks ?? [] })
+        judged++
+      }
+    }
+    return judged
+  })
 }
 
 async function deliverPendingPurchases(league: SideGameLeague): Promise<number> {
@@ -241,7 +346,7 @@ async function deliverPendingPurchases(league: SideGameLeague): Promise<number> 
  */
 export async function runChimmySideGameTurn(league: SideGameLeague, week: number, now: Date): Promise<Record<string, string>> {
   const s = league.sideGames
-  const anything = s.tokenPoolEnabled || s.survivorPoolEnabled
+  const anything = s.tokenPoolEnabled || s.survivorPoolEnabled || s.exileClaimMode === 'faab_bid'
   const state = await loadSideGameState(prisma, league.id)
   const liveAuctions = [...state.auctions.values()].filter((a) => a.status !== 'cancelled' && a.status !== 'settled' && new Date(a.opensAt).getTime() <= now.getTime() && now.getTime() < new Date(a.closesAt).getTime())
   if (!anything && !liveAuctions.length) return {}
@@ -252,9 +357,24 @@ export async function runChimmySideGameTurn(league: SideGameLeague, week: number
   if (!seats.length) return {}
   const games = week > 0 ? await loadSideGameWeekGames(prisma, league.sport, league.season, week) : []
   const records = seasonRecords(await loadSideGameSeasonGames(prisma, league.sport, league.season, week))
+  const groups = s.survivorPoolEnabled && ['conference', 'division'].includes(survivorPoolRuleForWeek(s, week).rule) ? await loadSideGameTeamGroups(prisma, league.sport) : null
   const turn: Record<string, string> = {}
   for (const seat of seats) {
     try {
+      // Sealed Exile team bid: one deterministic bid per period, from the stored-data team strength,
+      // reading only its OWN bid (never anyone else's).
+      if (seat.playerState === 'exile' && s.exileClaimMode === 'faab_bid') {
+        const { exileBidWindow } = await import('./survivorExileBids')
+        const window = await exileBidWindow(league, now).catch(() => null)
+        if (window && now.getTime() < window.closesAt.getTime() && !state.exileBids.get(window.week)?.resolved) {
+          const own = state.exileBids.get(window.week)?.bids.find((b) => b.userId === seat.userId) ?? null
+          const bid = chimmyExileTeamBid({ sport: league.sport, openTeams: window.openTeams, budget: s.exileBidBudget, records, myBid: own ? { team: own.team, amount: own.amount } : null })
+          if (bid) {
+            const r = await placeExileTeamBid({ leagueId: league.id, userId: seat.userId, team: bid.team, amount: bid.amount, now })
+            turn[seat.userId] = r.ok ? 'exile_team_bid' : `exile_bid_${r.status}`
+          }
+        }
+      }
       if (seat.playerState === 'exile' && s.tokenPoolEnabled && s.tokenPoolOpen) {
         const tp = state.tokenPool.get(seat.userId)
         if (s.tokenPoolMode === 'streak' && (tp?.pot ?? 0) >= CHIMMY_TOKEN_POOL_CASH_OUT_AT) {
@@ -277,7 +397,8 @@ export async function runChimmySideGameTurn(league: SideGameLeague, week: number
         const picked = pool?.picks.some((p) => p.week === week)
         if ((!entry || entry.alive) && !picked) {
           const rule = survivorPoolRuleForWeek(s, week)
-          const pick = chimmySideGamePick(games, records, now, (game, teamKey) => poolPickRefusal(league.sport, rule, game, teamKey) == null)
+          const used = poolUsedTeams(pool?.picks ?? [], week)
+          const pick = chimmySideGamePick(games, records, now, (game, teamKey) => poolPickRefusal(league.sport, rule, game, teamKey, groups) == null && poolReuseRefusal(s.survivorPoolNoReuse, used, teamKey) == null)
           if (pick) {
             const r = await submitSurvivorPoolPick({ leagueId: league.id, userId: seat.userId, gameKey: pick.gameKey, teamKey: pick.teamKey, now })
             turn[seat.userId] = r.ok ? 'pool_picked' : `pool_${r.status}`

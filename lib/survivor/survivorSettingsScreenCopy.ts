@@ -99,6 +99,10 @@ export const settingsErrorMessages = defineMessages({
     realPoints: (max: number): string => `A real-game points prize is 1 to ${max} points.`,
     faabCap: (min: number, max: number): string => `The weekly challenge FAAB cap is $${min} to $${max}.`,
     phaseRules: 'Prize rules per phase: tribe FAAB transfers are pre-merge only, and each phase must name known prize types.',
+    // The side games' shared validator (survivorSideGameSettings.ts) words these; English keeps its text.
+    sideGameInvalid: (detail: string, _key: string): string => detail,
+    sideGameLocked: (detail: string, _key: string): string => detail,
+    sideGameRule: (detail: string): string => detail,
   },
   es: {
     tribeCount: 'Elige entre 2 y 5 tribus.',
@@ -129,8 +133,30 @@ export const settingsErrorMessages = defineMessages({
     realPoints: (max: number): string => `Un premio en puntos de partido real es de 1 a ${max} puntos.`,
     faabCap: (min: number, max: number): string => `El tope semanal de FAAB de los retos es de $${min} a $${max}.`,
     phaseRules: 'Reglas de premios por fase: las transferencias de FAAB entre tribus son solo antes de la fusión, y cada fase debe usar tipos de premio conocidos.',
+    sideGameInvalid: (_detail: string, key: string): string => `Ese valor para «${sideGameLabelEs(key)}» no está permitido.`,
+    sideGameLocked: (_detail: string, key: string): string => `«${sideGameLabelEs(key)}» se bloquea cuando empieza la temporada.`,
+    sideGameRule: (): string => 'Esa combinación de ajustes de los juegos paralelos no es válida. Revísala en Ajustes de la liga → Exilio.',
   },
 })
+
+/** Spanish names for the side-game settings shown on this screen (SIDE_GAME_SCREEN_KEYS); the key otherwise. */
+const SIDE_GAME_LABELS_ES: Record<string, string> = {
+  tokenPoolEnabled: 'Pozo de fichas',
+  tokenPoolMode: 'modo del Pozo de fichas',
+  tokenPoolWrongPick: 'elección fallida del Pozo de fichas',
+  tokenShopEnabled: 'Tienda de fichas',
+  survivorPoolEnabled: 'Pozo Survivor',
+  survivorPoolTieRule: 'regla de empate del Pozo Survivor',
+  survivorPoolMissedPick: 'elección no hecha del Pozo Survivor',
+  survivorPoolNoReuse: 'sin repetir equipo en el Pozo Survivor',
+  exileClaimMode: 'modo de reclamo del Exilio',
+  exileBidBudget: 'presupuesto de pujas del Exilio',
+  exileTokenFaabRate: 'cambio de fichas a FAAB del Exilio',
+  hideExileMembership: 'ocultar quién está en el Exilio',
+}
+function sideGameLabelEs(key: string): string {
+  return SIDE_GAME_LABELS_ES[key] ?? key
+}
 
 /**
  * Every other refusal from the settings-screen API, keyed by a STABLE code, in the league's language.

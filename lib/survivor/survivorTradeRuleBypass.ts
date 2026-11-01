@@ -66,6 +66,21 @@ export function registerSurvivorTradeBypassRedeemer(sourcePrefix: string, redeem
   }
 }
 
+/**
+ * Which bypass (if any) a settled trade must spend. Only a trade that NEEDED the bypass spends it,
+ * and never one the commissioner forced or approved through: the override path skips the Survivor
+ * trade rules on the commissioner's authority, so a token the manager happens to hold was not what
+ * let the trade through and must stay unspent. Pure.
+ */
+export function survivorBypassSourceToRedeem(
+  check: { ok: boolean; bypassRequired?: boolean; bypassSource?: string | null } | null | undefined,
+  opts: { commissionerOverride?: boolean; commissionerApproved?: boolean } = {},
+): string | null {
+  if (opts.commissionerOverride || opts.commissionerApproved) return null
+  if (!check?.ok || !check.bypassRequired) return null
+  return check.bypassSource ?? null
+}
+
 /** Never throws: an executed trade must not fail because its token could not be marked spent. */
 export async function redeemSurvivorTradeBypass(args: { leagueId: string; week: number; tradeRef: string; source: string | null | undefined; actorUserId?: string | null }): Promise<boolean> {
   if (!args.source) return false

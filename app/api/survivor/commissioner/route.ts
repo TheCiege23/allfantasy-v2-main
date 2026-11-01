@@ -700,6 +700,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result)
   }
 
+  // "Removed if exposed" (lib/survivor/survivorExileExposure.ts): the commissioner marks a manager as
+  // having exposed an exile. Without `confirm: true` it only previews; the penalty is the league's
+  // `exileExposureRule` (removal or a conduct strike). Audited, and the manager is told by Chimmy.
+  if (action === 'exile_exposure_penalty') {
+    const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : ''
+    if (!targetUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    if (body.confirm !== undefined && typeof body.confirm !== 'boolean') return NextResponse.json({ error: 'confirm must be true or false' }, { status: 400 })
+    const { applyExileExposurePenalty } = await import('@/lib/survivor/survivorExileExposure')
+    const result = await applyExileExposurePenalty(leagueId, { targetUserId, actorUserId: userId, confirm: body.confirm === true, note: typeof body.note === 'string' ? body.note : null })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    if (!result.preview) await log('exile_exposure_penalty', `Exposure penalty: ${result.penalty}`, { targetUserId, newState: { penalty: result.penalty, removed: result.removed, strikes: result.strikes ?? null } as object })
+    return NextResponse.json(result)
+  }
+
   if (action === 'pause_season' || action === 'resume_season') {
     const paused = action === 'pause_season'
     const result = await setCouncilPaused(leagueId, userId, paused)

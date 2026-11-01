@@ -3,7 +3,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { checkSurvivorTradeRules, type SurvivorTradeRuleCheck } from '@/lib/survivor/survivorTradeRuleHook'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 import { survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
-import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
@@ -761,8 +761,10 @@ async function applyExecutedTrade(input: {
     details: { proposalId: input.proposalId, rosterImpact: execution.rosterImpact },
   })
   // Survivor: the free-trade token this trade needed is spent now that it has executed. Never throws.
-  if (survivorCheck?.ok && survivorCheck.bypassRequired) {
-    await redeemSurvivorTradeBypass({ leagueId: input.state.leagueId, week: survivorCheck.week ?? 0, tradeRef: `redraft:${input.proposalId}`, source: survivorCheck.bypassSource, actorUserId: input.actorUserId ?? null })
+  // A commissioner override (force or approve) never spends a held token: survivorBypassSourceToRedeem.
+  const survivorRedeemSource = survivorBypassSourceToRedeem(survivorCheck, { commissionerOverride: input.commissionerOverride === true })
+  if (survivorRedeemSource && survivorCheck?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: input.state.leagueId, week: survivorCheck.week ?? 0, tradeRef: `redraft:${input.proposalId}`, source: survivorRedeemSource, actorUserId: input.actorUserId ?? null })
   }
   const next = await resolveNflRedraftTradeRuntime({ seasonId: input.state.seasonId, week: input.state.week })
   if (!next.ok) throw new Error(next.reason)
