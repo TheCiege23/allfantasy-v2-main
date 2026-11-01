@@ -105,7 +105,7 @@
 @keyframes afBxPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .af-bx-switch button { display: inline-flex; align-items: center; }
 .af-bx-stat > span { display: flex !important; justify-content: space-between; align-items: center; gap: 8px; }
-.af-bx-live-tag, .af-bx-soon-tag { font-style: normal; font-size: 10.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
+.af-bx-live-tag, .af-bx-soon-tag { font-style: normal; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
 .af-bx-live-tag { display: inline-flex; align-items: center; color: #ffb1b1; background: rgba(255, 107, 107, .12); }
 .af-bx-live-tag .af-bx-live-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: none; }
 .af-bx-soon-tag { color: #ffdfad; background: #4c391d; }
