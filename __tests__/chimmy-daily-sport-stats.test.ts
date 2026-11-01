@@ -195,6 +195,21 @@ describe('get_player_game_log — daily sports', () => {
     expect(await buildPlayerSeasonStatsContext({ playerName: 'Alex Striker', sport: 'soccer' }, db))
       .toContain('Verified soccer season totals are not stored')
   })
+
+  it('uses a season window for a winter game played after the calendar year changed', async () => {
+    const { db, calls } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: '20270201-ars-che:fielders', providerGameId: '20270201-ars-che',
+        season: 2027, gameDate: new Date('2027-02-01T05:00:00Z'), map: { group: 'fielders',
+          seasonType: 'regular', stats: { goals: 1, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'SOCCER', season: 2026 }, db)
+    expect(out).toContain('- 2027-02-01')
+    const query = calls.find((call) => call.text.includes('FROM player_game_stats') && call.text.includes('ORDER BY game_date'))!
+    expect(query.text).toContain('game_date >=')
+    expect(query.text).toContain('game_date <')
+    expect(query.text).not.toContain('AND season =')
+  })
   it('MLB: merges a two-way game into ONE line, pitching decision included', async () => {
     const { db } = logDb({
       registry: OHTANI_REG,

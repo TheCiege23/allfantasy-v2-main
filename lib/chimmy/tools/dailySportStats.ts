@@ -390,6 +390,14 @@ export async function buildDailyGameLogContext(
 
   const requestedSeason = typeof args.season === 'number' && Number.isFinite(args.season) ? Math.floor(args.season) : null
   const lastN = Math.min(10, Math.max(1, typeof args.lastN === 'number' && Number.isFinite(args.lastN) ? Math.floor(args.lastN) : 5))
+  const opener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason) : null
+  if (requestedSeason != null && sport !== 'MLB' && !opener) {
+    return `The ${dailySeasonLabel(sport, requestedSeason)} ${sport} season opener is not verified, so its game logs cannot be separated safely from adjacent seasons.`
+  }
+  const nextOpener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason + 1) : null
+  // For a future opener not yet recorded, stop before the next league season could begin.
+  // This is a conservative search boundary, not a claimed schedule date.
+  const nextBoundary = opener ? nextOpener ?? `${requestedSeason! + 1}-${sport === 'SOCCER' ? '07' : '09'}-01T00:00:00Z` : null
 
   const [rows, sportLatestRows] = await Promise.all([
     db.$queryRaw<DailyGameRow[]>(Prisma.sql`
@@ -397,7 +405,8 @@ export async function buildDailyGameLogContext(
              normalized_stat_map AS map, stat_payload AS payload
       FROM player_game_stats
       WHERE "sportType" = ${sport} AND "playerId" = ${player.id}
-        ${requestedSeason != null ? Prisma.sql`AND season = ${requestedSeason}` : Prisma.empty}
+        ${opener && nextBoundary ? Prisma.sql`AND game_date >= ${new Date(opener)} AND game_date < ${new Date(nextBoundary)}` :
+          requestedSeason != null ? Prisma.sql`AND season = ${requestedSeason}` : Prisma.empty}
       ORDER BY game_date DESC NULLS LAST, "gameId" ASC
       LIMIT ${lastN * 2 + 40}`),
     db.$queryRaw<Array<{ latest: Date | null }>>(Prisma.sql`
