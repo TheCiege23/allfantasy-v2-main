@@ -5,11 +5,32 @@
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
  *
- * CFP and NBA Cup pools use admin-published fields and game times. Single-game
- * finals are entered through the audited result route until verified provider
- * ingestion is available. Both sports have their own persisted round keys.
+ * CFP retains its published field and first-game lock. NBA Cup uses scheduled
+ * provider ingestion for Group Play and confirmed knockout matchups, with each
+ * game locking at tipoff. Both sports have their own persisted round keys.
  */
 export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
+
+/** Persisted challenge summaries returned by the authenticated list endpoint. */
+export type PlayoffChallengeListItem = {
+  challengeId: string
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+  seasonYear: number
+  participantCount: number
+  entryCount: number
+  inviteCode: string
+  config?: PlayoffChallengeConfig | null
+}
+
+export type PlayoffCreateResponse = {
+  challengeId: string
+  entryId: string | null
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+}
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -99,6 +120,7 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  | "cup_group_play"
   | "cup_quarterfinals"
   | "cup_semifinals"
   | "cup_championship"
@@ -130,6 +152,7 @@ export type BracketTeamProfile = {
 }
 
 export type PlayoffChallengeView = {
+  participants?: Array<{ userId: string; displayName: string; entryCount: number }>
   challenge: {
     id: string
     name: string
