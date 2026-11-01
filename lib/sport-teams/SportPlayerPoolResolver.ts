@@ -1,3 +1,4 @@
+import { reconcileCurrentProRows } from '@/lib/draft-room/currentProRoster'
 /**
  * Resolves player pool by sport so leagues only load players for their sport.
  * Uses SportsPlayer and PlayerIdentityMap; draft room and waiver wire filter by league sport.
@@ -41,6 +42,9 @@ const POOL_PLAYER_SELECT = {
   team: true,
   teamId: true,
   status: true,
+  dob: true,
+  fetchedAt: true,
+  expiresAt: true,
   sleeperId: true,
   externalId: true,
   age: true,
@@ -394,13 +398,14 @@ function normalizePositionFilter(sport: string, position?: string): string[] | n
  */
 export async function getPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const memoKey = JSON.stringify([
     normalizeSport(sportType),
     options?.limit ?? null,
     options?.teamId?.trim() || null,
     options?.position?.trim() || null,
+    options?.currentRosterOnly === true,
   ])
   const memoised = playerPoolMemo.get(memoKey)
   if (memoised) return structuredClone(memoised)
@@ -421,7 +426,7 @@ export async function getPlayerPoolForSport(
  */
 async function buildPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const rosterStatusById = new Map<string, string | null>()
   const pool = await buildPlayerPoolRecords(sportType, options, rosterStatusById)
@@ -443,7 +448,7 @@ async function buildPlayerPoolForSport(
 
 async function buildPlayerPoolRecords(
   sportType: SportType | LeagueSport | string,
-  options: { limit?: number; teamId?: string; position?: string } | undefined,
+  options: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean } | undefined,
   rosterStatusById: Map<string, string | null>,
 ): Promise<PoolPlayerRecord[]> {
   const sport = normalizeSport(sportType)
@@ -534,7 +539,7 @@ async function buildPlayerPoolRecords(
   // invalidate this key, or the pool it half-deletes gets frozen here for a full
   // TTL. The empty guard below does not cover that case and is not meant to.
   const rows = await cachedFetch(
-    cacheKey('sportsPlayerPool', where),
+    cacheKey('sportsPlayerPoolV2', where),
     dbFirstMode.draftPoolCacheTtlSeconds,
     () => prisma.sportsPlayer.findMany({
       where,
@@ -553,7 +558,8 @@ async function buildPlayerPoolRecords(
   // row that won.
   // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
   const isNfl = sport === 'NFL'
-  const poolRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
+  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
+  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true)
   // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
   // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
   const teamKeyOf = (team: string | null) =>
@@ -727,7 +733,7 @@ async function buildPlayerPoolRecords(
     (normalizedPositions == null ||
       normalizedPositions.some((p) => IDP_INDIVIDUAL_POSITIONS.has(p) || p === 'IDP_FLEX'))
 
-  if (!canFallbackIdpFromIdentity || primary.length >= limit) {
+  if (options?.currentRosterOnly || !canFallbackIdpFromIdentity || primary.length >= limit) {
     return primary
   }
 
@@ -802,7 +808,7 @@ async function buildPlayerPoolRecords(
 export async function getPlayerPoolForLeague(
   leagueId: string,
   leagueSport: LeagueSport,
-  options?: { limit?: number; teamId?: string; position?: string }
+  options?: { limit?: number; teamId?: string; position?: string; currentRosterOnly?: boolean }
 ): Promise<PoolPlayerRecord[]> {
   const sportType = leagueSportToSportType(leagueSport)
   const sportStr = SPORT_STR[leagueSport] ?? sportType

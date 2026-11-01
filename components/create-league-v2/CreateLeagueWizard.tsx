@@ -172,6 +172,11 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
     : translated
 }
 
+function chooseSurvivorTribeCount(teamCount: number, current: number): number {
+  const options = getSurvivorTribeOptions(teamCount)
+  return options.includes(current) ? current : (options[0] ?? 2)
+}
+
 export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
   // A format the manager has not picked follows the sport's default. A picked format is kept when
   // the new sport allows it; one it does not (guillotine is not offered for NCAAB or soccer) falls
@@ -204,10 +209,11 @@ export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSp
     scoringPresetId,
     teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
@@ -242,10 +248,11 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     draftType,
     teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),

@@ -121,6 +121,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
   const [isListedInFinder, setIsListedInFinder] = useState(false)
   const [dispersalDraftEligible, setDispersalDraftEligible] = useState(false)
   const [step, setStep] = useState(1)
+  const [zombieHubPath, setZombieHubPath] = useState<string | null>(null)
   const [tournamentHubPath, setTournamentHubPath] = useState<string | null>(null)
   const [draftOrder, setDraftOrder] = useState<DraftOrderMode>('standings')
   const [manualOrder, setManualOrder] = useState<DraftTeam[]>([])
@@ -145,6 +146,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
     setLoading(true)
     setResult(null)
     setTournamentHubPath(null)
+    setZombieHubPath(null)
     fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/renew`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
@@ -176,6 +178,8 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
         setManualOrder(teams)
         const saved = String(data.defaultDraftOrder ?? 'standings')
         setDraftOrder(DRAFT_ORDER_OPTIONS.some((o) => o.value === saved) ? (saved as DraftOrderMode) : 'standings')
+        const zombieHub = data.zombieRenewal?.renewFromHubPath
+        setZombieHubPath(typeof zombieHub === 'string' && zombieHub.startsWith('/') ? zombieHub : null)
         const hub = data.tournamentFeeder?.renewFromHubPath
         setTournamentHubPath(typeof hub === 'string' && hub.startsWith('/') ? hub : null)
       })
@@ -336,6 +340,11 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
               <p className="text-[14px] text-white/60">League already renewed for {nextSeason}.</p>
               <button type="button" onClick={onClose}
                 className="rounded-lg bg-cyan-600/80 px-6 py-2.5 text-sm font-medium text-white hover:bg-cyan-600">Close</button>
+            </div>
+          ) : zombieHubPath ? (
+            <div className="mt-6 space-y-4">
+              <p className="text-sm leading-relaxed text-white/65">Prepare next season in Zombie commissioner controls to review manager movement and preserve completed-season history.</p>
+              <Link href={zombieHubPath} className="flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white">Open Zombie season renewal</Link>
             </div>
           ) : tournamentHubPath ? (
             <div className="mt-6 space-y-4">

@@ -175,7 +175,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const immediate = isImmediateAddAllowedToday(settings)
   // The season phase (offseason / playoffs rules): why moves are limited, and whether none are open.
   const phaseReason = phaseMoveBlockReason(settings)
-  const movesClosed = Boolean(settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
+  const movesClosed = !settings || Boolean(settings.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
   const trend = useMemo(() => waiverTrendByPlayer(history, claims), [history, claims])
   const claimedIds = useMemo(() => new Set(claims.map((c) => c.addPlayerId)), [claims])
   const positions = useMemo(() => {

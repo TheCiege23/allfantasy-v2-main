@@ -144,6 +144,12 @@ describe('every option the create wizard offers is creatable', () => {
     expect(choices.some((c) => c.label.startsWith('SOCCER/'))).toBe(true)
   })
 
+  it('chooses a valid tribe count when a 15-manager cast selects Survivor', () => {
+    const state = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, teamCount: 15, survivorTribeCount: 4 }
+    const patch = nextStateForLeagueType(state, 'survivor')
+    expect(patch.survivorTribeCount).toBe(3)
+  })
+
   it('every reachable combination passes the wizard checks and the server validator', async () => {
     const refused: string[] = []
     for (const choice of choices) {

@@ -105,3 +105,15 @@ export function filterRosterTemplatesForProspectPolicy<T extends { key: string; 
     .filter((t) => !PROSPECT_ONLY_TEMPLATE_KEYS.has(t.key))
     .map((t) => ({ ...t, slots: stripProspectStashSlots(sport, t.slots) }))
 }
+
+/** Taxi and devy slots are reserved for long-term league formats. */
+export function leagueSupportsTaxiDevy(input: { leagueType?: string | null; leagueVariant?: string | null; isDynasty?: boolean | null }): boolean {
+  const types = [input.leagueType, input.leagueVariant].map(v => String(v ?? '').trim().toLowerCase().replace(/[- ]/g, '_'))
+  if (types.some(v => v === 'zombie' || v.startsWith('zombie_'))) return false
+  if (types.some(v => ['dynasty', 'devy', 'devy_dynasty', 'c2c', 'merged_devy_c2c', 'salary_cap', 'salary_cap_dynasty'].includes(v))) return true
+  return types.every(v => !v) && Boolean(input.isDynasty)
+}
+
+export function isTaxiDevySlot(key: string): boolean {
+  return ['TAXI', 'DEVY'].includes(String(key).trim().toUpperCase())
+}

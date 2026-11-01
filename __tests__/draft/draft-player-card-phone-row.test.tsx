@@ -46,7 +46,7 @@ describe('DraftPlayerCard row on a phone', () => {
 
   it('hides the ADP fallback stat line on a phone, but keeps a line with real stats', () => {
     card()
-    expect(screen.getByTestId('c0-stats-summary').textContent).toMatch(/^ADP\b|No stats available/)
+    expect(screen.getByTestId('c0-stats-summary').textContent).toBe('')
     expect(classes(screen.getByTestId('c0-stats-summary'))).toContain('max-md:hidden')
     cleanup()
     const player = normalizeDraftPlayer({
