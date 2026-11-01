@@ -559,6 +559,8 @@ export type InactiveLineupRunResult = {
 }
 
 const DEFAULT_LEAGUE_LIMIT = 20
+/** A Survivor forced-bench player's projection for Chimmy's lineup: below any real one. */
+const FORCED_BENCH_PROJECTION = -1_000_000
 
 /**
  * Hourly: set each managed team's projected-best lineup among players whose games have not started.
@@ -648,6 +650,13 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
           // The lineup screen's own bye test: a starter whose bye week is this week.
           const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
           const locked = new Set(lock.lockedPlayerIds)
+          // Survivor only: a player a "forced bench" disadvantage sits this week is projected far below
+          // anyone (lib/survivor/survivorForcedBench.ts), so Chimmy benches him whenever anyone can fill
+          // the slot; if nobody can, the save refuses the lineup rather than start him.
+          if (league.survivorMode === true) {
+            const benched = await import('@/lib/survivor/survivorForcedBench').then((m) => m.loadForcedBench(leagueId, rosterId, week!)).catch(() => new Set<string>())
+            for (const id of benched) players[id] = { position: players[id]?.position ?? null, projectedPoints: FORCED_BENCH_PROJECTION }
+          }
           const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
           if (plan.kind === 'skip') {
             if (plan.reason === 'already_best') result.unchanged += 1

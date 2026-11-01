@@ -10,11 +10,30 @@ these tokens**; they should not add their own sport colours. Tab-by-tab ownershi
 
 | rule | source |
 |---|---|
-| hosted on AllFantasy (imported leagues keep their provider's look) | `isNativePlatform` |
+| hosted on AllFantasy — **or** an imported redraft league whose stored data positively says redraft (below) | `isNativePlatform` / `isImportedRedraftLeague` |
 | `leagueType` is literally `redraft`; no dynasty / best ball / guillotine / keeper-phase flag; no specialty variant | `isRedraftFormatLeague` — the format half of the redraft shell's own gate, split out of `lib/league/is-nfl-redraft-core-dashboard.ts`, not a second copy |
 | a `leagueVariant` naming another registered format (dynasty, keeper, best_ball, guillotine, survivor, tournament, devy, c2c, zombie, salary_cap, big_brother) is never redraft | `NON_REDRAFT_FORMATS`, a `Record` keyed on `LeagueFormatId`, so a new format fails the typecheck until placed |
 | a sport the native redraft engine runs (`lib/redraft/sportAdapters/`) | `redraftSportTheme` — an unknown sport is **not** NFL, even though `normalizeToSupportedSport` falls back to NFL |
 | a guillotine banner wins | `NativeLeagueWorkspace` |
+
+### Imported leagues (batch B-ID, owner decision 2026-10-31)
+
+Imported redraft leagues get the same look and tab redesigns; their dynasty / keeper / best ball /
+guillotine / other specialty leagues do not. `isImportedRedraftLeague` reads `League.settings` and
+themes only on **positive** evidence — the `leagueType` column is `@default("redraft")` and is the import
+normalizer's shrug (`conceptConfident: false`), and every adapter's `isDynasty: false` means "no keeper
+signal found", so neither is evidence on its own:
+
+| platform | redraft when | stored by |
+|---|---|---|
+| any | a person confirmed the type as `redraft` (`settings.leagueTypeConfirmation.type`); confirmed anything else vetoes | League Settings / import review |
+| Sleeper | `settings.sleeper_league_type === 0` (Sleeper's own `settings.type`; 1 keeper, 2 dynasty) and not `best_ball` | `SleeperLeagueMapper` (new; rows imported earlier gain it on their next refresh) |
+| ESPN | `settings.espn_keeper_count === 0` (ESPN's own keeper count; its "dynasty" is keepers) | `EspnAdapter` (new; same) |
+| Yahoo, MFL, Fantrax, Fleaflicker | never from the import alone — their adapters only test whether keeper/dynasty keys are present, and Fleaflicker's stored `league_type: 'redraft'` is written even when `maxKeepers` is absent | — (a confirmation themes them) |
+
+All the native vetoes still apply on top (dynasty / best ball / guillotine flag, specialty variant, the
+importer's own `settings.isDynasty`), and the `leagueType` column must still read `redraft` unless a person
+confirmed otherwise — so a name signal that classified a league as guillotine still wins.
 
 Known conservative exclusion: an **IDP** redraft league (variant `idp` / `dynasty_idp`) keeps the default
 look, because the shared gate excludes those variants for the redraft shell. Widening it is a one-line
@@ -27,7 +46,7 @@ decision in `isRedraftFormatLeague`'s caller, not a new rule.
 Guillotine (`data-format=guillotine`) use. `components/league/native/redraft-identity.css` does the rest.
 
 **`/core` (AfCoreShell) carries them too** (batch CORE-1): the page passes
-`coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)` (`lib/core-app/coreShellRedraftIdentity.ts`,
+`coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)` — the fresh record carries `settings`, which the list row does not, so it is what lets an imported league theme (`lib/core-app/coreShellRedraftIdentity.ts`,
 a wrapper over `resolveRedraftIdentity` — no `?league=` → null) and the shell stamps the same two
 attributes on `.af-core.af-shell`. The token blocks here match either root through
 `.af-core:is(.nl-workspace,.af-shell)` (same specificity). /core-only chrome — art sizing for a page

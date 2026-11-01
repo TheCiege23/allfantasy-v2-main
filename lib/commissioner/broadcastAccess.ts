@@ -40,21 +40,36 @@ function coCommissionerMaySend(settings: unknown, userId: string, teams: readonl
   return !coTeamIds.length || isTournamentCoCommissioner(settings, userId) || coCommissionerAllowed(settings, coTeamIds, ['chat'])
 }
 
-/** Why this user may not broadcast to this league, or null when they may. */
-export async function broadcastRefusal(leagueId: string, userId: string): Promise<BroadcastRefusal | null> {
+/**
+ * Whether this user runs the league's chat — the head commissioner, or a co-commissioner the head
+ * commissioner left the chat permission — answered with the league's platform, or null.
+ *
+ * Shared by @everyone announcements and by pinning (user's decision, 2026-10-31: only the commissioner
+ * and co-commissioners pin). Pinning does NOT add the native-only rule below: a pin sits on the board
+ * and notifies nobody, so the imported-league hazard that rule exists for — an importer blasting a
+ * league they don't run — has no pin equivalent.
+ */
+export async function leagueChatModerator(leagueId: string, userId: string): Promise<{ platform: string | null } | null> {
   const [league, role] = await Promise.all([
     prisma.league.findFirst({ where: { id: leagueId }, select: { platform: true, settings: true } }),
     getLeagueRole(leagueId, userId),
   ])
-  if (!league || !SENDING_ROLES.has(role ?? '')) return 'forbidden'
+  if (!league || !SENDING_ROLES.has(role ?? '')) return null
   if (role === 'co_commissioner') {
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId, claimedByUserId: userId, isCoCommissioner: true },
       select: { leagueId: true, id: true, isCommissioner: true, isCoCommissioner: true },
     })
-    if (!coCommissionerMaySend(league.settings, userId, teams)) return 'forbidden'
+    if (!coCommissionerMaySend(league.settings, userId, teams)) return null
   }
-  return isNativePlatform(league.platform) ? null : 'imported'
+  return { platform: league.platform == null ? null : String(league.platform) }
+}
+
+/** Why this user may not broadcast to this league, or null when they may. */
+export async function broadcastRefusal(leagueId: string, userId: string): Promise<BroadcastRefusal | null> {
+  const moderator = await leagueChatModerator(leagueId, userId)
+  if (!moderator) return 'forbidden'
+  return isNativePlatform(moderator.platform) ? null : 'imported'
 }
 
 export type BroadcastLeague = { id: string; platform: string; native: boolean }

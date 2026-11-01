@@ -13,6 +13,7 @@ import { RecapShareButton } from './RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { PinnedBoard } from './PinnedBoard'
+import { LeagueMoveCard } from './LeagueMoveCard'
 import { DraftPollView, draftPollVoteUrl, readDraftPoll } from './draftPoll'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -22,6 +23,16 @@ import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draftChatLink'
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import type { LeagueChatChannelId } from '@/lib/league-chat/leagueChatChannels'
+import {
+  LEAGUE_MOVE_MESSAGE_TYPE,
+  describeMove,
+  mergeMovesIntoMessages,
+  movesForChannel,
+  readLeagueMoves,
+  type LeagueMove,
+} from '@/lib/league-chat/leagueMoves'
+import { readDynastyDraftOrderNotice } from '@/lib/league-chat/dynastyChatSkin'
+import { DynastyDraftOrderCard } from '@/components/chat/DynastyChatParts'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import '@/components/core-app/af-comms.css'
 
@@ -84,6 +95,19 @@ export type LeagueConversationProps = {
    * Absent = the whole league transcript, as the drawer has always read it.
    */
   channel?: LeagueChatChannelId | null
+  /**
+   * A league event drawn as a card across the conversation instead of as somebody's bubble
+   * (ChatMessageList `renderSystem`): return the card, or null for an ordinary message. Absent — the
+   * drawer, the draft room, every non-redraft league — draws every row as it always has.
+   */
+  renderEvent?: (m: ChatListMessage) => ReactNode | null
+  /** A message that keeps its bubble but carries a league event (ChatMessageList `eventKindFor`). */
+  eventKindFor?: (m: ChatListMessage) => string | null
+  /**
+   * A dynasty league's chat (Dynasty Era): trade cards draw picks as chips and draft-order
+   * announcements get the gold card. Off by default, where every row renders as before.
+   */
+  dynasty?: boolean
 }
 
 type LeagueMessage = {
@@ -124,6 +148,18 @@ function leagueToListMessage(m: LeagueMessage): ChatListMessage {
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v ? v : null
+}
+
+function moveToListMessage(move: LeagueMove): ChatListMessage {
+  return {
+    id: `move:${move.id}`,
+    authorId: null,
+    authorName: move.teamName ?? move.managerName ?? 'League',
+    body: describeMove(move),
+    createdAt: move.occurredAt,
+    messageType: LEAGUE_MOVE_MESSAGE_TYPE,
+    metadata: null,
+  }
 }
 
 /**
@@ -192,6 +228,9 @@ export function LeagueConversation({
   source = null,
   viewerId = null,
   channel = null,
+  renderEvent,
+  eventKindFor,
+  dynasty = false,
 }: LeagueConversationProps) {
   const tribe = typeof source === 'string' && source.startsWith('tribe_') ? source : null
   const room = `league:${leagueId}`
@@ -215,6 +254,13 @@ export function LeagueConversation({
   const [replyTo, setReplyTo] = useState<LeagueMessage | null>(null)
   const [pins, setPins] = useState<PinnedRef[]>([])
   const [pinBusy, setPinBusy] = useState(false)
+  /*
+   * Only the commissioner and co-commissioners pin or unpin (the pin route decides; `/pinned` says
+   * which this viewer is). False until it answers, so a member never sees a Pin that would 403.
+   */
+  const [canPin, setCanPin] = useState(false)
+  /* The league's recent transactions, drawn as cards between messages (lib/league-chat/leagueMoves.ts). */
+  const [moves, setMoves] = useState<LeagueMove[]>([])
   /*
    * Whether the draft room's messages are folded in. `null` means the reader has not chosen,
    * and the server decides: in while a draft is live, out otherwise. Inside the draft room
@@ -342,12 +388,29 @@ export function LeagueConversation({
     try {
       const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(room)}/pinned`)
       if (!res.ok) return
-      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown }
+      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown; canPin?: unknown }
       setPins(readPinnedRefs(data.pinned))
+      setCanPin(data.canPin === true)
     } catch {
       /* A board that failed to load is not worth an error over a working chat. */
     }
   }, [room, tribe])
+
+  /*
+   * Read once per league: the moves come from the daily ingest, so polling them with the messages
+   * would ask for the same rows every few seconds. A tribe channel is not the league's chat.
+   */
+  const loadMoves = useCallback(async () => {
+    if (tribe) return
+    try {
+      const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat/moves`)
+      if (!res.ok) return
+      const data = (await res.json().catch(() => ({}))) as { moves?: unknown }
+      if (activeLeague.current === leagueId) setMoves(readLeagueMoves(data.moves))
+    } catch {
+      /* No cards is a quieter chat, not a broken one. */
+    }
+  }, [leagueId, tribe])
 
   useEffect(() => {
     void load()
@@ -361,13 +424,16 @@ export function LeagueConversation({
     setReactionOverride({})
     setReplyTo(null)
     setPins([])
+    setCanPin(false)
+    setMoves([])
     setTyping([])
     setLoadedOnce(false)
     setSearching(false)
     setFocusRequest(null)
     setDraft(null)
     void loadPins()
-  }, [leagueId, loadPins])
+    void loadMoves()
+  }, [leagueId, loadPins, loadMoves])
 
   /*
    * Near-realtime. League chat loaded once when you picked a league and never again, so a
@@ -614,9 +680,11 @@ export function LeagueConversation({
    * now shows at once as a pending bubble. It lives in its OWN list, appended after the server's:
    * a poll that lands mid-send replaces `messages` wholesale and would otherwise erase it.
    */
+  const shownMoves = useMemo(() => moves.filter(movesForChannel(channel)), [moves, channel])
+  const moveById = useMemo(() => new Map(shownMoves.map((mv) => [`move:${mv.id}`, mv])), [shownMoves])
   const listMessages = useMemo(
-    () => [...messages, ...pendingSends].map(leagueToListMessage),
-    [messages, pendingSends],
+    () => mergeMovesIntoMessages([...messages, ...pendingSends].map(leagueToListMessage), shownMoves, moveToListMessage),
+    [messages, pendingSends, shownMoves],
   )
   const sourceById = useMemo(() => {
     const map = new Map<string, string | null>()
@@ -842,7 +910,7 @@ export function LeagueConversation({
         <PinnedBoard
           pins={pins}
           busy={pinBusy}
-          onUnpin={(pinId) => void unpinMessage(pinId)}
+          onUnpin={canPin ? (pinId) => void unpinMessage(pinId) : undefined}
           onJump={(messageId) => setFocusRequest({ id: messageId, nonce: Date.now() })}
         />
       ) : null}
@@ -878,7 +946,18 @@ export function LeagueConversation({
             void toggleReaction(m.id, emoji, reactionOverride[m.id] ?? readReactions(m.metadata, viewer))
           }
           onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
-          onPin={tribe ? undefined : (m) => void pinMessage(m.id)}
+          onPin={tribe || !canPin ? undefined : (m) => void pinMessage(m.id)}
+          /*
+           * Two kinds of card share this one slot: a league move (imported leagues, read from the
+           * activity table) and a native league's own event notice (`renderEvent`, redraft only). They
+           * never describe the same row — a move card's id is `move:…`, which no message carries — so
+           * the move is asked first and anything else goes to `renderEvent`.
+           */
+          renderSystem={(m) => {
+            const move = m.messageType === LEAGUE_MOVE_MESSAGE_TYPE ? moveById.get(m.id) : undefined
+            if (move) return <LeagueMoveCard move={move} />
+            return renderEvent ? renderEvent(m) : null
+          }}
           pinBusy={pinBusy}
           onEdit={editMessage}
           onDelete={deleteMessage}
@@ -886,6 +965,7 @@ export function LeagueConversation({
           onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
+          eventKindFor={eventKindFor}
           tagFor={(m) =>
             // 'broadcast' is server-owned (sanitizeClientMessageType turns it into 'text'): only a
             // commissioner announcement or the Survivor FAQ carries it. Same label the draft room uses.
@@ -894,9 +974,21 @@ export function LeagueConversation({
           hasRichFor={(m) =>
             hasRichContent(m.metadata, m.messageType, m.body) ||
             readDraftPoll(m.metadata, m.messageType, viewer) != null ||
-            isWeeklyRecap(m.metadata)
+            isWeeklyRecap(m.metadata) ||
+            (dynasty && readDynastyDraftOrderNotice(m.metadata, m.messageType) != null)
           }
           renderRich={(m) => {
+            const orderNotice = dynasty ? readDynastyDraftOrderNotice(m.metadata, m.messageType) : null
+            if (orderNotice) {
+              return (
+                <>
+                  <DynastyDraftOrderCard notice={orderNotice} />
+                  {hasRichContent(m.metadata, m.messageType, m.body) ? (
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} dynasty />
+                  ) : null}
+                </>
+              )
+            }
             /*
              * Chimmy's weekly recap carries a way OUT: most leagues have one AllFantasy member, so the
              * recap is shared into the league's own group chat with the invite link (recapShare.ts).
@@ -905,7 +997,7 @@ export function LeagueConversation({
               return (
                 <>
                   {hasRichContent(m.metadata, m.messageType, m.body) ? (
-                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} />
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} dynasty={dynasty} />
                   ) : null}
                   <RecapShareButton leagueId={leagueId} leagueName={leagueName} recap={m.body} />
                 </>
@@ -927,6 +1019,7 @@ export function LeagueConversation({
                 messageType={m.messageType}
                 body={m.body}
                 viewerUserId={viewer}
+                dynasty={dynasty}
                 onVote={(optionId) => void votePoll(m.id, optionId)}
                 onClosePoll={
                   /*

@@ -154,8 +154,9 @@ export function buildZombieInventoryPayload() {
       },
     ],
     resolution: { status: 'complete' },
-    isWhisperer: true,
-    ambushesRemaining: 1,
+    isWhisperer: false,
+    ambushesRemaining: 0,
+    experienceMode: 'enhanced',
     week: 3,
     isCommissionerView: false,
   }

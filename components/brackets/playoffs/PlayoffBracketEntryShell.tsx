@@ -23,7 +23,9 @@ import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import PlayoffBracketBoard from "./PlayoffBracketBoard"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import MlbBracketBoard from "./MlbBracketBoard"
+import BracketCoachPanel from "./BracketCoachPanel"
 import PlayoffSettingsModal from "./PlayoffSettingsModal"
+import { useNbaCupLiveView } from "./useNbaCupLiveView"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -38,7 +40,7 @@ type PlayoffProjectionMode = "official" | "user_projection"
  * branch is on the sport string and nothing else, so an NBA playoff pool renders
  * byte-identically to yesterday.
  */
-const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup"])
+const MIRRORED_BOARD_SPORTS = new Set(["mlb", "ncaaf", "nba_cup", "nfl"])
 
 export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const router = useRouter()
@@ -73,10 +75,12 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canAdminPool = view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canSyncSeries = ["nba", "nhl", "mlb"].includes(String(view.challenge.sport ?? "").toLowerCase()) && canAdminPool
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
-  const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
+  const canShareEntry = ["ncaaf", "nba_cup", "nfl"].includes(String(view.challenge.sport ?? "").toLowerCase())
   const isLiveSingleGame = canShareEntry && !view.challenge.isTestMode
+  const rollingCup = isLiveSingleGame && view.challenge.sport === "nba_cup"
+  useNbaCupLiveView(view.challenge.id, rollingCup, setView)
   const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
-  const pastDeadline = isLiveSingleGame && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
+  const pastDeadline = isLiveSingleGame && !rollingCup && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
     if (!activeEntry) return
     try {
@@ -91,6 +95,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const showLockDiagnostics = canAdminPool || canUseLatePicks
   const completion = useMemo(
     () => view.completion ?? getPlayoffCompletionSummary(myProjectedSeries, picks, {
+      sport: view.challenge.sport,
       lockRule,
       isPoolOwner: view.challenge.ownerUserId === view.viewerUserId,
       isTestMode: view.challenge.isTestMode,
@@ -118,9 +123,9 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const completionMode = completion?.mode ?? "full_bracket_required"
   const validGuess = /^\d{1,3}$/.test(tiebreakerGuess) && Number(tiebreakerGuess) <= 500
   const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries)) &&
-    (!isLiveSingleGame || (validGuess && !pastDeadline && Boolean(firstGameStartsAt)))
+    (!isLiveSingleGame || (validGuess && !pastDeadline && (rollingCup || Boolean(firstGameStartsAt))))
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
-  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? "Update finalized picks" : "Finalize picks" :
+  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? rollingCup ? "Update tiebreaker" : "Update finalized picks" : "Finalize picks" :
     completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
   const reviewBadge = activeEntry?.isComplete
     ? completionMode === "available_picks_only"
@@ -138,6 +143,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   }
 
   function handlePick(seriesId: string, teamName: string) {
+    if (!activeEntry) return
     if (savingSeriesIds.has(seriesId)) return
     const entryId = activeEntry.id
     const wasSubmitted = Boolean(view.activeEntry?.isComplete)
@@ -180,11 +186,13 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   }
 
   function handleSubmit() {
+    if (!activeEntry) return
+    const entryId = activeEntry.id
     startSubmitting(async () => {
       try {
         const result = await submitPlayoffBracketEntryClient({
           challengeId: view.challenge.id,
-          entryId: activeEntry.id,
+          entryId,
           tiebreakerTotalScore: isLiveSingleGame ? Number(tiebreakerGuess) : undefined,
         })
         toast.success(isLiveSingleGame ? "Picks finalized" : "Bracket submitted")
@@ -263,11 +271,11 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
                 onClick={handleSubmit}
                 disabled={!canSubmit || submitting}
                 title={canSubmit ? undefined : pastDeadline ? "The first game has started." : isLiveSingleGame && !validGuess ? "Enter a final game combined score." : submitBlockedMessage}
-                data-testid="pb-submit"
+                id="bracket-finalize" data-testid="pb-submit"
               >
                 {submitting
                   ? "Submitting…"
-                  : dirtySinceSubmit && activeEntry.isComplete
+                  : dirtySinceSubmit && activeEntry.isComplete && !rollingCup
                     ? isLiveSingleGame ? "Finalize updated picks" : `Re-${submitButtonLabel}`
                     : submitButtonLabel}
               </button>
@@ -300,6 +308,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-5 p-4 sm:p-6">
+      <BracketCoachPanel view={view} />
       <section className="rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

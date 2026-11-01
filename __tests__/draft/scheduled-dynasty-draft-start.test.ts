@@ -46,7 +46,8 @@ describe('scheduled dynasty draft start', () => {
   it('starts a due dynasty draft whose commissioner turned Autostart on, through the Start-button path', async () => {
     expect(await startScheduledDynastyDrafts(NOW)).toMatchObject({ scanned: 1, started: 1, errors: [] })
     expect(m.start).toHaveBeenCalledWith('dyn-1')
-    expect(m.notifyStart).toHaveBeenCalledWith('dyn-1')
+    // startDraftSession owns the lifecycle alert; the scheduler must not duplicate it.
+    expect(m.notifyStart).not.toHaveBeenCalled()
     const where = m.due.mock.calls[0][0].where
     expect(where.autostart).toBe(true)
     expect(where.league.is.OR).toEqual(expect.arrayContaining([{ isDynasty: true }]))

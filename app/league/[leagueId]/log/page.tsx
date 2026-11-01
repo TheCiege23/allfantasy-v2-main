@@ -12,12 +12,12 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export default function LeagueLogPage() {
   const params = useParams<{ leagueId: string }>()
-  const { language } = useOptionalLanguage()
+  const { t } = useOptionalLanguage()
   const leagueId = params?.leagueId ?? ''
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
       <Link href={`/league/${encodeURIComponent(leagueId)}`} className="text-sm text-white/60 underline">
-        {language === 'es' ? '← Volver a la liga' : '← Back to league'}
+        {t('league.common.backToLeague')}
       </Link>
       <div className="mt-4">{leagueId && <LeagueLog leagueId={leagueId} />}</div>
     </main>

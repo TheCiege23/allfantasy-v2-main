@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
+import { isRevivedSurvivor } from '@/lib/zombie/weeklyUpdateSurvivors'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -23,6 +24,7 @@ export type ZombieWeeklyUpdateDraft = {
     prevHordeSize: number
     week: number
     leagueName: string
+    experienceMode?: 'simple' | 'enhanced'
   }
 }
 
@@ -57,6 +59,7 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
     include: {
       teams: true,
       whispererRecord: true,
+      coWhisperers: true,
       level: true,
       universe: true,
     },
@@ -70,9 +73,12 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
 ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
-  const wr = z.whispererRecord
-  const whispererName = wr?.displayName ?? 'Unknown'
-  const ambushesLeft = wr?.ambushesRemaining ?? 0
+  const whisperers = z.whispererRecord ? [z.whispererRecord, ...(z.coWhisperers ?? [])] : (z.coWhisperers ?? [])
+  const hiddenIds = new Set(!z.whispererIsPublic ? whisperers.map((record) => record.userId) : [])
+  const nameForUser = (userId: string) =>
+    hiddenIds.has(userId) ? Promise.resolve('Hidden Whisperer') : displayNameForUser(leagueId, userId)
+  const whispererLines = whisperers.map((record, index) =>
+    `${z.whispererIsPublic ? record.displayName : `Identity hidden #${index + 1}`} — ${record.ambushesRemaining} ambushes remaining`)
   const hordeSize = z.teams.filter((t) => t.status === 'Zombie').length
   const survivorCount = z.teams.filter((t) => t.status === 'Survivor').length
 
@@ -85,16 +91,16 @@ ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
       ? 'None declared'
       : ambushes.map((a) => a.ambushType).join(', ')
 
-  const sectionWhisperer = `🎭 THE WHISPERER
-${whispererName} — ${ambushesLeft} ambushes remaining
+  const sectionWhisperer = `🎭 THE WHISPERERS (${whisperers.length})
+${whispererLines.join('\n') || 'None selected'}
 Horde under command: ${hordeSize} Zombies
 This week's ambush: ${ambushSummary}`
 
   const zombies = z.teams.filter((t) => t.status === 'Zombie')
   const zombieLines: string[] = []
   for (const t of zombies) {
-    const nm = await displayNameForUser(leagueId, (await rosterUserId(t.rosterId)) ?? t.rosterId)
-    const by = t.killedByUserId ? await displayNameForUser(leagueId, t.killedByUserId) : '—'
+    const nm = await nameForUser( (await rosterUserId(t.rosterId)) ?? t.rosterId)
+    const by = t.killedByUserId ? await nameForUser( t.killedByUserId) : '—'
     zombieLines.push(`🧟 ${nm} — Week turned: ${t.weekBecameZombie ?? '?'} — Infected by: ${by}`)
   }
   const newInf = await prisma.zombieInfectionEvent.findMany({
@@ -103,7 +109,7 @@ This week's ambush: ${ambushSummary}`
   const newList: string[] = []
   for (const ev of newInf) {
     newList.push(
-      `${await displayNameForUser(leagueId, ev.victimUserId)} ← ${await displayNameForUser(leagueId, ev.infectorUserId)}`,
+      `${await nameForUser( ev.victimUserId)} ← ${await nameForUser( ev.infectorUserId)}`,
     )
   }
 
@@ -115,14 +121,14 @@ New this week: ${newList.length ? newList.join('; ') : 'None'}`
   const survLines: string[] = []
   for (const t of survivors) {
     const uid = await rosterUserId(t.rosterId)
-    const nm = uid ? await displayNameForUser(leagueId, uid) : t.rosterId
+    const nm = uid ? await nameForUser( uid) : t.rosterId
     survLines.push(`🧍 ${nm} — Record: ${t.wins}-${t.losses} — PF: ${(t.pointsFor ?? 0).toFixed(1)}`)
   }
-  const revived = z.teams.filter((t) => t.status.toLowerCase().includes('revived'))
+  const revived = z.teams.filter(isRevivedSurvivor)
   const revivedNames: string[] = []
   for (const r of revived) {
     const uid = await rosterUserId(r.rosterId)
-    if (uid) revivedNames.push(await displayNameForUser(leagueId, uid))
+    if (uid) revivedNames.push(await nameForUser( uid))
   }
   const sectionSurvivors = `🧍 SURVIVORS (${survivorCount} remaining)
 ${survLines.length ? survLines.join('\n') : '—'}
@@ -131,16 +137,21 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
   let sectionMoney: string | undefined
   if (z.updateIncludeMoney) {
     if (z.isPaid) {
-      sectionMoney = `💰 POT REPORT
-Total Pot: $${(z.potTotal ?? 0).toFixed(2)}
-Distributed this week: (see ledger)
-Remaining in pot: (see ledger)
-Top earner this week: —`
+      const payout = await prisma.zombieExternalWeeklyPayout.findUnique({
+        where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
+      })
+      const winner = payout ? await prisma.roster.findUnique({ where: { id: payout.winnerRosterId }, select: { platformUserId: true } }) : null
+      const winnerName = winner?.platformUserId ? await nameForUser( winner.platformUserId) : '—'
+      sectionMoney = payout
+        ? `💰 THIRD-PARTY WEEKLY PRIZE\n${winnerName} — $${(payout.amountCents / 100).toFixed(2)} (${payout.status}; ${payout.providerName})`
+        : '💰 THIRD-PARTY WEEKLY PRIZE\nNo external prize amount recorded for this week.'
     } else {
-      sectionMoney = `🏅 POINTS REPORT
-Outbreak Points in play: ${(z.potTotal ?? 0).toFixed(1)}
-Earned this week: —
-Leader: —`
+      const leaders = await prisma.zombieWeeklyWinnings.findMany({ where: { leagueId, week }, orderBy: { amount: 'desc' }, take: 1 })
+      const leader = leaders[0]
+      const owner = leader ? await prisma.roster.findUnique({ where: { id: leader.rosterId }, select: { platformUserId: true } }) : null
+      sectionMoney = leader && owner?.platformUserId
+        ? `${leader.source === 'weekly_settlement_2025' ? '🏅 WEEKLY WINNINGS' : '🏅 OUTBREAK POINTS'}\n${await nameForUser( owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} ${leader.source === 'weekly_settlement_2025' ? 'winnings units' : 'points'}.`
+        : '🏅 OUTBREAK POINTS\nWeekly points are pending.'
     }
   }
 
@@ -148,15 +159,15 @@ Leader: —`
   const maul = await prisma.zombieMaulingEvent.findMany({ where: { leagueId, week } })
   const bashLines = await Promise.all(
     bash.map(async (b) => {
-      const wn = await displayNameForUser(leagueId, b.winnerUserId)
-      const ln = await displayNameForUser(leagueId, b.loserUserId)
+      const wn = await nameForUser( b.winnerUserId)
+      const ln = await nameForUser( b.loserUserId)
       return `🔥 BASHING: ${wn} defeated ${ln} by ${b.margin.toFixed(1)} pts`
     }),
   )
   const maulLines = await Promise.all(
     maul.map(async (m) => {
-      const mn = await displayNameForUser(leagueId, m.maulerUserId)
-      const vn = await displayNameForUser(leagueId, m.victimUserId)
+      const mn = await nameForUser( m.maulerUserId)
+      const vn = await nameForUser( m.victimUserId)
       return `💀 MAULING: ${mn} destroyed ${vn} by ${m.margin.toFixed(1)} pts`
     }),
   )
@@ -165,8 +176,8 @@ ${[...bashLines, ...maulLines].join('\n') || '—'}`
 
   const infLines = await Promise.all(
     newInf.map(async (ev) => {
-      const v = await displayNameForUser(leagueId, ev.victimUserId)
-      const i = await displayNameForUser(leagueId, ev.infectorUserId)
+      const v = await nameForUser( ev.victimUserId)
+      const i = await nameForUser( ev.infectorUserId)
       return `${v} turned by ${i} — margin: ${ev.scoreDifference.toFixed(1)} pts`
     }),
   )
@@ -179,12 +190,25 @@ ${infLines.length ? infLines.join('\n') : 'None'}`
       where: { team: { leagueId } },
     })
     const serums = items.filter((i) => i.itemType.includes('serum') && !i.isUsed).length
+    const awardedWeapons = items.filter((i) => i.acquiredAtWeek === week && i.itemType.startsWith('weapon_'))
+    const awardedSerums = items.filter((i) => i.acquiredAtWeek === week && i.itemType.includes('serum'))
+    const serumAwards = await prisma.zombieResourceLedgerEntry.findMany({
+      where: { leagueId, week, resourceType: 'serum', delta: { gt: 0 } },
+      select: { rosterId: true, delta: true },
+    })
+    const awardLines: string[] = []
+    for (const item of awardedWeapons) awardLines.push(`${await nameForUser( item.userId)} won ${item.itemLabel}`)
+    for (const item of awardedSerums) awardLines.push(`${await nameForUser( item.userId)} won ${item.itemLabel} (${item.acquiredReason ?? 'weekly award'})`)
+    for (const award of serumAwards) {
+      const owner = await prisma.roster.findUnique({ where: { id: award.rosterId }, select: { platformUserId: true } })
+      if (owner?.platformUserId) awardLines.push(`${await nameForUser( owner.platformUserId)} won ${award.delta} serum${award.delta === 1 ? '' : 's'}`)
+    }
     const weapons = items.filter((i) => i.itemType.startsWith('weapon_') && !i.isUsed)
     const bomb = weapons.some((i) => i.itemType === 'weapon_bomb')
     sectionInventory = `🎒 ITEM INVENTORY SNAPSHOT
 Serums held: ${serums}
-Active weapons: ${weapons.length} (${[...new Set(weapons.map((w) => w.itemType))].join(', ') || 'none'})
-Bomb status: ${bomb ? 'Active' : 'None'}`
+Weapons held: ${weapons.length} (${[...new Set(weapons.map((w) => w.itemType))].join(', ') || 'none'})
+Bomb status: ${bomb ? 'Held' : 'None'}\nThis week's awards: ${awardLines.join('; ') || 'None recorded'}`
   }
 
   let sectionDangerMatchups: string | undefined
@@ -201,12 +225,14 @@ Bomb status: ${bomb ? 'Active' : 'None'}`
         if (!m.awayRosterId) continue
         const h = await redraftOwnerStatus(leagueId, m.homeRosterId)
         const a = await redraftOwnerStatus(leagueId, m.awayRosterId)
-        const pair = infectionRiskPair(h, a, m.homeRosterId, m.awayRosterId, leagueId)
-        if (pair) danger.push(pair)
+        const pair = infectionRiskPair(h, a)
+        if (pair && h && a) danger.push(!z.whispererIsPublic && pair === 'Whisperer threat'
+          ? 'A Survivor faces a hidden Horde threat'
+          : `${await nameForUser(h.userId)} vs ${await nameForUser(a.userId)} — ${pair}`)
       }
     }
     sectionDangerMatchups = `⚠️ DANGER MATCHUPS — WEEK ${nextWeek}
-${danger.slice(0, 3).join('\n') || '—'}`
+${danger.join('\n') || '—'}`
   }
 
   let sectionUniverseMovement: string | undefined
@@ -246,7 +272,7 @@ Questions? Tag @Chimmy in chat.
     sectionDangerMatchups,
     sectionUniverseMovement,
     footer,
-    meta: { hordeSize, prevHordeSize: prevHorde, week, leagueName },
+    meta: { hordeSize, prevHordeSize: prevHorde, week, leagueName, experienceMode: z.experienceMode === 'simple' ? 'simple' : 'enhanced' },
   }
 }
 
@@ -279,21 +305,15 @@ async function redraftOwnerStatus(
 function infectionRiskPair(
   h: { userId: string; status: string } | null,
   a: { userId: string; status: string } | null,
-  homeRid: string,
-  awayRid: string,
-  leagueId: string,
 ): string | null {
-  void leagueId
-  void homeRid
-  void awayRid
   if (!h || !a) return null
   const hs = h.status.toLowerCase()
   const as = a.status.toLowerCase()
   if (hs.includes('survivor') && (as.includes('zombie') || as.includes('whisperer'))) {
-    return `🔴 Survivor vs Horde threat (matchup)`
+    return as.includes('whisperer') ? 'Whisperer threat' : 'Zombie threat'
   }
   if (as.includes('survivor') && (hs.includes('zombie') || hs.includes('whisperer'))) {
-    return `🔴 Survivor vs Horde threat (matchup)`
+    return hs.includes('whisperer') ? 'Whisperer threat' : 'Zombie threat'
   }
   return null
 }
@@ -306,6 +326,12 @@ function footerSchedule(z: { weeklyUpdateDay: number | null; weeklyUpdateHour: n
 }
 
 export function composeWeeklyUpdateBody(d: ZombieWeeklyUpdateDraft): string {
+  if (d.meta.experienceMode === 'simple') {
+    return [
+      d.header, d.sectionWhisperer, d.sectionNewInfections, d.sectionRevivals,
+      d.sectionInventory, d.sectionMoney, d.sectionDangerMatchups, d.footer,
+    ].filter(Boolean).join('\n\n')
+  }
   const parts = [
     d.header,
     d.sectionWhisperer,
@@ -326,73 +352,71 @@ export function composeWeeklyUpdateBody(d: ZombieWeeklyUpdateDraft): string {
 export async function postWeeklyUpdate(leagueId: string, week: number, draft: ZombieWeeklyUpdateDraft): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-
   const body = composeWeeklyUpdateBody(draft)
-  // AfSub prose: call `generateWeeklyRecap` from commissioner tools or a dedicated job — it creates its own row.
-
-  const ann = await prisma.zombieAnnouncement.create({
-    data: {
-      zombieLeagueId: z.id,
-      universeId: z.universeId,
-      type: 'weekly_update',
-      title: `Week ${week} — Horde report`,
-      content: body,
-      week,
-      isPosted: false,
-      isPublic: true,
-    },
-  })
-
-  if (z.weeklyUpdateApproval) {
-    await notifyCommissioner(leagueId, 'weekly_resolution_complete', 'Weekly update ready', `Week ${week} update is ready to review and post.`, {
-      week,
-      relatedEventId: ann.id,
-      relatedEventType: 'ZombieAnnouncement',
-      requiresAction: true,
+  const key = `zombie-weekly:${z.id}:${week}`
+  const existing = await prisma.zombieAnnouncement.findUnique({ where: { idempotencyKey: key } })
+  if (existing?.isPosted) return
+  if (!existing) {
+    const legacyPosted = await prisma.zombieAnnouncement.findFirst({
+      where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
+      select: { id: true },
     })
+    if (legacyPosted) return
+  }
+
+  if (z.weeklyUpdateApproval || !z.weeklyUpdateAutoPost) {
+    const ann = await prisma.zombieAnnouncement.upsert({
+      where: { idempotencyKey: key },
+      create: {
+        zombieLeagueId: z.id, universeId: z.universeId, type: 'weekly_update',
+        title: `Week ${week} — Horde report`, content: body, week,
+        isPosted: false, isPublic: true, idempotencyKey: key,
+      },
+      update: { content: body },
+    })
+    if (z.weeklyUpdateApproval && !existing) {
+      await notifyCommissioner(leagueId, 'weekly_resolution_complete', 'Weekly update ready', `Week ${week} update is ready to review and post.`, {
+        week, relatedEventId: ann.id, relatedEventType: 'ZombieAnnouncement', requiresAction: true,
+      })
+    }
     return
   }
 
-  if (!z.weeklyUpdateAutoPost) return
-
   const lg = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-  if (lg?.userId) {
-    const meta: Record<string, unknown> = {
-      senderIsHost: true,
-      contentType: 'host_announcement',
-      isPinned: true,
-      zombieWeeklyUpdate: true,
-      week,
-    }
-    if (z.bannerUrl) {
-      meta.cardData = { type: 'banner_image', url: z.bannerUrl }
-    }
-    await prisma.leagueChatMessage.create({
-      data: {
-        leagueId,
-        userId: lg.userId,
-        message: body.slice(0, 100_000),
-        type: 'host_announcement',
-        metadata: toPrismaJsonInput(meta),
+  if (!lg?.userId) throw new Error('League owner not found for weekly chat post')
+  await prisma.$transaction(async (tx) => {
+    const ann = await tx.zombieAnnouncement.upsert({
+      where: { idempotencyKey: key },
+      create: {
+        zombieLeagueId: z.id, universeId: z.universeId, type: 'weekly_update',
+        title: `Week ${week} — Horde report`, content: body, week,
+        isPosted: false, isPublic: true, idempotencyKey: key,
       },
+      update: { content: body },
     })
-  }
-
-  await prisma.zombieAnnouncement.update({
-    where: { id: ann.id },
-    data: { isPosted: true, postedAt: new Date() },
+    await tx.leagueChatMessage.upsert({
+      where: { zombieWeeklyAnnouncementId: ann.id },
+      create: {
+        leagueId, userId: lg.userId, message: body.slice(0, 100_000), type: 'host_announcement',
+        zombieWeeklyAnnouncementId: ann.id,
+        metadata: toPrismaJsonInput({
+          senderIsHost: true, contentType: 'host_announcement', isPinned: true,
+          zombieWeeklyUpdate: true, week,
+          ...(z.bannerUrl ? { cardData: { type: 'banner_image', url: z.bannerUrl } } : {}),
+        }),
+      },
+      update: {},
+    })
+    await tx.zombieAnnouncement.update({ where: { id: ann.id }, data: { isPosted: true, postedAt: new Date() } })
   })
 
   if (draft.meta.hordeSize - draft.meta.prevHordeSize >= 2) {
     const surv = await prisma.zombieLeagueTeam.count({ where: { leagueId, status: 'Survivor' } })
-    const primaryUserId =
-      z.commissionerId ??
-      (await prisma.roster.findFirst({ where: { leagueId }, select: { platformUserId: true } }))?.platformUserId ??
-      leagueId
+    const primaryUserId = z.commissionerId ??
+      (await prisma.roster.findFirst({ where: { leagueId }, select: { platformUserId: true } }))?.platformUserId ?? leagueId
     await queueAnimation(leagueId, week, 'horde_grows', primaryUserId, {
-      hordeSize: draft.meta.hordeSize,
-      survivorCount: surv,
-    })
+      hordeSize: draft.meta.hordeSize, survivorCount: surv,
+    }).catch(() => {})
   }
 }
 
@@ -415,7 +439,7 @@ export async function scheduleWeeklyUpdate(leagueId: string): Promise<void> {
   })
   if (!latest) return
   const week = latest.week
-  if (!z.weeklyUpdateAutoPost || z.weeklyUpdateApproval) return
+  if (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval) return
 
   const dup = await prisma.zombieAnnouncement.findFirst({
     where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
@@ -433,7 +457,7 @@ export async function tryPostWeeklyUpdateAfterResolution(
   zombieLeagueId: string,
 ): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
-  if (!z || !z.weeklyUpdateAutoPost || z.weeklyUpdateApproval) return
+  if (!z || (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval)) return
   if (z.weeklyUpdateDay != null && z.weeklyUpdateHour != null) return
 
   const dup = await prisma.zombieAnnouncement.findFirst({

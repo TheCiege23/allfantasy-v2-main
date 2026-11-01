@@ -686,8 +686,8 @@ export default function WaiverWirePage({
   const immediateAddAllowed = isImmediateAddAllowedToday(settings)
   // Why the season phase limits moves (offseason / playoff rules), and whether it closes them all.
   const phaseReason = phaseMoveBlockReason(settings)
-  const movesClosed = Boolean(
-    settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed,
+  const movesClosed = !settings || Boolean(
+    settings.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed,
   )
   const watchlistIdSet = useMemo(() => new Set(watchlistPlayerIds), [watchlistPlayerIds])
   const uniqueTeams = useMemo(
@@ -1259,7 +1259,7 @@ export default function WaiverWirePage({
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     addMode={immediateAddAllowed && !holdUntil}
                     waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil, { tInterpolate, language }) : null}
-                    movesClosedReason={movesClosed ? phaseReason : null}
+                    movesClosedReason={movesClosed ? phaseReason ?? "Checking player move availability…" : null}
                     actionLoading={actionPlayerId === p.id}
                     onRowClick={() => {
                       if (alreadyClaimed || movesClosed) return
@@ -1271,11 +1271,11 @@ export default function WaiverWirePage({
                       }
                     }}
                     onAdd={() => {
-                      if (alreadyClaimed) return
+                      if (alreadyClaimed || movesClosed) return
                       handleAddClick(p)
                     }}
                     onAddClick={() => {
-                      if (alreadyClaimed) return
+                      if (alreadyClaimed || movesClosed) return
                       setImmediateMode(false)
                       setDrawerPlayer(p)
                       setDrawerOpen(true)

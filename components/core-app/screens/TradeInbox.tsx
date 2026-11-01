@@ -13,6 +13,7 @@ import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { tradeInboxMessages } from '@/lib/core-app/messages/tradeInbox'
+import { tradeCenterPanelMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
@@ -229,7 +230,7 @@ function assetLine(a: OfferAsset): string {
   return meta ? `${a.name} — ${meta}` : a.name
 }
 
-type TimelineFilter = 'all' | 'needs_you' | 'sent' | 'completed' | 'closed'
+type TimelineFilter = 'all' | 'needs_you' | 'sent' | 'received' | 'completed' | 'closed'
 
 function statusLabel(status?: string): string {
   const normalized = String(status ?? '').toLowerCase()
@@ -431,9 +432,15 @@ export function TradeInbox(props: {
    * Offers tab with it, so an offer is visible from the builder without leaving it.
    */
   onNeedsYouCount?: (count: number | null) => void
+  /**
+   * The trade center's History tab (TradeCenterPanel): settled trades only — open offers live in its
+   * Active and Review tabs — filtered All · Sent · Received · Complete · Rejected.
+   */
+  historyMode?: boolean
 }) {
   const language = useOptionalLanguage().language
   const m = useMessages(tradeInboxMessages)
+  const hm = useMessages(tradeCenterPanelMessages)
   const copy = useCallback((value: string) => coreUiCopy(value, language), [language])
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
@@ -591,7 +598,9 @@ export function TradeInbox(props: {
     const unique: NativeRow[] = mergeImportedTradeTimelineRows(importedTradeTimelineRows(props.importedHistory ?? []),
       [...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])])
     return unique
+      .filter((row) => !props.historyMode || isCompleteStatus(row.status) || isClosedStatus(row.status))
       .filter((row) => {
+        if (timelineFilter === 'received') return row.direction === 'incoming'
         if (timelineFilter === 'needs_you') return row.direction === 'incoming' && !isCompleteStatus(row.status) && !isClosedStatus(row.status)
         if (timelineFilter === 'sent') return row.direction === 'outgoing'
         if (timelineFilter === 'completed') return isCompleteStatus(row.status)
@@ -838,19 +847,35 @@ export function TradeInbox(props: {
             */}
             <p>{copy('Where a grade was saved when an offer was made, it stays beside today’s so you can see how the decision aged.')}</p>
           </div>
-          <div className="af-tc-timeline-filters" aria-label={copy('Filter trade timeline')}>
-            {([
-              ['all', 'All'],
-              ['needs_you', 'Needs you'],
-              ['sent', 'Sent'],
-              ['completed', 'Completed'],
-              ['closed', 'Declined & expired'],
-            ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
-              <button key={key} type="button" data-on={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
-                {copy(label)}
-              </button>
-            ))}
-          </div>
+          {props.historyMode ? (
+            <div className="af-tc-timeline-filters" role="group" aria-label={hm.historyFiltersLabel}>
+              {([
+                ['all', hm.filterAll],
+                ['sent', hm.filterSent],
+                ['received', hm.filterReceived],
+                ['completed', hm.filterComplete],
+                ['closed', hm.filterRejected],
+              ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
+                <button key={key} type="button" data-on={timelineFilter === key} aria-pressed={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="af-tc-timeline-filters" aria-label={copy('Filter trade timeline')}>
+              {([
+                ['all', 'All'],
+                ['needs_you', 'Needs you'],
+                ['sent', 'Sent'],
+                ['completed', 'Completed'],
+                ['closed', 'Declined & expired'],
+              ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
+                <button key={key} type="button" data-on={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
+                  {copy(label)}
+                </button>
+              ))}
+            </div>
+          )}
         </header>
 
         {state === 'loading' && data == null ? (

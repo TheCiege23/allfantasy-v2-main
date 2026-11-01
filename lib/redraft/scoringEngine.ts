@@ -2,9 +2,11 @@ import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } fro
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
+import { campusSport } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
@@ -843,8 +845,8 @@ async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
   args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
-  if (!league || !isNativePlatform(league.platform)) return null
-  const { campusPointsForMatchup, campusSport } = await import('@/lib/c2c/campusScoring')
+  if (!league || !isNativePlatform(league.platform) || !campusSport(league)) return null
+  const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
   const sport = campusSport(league)
   if (sport === 'football') {
     return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
@@ -866,6 +868,7 @@ async function loadBasketballCampusPoints(
   const { nbaCampusPointsForMatchup } = await import('@/lib/c2c/nbaCampusMatchupScoring')
   return nbaCampusPointsForMatchup(prisma, { ...args, now: new Date(), scorer })
 }
+
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
@@ -896,7 +899,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (!season) return null
   const seasonYear = season.season
 
-  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true } })
+  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true, leagueType: true } })
   // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
   const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
@@ -957,6 +960,9 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = Math.round((home.points + points.home.points) * 100) / 100
     away.points = Math.round((away.points + points.away.points) * 100) / 100
   }
+  const zombieBaseScores = { home: home.points, away: away.points }
+  let zombieItems: import('@/lib/zombie/beta2025Items').ItemScoreReceipt | null = null
+  const zombieScoring = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform) && scoringLeague && isZombieLeagueLike(scoringLeague)
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds, ...(basketballCampus?.home.missingPlayerIds ?? []), ...(basketballCampus?.away.missingPlayerIds ?? [])]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -987,28 +993,47 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     }
   }
 
-  await prisma.redraftMatchup.update({
-    where: { id: matchupId },
-    data: {
-      homeScore: scoringMode === 'roto' ? 0 : home.points,
-      awayScore: scoringMode === 'roto' ? 0 : away.points,
-      status: isFinal ? 'final' : 'active',
-      lineupSnapshots: {
-        ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
-        ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
-        redraftScoring: {
-          scoredAt: new Date().toISOString(),
-          isComplete,
-          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
-          ...(campus ? { campus } : {}),
+  const persistScores = async (db: Pick<typeof prisma, 'redraftMatchup'>) => {
+    let previousSnapshots = m.lineupSnapshots
+    home.points = zombieBaseScores.home
+    away.points = zombieBaseScores.away
+    if (zombieScoring) {
+      previousSnapshots = (await db.redraftMatchup.findUniqueOrThrow({ where: { id: matchupId }, select: { lineupSnapshots: true } })).lineupSnapshots
+      zombieItems = await (await import('@/lib/zombie/beta2025ItemService')).loadBetaItemScoreReceipt({ leagueId, week, season: seasonYear, homeRosterId, awayRosterId, previousSnapshots }, db as never)
+      if (zombieItems) {
+        home.points = Math.round((home.points + zombieItems.home.bonus) * 100) / 100
+        away.points = Math.round((away.points + zombieItems.away.bonus) * 100) / 100
+      }
+    }
+    await db.redraftMatchup.update({
+      where: { id: matchupId },
+      data: {
+        homeScore: scoringMode === 'roto' ? 0 : home.points,
+        awayScore: scoringMode === 'roto' ? 0 : away.points,
+        status: isFinal ? 'final' : 'active',
+        lineupSnapshots: {
+          ...(previousSnapshots && typeof previousSnapshots === 'object' && !Array.isArray(previousSnapshots) ? previousSnapshots : {}),
+          ...(zombieItems ? { zombieItems: { ...zombieItems, homeBaseScore: zombieBaseScores.home, awayBaseScore: zombieBaseScores.away } } : {}),
+          ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
+          redraftScoring: {
+            scoredAt: new Date().toISOString(),
+            isComplete,
+            ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
+            ...(campus ? { campus } : {}),
           ...(basketballCampus ? { campus: basketballCampus } : {}),
-          home,
-          away,
-          missingPlayerIds,
+            home,
+            away,
+            missingPlayerIds,
+          },
         },
       },
-    },
-  })
+    })
+
+  }
+  if (zombieScoring) {
+    const { itemTransaction, lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')
+    await itemTransaction(async tx => { await lockItemLeague(tx, leagueId); await persistScores(tx) })
+  } else await persistScores(prisma)
 
   // G15.2b/G15.3 — best-effort, never throws.
   //  • matchup.finalized: once per matchup (deterministic key), on final result.

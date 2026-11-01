@@ -7,8 +7,10 @@
  * opened there renders the default look. This is the ONE decision for that surface.
  *
  * ⚠ NO NEW CLASSIFICATION. The answer is `resolveRedraftIdentity`, the foundation's rule
- * (lib/league-media/redraftIdentity.ts): native platform, plain redraft format, no specialty
- * variant, a sport the redraft engine runs. This wrapper only adds what /core needs on top:
+ * (lib/league-media/redraftIdentity.ts): a native redraft league, or an IMPORTED one whose stored data
+ * positively says redraft (batch B-ID); plain redraft format, no specialty variant, a sport the
+ * redraft engine runs. Since native leagues redirect from /core's Home to /league/[id], the imported
+ * case is the one most /core league screens actually render. This wrapper only adds what /core needs on top:
  *   - no `?league=` (the cross-league dashboard, career, settings…) → null, the default look;
  *   - the platform the page re-read for the league (`selectedLeagueRecord.platform`) wins over the
  *     list row's, the same precedence the page already uses for `nativeLeague` — a stale list row
@@ -20,11 +22,30 @@ import {
   type RedraftSportTheme,
 } from '@/lib/league-media/redraftIdentity'
 
+/**
+ * The league row /core re-read for this request (`leagueContext.league()`), as far as the identity
+ * reads it. The list row (`UserLeague`) carries no `settings`, and an IMPORTED league's redraft
+ * evidence lives only there (lib/league-media/redraftIdentity.ts `isImportedRedraftLeague`), so
+ * without this an imported league can never theme. Its format columns win over the list row's for
+ * the same reason its platform does: it is the fresh read.
+ */
+export type CoreShellFreshLeague = Pick<
+  RedraftIdentityLeague,
+  'sport' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'bestBallMode' | 'guillotineMode' | 'settings'
+>
+
 export function coreShellRedraftSport(
   league: RedraftIdentityLeague | null | undefined,
   freshPlatform?: string | null,
+  fresh?: CoreShellFreshLeague | null,
 ): RedraftSportTheme | null {
   if (!league) return null
   const platform = freshPlatform?.trim() ? freshPlatform : league.platform
-  return resolveRedraftIdentity({ ...league, platform })?.sport ?? null
+  const merged: RedraftIdentityLeague = { ...league, platform }
+  if (fresh) {
+    for (const key of ['sport', 'leagueType', 'leagueVariant', 'isDynasty', 'bestBallMode', 'guillotineMode', 'settings'] as const) {
+      if (fresh[key] !== undefined) (merged as Record<string, unknown>)[key] = fresh[key]
+    }
+  }
+  return resolveRedraftIdentity(merged)?.sport ?? null
 }

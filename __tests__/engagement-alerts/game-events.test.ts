@@ -27,7 +27,7 @@ describe('basketball: end of Q1, halftime, end of Q3, final — nothing per play
   it.each(['NBA', 'WNBA'])('%s sends Q1, half and Q3 but not Q4 checkpoints', sport => {
     expect(keys(sport, { period: 1 }, { period: 2, homeLinescores: [25, 2], awayLinescores: [20, 0] })).toEqual(['interval:1'])
     expect(keys(sport, { period: 2 }, { period: 2, status: 'STATUS_HALFTIME', clock: '0:00' })).toEqual(['halftime'])
-    expect(keys(sport, { period: 3 }, { period: 4 })).toEqual(['interval:3'])
+    expect(keys(sport, { period: 3 }, { period: 4 })).toEqual(['interval:3', 'close'])
     expect(keys(sport, { period: 4, clock: '5:00', homeScore: 90, awayScore: 70 }, { period: 4, clock: '0:00', homeScore: 90, awayScore: 70, statusDetail: 'End of 4th' })).toEqual([])
   })
   it('reports the score at the end of the period from line scores when the poll arrives late', () => {
@@ -35,36 +35,28 @@ describe('basketball: end of Q1, halftime, end of Q3, final — nothing per play
     expect(a).toMatchObject({ type: 'game_halftime', title: 'Halftime: AWY 52 — HOM 55' })
   })
   it('men’s college basketball plays halves: halftime only', () => {
-    expect(keys('NCAAB', { period: 1 }, { period: 2 })).toEqual(['halftime'])
+    expect(keys('NCAAB', { period: 1 }, { period: 2 })).toEqual(['halftime', 'close'])
   })
   it('sends no per-play alerts for basketball', () => {
     for (const sport of ['NBA', 'WNBA', 'NCAAB']) {
       expect(gamePlayAlerts({ sport, drives: [], scoringPlays: [{ id: 'a', text: 'Three' }], basketball: { plays: [{ id: 'b', text: 'Dunk', scoring: true, athleteIds: [] }] } } as unknown as LiveGameDetail)).toEqual([])
     }
   })
-  it('in the last 60 seconds, alerts on a tie, a lead change or a 1-4 point game — not a 6-point game', () => {
-    const late = { period: 4, clock: '0:45' }
-    expect(gameStateAlerts('NBA', game({ ...late, homeScore: 98, awayScore: 96 }), game({ ...late, homeScore: 98, awayScore: 98 }))[0]).toMatchObject({ type: 'game_close', audience: 'broad', title: expect.stringContaining('Tied') })
-    expect(gameStateAlerts('NBA', game({ ...late, homeScore: 98, awayScore: 97 }), game({ ...late, homeScore: 98, awayScore: 100 }))[0]!.title).toContain('Lead change')
-    expect(gameStateAlerts('NBA', game({ ...late, homeScore: 98, awayScore: 95 }), game({ ...late, homeScore: 98, awayScore: 96 }))[0]!.title).toContain('Crunch time')
-    // The moment a game first turns close it is ONE "close game" alert, not that plus a crunch-time alert.
-    expect(keys('NBA', { ...late, homeScore: 98, awayScore: 92 }, { ...late, homeScore: 98, awayScore: 94 })).toEqual(['close'])
-    expect(keys('NBA', { ...late, homeScore: 100, awayScore: 92 }, { ...late, homeScore: 102, awayScore: 92 })).toEqual([])
-    expect(keys('NBA', { period: 4, clock: '1:30', homeScore: 98, awayScore: 96 }, { period: 4, clock: '1:10', homeScore: 98, awayScore: 98 })).toEqual([])
+  it('alerts once when an NBA game enters the final quarter within seven points, without basket alerts', () => {
+    expect(keys('NBA', { period: 3, homeScore: 90, awayScore: 82 }, { period: 4, homeScore: 90, awayScore: 83, homeLinescores: [25, 25, 40], awayLinescores: [20, 25, 38] })).toEqual(['interval:3', 'close'])
+    expect(keys('NBA', { period: 4, homeScore: 90, awayScore: 84 }, { period: 4, homeScore: 92, awayScore: 86 })).toEqual([])
+    expect(keys('NBA', { period: 4, homeScore: 90, awayScore: 82 }, { period: 4, homeScore: 90, awayScore: 83 })).toEqual(['close'])
   })
-  it('names the player who scored the crunch-time basket, with a headshot', () => {
-    const detail = { sport: 'NBA', players: { '9': [{ name: 'Jalen Brunson', headshot: 'https://img/9.png', group: 'basketball' }] }, basketball: { plays: [{ id: 'p', scoring: true, athleteIds: ['9'] }] } } as unknown as LiveGameDetail
-    const [a] = gameStateAlerts('NBA', game({ period: 4, clock: '0:30', homeScore: 98, awayScore: 99 }), game({ period: 4, clock: '0:20', homeScore: 100, awayScore: 99 }), detail)
-    expect(a!.body).toContain('Jalen Brunson scores')
-    expect(a!.imageUrl).toBe('https://img/9.png')
+  it('uses the second half as the final period in men’s college basketball', () => {
+    expect(keys('NCAAB', { period: 1, homeScore: 50, awayScore: 45 }, { period: 2, homeScore: 50, awayScore: 45, homeLinescores: [50, 0], awayLinescores: [45, 0] })).toContain('close')
   })
 })
 
 describe('close-game alerts for every sport carry the score and where to watch', () => {
   it.each([
     ['NFL', 4, '2:00', 8, true], ['NFL', 4, '2:30', 3, false], ['NFL', 4, '1:00', 9, false], ['NCAAF', 3, '1:00', 3, false],
-    ['NBA', 4, '0:59', 4, true], ['NBA', 4, '1:30', 2, false], ['NCAAB', 2, '38.5', 2, true],
-    ['NHL', 3, '1:00', 1, true], ['NHL', 3, '3:00', 1, false], ['MLB', 8, '', 1, true], ['MLB', 7, '', 1, false], ['SOCCER', 2, '85', 1, true],
+    ['NBA', 4, '10:00', 7, true], ['NBA', 4, '1:30', 8, false], ['NCAAB', 2, '18:00', 7, true],
+    ['NHL', 3, '14:00', 2, true], ['NHL', 2, '1:00', 1, false], ['MLB', 9, '', 2, true], ['MLB', 8, '', 1, false], ['SOCCER', 2, '85', 1, false],
   ])('applies %s late-game rules (period %s, %s left, %s apart → %s)', (sport, period, clock, gap, expected) => {
     expect(isCloseLateGame(sport as string, game({ period: period as number, clock: clock as string, homeScore: gap as number, awayScore: 0 }))).toBe(expected)
   })
@@ -102,50 +94,47 @@ describe('hockey', () => {
   it('sends the end of the 1st and 2nd periods; the 3rd ends in a final or overtime', () => {
     expect(keys('NHL', { period: 1 }, { period: 2 })).toEqual(['interval:1'])
     expect(keys('NHL', { period: 2 }, { period: 3 })).toEqual(['interval:2'])
-    expect(keys('NHL', { period: 3, clock: '5:00', homeScore: 2, awayScore: 2 }, { period: 4, clock: '5:00', homeScore: 2, awayScore: 2 })).toEqual(['overtime'])
+    expect(keys('NHL', { period: 3, clock: '5:00', homeScore: 2, awayScore: 2 }, { period: 4, clock: '5:00', homeScore: 2, awayScore: 2 })).toEqual([])
   })
   const hockey = (plays: object[]) => ({ sport: 'NHL', drives: [], scoringPlays: [], home: { id: 'h', abbrev: 'HOM' }, away: { id: 'a', abbrev: 'AWY' },
     players: { s1: [{ name: 'Auston Matthews', headshot: 'https://img/s1.png', group: 'skaters' }], g1: [{ name: 'Igor Shesterkin', headshot: 'https://img/g1.png', group: 'goalies' }] },
     hockey: { plays, box: { home: { goalies: [] }, away: { goalies: [{ athleteId: 'g1' }] } } } } as unknown as LiveGameDetail)
-  it('sends goals only in the last two minutes of a period in a game within two, with the scorer and headshot', () => {
+  it('sends every goal, with the scorer and headshot', () => {
     const early = { id: 'e', text: 'Goal', scoring: true, period: 2, clock: '10:00', homeScore: 1, awayScore: 0, athleteIds: ['s1'], teamId: 'h' }
     const late = { id: 'l', text: 'Goal', scoring: true, period: 3, clock: '1:30', homeScore: 2, awayScore: 2, athleteIds: ['s1'], teamId: 'h' }
     const out = gamePlayAlerts(hockey([early, { ...late, homeScore: 1, awayScore: 2, id: 'x', clock: '15:00', scoring: false, type: 'Hit' }, late]))
-    expect(out.map(a => a.key)).toEqual(['play:l'])
+    expect(out.map(a => a.key)).toEqual(['play:e', 'play:l'])
     expect(out[0]).toMatchObject({ imageUrl: 'https://img/s1.png', severity: 'high' })
     expect(out[0]!.body).toContain('Auston Matthews scores')
   })
-  it('names the goalie on a big late save against the trailing team, at most twice per game', () => {
+  it('does not send saves', () => {
     const save = (id: string) => ({ id, text: 'Shot saved', type: 'Shot', scoring: false, period: 3, clock: '0:40', homeScore: 2, awayScore: 3, athleteIds: ['s1', 'g1'], teamId: 'h' })
     const out = gamePlayAlerts(hockey([{ id: '0', text: 'Goal', scoring: true, period: 1, clock: '5:00', homeScore: 2, awayScore: 3, athleteIds: [], teamId: 'a' }, save('a'), save('b'), save('c')]))
-    expect(out.map(a => a.key)).toEqual(['play:a', 'play:b'])
-    expect(out[0]!.body).toContain('Igor Shesterkin')
+    expect(out.map(a => a.key)).toEqual(['play:0'])
   })
 })
 
 describe('baseball', () => {
   const mlb = (prev: Partial<GameObservation>, next: Partial<GameObservation>) => keys('MLB', prev, next)
-  it('sends no inning updates through six innings', () => {
+  it('sends end-of-inning updates from the first inning', () => {
     expect(mlb({ period: 6, statusDetail: 'Top 6th' }, { period: 6, statusDetail: 'Bot 6th' })).toEqual([])
-    expect(mlb({ period: 5, statusDetail: 'Bot 5th' }, { period: 6, statusDetail: 'Top 6th' })).toEqual([])
+    expect(mlb({ period: 5, statusDetail: 'Bot 5th' }, { period: 6, statusDetail: 'Top 6th', homeLinescores: [1, 0, 0, 0, 1, 0], awayLinescores: [0, 0, 1, 0, 0, 0] })).toEqual(['inning:5:end'])
   })
-  it('sends the seventh-inning stretch, then the end of every inning', () => {
-    expect(mlb({ period: 7, statusDetail: 'Top 7th' }, { period: 7, statusDetail: 'Mid 7th' })).toEqual(['inning:7:mid'])
+  it('sends the end of an inning without a mid-inning stretch alert', () => {
+    expect(mlb({ period: 7, statusDetail: 'Top 7th' }, { period: 7, statusDetail: 'Mid 7th' })).toEqual([])
     expect(mlb({ period: 7, statusDetail: 'Bot 7th' }, { period: 7, statusDetail: 'End 7th' })).toEqual(['inning:7:end'])
-    expect(mlb({ period: 8, statusDetail: 'Bot 8th' }, { period: 9, statusDetail: 'Top 9th' })).toEqual(['inning:8:end'])
+    expect(mlb({ period: 8, statusDetail: 'Bot 8th' }, { period: 9, statusDetail: 'Top 9th', homeScore: 5, awayScore: 0, homeLinescores: [0, 0, 1, 0, 0, 0, 0, 4, 0], awayLinescores: [0, 0, 0, 0, 0, 0, 0, 0, 0] })).toEqual(['inning:8:end'])
   })
-  it('one buzz, not two, when a poll skips from the top of the 7th to the 8th', () => {
-    expect(mlb({ period: 7, statusDetail: 'Top 7th' }, { period: 8, statusDetail: 'Top 8th' })).toEqual(['inning:7:end'])
+  it('does not announce a missed inning with a later live score when line scores are unavailable', () => {
+    expect(mlb({ period: 7, statusDetail: 'Top 7th' }, { period: 8, statusDetail: 'Top 8th' })).toEqual([])
   })
-  it('sends every scoring play with the batter and a headshot, and labels multi-run homers', () => {
+  it('does not send at-bat alerts', () => {
     const atBats = [{ id: 'run', scoring: true, result: 'Judge singled to left, Soto scored', batterId: '1', inning: 3, half: 'top', events: [] },
       { id: 'hr', scoring: true, resultType: 'Home Run', result: 'Ohtani homered to right (3-run)', batterId: '2', inning: 6, half: 'bottom', events: [] },
       { id: 'out', scoring: false, resultType: 'triple', result: 'Triple', events: [] }]
     const players = { '1': [{ name: 'Aaron Judge', headshot: 'https://img/1.png', group: 'batting' }], '2': [{ name: 'Shohei Ohtani', headshot: 'https://img/2.png', group: 'batting' }] }
     const out = gamePlayAlerts({ sport: 'MLB', drives: [], scoringPlays: [], players, baseball: { atBats } } as unknown as LiveGameDetail)
-    expect(out.map(x => x.key)).toEqual(['play:run', 'play:hr'])
-    expect(out[1]).toMatchObject({ imageUrl: 'https://img/2.png', title: expect.stringContaining('3-run home run') })
-    expect(out[0]!.body).toContain('Aaron Judge')
+    expect(out).toEqual([])
   })
 })
 
@@ -232,13 +221,12 @@ describe('channel policy', () => {
   })
 })
 
-describe('personal starter alerts for NBA, NHL and MLB', () => {
-  it('MLB: a scoring at-bat or homer by the batter', async () => {
+describe('personal starter alerts', () => {
+  it('does not send MLB at-bat alerts', async () => {
     const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
     const out = starterAlerts({ sport: 'MLB', drives: [], scoringPlays: [], players: { b: [{ name: 'Aaron Judge', headshot: 'https://img/b.png', group: 'batting', labels: [], stats: [] }] },
       baseball: { atBats: [{ id: 'x', batterId: 'b', scoring: false, resultType: 'Home Run', result: 'Judge homered (2-run)', events: [] }, { id: 'y', batterId: 'b', scoring: false, resultType: 'Single', result: 'Single', events: [] }] } } as unknown as LiveGameDetail)
-    expect(out).toHaveLength(1)
-    expect(out[0]).toMatchObject({ starterAthleteId: 'b', type: 'game_starter_play', imageUrl: 'https://img/b.png', title: '⭐ Your starter Aaron Judge: 2-run home run' })
+    expect(out).toEqual([])
   })
   it('NHL: the goal scorer and the assists, never the goalie', async () => {
     const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
@@ -247,13 +235,13 @@ describe('personal starter alerts for NBA, NHL and MLB', () => {
       hockey: { plays: [{ id: 'p', scoring: true, text: 'Goal', period: 1, clock: '5:00', athleteIds: ['s', 'a', 'g'] }], box: { home: { goalies: [{ athleteId: 'g' }] }, away: { goalies: [] } } } } as unknown as LiveGameDetail)
     expect(out.map(a => [a.starterAthleteId, a.title.split(': ')[1]])).toEqual([['s', 'GOAL'], ['a', 'assist']])
   })
-  it('basketball: milestones only — the highest points milestone, and a triple-double over a double-double', async () => {
+  it('does not send basketball milestones between period checkpoints', async () => {
     const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')
     const line = (pts: number, reb: number, ast: number) => [{ name: 'Nikola Jokic', headshot: null, group: 'basketball', labels: ['PTS', 'REB', 'AST', 'STL', 'BLK'], stats: [pts, reb, ast, 1, 0].map(String) }]
     const sent = (pts: number, reb: number, ast: number) => starterAlerts({ sport: 'NBA', drives: [], scoringPlays: [], players: { j: line(pts, reb, ast) } } as unknown as LiveGameDetail).filter(a => !a.silent).map(a => a.key)
     expect(sent(12, 4, 3)).toEqual([])
-    expect(sent(31, 12, 11)).toEqual(['starter:pts30:j', 'starter:triple_double:j'])
-    expect(sent(22, 11, 2)).toEqual(['starter:pts20:j', 'starter:double_double:j'])
+    expect(sent(31, 12, 11)).toEqual([])
+    expect(sent(22, 11, 2)).toEqual([])
   })
   it('sends nothing for football — bigPlayNotifier covers NFL starters', async () => {
     const { starterAlerts } = await import('@/lib/engagement-alerts/gameEvents')

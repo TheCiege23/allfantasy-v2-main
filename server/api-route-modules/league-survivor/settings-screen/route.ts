@@ -12,6 +12,13 @@
  *    assignment or a locked tribe plan;
  *  - the idol draw stays where IdolSetup put it: the idol count is saved through
  *    saveSurvivorIdolConfig, keeping its mode, picks and hide flag; the drawn types are never read.
+ *  - the island banner scene (settings.survivorIslandScene) is optional in the form, editable all
+ *    season, and must be one of SURVIVOR_ISLAND_SCENES or 'auto' (400 otherwise). Island control on
+ *    the /core Commissioner screen saves it, and its inline rule edits, through this same POST.
+ *  - house rules → League.settings.survivorHouseRules; weekly tribe prizes →
+ *    League.settings.survivorWeeklyPrizes; harsh token loss → League.survivorExileHarshTokenLoss;
+ *    merge naming → League.settings.mergeNamingMode (the late-season reader); co-commissioner mode,
+ *    jury and tribe chats → the foundation settings.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -29,16 +36,43 @@ import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPla
 import { readStoredTribePlan } from '@/lib/survivor/survivorTribePlan'
 import { defaultTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { upsertSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
+import {
+  readSurvivorHouseRules,
+  readSurvivorWeeklyPrizes,
+  SURVIVOR_HOUSE_RULES_KEY,
+  SURVIVOR_WEEKLY_PRIZES_KEY,
+} from '@/lib/survivor/survivorWeeklyPrizes'
+import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/survivorRealGameChallengeLogic'
+import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { readPrizePhaseRules, SURVIVOR_PRIZE_PHASE_RULES_KEY, validatePrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { readThievesCannotStealFromEachOther, SURVIVOR_THIEVES_RULE_KEY } from '@/lib/survivor/survivorRewardModel'
+import { settingsErrorMessages, settingsRefusalMessages, type SettingsRefusalCode } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { messagesFor } from '@/lib/i18n/messages'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
+  isSurvivorIslandScenePreference,
   lockedChanges,
   parseSettingsForm,
-  validateSettingsForm,
+  readSurvivorIslandScene,
+  settingsFormErrors,
   type SurvivorSettingsContext,
   type SurvivorSettingsForm,
   type SurvivorSettingsLocks,
+  weeklyPrizesFromForm,
+  realGameSettingsFromForm,
+  SURVIVOR_CHALLENGE_SETTING_DEFAULTS,
+  changedSideGameScreenKeys,
+  sideGamePatchError,
+  sideGamesForScreen,
 } from '@/lib/survivor/survivorSettingsScreen'
+import {
+  lockedSideGameKeys,
+  readSurvivorSideGameSettings,
+  SURVIVOR_SIDE_GAMES_KEY,
+  validateSurvivorSideGamePatch,
+  type SurvivorSideGameKey,
+} from '@/lib/survivor/survivorSideGameSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,15 +83,37 @@ function rec(value: unknown): Rec {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Rec) : {}
 }
 
+type Lang = 'en' | 'es'
+const langOf = (language: unknown): Lang => (String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en')
+
+/** League.language, or English when there is no league to ask (or the read fails). */
+async function leagueLang(leagueId: string | null | undefined): Promise<Lang> {
+  if (!leagueId) return 'en'
+  try {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { language: true } })
+    return langOf((row as { language?: unknown } | null)?.language)
+  } catch {
+    return 'en'
+  }
+}
+
+/** A refusal in the league's language with its stable code: `{ error, code, ...extra }`. */
+function refuse(lang: Lang, code: SettingsRefusalCode, status: number, extra: Rec = {}, detail = ''): NextResponse {
+  const m = messagesFor(settingsRefusalMessages, lang)
+  const entry = m[code] as string | ((d: string) => string)
+  const error = typeof entry === 'function' ? entry(detail) : entry
+  return NextResponse.json({ error, code, ...extra }, { status })
+}
+
 async function authorize(ctx: Ctx) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   const { leagueId } = await ctx.params
-  if (!leagueId) return { error: NextResponse.json({ error: 'Missing leagueId' }, { status: 400 }) }
+  if (!userId) return { error: refuse(await leagueLang(leagueId), 'unauthorized', 401) }
+  if (!leagueId) return { error: refuse('en', 'missingLeague', 400) }
   const access = await resolveSurvivorAccessContext(leagueId, userId)
-  if (!access) return { error: NextResponse.json({ error: 'League not found' }, { status: 404 }) }
-  if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: NextResponse.json({ error: 'Commissioner access required' }, { status: 403 }) }
+  if (!access) return { error: refuse(await leagueLang(leagueId), 'leagueNotFound', 404) }
+  if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: refuse(await leagueLang(leagueId), 'commissionerOnly', 403) }
   return { leagueId, userId, access }
 }
 
@@ -69,12 +125,16 @@ export interface SurvivorSettingsScreenState {
   /** Offer "Chimmy's roster" only to a league that already runs it (existing leagues keep it). */
   chimmyBossAvailable: boolean
   commissionerPlays: boolean
+  /** League.language ('en' | 'es'): validation errors follow it, on the server and on the screen. */
+  language?: 'en' | 'es'
+  /** Side-game keys locked this season (the side games' own lock rule, shared with league settings → Exile). */
+  sideGameLocked?: SurvivorSideGameKey[]
 }
 
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true },
+    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true, survivorExileHarshTokenLoss: true, language: true },
   })
   if (!league) return null
   const settings = rec(league.settings)
@@ -83,11 +143,15 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
   // Show the boss the league really plays: outside the NBA a legacy Chimmy value is the median.
   const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, league.sport) }
   const plan = readSurvivorFullSeasonPlan(settings)
-  const [draftStarted, assigned, idolView] = await Promise.all([
+  const prizes = readSurvivorWeeklyPrizes(settings)
+  const realGame = readRealGameSettings(settings)
+  const [draftStarted, assigned, idolView, sideGameLockCtx] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
     getSurvivorIdolSetupView(leagueId, { isCommissioner: true, canSeeDraw: viewer.canSeeDraw }),
+    import('@/lib/survivor/survivorSideGameService').then((m) => m.sideGameLockContext(leagueId)).catch(() => ({ draftStarted: true, seasonStarted: true })), // fail closed: locks hold
   ])
+  const sideGames = readSurvivorSideGameSettings(settings, { harshTokenLoss: league.survivorExileHarshTokenLoss })
   const firstWeek = plan?.startWeek ?? 1
   const lastWeek = plan?.endWeek ?? 13
   return {
@@ -115,11 +179,34 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
       spectatorPageEnabled: foundation.spectatorPageEnabled,
+      islandScene: readSurvivorIslandScene(settings),
+      coCommissionerMode: foundation.coCommissionerMode,
+      mergeNamingMode: stored.mergeNamingMode,
+      juryEnabled: foundation.juryEnabled,
+      tribeChatsEnabled: foundation.tribeChatsEnabled,
+      exileHarshTokenLoss: league.survivorExileHarshTokenLoss === true,
+      houseRules: readSurvivorHouseRules(settings),
+      winningTribeFaabPerPlayer: prizes.winningTribeFaabPerPlayer,
+      topScorerReward: prizes.topScorerReward,
+      topScorerAmount: prizes.topScorerAmount,
+      topScorerPowerType: prizes.topScorerPowerType,
+      tribeTieBreakPosition: prizes.tribeTieBreakPosition,
+      realGameEnabled: realGame.enabled,
+      realGamePerWeek: realGame.perWeek,
+      realGamePrizeType: realGame.prize.type,
+      realGamePrizeAmount: realGame.prize.type === 'none' ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : realGame.prize.amount,
+      challengeFaabWeeklyCap: readChallengeFaabWeeklyCap(settings),
+      payInTribeWeeksAfterMerge: prizes.payInTribeWeeksAfterMerge,
+      thievesCannotStealFromEachOther: readThievesCannotStealFromEachOther(settings),
+      prizePhaseRules: readPrizePhaseRules(settings),
+      sideGames: sideGamesForScreen(sideGames),
     },
-    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek },
+    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL'), sideGames },
+    sideGameLocked: lockedSideGameKeys(sideGameLockCtx),
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
     chimmyBossAvailable: late.exileBossMode === 'chimmy_roster',
     commissionerPlays: foundation.commissionerParticipationMode === 'participating_player',
+    language: String((league as { language?: string | null }).language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en',
   }
 }
 
@@ -127,7 +214,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const auth = await authorize(ctx)
   if ('error' in auth) return auth.error
   const state = await loadState(auth.leagueId, { canSeeDraw: auth.access.decisions.canSeeHiddenIdolAssignments })
-  if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  if (!state) return refuse('en', 'leagueNotFound', 404)
   return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -137,26 +224,43 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId, userId, access } = auth
   const viewer = { canSeeDraw: access.decisions.canSeeHiddenIdolAssignments }
   const body = rec(await req.json().catch(() => null))
+  const sceneRaw = rec(body.form).islandScene
+  if (sceneRaw !== undefined && !isSurvivorIslandScenePreference(sceneRaw)) {
+    return refuse(await leagueLang(leagueId), 'unknownScene', 400)
+  }
   const next = parseSettingsForm(body.form)
-  if (!next) return NextResponse.json({ error: 'Send the whole settings form.' }, { status: 400 })
+  if (!next) return refuse(await leagueLang(leagueId), 'malformedForm', 400)
 
   const state = await loadState(leagueId, viewer)
-  if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  if (!state) return refuse('en', 'leagueNotFound', 404)
+  const lang: Lang = state.language ?? 'en'
   const changed = changedSettingsKeys(state.form, next)
   if (!changed.length) return NextResponse.json({ ok: true, unchanged: true, state })
 
   const locked = lockedChanges(changed, state.locks)
-  if (locked.length) {
-    return NextResponse.json({ error: 'These settings locked when the draft started. Only the vote deadline, the Exile boss and sharing can change during the season.', locked }, { status: 409 })
+  if (locked.length) return refuse(lang, 'settingsLocked', 409, { locked })
+  if (next.exileBossMode === 'chimmy_roster' && !state.chimmyBossAvailable) return refuse(lang, 'chimmyBossUnavailable', 422)
+  if (state.commissionerPlays && next.tribeFormation === 'commissioner_manual') return refuse(lang, 'playingCommissionerManualTribes', 409)
+  // Validation errors in the league's language, each with a stable code (`settingsErrorMessages`).
+  const detailed = settingsFormErrors(next, state.context, messagesFor(settingsErrorMessages, state.language ?? 'en'))
+  if (detailed.length) {
+    return NextResponse.json({ error: detailed[0]!.message, code: detailed[0]!.code, errors: detailed.map(e => e.message), codes: detailed.map(e => e.code) }, { status: 422 })
   }
-  if (next.exileBossMode === 'chimmy_roster' && !state.chimmyBossAvailable) {
-    return NextResponse.json({ error: "Chimmy's roster boss is only kept for leagues that already use it." }, { status: 422 })
+
+  // The key side games: the SAME validator and season locks league settings → Exile saves with.
+  let sideGamePatchResult: Extract<ReturnType<typeof validateSurvivorSideGamePatch>, { ok: true }> | null = null
+  const sideKeys = changedSideGameScreenKeys(state.form.sideGames, next.sideGames)
+  if (sideKeys.length && next.sideGames && state.context.sideGames) {
+    const patch: Rec = {}
+    for (const k of sideKeys) patch[k] = next.sideGames[k]
+    const checked = validateSurvivorSideGamePatch(state.context.sideGames, patch, state.sideGameLocked ?? [])
+    if (!checked.ok) {
+      // The same bilingual `{ error, code }` shape as every other refusal from this route.
+      const e = sideGamePatchError(checked, Object.keys(patch), messagesFor(settingsErrorMessages, lang))
+      return NextResponse.json({ error: e.message, code: e.code }, { status: checked.code === 'locked' ? 409 : 422 })
+    }
+    sideGamePatchResult = checked
   }
-  if (state.commissionerPlays && next.tribeFormation === 'commissioner_manual') {
-    return NextResponse.json({ error: 'A playing commissioner must use system-run tribe formation.' }, { status: 409 })
-  }
-  const errors = validateSettingsForm(next, state.context)
-  if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const has = (key: keyof SurvivorSettingsForm) => changed.includes(key)
   const outcome = await prisma.$transaction(async tx => {
@@ -183,6 +287,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('shareCardsEnabled')) foundationPatch.shareCardsEnabled = next.shareCardsEnabled
     if (has('publicMomentPages')) foundationPatch.publicMomentPages = next.publicMomentPages
     if (has('spectatorPageEnabled')) foundationPatch.spectatorPageEnabled = next.spectatorPageEnabled
+    if (has('coCommissionerMode')) foundationPatch.coCommissionerMode = next.coCommissionerMode
+    if (has('juryEnabled')) foundationPatch.juryEnabled = next.juryEnabled
+    if (has('tribeChatsEnabled')) foundationPatch.tribeChatsEnabled = next.tribeChatsEnabled
     if (has('tribeCount')) {
       // Same reset the tribe panel does on a count change: default identities and capacities.
       foundationPatch.tribeCount = next.tribeCount
@@ -193,11 +300,41 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('exileBossMode')) latePatch.exileBossMode = next.exileBossMode
     if (has('exileBossFixedScore') || (has('exileBossMode') && next.exileBossMode === 'fixed')) latePatch.exileBossFixedScore = next.exileBossFixedScore
     if (has('exileBossTopN')) latePatch.exileBossTopN = next.exileBossTopN
+    // The island banner's scene (lib/core-app/survivorIsland.ts islandView reads it from the summary).
+    if (has('islandScene') && next.islandScene) latePatch.survivorIslandScene = next.islandScene
+    if (has('mergeNamingMode')) latePatch.mergeNamingMode = next.mergeNamingMode
+    // League-rule extras that live beside the foundation settings, not in them.
+    if (has('houseRules')) latePatch[SURVIVOR_HOUSE_RULES_KEY] = next.houseRules.trim()
+    if ((['winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType', 'tribeTieBreakPosition', 'payInTribeWeeksAfterMerge'] as const).some(has)) {
+      latePatch[SURVIVOR_WEEKLY_PRIZES_KEY] = weeklyPrizesFromForm(next)
+    }
+    if ((['realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount'] as const).some(has)) {
+      latePatch[REAL_GAME_SETTINGS_KEY] = realGameSettingsFromForm(next, current[REAL_GAME_SETTINGS_KEY])
+    }
+    if (has('challengeFaabWeeklyCap')) latePatch[SURVIVOR_CHALLENGE_FAAB_CAP_KEY] = next.challengeFaabWeeklyCap
+    // Reward rules (validated by validateSettingsForm above; stored in their canonical shape).
+    if (has('thievesCannotStealFromEachOther')) latePatch[SURVIVOR_THIEVES_RULE_KEY] = next.thievesCannotStealFromEachOther
+    if (has('prizePhaseRules')) {
+      const rules = validatePrizePhaseRules(next.prizePhaseRules, 'en')
+      if (rules.ok) latePatch[SURVIVOR_PRIZE_PHASE_RULES_KEY] = rules.rules
+    }
+    // Re-validated against the side games stored INSIDE this transaction, so a concurrent save from
+    // league settings → Exile is merged rather than overwritten.
+    if (sideGamePatchResult) {
+      const stored = readSurvivorSideGameSettings(current, { harshTokenLoss: state.form.exileHarshTokenLoss })
+      const merged = validateSurvivorSideGamePatch(stored, sideGamePatchResult.patch, state.sideGameLocked ?? [])
+      if (!merged.ok) {
+        const sideGameError = sideGamePatchError(merged, Object.keys(sideGamePatchResult.patch), messagesFor(settingsErrorMessages, lang))
+        return { ok: false as const, status: merged.code === 'locked' ? 409 : 422, error: merged.error, sideGameError }
+      }
+      latePatch[SURVIVOR_SIDE_GAMES_KEY] = merged.settings
+    }
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}
     if (has('swapEnabled') || has('swapWeek')) columns.survivorSwapWeek = next.swapEnabled ? next.swapWeek : null
     if (has('finalistCount')) columns.survivorFinal3 = next.finalistCount === 3
+    if (has('exileHarshTokenLoss')) columns.survivorExileHarshTokenLoss = next.exileHarshTokenLoss
 
     if (has('idolCount')) {
       const idol = await getSurvivorIdolSetupView(leagueId, { isCommissioner: true }, tx)
@@ -225,7 +362,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     })
     return { ok: true as const, nextFoundation }
   })
-  if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status })
+  // A side-game refusal from inside the transaction keeps its own bilingual `{ error, code }`.
+  if (!outcome.ok && 'sideGameError' in outcome && outcome.sideGameError) {
+    return NextResponse.json({ error: outcome.sideGameError.message, code: outcome.sideGameError.code }, { status: outcome.status })
+  }
+  if (!outcome.ok) return refuse(lang, 'idolSaveFailed', outcome.status, {}, typeof outcome.error === 'string' ? outcome.error : '')
 
   const f = outcome.nextFoundation
   if (changed.some(k => ['tribeCount', 'tribeFormation', 'mergeTrigger', 'mergeWeek', 'mergeActivePlayerCount', 'selfVotesAllowed', 'exileEnabled', 'exileReturnTokens', 'idolCount', 'voteTime'].includes(k))) {

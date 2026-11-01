@@ -18,6 +18,7 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
 import { ensureWeeklyCall, settleWeeklyCall } from './survivorWeeklyCall'
+import { ensureRealGameChallenges, settleRealGameChallenges } from './survivorRealGameChallenges'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
@@ -54,6 +55,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     return 'opening_started'
   }
   const week = game.currentWeek
+  // A sealed swap (scheduled or the commissioner's) is revealed at the lineup lock it names, so the
+  // week's scores land on the new tribes. No-op when nothing is sealed or it is not yet due.
+  {
+    const { revealDueTribeSwap } = await import('./tribeSwapService')
+    await revealDueTribeSwap(leagueId, { now }).catch(error => {
+      console.warn('[survivor] tribe swap reveal failed', error instanceof Error ? error.message : error)
+    })
+  }
   if (week > plan.endWeek || week > calendarWeek) return 'awaiting_calendar'
   const kind = plannedWeekKind(plan, week)
   if (kind === 'outside') return 'outside_plan'
@@ -73,6 +82,41 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
   // The weekly mini-game is bragging rights only: a failure here never holds up the season.
   await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Rewards: deferred prizes whose week has come, and Chimmy's reward choices for the seats it runs
+  // (points on a tribemate, steal targets). Idempotent and best-effort: never holds up the island.
+  {
+    const { runSurvivorRewardOpenStep } = await import('./survivorWeeklyPrizeRunner')
+    await runSurvivorRewardOpenStep(leagueId, week).catch(error => {
+      console.warn('[survivor] reward step failed', error instanceof Error ? error.message : error)
+    })
+  }
+  // Real-game challenges: pick the winner of a featured real game, settled from its stored final with a
+  // small real prize (FAAB). Opened once a week, settled every tick as games go final. Best-effort: a
+  // failure never holds up the island.
+  await ensureRealGameChallenges(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(error => {
+    console.warn('[survivor] real-game challenge setup failed', error instanceof Error ? error.message : error)
+  })
+  await settleRealGameChallenges(leagueId, now).catch(error => {
+    console.warn('[survivor] real-game challenge settlement failed', error instanceof Error ? error.message : error)
+  })
+  // Commissioner challenges (the challenge builder): open and lock on the clock with a host line,
+  // Chimmy answers for its seats near the lock, and the kinds our stored data can settle settle
+  // themselves. Idempotent, audited, best-effort: a failure never holds up the island.
+  {
+    const { runChallengeBuilderStep } = await import('./survivorChallengeBuilder')
+    await runChallengeBuilderStep(leagueId, now).catch(error => {
+      console.warn('[survivor] challenge builder step failed', error instanceof Error ? error.message : error)
+    })
+  }
+  // Exile Island and the side games (survivorSideGameRunner.ts): Exile team bids, Token Pool and
+  // Survivor Pool settlement from stored finals, Auction Week, shop deliveries, the return's FAAB, and
+  // Chimmy's picks and bids for the seats it runs. Idempotent and best-effort: never holds up the island.
+  {
+    const { runSurvivorSideGameStep } = await import('./survivorSideGameRunner')
+    await runSurvivorSideGameStep(leagueId, week, now).catch(error => {
+      console.warn('[survivor] side-game step failed', error instanceof Error ? error.message : error)
+    })
+  }
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
   // like its council turn: a failure never holds up the island.
   {
@@ -105,6 +149,13 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   }
   await settleVerifiedSlateChallenges(leagueId, week)
   await settleWeeklyCall(leagueId, week).catch(() => {})
+  // The commissioner's weekly tribe prizes, from the final scores. Once per week (idempotent keys).
+  {
+    const { applyWeeklyTribePrizes } = await import('./survivorWeeklyPrizeRunner')
+    await applyWeeklyTribePrizes(leagueId, week).catch(error => {
+      console.warn('[survivor] weekly tribe prizes failed', error instanceof Error ? error.message : error)
+    })
+  }
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {
@@ -142,6 +193,22 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
         return 'final_three_preserved'
       }
       if (active < 3) return 'cast_below_final_three'
+      // The final jury step (survivorFinalJuryStep.ts): once the merged cast is down to the finalists
+      // plus the castaways the step sends to the jury, the last immunity cuts it, not a Tribal. Closes
+      // the planned elimination the same way the final-three skip does. Best-effort: on a failed read
+      // the council opens as before.
+      {
+        const { finalJuryStepHoldsCouncil } = await import('./survivorFinalJuryStepService')
+        if (await finalJuryStepHoldsCouncil(leagueId).catch(() => false)) {
+          await withSurvivorSetupTransaction(leagueId, async tx => {
+            const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'planned_elimination_skipped_final_three' }, select: { id: true } })
+            if (existing) return
+            await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'automation', action: 'planned_elimination_skipped_final_three', data: { reason: 'final_jury_step' }, isVisibleToPublic: true, isVisibleToCommissioner: true } })
+            await tx.survivorGameState.update({ where: { leagueId }, data: { needsTribalLock: false } })
+          })
+          return 'final_jury_step_holds_council'
+        }
+      }
       // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
       // the commissioner has had until this council to choose otherwise.
       await autoApplyPendingTribeRedraw(leagueId, week)
@@ -182,11 +249,37 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
   await tryAutomaticPhaseAdvance(leagueId)
   if (kind === 'finale') {
+    // The final jury step: after the last immunity is settled, the castaway(s) who did worst join the
+    // jury, so the finale opens with the finalists. Idempotent (audited once), best-effort.
+    {
+      const { applyFinalJuryStepIfDue } = await import('./survivorFinalJuryStepService')
+      const step = await applyFinalJuryStepIfDue(leagueId, week).catch(error => {
+        console.warn('[survivor] final jury step failed', error instanceof Error ? error.message : error)
+        return 'failed' as const
+      })
+      if (step === 'awaiting_immunity') return 'awaiting_final_immunity'
+    }
     let finale = await getFinaleState(leagueId, week)
     if (finale.open && !finale.closed) {
       // Nobody has to click "open voting": the jury votes until the ceremony, and the engine
       // crowns the winner itself once every juror has voted or that deadline passes.
       if (!finale.votingDeadline) await ensureJuryVotingOpen(leagueId, nextTorchCeremonyDeadline(now, league.settings))
+      // Jurors and finalists Chimmy runs ask, answer, give a closing speech and vote. Idempotent,
+      // best-effort: a failure never holds up the finale.
+      {
+        const { runChimmyFinaleTurn } = await import('./chimmyJuryTurn')
+        await runChimmyFinaleTurn(leagueId, now).catch(error => {
+          console.warn('[survivor] Chimmy finale turn failed', error instanceof Error ? error.message : error)
+        })
+      }
+      // The commissioner's report gets a jury/finale line (questions, speeches, votes in), once a day
+      // while the finale is open. Counts only; never holds up the finale.
+      {
+        const { sendChimmyWeeklyReport } = await import('./chimmyWeeklyReport')
+        await sendChimmyWeeklyReport(leagueId, week, { finale: true, dedupeKey: `${week}:finale:${now.toISOString().slice(0, 10)}` }).catch(error => {
+          console.warn('[survivor] Chimmy finale report failed', error instanceof Error ? error.message : error)
+        })
+      }
       finale = await settleFinaleIfDue(leagueId, week)
     }
     if (finale.closed && finale.winnerRosterId) {
@@ -217,6 +310,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     await postChimmyWeekLines(leagueId, week)
   }
   await dissolveSurpriseTribes(leagueId, week)
+  // The commissioner's scheduled swaps beyond the setup screen's one (more tribes, back to the
+  // originals, a custom pattern): sealed as this week closes, revealed at the next lineup lock.
+  // Best-effort and idempotent; a swap that cannot be drawn is recorded and the week still advances.
+  {
+    const { ensureScheduledTribeSwap } = await import('./survivorScheduledSwaps')
+    await ensureScheduledTribeSwap(leagueId, week, now).catch(error => {
+      console.warn('[survivor] scheduled tribe swap failed', error instanceof Error ? error.message : error)
+    })
+  }
   await advanceWeek(leagueId)
   return 'week_advanced'
 }

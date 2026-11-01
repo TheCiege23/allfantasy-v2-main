@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
+import { isZombieExperienceMode, zombieExperienceDefaults } from '@/lib/zombie/zombieExperience'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,14 +20,102 @@ export async function PATCH(req: Request) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, userId)
+  try {
+    await requireCommissionerOnly(leagueId, userId)
+  } catch (denied) {
+    if (denied instanceof Response) return denied
+    throw denied
+  }
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
 
+  if (['status', 'currentWeek', 'universeId'].some((key) => body[key] !== undefined)) {
+    return NextResponse.json({ error: 'League lifecycle and universe membership use dedicated commissioner actions.' }, { status: 400 })
+  }
+
+  const moneyAmounts = ['buyInAmount', 'commissionerFeeCap', 'totalPot', 'weeklyPayoutPool']
+  const moneyRates = ['commissionerFeeRate', 'weeklyPayoutRate', 'seasonPayoutRate', 'survivorBonusRate']
+  for (const key of moneyAmounts) {
+    const value = body[key]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      return NextResponse.json({ error: `${key} must be a nonnegative amount.` }, { status: 400 })
+    }
+  }
+  for (const key of moneyRates) {
+    const value = body[key]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) {
+      return NextResponse.json({ error: `${key} must be between 0 and 1.` }, { status: 400 })
+    }
+  }
+  const nextPaid = typeof body.isPaid === 'boolean' ? body.isPaid : z.isPaid
+  const nextBuyIn = typeof body.buyInAmount === 'number' ? body.buyInAmount : z.buyInAmount
+  if ((body.isPaid === true || body.buyInAmount !== undefined) && nextPaid && (!nextBuyIn || nextBuyIn <= 0)) {
+    return NextResponse.json({ error: 'Paid Zombie leagues require a buy-in greater than zero.' }, { status: 400 })
+  }
+  if (body.commissionerUiPrefs !== undefined) {
+    const prefs = body.commissionerUiPrefs
+    if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+      return NextResponse.json({ error: 'Invalid commissioner preferences.' }, { status: 400 })
+    }
+    for (const key of ['leaguesafeUrl', 'fancredUrl']) {
+      const value = (prefs as Record<string, unknown>)[key]
+      if (value === undefined || value === '') continue
+      if (typeof value !== 'string' || value.length > 500) {
+        return NextResponse.json({ error: `${key} must be a valid HTTPS URL.` }, { status: 400 })
+      }
+      try {
+        if (new URL(value).protocol !== 'https:') throw new Error('Insecure URL')
+      } catch {
+        return NextResponse.json({ error: `${key} must be a valid HTTPS URL.` }, { status: 400 })
+      }
+    }
+  }
+
+  if (String(z.sport ?? '').toUpperCase() === 'NFL' && (
+    (body.serumReviveCount !== undefined && body.serumReviveCount !== 2) || body.autoSerumRevive === false ||
+    body.serumAwardHighScore === false || body.serumAwardOnBashMaul === false ||
+    body.serumUseBeforeLastStarter === false || body.weaponTopTwoActive === false || body.bombOneTimeOverride === false ||
+    body.weaponScoreThresholds !== undefined
+  )) return NextResponse.json({ error: 'The 2025 NFL rules require automatic two-serum revival, last-starter timing and fixed weapon bonuses.' }, { status: 400 })
+
+  if (body.zombieTradeBlocked === false) {
+    return NextResponse.json({ error: 'The 2025 Zombie rules prohibit Zombie trades.' }, { status: 400 })
+  }
+
+  const competitiveKeys = [
+    'experienceMode', 'whispererCount', 'whispererSelectionMode', 'whispererSelection',
+    'whispererAmbushCount', 'ambushCountPerWeek', 'ambushRemapMatchup',
+    'infectionLossToWhisperer', 'infectionLossToZombie', 'serumReviveCount',
+    'autoSerumRevive', 'serumAwardHighScore', 'serumAwardOnBashMaul',
+    'serumUseBeforeLastStarter', 'weaponScoreThresholds', 'weaponTopTwoActive',
+    'bombOneTimeOverride', 'zombieTradeBlocked', 'noWaiverFreeAgency',
+  ]
+  if (!['setup', 'registering'].includes(z.status) && competitiveKeys.some((key) => body[key] !== undefined)) {
+    return NextResponse.json({ error: 'Competitive Zombie rules are locked for this season.' }, { status: 409 })
+  }
+
   const num = (k: string) => (typeof body[k] === 'number' ? (body[k] as number) : undefined)
   const bool = (k: string) => (typeof body[k] === 'boolean' ? (body[k] as boolean) : undefined)
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : undefined)
+
+  const experienceModePatch = str('experienceMode')
+  if (experienceModePatch !== undefined && !isZombieExperienceMode(experienceModePatch)) {
+    return NextResponse.json({ error: 'experienceMode must be simple or enhanced.' }, { status: 400 })
+  }
+  if (experienceModePatch !== undefined && !['setup', 'registering'].includes(z.status)) {
+    return NextResponse.json({ error: 'Experience mode is locked once the season starts.' }, { status: 409 })
+  }
+
+  const whispererCountPatch = num('whispererCount')
+  if (whispererCountPatch !== undefined &&
+      (whispererCountPatch !== 1 && whispererCountPatch !== 2 ||
+       whispererCountPatch === 2 && (!['NBA', 'NHL', 'MLB'].includes(String(z.sport ?? '').toUpperCase()) || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
+    return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
+  }
+  if (experienceModePatch === 'simple' && z.whispererCount === 2 && whispererCountPatch !== 1) {
+    return NextResponse.json({ error: 'Set Whisperer count to one before choosing Simple Zombie.' }, { status: 400 })
+  }
 
   const teamCountPatch = num('teamCount')
   if (
@@ -67,19 +157,72 @@ export async function PATCH(req: Request) {
     )
   }
 
+  const configSelectionPatch = str('whispererSelection')
+  if (
+    configSelectionPatch !== undefined &&
+    !(ZOMBIE_ALLOWED_WHISPERER_SELECTION_MODES as readonly string[]).includes(configSelectionPatch)
+  ) {
+    return NextResponse.json({ error: 'Unsupported Whisperer selection mode.' }, { status: 400 })
+  }
+  if (
+    configSelectionPatch !== undefined &&
+    whispererSelectionModePatch !== undefined &&
+    configSelectionPatch !== whispererSelectionModePatch
+  ) {
+    return NextResponse.json({ error: 'Whisperer selection fields must match.' }, { status: 400 })
+  }
+
+  const seasonAmbushPatch = num('whispererAmbushCount')
+  const weeklyAmbushPatch = num('ambushCountPerWeek')
+  if (seasonAmbushPatch !== undefined && (!Number.isInteger(seasonAmbushPatch) || seasonAmbushPatch < 0 || seasonAmbushPatch > 20)) {
+    return NextResponse.json({ error: 'whispererAmbushCount must be an integer between 0 and 20.' }, { status: 400 })
+  }
+  if (weeklyAmbushPatch !== undefined && (!Number.isInteger(weeklyAmbushPatch) || weeklyAmbushPatch < 0 || weeklyAmbushPatch > 5)) {
+    return NextResponse.json({ error: 'ambushCountPerWeek must be an integer between 0 and 5.' }, { status: 400 })
+  }
+  const currentAmbushConfig = await prisma.zombieLeagueConfig.findUnique({
+    where: { leagueId }, select: { ambushCountPerWeek: true },
+  })
+  if ((seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) &&
+      (seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? currentAmbushConfig?.ambushCountPerWeek ?? 1)) {
+    return NextResponse.json({ error: 'Weekly ambush cap cannot exceed season ambushes.' }, { status: 400 })
+  }
+
+  const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
+  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined || whispererCountPatch !== undefined) {
+    const selected = await prisma.whispererRecord.findUnique({
+      where: { zombieLeagueId: z.id },
+      select: { id: true },
+    })
+    if (selected || !['setup', 'registering'].includes(z.status)) {
+      return NextResponse.json(
+        { error: 'Whisperer and ambush settings are locked once the draft assigns the role.' },
+        { status: 409 },
+      )
+    }
+  }
+
+  const serumReviveCountPatch = num('serumReviveCount')
+  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 5)) {
+    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 5.' }, { status: 400 })
+  }
+
   const leaguePatch = {
     ...(str('name') !== undefined ? { name: str('name') } : {}),
-    ...(str('status') !== undefined ? { status: str('status') } : {}),
     ...(teamCountPatch !== undefined ? { teamCount: teamCountPatch } : {}),
-    ...(num('currentWeek') !== undefined ? { currentWeek: num('currentWeek') } : {}),
+    ...(experienceModePatch !== undefined ? { experienceMode: experienceModePatch } : {}),
+    ...(whispererCountPatch !== undefined ? { whispererCount: whispererCountPatch } : {}),
     ...(num('buyInAmount') !== undefined ? { buyInAmount: num('buyInAmount') } : {}),
     ...(bool('isPaid') !== undefined ? { isPaid: bool('isPaid') } : {}),
     ...(str('namingMode') !== undefined ? { namingMode: str('namingMode') } : {}),
-    ...(whispererSelectionModePatch !== undefined
-      ? { whispererSelectionMode: whispererSelectionModePatch }
+    ...(requestedSelection !== undefined
+      ? { whispererSelectionMode: requestedSelection }
       : {}),
     ...(bool('whispererIsPublic') !== undefined ? { whispererIsPublic: bool('whispererIsPublic') } : {}),
-    ...(num('whispererAmbushCount') !== undefined ? { whispererAmbushCount: num('whispererAmbushCount') } : {}),
+    ...(seasonAmbushPatch !== undefined ? { whispererAmbushCount: seasonAmbushPatch } : {}),
+    ...(experienceModePatch === 'simple' ? { whispererAmbushCount: 0 } : {}),
+    ...(experienceModePatch === 'enhanced' && z.experienceMode === 'simple' && seasonAmbushPatch === undefined
+      ? { whispererAmbushCount: 3 } : {}),
     ...(bool('weeklyPayoutEnabled') !== undefined ? { weeklyPayoutEnabled: bool('weeklyPayoutEnabled') } : {}),
     ...(bool('ultimateSurvivorPot') !== undefined ? { ultimateSurvivorPot: bool('ultimateSurvivorPot') } : {}),
     ...(weeklyUpdateDayPatch !== undefined ? { weeklyUpdateDay: weeklyUpdateDayPatch } : {}),
@@ -113,13 +256,13 @@ export async function PATCH(req: Request) {
   }
 
   const configPatch = {
-    ...(str('universeId') !== undefined ? { universeId: str('universeId') || null } : {}),
-    ...(str('whispererSelection') !== undefined ? { whispererSelection: str('whispererSelection') } : {}),
+    ...(requestedSelection !== undefined ? { whispererSelection: requestedSelection } : {}),
     ...(bool('infectionLossToWhisperer') !== undefined
       ? { infectionLossToWhisperer: bool('infectionLossToWhisperer') }
       : {}),
     ...(bool('infectionLossToZombie') !== undefined ? { infectionLossToZombie: bool('infectionLossToZombie') } : {}),
-    ...(num('serumReviveCount') !== undefined ? { serumReviveCount: num('serumReviveCount') } : {}),
+    ...(serumReviveCountPatch !== undefined ? { serumReviveCount: serumReviveCountPatch } : {}),
+    ...(bool('autoSerumRevive') !== undefined ? { autoSerumRevive: bool('autoSerumRevive') } : {}),
     ...(bool('serumAwardHighScore') !== undefined ? { serumAwardHighScore: bool('serumAwardHighScore') } : {}),
     ...(bool('serumAwardOnBashMaul') !== undefined ? { serumAwardOnBashMaul: bool('serumAwardOnBashMaul') } : {}),
     ...(bool('serumUseBeforeLastStarter') !== undefined
@@ -130,12 +273,13 @@ export async function PATCH(req: Request) {
       : {}),
     ...(bool('weaponTopTwoActive') !== undefined ? { weaponTopTwoActive: bool('weaponTopTwoActive') } : {}),
     ...(bool('bombOneTimeOverride') !== undefined ? { bombOneTimeOverride: bool('bombOneTimeOverride') } : {}),
-    ...(num('ambushCountPerWeek') !== undefined ? { ambushCountPerWeek: num('ambushCountPerWeek') } : {}),
+    ...(weeklyAmbushPatch !== undefined ? { ambushCountPerWeek: weeklyAmbushPatch } : {}),
     ...(bool('ambushRemapMatchup') !== undefined ? { ambushRemapMatchup: bool('ambushRemapMatchup') } : {}),
     ...(bool('noWaiverFreeAgency') !== undefined ? { noWaiverFreeAgency: bool('noWaiverFreeAgency') } : {}),
     ...(bool('statCorrectionReversal') !== undefined ? { statCorrectionReversal: bool('statCorrectionReversal') } : {}),
-    ...(bool('zombieTradeBlocked') !== undefined ? { zombieTradeBlocked: bool('zombieTradeBlocked') } : {}),
+    ...(body.zombieTradeBlocked !== undefined ? { zombieTradeBlocked: true } : {}),
     ...(num('dangerousDropThreshold') !== undefined ? { dangerousDropThreshold: num('dangerousDropThreshold') } : {}),
+    ...(experienceModePatch !== undefined ? zombieExperienceDefaults(experienceModePatch) : {}),
   }
 
   let config = null
@@ -198,6 +342,12 @@ export async function PATCH(req: Request) {
     })
   } else {
     freeRewardConfig = await prisma.zombieFreeRewardConfig.findUnique({ where: { zombieLeagueId: z.id } })
+  }
+
+  if (serumReviveCountPatch !== undefined || bool('autoSerumRevive') !== undefined ||
+      bool('serumAwardHighScore') !== undefined || bool('serumAwardOnBashMaul') !== undefined ||
+      seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined) {
+    await generateRulesDocument(z.id)
   }
 
   return NextResponse.json({ zombieLeague: row, config, paidConfig, freeRewardConfig })

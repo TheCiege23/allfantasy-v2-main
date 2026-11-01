@@ -70,6 +70,13 @@ covers it; neither an empty scoreboard nor the previous season proves a future s
 - UNVERIFIED: an IN-PROGRESS summary (`drives.current`, `situation`, live `winprobability`). This capture is a final. Capture one live game, once, the next time a probe is justified.
 - UNVERIFIED: college football (`football/college-football`) summaries — not probed.
 
+## NFL postseason scoreboard, 2026-11-01
+
+- RESOLVED: `scoreboard?dates=` for 20260110, 20260117, 20260125 and 20260208 (one day each of the 2025 Wild Card, Divisional, Conference and Super Bowl rounds), captured via probe.sh for NFL playoff bracket pools. Do not re-probe for shape.
+- `P-01` FOUND BY THE FIXTURES: **the scoreboard carries no playoff seed.** `curatedRank.current` is 99 for every team. Seeds are read from the standings cache (`NFL:standings:<season>:*`, `position`) by `resolvePlayoffSeedField`; a scoreboard game is only accepted into a bracket slot when its two teams are the two the seeded field puts there.
+- `P-02` UNVERIFIED: whether `/apis/v2/sports/football/nfl/standings` reports `playoffSeed` per CONFERENCE (1-16) and which group name it files teams under. `lib/standings/espnStandings.ts` writes `position = playoffSeed ?? rank`, so a missing `playoffSeed` would silently become a rank. The NFL seed reader accepts a field only when each conference has exactly seeds 1-7 with no duplicate, and the scoreboard cross-check above refuses any Wild Card game the field does not predict. Settle with one standings capture after week 18, before the first pool seeds.
+- `P-03` UNVERIFIED: `seasontype=3&week=N` as a query instead of `dates`. Not needed; the writer scans dates.
+
 ## Fantasy activity (trades), 2026-10-27 — recorded without probing
 
 - `T-01` UNVERIFIED: the shape of `view=kona_league_communication`, the feed
@@ -97,3 +104,12 @@ covers it; neither an empty scoreboard nor the previous season proves a future s
   ESPN's defensive block (8 DT · 9 DE · 10 LB · 11 DL · 12 CB · 13 S · 14 DB · 15 DP) and
   `lib/lineup-actions/sleeperSlotUtils.ts` already treats `DP` as IDP. It now counts as an IDP signal on
   import. A capture of a league using it would confirm which positions it accepts.
+# NBA Cup scoreboard verification — 2026-10-31
+
+Resolved: the four `scoreboard.NBA.*.json` fixtures capture Group Play (9 games),
+quarterfinals (2), semifinals (2), and championship (1). The final's label is
+`NBA Cup Championship`, without the hyphen used by the other stages. Results,
+real teams, dates and venue fields are verified; tournament seeds are not.
+The six-week date-range request returned HTTP 400. Runtime uses individual days.
+The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
+no spoofed headers or bypass retry was attempted. It is not a runtime source.

@@ -235,7 +235,16 @@ function FlagRow({ flag, language }: { flag: HealthFlag; language: string }) {
   )
 }
 
-export function HealthPanel({ data, language = 'en' }: { data: CommissionerHubData; language?: string }) {
+export function HealthPanel({
+  data,
+  breakdown,
+  language = 'en',
+}: {
+  data: CommissionerHubData
+  /** The five component bars (HubReports `HealthBreakdown`), streamed in under the score. */
+  breakdown?: ReactNode
+  language?: string
+}) {
   const t = (english: string | null | undefined) => hubCopy(english, language)
   const { score, flags } = data.health
   const measured = flags.filter((f) => f.measured).length
@@ -265,6 +274,7 @@ export function HealthPanel({ data, language = 'en' }: { data: CommissionerHubDa
           </>
         )}
       </div>
+      {breakdown ?? null}
       <ul className="af-ch-flags">
         {flags.map((f) => (
           <FlagRow key={f.key} flag={f} language={language} />

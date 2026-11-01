@@ -264,6 +264,19 @@ export async function persistRosterLineupWithEngine(
     if (campusIssues.length) return { ok: false, error: campusIssues.map((i) => i.message).join(' '), status: 400 }
   }
 
+  // Survivor's "forced bench" disadvantage (lib/survivor/survivorForcedBench.ts). SURVIVOR LEAGUES ONLY:
+  // every other league stops at this boolean and never loads the module. A commissioner override or an
+  // import is never refused, as above.
+  if (league.survivorMode === true && (input.source === 'user_save' || input.source === 'system')) {
+    const { forcedBenchSaveRefusal } = await import('@/lib/survivor/survivorForcedBench')
+    const names = lineupPlayerNames(roster.playerData, input.nextPlayerData)
+    const refusal = await forcedBenchSaveRefusal({
+      leagueId: input.leagueId, rosterId: input.rosterId, week: input.week,
+      starterIds: lineupPlayerIds(input.nextPlayerData, 'starters'), language: league.language ?? null, nameOf: names,
+    })
+    if (refusal) return { ok: false, error: refusal, status: 409 }
+  }
+
   const leagueWeek = weekFromLeagueSettings(league.settings)
 
   if (!input.skipLockCheck) {

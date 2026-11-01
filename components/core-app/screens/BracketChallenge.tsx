@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import '@/components/core-app/af-bracket.css'
+import '@/components/core-app/af-core-redraft-standings.css'
 import type { BracketChallengeData, BracketSide, BracketTeam } from '@/lib/core-app/bracketChallenge'
 import { BRACKET_SEASON_YEAR, type BracketPicksResponse } from '@/lib/core-app/bracketPicks'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'

@@ -267,3 +267,36 @@ export function canSeeSurvivorChannel(
   }
   return context.decisions.canSeeHiddenIdolAssignments
 }
+
+/**
+ * The finale controls (jury, finale and reunion rules; this season's finale windows) for a
+ * commissioner. Unlike the other manual game controls these do not need a NON-playing host: a
+ * playing commissioner may configure them too, because they set timers and rules, not outcomes.
+ *
+ * The exception is the commissioner's own seat. A commissioner who is a finalist or a juror keeps
+ * exactly their role's view: they may still change the windows, but `canSeePrivateFinale` stays false
+ * (no other castaway's private answers or ballots). Only a non-playing host who is neither may see
+ * private finale state, and only where the host already could (`canSeePrivateVotes`).
+ */
+export type SurvivorFinaleControlRole = 'host' | 'playing_commissioner' | 'juror' | 'finalist' | 'none'
+
+export interface SurvivorFinaleControlAccess {
+  canConfigure: boolean
+  canSeePrivateFinale: boolean
+  role: SurvivorFinaleControlRole
+}
+
+export function survivorFinaleControlAccess(context: SurvivorAccessContext | null | undefined): SurvivorFinaleControlAccess {
+  if (!context) return { canConfigure: false, canSeePrivateFinale: false, role: 'none' }
+  const canConfigure = context.decisions.canUpdateSettings || context.isAiHostActor
+  const role: SurvivorFinaleControlRole = context.isUserFinalist
+    ? 'finalist'
+    : context.isUserJuryMember
+      ? 'juror'
+      : context.isNonParticipatingCommissionerHost || context.isAiHostActor
+        ? 'host'
+        : canConfigure
+          ? 'playing_commissioner'
+          : 'none'
+  return { canConfigure, canSeePrivateFinale: role === 'host' && context.decisions.canSeePrivateVotes, role }
+}

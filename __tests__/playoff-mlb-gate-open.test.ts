@@ -22,7 +22,7 @@ const read = (p: string) => readFileSync(resolve(root, p), "utf8")
 describe("MLB playoff pools — the gate is open, consistently", () => {
   it("the create API accepts mlb", () => {
     const src = read("app/api/brackets/playoffs/route.ts")
-    expect(src).toContain('sport: z.enum(["nba", "nhl", "mlb", "ncaaf", "nba_cup"])')
+    expect(src).toContain('sport: z.enum(["nba", "nhl", "mlb", "ncaaf", "nba_cup", "nfl"])')
   })
 
   it("the sync service will sync mlb", async () => {

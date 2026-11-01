@@ -6,8 +6,9 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isZombieLeague, getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { isZombieLeague } from '@/lib/zombie/ZombieLeagueConfig'
 import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
+import { getZombieTradeRestriction } from '@/lib/zombie/zombieTradePolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,15 +33,14 @@ export async function GET(
   const rosterId = new URL(req.url).searchParams?.get('rosterId')
   if (!rosterId) return NextResponse.json({ error: 'Missing rosterId' }, { status: 400 })
 
-  const [config, status] = await Promise.all([
-    getZombieLeagueConfig(leagueId),
+  const [restriction, status] = await Promise.all([
+    getZombieTradeRestriction(leagueId, [rosterId]),
     getStatus(leagueId, rosterId),
   ])
 
-  const blocked = config?.zombieTradeBlocked && status === 'Zombie'
   return NextResponse.json({
-    canTrade: !blocked,
-    reason: blocked ? 'zombie_trade_blocked' : 'allowed',
+    canTrade: restriction === null,
+    reason: restriction ?? 'allowed',
     status: status ?? undefined,
   })
 }

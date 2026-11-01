@@ -9,6 +9,7 @@ import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
 import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
 import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 import { isFinaleVoteComplete } from './finaleReveal'
+import { juryVotingHeldForSpeeches, readSurvivorFinaleSettings, readSurvivorFinaleWindows } from './survivorFinaleSettings'
 import { afterWinnerCrowned } from './shareCards/hooks'
 import { createSurvivorChatMessage } from './survivorChatBridge'
 
@@ -267,7 +268,7 @@ export async function submitJuryVote(args: {
   week: number
   source?: string | null
   command?: string | null
-}): Promise<{ ok: boolean; error?: string; state?: SurvivorFinaleState }> {
+}): Promise<{ ok: boolean; error?: string; code?: string; state?: SurvivorFinaleState }> {
   const { leagueId, jurorRosterId, finalistRosterId, week } = args
   const config = await getSurvivorConfig(leagueId)
   if (!config) {
@@ -289,6 +290,12 @@ export async function submitJuryVote(args: {
   }
   if (state.votingDeadline && Date.now() >= state.votingDeadline.getTime()) {
     return { ok: false, error: 'The jury vote has closed' }
+  }
+  // Original rule: closing speeches come before the jury votes. Only when the commissioner set a
+  // speech window; with none, voting is never held (the behaviour before speeches existed).
+  const leagueRow = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })).catch(() => null)
+  if (juryVotingHeldForSpeeches(readSurvivorFinaleSettings(leagueRow?.settings), readSurvivorFinaleWindows(leagueRow?.settings), new Date())) {
+    return { ok: false, code: 'held_for_speeches', error: 'Jury voting opens when the closing speeches close' }
   }
 
   await appendSurvivorAudit(leagueId, config.configId, 'jury_vote_submitted', {
@@ -372,6 +379,10 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   })
   // Share cards: the champion card, offered to the winner and to the league as a recap.
   afterWinnerCrowned(leagueId)
+  // The reunion: Island Chat reopens to everyone (commissioner toggle). Never holds up the crown.
+  await import('./survivorReunion').then(({ openReunionChatOnce }) => openReunionChatOnce(leagueId, winnerName)).catch((error) => {
+    console.warn('[survivor-finale] reunion chat did not open', error instanceof Error ? error.message : error)
+  })
   return { winnerUserId }
 }
 

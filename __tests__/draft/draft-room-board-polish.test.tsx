@@ -58,6 +58,29 @@ describe('draft room panel size', () => {
     expect(zone.getAttribute('data-dock-size')).toBe('half')
   })
 
+  it('keeps the board selector and panel presets in one consistent state', () => {
+    const zone = renderShell()
+    const shell = screen.getByTestId('draft-room-shell')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Draft board size' }), { target: { value: 'hidden' } })
+    expect(shell.getAttribute('data-board-size')).toBe('hidden')
+    expect(zone.getAttribute('data-dock-size')).toBe('tall')
+    fireEvent.click(screen.getByTestId('draft-dock-collapse-toggle'))
+    expect(zone.getAttribute('data-dock-size')).toBe('min')
+    expect(shell.getAttribute('data-board-size')).not.toBe('hidden')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Draft board size' }), { target: { value: 'balanced' } })
+    expect(zone.getAttribute('data-dock-size')).toBe('half')
+    fireEvent.click(screen.getByTestId('draft-dock-size-tall'))
+    expect((screen.getByRole('combobox', { name: 'Draft board size' }) as HTMLSelectElement).value).toBe('compact')
+    expect(shell.getAttribute('data-board-size')).toBe('compact')
+  })
+
+  it('migrates the older compact board preference into the larger player panel', () => {
+    window.localStorage.setItem('af:draft-board-size', 'compact')
+    const zone = renderShell()
+    expect(zone.getAttribute('data-dock-size')).toBe('tall')
+    expect(screen.getByTestId('draft-room-shell').getAttribute('data-board-size')).toBe('compact')
+  })
+
   it('remembers the chosen size', () => {
     renderShell()
     fireEvent.click(screen.getByTestId('draft-dock-size-tall'))
@@ -68,6 +91,7 @@ describe('draft room panel size', () => {
 
   it('reads the older collapsed preference as the board-only size', () => {
     window.localStorage.setItem('af:draft-premium-bottom-dock-expanded', '0')
+    window.localStorage.setItem('af:draft-board-size', 'compact')
     const zone = renderShell()
     expect(zone.getAttribute('data-dock-size')).toBe('min')
   })
@@ -119,7 +143,7 @@ describe('draft pool player card', () => {
       adpMetricLabel: 'AI ADP',
       display: { stats: { primaryStatValue: 31.7, primaryStatLabel: 'FPPG' }, metadata: {}, assets: {} } as never,
     })
-    expect(screen.getByTestId('card-adp').textContent).not.toBe('31.7')
+    expect(screen.queryByTestId('card-adp')).toBeNull()
   })
 })
 

@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { processSerumAction, processRevive } from '@/lib/zombie/serumEngine'
 import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
-import { getWeaponBalance } from '@/lib/zombie/ZombieWeaponEngine'
+import { processBombAction, processWeaponAction } from '@/lib/zombie/weaponEngine'
+import { processAmbushFromChimmy } from '@/lib/zombie/ambushEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import {
   applyZombieHordeSitOutToChallenges,
@@ -50,7 +51,7 @@ export function detectZombieChimmyIntent(rawMessage: string): ZombieChimmyIntent
   if (lower.match(/serum.*revive|revive/)) return 'use_serum'
   if (lower.match(/use.*serum|serum.*use/)) return 'use_serum'
   if (lower.match(/bomb|dynamite|tnt|💣|detonate/)) return 'declare_bomb'
-  if (lower.match(/use.*(axe|gun|knife|bow|🪓|🔫|🔪|🏹)/)) return 'use_weapon'
+  if (lower.match(/(?:use\s+)?(axe|gun|knife|bow|🪓|🔫|🔪|🏹)/)) return 'use_weapon'
   if (lower.match(/activate.*(power|horde|whisper|infection|serum)/)) return 'activate_power'
 
   // Query intents
@@ -70,13 +71,16 @@ async function handleQueryInventory(leagueId: string, userId: string): Promise<s
     })
     if (!roster) return '⚠️ You are not on a roster in this league.'
 
-    const serums = await getSerumBalance(leagueId, roster.id)
-    const weapons = await prisma.zombieResourceLedger.findMany({
-      where: { leagueId, rosterId: roster.id, resourceType: 'weapon' },
+    const ledgerSerums = await getSerumBalance(leagueId, roster.id)
+    const team = await prisma.zombieLeagueTeam.findUnique({
+      where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
+      include: { items: true },
     })
-
-    const weaponList = weapons.map((w) => `${w.resourceKey}: ${w.balance}`).join(', ')
-    return `📦 **Inventory**: ${serums} serum(s), weapons: ${weaponList || 'none'}`
+    const held = team?.items.filter((item) => !item.isUsed && !item.isExpired) ?? []
+    const nativeSerums = held.filter((item) => item.itemType.includes('serum')).length
+    const weapons = held.filter((item) => item.itemType.startsWith('weapon_'))
+    const weaponList = weapons.map((item) => item.itemLabel).join(', ')
+    return `📦 **Inventory**: ${Math.max(nativeSerums, ledgerSerums)} serum(s), weapons: ${weaponList || 'none'}`
   } catch (e) {
     return `⚠️ Error fetching inventory: ${e instanceof Error ? e.message : String(e)}`
   }
@@ -97,9 +101,11 @@ async function handleQueryRole(leagueId: string, userId: string): Promise<string
     if (!zombieLeague) {
       return '⚠️ This is not a Zombie league.'
     }
-    const whisperer = await prisma.whispererRecord.findFirst({
+    const whisperer = (await prisma.whispererRecord.findFirst({
       where: { userId, zombieLeagueId: zombieLeague.id },
-    })
+    })) ?? (await prisma.zombieCoWhisperer.findUnique({
+      where: { zombieLeagueId_userId: { zombieLeagueId: zombieLeague.id, userId } },
+    }))
 
     const icon = status === 'Whisperer' ? '🔴' : status === 'Zombie' ? '🟢' : '👤'
     const extra = whisperer ? ` (${whisperer.ambushesRemaining} ambushes left)` : ''
@@ -115,7 +121,11 @@ async function handleQueryRules(leagueId: string): Promise<string> {
     if (!config)
       return '⚠️ Unable to load league rules. Contact your commissioner.'
 
-    return `📋 **Rules Summary**: Infection threshold ${config.infectionLossToZombie ? 'on loss' : 'off'}, Serum revive cost: ${config.serumReviveCount}, Weapons: ${config.weaponTopTwoActive ? 'top 2 only' : 'all qualify'}`
+    const league = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true, sport: true } })
+    if (league?.sport === 'NFL') return `2025 NFL: serums give +10 against Zombies before your last starter begins; multiple uses are allowed. Zombies automatically spend two serums to revive, never during their infection week. ${league.experienceMode === 'simple' ? 'Weapons are off.' : 'Your strongest two ordinary weapons equip automatically; a bomb gives +35 once instead.'}`
+    return league?.experienceMode === 'simple'
+      ? `📋 **Simple Zombie**: infection on eligible loss, automatic revival at ${config.serumReviveCount} serum(s). Weapons and ambushes are off.`
+      : `📋 **Enhanced Zombie**: infection on eligible loss, revival at ${config.serumReviveCount} serum(s), and defensive weapons and ambushes before lock.`
   } catch (e) {
     return `⚠️ Error fetching rules: ${e instanceof Error ? e.message : String(e)}`
   }
@@ -147,6 +157,7 @@ export async function handleZombieChimmyAction(
   userId: string,
   rawMessage: string,
   week: number,
+  requestId?: string,
 ): Promise<ChimmyActionResult> {
   const intent = detectZombieChimmyIntent(rawMessage)
   const lower = rawMessage.toLowerCase()
@@ -208,25 +219,33 @@ export async function handleZombieChimmyAction(
       }
     }
 
-    /*
-     * 🛑 WEAPONS, BOMBS, AMBUSHES AND POWERS SPENT THE ITEM AND DID NOTHING. `processWeaponAction` marked the
-     * weapon used ("Your weapon is active for week N") but nothing reads `usedEffect: 'active_weapon'`; a
-     * bomb waited on a commissioner approval nothing processes; an ambush decremented the Whisperer's count
-     * and re-paired no matchup; a power announced itself and changed nothing. Until those mechanics exist
-     * (the 2026-10-17 decision: read-only for this season), the command keeps the item and says so.
-     * Serums are different and stay live: a registered serum really does block an infection, and a revive
-     * really does bring a Zombie back.
-     */
-    if (intent === 'use_weapon' || intent === 'declare_bomb' || intent === 'trigger_ambush' || intent === 'activate_power') {
-      const what = {
-        use_weapon: 'Weapons are',
-        declare_bomb: 'The bomb is',
-        trigger_ambush: 'Ambushes are',
-        activate_power: 'Whisperer powers are',
-      }[intent]
+    if (intent === 'trigger_ambush') {
+      const row = await processAmbushFromChimmy(leagueId, userId, rawMessage, week)
+      return {
+        ok: row.isValid, chimmyActionId: row.id,
+        publicMessage: row.publicResponse, privateMessage: row.privateResponse,
+        error: row.validationError ?? undefined,
+      }
+    }
+    if (intent === 'use_weapon') {
+      const row = await processWeaponAction(leagueId, userId, rawMessage, week)
+      return {
+        ok: row.isValid, chimmyActionId: row.id,
+        publicMessage: row.publicResponse, privateMessage: row.privateResponse,
+        error: row.validationError ?? undefined,
+      }
+    }
+    if (intent === 'declare_bomb') {
+      const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+      if (z?.sport.toUpperCase() === 'NFL') {
+        const row = await processBombAction(leagueId, userId, rawMessage, week, requestId) as ZombieChimmyAction
+        return { ok: row.isValid, chimmyActionId: row.id, privateMessage: row.privateResponse, error: row.validationError ?? undefined }
+      }
+    }
+    if (intent === 'declare_bomb' || intent === 'activate_power') {
       return {
         ok: false,
-        privateMessage: `${what} tracked this season but don't change matchups or scores yet, so nothing was spent — it's still yours.`,
+        privateMessage: 'That effect has no verified scoring implementation yet, so nothing was spent.',
         error: 'not_active_this_season',
       }
     }
@@ -252,7 +271,7 @@ export async function handleZombieChimmyAction(
           return { ok: false, chimmyActionId: row.id, privateMessage: msg }
         }
       } else {
-        const row = (await processSerumAction(leagueId, userId, rawMessage, week)) as ZombieChimmyAction
+        const row = (await processSerumAction(leagueId, userId, rawMessage, week, requestId)) as ZombieChimmyAction
         return {
           ok: row.isValid,
           chimmyActionId: row.id,
@@ -264,6 +283,10 @@ export async function handleZombieChimmyAction(
     }
 
     // Unknown intent
+    const leagueMode = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true } })
+    const advancedHelp = leagueMode?.experienceMode === 'simple'
+      ? ''
+      : '• `@Chimmy use knife/bow/axe/gun` — Arm a defense\n• `@Chimmy ambush swap <team name>` — Whisperer matchup swap'
     const row = await prisma.zombieChimmyAction.create({
       data: {
         leagueId,
@@ -280,10 +303,8 @@ export async function handleZombieChimmyAction(
           '• `@Chimmy horde sit out [manager]` — Nominate a horde sit-out\n' +
           '• `@Chimmy rules` — Show infection & serum rules\n' +
           '• `@Chimmy week` — Show this week\'s standings\n' +
-          '• `@Chimmy revive` — Use serum to revive\n' +
-          '• `@Chimmy bomb 💣` — Detonate bomb\n' +
-          '• `@Chimmy axe/gun/knife/bow` — Use weapon\n' +
-          '• `@Chimmy ambush [target]` — Whisperer ambush',
+          (leagueMode?.experienceMode === 'simple' ? '' : '• `@Chimmy revive` — Use serum to revive\n') +
+          advancedHelp,
       },
     })
     return { ok: false, chimmyActionId: row.id, privateMessage: row.privateResponse }

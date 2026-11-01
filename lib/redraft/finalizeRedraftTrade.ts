@@ -220,6 +220,7 @@ export async function finalizeRedraftTrade(
       }
       const settlement = await settleRedraftTradeAssets(tx, {
         leagueId: proposal.leagueId,
+        tradeId: proposal.id,
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         ...(multiTeam ? { additionalRosterIds: participantRosterIds.slice(2) } : {}),
@@ -260,6 +261,7 @@ export async function finalizeRedraftTrade(
           playersMoved: settlement.playersMoved,
           faabTransferred: settlement.faabTransferred,
           picksRecorded: settlement.picksRecorded,
+          ...(proposal.assets.some(a => a.assetType === 'zombie_item') ? { zombieItems: proposal.assets.filter(a => a.assetType === 'zombie_item').map(a => ({ fromRosterId: a.fromRosterId, toRosterId: a.toRosterId, metadata: a.metadata })) } : {}),
         },
         sourceTransactionIds: capTransfer.transactionIds,
         beforeState,
@@ -379,6 +381,10 @@ export async function finalizeRedraftTrade(
         },
   )
 
+  if (proposal.assets.some(a => a.assetType === 'zombie_item')) {
+    const z = await prisma.zombieLeague.findUnique({ where: { leagueId: proposal.leagueId }, select: { currentWeek: true } })
+    if (z) await (await import('@/lib/zombie/beta2025ItemService')).refreshItemScores(proposal.leagueId, z.currentWeek).catch(() => {})
+  }
   /*
    * 🛑 A MULTI-TEAM TRADE HAS NO DM CARD, SO THE STATUS ABOVE IS A NO-OP FOR IT AND NOBODY WAS TOLD IT
    * WENT THROUGH. Every team hears it here, with every team named and what each one got.

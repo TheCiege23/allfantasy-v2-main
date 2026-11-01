@@ -92,7 +92,8 @@ beforeEach(() => {
       if (method === 'POST') return json({ message: { id: 'new1' } })
       return json(chatBody)
     }
-    if (u.includes('league%3AL1/pinned')) return json({ pinned: [] })
+    // A commissioner here: Pin is offered only to whoever runs the league's chat (2026-10-31).
+    if (u.includes('league%3AL1/pinned')) return json({ pinned: [], canPin: true })
     if (u.includes('league%3AL1/typing')) return json({ typing: [] })
     if (u.includes('league%3AL1/search')) {
       return json({ messages: [{ id: 'old1', body: 'RB1 for two firsts', senderName: 'Sam', createdAt: T(-600) }] })
@@ -230,6 +231,8 @@ describe('the league page chat does everything the drawer does', () => {
 
   it('pins for the league and reacts', async () => {
     await openPanel()
+    // Pin waits for /pinned to say this viewer may pin; it is not offered on a guess.
+    await waitFor(() => expect(calls((u) => u.includes('league%3AL1/pinned')).length).toBeGreaterThan(0))
     fireEvent.click(within(openActions('a')).getByRole('button', { name: /Pin for the league/ }))
     await waitFor(() => expect(calls((u, i) => u.endsWith('league%3AL1/pin') && i?.method === 'POST')).toHaveLength(1))
     fireEvent.click(within(openActions('a')).getByRole('button', { name: 'React 🔥' }))
