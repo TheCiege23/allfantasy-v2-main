@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -24,6 +24,7 @@ import PlayoffBracketBoard from "./PlayoffBracketBoard"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import MlbBracketBoard from "./MlbBracketBoard"
 import PlayoffSettingsModal from "./PlayoffSettingsModal"
+import { useNbaCupLiveView } from "./useNbaCupLiveView"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -76,15 +77,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canShareEntry = ["ncaaf", "nba_cup", "nfl"].includes(String(view.challenge.sport ?? "").toLowerCase())
   const isLiveSingleGame = canShareEntry && !view.challenge.isTestMode
   const rollingCup = isLiveSingleGame && view.challenge.sport === "nba_cup"
-  useEffect(() => {
-    if (!rollingCup) return
-    let active = true
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "visible") return
-      void getPlayoffBracketViewClient(view.challenge.id, view.activeEntry?.id).then((next) => { if (active) setView(next) }).catch(() => {})
-    }, 30_000)
-    return () => { active = false; clearInterval(timer) }
-  }, [rollingCup, view.challenge.id, view.activeEntry?.id])
+  useNbaCupLiveView(view.challenge.id, rollingCup, setView)
   const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
   const pastDeadline = isLiveSingleGame && !rollingCup && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
@@ -149,6 +142,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   }
 
   function handlePick(seriesId: string, teamName: string) {
+    if (!activeEntry) return
     if (savingSeriesIds.has(seriesId)) return
     const entryId = activeEntry.id
     const wasSubmitted = Boolean(view.activeEntry?.isComplete)
@@ -191,11 +185,13 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   }
 
   function handleSubmit() {
+    if (!activeEntry) return
+    const entryId = activeEntry.id
     startSubmitting(async () => {
       try {
         const result = await submitPlayoffBracketEntryClient({
           challengeId: view.challenge.id,
-          entryId: activeEntry.id,
+          entryId,
           tiebreakerTotalScore: isLiveSingleGame ? Number(tiebreakerGuess) : undefined,
         })
         toast.success(isLiveSingleGame ? "Picks finalized" : "Bracket submitted")

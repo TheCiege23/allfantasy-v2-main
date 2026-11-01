@@ -1,5 +1,6 @@
 import type { PlayoffSeriesView } from "./types"
 import { nbaCupLogoCode } from "@/lib/players/teamLogos"
+import { cupGameDetails } from "./nbaCupProgress"
 
 /**
  * NBA Cup Group Play, derived for the pool page: per-game live detail, group
@@ -60,12 +61,15 @@ export function cupGameDetail(series: Pick<PlayoffSeriesView, "providerGamesJson
   const live = json.live ?? {}
   const teams = json.teams ?? {}
   const period = Number(live.period)
+  const details = cupGameDetails(series)
+  const tiedLeader = (rows: typeof details.homeLeaders): CupLeader | null => rows?.length
+    ? { name: rows.map((row) => row.name).join(" / "), points: rows[0].points } : null
   return {
-    detail: text(live.detail),
-    period: Number.isInteger(period) && period > 0 ? period : null,
-    clock: text(live.clock, 12),
-    homeLeader: leader(live.homeLeader),
-    awayLeader: leader(live.awayLeader),
+    detail: text(live.detail) ?? details.statusDetail ?? null,
+    period: Number.isInteger(period) && period > 0 ? period : details.period ?? null,
+    clock: text(live.clock, 12) ?? details.clock ?? null,
+    homeLeader: tiedLeader(details.homeLeaders) ?? leader(live.homeLeader),
+    awayLeader: tiedLeader(details.awayLeaders) ?? leader(live.awayLeader),
     homeLines: lines(live.homeLines),
     awayLines: lines(live.awayLines),
     homeColor: color(teams.homeColor),

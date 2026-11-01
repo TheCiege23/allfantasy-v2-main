@@ -17,6 +17,8 @@ import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
+import { useNbaCupLiveView } from "./useNbaCupLiveView"
+import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
 import "../bracket-experience.css"
 import "./pool-dashboard.css"
 
@@ -88,6 +90,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const tournamentUsed = view.viewerTournamentBracketUsed ?? null
   const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
   const rollingCup = safeChallenge.sport === "nba_cup" && !safeChallenge.isTestMode
+  useNbaCupLiveView(safeChallenge.id, rollingCup, setView)
   const tournamentLocked = singleGameSport && !rollingCup && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
@@ -385,6 +388,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             </article>
           )}
         </section>
+
+        {rollingCup ? <NbaCupTournamentPanel series={series} season={safeChallenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
 
         {canSyncPlayoffPool ? (
           <section

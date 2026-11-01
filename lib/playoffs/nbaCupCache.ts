@@ -25,6 +25,9 @@ export function nbaCupSeriesRows(games: NbaCupGame[]) {
     seriesSummary: game.winnerTeamName ? `${game.homeScore}–${game.awayScore}` : null,
     providerGamesJson: {
       provider: "espn_nba_cup", eventId: game.eventId, gameLabel: game.label, location: game.location,
+      period: game.period ?? null, clock: game.clock ?? null, statusDetail: game.statusDetail ?? null,
+      homeLeaders: game.homeLeaders ?? [], awayLeaders: game.awayLeaders ?? [],
+      homeRegulationPoints: game.homeRegulationPoints ?? null, awayRegulationPoints: game.awayRegulationPoints ?? null,
       live: {
         detail: game.statusDetail ?? null, period: game.period ?? null, clock: game.clock ?? null,
         homeLeader: game.homeLeader ?? null, awayLeader: game.awayLeader ?? null,
