@@ -20,6 +20,7 @@ import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { scenarioVerdict, startSitCall, tradeTargetVerdict } from './answerPolishBuild'
 import { answerKey } from './answerPolish'
+import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
 
 const points = (n: number | null) => n == null ? 'not computed' : n.toFixed(1)
 const names = (ps: Array<{ name: string }>) => ps.map(p => p.name).join(', ')
@@ -173,6 +174,17 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     let scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
+    if (kind === 'lineup' && scenario?.status === 'unresolved' && scenario.reason === 'sport_not_supported') {
+      const { buildOtherSportStartSit } = await import('./otherSportStartSit')
+      const comparison = await buildOtherSportStartSit({
+        leagueId: provenLeagueId, userId: args.userId,
+        players: extractPlayerNameCandidates(input.message).slice(0, 2),
+      })
+      return comparison.ready
+        ? decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: comparison.text,
+          sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
+        : gap('other_sport_start_sit_unavailable', comparison.text, 'Check the player names, game schedule and scoring data before making a lineup change.')
+    }
     if (scenario?.status === 'unresolved') {
       const remedy = scenario.reason === 'unavailable_player'
         ? 'Choose an available player whose game has not started. Ask for a full lineup check to compare eligible replacements, then confirm the slot and AutoSubs on your platform.'
@@ -212,6 +224,12 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     }
     if (kind === 'lineup') {
       const result = await buildLineupOptimization({ leagueId: provenLeagueId, userId: args.userId })
+      if (result.status === 'unresolved' && result.reason === 'sport_not_supported') {
+        const { buildBaselineLineupContext } = await import('./lineupOptimizerOtherSports')
+        const baseline = await buildBaselineLineupContext({ leagueId: provenLeagueId, userId: args.userId })
+        return gap('league_scored_weekly_projection_unavailable', baseline,
+          'This is a standard per-game baseline, not a forecast under your league scoring. Check this scoring period\'s games and lineup locks before making changes.')
+      }
       if (result.status === 'unresolved') return gap(result.reason, result.detail, 'Sync your league and check that weekly projections are available, then retry.')
       const call = singleSwapCall(result, provenLeagueId)
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'league_scoring', 'weekly_projections'],

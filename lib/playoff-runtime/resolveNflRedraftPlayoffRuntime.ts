@@ -354,7 +354,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   const format = 'format' in general ? String((general as { format?: unknown }).format ?? 'redraft') : 'redraft'
   // Same coverage as the schedule runtime: a season the roller can advance must be able to
   // reach its bracket and champion.
-  if (!runsStandardWeeklySeason(sport, format)) {
+  if (!runsStandardWeeklySeason(sport, format, season.season)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
 

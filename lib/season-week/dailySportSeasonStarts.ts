@@ -146,6 +146,9 @@ export function resolveDailySportWeekWindow(
     const start = new Date(`${day}T00:00:00.000Z`)
     return { start, end: new Date(start.getTime() + 7 * DAY_MS) }
   }
+  // A future soccer season cannot borrow the daily-sport seven-day arithmetic:
+  // international breaks would shift its scoring weeks away from the schedule.
+  if (String(sport ?? '').trim().toUpperCase() === 'SOCCER') return null
   return weekWindowFromSeasonStart(resolveDailySportSeasonStart(sport, season), week)
 }
 
@@ -183,6 +186,7 @@ export function dailySportWeekForInstant(
     }
     return null
   }
+  if (String(sport ?? '').trim().toUpperCase() === 'SOCCER') return null
   const opener = resolveDailySportSeasonStart(sport, season)
   if (!opener) return null
   const anchor = Date.parse(opener)

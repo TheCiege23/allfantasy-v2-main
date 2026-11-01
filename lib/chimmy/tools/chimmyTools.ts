@@ -429,7 +429,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Soccer has per-match logs only, not verified full-season totals. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           season: { type: 'number', description: 'A year, only if the user named one (e.g. 2025). Omit for the current season.' },
         },
         required: ['player'],
@@ -446,7 +446,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           week: { type: 'number', description: 'NFL / college only: a specific week, only if the user named one. Do not guess the current week. Ignored for MLB/NBA/NHL.' },
           last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
@@ -520,7 +520,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'compare_start_options',
       description:
-        "Start A or B? Compares exactly two players on the user's roster: this week's projection for each under the league's scoring, and the best lineup total if each is the one started. Use when they name two players ('Chase or Nacua?'). For the whole lineup use optimize_my_lineup.",
+        "Start A or B? Compares two players on the user's roster in the selected league. NFL uses this week's league-scored projection and whole-lineup impact. NBA, NHL, MLB, college sports, and soccer combine current-season game logs with verified remaining games and opponents in the scoring period; points leagues receive a schedule-adjusted baseline, category and roto leagues receive category-by-category contributions without an invented overall winner. Soccer calls are limited to verified gameweeks. Use when they name two players. For a whole-lineup question use optimize_my_lineup.",
       parameters: {
         type: 'object',
         properties: {
@@ -622,6 +622,29 @@ export const CHIMMY_TOOL_SPECS = [
       description:
         "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a Guilly league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_live_fantasy_matchup',
+      description:
+        "The selected league's current fantasy scoreboard: head-to-head points and starter contributions, native category matchup values, or native rotisserie standings and rank points, depending on league format. Use for 'what is my score', 'am I winning right now', 'what is my roto rank', or 'live fantasy matchup'. Requires a selected league. Repeat the refresh time; never call missing scores zero or stale data real-time. For pregame matchup projections use get_my_matchup.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_fantasy_matchup_history',
+      description:
+        "Played fantasy results in the selected league across stored seasons. Use for past team results and league W-L; add player for a named athlete's actual league-scored fantasy points by week, including starter or bench and finalization status. Native category and roto leagues report finalized category snapshots when stored. Optional season, week and limit narrow the read. It does not infer missing 0–0 games or historical roster membership. For real-sports games use get_player_game_log instead.",
+      parameters: { type: 'object', properties: {
+        season: { type: 'integer', description: 'Optional fantasy season year.' },
+        week: { type: 'integer', description: 'Optional fantasy matchup week.' },
+        player: { type: 'string', description: 'Exact player name when asking for this athlete’s historical fantasy points in the selected league.' },
+        limit: { type: 'integer', description: 'Maximum results to show, 1–20. Defaults to 8.' },
+      }, required: [] },
     },
   },
 
@@ -1202,6 +1225,22 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           ...(settles ? { onSettle: (run: ChimmyEliminationSettleRun) => settles.push(run) } : {}),
         })
+      }
+
+      case 'get_live_fantasy_matchup': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLiveFantasyMatchupContext } = await import('@/lib/chimmy/liveFantasyMatchupGrounding')
+        return await buildLiveFantasyMatchupContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'get_fantasy_matchup_history': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLeagueFantasyHistoryContext } = await import('@/lib/chimmy/leagueFantasyHistoryGrounding')
+        return await buildLeagueFantasyHistoryContext({ leagueId: ctx.leagueId, userId: ctx.userId,
+          season: typeof args.season === 'number' ? args.season : null,
+          week: typeof args.week === 'number' ? args.week : null,
+          limit: typeof args.limit === 'number' ? args.limit : null,
+          player: typeof args.player === 'string' ? args.player : null })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */
