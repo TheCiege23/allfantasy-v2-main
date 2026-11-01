@@ -52,6 +52,11 @@ describe('rookieFilterState is threaded from the resolver to the panel', () => {
     expect(read('lib/draft-room/ensureDraftPoolReady.ts').match(/rookieFilterState: resolved\.rookieFilterState/g)).toHaveLength(2)
   })
 
+  it('the pool route and the cache warmer both store the proven non-rookies the pick check reads', () => {
+    expect(read('app/api/leagues/[leagueId]/draft/pool/route.ts')).toContain('provenNonRookies: resolved.provenNonRookies')
+    expect(read('lib/draft-room/ensureDraftPoolReady.ts').match(/provenNonRookies: resolved\.provenNonRookies/g)).toHaveLength(2)
+  })
+
   it('the draft room parses it off the pool response and hands it to the player pool', () => {
     const client = read('components/app/draft-room/DraftRoomPageClient.tsx')
     expect(client).toContain('rookieFilterState: parseRookieFilterState(data.rookieFilterState)')
@@ -60,6 +65,6 @@ describe('rookieFilterState is threaded from the resolver to the panel', () => {
 
   it('PlayerPanel renders the banner from its prop', () => {
     const panel = read('components/app/draft-room/PlayerPanel.tsx')
-    expect(panel).toMatch(/<RookieFilterFallbackBanner rookieFilterState=\{rookieFilterState\} t=\{t\} \/>/)
+    expect(panel).toMatch(/<RookieFilterFallbackBanner rookieFilterState=\{rookieFilterState\} t=\{t\} sport=\{sport\} \/>/)
   })
 })

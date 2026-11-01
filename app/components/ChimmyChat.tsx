@@ -5,14 +5,14 @@ import { Send, Volume2, VolumeX, Image as ImageIcon, Mic, MicOff, Loader2, Squar
 import { toast } from 'sonner';
 import { getDefaultChimmyChips } from '@/lib/chimmy-interface';
 import { isSupportedSport } from '@/lib/sport-scope';
-import { isNoChargeChimmyIntent } from '@/lib/ai/chimmyIntentRouter';
-import { confirmTokenSpend } from '@/lib/tokens/client-confirm';
+import { ChimmyAnalysisPreview } from '@/components/chimmy/ChimmyAnalysisPreview';
+import { useAnalysisUnlock } from '@/components/chimmy/useAnalysisUnlock';
+import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types';
 import { sendChimmyMessage } from '@/lib/chimmy-chat/ChimmyChatService';
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
   CHIMMY_GENERIC_ERROR_MESSAGE,
   CHIMMY_PREMIUM_CTA_LABEL,
-  CHIMMY_PREMIUM_FEATURE_MESSAGE,
 } from '@/lib/chimmy-chat/response-copy';
 import {
   getVoiceConfig,
@@ -39,6 +39,7 @@ type ChatMessage = {
   content: string;
   image?: string | null;
   upgradePath?: string | null;
+  meta?: ChimmyMessageMeta;
   /** Unix ms — for timestamps & threaded grouping */
   createdAt: number;
 };
@@ -397,7 +398,12 @@ export default function ChimmyChat({
     reader.readAsDataURL(file);
   };
 
+  const analysisUnlock = useAnalysisUnlock((id, result) => {
+    setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta, upgradePath: null } : message));
+  }, message => toast.error(message), setIsTyping);
+
   const sendMessage = async (overrideText?: string) => {
+    if (isTyping || analysisUnlock.isBusy()) return;
     const outgoingText = (overrideText !== undefined ? overrideText : input).trim();
     if (!outgoingText && !imageFile) return;
 
@@ -423,50 +429,7 @@ export default function ChimmyChat({
       imageFileInputRef.current.value = '';
     }
     setIsTyping(true);
-
-    const skipClientTokenPreflight = outgoingText ? isNoChargeChimmyIntent(outgoingText) : false;
-    /*
-     * 🛑 THIS IS A CLAIM THAT REACHES BILLING, SO IT IS ONLY EVER SET BY AN ACTUAL
-     * "yes" BELOW. A skipped preflight is not consent, and neither is a preflight
-     * that threw — both leave this false and let the server ask for confirmation
-     * rather than charging somebody who was never asked.
-     */
-    let tokenSpendConfirmed = false;
-    if (!skipClientTokenPreflight) {
-      try {
-        const { confirmed, preview } = await confirmTokenSpend('ai_chimmy_chat_message');
-        if (!preview.canSpend) {
-          setMessages((prev) => [
-            ...prev.slice(0, -1),
-            {
-              id: createMessageId(),
-              role: 'assistant',
-              content: CHIMMY_PREMIUM_FEATURE_MESSAGE,
-              upgradePath: CHIMMY_DEFAULT_UPGRADE_PATH,
-              createdAt: Date.now(),
-            },
-          ]);
-          setIsTyping(false);
-          return;
-        }
-        if (!confirmed) {
-          setMessages((prev) => prev.slice(0, -1));
-          setInput(capturedInput);
-          if (capturedImageFile) {
-            setImageFile(capturedImageFile);
-            setImagePreview(capturedImagePreview);
-          }
-          setIsTyping(false);
-          return;
-        }
-        tokenSpendConfirmed = true;
-      } catch (error) {
-        console.error(
-          '[ChimmyChat] Token preview failed, continuing without preflight:',
-          error instanceof Error ? error.message : error
-        );
-      }
-    }
+    analysisUnlock.register('');
 
     try {
       let streamedAssistantHandled = false;
@@ -492,9 +455,8 @@ export default function ChimmyChat({
               }
             : {}),
         },
-        /* We already asked, just above — so do not ask again, and pass on the answer. */
-        promptForTokenSpend: false,
-        tokenSpendConfirmed,
+        // The service asks for consent only if the server says no included answers remain.
+        tokenSpendConfirmed: false,
         onChunk: (text) => {
           streamedAssistantHandled = true;
           setMessages((prev) => {
@@ -517,14 +479,25 @@ export default function ChimmyChat({
           });
         },
       });
+      if (result.error === 'Token spend cancelled by user.') {
+        setMessages((prev) => prev.filter((message) => message.id !== userMessage.id));
+        setInput(capturedInput || outgoingText);
+        if (capturedImageFile) {
+          setImageFile(capturedImageFile);
+          setImagePreview(capturedImagePreview);
+        }
+        return;
+      }
       if (result.sessionId) {
         setSessionId(result.sessionId);
       }
+      analysisUnlock.register(assistantMessageId, result.unlock);
       const reply = result.response || CHIMMY_GENERIC_ERROR_MESSAGE;
       const assistantMessage: ChatMessage = {
         id: assistantMessageId,
         role: 'assistant',
         content: reply,
+        meta: result.meta,
         upgradePath: result.upgradeRequired ? result.upgradePath ?? CHIMMY_DEFAULT_UPGRADE_PATH : null,
         createdAt: assistantCreatedAt,
       };
@@ -745,7 +718,10 @@ export default function ChimmyChat({
                     widePanel ? 'w-full max-w-full' : 'max-w-[85%]'
                   } ${embedded ? 'p-3 text-[13px]' : 'p-5'}`}
                 >
-                  {renderContentWithLinks(msg.content)}
+                  {msg.meta?.analysisPreview ? <ChimmyAnalysisPreview preview={msg.meta.analysisPreview}
+                    busy={isTyping || analysisUnlock.busy}
+                    onUnlock={analysisUnlock.activeId === msg.id ? () => void analysisUnlock.unlock(msg.id) : undefined} />
+                    : renderContentWithLinks(msg.content)}
                   <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
                     <button
                       type="button"

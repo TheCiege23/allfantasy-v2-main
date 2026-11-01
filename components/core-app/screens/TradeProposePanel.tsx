@@ -5,6 +5,8 @@ import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker
 import type { LeagueRoster, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { PickTermsEditor, usePickTermsView, type OfferPick } from '@/components/core-app/PickTermsEditor'
+import { parseFuturePickRef, type PickTerms } from '@/lib/league-trade-engine/pickTerms'
 
 /**
  * Phase 4 — send the deal on the board as a real proposal.
@@ -42,6 +44,8 @@ export type ProposalAsset = {
   fromRosterId: string
   toRosterId: string
   faabAmount?: number
+  /** Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) ride here as `pickTerms`. */
+  metadata?: Record<string, unknown>
 }
 
 /**
@@ -185,6 +189,8 @@ export function TradeProposePanel(props: {
   const [sending, setSending] = useState(false)
   const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
   const [offerMessage, setOfferMessage] = useState('')
+  const [pickTerms, setPickTerms] = useState<Record<string, PickTerms | undefined>>({})
+  const pickTermsView = usePickTermsView(leagueId)
 
   const hasDeal = give.length + get.length > 0
   const unpriced = [...give, ...get].filter((asset) => asset.kind !== 'faab' && asset.value == null)
@@ -210,6 +216,16 @@ export function TradeProposePanel(props: {
     })
   }, [mine, partner, give, get])
 
+  /** This league's future picks in the deal, which may carry terms. */
+  const offerPicks = useMemo<OfferPick[]>(() => {
+    const labels = new Map([...give, ...get].flatMap((a) => (a.kind === 'pick' && a.pickId ? [[a.pickId, a.label] as const] : [])))
+    return (reconciled?.assets ?? []).flatMap((a) => {
+      const ref = String(a.itemReference ?? '')
+      const p = parseFuturePickRef(ref)
+      return p ? [{ pickId: ref, label: labels.get(ref) ?? `${p.season} round ${p.round}`, round: p.round, originalRosterId: p.originalRosterId }] : []
+    })
+  }, [reconciled, give, get])
+
   const propose = useCallback(async () => {
     if (!leagueId || !mine || !partner || !reconciled || reconciled.blocked.length > 0) return
     setSending(true)
@@ -229,7 +245,10 @@ export function TradeProposePanel(props: {
         body: JSON.stringify({
           proposerRosterId: mine.rosterId,
           receiverRosterId: partner.rosterId,
-          assets: reconciled.assets,
+          assets: reconciled.assets.map((a) => {
+            const terms = a.itemReference ? pickTerms[a.itemReference] : undefined
+            return terms ? { ...a, metadata: { ...(a.metadata ?? {}), pickTerms: terms } } : a
+          }),
           metadata: offerMessage.trim() ? { offerMessage: offerMessage.trim() } : undefined,
         }),
       })
@@ -266,7 +285,7 @@ export function TradeProposePanel(props: {
     } finally {
       setSending(false)
     }
-  }, [leagueId, mine, partner, reconciled, counteringTradeId, offerMessage, onSent, copy])
+  }, [leagueId, mine, partner, reconciled, counteringTradeId, offerMessage, pickTerms, onSent, copy])
 
   if (!leagueId || !hasDeal) return null
 
@@ -394,6 +413,15 @@ export function TradeProposePanel(props: {
                 {partner.ownerName ?? copy('them')}. {copy('They answer it in AllFantasy.')}
               </p>
             )
+          ) : null}
+
+          {partner?.canReceiveProposal && pickTermsView && reconciled && reconciled.blocked.length === 0 ? (
+            <PickTermsEditor
+              view={pickTermsView}
+              picks={offerPicks}
+              value={pickTerms}
+              onChange={(pickId, terms) => setPickTerms((t) => ({ ...t, [pickId]: terms }))}
+            />
           ) : null}
 
           {partner?.canReceiveProposal ? (

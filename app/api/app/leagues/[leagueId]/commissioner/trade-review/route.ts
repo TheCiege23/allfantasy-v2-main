@@ -19,8 +19,9 @@ export const dynamic = 'force-dynamic'
  * user-safe `CommissionerTradeReviewV1` contract — review WORKLOAD only, never a
  * fairness/veto/collusion verdict.
  *
- * Gated by `COMMISSIONER_TRADE_REVIEW_ENABLED=true` (default off → the module
- * renders a quiet "expanding soon" state).
+ * ON BY DEFAULT since 2026-10-26 (owner decision: switch the trade-review panel on across the
+ * site). `COMMISSIONER_TRADE_REVIEW_ENABLED=false` is kept as a kill switch → the module renders
+ * its quiet "expanding soon" state.
  */
 export interface TradeReviewResponse {
   enabled: boolean
@@ -30,7 +31,7 @@ export interface TradeReviewResponse {
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const { leagueId } = await ctx.params
 
-  if (process.env.COMMISSIONER_TRADE_REVIEW_ENABLED !== 'true') {
+  if (!isCommissionerTradeReviewEnabled()) {
     return NextResponse.json({ enabled: false } satisfies TradeReviewResponse, { status: 200 })
   }
 
@@ -57,4 +58,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   } catch {
     return NextResponse.json({ error: 'Trade review is temporarily unavailable.' }, { status: 500 })
   }
+}
+
+/** On unless explicitly switched off with `COMMISSIONER_TRADE_REVIEW_ENABLED=false`. */
+function isCommissionerTradeReviewEnabled(): boolean {
+  return (process.env.COMMISSIONER_TRADE_REVIEW_ENABLED ?? '').trim().toLowerCase() !== 'false'
 }

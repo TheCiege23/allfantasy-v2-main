@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-vi.mock('@/components/navigation/HomeTopNav', () => ({ default: () => null }))
+vi.mock('@/components/i18n/LanguageToggle', () => ({ default: () => null }))
 vi.mock('@/components/landing/SeoLandingFooter', () => ({ default: () => null }))
 vi.mock('@/components/landing/LandingCTAStrip', () => ({ LandingCTAStrip: () => null }))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (k: string) => k }) }))

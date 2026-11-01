@@ -21,12 +21,17 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'trades',
   'guillotine-first-chop',
   'guillotine-chop-rules',
+  'guillotine-rules',
   'playoffs',
   'members',
+  'team-settings',
+  'previous-leagues',
   'co-commissioners',
   'divisions',
   'ai',
   'commissioner-tools',
+  'settings-lock',
+  'score-adjustments',
   'survivor-tribes',
 ]
 

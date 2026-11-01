@@ -21,6 +21,7 @@ export async function GET(request: Request, context: { params: Promise<{ challen
 
   const view = await getPlayoffBracketView({
     challengeId: params.data.challengeId,
+    requestedEntryId: new URL(request.url).searchParams.get("entryId") ?? undefined,
     user: auth.user,
   })
 

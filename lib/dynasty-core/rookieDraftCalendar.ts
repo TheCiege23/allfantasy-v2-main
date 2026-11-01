@@ -19,19 +19,60 @@
  * the window falls in the seeded season's own year.
  *
  * A commissioner may turn auto-open on or off and set a custom open date; both live in
- * `League.settings[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]` — no schema change.
+ * `League.settings[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]` — no schema change. Unset, auto-open follows
+ * the league's plan: on for AF Commissioner, off otherwise ({@link resolveRookieDraftAutoOpen}).
  */
 import { DYNASTY_SPORT_CONFIGS, type DynastySportConfig } from './dynastySportConfig'
 
 export const ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY = 'dynasty_rookie_draft_calendar'
 
 /**
- * ⚠ OFF UNLESS A COMMISSIONER TURNS IT ON. An existing dynasty league already sitting in its
- * offseason (an MLB league finalized this October, say) would otherwise get a rookie draft created
- * under it, and its league moved to `pre_draft`, the first time the roller ran after this shipped.
- * Defaulting it on for new leagues only is an owner decision; this is the one line to change.
+ * The default for a league whose commissioner does NOT hold AF Commissioner, and the value read
+ * when nothing else is known. Free leagues create the next draft with the button.
  */
 export const ROOKIE_DRAFT_AUTO_OPEN_DEFAULT = false
+
+/**
+ * Leagues whose commissioner holds AF Commissioner open their rookie draft automatically unless the
+ * commissioner switched it off (spec §1.1, owner decision 2026-10-27).
+ *
+ * ⚠ ONLY FOR AN OFFSEASON THAT BEGAN ON OR AFTER THIS INSTANT. An offseason already under way when
+ * this shipped (an MLB league crowned this October, say) would otherwise get a rookie draft created
+ * under it, and its league moved to `pre_draft`, on the first roller tick. Those leagues keep auto-open
+ * off and their commissioner is told once, with the switch to turn it on.
+ */
+export const ROOKIE_DRAFT_PLAN_DEFAULT_FROM = new Date('2026-10-28T00:00:00Z')
+
+export type RookieDraftAutoOpenDecision = {
+  autoOpen: boolean
+  source:
+    /** The commissioner set the switch; their choice stands. */
+    | 'commissioner'
+    /** AF Commissioner, offseason began after the plan default shipped. */
+    | 'plan_default'
+    /** AF Commissioner, but this offseason was already under way: off, and the commissioner is told. */
+    | 'plan_default_predates'
+    /** No AF Commissioner. */
+    | 'free_default'
+}
+
+/**
+ * Whether THIS offseason's rookie draft opens automatically. Pure: the caller supplies whether the
+ * commissioner holds AF Commissioner and when the offseason began (next season's shell was created).
+ */
+export function resolveRookieDraftAutoOpen(input: {
+  settings: unknown
+  commissionerPlan: boolean
+  offseasonStartedAt: Date
+}): RookieDraftAutoOpenDecision {
+  const explicit = readExplicitAutoOpen(input.settings)
+  if (explicit !== null) return { autoOpen: explicit, source: 'commissioner' }
+  if (!input.commissionerPlan) return { autoOpen: ROOKIE_DRAFT_AUTO_OPEN_DEFAULT, source: 'free_default' }
+  if (input.offseasonStartedAt.getTime() < ROOKIE_DRAFT_PLAN_DEFAULT_FROM.getTime()) {
+    return { autoOpen: false, source: 'plan_default_predates' }
+  }
+  return { autoOpen: true, source: 'plan_default' }
+}
 
 /** The hour (UTC) a window opens on its day: 12:00 UTC is the morning in every US time zone. */
 const OPEN_HOUR_UTC = 12
@@ -40,6 +81,37 @@ export type RookieDraftCalendarSettings = {
   autoOpen: boolean
   /** `YYYY-MM-DD`, or null for the sport default. */
   customOpenDate: string | null
+  /** Days after an automatic open that the draft starts by itself, or null: the commissioner presses Start. */
+  autoStartDays: RookieDraftAutoStartDays | null
+}
+
+/** "Start it N days after it opens" (phase 6, 2026-10-29): the choices a commissioner is offered. */
+export const ROOKIE_DRAFT_AUTO_START_DAYS = [3, 7, 14] as const
+export type RookieDraftAutoStartDays = (typeof ROOKIE_DRAFT_AUTO_START_DAYS)[number]
+
+export function normalizeAutoStartDays(value: unknown): RookieDraftAutoStartDays | null {
+  return (ROOKIE_DRAFT_AUTO_START_DAYS as readonly unknown[]).includes(value) ? (value as RookieDraftAutoStartDays) : null
+}
+
+/**
+ * When an automatically opened rookie draft starts by itself: `days` after the day it opened, at
+ * 00:00 UTC of the following day — 8 pm Eastern / 5 pm Pacific in summer, an evening across the US.
+ */
+export function rookieDraftAutoStartAt(openedAt: Date, days: RookieDraftAutoStartDays): Date {
+  return new Date(Date.UTC(openedAt.getUTCFullYear(), openedAt.getUTCMonth(), openedAt.getUTCDate() + days + 1, 0))
+}
+
+/** "Tuesday, May 12 at 8:00 PM ET" — the start time as members read it in the announcement. */
+export function describeRookieDraftStart(at: Date): string {
+  const text = at.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+  return `${text.replace(/, (\d{1,2}:\d{2})/, ' at $1')} ET`
 }
 
 export type RookieDraftWindow = {
@@ -104,13 +176,28 @@ export function normalizeCustomOpenDate(value: unknown): string | null {
   return v
 }
 
-export function readRookieDraftCalendarSettings(settings: unknown): RookieDraftCalendarSettings {
+function calendarObject(settings: unknown): Record<string, unknown> {
   const all = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
   const raw = all[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]
-  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+}
+
+/** The commissioner's own auto-open choice, or null when they never set it. */
+export function readExplicitAutoOpen(settings: unknown): boolean | null {
+  const v = calendarObject(settings).autoOpen
+  return typeof v === 'boolean' ? v : null
+}
+
+/**
+ * The stored settings. `autoOpen` here is the commissioner's choice or the free default; it does not
+ * know the league's plan — use {@link resolveRookieDraftAutoOpen} for what will actually happen.
+ */
+export function readRookieDraftCalendarSettings(settings: unknown): RookieDraftCalendarSettings {
+  const o = calendarObject(settings)
   return {
-    autoOpen: typeof o.autoOpen === 'boolean' ? o.autoOpen : ROOKIE_DRAFT_AUTO_OPEN_DEFAULT,
+    autoOpen: readExplicitAutoOpen(settings) ?? ROOKIE_DRAFT_AUTO_OPEN_DEFAULT,
     customOpenDate: normalizeCustomOpenDate(o.customOpenDate),
+    autoStartDays: normalizeAutoStartDays(o.autoStartDays),
   }
 }
 

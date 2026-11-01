@@ -47,6 +47,7 @@ import {
   captureRedraftRosterState,
   type RedraftRosterStateSnapshot,
 } from '@/lib/redraft/tradeExecutionSnapshot'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 type Db = Prisma.TransactionClient | typeof prisma
 
@@ -60,6 +61,7 @@ export type NativeReversalBlocker =
   | 'SNAPSHOT_NOT_NATIVE'
   | 'ALREADY_REVERSED'
   | 'ROSTER_CHANGED_SINCE_EXECUTION'
+  | 'ZOMBIE_ITEMS_REQUIRE_REVIEW'
   | 'CAP_LEDGER_MISSING'
   | 'CAP_RECORD_MOVED_SINCE_EXECUTION'
 
@@ -143,12 +145,16 @@ export async function evaluateNativeTradeReversalReadiness(
 
   const snapshot = await db.tradeExecutionSnapshot.findUnique({
     where: { tradeId: proposalId },
-    select: { id: true, tradeSource: true, afterState: true, dependencies: true },
+    select: { id: true, tradeSource: true, afterState: true, dependencies: true, assetSummary: true },
   })
   if (!snapshot) {
     // Everything settled before the native snapshot writer landed. A guessed "before" is not
     // evidence, so there is deliberately no fallback.
     blockers.push('NO_EXECUTION_SNAPSHOT')
+    return { ok: false, blockers, drift }
+  }
+  if (Array.isArray((snapshot.assetSummary as { zombieItems?: unknown } | null)?.zombieItems)) {
+    blockers.push('ZOMBIE_ITEMS_REQUIRE_REVIEW')
     return { ok: false, blockers, drift }
   }
   if (snapshot.tradeSource !== 'redraft_native') blockers.push('SNAPSHOT_NOT_NATIVE')
@@ -282,6 +288,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
       for (const r of before) {
         await tx.redraftRoster.update({ where: { id: r.rosterId }, data: { faabBalance: r.faabBalance } })
       }
+      await copyRedraftFaabToGeneric(tx, before.map((r) => r.rosterId))
 
       // IDP cap: move each salary record back, then APPEND reversing ledger rows.
       const { moves } = await readCapMoves(tx, readSourceTransactionIds(snapshot.dependencies))

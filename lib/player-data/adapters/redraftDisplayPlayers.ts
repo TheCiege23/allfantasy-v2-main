@@ -29,6 +29,8 @@ export type DisplayPlayerRecord = SlimPlayer & {
   profileSource?: string | null
   statsSource?: string | null
   projectionsSource?: string | null
+  /** NBA / NHL / MLB: "C12" — rank within position by season points in the league's scoring. */
+  positionRankLabel?: string | null
   byeWeek?: number | null
   activeStatus?: string | null
   opponent?: string | null
@@ -95,10 +97,12 @@ export function displayPlayerFromUnifiedRow(row: UnifiedPlayerWireDto): DisplayP
     profileSource: row.profileSource ?? null,
     statsSource: row.statsSource ?? null,
     projectionsSource: row.projectionsSource ?? null,
+    positionRankLabel: row.positionRankLabel ?? null,
     byeWeek: metadata?.byeWeek ?? canonical?.byeWeek ?? row.product?.byeWeek ?? null,
     activeStatus: metadata?.activeStatus ?? canonical?.activeStatus ?? null,
-    opponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? null,
-    homeAway: gameContext?.homeAway ?? null,
+    // NBA / NHL / MLB carry no NFL game context; a daily-lineup row carries the selected day's opponent.
+    opponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? row.periodOpponent ?? null,
+    homeAway: gameContext?.homeAway ?? row.periodHomeAway ?? null,
     kickoffTimeIso: gameContext?.kickoffTimeIso ?? null,
     gameStatus: liveGameStatus ?? gameContext?.gameStatus ?? null,
     liveGameStatus,

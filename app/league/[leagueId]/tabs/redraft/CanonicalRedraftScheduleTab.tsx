@@ -8,7 +8,9 @@ import {
 } from '@/lib/redraft/client'
 import { ScheduleView } from './ScheduleView'
 import { WeekControlPanel } from './WeekControlPanel'
+import { ScheduleRegeneratePanel } from './ScheduleRegeneratePanel'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
+import '../redraft-tailwind-tabs.css'
 
 /**
  * Canonical NFL/NCAAF redraft Schedule destination.
@@ -20,12 +22,17 @@ import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 export function CanonicalRedraftScheduleTab({
   leagueId,
   isCommissioner = false,
+  tradeDeadlineWeek = null,
 }: {
   leagueId: string
   isCommissioner?: boolean
+  /** League.tradeDeadlineWeek — marked on the season calendar; unset means no marker. */
+  tradeDeadlineWeek?: number | null
 }) {
   const [schedule, setSchedule] = useState<RedraftScheduleClient | null>(null)
   const [seasonId, setSeasonId] = useState<string | null>(null)
+  /** RedraftSeason.totalWeeks: the only source for the calendar's playoff weeks. */
+  const [totalWeeks, setTotalWeeks] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [noSeason, setNoSeason] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +54,7 @@ export function CanonicalRedraftScheduleTab({
           return
         }
         setSeasonId(season.id)
+        setTotalWeeks(typeof season.totalWeeks === 'number' ? season.totalWeeks : null)
         const nextSchedule = await fetchRedraftSchedule(leagueId, season.id)
         if (!cancelled) setSchedule(nextSchedule)
       } catch (cause) {
@@ -65,7 +73,7 @@ export function CanonicalRedraftScheduleTab({
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="rdt rdt-bridge p-4">
         <LeagueSurfaceState
           kind="loading"
           title="Loading schedule"
@@ -78,7 +86,7 @@ export function CanonicalRedraftScheduleTab({
 
   if (error) {
     return (
-      <div className="p-4">
+      <div className="rdt rdt-bridge p-4">
         <LeagueSurfaceState
           kind="error"
           title="Schedule unavailable"
@@ -93,7 +101,7 @@ export function CanonicalRedraftScheduleTab({
 
   if (noSeason) {
     return (
-      <div className="p-4">
+      <div className="rdt rdt-bridge p-4">
         <LeagueSurfaceState
           kind="empty"
           title="Schedule starts after the draft"
@@ -105,7 +113,7 @@ export function CanonicalRedraftScheduleTab({
   }
 
   return (
-    <div className="min-w-0 p-4" data-testid="canonical-redraft-schedule-tab">
+    <div className="rdt min-w-0 p-1 sm:p-4" data-testid="canonical-redraft-schedule-tab">
       {isCommissioner && seasonId && schedule ? (
         <WeekControlPanel
           seasonId={seasonId}
@@ -113,7 +121,10 @@ export function CanonicalRedraftScheduleTab({
           onChanged={() => setReloadToken((n) => n + 1)}
         />
       ) : null}
-      <ScheduleView schedule={schedule} />
+      {isCommissioner && seasonId ? (
+        <ScheduleRegeneratePanel seasonId={seasonId} onChanged={() => setReloadToken((n) => n + 1)} />
+      ) : null}
+      <ScheduleView schedule={schedule} totalWeeks={totalWeeks} tradeDeadlineWeek={tradeDeadlineWeek} />
     </div>
   )
 }

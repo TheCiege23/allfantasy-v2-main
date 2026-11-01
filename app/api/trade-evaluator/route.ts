@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -357,7 +358,7 @@ function resolvePickData(p: string | { year: number; round: number; projected_ra
   }
 }
 
-export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "TradeEvaluator" })(async (request: NextRequest) => {
+const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "TradeEvaluator" })(async (request: NextRequest) => {
   let userId: string | null = null
   let tokenFallbackLedgerId: string | null = null
   try {
@@ -557,6 +558,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       : null
     const cached = cacheKey ? getCachedResponse<Record<string, unknown>>(cacheKey) : null
     if (cached) {
+      paidToolNotDelivered()
       return NextResponse.json({
         ...cached,
         tokenSpend: gate.tokenSpend
@@ -1798,6 +1800,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       teamNames: { teamA: data.sender.manager_name, teamB: data.receiver.manager_name },
       rosterNames: { teamA: rosterNamesOf(data.sender.roster), teamB: rosterNamesOf(data.receiver.roster) },
     })
+    if (explanation.source !== 'ai') paidToolNotDelivered()
     const aiProviders: Record<string, 'ok' | 'error'> = explanation.provider
       ? { [explanation.provider]: explanation.source === 'ai' ? 'ok' : 'error' }
       : {}
@@ -2141,3 +2144,5 @@ export const GET = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trade
     message: 'AllFantasy Trade Evaluator API v3 — Structured Decision Engine',
   })
 })
+
+export const POST = withPaidToolBilling(paidToolPost)

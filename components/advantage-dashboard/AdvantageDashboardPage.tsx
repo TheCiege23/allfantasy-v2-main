@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import Link from 'next/link'
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
@@ -179,7 +181,7 @@ async function defaultLoadSimulationPreview(
   const teamA = presets[0] ?? fallbackPresets[0]!
   const teamB = presets[1] ?? fallbackPresets[1] ?? fallbackPresets[0]!
 
-  const response = await fetch('/api/simulation/matchup', {
+  const response = await paidToolFetchWithConfirm('/api/simulation/matchup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

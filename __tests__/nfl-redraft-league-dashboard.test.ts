@@ -66,7 +66,7 @@ describe('NFL redraft league shell gating', () => {
     ).toBe(false)
   })
 
-  it('rejects guillotine mode even for NCAAF redraft', () => {
+  it('rejects Guilly mode even for NCAAF redraft', () => {
     expect(
       isNflRedraftCoreDashboardLeague({
         sport: 'NCAAF',

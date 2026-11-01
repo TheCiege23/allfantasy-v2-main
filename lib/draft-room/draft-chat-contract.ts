@@ -6,7 +6,7 @@
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import type { LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
 import type { DraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-context'
-import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { redactPollForViewer } from '@/lib/chat-core/messagePolls'
 import { isSameSiteRelativePath } from '@/lib/rich-message/safeMedia'
 
 export type DraftChatMessageCategory =
@@ -230,6 +230,8 @@ export function sanitizeDraftChatRichMeta(raw: unknown): Record<string, unknown>
         ...(closeAt ? { closeAt } : {}),
         allowMultiple: raw.poll.allowMultiple === true,
         anonymous: raw.poll.anonymous === true,
+        // "Show results after close" — the read paths redact the tally until then (messagePolls.ts).
+        ...(raw.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
       }
     }
   }
@@ -465,7 +467,7 @@ export function buildDraftChatWireMessage(
     ...(aiMetadata ? { aiMetadata } : {}),
     parentMessageId: m.parentMessageId ?? null,
     metadata: metaRecord
-      ? ((redactAnonymousPollVotes(metaRecord, opts.viewerUserId ?? null) ?? null) as Record<string, unknown> | null)
+      ? ((redactPollForViewer(metaRecord, opts.viewerUserId ?? null) ?? null) as Record<string, unknown> | null)
       : null,
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAutomaticCeremonyDue, partitionReleasedPlayers, selectActiveFinalScores } from '@/lib/survivor-guillotine/corrections'
 
-describe('Survivor Guillotine correction recovery', () => {
+describe('Survivor Guilly correction recovery', () => {
   it('restores free players but preserves settled waiver ownership', () => {
     expect(partitionReleasedPlayers(['free', 'claimed', 'free'], new Set(['claimed']))).toEqual({
       restore: ['free'], retainedByClaimants: ['claimed'],

@@ -112,8 +112,11 @@ test.describe("@mobile login field probe", () => {
   })
 
   test("desktop keeps the handoff's 14px", async ({ browser }) => {
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    // newContext inherits the mobile project's touch settings unless overridden.
+    // A wide touch viewport is a tablet, so this control must request a mouse.
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false })
     const p = await ctx.newPage()
+    expect(await p.evaluate(() => matchMedia('(pointer: fine)').matches)).toBe(true)
     await p.setContent(page(CORE_CSS, AUTH_CSS, FORM))
     const sizes = await fieldSizes(p)
     console.log(`[login-field-probe] desktop 1280px fixed: ${JSON.stringify(sizes)}`)

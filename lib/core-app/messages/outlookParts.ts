@@ -1,0 +1,206 @@
+import { defineMessages } from '@/lib/i18n/messages'
+import { ageLabel, ordinal } from '@/lib/core-app/outlookCopy'
+import { ordinalEs } from '@/lib/core-app/outlookSpanish'
+import { ageText } from '@/lib/core-app/shellCopy'
+
+/**
+ * Season Outlook parts (components/core-app/outlook/OutlookParts.tsx). Every string is the one the
+ * screen printed before the move, byte for byte, in both languages — this is a relocation, not a
+ * rewrite. Server-built sentences still go through `outlookText`; only the screen's own copy is here.
+ */
+export const outlookPartsMessages = defineMessages({
+  en: {
+    // Odds
+    likelyRange: 'Likely range',
+    range: 'range',
+    clinched: '✓ Clinched',
+    eliminated: '✕ Eliminated',
+    // Drivers
+    noDrivers: 'No single factor moves your playoff odds by a point or more.',
+    // Moves
+    noMoves: 'No lineup or waiver move is worth a point a week or more right now.',
+    openLeague: 'Open the league',
+    lineupWeek: (week: number | string | null) => `Lineup · week ${week}`,
+    waiversRest: 'Waivers · rest of season',
+    playoffPts: 'playoff pts',
+    title: 'title',
+    ptsPerWeek: 'pts/wk',
+    setLineup: 'Set lineup',
+    openWaivers: 'Open waivers',
+    // Milestones
+    safeIn: 'gets you in 9 times in 10',
+    likelyIn: 'gets you in more often than not',
+    winsForSeed: (seed: string) => `wins for the ${seed} seed, usually`,
+    pointsForSeed: (seed: string) => `points for the ${seed} seed`,
+    onPace: (record: string, points: string | null) =>
+      `On pace for ${record}${points != null ? ` and about ${points} points` : ''} — the middle of your simulated finishes.`,
+    oddsByRecord: 'Playoff odds by final record',
+    tooFewRuns: 'too few runs',
+    oddsByRecordCaption: 'Playoff odds by final regular-season record',
+    record: 'Record',
+    playoffOdds: 'Playoff odds',
+    tooFewRunsToSay: 'too few runs to say',
+    barsNote:
+      'Bars show how often a season that ends on that many wins makes the field. Blank bars ended there too rarely to measure.',
+    // Schedule
+    noSchedule: 'No schedule on file for this league.',
+    scheduleCaption: (leagueAvg: string | null) =>
+      `Opponents' fitted weekly average, already played and still to come, against the league average${leagueAvg != null ? ` of ${leagueAvg}` : ''}. Rank 1 is the hardest.`,
+    team: 'Team',
+    played: 'Played',
+    rank: 'Rank',
+    remaining: 'Remaining',
+    unnamedTeam: 'Unnamed team',
+    gamesAbbr: 'g',
+    // Durability
+    nothingFragile: 'Nothing on this roster stands out as fragile.',
+    age: 'Age',
+    averageAge: (known: number, starters: number) => `average age of ${known} of ${starters} starters`,
+    depth: 'Depth',
+    noLineupSlots: 'This league stores no lineup slots, so depth cannot be judged.',
+    everySlotBacked: 'Every dedicated slot has a healthy backup.',
+    depthLine: (healthy: number, starters: number) => `${healthy} healthy for ${starters} slot${starters === 1 ? '' : 's'}`,
+    injuries: 'Injuries',
+    noInjuries: 'No player on this roster is listed as out or at risk.',
+    inYourLineup: 'in your lineup',
+    byesToCome: 'Byes still to come',
+    noByes: 'No starter has a bye in the remaining regular season, or the NFL schedule is not on file.',
+    weekAbbr: 'Wk',
+    concentration: 'Concentration',
+    topPosition: 'Top position:',
+    topPlayer: 'Top player:',
+    sameNflTeam: 'Same NFL team:',
+    from: 'from',
+    noStack: 'no stack of two or more',
+    sharesNote: "Shares of your best lineup's projected points.",
+    basisWeek: (week: number | string) => `Points are week ${week} projections, scored under this league's rules.`,
+    // Assumptions
+    sourceLeague: 'from the league’s settings',
+    sourceStandard: 'standard bracket, not stated by the league',
+    sourceDefault: 'assumed — the league does not say',
+    simulations: 'Simulations',
+    seasons: 'seasons',
+    perWhatIf: 'per what-if',
+    rangeTitle: 'Range',
+    rangeDetail: (batches: number, runs: string) => `${batches} re-fits × ${runs} seasons, 10th–90th percentile`,
+    scoringModel: 'Scoring model',
+    scoringDetail: (weeks: { min: number; median: number; max: number } | null, seasons: number[]) =>
+      `Each team's weekly score is drawn from its own average and spread, fitted from ${
+        weeks ? `${weeks.min}–${weeks.max} completed weeks (median ${weeks.median})` : 'no completed weeks'
+      } across ${seasons.length ? seasons.join(', ') : 'no seasons'}.`,
+    teamsModelled: 'Teams modelled',
+    of: 'of',
+    schedule: 'Schedule',
+    gamesLeft: (n: number) => `${n} games left`,
+    seasonEnds: (week: number) => `, regular season ends week ${week}`,
+    playoffField: 'Playoff field',
+    teams: 'teams',
+    firstRoundByes: 'First-round byes',
+    seeding: 'Seeding',
+    playerPoints: 'Player points',
+    playerPointsDetail: (week: number | string) =>
+      `Week ${week} projections under this league's scoring, used for every remaining week in the what-ifs.`,
+    lastRun: 'Last run',
+    reused: ' — reused, because nothing it reads has changed since',
+    notModelled: 'Not modelled, or missing',
+    // Formatting
+    numberLocale: 'en-US',
+    seedOrdinal: (n: number): string => ordinal(n),
+    lastRunAge: (computedAt: string, nowMs: number): string => ageLabel(computedAt, nowMs),
+  },
+  es: {
+    likelyRange: 'Rango probable',
+    range: 'rango',
+    clinched: '✓ Clasificado',
+    eliminated: '✕ Eliminado',
+    noDrivers: 'Ningún factor mueve tus probabilidades de playoffs en un punto o más.',
+    noMoves: 'Ningún cambio de alineación ni de agentes libres vale un punto por semana o más ahora mismo.',
+    openLeague: 'Abrir la liga',
+    lineupWeek: (week) => `Alineación · semana ${week}`,
+    waiversRest: 'Agentes libres · resto de la temporada',
+    playoffPts: 'pts de playoffs',
+    title: 'título',
+    ptsPerWeek: 'pts/sem',
+    setLineup: 'Ajustar alineación',
+    openWaivers: 'Abrir agentes libres',
+    safeIn: 'te clasifica 9 de cada 10 veces',
+    likelyIn: 'te clasifica más de la mitad de las veces',
+    winsForSeed: (seed) => `victorias para el ${seed} puesto, normalmente`,
+    pointsForSeed: (seed) => `puntos para el ${seed} puesto`,
+    onPace: (record, points) =>
+      `Vas camino de ${record}${points != null ? ` y unos ${points} puntos` : ''}: el punto medio de tus finales simulados.`,
+    oddsByRecord: 'Probabilidad de playoffs según el récord final',
+    tooFewRuns: 'pocas simulaciones',
+    oddsByRecordCaption: 'Probabilidad de playoffs según el récord final de la temporada regular',
+    record: 'Récord',
+    playoffOdds: 'Probabilidad de playoffs',
+    tooFewRunsToSay: 'muy pocas simulaciones para saberlo',
+    barsNote:
+      'Las barras muestran con qué frecuencia una temporada que termina con esas victorias llega a playoffs. Las barras vacías terminaron ahí demasiado pocas veces para medirlo.',
+    noSchedule: 'No hay calendario registrado para esta liga.',
+    scheduleCaption: (leagueAvg) =>
+      `Promedio semanal ajustado de los rivales, ya jugados y por jugar, frente al promedio de la liga${leagueAvg != null ? ` de ${leagueAvg}` : ''}. El puesto 1 es el más difícil.`,
+    team: 'Equipo',
+    played: 'Jugados',
+    rank: 'Puesto',
+    remaining: 'Restantes',
+    unnamedTeam: 'Equipo sin nombre',
+    gamesAbbr: 'p',
+    nothingFragile: 'Nada en esta plantilla destaca como frágil.',
+    age: 'Edad',
+    averageAge: (known, starters) => `edad media de ${known} de ${starters} titulares`,
+    depth: 'Profundidad',
+    noLineupSlots: 'Esta liga no guarda puestos de alineación, así que no se puede juzgar la profundidad.',
+    everySlotBacked: 'Cada puesto específico tiene un suplente sano.',
+    depthLine: (healthy, starters) =>
+      `${healthy} ${healthy === 1 ? 'sano' : 'sanos'} para ${starters} ${starters === 1 ? 'puesto' : 'puestos'}`,
+    injuries: 'Lesiones',
+    noInjuries: 'Ningún jugador de esta plantilla figura como baja o en riesgo.',
+    inYourLineup: 'en tu alineación',
+    byesToCome: 'Descansos por venir',
+    noByes: 'Ningún titular descansa en lo que queda de temporada regular, o el calendario de la NFL no está registrado.',
+    weekAbbr: 'Sem',
+    concentration: 'Concentración',
+    topPosition: 'Posición principal:',
+    topPlayer: 'Jugador principal:',
+    sameNflTeam: 'Mismo equipo de la NFL:',
+    from: 'de',
+    noStack: 'ningún grupo de dos o más',
+    sharesNote: 'Porcentajes de los puntos proyectados de tu mejor alineación.',
+    basisWeek: (week) => `Los puntos son proyecciones de la semana ${week}, puntuadas con las reglas de esta liga.`,
+    sourceLeague: 'según la configuración de la liga',
+    sourceStandard: 'cuadro estándar, la liga no lo indica',
+    sourceDefault: 'supuesto: la liga no lo indica',
+    simulations: 'Simulaciones',
+    seasons: 'temporadas',
+    perWhatIf: 'por escenario',
+    rangeTitle: 'Rango',
+    rangeDetail: (batches, runs) => `${batches} reajustes × ${runs} temporadas, percentil 10–90`,
+    scoringModel: 'Modelo de puntuación',
+    scoringDetail: (weeks, seasons) =>
+      `La puntuación semanal de cada equipo sale de su propio promedio y dispersión, ajustados con ${
+        weeks ? `${weeks.min}–${weeks.max} semanas completas (mediana ${weeks.median})` : 'ninguna semana completa'
+      } de ${seasons.length ? seasons.join(', ') : 'ninguna temporada'}.`,
+    teamsModelled: 'Equipos modelados',
+    of: 'de',
+    schedule: 'Calendario',
+    gamesLeft: (n) => `${n} partidos restantes`,
+    seasonEnds: (week) => `, la temporada regular termina en la semana ${week}`,
+    playoffField: 'Plazas de playoffs',
+    teams: 'equipos',
+    firstRoundByes: 'Descansos de primera ronda',
+    seeding: 'Posiciones',
+    playerPoints: 'Puntos de jugadores',
+    playerPointsDetail: (week) =>
+      `Proyecciones de la semana ${week} con la puntuación de esta liga, usadas para cada semana restante en los escenarios.`,
+    lastRun: 'Última ejecución',
+    reused: ': reutilizada, porque nada de lo que lee ha cambiado desde entonces',
+    notModelled: 'No modelado o faltante',
+    numberLocale: 'es-ES',
+    seedOrdinal: (n) => ordinalEs(n),
+    lastRunAge: (computedAt, nowMs) => {
+      const age = ageLabel(computedAt, nowMs)
+      return age === 'unknown' ? 'desconocida' : ageText(age, 'es')
+    },
+  },
+})

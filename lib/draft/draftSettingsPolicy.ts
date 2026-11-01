@@ -87,6 +87,30 @@ export function timerOptionsFor(currentSeconds: number | null | undefined): numb
   return out.sort((a, b) => a - b)
 }
 
+/**
+ * Every whole hour from 1 to 24 — the slow-draft dropdown AF Commissioner and AF Supreme get.
+ * No new server rule: for an entitled commissioner these are custom values inside 10s..72h, which
+ * `validateDraftTimerSeconds` already accepts.
+ */
+export const HOURLY_TIMER_SECONDS: readonly number[] = Array.from({ length: 24 }, (_, i) => (i + 1) * 3600)
+
+export type TimerSelectOption = { seconds: number; locked: boolean }
+
+/**
+ * The time-per-pick dropdown: the standard list plus every hour 1–24, and the saved value when it is
+ * off both lists. An hourly value outside the standard list is `locked` without the plan — shown so a
+ * Free commissioner can see what the plan adds, but not selectable. That includes the legacy 12h/24h,
+ * which stopped being offered; the saved value is never locked, so a league already on one keeps it.
+ */
+export function timerSelectOptions(currentSeconds: number | null | undefined, hasPlan: boolean): TimerSelectOption[] {
+  const base = timerOptionsFor(currentSeconds)
+  const all = [...new Set([...base, ...HOURLY_TIMER_SECONDS])].sort((a, b) => a - b)
+  return all.map((seconds) => ({
+    seconds,
+    locked: !hasPlan && !base.includes(seconds),
+  }))
+}
+
 // ---------------------------------------------------------------------------
 // Pace
 // ---------------------------------------------------------------------------
@@ -217,22 +241,57 @@ export function clampRandomizeTimes(value: unknown, allowMultiple: boolean): num
   return n
 }
 
-/** Fisher–Yates, `times` passes. `random` is injectable for tests. */
-export function shuffleTimes<T>(items: readonly T[], times: number, random: () => number = Math.random): T[] {
+/** The "Number of randomizes" dropdown: 1–20, then 25, 50 and 100. */
+export const RANDOMIZE_COUNT_OPTIONS: readonly number[] = [
+  ...Array.from({ length: 20 }, (_, i) => i + 1),
+  25,
+  50,
+  RANDOMIZE_MAX_TIMES,
+]
+
+/**
+ * Fisher–Yates, `times` passes, keeping the order after every pass. The panel replays these so every
+ * shuffle is seen, not only the last; `final` is always the last step.
+ */
+export function shuffleTimesWithSteps<T>(
+  items: readonly T[],
+  times: number,
+  random: () => number = Math.random,
+): { final: T[]; steps: T[][] } {
   let a = [...items]
+  const steps: T[][] = []
   for (let pass = 0; pass < Math.max(1, times); pass++) {
     a = [...a]
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1))
       ;[a[i], a[j]] = [a[j]!, a[i]!]
     }
+    steps.push(a)
   }
-  return a
+  return { final: a, steps }
+}
+
+/** Fisher–Yates, `times` passes. `random` is injectable for tests. */
+export function shuffleTimes<T>(items: readonly T[], times: number, random: () => number = Math.random): T[] {
+  return shuffleTimesWithSteps(items, times, random).final
+}
+
+/**
+ * How long the panel shows each shuffle: slower for a few, faster for many, so 100 shuffles still
+ * finish in about half a minute and none flashes by too fast to read.
+ */
+export function randomizeStepMs(times: number): number {
+  return Math.max(250, Math.min(900, Math.round(15000 / Math.max(1, times))))
 }
 
 /** League chat text for a randomize run. Plain text; names come from the league. */
-export function buildRandomizeChatMessage(times: number, orderedNames: readonly string[]): string {
-  const head = times === 1 ? '🎲 Draft order randomized' : `🎲 Draft order randomized ${times} times`
+export function buildRandomizeChatMessage(
+  times: number,
+  orderedNames: readonly string[],
+  chosenBy?: string | null,
+): string {
+  const base = times === 1 ? '🎲 Draft order randomized' : `🎲 Draft order randomized ${times} times`
+  const head = chosenBy && times > 1 ? `${base} (number chosen by ${chosenBy})` : base
   const lines = orderedNames.map((n, i) => `${i + 1}. ${n}`)
   return lines.length ? `${head} — final order:\n${lines.join('\n')}` : head
 }

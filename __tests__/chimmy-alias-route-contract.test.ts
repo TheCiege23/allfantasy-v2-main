@@ -10,6 +10,12 @@ const getServerSessionMock = vi.fn()
 const runAiProtectionMock = vi.fn()
 const requireFeatureEntitlementMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock("@/app/api/chat/chimmy/route", () => ({
   POST: chatChimmyPostMock,
@@ -69,7 +75,7 @@ describe("POST /api/chimmy compatibility route", () => {
           plans: ["pro"],
         },
       },
-      tokenSpend: null,
+      tokenSpend: { id: 'alias-ledger', balanceAfter: 10 },
       tokenPreview: null,
     })
     refundSpendByLedgerMock.mockResolvedValue(null)
@@ -373,4 +379,15 @@ describe("POST /api/chimmy compatibility route", () => {
     expect(body).toContain('event: done')
     expect(body).toContain('"tokensUsed":88')
   })
+  it('routes versioned previews through the canonical handler even when the legacy provider is enabled', async () => {
+    isAnthropicChimmyEnabledMock.mockResolvedValue(true);isAnthropicPipelineAvailableMock.mockReturnValue(true)
+    const preview={version:1,summary:'Free summary.',sections:[{title:'Reasoning',description:'Available evidence'}],access:'tokens',tokenCost:3,canUnlock:true,quote:'signed',expiresAt:'2026-10-25T23:00:00Z'}
+    chatChimmyPostMock.mockImplementationOnce(async (req: Request) => {
+      const form=await req.formData();expect(form.get('requestId')).toBe('stable-request');expect(form.get('tokenQuote')).toBe('signed');expect(form.get('analysisUnlock')).toBe('true');expect(form.get('commissionerGrounding')).toBeNull()
+      return new Response(JSON.stringify({analysisPreview:preview,meta:{fullResponse:'PRIVATE'},fullResponse:'PRIVATE'}),{status:409})
+    })
+    const {POST}=await import('@/app/api/chimmy/route');const res=await POST(buildJsonRequest({message:'Question',requestId:'stable-request',analysisPreviewVersion:'1',analysisUnlock:true,tokenQuote:'signed',confirmTokenSpend:true,userContext:{}}) as any)
+    expect(res.status).toBe(409);const body=await res.json();expect(body.upgradeRequired).toBe(false);expect(body.response).toBe('Free summary.');expect(JSON.stringify(body)).not.toContain('PRIVATE');expect(runAgentPipelineMock).not.toHaveBeenCalled()
+  })
+
 })

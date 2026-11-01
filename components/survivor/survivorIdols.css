@@ -106,3 +106,9 @@ html[data-mode='light'] .svs-seg,html[data-mode='light'] .svs-values input{backg
 html[data-mode='light'] .svs-seg button[aria-checked=true]{background:#fffaf0;color:#1d1a14}
 html[data-mode='light'] .svv-facts div{background:#f7f1e4;border-color:rgba(40,30,10,.08)}
 html[data-mode='light'] .svv-facts dd,html[data-mode='light'] .svv-head h2,html[data-mode='light'] .svs-check{color:#1d1a14}
+/* Pick mode (2026-10-20): a quantity per idol type. */
+.svs-qty{display:inline-flex;align-items:center;gap:6px;flex:none}
+.svs-qty-btn{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1.5px solid rgba(255,255,255,.25);background:#07080d;color:#fff;cursor:pointer}
+.svs-qty-btn:disabled{opacity:.35;cursor:default}
+.svs-qty-btn:focus-visible{outline:2px solid #f1d58a;outline-offset:2px}
+.svs-qty-val{min-width:22px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}

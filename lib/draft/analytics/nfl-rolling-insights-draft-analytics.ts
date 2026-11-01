@@ -22,6 +22,8 @@ export type SnapshotAnalyticsSlice = {
 }
 
 export type RollingInsightsSeasonSlice = {
+  /** Box score from this exact selected season, including identity-checked fallback rows. */
+  stats?: unknown
   fantasyPointsPerGame: number | null
   fantasyPointsSeason: number | null
   gamesPlayed: number | null
@@ -431,6 +433,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
           playerId: true,
           season: true,
           fantasyPointsPerGame: true,
+          stats: true,
           fantasyPoints: true,
           gamesPlayed: true,
           updatedAt: true,
@@ -438,10 +441,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
         orderBy: [{ playerId: 'asc' }, { season: 'desc' }, { updatedAt: 'desc' }],
       })
 
-      const statsByRiId = new Map<string, (typeof statsRows)[0]>()
-      for (const row of statsRows) {
-        if (!statsByRiId.has(row.playerId)) statsByRiId.set(row.playerId, row)
-      }
+      const statsByRiId = pickRiSeasonRowPerPlayer(statsRows)
 
       for (const urow of unidentifiedRows) {
         if (!urow.sleeperCandidate) continue
@@ -454,6 +454,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.exactIdHits += 1
         }
@@ -510,6 +511,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             playerId: true,
             season: true,
             fantasyPointsPerGame: true,
+          stats: true,
             fantasyPoints: true,
             gamesPlayed: true,
             updatedAt: true,
@@ -517,10 +519,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
           orderBy: [{ playerId: 'asc' }, { season: 'desc' }, { updatedAt: 'desc' }],
         })
 
-        const statsByRiId = new Map<string, (typeof fallbackStats)[0]>()
-        for (const row of fallbackStats) {
-          if (!statsByRiId.has(row.playerId)) statsByRiId.set(row.playerId, row)
-        }
+        const statsByRiId = pickRiSeasonRowPerPlayer(fallbackStats)
 
         for (const urow of unmatched) {
           if (seasonByPoolKey.has(urow.poolKey)) continue
@@ -537,6 +536,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
                 gamesPlayed: statsRow.gamesPlayed ?? null,
                 season: statsRow.season ?? null,
                 updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
               })
               diagnostics.namePositionHits += 1
             }
@@ -563,6 +563,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
         position: true,
         season: true,
         fantasyPointsPerGame: true,
+          stats: true,
         fantasyPoints: true,
         gamesPlayed: true,
         updatedAt: true,
@@ -572,10 +573,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
 
     // Build canonical name+position → stats row map with ambiguity detection
     // Keep only the most recent row per playerId, then index by canonical key
-    const latestByPlayerId = new Map<string, (typeof allStatsRows)[0]>()
-    for (const row of allStatsRows) {
-      if (!latestByPlayerId.has(row.playerId)) latestByPlayerId.set(row.playerId, row)
-    }
+    const latestByPlayerId = pickRiSeasonRowPerPlayer(allStatsRows)
 
     const directNamePosMap = new Map<string, (typeof allStatsRows)[0]>()
     const directNamePosAmbiguous = new Set<string>()
@@ -606,6 +604,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.namePositionHits += 1
         }

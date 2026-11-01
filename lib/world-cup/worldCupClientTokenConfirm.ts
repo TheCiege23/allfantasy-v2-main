@@ -1,3 +1,4 @@
+import { approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
 export type WorldCupTokenConfirmationResponse = {
   code?: string
   error?: string
@@ -52,5 +53,5 @@ export function confirmWorldCupTokenSpend(
   if (typeof window === "undefined" || typeof window.confirm !== "function") {
     return false
   }
-  return window.confirm(formatWorldCupTokenConfirmationMessage(body))
+  return window.confirm(formatWorldCupTokenConfirmationMessage(body)) && approvePaidToolQuote(body)
 }

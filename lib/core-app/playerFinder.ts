@@ -756,7 +756,9 @@ export async function resolveLeagueSlots(
       const knownRows =
         all.length > 0
           ? await prisma.sportsPlayer
-              .findMany({ where: { sleeperId: { in: all } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
+              // Only NFL leagues reach the coverage check below (another sport's is skipped), so only NFL
+              // players may vouch for a sample — Sleeper reuses ids across its sports.
+              .findMany({ where: { sport: 'NFL', sleeperId: { in: all } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
               .catch(() => [] as Array<{ sleeperId: string | null }>)
           : []
       const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))

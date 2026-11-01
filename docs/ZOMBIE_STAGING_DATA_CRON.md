@@ -1,0 +1,71 @@
+# Zombie staging sports-data imports
+
+The isolated Railway project `allfantasy-zombie-rehearsal` has a separate `zombie-data-cron` service. It builds only the Node runner and its tests, calls the web app's existing authenticated import route every six hours, then exits. The four TheSportsDB jobs each name exactly one of NFL/NBA/NHL/MLB; one API-Sports NFL job supplements the football schedule and week numbers.
+
+## Configuration
+
+- Source: the reviewed Zombie PR commit, pinned alongside `zombie-web`.
+- Settings reference: `railway.zombie-staging-cron.json`. The connector rejected the custom config-file path, so its Dockerfile, start command, restart policy, and cron fields were applied directly to this service.
+- `ZOMBIE_STAGING_BASE_URL=https://zombie-web-staging.up.railway.app`.
+- `ZOMBIE_STAGING_SEASON=2026`.
+- `ZOMBIE_CRON_SECRET=${{zombie-web.CRON_SECRET}}` uses a reference inside this isolated project.
+- `ZOMBIE_STAGING_CRON_ENABLED=1` only after the web deployment includes the scoped import route.
+- The runner refuses any project other than `2fa5548e-62f6-467d-9a63-6e6773c62f8a`, any environment other than `staging`, and any other destination origin.
+
+Generate a distinct cron secret for this staging service in Railway. Do not copy production variables. The cron service needs only that reference and its non-secret settings; provider and database credentials stay on the web service.
+
+## Verification
+
+The small Docker build executes `node --test zombie-staging-cron.test.mjs` in its copied working directory. Tests cover isolation guards, the four sport scopes, partial/empty provider responses, continuing after a failed sport, redirect refusal, and credential-safe logging. `__tests__/cron/tsdb-schedule-sports.test.ts` covers the optional scope allow-list; omitted scope preserves existing production behavior.
+
+The runner logs job name, HTTP status where relevant, row counts, partial/failure state, and elapsed time. It does not log headers, provider response bodies, URLs containing credentials, or raw exception messages. HTTP 200 with a provider error, no games, or deferred work is not reported as a successful import. Requests are sequential, bounded, and not retried automatically. The next six-hour run can continue a partial schedule sweep.
+
+On October 28 all four Node tests passed in the Railway Docker build. The `ed53a33` web deployment then became healthy after Railway's [US East / EU West build incident](https://status.railway.com/incident/TX3M5SWF) delayed rollout. The first enabled bootstrap completed all five jobs successfully. Neon confirmed TheSportsDB season-2026 game rows: NFL 321, NBA 1,266, NHL 1,409, and MLB 2,470; API-Sports stored a separate 321 NFL rows. All have game dates. The four `cron-import-schedules-tsdb` runs each recorded the expected single-sport scope, a success status, and matching write counts.
+
+The six-hour schedule is restored and `ZOMBIE_STAGING_CRON_ENABLED=1`. To bootstrap another run through this connector, temporarily clear the cron schedule and deploy the pinned source with the current settings. A replay of an older cron deployment did not start a task with the new run settings, so inspect runtime logs and stored rows rather than assuming a successful deployment executed an import. Restore the six-hour schedule and deploy the current settings after the task completes. Runtime JSON logs expose their safe job/status/count fields as structured Railway attributes; the runner also supplies a readable message.
+
+## Player profiles
+
+A separate `zombie-player-cron` uses the same small Dockerfile with `ZOMBIE_STAGING_IMPORT_MODE=profiles`. It runs the existing authenticated Rolling Insights team/player importer once per sport, explicitly scoped to NFL, NBA, NHL, and MLB. Its daily schedule is 04:45 UTC. The game-calendar service keeps its six-hour schedule and defaults to `schedules` mode.
+
+The profile importer writes `SportsPlayer`, which the draft pool resolver reads directly. `sports_players` is a separate analytics/enrichment table; a populated profile pool does not establish scoring or projection coverage. Imported profiles can include inactive or historical players, so raw provider totals are not draftable-player totals.
+
+The profile worker treats HTTP-200 error arrays, missing player counts, zero-player responses, and deferred work as failures/empty/partial outcomes. Team counts alone cannot mark a player import successful. The route combines team/player `notModified` flags, so that flag does not turn zero players into success. Read stored player counts and profile job telemetry after the initial bootstrap. Do not auto-fill seats, start drafts, or alter league settings as part of the import.
+
+Verify `SportsGame` row counts by sport, source, and season and check `sync_job_runs` for `cron-import-schedules-tsdb` with a single-sport scope. Stored game coverage establishes calendar/lock readiness. Provider player scores, a completed fantasy draft, weekly settlement, and corrections still need their own acceptance run.
+
+## Fresh staging schema prerequisites
+
+Normal `prisma migrate deploy` does not install every object declared by the Prisma schema: some existing migrations are deliberately parked outside the deploy path. On October 28 the owner approved repairing the isolated staging schema. The repair installed the T-101 tenancy tables and League tenant column (the role ordering guard was explicitly omitted for this isolated single-tenant rehearsal), `leagues.lastViewedAt` and its partial index, and `rosters.redraftRosterId` with its unique index and foreign key. These repairs did not install Commissioner OS role isolation or mark its guarded migration as replayable.
+
+All four staging Zombie leagues were then created successfully. Do not move the guarded Commissioner OS migration into the common deploy directory to recreate this fixture. Provision a fresh environment explicitly, and compare its required models with the database before asking testers to create leagues.
+
+## Draft pool usability and photo follow-up (October 28)
+
+The owner confirmed live NBA/NHL pools appear, then reported cramped player space, missing
+photos, and a load exceeding 30 seconds. The matching proxy logs measured the first NBA/NHL
+pool responses at 7.99/9.10 seconds and later NHL cache hits at 0.36–0.44 seconds. These are
+server timings, not a measurement of total time to usable players. Logs showed overlapping
+prewarm/API cold builds. The isolated database had zero canonical Player rows and zero
+canonical player images despite its imported SportsPlayer profiles.
+
+The snake room now reserves 28dvh (maximum 320px) for the scrollable board and gives the
+remaining workspace to the player pane. The two reported desktop sizes have browser checks
+for a 240px list viewport and at least two wholly visible cards. Mobile trays retain their
+existing behavior. Concurrent pool callers share the same cold resolver build, partitioned
+by league and complete options, with no settled-result caching. Pool reads explicitly avoid
+on-demand ADP imports.
+
+The image cron accepts an opt-in `backfill=1` for one NFL/NBA/NHL/MLB sport. It uses the existing
+canonical identity backfill from stored profiles before the existing verified image resolver.
+No schema changes or inferred photo ids are introduced. The staging runner adds `photos`
+and `profiles-and-photos` modes. Combined mode refreshes profiles first and resolves up to
+100 missing/stale photos per sport per pass; it reports misses and budget exhaustion. It is
+incremental coverage, not a promise that every player has a vendor photo. Daily wiring and
+actual persisted photos must be verified after the new web deployment is live.
+
+Regression coverage includes concurrent-build sharing/config isolation/retry, the existing
+credential variable plus `thesports_api_key` compatibility, the photo job contract, ordering,
+partial work and credential-safe errors. The updated runtime and browser changes are pending
+CI and staging rollout at this commit. Keep the overall estimate at 87% until verified; the
+four provider-scored weekly journeys, correction acceptance, and iOS device review remain.

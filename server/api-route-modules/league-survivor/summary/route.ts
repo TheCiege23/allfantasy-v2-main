@@ -3,6 +3,8 @@
  * Returns 404 when league is not a survivor league.
  */
 
+import { loadImmunitySealed } from '@/lib/survivor/survivorSealedImmunityState'
+import { redactImmunityList } from '@/lib/survivor/survivorSealedImmunity'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -35,16 +37,33 @@ import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolPlayCutoffText } from '@/lib/survivor/survivorIdolExpiry'
+import { buildSurvivorWeekAdvice } from '@/lib/survivor/survivorWeekAdvice'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
+import { loadCouncilWeekPosition } from '@/lib/survivor/survivorWeekCouncilProgress'
+import { councilWeekLabel } from '@/lib/survivor/survivorEliminationSchedule'
 import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { readSurvivorIslandScene, resolveSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
+import { tribalVotesDueFromSettings } from '@/lib/survivor/survivorCeremonySchedule'
+import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
+import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { tribeEmojiFor } from '@/lib/survivor/survivorTribeEmoji'
+import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
 /** Crest (current name + colours) and decorative mark for a summary tribe; the merged pseudo-tribe has neither. */
+/** When idols stop being playable: the league's expiry rule, plus the play cutoff if one is set. */
+function idolTimingText(settings: ReturnType<typeof normalizeSurvivorFoundationSettings>): string {
+  const cutoff = survivorIdolPlayCutoffText(settings.idolPlayCutoffHours)
+  return [survivorIdolExpiryText(survivorIdolExpiryRule(settings)), cutoff].filter(Boolean).join(' ')
+}
+
 function summaryTribeEmblem(t: { name: string; logoUrl?: string | null; catalogId?: string | null; primaryColor?: string | null; secondaryColor?: string | null }, sport: string | null | undefined) {
   const emblem = resolveTribeEmblem({ name: t.name, logoUrl: t.logoUrl ?? null, catalogId: t.catalogId, primaryColor: t.primaryColor, secondaryColor: t.secondaryColor }, sport ?? 'NFL')
   return { logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
@@ -105,14 +124,16 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true, survivorRevealMode: true },
+    select: { sport: true, name: true, survivorRevealMode: true, season: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
   // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
   const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
-  // Weekly necklaces still being worn (until the next lineup lock). Public by design.
-  const activeNecklaces = await getActiveTribeImmunity(leagueId)
+  // Weekly necklaces still being worn (until the next lineup lock). Public by design, unless the
+  // commissioner sealed immunity, in which case only the winner sees theirs until votes are in.
+  const immunitySealed = await loadImmunitySealed(leagueId, currentWeek)
+  const activeNecklaces = redactImmunityList(await getActiveTribeImmunity(leagueId), immunitySealed, (row) => row.immunityWinnerUserId === userId)
 
   const tribes = merged
     ? [
@@ -143,6 +164,15 @@ export async function GET(
   const myTribeId =
     !merged && myRosterId
       ? tribes.find((tribe) => tribe.members.some((member) => member.rosterId === myRosterId))?.id ?? null
+      : null
+  // After the merge every active manager shares one huddle: the merged tribe's chat source.
+  const mergedTribe = merged
+    ? await prisma.survivorTribe.findFirst({ where: { leagueId, isMerged: true }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null
+  const myTribeSource = myTribeId
+    ? getTribeChatSource(myTribeId)
+    : merged && mergedTribe && myRosterId && !eliminatedRosterIds.has(myRosterId)
+      ? getTribeChatSource(mergedTribe.id)
       : null
 
   const rosterIds = new Set<string>([
@@ -194,6 +224,13 @@ export async function GET(
   for (const r of rosters) {
     const teamId = map.rosterIdToTeamId.get(r.id)
     rosterDisplayNames[r.id] = teamId ? teamNameById[teamId] ?? r.id : r.id
+  }
+  // The commissioner's "tribe emoji in names" (display only; stored team names never change). Before
+  // the merge each castaway shows their current tribe's emoji; after it, nobody has a tribe to show.
+  if (readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged) {
+    const tribeByRoster = new Map<string, { name: string; catalogId: string | null }>()
+    for (const tribe of tribesRaw) for (const member of tribe.members) tribeByRoster.set(member.rosterId, { name: tribe.name, catalogId: tribe.catalogId ?? null })
+    Object.assign(rosterDisplayNames, decorateNamesWithTribeEmoji(rosterDisplayNames, tribeByRoster, true))
   }
 
   let myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[] = []
@@ -282,6 +319,8 @@ export async function GET(
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
   if (!privacy?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
+  // Double-elimination weeks run two councils back to back; say which one this is.
+  const councilWeekPosition = council ? await loadCouncilWeekPosition(leagueId, council, leagueSettingsRow?.settings) : null
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -303,12 +342,17 @@ export async function GET(
       tribeShuffleImbalanceThreshold: config.tribeShuffleImbalanceThreshold,
       voteDeadlineDayOfWeek: config.voteDeadlineDayOfWeek,
       voteDeadlineTimeUtc: config.voteDeadlineTimeUtc,
+      // When votes are really due (the settings screen's vote day/time, as the scheduler reads it).
+      tribalVotesDue: tribalVotesDueFromSettings(leagueSettingsJson),
       selfVoteDisallowed: config.selfVoteDisallowed,
       tribalCouncilDayOfWeek: config.tribalCouncilDayOfWeek,
       tribalCouncilTimeUtc: config.tribalCouncilTimeUtc,
       minigameFrequency: config.minigameFrequency,
       seasonThemeLabel: config.seasonThemeLabel,
       visualThemeId: config.visualThemeId,
+      // The commissioner's island banner scene ('auto' follows the season), from league settings.
+      // 'rotate' resolves here to this season's scene (deterministic per league and season).
+      islandScene: resolveSurvivorIslandScene(readSurvivorIslandScene(leagueSettingsJson), leagueId, leagueMeta?.season ?? null),
       challengesSystemRun: config.challengesSystemRun,
       regularSeasonEndWeek: config.regularSeasonEndWeek,
       faqSeededAt: config.faqSeededAt,
@@ -324,7 +368,7 @@ export async function GET(
     immunityRosterIds: [...new Set([
       ...activeNecklaces.map(row => mainRosterByPlatformUserId.get(row.immunityWinnerUserId) ?? row.immunityWinnerRosterId),
       ...weeklyScoreRows.flatMap(row => {
-        const rosterId = row.wonIndividualImmunity ? mainRosterByPlatformUserId.get(row.userId) : undefined
+        const rosterId = row.wonIndividualImmunity && (!immunitySealed || row.userId === userId) ? mainRosterByPlatformUserId.get(row.userId) : undefined
         return rosterId ? [rosterId] : []
       }),
     ])],
@@ -341,6 +385,8 @@ export async function GET(
       id: t.id,
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
+      // The tribe's emoji (its name's leading icon, else the catalogue mascot's) for `tribeEmojiInNames`.
+      tribeEmoji: tribeEmojiFor({ name: t.name, catalogId: 'catalogId' in t ? t.catalogId ?? null : null }),
       slotIndex: t.slotIndex,
       ...summaryTribeEmblem(t, leagueMeta?.sport),
       colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
@@ -366,6 +412,8 @@ export async function GET(
           isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
           revealStartsAt: (publicCouncil as { revealStartsAt?: Date | null }).revealStartsAt ?? null,
+          weekPosition: councilWeekPosition,
+          weekLabel: councilWeekLabel(councilWeekPosition),
         }
       : null,
     challenges: challenges.map((c) => ({
@@ -387,6 +435,13 @@ export async function GET(
     })),
     jury: jury.map((j) => ({ rosterId: j.rosterId, votedOutWeek: j.votedOutWeek })),
     exileLeagueId,
+    // Exile secrecy (League.settings.survivorSideGames.hideExileMembership): screens drop "on Exile"
+    // labels for a viewer who may not know. Token balances below are already the viewer's own only.
+    exileMembershipHidden: !canSeeExileMembership({
+      hidden: exileMembershipHidden(leagueSettingsRow?.settings),
+      viewerState: myExileStatus ? 'exile' : null,
+      nonPlayingCommissioner: privacy.isNonParticipatingCommissionerHost,
+    }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null
       return {
@@ -401,8 +456,9 @@ export async function GET(
     merged,
     myRosterId: myRosterId ?? undefined,
     myTribeId: myTribeId ?? undefined,
-    myTribeSource: myTribeId ? getTribeChatSource(myTribeId) : null,
+    myTribeSource,
     myIdols,
+    idolExpiryText: idolTimingText(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>)),
     myActiveEffects,
     myExileStatus,
     nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,
@@ -464,11 +520,32 @@ export async function GET(
       .then(game => Boolean(game?.pausedSnapshot) || Boolean(game?.lastError?.startsWith('PAUSED:')))
       .catch(() => false),
     rosterDisplayNames,
+    // Display only: the commissioner's "tribe emoji in names" (before the merge), for screens that draw tribe names.
+    tribeEmojiInNames: readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged,
   }
+
+  // This week's strategy for the viewer, from facts already in the payload (only their own idols).
+  const openCouncil = body.council && !body.council.closedAt && !body.council.isRevealed ? body.council : null
+  const weekAdvice = buildSurvivorWeekAdvice({
+    merged: Boolean(merged),
+    inGame: Boolean(myRosterId) && !eliminatedRosterIds.has(myRosterId!),
+    myRosterId: myRosterId ?? null,
+    myTribeId: myTribeId ?? null,
+    tribeScores,
+    tribeNames: Object.fromEntries(tribes.map(tribe => [tribe.id, tribe.name])),
+    memberScores: body.memberScores,
+    rosterNames: rosterDisplayNames,
+    immuneRosterIds: body.immunityRosterIds.filter((id): id is string => typeof id === 'string'),
+    scoresFinalized: body.scoresFinalized,
+    council: openCouncil ? { attendingTribeId: openCouncil.attendingTribeId ?? null } : null,
+    myIdols: myIdols.map(idol => ({ name: idolDefinition(idol.powerType).name, playableAtCouncil: Boolean(idolDefinition(idol.powerType).action) })),
+    idolExpiryText: body.idolExpiryText,
+  })
+  const payload = { ...body, weekAdvice }
 
   if (fairPlayRedact) {
-    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(body))
+    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(payload))
   }
 
-  return NextResponse.json(body)
+  return NextResponse.json(payload)
 }

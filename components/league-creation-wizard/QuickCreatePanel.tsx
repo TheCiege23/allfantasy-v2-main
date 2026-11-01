@@ -85,7 +85,7 @@ const QUICK_PRESETS: QuickCreatePreset[] = [
   },
   {
     id: 'nfl_guillotine',
-    label: 'NFL Guillotine',
+    label: 'NFL Guilly',
     emoji: '🔪',
     description: '17-team elimination league',
     sport: 'NFL',

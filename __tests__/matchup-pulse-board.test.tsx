@@ -611,7 +611,7 @@ describe('MatchupPulseBoard — counts that must add up', () => {
     expect(text).not.toContain('55 more')
   })
 
-  it('names guillotine leagues as a format, not a gap', () => {
+  it('names Guilly leagues as a format, not a gap', () => {
     const { container } = render(
       <MatchupPulseBoard
         allHref={ALL_HREF}
@@ -619,7 +619,7 @@ describe('MatchupPulseBoard — counts that must add up', () => {
         pulse={pulse({ leading: [row()], notRanked: { elimination: 2, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 } })}
       />,
     )
-    expect(container.textContent ?? '').toContain('2 are guillotine leagues, scored against the whole field')
+    expect(container.textContent ?? '').toContain('2 are Guilly leagues, scored against the whole field')
   })
 
   it('🛑 the expected record says "of N" when some ranked rows carry no odds', () => {

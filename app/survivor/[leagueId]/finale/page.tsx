@@ -13,13 +13,13 @@ export default function SurvivorFinalePage() {
       <Link
         href={`/survivor/${leagueId}`}
         aria-label="Back to the island"
-        className="mb-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-white/80"
+        className="sv-btn mb-4 min-w-[44px] !px-0"
       >
         ‹
       </Link>
       {leagueId ? <JuryFinale leagueId={leagueId} /> : null}
       <div className="mt-8 flex justify-center">
-        <Link href={`/survivor/${leagueId}/chat`} className="inline-flex min-h-[44px] items-center text-[13px] text-amber-200/90">
+        <Link href={`/survivor/${leagueId}/chat`} className="sv-link inline-flex min-h-[44px] items-center text-[13px]">
           Open league chat
         </Link>
       </div>

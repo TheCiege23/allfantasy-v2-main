@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
+import { POST } from "@/app/api/brackets/world-cup/[challengeId]/chat/route"
 
 const requireUserMock = vi.hoisted(() => vi.fn())
 const memberAccessMock = vi.hoisted(() => vi.fn())
@@ -291,7 +292,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
    */
   it("free user still hits 402 BEFORE the rate-limit check (no count query made)", async () => {
     hasAiMock.mockResolvedValue(false)
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(request({ body: "@chimmy help me" }), { params: { challengeId: "c1" } })
     const json = await res.json()
@@ -306,7 +306,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
 
   it("Pro user UNDER limit triggers OpenAI and creates the reply (201)", async () => {
     findManyMessagesMock.mockResolvedValue(generatedAiRows(5))
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(request({ body: "@chimmy help me" }), { params: { challengeId: "c1" } })
 
@@ -317,7 +316,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
   it("Pro user AT limit returns 429 with daily_ai_limit_reached and skips OpenAI", async () => {
     // Pro tier is 30/day (DAILY_CAP_LIMITS.chimmy.pro). Use count == limit to trigger cap.
     findManyMessagesMock.mockResolvedValue(generatedAiRows(30))
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(request({ body: "@chimmy help me" }), { params: { challengeId: "c1" } })
     const json = await res.json()
@@ -337,7 +335,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
 
   it("Pro user OVER limit also returns 429 (defensive — count > limit)", async () => {
     findManyMessagesMock.mockResolvedValue(generatedAiRows(50))
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(request({ body: "@chimmy help me" }), { params: { challengeId: "c1" } })
 
@@ -347,7 +344,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
 
   it("non-Chimmy normal chat messages are NOT rate-limited (no count query made)", async () => {
     findManyMessagesMock.mockResolvedValue(generatedAiRows(50)) // would block Chimmy but should not affect normal chat
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(request({ body: "regular pool chat message" }), { params: { challengeId: "c1" } })
 
@@ -359,7 +355,6 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
 
   it("count window starts at UTC 00:00 (cross-day boundary check)", async () => {
     findManyMessagesMock.mockResolvedValue([])
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     await POST(request({ body: "@chimmy hello" }), { params: { challengeId: "c1" } })
 

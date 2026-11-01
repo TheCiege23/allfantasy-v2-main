@@ -1,3 +1,8 @@
+import { quotedChimmyRequest } from '@/__tests__/helpers/quotedChimmyRequest'
+vi.mock('@/lib/chimmy/requestReceipts', async original => ({
+  ...await original<typeof import('@/lib/chimmy/requestReceipts')>(),
+  ...(await import('@/__tests__/helpers/quotedChimmyRequest')).receiptStorageFixture,
+}))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
@@ -60,6 +65,12 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/chimmy/tools/chimmyToolLoop', () => ({ runChimmyToolLoop: h.runChimmyToolLoop }))
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 vi.mock('next-auth', () => ({ getServerSession: h.getServerSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/ai-protection', () => ({ runAiProtection: h.runAiProtection }))
@@ -199,7 +210,7 @@ async function post(fields: Record<string, string> = {}) {
   const fd = new FormData()
   for (const [k, v] of Object.entries({ message: MESSAGE, leagueId: LEAGUE.id, confirmTokenSpend: 'true', ...fields })) fd.append(k, v)
   const { POST } = await import('@/app/api/chat/chimmy/route')
-  const res = await POST(createMockNextRequest('http://localhost/api/chat/chimmy', { method: 'POST', body: fd }) as never)
+  const res = await POST(await quotedChimmyRequest(fd, 'user-1') as never)
   const json = JSON.parse(await res.text())
   return { status: res.status, json }
 }
@@ -236,7 +247,7 @@ describe('writing history does not change what is charged', () => {
     const ok = await post()
     const okSpend = h.spendTokensForRule.mock.calls.map((c) => c[0])
     expect(okSpend).toHaveLength(1)
-    expect(okSpend[0]).toMatchObject({ userId: 'user-1', ruleCode: 'ai_chimmy_chat_message' })
+    expect(okSpend[0]).toMatchObject({ userId: 'user-1', ruleCode: 'ai_chimmy_chat_message', expectedTokenCost: 15, confirmed: true, idempotencyKey: expect.stringContaining('chimmy_request:'), assertWithinTransaction: expect.any(Function) })
     expect(h.refundSpendByLedger).not.toHaveBeenCalled()
 
     vi.clearAllMocks()
@@ -247,7 +258,16 @@ describe('writing history does not change what is charged', () => {
     expect(failed.status).toBe(200)
     expect(failed.json.response).toBe(LOOP_TEXT)
     expect(h.appendChatHistory).toHaveBeenCalled()
-    expect(h.spendTokensForRule.mock.calls.map((c) => c[0])).toEqual(okSpend)
+    const failedSpend = h.spendTokensForRule.mock.calls.map((c) => c[0])
+    expect(failedSpend).toHaveLength(1)
+    const { idempotencyKey: okKey, assertWithinTransaction: okFence, ...okCharge } = okSpend[0]
+    const { idempotencyKey: failedKey, assertWithinTransaction: failedFence, ...failedCharge } = failedSpend[0]
+    expect(failedCharge).toEqual(okCharge)
+    // Different turns have different receipt identities, with the same exact charge and transaction fencing.
+    expect(failedKey).toEqual(expect.stringContaining('chimmy_request:'))
+    expect(failedKey).not.toBe(okKey)
+    expect(okFence).toEqual(expect.any(Function))
+    expect(failedFence).toEqual(expect.any(Function))
     expect(h.refundSpendByLedger).not.toHaveBeenCalled()
     expect(failed.json.meta.tokenSpend).toEqual(ok.json.meta.tokenSpend)
     expect(ok.json.meta.tokenSpend).toMatchObject({ tokenCost: 15, balanceAfter: 5, ledgerId: 'ledger-1' })

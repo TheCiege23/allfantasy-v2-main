@@ -4,7 +4,8 @@
 
 import type { League, Roster } from '@prisma/client'
 import { extractDraftPicksFromPlayerData } from '@/lib/dispersal-draft/assetPoolBuilder'
-import { getRosterPlayerIds, getRosterSize } from '@/lib/waiver-wire/roster-utils'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { countTowardRosterLimit, leagueRosterLimit, uncountedPlayerIds } from '@/lib/league/rosterLimit'
 import {
   isPastTradeDeadline,
   resolveLeagueTradeSettings,
@@ -12,6 +13,11 @@ import {
 } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { TRADE_ITEM_TYPES, type TradeItemType } from '@/lib/league-trade-engine/types'
+import {
+  checkRedraftPickAsset,
+  isRedraftPickLeague,
+  type RedraftPickBook,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
 
 export type TradeValidationResult = { ok: true; settings: ResolvedLeagueTradeSettings } | { ok: false; code: string; message: string }
 
@@ -104,6 +110,12 @@ export function validateTradeAssets(params: {
    * `playerData`, so without this an offer of one is refused as not owned.
    */
   nativeFuturePickOwners?: ReadonlyMap<string, string> | null
+  /**
+   * A REDRAFT league's current-draft picks (`loadRedraftPickBook`). Required for an `rdp:` pick to
+   * pass: absent, such a pick is refused rather than waved through. Whether the league is redraft is
+   * read from `league` itself, so the future-pick refusal holds even when no book was passed.
+   */
+  redraftDraftPicks?: RedraftPickBook | null
 }): TradeValidationResult {
   const { league, settings, proposer, receiver, assets, currentWeek } = params
 
@@ -211,6 +223,29 @@ export function validateTradeAssets(params: {
         return { ok: false, code: 'PICK_REF_REQUIRED', message: 'Pick trades require itemReference (pick id).' }
       }
       const from = rosterById.get(a.fromRosterId)!
+      /*
+       * A REDRAFT league trades its current draft's picks and nothing later
+       * (`redraftDraftPicks.ts`). Checked before the C2C gate below so a future pick is refused with
+       * the redraft code, which says why, rather than a cross-layer one, which does not apply.
+       */
+      if (t !== 'devy_pick' && isRedraftPickLeague(league)) {
+        const rosterPickSeason =
+          listProposablePicks(from.playerData).find((p) => p.pickId === ref)?.season ??
+          extractDraftPicksFromPlayerData(from.playerData, from.id).find((p) => p.pickId === ref)?.pickYear ??
+          null
+        const redraft = checkRedraftPickAsset(a, {
+          book: params.redraftDraftPicks ?? null,
+          currentSeason: params.redraftDraftPicks?.season ?? (Number(league.season) || null),
+          rosterPickSeason,
+        })
+        if (!redraft.ok) return { ok: false, code: redraft.code, message: redraft.message }
+        if (redraft.kind === 'current_draft') {
+          const key = `pick:${ref}`
+          if (seen.has(key)) return { ok: false, code: 'DUPLICATE_ASSET', message: 'Duplicate pick in trade bundle.' }
+          seen.add(key)
+          continue
+        }
+      }
       const picks = extractDraftPicksFromPlayerData(from.playerData, from.id)
       /*
        * Two ways a reference can be legitimate. `extractDraftPicksFromPlayerData`
@@ -241,11 +276,16 @@ export function validateTradeAssets(params: {
     }
   }
 
-  const max = league.rosterSize ?? 999
-  const counts = new Map(participants.map((r) => [r.id, getRosterSize(r.playerData)]))
+  // The same limit waivers and the draft use (lib/league/rosterLimit.ts): a player in an uncounted
+  // spot (IR / taxi; IR too on an import) is not counted — he arrives on the bench, and leaving from
+  // one of those spots frees nothing, so the sender's count only drops for a player who counted.
+  const { limit: max, counts: rosterCounts } = leagueRosterLimit(league, 999)
+  const counts = new Map(participants.map((r) => [r.id, countTowardRosterLimit(r.playerData, rosterCounts)]))
+  const uncountedByRoster = new Map(participants.map((r) => [r.id, uncountedPlayerIds(r.playerData, rosterCounts)]))
   for (const a of assets) {
     if (a.itemType === 'player' && a.itemReference) {
-      counts.set(a.fromRosterId, (counts.get(a.fromRosterId) ?? 0) - 1)
+      const leavesUncounted = uncountedByRoster.get(a.fromRosterId)?.has(String(a.itemReference))
+      if (!leavesUncounted) counts.set(a.fromRosterId, (counts.get(a.fromRosterId) ?? 0) - 1)
       counts.set(a.toRosterId, (counts.get(a.toRosterId) ?? 0) + 1)
     }
   }

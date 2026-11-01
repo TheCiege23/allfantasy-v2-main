@@ -61,7 +61,7 @@ const g = vi.hoisted(() => {
     scanned: [],
     incomplete: null,
   }
-  const account: { sleeperUserId: string | null; leagues: unknown[] | null } = { sleeperUserId: 's1', leagues: null }
+  const account: { sleeperUserId: string | null; leagues: unknown[] | null; preferences: Record<string, unknown> } = { sleeperUserId: 's1', leagues: null, preferences: {} }
   /** The league home read: null is "could not read it", an object is a league that loaded. */
   const leagueHome: { data: unknown } = { data: null }
   return { gates, calls, fns, gate, scan, account, leagueHome }
@@ -128,7 +128,7 @@ vi.mock('@/lib/ai-access/AIAccessResolver', () => ({ aiAccessResolver: { resolve
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     platformNotification: { count: vi.fn(async () => 0) },
-    appUser: { findUnique: vi.fn(async () => null) },
+    appUser: { findUnique: vi.fn(async () => ({ profile: { notificationPreferences: g.account.preferences } })) },
     league: { findUnique: vi.fn(async () => ({ settings: {}, platform: 'sleeper' })) },
   },
 }))
@@ -211,6 +211,14 @@ vi.mock('@/lib/core-app/crossLeagueValueActions', () => ({ getCrossLeagueValueAc
 type AnyElement = ReactElement<Record<string, unknown>>
 
 /** Every element matching `match`, walking children, element props and plain-object props (slots). */
+/**
+ * The panel's props as text, for "does it say X". A component element's `type` is the component itself
+ * (next/link's is a module object that refers to itself), which JSON cannot hold — and the text it renders
+ * is in `children` anyway, so the type is dropped.
+ */
+const propsText = (els: AnyElement[]) =>
+  JSON.stringify(els.map((el) => el.props), (key, value) => (key === 'type' && typeof value !== 'string' ? undefined : value))
+
 function findAll(node: unknown, match: (el: AnyElement) => boolean, into: AnyElement[] = []): AnyElement[] {
   if (Array.isArray(node)) {
     for (const child of node) findAll(child, match, into)
@@ -280,6 +288,8 @@ beforeEach(() => {
   g.scan.incomplete = null
   g.account.sleeperUserId = 's1'
   g.account.leagues = null
+  // Streaming tests exercise every card through the explicit "show everything" choice.
+  g.account.preferences = { homeLayoutHiddenSections: [] }
   summaries.on = false
   g.leagueHome.data = null
 })
@@ -290,6 +300,15 @@ afterEach(() => {
 })
 
 describe('/core home cards stream independently', () => {
+  it('renders the simpler default layout when no personal layout is saved', { timeout: 180_000 }, async () => {
+    g.account.preferences = {}
+    const { cards } = await homeCards()
+    expect([...cards.keys()]).toEqual([
+      'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
+      'chimmy', 'career', 'rivals', 'following', 'leagues', 'coverage',
+    ])
+  })
+
   it('returns the home while every read is pending — with the independent reads already started', { timeout: 180_000 }, async () => {
     const body = await homeBody()
     const outcome = await within(render(body).then(() => 'resolved'), 20_000)
@@ -630,7 +649,7 @@ describe('/core home cards stream independently', () => {
   it('shows the failure panel, not a blank screen, when a league home cannot be read', { timeout: 180_000 }, async () => {
     const body = await screenBody([], { league: 'L1' }, '|L1')
     const tree = await render(body)
-    const panels = JSON.stringify(findAll(tree, (el) => el.type === 'div' && el.props?.className === 'af-frame').map((el) => el.props))
+    const panels = propsText(findAll(tree, (el) => el.type === 'div' && el.props?.className === 'af-frame'))
     expect(panels).toContain('We could not read this league just now')
     // It names the league it failed to read, and says the OTHERS are fine — the rail beside this
     // panel is showing them, so the account-wide copy this branch first reused contradicted the page.
@@ -654,10 +673,11 @@ describe('/core home cards stream independently', () => {
     const tree = await render(body)
     const league = findAll(tree, (el) => (el.props?.data as { league?: { id?: string } } | undefined)?.league?.id === 'L1')
     expect(league, 'the league home rendered').toHaveLength(1)
-    expect(JSON.stringify(findAll(tree, (el) => el.type === 'div' && el.props?.className === 'af-frame').map((el) => el.props))).not.toContain(
+    expect(propsText(findAll(tree, (el) => el.type === 'div' && el.props?.className === 'af-frame'))).not.toContain(
       'We could not read this league just now',
     )
   })
 })
 
 vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: vi.fn(async () => {}) }))
+vi.mock('@/lib/core-app/attachSurvivorExileLinks', () => ({ attachSurvivorExileLinks: vi.fn(async () => {}) }))

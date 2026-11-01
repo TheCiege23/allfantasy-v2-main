@@ -26,7 +26,7 @@ import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { draftPoolRowMatchesEligiblePositions } from '@/lib/draft-room/draft-pool-eligible-positions'
 import { getDraftEligiblePositionsFromPayload, getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { runDraftAIAssist } from '@/lib/draft-ai-engine'
-import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
+import type { DraftSessionSnapshot, SlotOrderTribeBadge } from '@/lib/live-draft-engine/types'
 import {
   type ADPSource,
   type ADPRanking,
@@ -160,7 +160,7 @@ export type DraftState = {
   timerEndAtIso: string | null
   timerActive: boolean
   adpSource: ADPSource
-  slotOrder: Array<{ slot: number; rosterId: string; displayName: string; budgetRemaining?: number | null }>
+  slotOrder: Array<{ slot: number; rosterId: string; displayName: string; budgetRemaining?: number | null; tribe?: SlotOrderTribeBadge | null }>
   picks: Pick[]
   availablePlayers: DraftPlayerPoolEntry[]
   chatMessages: Array<{ id: string; from: string; text: string; at: string }>
@@ -417,6 +417,7 @@ export class DraftWorker {
         rosterId: entry.rosterId,
         displayName: entry.displayName,
         budgetRemaining: budgets[entry.rosterId] ?? null,
+        tribe: entry.tribe ?? null,
       })),
       picks: snapshot.picks.map((pick) => ({
         id: pick.id,

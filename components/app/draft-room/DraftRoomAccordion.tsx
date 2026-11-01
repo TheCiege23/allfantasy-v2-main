@@ -71,49 +71,55 @@ export function DraftRoomAccordion({
       className={cn(
         'rounded-xl border transition-shadow duration-200',
         rs
-          ? 'border-white/12 bg-black/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+          ? 'border-white/[0.06] bg-[#151b2e]'
           : 'border-white/10 bg-[#0a1228]/60',
         className,
       )}
       data-testid={testId}
     >
-      <button
-        type="button"
-        id={`${panelId}-trigger`}
-        aria-expanded={open}
-        aria-controls={`${panelId}-panel`}
-        onClick={toggle}
+      {/* Header actions sit beside the toggle, not inside it: a button nested in a button is invalid
+          HTML, and React's dev overlay for that error covers the whole room. */}
+      <div
         className={cn(
-          'flex w-full items-start gap-2 rounded-t-xl px-3 py-2.5 text-left transition-colors',
-          rs ? 'hover:bg-white/[0.04]' : 'hover:bg-white/5',
+          'flex items-start rounded-t-xl transition-colors',
+          rs ? 'hover:bg-[#1d2236]' : 'hover:bg-white/5',
         )}
       >
-        <ChevronDown
-          className={cn(
-            'mt-0.5 h-4 w-4 shrink-0 text-cyan-300/80 transition-transform duration-200',
-            open ? 'rotate-0' : '-rotate-90',
-          )}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {icon ? <span className="shrink-0 text-cyan-200/90">{icon}</span> : null}
-            <span
-              className={cn(
-                'text-[11px] font-bold uppercase tracking-[0.16em]',
-                rs ? 'text-cyan-100/90' : 'text-white/85',
-              )}
-            >
-              {title}
-            </span>
-            {headerActions ? <span className="ml-auto shrink-0">{headerActions}</span> : null}
+        <button
+          type="button"
+          id={`${panelId}-trigger`}
+          aria-expanded={open}
+          aria-controls={`${panelId}-panel`}
+          onClick={toggle}
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-t-xl px-3 py-2.5 text-left"
+        >
+          <ChevronDown
+            className={cn(
+              'mt-0.5 h-4 w-4 shrink-0 text-[#8b91a7] transition-transform duration-200',
+              open ? 'rotate-0' : '-rotate-90',
+            )}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {icon ? <span className="shrink-0 text-[#8b91a7]">{icon}</span> : null}
+              <span
+                className={cn(
+                  'text-[11px] font-bold uppercase tracking-[0.16em]',
+                  rs ? 'text-white/85' : 'text-white/85',
+                )}
+              >
+                {title}
+              </span>
+            </div>
+            {!open && collapsedSubtitle ? (
+              <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/50">{collapsedSubtitle}</p>
+            ) : null}
+            {open && summary ? <p className="mt-0.5 text-[11px] text-white/40">{summary}</p> : null}
           </div>
-          {!open && collapsedSubtitle ? (
-            <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/50">{collapsedSubtitle}</p>
-          ) : null}
-          {open && summary ? <p className="mt-0.5 text-[11px] text-white/40">{summary}</p> : null}
-        </div>
-      </button>
+        </button>
+        {headerActions ? <div className="shrink-0 py-2 pr-3">{headerActions}</div> : null}
+      </div>
       {open ? (
         <div
           id={`${panelId}-panel`}

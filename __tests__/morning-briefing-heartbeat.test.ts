@@ -34,6 +34,10 @@ const { withSyncJobRunMock, syncRuns, prismaMock } = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: withSyncJobRunMock }))
+// Find a League saved-search alerts ride this route too (their own suite: find-league-step3); nothing is due here.
+vi.mock('@/lib/public-discovery/runSavedSearchAlerts', () => ({
+  runSavedSearchAlerts: vi.fn(async () => ({ due: 0, checked: 0, alerted: 0, errors: [], budgetExhausted: false })),
+}))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 // The non-cron branch calls getServerSession, which needs a Next request scope vitest does not

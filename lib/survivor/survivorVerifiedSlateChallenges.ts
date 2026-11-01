@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import type { SurvivorPlanSport } from './survivorPlanCalendar'
 
 type Score = { userId: string; tribeId: string | null; finalScore: number; isFinalized: boolean; countedTowardTribeTotal: boolean }
 
@@ -15,7 +16,7 @@ export function verifiedSlateWinners(scores: Score[]) {
 }
 
 /** NBA/NHL weekly slate contests use verified native scoring, never an AI-generated answer key. */
-export async function ensureVerifiedSlateChallenges(leagueId: string, week: number, sport: 'NBA' | 'NHL', includeTribe: boolean) {
+export async function ensureVerifiedSlateChallenges(leagueId: string, week: number, sport: SurvivorPlanSport, includeTribe: boolean) {
   const config = await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
   if (!config) throw new Error('Survivor configuration missing')
   for (const [number, scope] of [[1, 'tribe'], [2, 'individual']] as const) {
@@ -41,6 +42,10 @@ export async function settleVerifiedSlateChallenges(leagueId: string, week: numb
   const winners = verifiedSlateWinners(scores)
   if (!winners) throw new Error('Weekly slate scores are not finalized')
   if (challenges.some(challenge => challenge.scope === 'tribe') && !winners.tribeId) throw new Error('Tribe slate has no eligible scored tribe')
+  const [winnerTribe, winnerPlayer] = await Promise.all([
+    winners.tribeId ? prisma.survivorTribe.findUnique({ where: { id: winners.tribeId }, select: { name: true } }) : null,
+    prisma.survivorPlayer.findFirst({ where: { leagueId, userId: winners.individualUserId }, select: { displayName: true } }),
+  ])
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
@@ -51,7 +56,9 @@ export async function settleVerifiedSlateChallenges(leagueId: string, week: numb
       await tx.survivorChallenge.update({ where: { id: challenge.id }, data: { status: 'complete', lockAt: now, closesAt: now,
         winnerTribeId: isTribe ? winners.tribeId : null, winnerUserIds: isTribe ? [] : [winners.individualUserId],
         resultJson: { source: 'native_finalized_weekly_scores_v1', score: isTribe ? winners.tribePoints : winners.individualPoints, settledAt: now.toISOString() } as Prisma.InputJsonValue,
-        resultSummary: isTribe ? `Tribe ${winners.tribeId} wins the ${week} slate.` : `The weekly individual winner is ${winners.individualUserId}.`,
+        resultSummary: isTribe
+          ? `${winnerTribe?.name ?? 'A tribe'} won the week ${week} slate with ${winners.tribePoints?.toFixed(1) ?? '?'} points.`
+          : `${winnerPlayer?.displayName ?? 'A manager'} won the week ${week} slate with ${winners.individualPoints.toFixed(1)} points.`,
       } })
       await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'challenge', action: 'verified_slate_result', relatedEntityId: challenge.id, relatedEntityType: 'challenge', data: { scope: challenge.scope, winnerTribeId: isTribe ? winners.tribeId : null, winnerUserId: isTribe ? null : winners.individualUserId }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }

@@ -6,6 +6,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { consecutiveRuns, type BookTrend, type Change, type ValueTrend as ValueTrendData } from '@/lib/core-app/valueTrend'
 import { bookLabelText, nudgeText, shortDateText, tradeValueCopy, type TradeValueCopy } from '@/lib/core-app/finderTradeValueCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * "Market value, last 30 days" — his value per book your leagues price on, with a sparkline, the week's
@@ -34,8 +35,8 @@ function Sparkline({ t, copy, language }: { t: BookTrend; copy: TradeValueCopy; 
   const label = copy.sparkLabel(
     shortDateText(DATE.format(new Date(dayMs(pts[0].day))), language),
     shortDateText(DATE.format(new Date(dayMs(t.lastDay))), language),
-    pts[0].value.toLocaleString('en-US'),
-    t.value.toLocaleString('en-US'),
+    pts[0].value.toLocaleString(getAppIntlLocale()),
+    t.value.toLocaleString(getAppIntlLocale()),
   )
   return (
     <svg className={`af-pf-vt-spark${dir > 0 ? ' is-up' : dir < 0 ? ' is-down' : ''}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} preserveAspectRatio="none">
@@ -86,7 +87,7 @@ export function ValueTrend({ data, access }: { data: ValueTrendData | null; acce
               )}
             </div>
             <div className="af-pf-vt-body">
-              <span className="af-pf-vt-value af-num">{t.value.toLocaleString('en-US')}</span>
+              <span className="af-pf-vt-value af-num">{t.value.toLocaleString(getAppIntlLocale())}</span>
               {t.points.length > 1 ? <Sparkline t={t} copy={copy} language={language} /> : null}
               <span className="af-pf-vt-chgs">
                 <ChangeChip c={t.change7} label={copy.sevenDays} copy={copy} />

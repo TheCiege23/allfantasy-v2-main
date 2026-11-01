@@ -6,6 +6,10 @@ import { render, screen } from '@testing-library/react'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
 
 describe('NBA draft season rates', () => {
+  const unknownExtraRates = {
+    assistsPerGame: null, stealsPerGame: null, blocksPerGame: null,
+    threePointersMadePerGame: null, fieldGoalPercentage: null, freeThrowPercentage: null,
+  }
   it('divides season totals by games before displaying per-game values', () => {
     const rates = extractNbaDraftSeasonRates({
       games_played: 80,
@@ -13,7 +17,7 @@ describe('NBA draft season rates', () => {
       total_rebounds: 640,
       minutes: 2560,
     })
-    expect(rates).toEqual({ pointsPerGame: 26, reboundsPerGame: 8, minutesPerGame: 32 })
+    expect(rates).toEqual({ ...unknownExtraRates, gamesPlayed: 80, pointsPerGame: 26, reboundsPerGame: 8, minutesPerGame: 32 })
     const player = normalizeDraftPlayer({
       name: 'Example Player', position: 'PG', team: 'BOS', nbaDraftStats: rates,
     }, 'NBA')
@@ -24,14 +28,14 @@ describe('NBA draft season rates', () => {
 
   it('uses explicit rates and refuses totals without a games denominator', () => {
     expect(extractNbaDraftSeasonRates({ points_per_game: 24.6, rebounds_per_game: 6.4, minutes_per_game: 31.2 }))
-      .toEqual({ pointsPerGame: 24.6, reboundsPerGame: 6.4, minutesPerGame: 31.2 })
+      .toEqual({ ...unknownExtraRates, gamesPlayed: null, pointsPerGame: 24.6, reboundsPerGame: 6.4, minutesPerGame: 31.2 })
     expect(extractNbaDraftSeasonRates({ points: 2200, total_rebounds: 500, minutes: 2400 })).toBeNull()
   })
 
   it('reads documented season-stat labels without mistaking totals for rates', () => {
     expect(extractNbaDraftSeasonRates({ season_stats: {
       'Games Played': '72', Points: '1800', 'Total Rebounds': '576', 'Minutes Played': '2304',
-    } })).toEqual({ pointsPerGame: 25, reboundsPerGame: 8, minutesPerGame: 32 })
+    } })).toEqual({ ...unknownExtraRates, gamesPlayed: 72, pointsPerGame: 25, reboundsPerGame: 8, minutesPerGame: 32 })
   })
 
   it('offers a dual-position NBA player once while preserving namesakes on other clubs', () => {

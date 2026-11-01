@@ -83,16 +83,17 @@ describe('POST /api/redraft/seasons/finalize — offseason wiring', () => {
     expect(body.offseasonSnapshotId).toBe('snap-1')
   })
 
-  it('does not enter offseason again when the season was already finalized', async () => {
+  it('repairs a missing archive when the champion was already finalized', async () => {
     finalizeNflRedraftPlayoffRuntimeSeason.mockResolvedValueOnce({ ...finalizeSuccess, alreadyFinalized: true })
+    enterRedraftOffseason.mockResolvedValueOnce({ ok: true, snapshotId: 'repaired', alreadyInOffseason: false })
 
     const res = await POST(request({ seasonId: 'season-1' }))
     const body = await res.json()
 
-    expect(enterRedraftOffseason).not.toHaveBeenCalled()
+    expect(enterRedraftOffseason).toHaveBeenCalledWith('season-1', 'commish-1')
     expect(triggerKeeperOffseason).not.toHaveBeenCalled()
-    expect(body.offseasonEntered).toBe(false)
-    expect(body.offseasonSnapshotId).toBeNull()
+    expect(body.offseasonEntered).toBe(true)
+    expect(body.offseasonSnapshotId).toBe('repaired')
   })
 
   it('still crowns the champion and still triggers the keeper offseason when the archive step fails', async () => {

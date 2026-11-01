@@ -11,8 +11,8 @@ const TEMPLATES = [
     scoringPeriod: 'weekly',
     scoringWindowDesc:
       'Games span Thursday through Monday night. Lineups lock at each player\'s kickoff.',
-    bashingThreshold: 30,
-    maulingThreshold: 50,
+    bashingThreshold: 60,
+    maulingThreshold: 60,
     weaponShieldThreshold: 110,
     weaponAmbushThreshold: 140,
     serumAwardCondition: 'survivor_wins_by_30_or_more',

@@ -155,7 +155,8 @@ export async function scanFreeAgentLeagues(
   const known =
     union.length > 0
       ? await prisma.sportsPlayer
-          .findMany({ where: { sleeperId: { in: union } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
+          // Only NFL leagues are scanned (above), so only NFL players can vouch for their ids.
+          .findMany({ where: { sport: 'NFL', sleeperId: { in: union } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
           .catch(() => null)
       : []
   if (!known) return done()

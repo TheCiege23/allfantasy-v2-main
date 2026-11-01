@@ -1,26 +1,51 @@
 "use client"
 
 import Link from "next/link"
-import { Calendar, User, Sparkles, Zap } from "lucide-react"
+import { useState } from "react"
+import { CommishReputationBadge } from "@/components/commish-reputation/CommishReputationBadge"
+import { Calendar, ExternalLink, ShieldCheck, User, Sparkles, Zap } from "lucide-react"
 import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
-import type { DiscoveryCard } from "@/lib/public-discovery/types"
+import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { platformLabel, verificationLabel } from "@/lib/public-discovery/externalListing"
+import { vibeLabel } from "@/lib/public-discovery/vibes"
+import {
+  RANK_BAND_HINTS,
+  RANK_BAND_LABELS,
+  TIME_ZONE_REGION_LABELS,
+  resolveViewerTimeZone,
+  timeZoneRegionFor,
+} from "@/lib/public-discovery/findLeagueFilters"
 
 export interface FindLeagueCardProps {
   league: DiscoveryCard
 }
 
-function formatDraftDate(
-  iso: string | null,
-  formatDateInTimezone: (date: Date | string | number) => string
-): string {
-  if (!iso) return "—"
+/** "Sun, Sep 6, 7:30 PM EDT" on the viewer's clock (see resolveViewerTimeZone). */
+function formatDraftTime(iso: string | null, timeZone: string | null): string {
+  if (!iso) return "Draft not scheduled"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "Draft not scheduled"
   try {
-    return formatDateInTimezone(iso)
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+      ...(timeZone ? { timeZone } : {}),
+    }).format(d)
   } catch {
-    return "—"
+    return "Draft not scheduled"
   }
+}
+
+const RANK_BAND_STYLES: Record<RankBand, { background: string; color: string }> = {
+  step_up: { background: "rgba(244, 114, 182, 0.14)", color: "rgb(249, 168, 212)" },
+  your_level: { background: "rgba(56, 189, 248, 0.14)", color: "rgb(125, 211, 252)" },
+  chill: { background: "rgba(52, 211, 153, 0.14)", color: "rgb(110, 231, 183)" },
 }
 
 function isNew(createdAt: string): boolean {
@@ -44,7 +69,9 @@ function formatDraftStatus(status: string | null | undefined): string {
   return raw.replace(/_/g, " ")
 }
 
-function getSourceLabel(source: DiscoveryCard["source"]): string {
+function getSourceLabel(league: DiscoveryCard): string {
+  const source = league.source
+  if (league.joinMode === "request") return `Plays on ${platformLabel(league.externalPlatform)}`
   if (source === "fantasy") return "Public league"
   if (source === "creator") return "Creator league"
   return "Bracket"
@@ -63,8 +90,20 @@ function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
   return { background: "rgba(59, 130, 246, 0.15)", color: "rgb(96, 165, 250)" }
 }
 
+/** "Runs 3 AllFantasy leagues · since 2025" — who you'd be playing for, before you ask to join. */
+function commishLine(league: DiscoveryCard): string | null {
+  const parts: string[] = []
+  const run = league.commissionerLeaguesRun ?? 0
+  if (run > 0) parts.push(run === 1 ? "Runs 1 AllFantasy league" : `Runs ${run} AllFantasy leagues`)
+  if (league.commissionerSinceYear) parts.push(`since ${league.commissionerSinceYear}`)
+  return parts.length > 0 ? parts.join(" · ") : null
+}
+
 export function FindLeagueCard({ league }: FindLeagueCardProps) {
-  const { formatDateInTimezone } = useUserTimezone()
+  const { timezone: profileTimeZone } = useUserTimezone()
+  const viewerZone = resolveViewerTimeZone(profileTimeZone)
+  const leagueRegion = timeZoneRegionFor(league.timezone)
+  const rankBand = league.rankBand ?? null
   const paidBoundaryDisclosure = getFanCredBoundaryDisclosureShort()
   const isFull = league.maxMembers > 0 && league.memberCount >= league.maxMembers
   const fillingFast =
@@ -101,7 +140,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
             style={sourceBadgeStyle}
           >
-            {getSourceLabel(league.source)}
+            {getSourceLabel(league)}
           </span>
         </div>
 
@@ -167,7 +206,16 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               AI-enabled
             </span>
           )}
-          {rankFitScore > 0 && (
+          {rankBand ? (
+            <span
+              data-testid={`find-league-rank-band-${league.id}`}
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-semibold"
+              title={RANK_BAND_HINTS[rankBand]}
+              style={RANK_BAND_STYLES[rankBand]}
+            >
+              {RANK_BAND_LABELS[rankBand]}
+            </span>
+          ) : rankFitScore > 0 && (
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title="Ranking effect score based on league tier fit and direct-join eligibility."
@@ -178,9 +226,24 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           )}
         </div>
         {league.isPaid ? (
-          <p className="text-[11px]" style={{ color: "rgba(250, 204, 21, 0.75)" }}>
-            Paid league dues and payouts are managed externally via FanCred.
+          <p className="text-[11px]" style={{ color: "rgba(250, 204, 21, 0.75)" }} data-testid={`find-league-paid-${league.id}`}>
+            {league.entryFee ? `Entry $${league.entryFee}. ` : ""}
+            Dues and payouts are handled by the commissioner through FanCred. AllFantasy never holds the money.
           </p>
+        ) : null}
+
+        {league.vibes && league.vibes.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5" data-testid={`find-league-vibes-${league.id}`}>
+            {league.vibes.map((vibe) => (
+              <span
+                key={vibe}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                style={{ background: "rgba(251, 191, 36, 0.12)", color: "rgb(252, 211, 77)" }}
+              >
+                {vibeLabel(vibe)}
+              </span>
+            ))}
+          </div>
         ) : null}
 
         <p className="text-xs sm:text-sm truncate" style={{ color: "var(--muted)" }}>
@@ -210,15 +273,42 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             {league.teamCount > 0 ? ` / ${league.teamCount}` : ""}
           </span>
           <span>AI features: {hasAI ? league.aiFeatures.join(", ") : "None"}</span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1" data-testid={`find-league-draft-time-${league.id}`}>
             <Calendar className="h-3.5 w-3.5 shrink-0" />
-            {formatDraftDate(league.draftDate, formatDateInTimezone)}
+            {formatDraftTime(league.draftDate, viewerZone)}
+            {league.draftDate ? <span className="opacity-70">(your time)</span> : null}
           </span>
-          <span className="flex items-center gap-1">
+          {leagueRegion ? (
+            <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
+          ) : null}
+          <span className="flex min-w-0 flex-wrap items-center gap-1" data-testid={`find-league-commish-${league.id}`}>
             <User className="h-3.5 w-3.5 shrink-0" />
-            {league.commissionerName || "Commissioner"}
+            {league.commissionerUsername ? (
+              <Link href={`/profile/${encodeURIComponent(league.commissionerUsername)}`} className="underline-offset-2 hover:underline">
+                {league.commissionerName || league.commissionerUsername}
+              </Link>
+            ) : (
+              league.commissionerName || "Commissioner"
+            )}
+            <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
+            {commishLine(league) ? <span className="opacity-80">· {commishLine(league)}</span> : null}
           </span>
         </div>
+        {league.joinMode === "request" && league.listingVerification ? (
+          <p
+            className="flex items-center gap-1 text-[11px] sm:text-xs"
+            style={{ color: league.listingVerification === "provider" ? "rgb(110, 231, 183)" : "var(--muted)" }}
+            data-testid={`find-league-verified-${league.id}`}
+          >
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+            {verificationLabel(league.listingVerification, league.externalPlatform)}
+          </p>
+        ) : null}
+        {league.listingNote ? (
+          <p className="text-xs italic" style={{ color: "var(--text)" }}>
+            &ldquo;{league.listingNote}&rdquo;
+          </p>
+        ) : null}
         {league.maxMembers > 0 && (
           <div
             className="h-1.5 rounded-full overflow-hidden"
@@ -238,6 +328,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         className="p-3 sm:p-4 pt-0 flex flex-wrap items-center gap-2 border-t"
         style={{ borderColor: "var(--border)" }}
       >
+        {league.joinMode === "request" ? null : (
         <Link
           href={league.detailUrl}
           data-testid={`find-league-view-${league.id}`}
@@ -246,7 +337,10 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         >
           View
         </Link>
-        {isFull ? (
+        )}
+        {league.joinMode === "request" && !isFull ? (
+          <RequestSpotButton league={league} />
+        ) : isFull ? (
           <span
             data-testid={`find-league-full-${league.id}`}
             className="rounded-lg px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium"
@@ -295,5 +389,101 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         )}
       </div>
     </article>
+  )
+}
+
+/**
+ * "Request a spot" for a league that plays on another platform: there is no seat to take here,
+ * so the player asks and the commissioner answers with their platform invite.
+ */
+function RequestSpotButton({ league }: { league: DiscoveryCard }) {
+  const [open, setOpen] = useState(false)
+  const [message, setMessage] = useState("")
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [error, setError] = useState("")
+
+  const send = async () => {
+    setState("sending")
+    setError("")
+    try {
+      const r = await fetch(`/api/find-league/leagues/${encodeURIComponent(league.id)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      })
+      const body = (await r.json().catch(() => ({}))) as { error?: string }
+      if (r.status === 401) {
+        window.location.href = `/login?callbackUrl=${encodeURIComponent("/find-league")}`
+        return
+      }
+      if (!r.ok) throw new Error(body.error || "")
+      setState("sent")
+    } catch (e) {
+      setState("error")
+      setError(e instanceof Error && e.message ? e.message : "That didn't send. Try again.")
+    }
+  }
+
+  if (state === "sent") {
+    return (
+      <span
+        className="text-xs sm:text-sm font-medium"
+        style={{ color: "rgb(110, 231, 183)" }}
+        data-testid={`find-league-request-sent-${league.id}`}
+      >
+        Request sent. The commissioner will answer with their {platformLabel(league.externalPlatform)} invite.
+      </span>
+    )
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        data-testid={`find-league-request-${league.id}`}
+        className="rounded-lg px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium touch-manipulation"
+        style={{ background: "var(--accent)", color: "var(--bg)" }}
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        Request a spot
+      </button>
+    )
+  }
+
+  return (
+    <div className="w-full space-y-2">
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value.slice(0, 500))}
+        rows={2}
+        placeholder="Say hi: your experience, what you're looking for (optional)"
+        aria-label="Message to the commissioner"
+        data-testid={`find-league-request-message-${league.id}`}
+        className="w-full rounded-lg border px-3 py-2 text-sm"
+        style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={state === "sending"}
+          data-testid={`find-league-request-send-${league.id}`}
+          className="rounded-lg px-3 py-2 min-h-[40px] text-sm font-medium disabled:opacity-60 touch-manipulation"
+          style={{ background: "var(--accent)", color: "var(--bg)" }}
+        >
+          {state === "sending" ? "Sending…" : "Send request"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="min-h-[40px] text-sm" style={{ color: "var(--muted)" }}>
+          Cancel
+        </button>
+      </div>
+      {state === "error" ? (
+        <p role="alert" className="text-xs" style={{ color: "rgb(248, 113, 113)" }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }

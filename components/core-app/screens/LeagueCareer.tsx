@@ -15,6 +15,7 @@ import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-league-career.css'
 import '@/components/core-app/af-career-live.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 38a·6 — your career inside ONE league.
@@ -104,7 +105,7 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
           <span className="af-lc-stat-s">{describeWinRate(totals.winPct)}</span>
         </div>
         <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString()}</span>
+          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString(getAppIntlLocale())}</span>
           <span className="af-label">Points scored</span>
           <span className="af-lc-stat-s af-num">
             {totals.games > 0 ? `${(totals.pointsFor / totals.games).toFixed(1)} per game` : '—'}
@@ -261,7 +262,7 @@ function WeeklyLeagueCareer({
         <p className="af-label af-lc-eyebrow">{league.name}</p>
         <h1 className="af-display af-lc-title">Your career here</h1>
         <p className="af-lc-sub">
-          {elimination ? 'A guillotine league' : 'A league scored against the whole field'}, so every week is your
+          {elimination ? 'A Guilly league' : 'A league scored against the whole field'}, so every week is your
           score against everyone still playing — since {firstSeason}.{' '}
           <Link href={allLeaguesHref}>Across every league →</Link>
         </p>
@@ -300,7 +301,7 @@ function WeeklyLeagueCareer({
           <span className="af-lc-stat-s">weeks you outscored everyone</span>
         </div>
         <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString()}</span>
+          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString(getAppIntlLocale())}</span>
           <span className="af-label">Points scored</span>
           <span className="af-lc-stat-s af-num">
             {totals.weeks > 0 ? `${(totals.pointsFor / totals.weeks).toFixed(1)} per week` : '—'}
@@ -370,7 +371,7 @@ function WeeklyLeagueCareer({
                         : ''}
                       {elimination ? (s.choppedAfterWeek != null ? ` · chopped after week ${s.choppedAfterWeek}` : ' · still alive') : ''}
                       {' · '}
-                      {Math.round(s.pointsFor).toLocaleString()} pts
+                      {Math.round(s.pointsFor).toLocaleString(getAppIntlLocale())} pts
                     </span>
                   </span>
                 </li>
@@ -475,8 +476,8 @@ function TradeMoment({ title, moment, tone }: { title: string; moment: CareerTra
 }
 
 function signed(value: number): string {
-  const rounded = Math.round(value).toLocaleString('en-US')
-  return value > 0 ? `+${rounded}` : value < 0 ? `−${Math.abs(Math.round(value)).toLocaleString('en-US')}` : '0'
+  const rounded = Math.round(value).toLocaleString(getAppIntlLocale())
+  return value > 0 ? `+${rounded}` : value < 0 ? `−${Math.abs(Math.round(value)).toLocaleString(getAppIntlLocale())}` : '0'
 }
 
 function formatDate(value: string): string {

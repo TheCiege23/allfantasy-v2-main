@@ -134,6 +134,8 @@ export interface GuillotineWarRoomContext {
   availability: GuillotineDataAvailability
   freshness: GuillotineFreshness
   missingDataFlags: string[]
+  /** A best ball Guilly league: lineups set themselves (lib/guillotine/guillotineBestBall.ts). Optional for older fixtures. */
+  bestBallLineups?: boolean
   featureAvailability: {
     survivalRisk: boolean
     rosterRisk: boolean

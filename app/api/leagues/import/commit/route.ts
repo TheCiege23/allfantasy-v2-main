@@ -21,7 +21,9 @@ import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/l
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import {
+  applyAttestedCommissioner,
   assertImportCommissioner,
+  attestationFromRequestBody,
   OPEN_READ_PROVIDERS,
   recordImportAttestation,
 } from '@/lib/league-import/commissionerGate'
@@ -59,6 +61,8 @@ function mapImportCommitErrorStatus(code: string): number {
   if (code === 'PROVIDER_UNAVAILABLE') return 503
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  /* A sport this provider's import does not support: understood, and a retry will not change it. */
+  if (code === 'UNSUPPORTED_SPORT') return 422
   return 500
 }
 
@@ -83,7 +87,7 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
   let body: {
     provider?: string
     sourceId?: string
-    attestation?: { accepted?: boolean; statement?: string }
+    attestation?: unknown
     /** When true, re-import over an existing league instead of returning 409. */
     force?: boolean
     /**
@@ -130,6 +134,7 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     )
   }
 
+  const attestation = attestationFromRequestBody(body.attestation)
   // Only the commissioner/co-commissioner of the source league may import.
   const gate = await assertImportCommissioner({
     appUserId: auth.userId,
@@ -138,9 +143,7 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     // Phase 2.2: committing a full (playable) league is commissioner-only. Enforced for
     // providers where commissioner status is determinable (Sleeper); no-op for others.
     requireCommissioner: true,
-    attestation: body.attestation?.accepted
-      ? { accepted: true, statement: body.attestation.statement }
-      : undefined,
+    attestation,
   })
   if (!gate.ok) {
     return commissionerGateFailureResponse(gate)
@@ -224,14 +227,19 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
-    if (gate.verification === 'attestation' && body.attestation?.accepted) {
+    if (gate.verification === 'attestation' && attestation) {
       void recordImportAttestation({
         leagueId: persisted.league.id,
         appUserId: auth.userId,
         provider,
         sourceLeagueId: sourceId,
-        attestation: { accepted: true, statement: body.attestation.statement },
+        attestation: { accepted: true, statement: attestation.statement },
       }).catch(() => {})
+      // Awaited: the response's league is what the client opens next, and it must already show
+      // the C. Not for a cross-account join — that league row belongs to someone else.
+      if (persisted.joinedExisting !== true) {
+        await applyAttestedCommissioner({ leagueId: persisted.league.id, appUserId: auth.userId })
+      }
     }
 
     /*

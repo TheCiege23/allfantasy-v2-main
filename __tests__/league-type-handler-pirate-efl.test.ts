@@ -165,7 +165,7 @@ describe('EFL', () => {
   })
 })
 
-describe('Survivor Guillotine', () => {
+describe('Survivor Guilly', () => {
   it('round-trips as one format, with the guillotine chassis in the column', async () => {
     const saved = await patch({ type: 'survivor_guillotine' })
     expect(saved.status).toBe(200)
@@ -192,7 +192,7 @@ describe('Survivor Guillotine', () => {
     expect(resolved.concept?.actions.find((a) => a.id === 'trade')?.legalInFormat).toBe(false)
   })
 
-  it('a plain Guillotine confirmation carries no marker and resolves as guillotine', async () => {
+  it('a plain Guilly confirmation carries no marker and resolves as guillotine', async () => {
     await patch({ type: 'guillotine' })
     expect(h.row!.leagueType).toBe('guillotine')
     const rules = readFormatRules(h.row as never)

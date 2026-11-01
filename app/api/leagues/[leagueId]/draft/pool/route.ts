@@ -34,7 +34,13 @@ import {
 import { soccerLeagueHintFromLeagueSettings } from '@/lib/player-data/leagueSoccerLeagueHint'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import { dedupeCanonicalNflDraftPoolEntries, enrichCanonicalNflDraftPoolEntries } from '@/lib/nfl-data-foundation'
-import { buildDraftPoolCacheKey, resolveDraftPoolCacheContext } from '@/lib/draft-room/ensureDraftPoolReady'
+import {
+  buildDraftPoolCacheKey,
+  readStaleDraftPoolRow,
+  resolveDraftPoolCacheContext,
+  triggerDraftPoolPrewarmBackground,
+  waitForInFlightDraftPoolBuild,
+} from '@/lib/draft-room/ensureDraftPoolReady'
 
 export const dynamic = 'force-dynamic'
 
@@ -303,6 +309,63 @@ export async function GET(
     return response
   }
 
+  // Expired but recent (see DRAFT_POOL_MAX_STALE_MS): a live draft keeps going past the cache TTL,
+  // so serve the last good pool and rebuild once in the background rather than make this request
+  // wait out a cold build. Not put in the memory cache, so the next request finds the fresh row.
+  if (draftPoolCacheModel?.findFirst) {
+    try {
+      const stale = await readStaleDraftPoolRow(leagueId, { cacheKey, rosterFp })
+      if (stale) {
+        triggerDraftPoolPrewarmBackground(leagueId)
+        const payload = stripPoolEntryFallbacks(withDraftPoolMeta(stale.payload as DraftPoolResponseBody, {
+          source: 'db-cache',
+          entryCount: stale.entryCount,
+          elapsedMs: Date.now() - routeStartedAt,
+          cacheKey,
+          cachedAt: stale.syncedAt,
+        }))
+        console.info('[draft/pool GET] cache hit', { layer: 'db-stale', leagueId, cacheKey, entryCount: stale.entryCount, elapsedMs: Date.now() - routeStartedAt })
+        const outward = { ...payload } as DraftPoolResponseBody
+        await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+        const response = NextResponse.json(outward, { status: 200 })
+        response.headers.set('Cache-Control', 'private, no-cache')
+        return response
+      }
+    } catch (err) {
+      console.warn('[draft/pool GET] stale cache read failed (non-fatal):', (err as Error).message)
+    }
+  }
+
+  // Cold: no fresh, memory or stale pool. If this process is already building the pool (the page's
+  // prewarm, which fires just before the room's first request), wait for it and serve the row it
+  // writes instead of running a second full build of the same pool alongside it.
+  if (draftPoolCacheModel?.findFirst && (await waitForInFlightDraftPoolBuild(leagueId))) {
+    try {
+      const built = await draftPoolCacheModel.findFirst({
+        where: { leagueId, sourceFingerprint: rosterFp, expiresAt: { gt: new Date() } },
+        orderBy: { syncedAt: 'desc' },
+        select: { payload: true, entryCount: true, syncedAt: true },
+      })
+      if (built?.payload && typeof built.payload === 'object') {
+        const payload = stripPoolEntryFallbacks(withDraftPoolMeta(built.payload as DraftPoolResponseBody, {
+          source: 'db-cache',
+          entryCount: Number(built.entryCount ?? 0),
+          elapsedMs: Date.now() - routeStartedAt,
+          cacheKey,
+          cachedAt: built.syncedAt instanceof Date ? built.syncedAt.toISOString() : null,
+        }))
+        console.info('[draft/pool GET] cache hit', { layer: 'joined-prewarm', leagueId, cacheKey, elapsedMs: Date.now() - routeStartedAt })
+        const outward = { ...payload } as DraftPoolResponseBody
+        await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+        const response = NextResponse.json(outward, { status: 200 })
+        response.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
+        return response
+      }
+    } catch (err) {
+      console.warn('[draft/pool GET] read after joined prewarm failed (non-fatal):', (err as Error).message)
+    }
+  }
+
   try {
     console.info('[draft/pool GET] cache miss', {
       leagueId,
@@ -373,6 +436,7 @@ export async function GET(
         c2cConfig: resolved.c2cConfig,
         isIdp: resolved.isIdp,
         rookieFilterState: resolved.rookieFilterState,
+        provenNonRookies: resolved.provenNonRookies,
       }, {
         source: 'rebuilt',
         entryCount: Number(resolved.count ?? resolved.entries.length),

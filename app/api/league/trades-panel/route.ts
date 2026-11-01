@@ -8,6 +8,7 @@ import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
 import { getLeagueTradeLedgerForRoster } from '@/lib/provider-trades/providerTradeOfferReads'
 import { buildProviderOfferHistoryRows } from '@/lib/provider-trades/providerOfferHistoryRows'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
+import { storedVetoRule, vetoVotesNeeded } from '@/lib/league-trade-engine/vetoRule'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { readTradeBlock, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -42,6 +43,7 @@ import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 import { gradeProviderCompletedTrades } from '@/lib/provider-trades/providerCompletedGrades'
+import { pickChipFromTradeItem } from '@/lib/dynasty-core/dynastyDetails'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,11 +141,12 @@ async function storedLogoFor(sport: string | null | undefined): Promise<StoredLo
 }
 
 function assetLabel(
-  item: { itemType: string; itemReference: string | null; metadata: unknown },
+  item: { itemType: string; itemReference: string | null; metadata: unknown; fromRosterId?: string | null },
   sport = 'NFL',
   storedLogo: StoredLogo = null,
 ): {
   label: string; sublabel: string | null; playerId: string | null; team: string | null; headshotUrl: string | null; teamLogoUrl: string | null
+  pick?: LeagueTradeAsset['pick']
 } {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
     ? (item.metadata as Record<string, unknown>)
@@ -154,6 +157,7 @@ function assetLabel(
   const itemType = String(item.itemType ?? 'player').toLowerCase()
   const playerId = itemType.includes('player') ? item.itemReference : null
   const explicitHeadshot = typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl.trim() : null
+  const pick = pickChipFromTradeItem(item)
   return {
     label: name ?? item.itemReference ?? 'Asset',
     sublabel: [position, team].filter(Boolean).join(' · ') || null,
@@ -161,6 +165,41 @@ function assetLabel(
     team,
     headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
     teamLogoUrl: storedLogo?.(team) ?? teamLogoUrl(sport, team),
+    // A pick's year, round and original team, from its own id; absent on every other asset.
+    ...(pick ? { pick } : {}),
+  }
+}
+
+/**
+ * Survivor: the traded players who hold a player-bound idol that moves with them
+ * (lib/survivor/playerBoundIdolTransfer.ts moves `hidden`/`revealed`, unused idols). Only idols the viewer may
+ * see: revealed or publicly known ones, and the viewer's own. A secret idol stays secret from the other
+ * side of a trade. Any other league has no idol rows, so this is one empty indexed read; a failed read is
+ * "no chip", never a failed panel.
+ */
+async function idolRidesAlongPlayers(
+  leagueId: string,
+  userId: string,
+  items: Array<{ itemType?: string | null; itemReference?: string | null }>,
+): Promise<Set<string>> {
+  const playerIds = [...new Set(items
+    .filter((i) => i.itemReference && String(i.itemType ?? '').toLowerCase().includes('player'))
+    .map((i) => i.itemReference as string))]
+  if (playerIds.length === 0) return new Set()
+  try {
+    const rows = await prisma.survivorIdol.findMany({
+      where: {
+        leagueId,
+        playerId: { in: playerIds },
+        status: { in: ['hidden', 'revealed'] },
+        isUsed: false,
+        OR: [{ status: 'revealed' }, { isPubliclyKnown: true }, { currentOwnerUserId: userId }],
+      },
+      select: { playerId: true },
+    })
+    return new Set(rows.map((row) => row.playerId))
+  } catch {
+    return new Set()
   }
 }
 
@@ -250,6 +289,10 @@ async function buildNativeActiveTrades(
 
   const isCommissioner = await isElevatedCommissioner(leagueId, userId)
   const world = await resolveCanonicalWorld(leagueId).catch(() => null)
+  // The veto threshold counts every roster in the league, as `castAfTradeVetoVote` does.
+  const teamCount = active.some((t) => t.status === 'awaiting_votes')
+    ? await Promise.resolve().then(() => prisma.roster.count({ where: { leagueId } })).catch(() => 0)
+    : 0
 
   /*
    * Names for the grade. A Trade Center proposal carries a Sleeper id and no metadata per player, and
@@ -257,6 +300,14 @@ async function buildNativeActiveTrades(
    * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
    */
   const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items))
+  const idolPlayers = await idolRidesAlongPlayers(leagueId, userId, active.flatMap((t) => t.items))
+  /* An asset as the panel draws it, marked when a player-bound Survivor idol rides along with it. */
+  const nativeAsset = (item: (typeof active)[number]['items'][number]) => {
+    const label = assetLabel(item, sport, storedLogo)
+    return item.itemReference && String(item.itemType ?? '').toLowerCase().includes('player') && idolPlayers.has(item.itemReference)
+      ? { ...label, idol: true }
+      : label
+  }
 
   return Promise.all(active
     .filter((t) => {
@@ -265,7 +316,11 @@ async function buildNativeActiveTrades(
         t.receiverRosterId,
         ...t.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
       ])
-      return isCommissioner || (myRosterId != null && participants.has(myRosterId))
+      /*
+       * A trade in its veto window is the league's business: every member with a roster can vote on
+       * it, so every member sees it. An open offer stays private to its parties and the commissioner.
+       */
+      return isCommissioner || (myRosterId != null && (participants.has(myRosterId) || t.status === 'awaiting_votes'))
     })
     .map(async (t) => {
       const participantIds = [...new Set([
@@ -277,6 +332,26 @@ async function buildNativeActiveTrades(
         ? t.metadata as Record<string, unknown>
         : {}
       const accepted = new Set(Array.isArray(meta.acceptedRosterIds) ? meta.acceptedRosterIds.map(String) : [])
+      // The parties `castAfTradeVetoVote` refuses as voters: proposer, receiver and any recorded participant.
+      const tradingParties = new Set([
+        ...participantIds,
+        ...(Array.isArray(meta.participantRosterIds) ? meta.participantRosterIds.map(String) : []),
+      ])
+      const inVetoWindow = t.status === 'awaiting_votes'
+      const votes = inVetoWindow
+        ? {
+            veto: t.votes.filter((v) => v.vote === 'veto').length,
+            allow: t.votes.filter((v) => v.vote !== 'veto').length,
+            needed: vetoVotesNeeded(
+              storedVetoRule(t.metadata) ?? { mode: 'percent' as const, value: t.vetoThresholdPercent ?? 50 },
+              { teamCount, tradingTeams: tradingParties.size },
+            ),
+            viewerVote: (() => {
+              const mine = myRosterId ? t.votes.find((v) => v.voterRosterId === myRosterId) : null
+              return mine ? (mine.vote === 'veto' ? 'veto' as const : 'allow' as const) : null
+            })(),
+          }
+        : null
       const viewerIsProposer = myRosterId != null && t.proposerRosterId === myRosterId
       const viewerIsReceiver = myRosterId != null && participantIds.includes(myRosterId) && !viewerIsProposer && !accepted.has(myRosterId)
       const direction: LeagueTradeHistoryItem['direction'] = viewerIsProposer
@@ -288,10 +363,10 @@ async function buildNativeActiveTrades(
       const partnerName = participantIds.filter((id) => id !== viewRosterId).map((id) => nameByRosterId.get(id) ?? 'Manager').join(' + ')
       const sent: LeagueTradeAsset[] = t.items
         .filter((i) => i.fromRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'blue' as const }))
+        .map((i) => ({ id: i.id, ...nativeAsset(i), accent: 'blue' as const }))
       const received: LeagueTradeAsset[] = t.items
         .filter((i) => i.toRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'teal' as const }))
+        .map((i) => ({ id: i.id, ...nativeAsset(i), accent: 'teal' as const }))
       /*
        * ⚠ ONLY WHEN THE VIEWER IS A PARTY. A commissioner looking at someone else's offer falls back
        * to `viewerRosterId: t.proposerRosterId` below, and a lineup effect computed there would be
@@ -309,11 +384,11 @@ async function buildNativeActiveTrades(
           isViewer: rosterId === myRosterId,
           assets: t.items
             .filter((item) => item.fromRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...nativeAsset(item), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
           // What this manager GETS — the side a trade card lists under their name and letter.
           received: t.items
             .filter((item) => item.toRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...nativeAsset(item), accent: item.fromRosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -393,6 +468,12 @@ async function buildNativeActiveTrades(
         viewerIsReceiver,
         viewerIsProposer,
         viewerIsParticipant: myRosterId != null && participantIds.includes(myRosterId),
+        viewerRosterId: myRosterId,
+        proposerRosterId: t.proposerRosterId,
+        expiresAt: t.expiresAt ? t.expiresAt.toISOString() : null,
+        acceptedRosterIds: [...accepted],
+        votes,
+        viewerCanVote: inVetoWindow && myRosterId != null && !tradingParties.has(myRosterId),
         decisionAction: graded.decisionAction,
         decisionRecommendation: graded.decisionRecommendation,
         decisionCoveragePct: frozenDecision?.coveragePct ?? decision?.coveragePct ?? null,
@@ -728,6 +809,7 @@ function providerAsset(
   provider: string = 'sleeper',
 ): LeagueTradeAsset {
   const isPlayer = !asset.isPick && asset.faabAmount == null
+  const pickRound = asset.isPick && Number.isInteger(asset.pickRoundNumber) && (asset.pickRoundNumber ?? 0) > 0 ? asset.pickRoundNumber! : null
   return {
     id: `${asset.playerId ?? 'pick'}:${idx}`,
     label: asset.playerName,
@@ -735,6 +817,10 @@ function providerAsset(
     // ⚠ SLEEPER IDS ONLY. A Yahoo player key fed to Sleeper's CDN is a different player's face, or a 404.
     headshotUrl: isPlayer && provider === 'sleeper' ? sleeperPlayerHeadshot(asset.playerId) : null,
     accent,
+    // The sending roster is not on a provider asset, so a provider pick never claims a "via".
+    ...(pickRound != null
+      ? { pick: { season: Number.isInteger(asset.pickYear) ? asset.pickYear! : null, round: pickRound, originalRosterId: asset.pickOriginalRosterExternalId ?? null, fromRosterId: null } }
+      : {}),
   }
 }
 

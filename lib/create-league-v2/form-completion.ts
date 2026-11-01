@@ -19,6 +19,14 @@ import {
   getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { toUtc } from '@/lib/timezone'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -35,7 +43,11 @@ function isKeeperSetupValid(k: ReturnType<typeof getDefaultKeeperSetup>): boolea
 /**
  * Returns blocking issues that prevent POST /api/leagues (or tournament create).
  */
-export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): CreateLeagueCompletionIssue[] {
+export function analyzeCreateLeagueCompletion(
+  state: CreateLeagueV2State,
+  /** An import carryover's team count, which the import-flexible types accept off their list. */
+  options: { importedTeamCount?: number | null } = {},
+): CreateLeagueCompletionIssue[] {
   const issues: CreateLeagueCompletionIssue[] = []
   const lt = getEffectiveLeagueType(state)
 
@@ -46,6 +58,9 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
 
   if (lt === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)) {
     issues.push({ code: 'survivor_tribes_invalid', message: 'Choose a valid starting tribe count for this cast size.' })
+  }
+  if (lt === 'survivor' && state.survivorEntryFeeMode === 'paid' && parseSurvivorDuesUsd(state.survivorDuesUsd ?? '') === 'invalid') {
+    issues.push({ code: 'survivor_dues_invalid', message: 'Enter a dues amount greater than zero, or leave it blank.' })
   }
 
   if (!state.sport) {
@@ -76,7 +91,11 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
       message: 'Team count must be from 2 through 32.',
     })
   } else {
-    const allowedTeams = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+    const allowedTeams = teamCountOptionsWithImported(
+      getTeamCountOptions(state.sport, lt, state.soccerPipeline),
+      state.idpSelected ? 'idp' : lt,
+      options.importedTeamCount,
+    )
     if (!allowedTeams.includes(state.teamCount)) {
       issues.push({
         code: 'team_count_invalid',
@@ -120,6 +139,41 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
 
   if (!state.timezone.trim()) {
     issues.push({ code: 'timezone_required', message: 'Choose a timezone.' })
+  }
+
+  /*
+   * Survivor eliminates at most one manager per scoring period, so a cast needs roughly one
+   * period per manager: 24 in the NBA's 25-week season fits only when the draft lands in the
+   * opening week. The server refuses such a league (validateCreateLeague builds the same plan);
+   * this mirror surfaces the refusal on the wizard, where the cast and the draft date can
+   * still change. Same inputs as the server: the wizard sends no Exile or finalist overrides,
+   * so the foundation defaults apply on both sides.
+   */
+  if (
+    lt === 'survivor' &&
+    isSurvivorPlanSport(state.sport) &&
+    state.draftScheduleLater !== true &&
+    state.draftDate.trim() &&
+    state.draftTime.trim() &&
+    state.timezone.trim()
+  ) {
+    try {
+      const exile = normalizeSurvivorFoundationSettings({})
+      buildSurvivorFullSeasonPlan({
+        sport: state.sport,
+        season: resolveLeagueCreationSeason(state.sport),
+        castSize: state.teamCount,
+        draftAt: toUtc(state.draftDate, state.draftTime, state.timezone),
+        exileEnabled: exile.exileIslandEnabled,
+        // The wizard has no return-week field, so the plan picks one that fits the remaining season.
+        finalistCount: readSurvivorLateSeasonSettings({}).finalistCount,
+      })
+    } catch (error) {
+      issues.push({
+        code: 'survivor_season_too_short',
+        message: error instanceof Error ? error.message : 'Not enough season remains for this cast.',
+      })
+    }
   }
 
   // TE premium turned on must say how much: the commissioner picks the per-catch amount.

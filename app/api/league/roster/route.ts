@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,11 +9,17 @@ import { getCachedSleeperUserId, setCachedSleeperUserId } from '@/lib/league/sle
 import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
-import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
-import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
+import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
+import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { loadCampusLineupView, type CampusLineupView } from '@/lib/c2c/campusLineupView'
+import { isDailyFormSport } from '@/lib/projections/dailySportForm'
+import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
+import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -61,35 +68,6 @@ function teamNameFromMetadata(metadata: SleeperUser['metadata']): string | null 
   return typeof tn === 'string' ? tn : null
 }
 
-function expandLockedRedraftStarterSlots(order: string[]): ReturnType<typeof expandStarterSlots> {
-  const totals = order.reduce<Record<string, number>>((acc, raw) => {
-    const key = raw === 'FLX' ? 'FLEX' : raw
-    acc[key] = (acc[key] ?? 0) + 1
-    return acc
-  }, {})
-
-  const seen: Record<string, number> = {}
-
-  return order.map((raw, index) => {
-    const key = raw === 'FLX' ? 'FLEX' : raw
-    seen[key] = (seen[key] ?? 0) + 1
-
-    const label = totals[key] > 1 ? `${key}${seen[key]}` : key
-    const allowedPositions =
-      key === 'FLEX'
-        ? ['RB', 'WR', 'TE']
-        : key === 'DEF'
-          ? ['DEF', 'DST', 'D/ST']
-          : [key]
-
-    return {
-      index,
-      label,
-      allowedPositions,
-      isFlexible: key === 'FLEX',
-    }
-  })
-}
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string; name?: string | null; email?: string | null }
@@ -121,11 +99,18 @@ export async function GET(req: NextRequest) {
       season: true,
       lifecycleState: true,
       leagueType: true,
+      taxiSlots: true,
       isDynasty: true,
       bestBallMode: true,
       guillotineMode: true,
       keeperPhaseActive: true,
       lockAllMoves: true,
+      irAllowOut: true,
+      irAllowCovid: true,
+      irAllowSuspended: true,
+      irAllowNA: true,
+      irAllowDNR: true,
+      irAllowDoubtful: true,
     },
   })
 
@@ -164,8 +149,9 @@ export async function GET(req: NextRequest) {
       // belt-and-suspenders if the dynamic import itself fails.
     }
 
+    const coOwnerRosterId = targetUserId === sessionUserId ? await acceptedCoOwnerRosterId(leagueId, sessionUserId) : null
     const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: targetUserId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: targetUserId },
     })
 
     if (!roster) {
@@ -206,7 +192,8 @@ export async function GET(req: NextRequest) {
       // Template hydration failure should not block base roster rendering.
     }
 
-    const useLockedFootballRedraftSlots = isNflRedraftCoreDashboardLeague({
+    // The same resolver the lineup engine validates slot positions against (lib/league/lineupStarterSlots.ts).
+    const lockedRedraftLayout = resolveLockedRedraftStarterLayout({
       sport: leagueSport,
       leagueType: league.leagueType,
       isDynasty: league.isDynasty,
@@ -214,37 +201,28 @@ export async function GET(req: NextRequest) {
       bestBallMode: league.bestBallMode,
       guillotineMode: league.guillotineMode,
       keeperPhaseActive: league.keeperPhaseActive,
+      settings: league.settings,
     })
-
-    if (useLockedFootballRedraftSlots) {
-      const settingsRecord =
-        league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-          ? (league.settings as Record<string, unknown>)
-          : {}
-
-      const contract = getRedraftDefaultContract({
-        sport: leagueSport,
-        draftType: settingsRecord.requested_draft_type ?? settingsRecord.draft_type ?? 'snake',
-        scoringPresetId:
-          typeof settingsRecord.scoring_preset_id === 'string'
-            ? settingsRecord.scoring_preset_id
-            : null,
-      })
-
-      if (contract) {
-        starterSlots = expandLockedRedraftStarterSlots(contract.rosterTemplate.starterSlotOrder)
-        slotLimits = {
-          starters: starterSlots.length,
-          bench: contract.rosterTemplate.benchSlots,
-          ir: contract.rosterTemplate.irSlots,
-          taxi: 0,
-          devy: 0,
-        }
-        starterAllowedPositions = contract.rosterTemplate.draftablePlayerPositions
-        rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
+    /*
+     * 🛑 THE LEAGUE'S OWN SAVED LAYOUT WINS (owner, 2026-10-20) — resolved in the shared module, so this
+     * screen and the lineup engine's per-slot validation (slotIndex) read the SAME list.
+     */
+    if (lockedRedraftLayout) {
+      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftLayout.starterOrder)
+      slotLimits = {
+        starters: starterSlots.length,
+        bench: lockedRedraftLayout.benchSlots,
+        ir: lockedRedraftLayout.irSlots,
+        taxi: 0,
+        devy: 0,
       }
+      starterAllowedPositions = lockedRedraftLayout.starterAllowedPositions
+      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-${lockedRedraftLayout.source}`
     }
-const leagueWeek = weekFromLeagueSettings(league.settings)
+    // The lineup engine validates taxi against `League.taxiSlots`, so a league whose roster template
+    // carries no taxi count still has a squad; report the larger of the two.
+    if (slotLimits && (league.taxiSlots ?? 0) > slotLimits.taxi) slotLimits = { ...slotLimits, taxi: league.taxiSlots ?? 0 }
+    const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({
       leagueId,
       rosterId: roster.id,
@@ -288,6 +266,23 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       unifiedRoster = []
     }
 
+    // NBA / NHL / MLB: an AF projection for this period and a position rank, both under this
+    // league's scoring, from stored game lines (lib/projections/dailySportOutlook.ts). No-op elsewhere.
+    // A daily-lineup league's period is the day the lineup screen's day picker sent (`day`), else today.
+    if (isDailyFormSport(leagueSport) && unifiedRoster.length > 0) {
+      try {
+        const pickedDay = searchParams?.get('day')
+        const outlook = await loadDailySportOutlook(prisma, {
+          league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
+          day: isDayKey(pickedDay) ? pickedDay : null,
+          players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
+        })
+        unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] daily-sport outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
     // roster tab renders no section at all; a load failure also degrades to null
@@ -313,10 +308,64 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       })
     }
 
+    // C2C campus lineup (lib/c2c/campusLineup.ts): native football C2C only, null everywhere else.
+    // A load failure degrades to null (logged) rather than blocking the roster.
+    const campus: CampusLineupView | null = await loadCampusLineupView(prisma, {
+      league: { id: league.id, platform: league.platform, sport: league.sport, leagueVariant: league.leagueVariant },
+      playerData: roster.playerData,
+      redraftRosterId: roster.redraftRosterId ?? null,
+    }).catch((e: unknown) => {
+      console.warn('[league/roster] campus lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      return null
+    })
+
+    // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
+    let dailyLineups: DailyLineupView | null = null
+    if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
+      const redraftRosterId = roster.redraftRosterId
+      // The scoring calendar's week and year, the ones the matchup is scored under.
+      dailyLineups = await prisma.redraftRoster
+        .findUnique({ where: { id: redraftRosterId }, select: { season: { select: { season: true, currentWeek: true } } } })
+        .then((r) =>
+          r?.season
+            ? loadDailyLineupView(prisma, {
+                leagueId,
+                redraftRosterId,
+                season: r.season.season,
+                week: Math.max(1, r.season.currentWeek ?? leagueWeek),
+              })
+            : null,
+        )
+        .catch((e: unknown) => {
+          console.warn('[league/roster] daily lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+          return null
+        })
+    }
+
+    // Dynasty taxi tenure for the lineup screen's taxi badges (lib/taxi/taxiMaxYears.ts). Native
+    // dynasty-family leagues with a taxi squad only; a load failure leaves the badges off.
+    let taxiTenure: TaxiTenureView | null = null
+    if (
+      resolveWriteAuthority(league.platform) === 'NATIVE' &&
+      isDynastyFamilyLeague(league) &&
+      (slotLimits?.taxi ?? 0) > 0 &&
+      unifiedRoster.length > 0
+    ) {
+      taxiTenure = await loadTaxiTenureView(prisma, leagueId, league.settings, unifiedRoster.map((r) => r.id)).catch((e: unknown) => {
+        console.warn('[league/roster] taxi tenure failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+        return null
+      })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      taxiTenure,
+      // Sent back with a save (`expectedLineupVersion`); see lib/roster/lineupVersion.ts.
+      lineupVersion: lineupVersionOf(roster.playerData),
+      dailyLineups,
       collegeRights,
+      campus,
       roster: roster.playerData,
       unifiedRoster,
       faabRemaining: roster.faabRemaining,
@@ -339,6 +388,16 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       },
       canEditLineup: !lockCtx.locked,
       lineupLockHelp: lockCtx.reason,
+      // The save route's IR rule (`isIrEligibleStatus`) reads these flags; the lineup screen reads the
+      // same rule so it only offers "Move to IR" for a player the server will accept there.
+      irRules: {
+        irAllowOut: league.irAllowOut,
+        irAllowCovid: league.irAllowCovid,
+        irAllowSuspended: league.irAllowSuspended,
+        irAllowNA: league.irAllowNA,
+        irAllowDNR: league.irAllowDNR,
+        irAllowDoubtful: league.irAllowDoubtful,
+      },
       // Lets the client label the save control ("Save shadow lineup") before the user commits,
       // rather than only correcting the story in the success toast afterwards.
       writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),

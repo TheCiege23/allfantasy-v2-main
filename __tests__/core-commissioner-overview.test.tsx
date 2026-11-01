@@ -283,7 +283,7 @@ describe('<CommissionerOverview />', () => {
     expect(links[0].textContent).toBe('All leagues · 2')
     expect(links[0].getAttribute('aria-current')).toBe('page')
     expect(links[0].getAttribute('href')).toBe('/core/commissioner')
-    expect(within(nav).getByRole('link', { name: 'Guillotine · 2' }).getAttribute('href')).toBe('/core/hubs/guillotine')
+    expect(within(nav).getByRole('link', { name: 'Guilly · 2' }).getAttribute('href')).toBe('/core/hubs/guillotine')
   })
 
   it('opens each league’s own commissioner screen and states an unmeasured league as unmeasured', () => {

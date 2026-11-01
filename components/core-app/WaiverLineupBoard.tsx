@@ -13,6 +13,8 @@ import { isPerGameBasis } from '@/lib/waivers/waiverSportBasis'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -66,7 +68,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
    * patterns rebuild the templated ones ("74 free agents are…") around their numbers.
    */
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiverLineupBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   /*
    * Arriving from the home's "Add <player> in <league>" button (TriageBestAdd): `player` is the add
@@ -117,7 +119,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
     return (
       <section className="af-card af-wv-section af-wlb" data-testid="waiver-lineup-board-loading" aria-busy="true">
         <div className="af-wv-section-head">
-          <h2 className="af-label">{es ? 'Vale la pena sumar' : 'Worth adding'}</h2>
+          <h2 className="af-label">{m.worthAdding}</h2>
         </div>
         <div className="af-wlb-skel" aria-hidden />
         <div className="af-wlb-skel" aria-hidden />
@@ -138,18 +140,18 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
       <div className="af-wv-section-head">
         {/* One "?" for the whole list — how +N, "over …" and AF are read — not four per row. */}
         <h2 className="af-label">
-          {es ? 'Vale la pena sumar' : 'Worth adding'} <TopicTip topic="worthAdding" />
+          {m.worthAdding} <TopicTip topic="worthAdding" />
         </h2>
         {board.state === 'ok' && board.currentLineupPoints != null ? (
           <span className="af-wv-section-note af-num">
             {/* The BEST lineup your roster can field — not the one set on the platform. */}
-            {es ? 'tu mejor alineación' : 'your best lineup'} {board.currentLineupPoints}
-            {perGame ? (es ? ' por partido' : ' per game') : board.week ? (es ? ` · sem ${board.week}` : ` · wk ${board.week}`) : ''}
+            {m.yourBestLineup} {board.currentLineupPoints}
+            {perGame ? m.perGame : board.week ? m.weekSuffix(board.week) : ''}
           </span>
         ) : null}
       </div>
 
-      {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} es={es} /> : null}
+      {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
 
       {board.state !== 'ok' ? (
         <p className="af-wlb-why">{copy(REASON[board.state])}</p>
@@ -190,7 +192,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                 </span>
                 <span className="af-wlb-meta">
                   {c.position ?? '—'}
-                  {c.team ? ` · ${c.team}` : ''} · {es ? 'proy' : 'proj'}{' '}
+                  {c.team ? ` · ${c.team}` : ''} · {m.proj}{' '}
                   <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
                   {/* AllFantasy's own engine, beside the provider's figure. */}
                   {c.afProjectedPoints != null ? (
@@ -198,7 +200,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                       {' · '}
                       <span
                         className="af-wlb-af af-num"
-                        title={es ? 'Proyección del motor de AllFantasy, ajustada a la puntuación de esta liga' : "AllFantasy engine projection, adjusted to this league's scoring"}
+                        title={m.afEngineTitle}
                       >
                         AF {c.afProjectedPoints.toFixed(1)}
                       </span>
@@ -214,17 +216,17 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                   {c.basis === 'form' ? (
                     <span
                       className="af-wlb-chip"
-                      title={es ? 'Ninguna proyección lo cubre: esto es lo que viene anotando aquí' : 'No projection feed covers him — this is his recent scoring here'}
+                      title={m.formTitle}
                     >
-                      {es ? `forma · ${c.formGames} p` : `form · ${c.formGames}g`}
+                      {m.formChip(c.formGames)}
                     </span>
                   ) : null}
                   {c.basis === 'season_rate' ? (
                     <span
                       className="af-wlb-chip"
-                      title={es ? 'Un promedio por partido de la proyección de temporada de AllFantasy, no una proyección para esta semana' : "A per-game rate from AllFantasy's season projection, not a projection for this week"}
+                      title={m.seasonRateTitle}
                     >
-                      {es ? 'por partido · temporada' : 'per game · season'}
+                      {m.seasonRateChip}
                     </span>
                   ) : null}
                   {/*
@@ -236,17 +238,11 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                     <span
                       className="af-wlb-bid af-num"
                       data-over={faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining ? 'true' : undefined}
-                      title={
-                        es
-                          ? 'Oferta sugerida con la regla de Inteligencia de agentes libres de abajo: presupuesto × su valor de mercado ÷ el ancla, con un tope del 60% del presupuesto'
-                          : 'Suggested bid by the Waiver intelligence rule below: budget × his market value ÷ the anchor, capped at 60% of the budget'
-                      }
+                      title={m.bidTitle}
                     >
-                      {es ? 'oferta' : 'bid'} ~${bidQuotes[c.sleeperId]}
+                      {m.bid} ~${bidQuotes[c.sleeperId]}
                       {faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining
-                        ? es
-                          ? ` · más que tus $${faab.remaining} restantes`
-                          : ` · over your $${faab.remaining} left`
+                        ? m.overYourLeft(faab.remaining)
                         : ''}
                     </span>
                   ) : null}
@@ -257,7 +253,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
               <span className="af-wlb-over">
                 {c.displaces ? (
                   <>
-                    {es ? 'en lugar de' : 'over'} {c.displaces.name}{' '}
+                    {m.over} {c.displaces.name}{' '}
                     <span className="af-num">
                       ({c.displaces.projectedPoints.toFixed(1)}
                       {c.displaces.afProjectedPoints != null ? ` · AF ${c.displaces.afProjectedPoints.toFixed(1)}` : ''})
@@ -265,7 +261,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                   </>
                 ) : (
                   // No incumbent to name; a blank here would read as a bug.
-                  es ? 'ocupa un puesto vacío' : 'fills an empty slot'
+                  m.fillsEmptySlot
                 )}
               </span>
             </li>
@@ -274,7 +270,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
       )}
 
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
-        <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} es={es} />
+        <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} />
       ) : null}
 
       {/*
@@ -295,31 +291,30 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
  * and byes in the weeks just ahead. Three checkable facts (lib/waivers/rosterNeeds.ts) — nothing
  * here grades the roster.
  */
-function RosterNeedsStrip({ needs, es }: { needs: RosterNeeds; es: boolean }) {
+function RosterNeedsStrip({ needs }: { needs: RosterNeeds }) {
+  const m = useMessages(waiverLineupBoardMessages)
   const byes = needs.byes.filter((b) => b.players.some((p) => p.starter))
   if (needs.emptySlots.length === 0 && needs.noBackup.length === 0 && byes.length === 0) return null
   return (
-    <ul className="af-wlb-needs" data-testid="waiver-roster-needs" aria-label={es ? 'Lo que necesita tu plantilla' : 'What your roster needs'}>
+    <ul className="af-wlb-needs" data-testid="waiver-roster-needs" aria-label={m.rosterNeedsLabel}>
       {needs.emptySlots.length > 0 ? (
         <li data-tone="bad">
           <span className="af-wlb-need-k">
-            {es ? 'Vacío' : 'Empty'}
-            {needs.week != null ? (es ? ` en sem ${needs.week}` : ` in wk ${needs.week}`) : ''}
+            {m.empty}
+            {needs.week != null ? m.inWeek(needs.week) : ''}
           </span>
           {needs.emptySlots.join(', ')}
         </li>
       ) : null}
       {needs.noBackup.map((n) => (
         <li key={n.position} data-tone="warn">
-          <span className="af-wlb-need-k">{es ? `Sin suplente de ${n.position}` : `No ${n.position} backup`}</span>
-          {es
-            ? `${n.rostered} en plantilla para ${n.starting} ${n.starting === 1 ? 'puesto titular' : 'puestos titulares'}`
-            : `${n.rostered} rostered for ${n.starting} starting ${n.starting === 1 ? 'slot' : 'slots'}`}
+          <span className="af-wlb-need-k">{m.noBackup(n.position)}</span>
+          {m.rosteredFor(n.rostered, n.starting)}
         </li>
       ))}
       {byes.map((b) => (
         <li key={b.week} data-tone={needs.week != null && b.week === needs.week ? 'bad' : 'muted'}>
-          <span className="af-wlb-need-k">{es ? `Descanso sem ${b.week}` : `Bye wk ${b.week}`}</span>
+          <span className="af-wlb-need-k">{m.byeWeek(b.week)}</span>
           {/* Starters only: a bench player's bye changes nothing you start. */}
           {b.players
             .filter((p) => p.starter)
@@ -341,41 +336,23 @@ function PriorityCost({
   priority,
   candidates,
   perGame,
-  es,
 }: {
   priority: { priority: number; leagueRosters: number }
   candidates: WaiverBoard['candidates']
   perGame: boolean
-  es: boolean
 }) {
+  const m = useMessages(waiverLineupBoardMessages)
   const [top, next] = candidates
-  const unit = perGame ? (es ? ' por partido' : ' per game') : ''
+  const unit = perGame ? m.perGame : ''
   const last = priority.priority === priority.leagueRosters
-  if (es) {
-    return (
-      <p className="af-wlb-priority" data-testid="waiver-priority-cost">
-        <strong>Tu prioridad: #{priority.priority} de {priority.leagueRosters}.</strong>{' '}
-        {last
-          ? 'Ya eres último, así que un reclamo no te cuesta ningún lugar en el orden.'
-          : `Un reclamo te manda al #${priority.leagueRosters}. `}
-        {!last
-          ? next
-            ? `${top.name} suma +${top.gain.toFixed(1)}${unit}; el siguiente, ${next.name}, suma +${next.gain.toFixed(1)}: una diferencia de ${(top.gain - next.gain).toFixed(1)} puntos es lo que compra gastarla.`
-            : `${top.name} (+${top.gain.toFixed(1)}${unit}) es el único agente libre que mejora tu alineación.`
-          : ''}
-      </p>
-    )
-  }
   return (
     <p className="af-wlb-priority" data-testid="waiver-priority-cost">
-      <strong>Your priority: #{priority.priority} of {priority.leagueRosters}.</strong>{' '}
-      {last
-        ? 'You are already last, so a claim costs you no place in the order.'
-        : `A claim sends you to #${priority.leagueRosters}. `}
+      <strong>{m.yourPriority(priority.priority, priority.leagueRosters)}</strong>{' '}
+      {last ? m.alreadyLast : m.claimSendsYouTo(priority.leagueRosters)}
       {!last
         ? next
-          ? `${top.name} adds +${top.gain.toFixed(1)}${unit}; the next best, ${next.name}, adds +${next.gain.toFixed(1)} — a ${(top.gain - next.gain).toFixed(1)}-point gap is what spending it buys.`
-          : `${top.name} (+${top.gain.toFixed(1)}${unit}) is the only free agent who improves your lineup.`
+          ? m.priorityGap(top.name, top.gain.toFixed(1), unit, next.name, next.gain.toFixed(1), (top.gain - next.gain).toFixed(1))
+          : m.onlyFreeAgent(top.name, top.gain.toFixed(1), unit)
         : ''}
     </p>
   )

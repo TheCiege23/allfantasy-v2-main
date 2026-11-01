@@ -358,6 +358,23 @@
   grid-template-columns: 1fr;
 }
 
+/* A Survivor league and its Exile Island: one grid cell, the island under the league, joined by ↕. */
+.af-ml-exile-pair {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  align-content: start;
+}
+
+.af-ml-exile-link {
+  margin: 2px 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--accent);
+}
+
 /* ── Card ───────────────────────────────────────────────────────────────── */
 .af-ml-card {
   position: relative;
@@ -462,6 +479,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.af-ml-audience {
+  flex: 0 0 auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background-color: var(--chip);
+  color: var(--muted);
+}
+
+/* Public is the one worth noticing: anyone can find it in Find a League. */
+.af-ml-audience[data-audience='public'] {
+  background-color: var(--accent-soft);
+  color: var(--accent);
 }
 
 .af-ml-role {

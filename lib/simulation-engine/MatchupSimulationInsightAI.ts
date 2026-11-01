@@ -176,7 +176,7 @@ async function interpretSimulationDistribution(
   out: MatchupSimulationOutput,
   teamAName: string,
   teamBName: string
-): Promise<string> {
+): Promise<{ text: string; aiUsed: boolean }> {
   const context = buildContext(out, teamAName, teamBName)
   const result = await deepseekChat({
     systemPrompt:
@@ -185,35 +185,34 @@ async function interpretSimulationDistribution(
     temperature: 0.15,
     maxTokens: 180,
   })
-  return result.content?.trim() || buildDistributionFallback(out, teamAName, teamBName)
+  const text = !result.error && result.content?.trim()
+  return { text: text || buildDistributionFallback(out, teamAName, teamBName), aiUsed: Boolean(text) }
 }
 
 async function buildStorylineFraming(
   out: MatchupSimulationOutput,
   teamAName: string,
   teamBName: string
-): Promise<string> {
+): Promise<{ text: string; aiUsed: boolean }> {
   const context = buildContext(out, teamAName, teamBName)
   const grokResponse = await maybeCallGrok(
     'You are Grok writing one vivid fantasy sports storyline sentence. Keep it sharp, grounded in the simulation context, and free of numbered bullets.',
     context
   )
-  if (grokResponse) return grokResponse
-  return buildStorylineFallback(out, teamAName, teamBName)
+  return { text: grokResponse || buildStorylineFallback(out, teamAName, teamBName), aiUsed: Boolean(grokResponse) }
 }
 
 async function buildMatchupExplanation(
   out: MatchupSimulationOutput,
   teamAName: string,
   teamBName: string
-): Promise<string> {
+): Promise<{ text: string; aiUsed: boolean }> {
   const context = buildContext(out, teamAName, teamBName)
   const openaiResponse = await maybeCallOpenAI(
     'Explain this fantasy matchup clearly in 2-3 sentences. State who is favored, why the schedule and lineup profile matter, and what would need to happen for the underdog to flip it.',
     context
   )
-  if (openaiResponse) return openaiResponse
-  return buildExplanationFallback(out, teamAName, teamBName)
+  return { text: openaiResponse || buildExplanationFallback(out, teamAName, teamBName), aiUsed: Boolean(openaiResponse) }
 }
 
 export async function getMatchupSimulationInsight(
@@ -228,8 +227,9 @@ export async function getMatchupSimulationInsight(
   ])
 
   return {
-    deepseek,
-    grok,
-    openai,
+    deepseek: deepseek.text,
+    grok: grok.text,
+    openai: openai.text,
+    aiUsed: deepseek.aiUsed || grok.aiUsed || openai.aiUsed,
   }
 }

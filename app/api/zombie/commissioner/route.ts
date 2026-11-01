@@ -40,16 +40,29 @@ export async function POST(req: Request) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (action === 'pause_league') {
-    await prisma.zombieLeague.update({ where: { id: z.id }, data: { status: 'paused' } })
+  if (action === 'pause_league' || action === 'resume_league') {
+    const pausing = action === 'pause_league'
+    const changed = await prisma.zombieLeague.updateMany({
+      where: {
+        id: z.id,
+        status: pausing ? 'active' : 'paused',
+        ...(!pausing ? { currentWeek: { gt: 0 } } : {}),
+      },
+      data: { status: pausing ? 'paused' : 'active' },
+    })
+    if (changed.count !== 1) {
+      return NextResponse.json({
+        error: pausing ? 'Only an active league can be paused.' : 'Only a started, paused league can be resumed.',
+      }, { status: 409 })
+    }
     await logAuditEntry(z.id, {
       category: 'commissioner_override',
-      action: 'LEAGUE_PAUSED',
+      action: pausing ? 'LEAGUE_PAUSED' : 'LEAGUE_RESUMED',
       description: reason,
       actorUserId: session.user.id,
       actorRole: 'commissioner',
     })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, status: pausing ? 'paused' : 'active' })
   }
 
   if (action === 'generate_rules_doc') {
@@ -128,6 +141,29 @@ export async function POST(req: Request) {
     })
     if (!team) return NextResponse.json({ error: 'Zombie team row missing' }, { status: 400 })
 
+    if (z.sport === 'NFL') {
+      const currentResolution = await prisma.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } }, select: { status: true } })
+      if (currentResolution && currentResolution.status !== 'pending') return NextResponse.json({ error: 'Complete weekly settlement or its review before granting items.' }, { status: 409 })
+      const { itemTransaction, lockItemLeague, lastStarterDeadline, refreshItemScores } = await import('@/lib/zombie/beta2025ItemService')
+      const { reviveBetaTeamInTransaction } = await import('@/lib/zombie/beta2025ItemSettlement')
+      const { WEAPON_POINTS } = await import('@/lib/zombie/beta2025Items')
+      if (!itemType.includes('serum') && !WEAPON_POINTS[itemType]) return NextResponse.json({ error: 'Choose a 2025 serum or weapon.' }, { status: 400 })
+      await itemTransaction(async tx => {
+        await lockItemLeague(tx, leagueId)
+        const current = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } } })
+        if (current && current.status !== 'pending') throw new Error('Weekly settlement has started; retry the grant after it completes.')
+        let activatesAtWeek = z.currentWeek
+        if (z.status === 'active') {
+          const season = await tx.redraftSeason.findFirst({ where: { leagueId, season: z.season }, select: { id: true } })
+          const rr = season && await tx.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
+          const deadline = rr && await lastStarterDeadline(tx, rr.id, z.season, z.currentWeek).catch(() => null)
+          if (!deadline || deadline.getTime() <= Date.now()) activatesAtWeek++
+        }
+        await tx.zombieTeamItem.create({ data: { teamStatusId: team.id, zombieLeagueId: z.id, userId, itemType, itemLabel: itemType, acquiredReason: reason, activatesAtWeek } })
+        if (z.status === 'active') await reviveBetaTeamInTransaction(tx, team.id, z.currentWeek)
+      })
+      if (z.status === 'active') await refreshItemScores(leagueId, z.currentWeek).catch(() => {})
+    } else {
     await prisma.zombieTeamItem.create({
       data: {
         teamStatusId: team.id,
@@ -138,6 +174,7 @@ export async function POST(req: Request) {
         acquiredReason: reason,
       },
     })
+    }
     await logAuditEntry(z.id, {
       category: 'item_acquisition',
       action: 'COMMISSIONER_ITEM_AWARD',

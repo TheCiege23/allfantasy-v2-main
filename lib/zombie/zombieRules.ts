@@ -34,8 +34,9 @@ export async function getZombieRulesForSport(sportRaw: string): Promise<ZombieRu
   const weapons = sportCfg.engineWeapons ?? DEFAULT_ENGINE_WEAPONS
   return {
     sport,
-    bashingThreshold: row?.bashingThreshold ?? sportCfg.bashingThreshold,
-    maulingThreshold: row?.maulingThreshold ?? sportCfg.maulingThreshold,
+    // The approved 2025 NFL preset uses 60 for both events. Historical snapshots retain old rules.
+    bashingThreshold: sport === 'NFL' ? 60 : row?.bashingThreshold ?? sportCfg.bashingThreshold,
+    maulingThreshold: sport === 'NFL' ? 60 : row?.maulingThreshold ?? sportCfg.maulingThreshold,
     weaponShieldThreshold: row?.weaponShieldThreshold ?? weapons.knifeScore,
     weaponAmbushThreshold: row?.weaponAmbushThreshold ?? weapons.bowScore,
     weaponAxeMargin: weapons.axeWinMargin,

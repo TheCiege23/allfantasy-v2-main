@@ -286,6 +286,9 @@ const SPORT_TO_LEAGUE_SPORT: Record<PlayoffSport, LeagueSport> = {
   mlb: "MLB",
   // Mapped so the type is total; NOT syncable yet — see SYNCABLE_PLAYOFF_SPORTS.
   ncaaf: "NCAAF",
+  nba_cup: "NBA",
+  // Total for the type only: NFL pools are fed by syncNflPlayoffs, never by this service.
+  nfl: "NFL",
 }
 
 /**

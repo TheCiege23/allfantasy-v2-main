@@ -100,16 +100,16 @@ export function SurvivorGuillotineSetup() {
       const saved = await rules.json()
       if (!rules.ok) throw new Error(`League ${id} was created. Save its Survivor rules before inviting managers: ${saved.error ?? 'save failed'}`)
       await loadInvite(id)
-      setNotice('Survivor Guillotine league created. Review your rules, then share the invite link.')
+      setNotice('Survivor Guilly league created. Review your rules, then share the invite link.')
     } catch (error) { setNotice(error instanceof Error ? error.message : 'League creation failed') }
     finally { setSaving(false) }
   }
   return <main className={styles.page}>
     <header className={styles.header}>
-      <div><span className={styles.eyebrow}>ALLFANTASY · COMMISSIONER WORKSHOP</span><h1><Image src="/survivor-guillotine/emblem.svg" alt="" width={52} height={52} className={styles.emblem} />Survivor Guillotine</h1><p>Build your island. Set the rules. Leave three standing.</p></div>
+      <div><span className={styles.eyebrow}>ALLFANTASY · COMMISSIONER WORKSHOP</span><h1><Image src="/survivor-guillotine/emblem.svg" alt="" width={52} height={52} className={styles.emblem} />Survivor Guilly</h1><p>Build your island. Set the rules. Leave three standing.</p></div>
       <span className={styles.badge}>{leagueId ? 'Live league setup' : 'Setup preview'}</span>
     </header>
-    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Choose your rules and create a private NFL or NBA league. The invite link appears after Survivor Guillotine is configured.'}</p>
+    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Choose your rules and create a private NFL or NBA league. The invite link appears after Survivor Guilly is configured.'}</p>
     <div className={styles.stats}>
       <article><strong>{Number.isFinite(config.teamCount) ? config.teamCount : '—'}</strong><span>Starting teams</span></article>
       <article><strong>{Number.isFinite(config.tribeCount) ? config.tribeCount : '—'}</strong><span>Starting tribes</span></article>
@@ -170,7 +170,7 @@ export function SurvivorGuillotineSetup() {
         </tr>)}</tbody></table></div>
         <button className={styles.secondary} type="button" onClick={() => update('periodOverrides', {})}>Reset period overrides</button>
         <button className={styles.primary} type="button" disabled={schedule.errors.length > 0} onClick={exportRules}>Export season rules</button>
-        {!leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving || !leagueName.trim()} onClick={createLeague}>{saving ? 'Creating…' : 'Create Survivor Guillotine league'}</button>}
+        {!leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving || !leagueName.trim()} onClick={createLeague}>{saving ? 'Creating…' : 'Create Survivor Guilly league'}</button>}
         {leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving} onClick={saveRules}>{saving ? 'Saving…' : 'Save to league'}</button>}
         {leagueId && <a className={styles.primary} href={`/survivor-guillotine/${encodeURIComponent(leagueId)}`}>Open league island</a>}
         {inviteLink && <div className={styles.inset}><h3>Invite managers</h3><p>Share this link when your league is ready.</p><a href={inviteLink}>{inviteLink}</a><button className={styles.secondary} type="button" onClick={() => { void navigator.clipboard?.writeText(inviteLink).then(() => setNotice('Invite link copied.')) }}>Copy invite link</button></div>}

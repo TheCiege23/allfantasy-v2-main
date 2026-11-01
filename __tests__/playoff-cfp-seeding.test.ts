@@ -52,7 +52,14 @@ const db = vi.hoisted(() => {
         return row
       },
       count: async ({ where }: Row) =>
-        mem.series.filter((s) => matchIn(s.challengeId, where.challengeId) && matchIn(s.status, where.status)).length,
+        mem.series.filter((s) => matchIn(s.challengeId, where.challengeId) && (
+          where.OR
+            ? where.OR.some((condition: Row) =>
+                condition.status ? matchIn(s.status, condition.status) :
+                condition.startsAt?.lte ? s.startsAt instanceof Date && s.startsAt <= condition.startsAt.lte : false,
+              )
+            : matchIn(s.status, where.status)
+        )).length,
     },
     playoffBracketPick: {
       updateMany: async ({ where, data }: Row) => {

@@ -106,6 +106,7 @@ beforeEach(() => {
 describe('parseHubFormat', () => {
   it('accepts the six formats case-insensitively and nothing else', () => {
     expect(parseHubFormat('Guillotine')).toBe('guillotine')
+    expect(parseHubFormat('Guilly')).toBe('guillotine')
     expect(parseHubFormat(' efl ')).toBe('efl')
     expect(parseHubFormat('dynasty')).toBeNull()
     expect(parseHubFormat(undefined)).toBeNull()
@@ -203,7 +204,7 @@ const fixture = (over: Partial<FormatHubData> = {}): FormatHubData => ({
 describe('<FormatHub />', () => {
   it('marks the open hub and links every other format by path', () => {
     render(<FormatHub data={fixture()} />)
-    const current = screen.getByRole('link', { name: 'Guillotine' })
+    const current = screen.getByRole('link', { name: 'Guilly' })
     expect(current.getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Survivor · 2' }).getAttribute('href')).toBe('/core/hubs/survivor')
   })
@@ -231,7 +232,7 @@ describe('<FormatHub />', () => {
         youCommission: true,
       }],
     })} />)
-    expect(screen.getByRole('img', { name: /Guillotine league comparison/i })).toBeTruthy()
+    expect(screen.getByRole('img', { name: /Guilly league comparison/i })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Standings' }).getAttribute('href')).toBe('/core/standings?league=L1')
     expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('href')).toBe('/core/trades?league=L1')
     // Five-doors restyle: this opens the Commissioner Hub for the league, so it no longer says "Commissioner OS".
@@ -255,7 +256,7 @@ describe('<FormatHub />', () => {
 
   it('shows an honest empty hub instead of sample leagues', () => {
     render(<FormatHub data={fixture({ leagues: [], totalLeagues: 0, stats: [], trades: null, mentions: null })} />)
-    expect(screen.getByText('You’re not in a guillotine league yet')).toBeTruthy()
+    expect(screen.getByText('You’re not in a Guilly league yet')).toBeTruthy()
     expect(screen.queryByText('Chop Shop')).toBeNull()
     expect(screen.queryByText(/The Chopping Block|@mikek/)).toBeNull()
   })
@@ -265,4 +266,16 @@ describe('<FormatHub />', () => {
     expect(container.querySelector('video')?.getAttribute('src')).toBe('/league-type-guillotine-hub.mp4')
     expect(container.innerHTML).not.toContain('hf_20260914')
   })
+})
+
+it('excludes a converted native redraft from the Guilly hub despite its retained configuration', async () => {
+  m.league.findMany.mockImplementation(async (args: { select?: { settings?: boolean } }) => args.select?.settings ? [] : [
+    member({ id: 'converted', name: 'NBA Redraft', platform: 'manual', leagueVariant: 'redraft' }),
+    member({ id: 'imported', name: 'Imported Guilly' }),
+    member({ id: 'native', name: 'Native Guilly', platform: 'manual', leagueVariant: 'guillotine' }),
+  ])
+  m.guillotineLeagueConfig.findMany.mockResolvedValue(['converted', 'imported', 'native'].map(leagueId => ({ leagueId })))
+  const hub = await getFormatHub(USER, 'guillotine')
+  expect(hub.counts.guillotine).toBe(2)
+  expect(hub.leagues.map(league => league.leagueId).sort()).toEqual(['imported', 'native'])
 })

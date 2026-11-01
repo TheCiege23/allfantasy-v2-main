@@ -161,7 +161,7 @@ export function detectEvents(
   next: GameSnapshot,
   opts: DetectOptions = {}
 ): LiveEvent[] {
-  const bigPlayYards = opts.bigPlayYards ?? 20
+  const bigPlayYards = opts.bigPlayYards ?? 19 // owner's rule (2026-10-22): plays of 19+ yards
   const events: LiveEvent[] = []
 
   /*

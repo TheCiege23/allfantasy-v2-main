@@ -1,16 +1,24 @@
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 /**
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
  */
 
+import { checkOfferPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { resolveTradeDeadlineStatus, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
+import {
+  CodedTradeError,
+  isRedraftPickLeague,
+  loadRedraftPickBook,
+  parseRedraftPickId,
+} from '@/lib/league-trade-engine/redraftDraftPicks'
 import {
   captureGenericRosterState,
   genericTradeActorRole,
@@ -36,6 +44,35 @@ import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTra
 import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
+ * read and out for every non-Survivor league; a commissioner's processing of a reviewed trade is the
+ * override, as it is for the deadline.
+ */
+async function assertSurvivorTradeRulesForAfTrade(
+  leagueId: string,
+  rosterIds: string[],
+  items: ReadonlyArray<{ itemType: string; itemReference?: string | null; fromRosterId: string; metadata?: unknown }>,
+): Promise<{ holdForCommissioner: boolean }> {
+  const check = await checkSurvivorTradeRules({
+    leagueId,
+    rosterIds,
+    rosterIdSpace: 'league',
+    players: items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => {
+      const meta = i.metadata && typeof i.metadata === 'object' ? (i.metadata as Record<string, unknown>) : {}
+      return { playerId: String(i.itemReference), playerName: typeof meta.playerName === 'string' ? meta.playerName : null, fromRosterId: i.fromRosterId }
+    }),
+  })
+  if (!check.ok) throw new CodedTradeError(check.code, check.message)
+  // The check could not run and the league holds such trades for the commissioner (acceptance only).
+  return { holdForCommissioner: Boolean(check.holdForCommissioner) }
+}
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -468,6 +505,14 @@ async function linkCounterToParent(
   })
 }
 
+/**
+ * The lifecycle refusal as a throwable that keeps its `code` and `status`, so a route can answer
+ * `roster_locked_post_draft` with 423 instead of a bare 400 message. The message is unchanged.
+ */
+function lifecycleGateThrowable(err: { error: string; code: string; status: number }): Error & { code: string; status: number } {
+  return Object.assign(new Error(err.error), { code: err.code, status: err.status })
+}
+
 /*
  * ⚠ NO `currentWeek` INPUT, ON PURPOSE. It used to be one, and the deadline was only as good as the
  * caller: the Trade Center passed none (deadline skipped), the counter route passed the client's
@@ -483,7 +528,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.proposedByUserId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.proposedByUserId),
   })
-  if (!life.ok) throw new Error(life.err.error)
+  if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const participantRosterIds = [...new Set([
     input.proposerRosterId,
@@ -502,6 +547,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
   const proposerOwnsRoster = proposer.platformUserId === input.proposedByUserId
     || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
+    || await isAcceptedCoOwnerForRoster(input.leagueId, proposer.id, input.proposedByUserId)
   if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
@@ -514,11 +560,22 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     kind: 'trade',
   })
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
+  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, input.assets)
 
   const settings = resolveLeagueTradeSettings(league)
+  /*
+   * A picks-only offer in a league whose pick trades have their own deadline is held to that one
+   * (lib/trade-deadline/pickTradeDeadline.ts), so the validator is given no week and checks no
+   * deadline. Every other offer: the validator's check, at the server's week.
+   */
+  const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: input.assets })
+  if (deadline.scope === 'picks' && deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   // A native dynasty league's future picks are checked against its inventory, not `playerData`.
   const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
   const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
+  // A redraft league's current-draft picks; a failed read leaves the book null, which refuses them.
+  const offersRedraftPick = isRedraftPickLeague(league) && input.assets.some((a) => parseRedraftPickId(String(a.itemReference ?? '')) != null)
+  const redraftPicks = offersRedraftPick ? await loadRedraftPickBook(input.leagueId, undefined, league).catch(() => null) : null
   const v = validateTradeAssets({
     league,
     settings,
@@ -526,10 +583,15 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiver,
     participants,
     assets: input.assets,
-    currentWeek: await serverWeekForTradeDeadline(league, settings.tradeDeadlineWeek),
+    currentWeek: deadline.scope === 'picks' || !deadline.window?.inSeason ? null : deadline.window.week,
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
+    redraftDraftPicks: redraftPicks,
   })
-  if (!v.ok) throw new Error(v.message)
+  // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
+  if (!v.ok) throw new CodedTradeError(v.code, v.message)
+  // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
+  // the settlement reads. An offer without terms is returned as it came.
+  const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -579,12 +641,18 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         participantRosterIds,
         acceptedRosterIds: [],
         multiTeam: participantRosterIds.length > 2,
+        // The league's veto rule when the trade was proposed (./vetoRule.ts): a later settings change
+        // never moves the line on a vote already under way.
+        vetoRule: settings.vetoRule,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => {
+        create: offerAssets.map((a) => {
           // A native future pick's item carries its own season and round, read from its id, so
           // every reader of the item (grades, history, notices) can price it without the id format.
           const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
+          const redraftPick = parseRedraftPickId(String(a.itemReference ?? ''))
+            ? redraftPicks?.picks.find((p) => p.pickId === a.itemReference) ?? null
+            : null
           return {
             itemType: a.itemType,
             itemReference: a.itemReference ?? null,
@@ -598,7 +666,17 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
                   pickRound: nativePick.round,
                   originalRosterId: nativePick.originalRosterId,
                 }
-              : (a.metadata ?? {})) as Prisma.InputJsonValue,
+              : redraftPick
+                ? {
+                    ...(a.metadata ?? {}),
+                    pickSeason: redraftPick.season,
+                    pickRound: redraftPick.round,
+                    pickSlot: redraftPick.slot,
+                    pickOverall: redraftPick.overall,
+                    originalRosterId: redraftPick.originalRosterId,
+                    draftSessionId: redraftPick.sessionId,
+                  }
+                : (a.metadata ?? {})) as Prisma.InputJsonValue,
           }
         }),
       },
@@ -804,6 +882,10 @@ export async function acceptAfLeagueTrade(input: {
     const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
   }
+  if (!acceptingRoster) {
+    const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+    acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.id === coOwnerRosterId)
+  }
   if (!acceptingRoster) throw new Error('Only a participating manager can accept')
 
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
@@ -815,8 +897,8 @@ export async function acceptAfLeagueTrade(input: {
    * acceptance leaves the offer exactly as it was. Once accepted, the review period (commissioner,
    * league vote, processing delay) may finish after the deadline — see `finalizeAfLeagueTradeProcessing`.
    */
-  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
-  if (deadline.passed) throw new Error('Trade deadline has passed.')
+  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, {}, { items: trade.items })
+  if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
 
   const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
@@ -852,14 +934,24 @@ export async function acceptAfLeagueTrade(input: {
     kind: 'trade',
   })
   if (!rosterTxGateAccept.ok) throw new Error(rosterTxGateAccept.error)
+  const survivorAtAccept = await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
+  const survivorHeld = survivorAtAccept.holdForCommissioner
+  // The hold copy follows League.language (lib/survivor/survivorGovernanceCopy.ts).
+  const survivorHoldCopy = governanceCopy((league as { language?: string | null } | null)?.language)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
   })
-  if (!life.ok) throw new Error(life.err.error)
+  if (!life.ok) throw lifecycleGateThrowable(life.err)
 
   const settings = resolveLeagueTradeSettings(league)
-  const reviewType = trade.reviewType
+  // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
+  // before it executes, goes to commissioner review whatever the league's review mode.
+  // Survivor "hold it for the commissioner" (the trade-rule check could not run) takes the same route.
+  const held = survivorHeld || (
+    trade.reviewType !== 'commissioner' &&
+    (await shouldHoldAcceptedTrade({ leagueId: input.leagueId, settings: league.settings, ref: { kind: 'af', tradeId: trade.id } })))
+  const reviewType = held ? 'commissioner' : trade.reviewType
 
   if (reviewType === 'instant') {
     await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, deadlineChecked: true })
@@ -900,15 +992,30 @@ export async function acceptAfLeagueTrade(input: {
       proposerUserId: trade.proposedByUserId,
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
-      body: 'It now goes to commissioner review before processing.',
+      body: survivorHeld
+        ? survivorHoldCopy.tradeHeldForCommissioner
+        : held
+        ? 'The league integrity check flagged it, so it is held for commissioner review before processing.'
+        : 'It now goes to commissioner review before processing.',
     })
     announceTradeStatusInDm({
       tradeId: trade.id,
       status: 'accepted',
       actorUserId: input.userId,
-      detail: 'It goes to commissioner review before it processes.',
+      detail: survivorHeld
+        ? survivorHoldCopy.tradeHeldForCommissioner
+        : held
+        ? 'The league integrity check flagged it, so it is held for commissioner review.'
+        : 'It goes to commissioner review before it processes.',
     })
-    announceTradeInLeagueChat(trade.id, 'Accepted. It goes to commissioner review before it processes.')
+    announceTradeInLeagueChat(
+      trade.id,
+      survivorHeld
+        ? survivorHoldCopy.tradeHeldChat
+        : held
+        ? 'Accepted. Held for commissioner review by the league integrity check.'
+        : 'Accepted. It goes to commissioner review before it processes.',
+    )
     return { status: 'awaiting_commissioner' }
   }
 
@@ -969,6 +1076,19 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   auditMetadata?: Record<string, unknown>
   /** The caller is `acceptAfLeagueTrade`, which checked the deadline at the moment of acceptance. */
   deadlineChecked?: boolean
+  /**
+   * An elevated commissioner forcing a still-pending offer through past the deadline — the same
+   * `commissionerOverride` convention the redraft trade runtime uses (TRADE_DEADLINE_PASSED is
+   * skipped when it is set). Only ever set by a route that has already checked the commissioner
+   * gate; never by a manager's request.
+   */
+  commissionerOverride?: boolean
+  /**
+   * The trade is being pushed through by a commissioner's decision (an approval of a reviewed trade,
+   * or the commissioner-only process route). Like `commissionerOverride` it means the Survivor trade
+   * rules were waived by the commissioner, so a held free-trade token is not spent.
+   */
+  commissionerApproved?: boolean
 }): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
@@ -992,6 +1112,16 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   }
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: trade.leagueId } })
+  // Survivor: a free-trade token this trade relies on is spent once the trade has executed (below).
+  // Read BEFORE the assets move, while the played-player facts still describe the trade. Survivor only.
+  const survivorBypass = league.survivorMode
+    ? await checkSurvivorTradeRules({
+      leagueId: trade.leagueId,
+      rosterIds: participantRosterIds,
+      rosterIdSpace: 'league',
+      players: trade.items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => ({ playerId: String(i.itemReference), fromRosterId: i.fromRosterId })),
+    }).catch(() => null)
+    : null
   const rosterTxGateFinalize = await assertRosterTransactionsAllowed({
     leagueId: trade.leagueId,
     league,
@@ -1010,9 +1140,9 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * still `pending` here was never accepted — a commissioner processing the bare offer — and is held
    * to the deadline like a new proposal.
    */
-  if (trade.status === 'pending' && !input.deadlineChecked) {
-    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek)
-    if (deadline.passed) throw new Error('Trade deadline has passed.')
+  if (trade.status === 'pending' && !input.deadlineChecked && !input.commissionerOverride) {
+    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: trade.items })
+    if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0
 
@@ -1130,6 +1260,11 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+  // A commissioner forcing or approving the trade through is the override: a held token stays unspent.
+  const survivorRedeemSource = survivorBypassSourceToRedeem(survivorBypass, { commissionerOverride: input.commissionerOverride === true, commissionerApproved: input.commissionerApproved === true })
+  if (survivorRedeemSource && survivorBypass?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: trade.leagueId, week: survivorBypass.week ?? 0, tradeRef: `af:${trade.id}`, source: survivorRedeemSource, actorUserId: input.actorUserId })
+  }
 
   // The integrity scan: the trade review, run once the trade has settled. Native trades were never
   // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.
@@ -1200,7 +1335,7 @@ export async function commissionerAfTradeDecision(input: {
     return
   }
 
-  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata })
+  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata, commissionerApproved: true })
 }
 
 export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -1230,7 +1365,10 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
   }
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   const isComm = league?.userId === input.userId
-  if (!isRecv && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+  const isCoOwnerReceiver = !!coOwnerRosterId && participantIds.includes(coOwnerRosterId) && coOwnerRosterId !== trade.proposerRosterId
+  if (!isRecv && !isCoOwnerReceiver && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  isRecv ||= isCoOwnerReceiver
 
   await prisma.afLeagueTrade.update({
     where: { id: trade.id },
@@ -1270,7 +1408,8 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     where: { id: trade.proposerRosterId, platformUserId: input.userId },
   })
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
-  if (!isProp && !elevated) throw new Error('Only proposer or commissioner can cancel')
+  const isCoOwnerProposer = await isAcceptedCoOwnerForRoster(input.leagueId, trade.proposerRosterId, input.userId)
+  if (!isProp && !isCoOwnerProposer && !elevated) throw new Error('Only proposer or commissioner can cancel')
 
   /*
    * 🛑 THE PROPOSER COULD WITHDRAW A TRADE THE OTHER MANAGER HAD ALREADY ACCEPTED. `scheduled` is set only
@@ -1309,6 +1448,74 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
   )
 }
 
+/**
+ * A still-pending offer expires when the trade deadline passes (lib/trade-deadline/expireOffersAtDeadline.ts).
+ *
+ * Nobody could accept it anyway — acceptance re-checks the deadline — but left `pending` it sat in both
+ * inboxes as a live offer that would refuse every click, which reads as broken. Only a PENDING offer
+ * expires: one already accepted and waiting on review, a vote or a processing delay passed the gate at
+ * acceptance and finishes its window (see `acceptAfLeagueTrade`).
+ *
+ * Claimed on the status read, like cancel, so a manager acting at the same instant wins or loses
+ * cleanly. Both sides are told; the notice is idempotent per trade, so a re-run cannot send twice.
+ * Returns false when the offer had already moved on.
+ */
+export async function expireAfLeagueTradeAtDeadline(input: {
+  tradeId: string
+  leagueId: string
+  /** Names the limit that closed trades, for the notice. */
+  reason: string
+}): Promise<boolean> {
+  const trade = await prisma.afLeagueTrade.findFirst({ where: { id: input.tradeId, leagueId: input.leagueId } })
+  if (!trade || trade.status !== 'pending') return false
+  const claimed = await prisma.afLeagueTrade.updateMany({
+    where: { id: trade.id, status: 'pending' },
+    data: { status: 'expired' },
+  })
+  if (claimed.count === 0) return false
+  await appendAfTradeStatusHistory({
+    tradeId: trade.id,
+    fromStatus: 'pending',
+    toStatus: 'expired',
+    actorUserId: null,
+    reason: 'trade_deadline_passed',
+    metadata: { detail: input.reason },
+  })
+  await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'expired' })
+
+  try {
+    const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
+      ? trade.metadata as Record<string, unknown>
+      : {}
+    const partyRosterIds = Array.isArray(metadata.participantRosterIds) && metadata.participantRosterIds.length > 0
+      ? metadata.participantRosterIds.map(String)
+      : [trade.proposerRosterId, trade.receiverRosterId]
+    const rosters = await prisma.roster.findMany({
+      where: { id: { in: partyRosterIds }, leagueId: input.leagueId },
+      select: { platformUserId: true },
+    })
+    const raw = rosters
+      .map((r) => r.platformUserId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+    const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
+    if (userIds.length > 0) {
+      const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+      const event = tradeEvent({
+        userIds,
+        leagueId: input.leagueId,
+        type: 'trade_rejected',
+        tradeId: trade.id,
+        title: 'Trade offer expired at the deadline',
+        body: `${input.reason} Pending offers expire when trades close.`,
+      })
+      await ingest({ ...event, meta: { ...event.meta, idempotencyKey: `trade-deadline-expiry:${trade.id}` } })
+    }
+  } catch {
+    /* a notice failure never undoes the expiry */
+  }
+  return true
+}
+
 export async function castAfTradeVetoVote(input: {
   tradeId: string
   leagueId: string
@@ -1324,9 +1531,9 @@ export async function castAfTradeVetoVote(input: {
   if (trade.status !== 'awaiting_votes') throw new Error('Trade is not in veto window')
 
   const vr = await prisma.roster.findFirst({
-    where: { id: input.voterRosterId, leagueId: input.leagueId, platformUserId: input.userId },
+    where: { id: input.voterRosterId, leagueId: input.leagueId },
   })
-  if (!vr) throw new Error('Invalid voter roster')
+  if (!vr || (vr.platformUserId !== input.userId && !await isAcceptedCoOwnerForRoster(input.leagueId, vr.id, input.userId))) throw new Error('Invalid voter roster')
   const tradeMetadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
     : {}
@@ -1354,7 +1561,9 @@ export async function castAfTradeVetoVote(input: {
   const vetoCount = await prisma.afLeagueTradeVote.count({
     where: { tradeId: trade.id, vote: 'veto' },
   })
-  const needed = Math.ceil((allRosters * (trade.vetoThresholdPercent ?? 50)) / 100)
+  // The rule stored with the trade; a trade proposed before rules were stored keeps its percent (50% default).
+  const rule = storedVetoRule(trade.metadata) ?? { mode: 'percent' as const, value: trade.vetoThresholdPercent ?? 50 }
+  const needed = vetoVotesNeeded(rule, { teamCount: allRosters, tradingTeams: tradingParties.size })
 
   if (input.vote === 'veto' && vetoCount >= needed) {
     await prisma.afLeagueTrade.update({

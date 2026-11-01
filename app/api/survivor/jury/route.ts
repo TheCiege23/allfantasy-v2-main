@@ -12,6 +12,8 @@ import {
 import { recordCrownedWinner, settleFinaleIfDue, submitJuryVote } from '@/lib/survivor/SurvivorFinaleEngine'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { getFinaleRevealView } from '@/lib/survivor/finaleView'
+import { answerJuryQuestion, askJuryQuestion, getJuryQaView, markJuryAnswerSeen, postClosingSpeech } from '@/lib/survivor/survivorJuryQaService'
+import { loadEndOfSeasonBallotReveal } from '@/lib/survivor/survivorBallotRevealService'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,8 +29,16 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  const part = req.nextUrl.searchParams?.get('part')?.trim()
+  // Jury Q&A + closing speeches: read only by the jury, finalists and a non-playing host until the
+  // champion is crowned (survivorJuryQa.canReadJuryQa).
+  if (part === 'qa') return NextResponse.json({ qa: await getJuryQaView(leagueId, userId) })
+  // Who voted for whom: null until the season is complete, and only when the commissioner opted in.
+  if (part === 'ballots') return NextResponse.json({ ballots: await loadEndOfSeasonBallotReveal(leagueId) })
   return NextResponse.json({ view: await getFinaleRevealView(leagueId, userId) })
 }
+
+const PARTICIPANT_INTENTS = new Set(['jury_vote', 'jury_question', 'finalist_answer', 'juror_seen', 'closing_speech'])
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -42,6 +52,8 @@ export async function POST(req: NextRequest) {
     finalistRosterId?: string
     deadline?: string
     finalistUserId?: string
+    jurorRosterId?: string
+    text?: unknown
     week?: number
   }
   try {
@@ -52,10 +64,30 @@ export async function POST(req: NextRequest) {
 
   if (!body.leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  if (body.intent !== 'jury_vote') {
-  const hostDenied = await survivorHostGuard(body.leagueId, userId)
-  if (hostDenied) return hostDenied
+  if (!PARTICIPANT_INTENTS.has(String(body.intent ?? ''))) {
+    const hostDenied = await survivorHostGuard(body.leagueId, userId)
+    if (hostDenied) return hostDenied
+  }
 
+  // Jury Q&A and closing speeches: the acting manager's own roster, never a roster from the body.
+  if (body.intent === 'jury_question' || body.intent === 'finalist_answer' || body.intent === 'juror_seen' || body.intent === 'closing_speech') {
+    const gate = await assertLeagueMember(body.leagueId, userId)
+    if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+    const own = await prisma.roster.findFirst({ where: { leagueId: body.leagueId, platformUserId: userId }, select: { id: true } })
+    if (!own) return NextResponse.json({ error: 'You have no roster in this league', code: 'no_roster' }, { status: 403 })
+    const text = typeof body.text === 'string' ? body.text : ''
+    const other = typeof body.finalistRosterId === 'string' ? body.finalistRosterId.trim() : typeof body.jurorRosterId === 'string' ? body.jurorRosterId.trim() : ''
+    if (body.intent !== 'closing_speech' && !other) return NextResponse.json({ error: 'finalistRosterId or jurorRosterId required', code: 'missing_target' }, { status: 400 })
+    if ((body.intent === 'jury_question' || body.intent === 'finalist_answer' || body.intent === 'closing_speech') && typeof body.text !== 'string') {
+      return NextResponse.json({ error: 'text required', code: 'empty' }, { status: 400 })
+    }
+    const result =
+      body.intent === 'jury_question' ? await askJuryQuestion(body.leagueId, { jurorRosterId: own.id, finalistRosterId: other, text, source: 'api.survivor.jury.route' })
+        : body.intent === 'finalist_answer' ? await answerJuryQuestion(body.leagueId, { finalistRosterId: own.id, jurorRosterId: typeof body.jurorRosterId === 'string' ? body.jurorRosterId.trim() : other, text, source: 'api.survivor.jury.route' })
+          : body.intent === 'juror_seen' ? await markJuryAnswerSeen(body.leagueId, { jurorRosterId: own.id, finalistRosterId: other })
+            : await postClosingSpeech(body.leagueId, { finalistRosterId: own.id, text, source: 'api.survivor.jury.route' })
+    if (!result.ok) return NextResponse.json({ error: result.code, code: result.code }, { status: result.status })
+    return NextResponse.json({ ok: true })
   }
 
   if (body.intent === 'open_jury') {
@@ -113,7 +145,7 @@ export async function POST(req: NextRequest) {
       source: 'api.survivor.jury.route',
     })
     if (!result.ok) {
-      return NextResponse.json({ error: result.error ?? 'Final jury vote failed' }, { status: 400 })
+      return NextResponse.json({ error: result.error ?? 'Final jury vote failed', ...(result.code ? { code: result.code } : {}) }, { status: result.code === 'held_for_speeches' ? 409 : 400 })
     }
     // Never echo the finale state: it carries every juror's ballot. The client re-reads the sealed view.
     return NextResponse.json({ ok: true, closed: Boolean(result.state?.closed) })

@@ -14,6 +14,7 @@ import type { DueWaiverLeague } from "@/lib/automation/jobs/waivers/waiverAutoma
 import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
 import { getLeagueWaiverState } from "@/lib/waiver-wire/waiver-state-service"
+import { guillotineClaimsCutoff, isBlindAuctionLeague } from "@/lib/guillotine/blindWaiverCutoff"
 
 export type DiscoverDueWaiverLeaguesOptions = {
   limit?: number
@@ -76,7 +77,22 @@ export async function discoverDueWaiverLeagues(
     }
 
     const waiverType = settings.normalizedWaiverType ?? settings.waiverType ?? "rolling"
-    if (waiverType === "fcfs") {
+    // Guilly blind FAAB auction (lib/guillotine/blindWaiverCutoff.ts). While the window holds every
+    // pending claim, the league is NOT due: a run that settles nothing would still spend the day's
+    // idempotency key and push the real auction to tomorrow. And an FCFS Guilly league is not skipped,
+    // because the claims it held at claim time have no other way to settle once the window closes.
+    const league = await prisma.league
+      .findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true } })
+      .catch(() => null)
+    const blindLeague = league != null && isBlindAuctionLeague(league)
+    if (blindLeague) {
+      const cutoff = await guillotineClaimsCutoff(leagueId, now, league)
+      if (cutoff) {
+        const dueCount = await prisma.waiverClaim.count({ where: { leagueId, status: "pending", createdAt: { lt: cutoff } } })
+        if (dueCount === 0) continue
+      }
+    }
+    if (waiverType === "fcfs" && !blindLeague) {
       continue
     }
 

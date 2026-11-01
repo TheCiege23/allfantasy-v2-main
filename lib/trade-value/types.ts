@@ -101,8 +101,9 @@ export interface AssetValueSnapshot {
   formatFit?: {
     formatId: string | null
     label: string | null
-    fit: { multiplier: number; reason: string } | null
-    legality: { ok: boolean; reason?: string } | null
+    /** `reasonCode` / `reasonParams`: the reason as a code (`lib/trade-value/formats/types.ts`). */
+    fit: { multiplier: number; reason: string; reasonCode?: string; reasonParams?: Record<string, string | number> } | null
+    legality: { ok: boolean; reason?: string; reasonCode?: string; reasonParams?: Record<string, string | number> } | null
   } | null
 }
 

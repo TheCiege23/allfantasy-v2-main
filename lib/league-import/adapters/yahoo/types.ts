@@ -55,6 +55,8 @@ export interface YahooImportTeam {
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
   reservePlayerIds: string[]
+  /** Players in the `NA` (not active / minors) slot — a subset of `reservePlayerIds`. Absent on older payloads. */
+  minorsPlayerIds?: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
   /*
    * 🛑 IMP-04 — WHY THIS TEAM'S ROSTER ARRAYS LOOK THE WAY THEY DO.
@@ -79,6 +81,8 @@ export interface YahooImportScheduleWeek {
     teamKey2: string
     points1?: number
     points2?: number
+    categories1?: Record<string, number>
+    categories2?: Record<string, number>
   }>
 }
 

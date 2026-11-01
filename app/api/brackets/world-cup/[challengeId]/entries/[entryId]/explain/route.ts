@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
@@ -26,7 +27,7 @@ export const runtime = "nodejs"
  * file to stay within the Vercel route budget.
  */
 
-export async function POST(
+async function paidToolPost(
   req: NextRequest,
   props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
@@ -41,6 +42,11 @@ export async function POST(
 
   // AF Pro gate — return 402 with upgrade flag (consistent with commissioner-brain).
   const body = await req.json().catch(() => ({}))
+
+  const ownedEntry = await prisma.worldCupBracketEntry.findFirst({
+    where: { id: entryId, challengeId, userId: userResult.user.id }, select: { id: true },
+  })
+  if (!ownedEntry) return NextResponse.json({ error: "Entry not found" }, { status: 404 })
 
   const hasBracketBrainAi = await userHasBracketBrainAi(
     userResult.user.id,
@@ -263,3 +269,5 @@ export async function GET(
     hasBracketBrainAi,
   })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

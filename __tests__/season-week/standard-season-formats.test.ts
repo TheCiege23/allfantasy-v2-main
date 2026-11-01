@@ -89,9 +89,13 @@ describe('which leagues the weekly season covers', () => {
     ['MLB', 'dynasty', true],
     ['MLB', 'keeper', true],
     ['MLB', 'best_ball', true],
-    ['SOCCER', 'redraft', false],
   ])('%s %s → %s', (sport, format, expected) => {
     expect(runsStandardWeeklySeason(sport, format)).toBe(expected)
+  })
+
+  it('runs soccer redraft in the verified 2026 gameweeks and gates unverified 2027', () => {
+    expect(runsStandardWeeklySeason('SOCCER', 'redraft', 2026)).toBe(true)
+    expect(runsStandardWeeklySeason('SOCCER', 'redraft', 2027)).toBe(false)
   })
 
   it('reads the season row’s config keys as sports', () => {

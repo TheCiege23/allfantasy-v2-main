@@ -6,6 +6,7 @@ import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPla
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { dispatchStateRefreshEvent } from "@/lib/state-consistency/state-events"
 import { rosterBadgeStatus } from "@/lib/injuries/injuryStatusDisplay"
+import { starterSlotIndexOf } from "@/lib/league/lineupSlotPositions"
 
 export type RosterSectionKey = "starters" | "bench" | "ir" | "taxi" | "devy"
 
@@ -22,6 +23,12 @@ export type RosterPlayer = {
   actual: number | null
   status: "healthy" | "q" | "out" | "ir"
   slot: RosterSectionKey
+  /**
+   * STARTERS only: the expanded starter slot he holds (QB, RB1, …, FLEX — lib/league/lineupSlotPositions.ts).
+   * Read from the stored row and written back, so a save from this board does not erase the positions
+   * the lineup screens set. Never on any other section.
+   */
+  slotIndex?: number
   /** Normalized display-only enrichments from `unifiedRoster` API slice */
   headshotUrl?: string | null
   providerInjuryLabel?: string | null
@@ -122,6 +129,21 @@ function normalizeRosterPlayer(raw: unknown, fallbackId: string, slot: RosterSec
     actual: obj.actual == null ? null : Number(obj.actual),
     status: normalizeStatus(obj.status ?? obj.injury_status),
     slot,
+    ...(slot === "starters" && starterSlotIndexOf(obj) != null ? { slotIndex: starterSlotIndexOf(obj)! } : {}),
+  }
+}
+
+/** `p` placed in `section`. A slot position is a starter's; it never follows a player off the lineup. */
+export function inRosterSection(p: RosterPlayer, section: RosterSectionKey, slotIndex?: number): RosterPlayer {
+  const { slotIndex: _drop, ...rest } = p
+  return section === "starters" && slotIndex !== undefined ? { ...rest, slot: section, slotIndex } : { ...rest, slot: section }
+}
+
+/** A swap: each player takes the other's section AND, in the lineup, the other's starter slot. */
+export function swapRosterSeats(a: RosterPlayer, b: RosterPlayer): { intoA: RosterPlayer; intoB: RosterPlayer } {
+  return {
+    intoA: inRosterSection(b, a.slot, a.slotIndex),
+    intoB: inRosterSection(a, b.slot, b.slotIndex),
   }
 }
 
@@ -233,18 +255,19 @@ function isStarterPositionEligible(position: string, starterAllowedPositions: st
   return false
 }
 
-function serializeRosterState(state: RosterState, existingPlayerData: unknown): Record<string, unknown> {
+/** Exported for tests: the board state → the `rosterData` the save route stores. */
+export function serializeRosterState(state: RosterState, existingPlayerData: unknown): Record<string, unknown> {
   const asObj =
     existingPlayerData && typeof existingPlayerData === "object" && !Array.isArray(existingPlayerData)
       ? (existingPlayerData as Record<string, unknown>)
       : {}
 
   const lineupSections: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
-    starters: state.starters.map((p) => ({ ...p, slot: "starters" })),
-    bench: state.bench.map((p) => ({ ...p, slot: "bench" })),
-    ir: state.ir.map((p) => ({ ...p, slot: "ir" })),
-    taxi: state.taxi.map((p) => ({ ...p, slot: "taxi" })),
-    devy: state.devy.map((p) => ({ ...p, slot: "devy" })),
+    starters: state.starters.map((p) => inRosterSection(p, "starters", p.slotIndex)),
+    bench: state.bench.map((p) => inRosterSection(p, "bench")),
+    ir: state.ir.map((p) => inRosterSection(p, "ir")),
+    taxi: state.taxi.map((p) => inRosterSection(p, "taxi")),
+    devy: state.devy.map((p) => inRosterSection(p, "devy")),
   }
 
   const allPlayerIds = dedupePlayers([
@@ -419,7 +442,8 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
       for (const key of Object.keys(roster) as RosterSectionKey[]) {
         for (const p of roster[key]) {
           if (p.id === playerId) {
-            moved = { ...p, slot: toSlot }
+            // Staying in the lineup keeps his slot; anywhere else, or coming in, he has none.
+            moved = key === "starters" && toSlot === "starters" ? p : inRosterSection(p, toSlot)
           } else {
             next[key].push(p)
           }
@@ -499,8 +523,9 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         return false
       }
 
-      next[aR.section][aR.index] = { ...b, slot: aR.section }
-      next[bR.section][bR.index] = { ...a, slot: bR.section }
+      const { intoA, intoB } = swapRosterSeats({ ...a, slot: aR.section }, { ...b, slot: bR.section })
+      next[aR.section][aR.index] = intoA
+      next[bR.section][bR.index] = intoB
 
       setSaveError(null)
       setRoster(next)
@@ -554,7 +579,7 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
       }
       const next: RosterState = {
         ...roster,
-        [toSlot]: [...roster[toSlot], { ...player, slot: toSlot }],
+        [toSlot]: [...roster[toSlot], inRosterSection(player, toSlot)],
       }
       setRoster(next)
       void autoSave(next)
@@ -596,12 +621,17 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         })
         void loadAvailablePlayers()
       } catch (err: any) {
-        setSaveError(err?.message || "Unable to save lineup.")
+        const message = err?.message || "Unable to save lineup."
+        setSaveError(message)
+        // A refused save (a taxi rule, a full section, a lock) left the board showing a move that did
+        // not happen: read the saved roster back so the board matches it. A good read clears the error,
+        // so it is put back — the manager still needs to know why the move did not stick.
+        void loadRoster().then(() => setSaveError(message))
       } finally {
         setSaving(false)
       }
     },
-    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, canEditLineup],
+    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, loadRoster, canEditLineup],
   )
 
   const addPlayerFromPool = useCallback(
@@ -658,7 +688,8 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         next.starters.length < startersTarget &&
         isStarterPositionEligible(player.position, starterAllowedPositions)
       ) {
-        next.starters.push({ ...player, slot: 'starters' })
+        // The optimizer has no slot layout, so it claims none; the lineup screens re-seat it on load.
+        next.starters.push(inRosterSection(player, 'starters'))
       } else {
         deferred.push(player)
       }
@@ -671,19 +702,19 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         slotLimits.ir > 0 &&
         next.ir.length < slotLimits.ir
       ) {
-        next.ir.push({ ...player, slot: 'ir' })
+        next.ir.push(inRosterSection(player, 'ir'))
         continue
       }
       if (slotLimits.bench > 0 && next.bench.length < slotLimits.bench) {
-        next.bench.push({ ...player, slot: 'bench' })
+        next.bench.push(inRosterSection(player, 'bench'))
         continue
       }
       if (slotLimits.taxi > 0 && next.taxi.length < slotLimits.taxi) {
-        next.taxi.push({ ...player, slot: 'taxi' })
+        next.taxi.push(inRosterSection(player, 'taxi'))
         continue
       }
       if (slotLimits.devy > 0 && next.devy.length < slotLimits.devy) {
-        next.devy.push({ ...player, slot: 'devy' })
+        next.devy.push(inRosterSection(player, 'devy'))
         continue
       }
       overflowUnassigned += 1

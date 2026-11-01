@@ -28,7 +28,7 @@ describe('league workspace hosting and return paths', () => {
   it('provides an all-league return that bypasses last-league landing and a scoped dashboard return', () => {
     render(<LeagueWorkspaceNavigation leagueId="native-one" leagueName="Sunday League" platform="allfantasy" />)
     expect(screen.getByRole('link', { name: /Back to Dashboard/ })).toHaveAttribute('href', '/core?view=all')
-    expect(screen.getByRole('link', { name: 'League Dashboard' })).toHaveAttribute('href', '/core?league=native-one')
+    expect(screen.getByRole('link', { name: 'League Home' })).toHaveAttribute('href', '/league/native-one')
     expect(screen.getByText('Hosted on AllFantasy · Beta')).toBeInTheDocument()
     expect(screen.queryByText(/Imported/)).not.toBeInTheDocument()
     expect(screen.getAllByRole('link')).toHaveLength(2)
@@ -58,15 +58,15 @@ describe('league workspace hosting and return paths', () => {
 })
 
 
-describe('the league list keeps both destinations', () => {
-  it('opens the full workspace independently of the dashboard action', () => {
+describe('the league list opens native homes directly', () => {
+  it('uses one direct native home action', () => {
     const data: MyLeaguesData = {
       leagues: [{ id: 'native-one', name: 'Sunday League', platform: 'allfantasy', tier: 'quiet', isDynasty: false, isCommissioner: true, reason: null, href: '/core?league=native-one', actionLabel: 'Open league' }],
       history: [], platforms: ['allfantasy'], coverage: [], notice: null,
       counts: { live: 1, history: 0, all: 1, needs: 0, playing: 0, quiet: 1, commissioner: 1, drafting: 0, dynasty: 0 },
     }
     render(<MyLeaguesV4 {...data} importHref="/import" />)
-    expect(screen.getByRole('link', { name: 'League dashboard' })).toHaveAttribute('href', '/core?league=native-one')
+    expect(screen.queryByRole('link', { name: 'League dashboard' })).toBeNull()
     expect(screen.getByRole('link', { name: /Open League/ })).toHaveAttribute('href', '/league/native-one')
   })
 })
