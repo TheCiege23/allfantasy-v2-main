@@ -1,0 +1,519 @@
+/*
+ * NBA Cup pool surfaces: Group Play cards, standings rail, matchup sheet.
+ *
+ * Rendered inside `.af-pb` (or `.af-pb-overlay` for the sheet), so every
+ * `var(--pb-*)` token resolves from af-playoff-bracket.css.
+ *
+ * ⚠ EVERY @media BLOCK IS AT THE BOTTOM OF THIS FILE, NEVER NESTED INSIDE
+ * ANOTHER — the same rule, and the same reason, as af-playoff-bracket.css.
+ */
+
+.af-cup {
+  --cup-live: #ff5a5f;
+  --cup-live-ink: #ff9ca0;
+  --cup-live-soft: rgba(255, 90, 95, 0.14);
+  --cup-gold: #f5c451;
+  --cup-lav: #b8a6ff;
+  --cup-lav-soft: rgba(184, 166, 255, 0.14);
+}
+
+/* ── court-line backdrop ─────────────────────────────────────────────── */
+.af-cup-court {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.af-cup-court g { fill: none; stroke: #fff; stroke-opacity: 0.06; stroke-width: 2; }
+
+/* ── live strip ──────────────────────────────────────────────────────── */
+.af-cup-live-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 20px 16px;
+  scrollbar-width: thin;
+}
+.af-cup-live-label {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cup-live-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.af-cup-live-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 90, 95, 0.3);
+  background: var(--pb-surface2);
+  color: var(--pb-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.af-cup-live-chip:hover { border-color: var(--cup-live); }
+.af-cup-live-chip small { color: var(--cup-live-ink); font-weight: 700; font-size: 11px; }
+.af-cup-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cup-live);
+  animation: afCupPulse 1.4s ease-in-out infinite;
+}
+@keyframes afCupPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ── filters + day headings ──────────────────────────────────────────── */
+.af-cup-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-cup-filter {
+  min-height: var(--pb-tap);
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-chip);
+  color: var(--pb-text2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cup-filter[aria-pressed="true"] { border-color: var(--pb-accent); color: var(--pb-accent); background: var(--pb-accent-soft); }
+.af-cup-day { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 22px; }
+.af-cup-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  border-bottom: 1px solid var(--pb-line);
+  padding-bottom: 8px;
+}
+.af-cup-day-head h3 { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.af-cup-day-head span { color: var(--pb-muted); font-size: 12px; }
+.af-cup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 14px; }
+
+/* ── game card ───────────────────────────────────────────────────────── */
+.af-cup-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-surface);
+}
+.af-cup-card[data-state="live"] { border-color: rgba(255, 90, 95, 0.38); }
+.af-cup-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 9px;
+}
+.af-cup-stage { color: var(--pb-muted); font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.af-cup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.af-cup-chip--live { background: var(--cup-live-soft); color: var(--cup-live-ink); }
+.af-cup-chip--final { background: var(--pb-chip); color: var(--pb-text2); border: 1px solid var(--pb-chip-line); }
+.af-cup-chip--time { color: var(--pb-text); padding: 0; font-size: 12px; }
+.af-cup-progress { height: 3px; background: var(--pb-line); }
+.af-cup-progress > span { display: block; height: 3px; background: var(--cup-live); }
+.af-cup-rows { display: flex; flex-direction: column; padding: 4px 0; }
+.af-cup-row { display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-height: 52px; }
+.af-cup-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.af-cup-row-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-cup-row[data-dim="true"] .af-cup-row-name,
+.af-cup-row[data-dim="true"] .af-cup-score { color: var(--pb-muted); font-weight: 600; }
+.af-cup-row-sub { color: var(--pb-muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-cup-mine {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: 1px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pb-accent);
+  border: 1px solid var(--pb-accent-line);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.af-cup-score { flex: none; min-width: 38px; text-align: right; font-size: 23px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.af-cup-pick {
+  flex: none;
+  min-height: var(--pb-tap);
+  min-width: 70px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-chip);
+  color: var(--pb-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.af-cup-pick[aria-pressed="true"] { background: var(--pb-accent); border-color: var(--pb-accent); color: var(--pb-accent-ink); }
+.af-cup-pick:disabled { opacity: 0.45; cursor: not-allowed; }
+.af-cup-card-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--pb-line);
+}
+.af-cup-meta { color: var(--pb-muted); font-size: 11.5px; line-height: 1.5; }
+.af-cup-result { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--pb-text2); }
+.af-cup-result[data-tone="good"] { color: var(--pb-good); }
+.af-cup-result[data-tone="bad"] { color: var(--pb-bad); }
+.af-cup-result[data-tone="live"] { color: var(--cup-gold); }
+.af-cup-group-line { color: var(--pb-text2); font-size: 11.5px; }
+.af-cup-details {
+  align-self: flex-start;
+  margin-top: 4px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pb-accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cup-details:hover { text-decoration: underline; }
+
+/* ── rail ────────────────────────────────────────────────────────────── */
+.af-cup-rail-card { padding-bottom: 6px; }
+.af-cup-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 0 14px 12px; }
+.af-cup-tab {
+  min-height: 36px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--pb-chip);
+  color: var(--pb-text2);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cup-tab[aria-selected="true"] { background: var(--pb-accent); color: var(--pb-accent-ink); }
+.af-cup-standing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid var(--pb-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.af-cup-standing[aria-pressed="true"] { background: var(--pb-accent-soft); }
+.af-cup-standing-top { display: grid; grid-template-columns: 18px minmax(0, 1fr) 38px 42px; gap: 0 8px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+.af-cup-standing-head { padding: 6px 14px; color: var(--pb-faint); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.af-cup-standing-team { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; }
+.af-cup-standing-team span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-cup-num { text-align: right; }
+.af-cup-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding-left: 26px; }
+.af-cup-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--pb-chip);
+  color: var(--pb-text2);
+}
+.af-cup-status[data-status="won_group"],
+.af-cup-status[data-status="clinched_group"],
+.af-cup-status[data-status="wild_card"] { background: var(--cup-gold); color: #241a00; }
+.af-cup-status[data-status="controls_path"] { background: var(--pb-accent); color: var(--pb-accent-ink); }
+.af-cup-status[data-status="needs_help"] { background: var(--cup-lav-soft); color: var(--cup-lav); }
+.af-cup-status[data-status="eliminated"] { background: rgba(251, 91, 120, 0.14); color: var(--pb-bad); }
+.af-cup-path { color: var(--pb-text2); font-size: 11.5px; line-height: 1.45; padding-left: 26px; }
+.af-cup-livenote { color: var(--cup-live-ink); font-size: 11.5px; font-weight: 700; padding-left: 26px; }
+.af-cup-dots { display: flex; gap: 3px; padding-left: 26px; }
+.af-cup-dots span { width: 20px; height: 6px; border-radius: 3px; background: var(--pb-line2); }
+.af-cup-dots span[data-r="W"] { background: var(--pb-good); }
+.af-cup-dots span[data-r="L"] { background: var(--pb-bad); }
+.af-cup-dots span[data-r="live"] { background: var(--cup-live); opacity: 0.6; }
+.af-cup-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 10px 14px 8px; border-top: 1px solid var(--pb-line); color: var(--pb-muted); font-size: 10.5px; }
+.af-cup-legend i { display: inline-block; width: 12px; height: 6px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+
+.af-cup-road { list-style: none; margin: 0; padding: 4px 14px 8px; }
+.af-cup-road li { display: flex; gap: 12px; }
+.af-cup-road-mark { flex: none; display: flex; flex-direction: column; align-items: center; width: 22px; }
+.af-cup-road-mark b {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--pb-line2);
+  font-size: 10px;
+  color: var(--pb-muted);
+}
+.af-cup-road-mark i { flex: 1; width: 2px; min-height: 12px; background: var(--pb-line2); }
+.af-cup-road li[data-state="done"] .af-cup-road-mark b { background: var(--pb-accent); border-color: var(--pb-accent); color: var(--pb-accent-ink); }
+.af-cup-road li[data-state="done"] .af-cup-road-mark i { background: var(--pb-accent); }
+.af-cup-road li[data-state="now"] .af-cup-road-mark b { border-color: var(--pb-accent); color: var(--pb-accent); }
+.af-cup-road li[data-state="out"] .af-cup-road-mark b { border-color: var(--pb-bad); color: var(--pb-bad); }
+.af-cup-road li[data-state="title"] .af-cup-road-mark b { border-color: var(--cup-gold); color: var(--cup-gold); }
+.af-cup-road li:last-child .af-cup-road-mark i { visibility: hidden; }
+.af-cup-road-body { display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; min-width: 0; }
+.af-cup-road-body strong { font-size: 13px; }
+.af-cup-road-body span { color: var(--pb-muted); font-size: 11.5px; line-height: 1.45; }
+
+.af-cup-mini { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--pb-line); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.af-cup-mini-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.af-cup-mini-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-cup-mini-name span { color: var(--pb-muted); font-size: 11px; }
+.af-cup-seed { width: 18px; color: var(--pb-faint); font-weight: 800; }
+.af-cup-note { color: var(--pb-muted); font-size: 11.5px; line-height: 1.5; padding: 4px 14px 10px; margin: 0; }
+
+/* ── matchup sheet ───────────────────────────────────────────────────── */
+.af-cup-sheet { position: fixed; inset: 0; z-index: 1000; overflow-y: auto; background: var(--pb-bg); color: var(--pb-text); }
+.af-cup-sheet-inner { position: relative; max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 22px; }
+.af-cup-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-surface);
+  color: var(--pb-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cup-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.af-cup-tag { border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; background: var(--pb-chip); color: var(--pb-text2); }
+.af-cup-tag--accent { background: var(--pb-accent); color: var(--pb-accent-ink); }
+.af-cup-tag--gold { background: rgba(245, 196, 81, 0.14); color: var(--cup-gold); }
+.af-cup-tag--good { background: rgba(52, 211, 153, 0.14); color: var(--pb-good); }
+.af-cup-tag--bad { background: rgba(251, 91, 120, 0.14); color: var(--pb-bad); }
+.af-cup-sheet h1 { margin: 0; font-size: clamp(30px, 5vw, 48px); font-weight: 900; letter-spacing: -0.03em; line-height: 1.05; }
+.af-cup-when { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.af-cup-when-date { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; }
+.af-cup-when-place { display: inline-flex; align-items: center; gap: 8px; color: var(--pb-text2); font-size: 14px; }
+.af-cup-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-surface);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-cup-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.af-cup-team {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 400px;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid var(--team-edge, var(--pb-line2));
+  background: var(--team-tint, var(--pb-surface));
+}
+.af-cup-team[data-picked="true"] { box-shadow: 0 0 0 2px var(--pb-accent); }
+/*
+ * The team silhouette: the real logo, desaturated and ghosted behind the panel.
+ *
+ * ⚠ NOT A FLAT ONE-COLOUR SHAPE. `brightness(0) invert(1)` was tried first and
+ * most NBA marks are roundels, so a solid silhouette of one is a featureless
+ * disc. Greyscale keeps the mark's interior detail and still reads as
+ * background. A filter needs no CORS, unlike a CSS mask over a cross-origin
+ * image.
+ */
+.af-cup-silhouette {
+  position: absolute;
+  right: -60px;
+  bottom: -70px;
+  width: 340px;
+  height: 340px;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.1);
+  opacity: 0.13;
+  pointer-events: none;
+  z-index: -1;
+}
+/* Stack the panel's content above the silhouette. Never `> *`: that would also
+   reposition the silhouette itself, which must stay absolutely placed. */
+.af-cup-team > :not(.af-cup-silhouette) { position: relative; }
+.af-cup-team-eyebrow { color: var(--pb-accent); font-size: 11px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+.af-cup-team-id { display: flex; align-items: center; gap: 14px; }
+.af-cup-team-id h2 { font-size: clamp(22px, 3.2vw, 32px); line-height: 1.1; }
+.af-cup-team-sub { color: var(--pb-text2); font-size: 13px; margin-top: 2px; }
+.af-cup-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.af-cup-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  text-align: center;
+  background: rgba(6, 7, 15, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.af-cup-stat strong { font-size: 19px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.af-cup-stat span { color: var(--pb-muted); font-size: 10.5px; }
+.af-cup-panel { padding: 12px; border-radius: 12px; background: rgba(6, 7, 15, 0.72); border: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 6px; }
+.af-cup-panel-head { color: var(--pb-muted); font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.af-cup-panel-row { display: flex; align-items: center; gap: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.af-cup-wl { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 900; }
+.af-cup-wl[data-r="W"] { background: var(--pb-good); color: #022016; }
+.af-cup-wl[data-r="L"] { background: var(--pb-bad); color: #2a0a10; }
+.af-cup-ifwin { font-size: 13px; color: var(--pb-text2); line-height: 1.5; }
+.af-cup-ifwin strong { color: var(--pb-text); }
+.af-cup-team-pick { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+.af-cup-team-pick button {
+  min-height: 52px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--pb-accent);
+  color: var(--pb-accent-ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.af-cup-team-pick button:disabled { opacity: 0.4; cursor: not-allowed; }
+.af-cup-team-pick span { text-align: center; color: var(--pb-muted); font-size: 12px; }
+
+.af-cup-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid var(--pb-line2);
+  background: var(--pb-surface);
+}
+.af-cup-board-side { position: relative; overflow: hidden; isolation: isolate; display: flex; flex-direction: column; gap: 10px; padding: 24px; background: var(--team-tint, transparent); }
+.af-cup-board-side[data-side="home"] { align-items: flex-end; text-align: right; }
+.af-cup-board-side .af-cup-silhouette { width: 260px; height: 260px; right: auto; left: -50px; bottom: -60px; }
+.af-cup-board-side[data-side="home"] .af-cup-silhouette { left: auto; right: -50px; }
+.af-cup-board-score { font-size: clamp(54px, 9vw, 88px); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.af-cup-board-side[data-dim="true"] .af-cup-board-score { color: var(--pb-muted); }
+.af-cup-board-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 18px; text-align: center; }
+.af-cup-board-mid strong { font-size: 12px; letter-spacing: 0.12em; color: var(--pb-text2); }
+
+.af-cup-box { overflow-x: auto; border-radius: 18px; border: 1px solid var(--pb-line2); background: var(--pb-surface); }
+.af-cup-box table { width: 100%; min-width: 420px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.af-cup-box caption { text-align: left; padding: 14px 18px 6px; font-weight: 800; font-size: 15px; color: var(--pb-text); }
+.af-cup-box th, .af-cup-box td { padding: 9px 10px; text-align: center; border-top: 1px solid var(--pb-line); font-size: 13px; }
+.af-cup-box thead th { border-top: 0; color: var(--pb-faint); font-size: 10.5px; letter-spacing: 0.1em; }
+.af-cup-box th[scope="row"], .af-cup-box thead th:first-child { text-align: left; padding-left: 18px; }
+
+.af-cup-leaders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.af-cup-leader { position: relative; overflow: hidden; isolation: isolate; display: flex; align-items: center; gap: 14px; padding: 18px; border-radius: 18px; border: 1px solid var(--team-edge, var(--pb-line2)); background: var(--team-tint, var(--pb-surface)); }
+.af-cup-leader .af-cup-silhouette { width: 170px; height: 170px; right: -30px; bottom: auto; top: -40px; }
+.af-cup-leader-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.af-cup-leader-text span:first-child { color: var(--pb-muted); font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.af-cup-leader-text strong { font-size: 18px; }
+.af-cup-leader-pts { font-size: 38px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.af-cup-leader-pts small { font-size: 12px; color: var(--pb-muted); font-weight: 800; }
+
+.af-cup-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.af-cup-split > :only-child { grid-column: 1 / -1; }
+.af-cup-box-card { border-radius: 18px; border: 1px solid var(--pb-line2); background: var(--pb-surface); padding: 16px 0 8px; display: flex; flex-direction: column; }
+.af-cup-box-card h2 { font-size: 16px; padding: 0 16px 8px; }
+.af-cup-stakes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 16px 8px; }
+.af-cup-stakes > div { border-radius: 12px; border: 1px solid var(--pb-line2); padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.af-cup-stakes span { color: var(--pb-text2); line-height: 1.45; }
+
+.af-cup-chimmy { border-radius: 20px; border: 1px solid rgba(184, 166, 255, 0.3); background: #120f26; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+.af-cup-chimmy-eyebrow { color: var(--cup-lav); font-size: 11px; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; }
+.af-cup-chimmy h2 { font-size: 20px; }
+.af-cup-chimmy-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--pb-bg); }
+.af-cup-chimmy-bar span:first-child { background: var(--pb-accent); }
+.af-cup-chimmy-bar span:last-child { background: var(--cup-lav); }
+.af-cup-chimmy p { margin: 0; color: var(--pb-text2); font-size: 13px; line-height: 1.5; }
+.af-cup-chimmy button {
+  align-self: flex-start;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--cup-lav);
+  color: #1b1240;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.af-cup-chimmy button:disabled { opacity: 0.4; cursor: not-allowed; }
+.af-cup-fine { color: var(--pb-faint); font-size: 12px; margin: 0; }
+
+/* ── pool header: court lines + phase track ─────────────────────────── */
+.af-pb-hero[data-cup="true"] { position: relative; overflow: hidden; isolation: isolate; }
+.af-pb-hero[data-cup="true"] > .af-cup-court { z-index: -1; }
+.af-cup-phases { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.af-cup-phases li { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--pb-line2); background: rgba(13, 16, 32, 0.82); }
+.af-cup-phases li[data-state="now"] { border-color: var(--pb-accent); background: var(--pb-accent-soft); }
+.af-cup-phases li[data-state="done"] { opacity: 0.65; }
+.af-cup-phases li[data-final="true"] { border-color: rgba(245, 196, 81, 0.4); }
+.af-cup-phase-label { display: inline-flex; align-items: center; gap: 6px; color: var(--pb-muted); font-size: 10.5px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+.af-cup-phases li[data-state="now"] .af-cup-phase-label { color: var(--pb-accent); }
+.af-cup-phases li[data-final="true"] .af-cup-phase-label { color: var(--cup-gold); }
+.af-cup-phases strong { font-size: 15px; font-weight: 900; }
+.af-cup-phase-note { color: var(--pb-muted); font-size: 11.5px; }
+
+/* Knockout tree: a live NBA Cup game gets the live edge (MlbBracketBoard sets data-live). */
+.af-pb-match[data-live="true"] { border-color: rgba(255, 90, 95, 0.45); }
+
+/* ── breakpoints: keep every @media block below this line ───────────── */
+@media (max-width: 760px) {
+  .af-cup-teams, .af-cup-leaders, .af-cup-split, .af-cup-stakes { grid-template-columns: minmax(0, 1fr); }
+  .af-cup-team { min-height: 0; padding: 18px; }
+  .af-cup-board { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .af-cup-board-side { padding: 16px; }
+  .af-cup-day, .af-cup-live-strip { padding-left: 14px; padding-right: 14px; }
+}
+
+@media (max-width: 640px) {
+  .af-cup-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 460px) {
+  .af-cup-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-cup-board-mid { padding: 0 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-cup-dot { animation: none; }
+}

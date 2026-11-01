@@ -19,16 +19,25 @@ export function nbaCupDiscoveryDates(season: number, cursor: number, now = new D
   return [...new Set([...live, ...(season === 2026 ? PUBLISHED_2026 : []), ...rotating])]
 }
 
-/** Scheduled writer for both schedule publication and verified finals. No admin publication gate. */
-export async function syncNbaCupTournament(input: { season: number; apply: boolean }) {
+/**
+ * Scheduled writer for both schedule publication and verified finals. No admin publication gate.
+ *
+ * `liveOnly` is the minute-level tick: it re-reads only today's and yesterday's
+ * scoreboards (UTC dates, which together cover a late-night Eastern tipoff), and
+ * accepts a 45s-old read instead of the 4-minute floor the discovery scan uses.
+ */
+export async function syncNbaCupTournament(input: { season: number; apply: boolean; liveOnly?: boolean }) {
   const now = new Date()
   const previous = await readNbaCupSnapshot(input.season)
   const checked = previous?.checkedDates ?? {}
   const today = dayKey(now), yesterday = dayKey(new Date(now.getTime() - 86400000))
-  const dates = nbaCupDiscoveryDates(input.season, previous?.cursor ?? 0, now).filter((date) => {
+  const recentFloorMs = input.liveOnly ? 45_000 : 4 * 60_000
+  const candidates = input.liveOnly ? [today, yesterday] : nbaCupDiscoveryDates(input.season, previous?.cursor ?? 0, now)
+  const dates = candidates.filter((date) => {
     const age = now.getTime() - Date.parse(checked[date] ?? "")
-    return !Number.isFinite(age) || age >= (date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
+    return !Number.isFinite(age) || age >= (date === today || date === yesterday ? recentFloorMs : 6 * 3600_000)
   }).slice(0, 4)
+  if (input.liveOnly && dates.length === 0) return { applied: false, skipped: "recently_checked", gamesDiscovered: 0, failures: [] as Array<{ date: string; error: string | null }>, outcomes: [] }
   const responses = await Promise.all(dates.map(async (date) => {
     try {
       const response = await fetch(`${ESPN_SITE_API_BASE}/basketball/nba/scoreboard?dates=${date}&limit=1000`, {
@@ -62,7 +71,8 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
       }
     }
     const games = assignNbaCupSlots([...merged.values()], current?.games ?? previous?.games)
-    const data = { games, checkedDates, cursor: ((current?.cursor ?? 0) + 4) % 92, syncedAt: now.toISOString() }
+    // The live tick does not advance the discovery cursor; only the full scan walks the season.
+    const data = { games, checkedDates, cursor: input.liveOnly ? current?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92, syncedAt: now.toISOString() }
     const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
     await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
     // Rotate large populations through bounded batches, and never alter test pools.
