@@ -24,6 +24,9 @@ import {
   type TribeSnapshot,
 } from './tribeSwapReveal'
 import { createSurvivorChatMessage } from './survivorChatBridge'
+import { isNewTribeKey, planTribeSwap } from './survivorSwapPlanner'
+import { swapAnnouncementCopy } from './survivorGovernanceCopy'
+import type { SurvivorScheduledSwap } from './survivorGovernanceSettings'
 
 const HOST = { senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement' } as const
 
@@ -32,11 +35,76 @@ async function postLeagueAnnouncement(db: Prisma.TransactionClient | typeof pris
   if (channel) await createSurvivorChatMessage(db, { data: { leagueId, channelId: channel.id, channelType: 'league', ...HOST, content } })
 }
 
+/** What a planned swap recorded about its shape (`SurvivorTribeSwap.newTribes`). Legacy rows: nothing. */
+function readSwapShape(value: unknown): { planned: boolean; retire: string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { planned: false, retire: [] }
+  const r = value as Record<string, unknown>
+  return { planned: true, retire: Array.isArray(r.retire) ? r.retire.filter((id): id is string => typeof id === 'string') : [] }
+}
+
+/** Create the tribes a swap adds, named from catalogue entries this league has not used. */
+async function createSwapTribes(db: Prisma.TransactionClient, leagueId: string, keys: string[]): Promise<Map<string, string>> {
+  const config = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
+  if (!config) throw new Error('No Survivor config')
+  const [existing, league] = await Promise.all([
+    db.survivorTribe.findMany({ where: { leagueId }, select: { name: true, slotIndex: true, catalogId: true } }),
+    db.league.findUnique({ where: { id: leagueId }, select: { sport: true } }),
+  ])
+  const usedNames = new Set(existing.map((t) => t.name.trim().toLowerCase()))
+  const usedIds = new Set(existing.map((t) => t.catalogId).filter(Boolean))
+  // Slot 99 is the merged tribe; new swap tribes take the next free slot below it.
+  let slot = Math.max(-1, ...existing.map((t) => t.slotIndex).filter((n) => n < 99)) + 1
+  const out = new Map<string, string>()
+  for (const key of keys) {
+    const entry = catalog.find((c) => !usedIds.has(c.id) && !usedNames.has(c.name.toLowerCase()))
+    if (entry) { usedIds.add(entry.id); usedNames.add(entry.name.toLowerCase()) }
+    const name = entry?.name ?? `Tribe ${slot + 1}`
+    const row = await db.survivorTribe.create({
+      data: { leagueId, configId: config.id, name, slotIndex: slot, colorHex: entry?.primary ?? null, isActive: true, phase: 'pre_merge',
+        catalogId: entry?.id ?? null, logoUrl: entry ? tribeCrestUrl(entry.id, String(league?.sport ?? 'NFL')) : null },
+      select: { id: true },
+    })
+    out.set(key, row.id)
+    slot++
+  }
+  return out
+}
+
+/** Everyone the scheduled swap modes can move: season points per tribe-member roster id. */
+async function seasonPointsByRoster(leagueId: string): Promise<Map<string, number>> {
+  const [players, scores] = await Promise.all([
+    prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, redraftRosterId: true } }),
+    prisma.survivorWeeklyScore.findMany({ where: { leagueId }, select: { userId: true, finalScore: true } }),
+  ])
+  const byUser = new Map<string, number>()
+  for (const s of scores) byUser.set(s.userId, (byUser.get(s.userId) ?? 0) + (s.finalScore ?? 0))
+  const out = new Map<string, number>()
+  for (const p of players) if (p.redraftRosterId) out.set(p.redraftRosterId, byUser.get(p.userId) ?? 0)
+  return out
+}
+
+/** The tribes as first formed: the oldest swap's "before", else null (no swap has run yet). */
+async function originalTribeSnapshot(leagueId: string): Promise<TribeSnapshot[] | null> {
+  const first = await prisma.survivorTribeSwap.findFirst({ where: { leagueId }, orderBy: { executedAt: 'asc' }, select: { beforeSnapshot: true } })
+  const snapshot = first ? readTribeSnapshot(first.beforeSnapshot) : []
+  return snapshot.length ? snapshot : null
+}
+
+export interface SealTribeSwapOptions {
+  /** A scheduled or commissioner swap of any kind. Omitted: the original random redraw. */
+  swap?: Pick<SurvivorScheduledSwap, 'mode' | 'tribeCount' | 'pattern' | 'order'>
+  actorUserId?: string | null
+}
+
 /**
  * Draw the swap and SEAL it. Memberships, tribe chats and idols are untouched until the reveal at
  * the next lineup lock. Idempotent: an existing sealed swap is returned as-is.
+ *
+ * With `opts.swap` the draw follows the commissioner's swap type (lib/survivor/survivorSwapPlanner):
+ * more or fewer tribes, back to the original tribes, or a custom pattern. Tribes it adds are created
+ * and tribes it folds are retired at the reveal, so the sealed draw shows nothing early.
  */
-export async function sealTribeSwap(leagueId: string, week: number, swapType = 'random_shuffle', now = new Date()): Promise<{ id: string; revealAt: Date }> {
+export async function sealTribeSwap(leagueId: string, week: number, swapType = 'random_shuffle', now = new Date(), opts: SealTribeSwapOptions = {}): Promise<{ id: string; revealAt: Date }> {
   const existing = await prisma.survivorTribeSwap.findFirst({ where: { leagueId, revealAt: { not: null }, revealedAt: null }, orderBy: { executedAt: 'desc' }, select: { id: true, revealAt: true } })
   if (existing?.revealAt) return { id: existing.id, revealAt: existing.revealAt }
   const config = await getSurvivorConfig(leagueId)
@@ -46,24 +114,51 @@ export async function sealTribeSwap(leagueId: string, week: number, swapType = '
     prisma.survivorTribe.findMany({ where: { configId: config.configId, isActive: true, isMerged: false }, orderBy: { slotIndex: 'asc' }, include: { members: true } }),
     getActiveRosterIdsForLeague(leagueId),
   ])
-  if (tribes.length < 2) throw new Error('A swap needs at least two active tribes.')
+  const planned = opts.swap && opts.swap.mode !== 'random_shuffle' ? opts.swap : null
+  if (tribes.length < (planned ? 1 : 2)) throw new Error('A swap needs at least two active tribes.')
   const active = new Set(activeRosterIds)
   const before: TribeSnapshot[] = tribes.map((t) => ({ tribeId: t.id, rosterIds: t.members.map((m) => m.rosterId).filter((id) => active.has(id)) }))
-  const after = drawSwapAssignment(before, (n) => randomInt(0, n))
+  let after: TribeSnapshot[]
+  let plan: { retire: string[]; created: number } | null = null
+  if (planned) {
+    const result = planTribeSwap({
+      before,
+      swap: planned,
+      original: planned.mode === 'return_to_original' ? (await originalTribeSnapshot(leagueId)) ?? before : null,
+      seasonPoints: planned.mode === 'custom_pattern' && planned.order !== 'random' ? await seasonPointsByRoster(leagueId) : undefined,
+      randomIndex: (n) => randomInt(0, n),
+    })
+    if (!result.ok) throw new Error(result.error)
+    after = result.after
+    plan = { retire: result.retire, created: result.created }
+  } else {
+    after = drawSwapAssignment(before, (n) => randomInt(0, n))
+  }
+  const type = planned ? planned.mode : swapType
   const revealAt = getNextLineupLock(league?.sport ?? 'NFL', now)
   const swap = await prisma.survivorTribeSwap.create({
-    data: { leagueId, week, swapType, beforeSnapshot: before as unknown as Prisma.InputJsonValue, afterSnapshot: after as unknown as Prisma.InputJsonValue, revealAt },
+    data: {
+      leagueId, week, swapType: type, beforeSnapshot: before as unknown as Prisma.InputJsonValue, afterSnapshot: after as unknown as Prisma.InputJsonValue, revealAt,
+      ...(plan ? { newTribes: { retire: plan.retire, created: plan.created, mode: type, tribeCount: after.length } as Prisma.InputJsonValue, originalTribesRetained: plan.retire.length === 0 && plan.created === 0 } : {}),
+    },
     select: { id: true },
   })
-  // The audit carries no assignment: the draw stays sealed even from audit readers.
-  await prisma.survivorAuditEntry.create({ data: { leagueId, week, category: 'tribe', action: 'tribe_swap_sealed', data: { swapId: swap.id, swapType, revealAt: revealAt.toISOString() }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
-  await postLeagueAnnouncement(prisma, leagueId, 'Drop your buffs. The tribes have been redrawn, and the new tribes stay sealed until the next lineup lock.').catch(() => {})
+  // The audit carries no assignment: the draw stays sealed even from audit readers. The tribe COUNT
+  // is announced with the swap ("three new tribes"), so a planned swap records it.
+  await prisma.survivorAuditEntry.create({ data: { leagueId, week, category: 'tribe', action: 'tribe_swap_sealed', ...(opts.actorUserId ? { actorUserId: opts.actorUserId } : {}), data: { swapId: swap.id, swapType: type, revealAt: revealAt.toISOString(), ...(plan ? { tribeCount: after.length } : {}) }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+  const announcement = planned ? await swapAnnouncement(leagueId, 'sealed', type, after.length) : 'Drop your buffs. The tribes have been redrawn, and the new tribes stay sealed until the next lineup lock.'
+  await postLeagueAnnouncement(prisma, leagueId, announcement).catch(() => {})
   // survivor-core §5 "Tribe swap": 24h before the reveal (now, if the reveal is closer). No assignment in it.
   const dayBefore = new Date(revealAt.getTime() - 24 * 60 * 60 * 1000)
   await import('./notificationEngine')
     .then(({ enqueueSurvivorCoreNotification }) => enqueueSurvivorCoreNotification(leagueId, { kind: 'tribe_swap' }, { role: 'active' }, dayBefore > now ? dayBefore : undefined))
     .catch(() => {})
   return { id: swap.id, revealAt }
+}
+
+async function swapAnnouncement(leagueId: string, stage: 'sealed' | 'revealed', mode: string, tribeCount: number): Promise<string> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { language: true } }).catch(() => null)
+  return swapAnnouncementCopy(league?.language ?? null, stage, mode, tribeCount)
 }
 
 /**
@@ -78,10 +173,18 @@ export async function revealDueTribeSwap(leagueId: string, opts: { now?: Date; f
   return withSurvivorSetupTransaction(leagueId, async (db) => {
     const swap = await db.survivorTribeSwap.findUnique({ where: { id: pending.id } })
     if (!swap || swap.revealedAt) return { revealed: false }
-    const after = readTribeSnapshot(swap.afterSnapshot)
+    const drawn = readTribeSnapshot(swap.afterSnapshot)
+    const shape = readSwapShape(swap.newTribes)
+    // A swap that adds tribes names them `new:<n>`; they are created now, at the reveal.
+    const created = new Map<string, string>()
+    if (drawn.some((t) => isNewTribeKey(t.tribeId))) {
+      for (const [key, id] of await createSwapTribes(db, leagueId, drawn.filter((t) => isNewTribeKey(t.tribeId)).map((t) => t.tribeId))) created.set(key, id)
+    }
+    const after = drawn.map((t) => ({ tribeId: created.get(t.tribeId) ?? t.tribeId, rosterIds: t.rosterIds })).filter((t) => !isNewTribeKey(t.tribeId))
     const tribeIds = after.map((t) => t.tribeId)
+    const retired = shape.retire.filter((id) => !tribeIds.includes(id))
     const [tribes, players, activeRosterIds] = await Promise.all([
-      db.survivorTribe.findMany({ where: { id: { in: tribeIds } }, include: { members: true } }),
+      db.survivorTribe.findMany({ where: { id: { in: [...tribeIds, ...retired] } }, include: { members: true } }),
       db.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, redraftRosterId: true } }),
       getActiveRosterIdsForLeague(leagueId),
     ])
@@ -90,12 +193,27 @@ export async function revealDueTribeSwap(leagueId: string, opts: { now?: Date; f
     const target = new Map<string, string>()
     for (const tribe of tribes) for (const m of tribe.members) if (active.has(m.rosterId)) target.set(m.rosterId, tribe.id)
     for (const tribe of after) for (const id of tribe.rosterIds) if (active.has(id)) target.set(id, tribe.tribeId)
+    // Someone left in a tribe this swap folds (back from Exile since the draw) joins the smallest new tribe.
+    if (retired.length) {
+      const size = (id: string) => [...target.values()].filter((t) => t === id).length
+      for (const [rosterId, tribeId] of target) {
+        if (!retired.includes(tribeId)) continue
+        const smallest = [...tribeIds].sort((a, b) => size(a) - size(b) || a.localeCompare(b))[0]
+        if (smallest) target.set(rosterId, smallest)
+      }
+    }
+    const touched = [...tribeIds, ...retired]
 
-    const oldChannels = await db.survivorChatChannel.findMany({ where: { leagueId, channelType: 'tribe', tribeId: { in: tribeIds }, isArchived: false }, select: { id: true } })
+    const oldChannels = await db.survivorChatChannel.findMany({ where: { leagueId, channelType: 'tribe', tribeId: { in: touched }, isArchived: false }, select: { id: true } })
     if (oldChannels.length) await db.survivorChatChannel.updateMany({ where: { id: { in: oldChannels.map((c) => c.id) } }, data: { isArchived: true, archivedAt: now, memberUserIds: [], readOnlyUserIds: [] } })
-    await db.survivorTribe.updateMany({ where: { id: { in: tribeIds } }, data: { chatChannelId: null } })
-    await db.survivorTribeMember.deleteMany({ where: { tribeId: { in: tribeIds }, rosterId: { in: [...target.keys()] } } })
-    await db.survivorTribeChatMember.deleteMany({ where: { tribeId: { in: tribeIds } } })
+    await db.survivorTribe.updateMany({ where: { id: { in: touched } }, data: { chatChannelId: null } })
+    if (shape.planned) {
+      // Back to the original tribes reactivates any that a resize folded; folded tribes retire.
+      await db.survivorTribe.updateMany({ where: { id: { in: tribeIds } }, data: { isActive: true, phase: 'pre_merge' } })
+      if (retired.length) await db.survivorTribe.updateMany({ where: { id: { in: retired } }, data: { isActive: false, phase: 'dissolved' } })
+    }
+    await db.survivorTribeMember.deleteMany({ where: { tribeId: { in: touched }, rosterId: { in: [...target.keys()] } } })
+    await db.survivorTribeChatMember.deleteMany({ where: { tribeId: { in: touched } } })
     const leaderDone = new Set<string>()
     for (const [rosterId, tribeId] of target) {
       await db.survivorTribeMember.create({ data: { tribeId, rosterId, isLeader: !leaderDone.has(tribeId) } })
@@ -109,8 +227,14 @@ export async function revealDueTribeSwap(leagueId: string, opts: { now?: Date; f
     await db.survivorTribeSwap.update({ where: { id: swap.id }, data: { revealedAt: now } })
     const moved = readTribeSnapshot(swap.beforeSnapshot).reduce((n, t) => n + t.rosterIds.filter((id) => target.get(id) && target.get(id) !== t.tribeId).length, 0)
     await db.survivorAuditEntry.create({ data: { leagueId, week: swap.week, category: 'tribe', action: 'tribe_swap_revealed', actorUserId: opts.actorUserId ?? null,
-      data: { swapId: swap.id, moved, forced: Boolean(opts.force) }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
-    await postLeagueAnnouncement(db, leagueId, 'The new tribes are revealed. Idols travel with their owners, and your tribe chat has switched over.')
+      data: { swapId: swap.id, moved, forced: Boolean(opts.force), ...(shape.planned ? { swapType: swap.swapType, tribeCount: tribeIds.length, retired, created: created.size } : {}) }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+    if (shape.planned) {
+      await db.survivorGameState.updateMany({ where: { leagueId }, data: { activeTribeCount: tribeIds.length } })
+      const league = await db.league.findUnique({ where: { id: leagueId }, select: { language: true } })
+      await postLeagueAnnouncement(db, leagueId, swapAnnouncementCopy(league?.language ?? null, 'revealed', swap.swapType, tribeIds.length))
+    } else {
+      await postLeagueAnnouncement(db, leagueId, 'The new tribes are revealed. Idols travel with their owners, and your tribe chat has switched over.')
+    }
     return { revealed: true, swapId: swap.id }
   })
 }

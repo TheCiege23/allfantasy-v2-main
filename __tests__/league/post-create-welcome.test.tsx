@@ -6,7 +6,10 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key, language: 'en' }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', () => ({
+  useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
+  useOptionalLanguage: () => ({ t: (key: string) => key, tInterpolate: (key: string) => key }),
+}))
 
 import {
   chooseWelcomeIntro,
@@ -294,6 +297,18 @@ describe('"your league is ready"', () => {
     expect(screen.queryByTestId('post-create-welcome-set-draft')).toBeNull()
     expect(screen.getByTestId('post-create-welcome-info').textContent).toContain('8:00')
     expect(screen.getByTestId('post-create-invite-no-link')).toBeTruthy()
+  })
+
+  it('offers to list the league in Find a League while it has open seats', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      return new Response(JSON.stringify({ listed: false, inviteReady: true, openSeats: 11, leagueSize: 12, seatsHeld: 1 }))
+    }))
+    render(<PostCreateWelcomeSheet league={league} inviteUrl="https://x.test/join?code=A" onClose={vi.fn()} onOpenSettings={vi.fn()} />)
+    expect((await screen.findByTestId('find-league-listing-seats')).textContent).toBe('11 open seats')
+    fireEvent.click(screen.getByTestId('find-league-listing-toggle'))
+    await waitFor(() => expect(calls).toContain('POST /api/commissioner/leagues/L1/league-finder'))
   })
 
   it('formats the draft date in the league zone, and survives a bad zone', () => {

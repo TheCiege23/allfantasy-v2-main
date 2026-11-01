@@ -495,7 +495,7 @@ export function ProposeTradeModal({
         ) : (
           <>
             {tradeContext ? (
-              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-cyan-100/80">
+              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-[var(--badge-text-cyan)]">
                 <p>
                   Suggestions use this league&apos;s {tradeContext.valueBook} values, {tradeContext.proposalModel ?? 'league'} rules and your {tradeContext.managerStrategy ?? 'balanced'} strategy, plus roster construction, records, picks and FAAB.{tradeContext.missing.length ? ` Full contextual grading remains pending for ${tradeContext.missing.join(' and ')}.` : ' The required strategy and paired outcome simulation are available.'}
                 </p>

@@ -31,8 +31,11 @@ const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
 export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
 export type DraftRoomShellProps = {
-  /** Premium ambient gradient for `/draft/[id]/snake` redraft room. */
-  surfaceVariant?: 'default' | 'redraft_snake'
+  /**
+   * Premium ambient gradient for `/draft/[id]/snake` redraft room. `dynasty` is the dynasty
+   * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.
+   */
+  surfaceVariant?: 'default' | 'redraft_snake' | 'dynasty'
   /** Reserve usable desktop pool space for drafts with a pick-order board. */
   playerSpacePriority?: boolean
   topBar: ReactNode
@@ -238,10 +241,19 @@ export function DraftRoomShell({
   const surfaceClass =
     surfaceVariant === 'redraft_snake'
       ? 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-gradient-to-b from-[#0d1530] via-[#0b1224] to-[#070b18] text-white shadow-[inset_0_1px_0_rgba(125,211,252,0.06)]'
-      : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
+      : surfaceVariant === 'dynasty'
+        ? 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--dyn-ink,#0B0F17)] text-white'
+        : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div data-board-size={boardSize} className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-player-space-priority={playerSpacePriority ? 'true' : 'false'}>
+    <div
+      data-board-size={boardSize}
+      data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
+      className={`draft-touch-room ${surfaceClass}`}
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      data-testid="draft-room-shell"
+      data-dynasty-skin={surfaceVariant === 'dynasty' ? 'true' : undefined}
+    >
       {topBar}
       {managerStrip}
 
@@ -297,7 +309,9 @@ export function DraftRoomShell({
               BOARD_ZONE_BY_DOCK_SIZE[dockSize],
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(10,22,44,0.98),rgba(6,12,22,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
-                : 'border-white/[0.06] bg-[#0d1428]',
+                : surfaceVariant === 'dynasty'
+                  ? 'border-[var(--dyn-line,#2A3345)] bg-[var(--dyn-vault,#121826)]'
+                  : 'border-white/[0.06] bg-[#0d1428]',
             )}
             data-testid="draft-premium-board-zone"
             data-dock-expanded={bottomDockExpanded ? 'true' : 'false'}

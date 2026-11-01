@@ -14,6 +14,8 @@ import { parseTradeTargetQuestion } from './tradeTargetQuestion'
 import { buildTradeTargetVerdict } from './tradeTargetVerdict'
 import { renderTradeTargetVerdict } from './tradeTargetDecision'
 import { buildTradeFinder, readTradeFinderPosition } from './tradeFinderGrounding'
+import { mentionsDraftPicks, readTradeFinderGoal } from './tradeFinderAsk'
+import { requestsPickTradePackage } from './tradeFinderIntent'
 import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { scenarioVerdict, startSitCall, tradeTargetVerdict } from './answerPolishBuild'
@@ -137,13 +139,27 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     if (kind === 'trade') {
       if (!imageTrade.question && /\b(?:find|suggest|recommend|propose)\b.*\btrades?\b|\btrade\s+ideas?\b/i.test(args.question)) {
         const positionWord = args.question.match(/\b(?:QB|RB|WR|TE|quarterback|running back|wide receiver|tight end)\b/i)?.[0]
-        const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord) })
+        /*
+         * 🛑 THE ASK'S OWN TERMS GO TO THE ENGINE. "3 win now trades using my draft picks" reached it as
+         * "find trades" and came back as dynasty-value player swaps with no pick, each a downgrade this
+         * season (2026-10-31). A goal and an offered pick are inputs, not tone.
+         */
+        const goal = readTradeFinderGoal(args.question)
+        const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord),
+          goal, includePicks: mentionsDraftPicks(args.question), requiresPicks: requestsPickTradePackage(args.question) })
         if (result.status === 'unavailable') return gap('trade_discovery_unavailable', result.reason, 'Sync league settings, rosters and values, then retry.')
         if (result.ideas.length === 0) return gap('no_trade_ideas', result.noIdeasReason ?? 'No supported offers were found.', 'Try a different position or name a specific trade to evaluate.')
         return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'trade_discovery', 'market_values'],
-          answer: [`Trade ideas for ${result.you.teamName}:`, ...result.ideas.map(idea =>
-            `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
-            'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
+          answer: [`${goal === 'win_now' ? 'Win-now trade ideas' : 'Trade ideas'} for ${result.you.teamName}:`, ...result.ideas.map(idea =>
+            `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.` +
+            `${idea.nowGive !== undefined ? ` This season: ${points(idea.nowGive ?? null)} given vs ${points(idea.nowGet ?? null)} received.` : ''}` +
+            `${idea.projectedLineupDelta != null ? ` Week ${result.projectionWeek?.week} projected starters ${points(idea.projectedLineupBefore ?? null)} before, ${points(idea.projectedLineupAfter ?? null)} after (+${points(idea.projectedLineupDelta)}).` : ''}` +
+            `${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
+            ...(result.pickNote ? [`Draft picks: ${result.pickNote}.`] : []),
+            ...(result.ideas.length < 3 && result.projectionWeek ? [`Only ${result.ideas.length} supported pick offer(s) passed the ownership, market-value and lineup checks.`] : []),
+            result.projectionWeek
+              ? 'These are opening offers using owned picks valued by round average. The lineup gain is for one projected week; acceptance and season outcomes are unknown.'
+              : 'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
       }
       const target = imageTrade.question ? null : parseTradeTargetQuestion(args.question)
       if (target) {
@@ -225,8 +241,16 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
      * engine could not resolve still gets its precise refusal above ("not found", "already
      * rostered"), because that one is a real answer.
      */
-    if (kind === 'waiver') return null
-    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', 'Name what you give and receive, or ask whether to trade for a named player.')
+    /*
+     * ⚠ THE SAME NOW HOLDS FOR A TRADE MESSAGE THAT NAMES NO MOVE. "in these trade I am giving up
+     * scoring players for potential players… u didnt consider a 2 or 3 for my 1st round pick"
+     * (2026-10-31) was a critique of the ideas Chimmy had just given. "trade" plus "for" made it a
+     * trade decision, and it got "I could not resolve a specific move to evaluate." This lane reads
+     * the one message and no conversation; the full answer path reads the last turns and has
+     * `find_trade_ideas` and `evaluate_trade`, whose letters `enforceTradeLetters` still holds to the
+     * engine's. Lineup always returned above, so nothing reaches here with a move to refuse.
+     */
+    return null
   } catch {
     return gap('engine_unavailable', 'The decision engine could not complete this comparison.', 'Try again after syncing your league. No recommendation was computed.')
   }

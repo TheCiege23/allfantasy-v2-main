@@ -3,8 +3,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { getDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { checkDynastyLotteryEligibility } from '@/lib/draft-lottery/dynastyYearGuard'
 import { normalizeToSupportedSport, DEFAULT_SPORT } from '@/lib/sport-scope'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 
 export type WeightedLotterySlotEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -22,6 +24,7 @@ export async function resolveWeightedLotterySlotOrderForLeague(
     where: { id: leagueId },
     select: {
       isDynasty: true,
+      leagueType: true,
       leagueVariant: true,
       settings: true,
       dynastyConfig: { select: { rookiePickOrderMethod: true } },
@@ -29,12 +32,8 @@ export async function resolveWeightedLotterySlotOrderForLeague(
   })
   if (!league) return null
 
-  const isDynasty =
-    league.isDynasty ||
-    (league.leagueVariant != null &&
-      ['devy_dynasty', 'merged_devy_c2c'].includes(String(league.leagueVariant).toLowerCase()))
-  if (!isDynasty) return null
-  if (league.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return null
+  if (!isDynastyLeague(league)) return null
+  if (!isWeightedRookieLottery(league.dynastyConfig?.rookiePickOrderMethod)) return null
 
   const { lotteryLastResult } = await getDraftOrderModeAndLotteryConfig(leagueId)
   const order = lotteryLastResult?.slotOrder
@@ -97,6 +96,7 @@ export async function resolveLiveDraftContextByDraftId(
           name: true,
           sport: true,
           isDynasty: true,
+          leagueType: true,
           leagueVariant: true,
         },
       },
@@ -124,7 +124,7 @@ export async function resolveLiveDraftContextByDraftId(
     })
     resolvedLeague = await prisma.league.findUnique({
       where: { id: session.leagueId },
-      select: { id: true, name: true, sport: true, isDynasty: true, leagueVariant: true },
+      select: { id: true, name: true, sport: true, isDynasty: true, leagueType: true, leagueVariant: true },
     })
   }
 
@@ -154,7 +154,7 @@ export async function resolveLiveDraftContextByDraftId(
     leagueId: resolvedLeague.id,
     leagueName: resolvedLeague.name ?? 'League Draft',
     sport: normalizeToSupportedSport(String(resolvedLeague.sport ?? session.sportType ?? DEFAULT_SPORT)),
-    isDynasty: Boolean(resolvedLeague.isDynasty),
+    isDynasty: isDynastyLeague(resolvedLeague),
     isCommissioner: userId ? await isCommissioner(resolvedLeague.id, userId).catch(() => false) : false,
     formatType,
     routeType,

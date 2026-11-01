@@ -14,6 +14,9 @@ import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 import type { RailGuillotineLine } from './railGuillotineLine'
 import { getNativeRailMatchups } from './nativeRailMatchups'
+import { mostHavePlayed } from './liveRailScores'
+import { loadBestBallField, type BestBallFieldRoster } from './bestBallField'
+import { isBestBallLeagueRow } from './leagueBestBall'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -155,7 +158,12 @@ export type RailStanding = {
    * cut line — the projection separates the teams in that window, and the UI must
    * say which one it drew. See `standingIn`.
    */
-  basis: 'points' | 'projected'
+  basis: 'points' | 'projected' | 'best_ball'
+  /**
+   * `best_ball` only: some player who can still score has a game that is not final, so the projected finals
+   * the rank is drawn from can still move. False once the week's last game is final.
+   */
+  provisional?: boolean
   /** Number of ranking places between this team and the weekly cut position. */
   placesAboveCut: number
   /** The score/projection currently defining the cut line. */
@@ -184,6 +192,16 @@ export type RailStanding = {
    * Optional so callers that build a standing by hand need not carry it.
    */
   bubble?: string[]
+  /** Teams in the field with points on the board — the live overlay keeps the projected rank until most have played. */
+  played?: number
+  /**
+   * The lowest team in the field OTHER than you, and its value on the same basis: the one the cut falls on
+   * while you stay above it, or the one you must pass when you are at the bottom. Null when unnamed.
+   */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included (its last scheduled week minus this one, plus one). */
+  weeksLeft?: number | null
 }
 
 /** How many teams from the bottom of an elimination week's field count as "on the bubble". */
@@ -500,10 +518,14 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
    * that was already gone, and "#13 of 18" counted three of them.
    */
   const outByLeague = new Map<string, Set<string>>()
+  const weeksLeftByLeague = new Map<string, number | null>()
   for (const leagueId of eliminationWithSeason) {
     const rows = eliminationSeasonRows.filter((r) => r.leagueId === leagueId)
     const current = currentByLeague.get(leagueId)
-    if (rows.length && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
+    if (rows.length && current) {
+      outByLeague.set(leagueId, choppedBefore(rows, current.week))
+      weeksLeftByLeague.set(leagueId, weeksLeftFrom(rows, current.week))
+    }
   }
   let matchups = weekRows
 
@@ -742,6 +764,13 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
     week: latest.week,
   })
 
+  const bestBallByLeague = await loadBestBallFields(
+    fixtures.filter((f) => f.elimination && f.unpaired).map((f) => ({ dbLeagueId: f.you.leagueId, platformLeagueId: f.row.leagueId, field: f.field })),
+    teamByKey,
+    latest.seasonYear,
+    latest.week,
+  ).catch(() => new Map<string, { finals: Map<string, number>; provisional: boolean }>())
+
   const byLeague: Record<string, RailMatchup> = {}
 
   for (const f of fixtures) {
@@ -767,6 +796,12 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
             yourRosterId: String(row.rosterId),
             sides: priced?.sides ?? new Map(),
             elimination: f.elimination || priced?.elimination === true,
+            nameOf: (rosterId) => {
+              const team = teamByKey.get(`${row.leagueId}:${rosterId}`)
+              return team ? rosterLabel([team.name], rosterId) : null
+            },
+            weeksLeft: weeksLeftByLeague.get(row.leagueId) ?? null,
+            bestBall: bestBallByLeague.get(you.leagueId) ?? null,
           })
         : null,
       eliminated: outByLeague.get(row.leagueId)?.has(String(row.rosterId)) === true,
@@ -866,6 +901,52 @@ function isPriceableId(raw: unknown): raw is string {
 
 function startersOf(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.map(String) : []
+}
+
+/**
+ * The projected finals of every best-ball elimination league in the list (bestBallField.ts), by AF league id.
+ * Only those leagues are read — two of this account's 94 today — so a list of ordinary leagues pays nothing.
+ * A league whose field cannot be valued is simply absent, and its standing keeps the ordinary rule.
+ */
+async function loadBestBallFields(
+  fixtures: Array<{ dbLeagueId: string; platformLeagueId: string; field: Array<{ rosterId: string | number; pointsFor: number }> }>,
+  teamByKey: ReadonlyMap<string, { externalId: string; rosterKeys: string[] }>,
+  season: number,
+  week: number,
+): Promise<Map<string, { finals: Map<string, number>; provisional: boolean }>> {
+  const out = new Map<string, { finals: Map<string, number>; provisional: boolean }>()
+  if (fixtures.length === 0) return out
+  const leagues = await prisma.league.findMany({
+    where: { id: { in: [...new Set(fixtures.map((f) => f.dbLeagueId))] } },
+    select: { id: true, name: true, platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+  })
+  const bestBall = leagues.filter((l) => isBestBallLeagueRow(l))
+  if (bestBall.length === 0) return out
+  const rosterRows = await prisma.roster.findMany({
+    where: { leagueId: { in: bestBall.map((l) => l.id) } },
+    select: { leagueId: true, platformUserId: true, playerData: true },
+  })
+  const list = (data: unknown, key: string): string[] => {
+    const value = data && typeof data === 'object' ? (data as Record<string, unknown>)[key] : null
+    return Array.isArray(value) ? value.map(String) : []
+  }
+  for (const league of bestBall) {
+    const fixture = fixtures.find((f) => f.dbLeagueId === league.id)
+    if (!fixture) continue
+    const byKey = new Map(rosterRows.filter((r) => r.leagueId === league.id).map((r) => [r.platformUserId, r.playerData]))
+    const rosters: BestBallFieldRoster[] = []
+    for (const row of fixture.field) {
+      const rosterId = String(row.rosterId)
+      const keys = teamByKey.get(`${fixture.platformLeagueId}:${rosterId}`)?.rosterKeys ?? [rosterId]
+      const data = keys.map((k) => byKey.get(k)).find((d) => d != null)
+      if (!data) break
+      rosters.push({ rosterId, players: list(data, 'players'), inactive: [...list(data, 'reserve'), ...list(data, 'taxi')], scoreboard: row.pointsFor })
+    }
+    if (rosters.length !== fixture.field.length) continue
+    const field = await loadBestBallField({ league, platformLeagueId: fixture.platformLeagueId, season, week, rosters }).catch(() => null)
+    if (field?.available) out.set(league.id, { finals: field.finals, provisional: field.provisional })
+  }
+  return out
 }
 
 export async function loadRailProjections(args: {
@@ -1122,10 +1203,8 @@ export async function loadRailProjections(args: {
   return { byLeague, projectionWeek }
 }
 
-/** "Most teams have played": strictly more than half of the field has points on the board. */
-export function mostHavePlayed(played: number, fieldSize: number): boolean {
-  return played * 2 > fieldSize
-}
+// One rule for the server row and the live refresh that overlays it (liveRailScores.ts).
+export { mostHavePlayed }
 
 /**
  * Where you sit in a league with no head-to-head.
@@ -1153,6 +1232,13 @@ export function standingIn(args: {
   yourRosterId: string
   sides: Map<string, RailSideProjection>
   elimination: boolean
+  nameOf?: (rosterId: string) => string | null
+  weeksLeft?: number | null
+  /**
+   * A best-ball league's projected finals per roster (bestBallField.ts). When every roster in the field has
+   * one, they ARE the ranking, all week: a best-ball live score is only a floor until the last game is final.
+   */
+  bestBall?: { finals: ReadonlyMap<string, number>; provisional: boolean } | null
 }): RailStanding | null {
   const { field, yourRosterId } = args
   if (field.length < 2) return null
@@ -1170,9 +1256,13 @@ export function standingIn(args: {
   }
   const fullyPriced = projected.length === field.length
 
-  let basis: 'points' | 'projected'
+  let basis: 'points' | 'projected' | 'best_ball'
   let valued: Array<{ rosterId: string; value: number }>
-  if (!mostHavePlayed(played, field.length) && fullyPriced) {
+  const finals = args.bestBall?.finals
+  if (finals && field.every((r) => finals.has(String(r.rosterId)))) {
+    basis = 'best_ball'
+    valued = field.map((r) => ({ rosterId: String(r.rosterId), value: finals.get(String(r.rosterId))! }))
+  } else if (!mostHavePlayed(played, field.length) && fullyPriced) {
     basis = 'projected'
     valued = projected
   } else if (played > 0) {
@@ -1192,6 +1282,8 @@ export function standingIn(args: {
   /* The bottom BUBBLE_SIZE (valued is sorted high → low), widened to include ties with the last of them. */
   const edge = valued[Math.max(0, valued.length - BUBBLE_SIZE)]!.value
   const bubble = valued.filter((team) => team.value <= edge).map((team) => team.rosterId)
+  // valued is sorted high → low, so the last entry that is not you is the lowest other team.
+  const cut = [...valued].reverse().find((team) => team.rosterId !== yourRosterId) ?? null
 
   return {
     rank: 1 + valued.filter(team => team.value > yours.value).length,
@@ -1202,6 +1294,11 @@ export function standingIn(args: {
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
     bubble,
+    played,
+    ...(basis === 'best_ball' ? { provisional: args.bestBall?.provisional === true } : {}),
+    cutTeam: cut ? (args.nameOf?.(cut.rosterId) ?? null) : null,
+    cutTeamValue: cut ? Math.round(cut.value * 100) / 100 : null,
+    weeksLeft: args.weeksLeft ?? null,
   }
 }
 
@@ -1237,4 +1334,27 @@ export function choppedBefore(
     if (lowest.length === 1) out.add(String(lowest[0]!.rosterId))
   }
   return out
+}
+
+/** An elimination league's weeks left, this one included: its last scheduled week minus `currentWeek`, plus one. */
+export function weeksLeftFrom(rows: ReadonlyArray<{ week: number }>, currentWeek: number): number | null {
+  if (rows.length === 0) return null
+  const last = Math.max(...rows.map((r) => r.week))
+  return last >= currentWeek ? last - currentWeek + 1 : null
+}
+
+/**
+ * The live field of one elimination league for the live refresh (app/api/core/rail-scores): who is out, and
+ * the weeks left — the same two facts the server-rendered row derives from the same rows.
+ */
+export async function readEliminationField(
+  platformLeagueId: string,
+  seasonYear: number,
+  week: number,
+): Promise<{ out: Set<string>; weeksLeft: number | null }> {
+  const rows = await prisma.weeklyMatchup.findMany({
+    where: { leagueId: platformLeagueId, seasonYear },
+    select: { week: true, rosterId: true, pointsFor: true },
+  })
+  return { out: choppedBefore(rows, week), weeksLeft: weeksLeftFrom(rows, week) }
 }

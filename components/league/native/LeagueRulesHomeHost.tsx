@@ -5,9 +5,12 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { BookOpen, X } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { enEsLanguage } from '@/lib/i18n/bilingual'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { renderChangeLine, renderRuleText } from '@/lib/league-rules-explainer/render'
 import type { ChangeGroup } from '@/lib/league-rules-explainer/types'
 import type { RulesExplainerView } from '@/lib/league-rules-explainer/view'
+import './league-rules-home.css'
 
 type ViewResponse = RulesExplainerView | { supported: false }
 
@@ -28,7 +31,7 @@ function formatChangeDate(iso: string, lang: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   try {
-    return new Intl.DateTimeFormat(lang === 'es' ? 'es-ES' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+    return new Intl.DateTimeFormat(getIntlLocale(lang), { dateStyle: 'medium', timeStyle: 'short' }).format(d)
   } catch {
     return d.toISOString()
   }
@@ -52,12 +55,13 @@ export function LeagueRulesHomeHost({
 }) {
   // The app's i18n (`t` from LanguageProviderClient); English outside a provider.
   const { t, language } = useOptionalLanguage()
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = enEsLanguage(language)
   const [view, setView] = useState<RulesExplainerView | null>(null)
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const autoOpened = useRef(false)
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  const hostRef = useRef<HTMLDivElement | null>(null)
   const titleId = useId()
 
   useEffect(() => setMounted(true), [])
@@ -135,12 +139,12 @@ export function LeagueRulesHomeHost({
     <ul className="space-y-3" data-testid={testId}>
       {groups.map((g) => (
         <li key={g.lastEventId}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          <p className="nl-rules-modal-when text-[11px] font-semibold uppercase tracking-wide">
             {renderRuleText({ k: 'leagueRules.ui.changedOn', vars: { date: formatChangeDate(g.lastAt, lang) } }, t, lang)}
           </p>
           <ul className="mt-1 space-y-1">
             {g.lines.map((line) => (
-              <li key={line.key} className="text-[13px] leading-snug text-white/88">
+              <li key={line.key} className="nl-rules-modal-change text-[13px] leading-snug">
                 {renderChangeLine(line, t, lang)}
               </li>
             ))}
@@ -157,7 +161,7 @@ export function LeagueRulesHomeHost({
           <div className="nl-card-label">
             <span>{t('leagueRules.ui.whatChanged')}</span>
           </div>
-          <p className="mb-3 text-[13px] text-white/70">{t('leagueRules.ui.whatChangedSubtitle')}</p>
+          <p className="nl-rules-sub mb-3 text-[13px] text-white/70">{t('leagueRules.ui.whatChangedSubtitle')}</p>
           {groupList(view.pendingChanges, 'league-rules-pending')}
           <div className="nl-actions">
             <button type="button" className="nl-button nl-primary" onClick={dismissChanges} data-testid="league-rules-changes-dismiss">
@@ -170,7 +174,7 @@ export function LeagueRulesHomeHost({
         </section>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end" ref={hostRef}>
         <button
           type="button"
           className={
@@ -194,15 +198,15 @@ export function LeagueRulesHomeHost({
                 aria-modal="true"
                 aria-labelledby={titleId}
                 data-testid="league-rules-modal"
-                className="flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d1526] text-white shadow-2xl"
+                className="nl-rules-modal flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-start justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
+                <div className="nl-rules-modal-head flex items-start justify-between gap-3 border-b px-5 py-4">
                   <div className="min-w-0">
                     <h2 id={titleId} className="text-[17px] font-bold">
                       {t(commissionerFirst ? 'leagueRules.ui.commissionerTitle' : 'leagueRules.ui.title')}
                     </h2>
-                    <p className="mt-0.5 text-[12px] text-white/55">
+                    <p className="nl-rules-modal-sub mt-0.5 text-[12px]">
                       {t(commissionerFirst ? 'leagueRules.ui.commissionerSubtitle' : 'leagueRules.ui.subtitle')}
                     </p>
                   </div>
@@ -210,7 +214,7 @@ export function LeagueRulesHomeHost({
                     type="button"
                     onClick={close}
                     aria-label={t('leagueRules.ui.close')}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/80"
+                    className="nl-rules-modal-close inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                     data-testid="league-rules-close"
                   >
                     <X className="h-5 w-5" aria-hidden />
@@ -219,10 +223,10 @@ export function LeagueRulesHomeHost({
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
                   {view.sections.map((section) => (
                     <section key={section.id} data-testid={`league-rules-section-${section.id}`}>
-                      <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/45">{renderRuleText(section.title, t, lang)}</h3>
+                      <h3 className="nl-rules-modal-h3 mb-1.5 text-[11px] font-bold uppercase tracking-wide">{renderRuleText(section.title, t, lang)}</h3>
                       <ul className="space-y-1.5">
                         {section.lines.map((line) => (
-                          <li key={line.id} className="text-[13px] leading-snug text-white/90">
+                          <li key={line.id} className="nl-rules-modal-line text-[13px] leading-snug">
                             {renderRuleText(line.text, t, lang)}
                           </li>
                         ))}
@@ -230,20 +234,20 @@ export function LeagueRulesHomeHost({
                     </section>
                   ))}
                   <section data-testid="league-rules-history-section">
-                    <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/45">{t('leagueRules.ui.history')}</h3>
+                    <h3 className="nl-rules-modal-h3 mb-1.5 text-[11px] font-bold uppercase tracking-wide">{t('leagueRules.ui.history')}</h3>
                     {view.history.length ? (
                       groupList(view.history, 'league-rules-history')
                     ) : (
-                      <p className="text-[13px] text-white/55">{t('leagueRules.ui.historyEmpty')}</p>
+                      <p className="nl-rules-modal-empty text-[13px]">{t('leagueRules.ui.historyEmpty')}</p>
                     )}
                   </section>
                 </div>
-                <div className="space-y-2 border-t border-white/[0.07] px-5 py-3">
+                <div className="nl-rules-modal-foot space-y-2 border-t px-5 py-3">
                   {/* The chat route types the question in, scoped to this league, and never sends it by itself. */}
                   <Link
                     href={`/chimmy/chat?prompt=${encodeURIComponent(t('leagueRules.ui.chimmyPrompt'))}&leagueId=${encodeURIComponent(leagueId)}`}
                     onClick={close}
-                    className="block w-full rounded-xl border border-white/15 px-4 py-2.5 text-center text-[14px] font-semibold text-white/85"
+                    className="nl-rules-modal-chimmy block w-full rounded-xl px-4 py-2.5 text-center text-[14px] font-semibold"
                     data-testid="league-rules-ask-chimmy"
                   >
                     {t('leagueRules.ui.askChimmy')}
@@ -251,7 +255,7 @@ export function LeagueRulesHomeHost({
                   <button
                     type="button"
                     onClick={close}
-                    className="w-full rounded-xl bg-[#ff3d81] px-4 py-2.5 text-[14px] font-bold text-white"
+                    className="nl-rules-modal-gotit w-full rounded-xl px-4 py-2.5 text-[14px] font-bold"
                     data-testid="league-rules-got-it"
                   >
                     {t('leagueRules.ui.gotIt')}
@@ -259,7 +263,12 @@ export function LeagueRulesHomeHost({
                 </div>
               </div>
             </div>,
-            document.body,
+            /*
+             * Inside a native redraft league the popup portals into that league's workspace root, so it
+             * inherits the redraft tokens and light mode (league-rules-home.css). Everywhere else it goes
+             * to <body> as before, with the colours it always had.
+             */
+            (variant === 'native' ? hostRef.current?.closest<HTMLElement>('.nl-workspace[data-format=redraft]') : null) ?? document.body,
           )
         : null}
     </>

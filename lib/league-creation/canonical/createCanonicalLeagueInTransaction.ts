@@ -33,6 +33,7 @@ import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromW
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { GUILLOTINE_BEST_BALL_KEY } from '@/lib/guillotine/guillotineBestBall'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { applyPlayoffShapeToSettings, redraftPlayoffShapeFor } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -519,6 +520,9 @@ export async function createCanonicalLeagueInTransaction(
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
   if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format
+  // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
+  // never `bestBallMode`, which would make this a Best Ball league everywhere.
+  if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
@@ -916,6 +920,7 @@ export async function createCanonicalLeagueInTransaction(
     // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
     // NBA/NHL/MLB) — never a flat 14, which left a daily sport's playoff start past its season's end.
     const dynastyFallbackRegularSeasonWeeks = ncaafRegularSeasonEndWeek ?? dynastyDefaultRegularSeasonWeeksFor(sport)
+    const rookieOrderMethod = str(ds.rookieDraftOrderMethod, 'max_pf') === 'lottery' ? 'weighted_lottery' : str(ds.rookieDraftOrderMethod, 'max_pf')
     const dynastyFallbackRookieDraftType =
       formatId === 'devy' ? readString(foundationDefaults.devyConfig, 'rookieDraftType', 'linear') : 'linear'
     await tx.dynastyLeagueConfig.upsert({
@@ -923,7 +928,7 @@ export async function createCanonicalLeagueInTransaction(
       create: {
         leagueId: league.id,
         regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
-        rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
+        rookiePickOrderMethod: rookieOrderMethod,
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
@@ -940,7 +945,7 @@ export async function createCanonicalLeagueInTransaction(
       },
       update: {
         regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
-        rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
+        rookiePickOrderMethod: rookieOrderMethod,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
         divisionsEnabled: num(ds.divisionCount, 0) > 0,

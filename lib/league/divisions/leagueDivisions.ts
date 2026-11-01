@@ -43,6 +43,11 @@ export type LeagueDivisionConfig = {
   teamAssignments: Record<string, number>
   aiNamingEnabled: boolean
   playoffRule: DivisionPlayoffRule
+  /**
+   * Play every division rival a second time (home and away swapped) after the full round robin.
+   * Off by default; with it off the schedule is exactly what it was before this setting existed.
+   */
+  rivalsTwice: boolean
   lastUpdatedAt: string | null
   lastUpdatedBy: string | null
 }
@@ -54,6 +59,7 @@ export type ActiveLeagueDivisions = {
   /** `LeagueTeam.id` → division key. */
   teamDivision: Map<string, string>
   playoffRule: DivisionPlayoffRule
+  rivalsTwice: boolean
 }
 
 function record(v: unknown): Record<string, unknown> | null {
@@ -77,6 +83,7 @@ export function defaultDivisionConfig(): LeagueDivisionConfig {
     teamAssignments: {},
     aiNamingEnabled: false,
     playoffRule: DEFAULT_DIVISION_PLAYOFF_RULE,
+    rivalsTwice: false,
     lastUpdatedAt: null,
     lastUpdatedBy: null,
   }
@@ -98,6 +105,7 @@ export function readDivisionConfig(settings: unknown): LeagueDivisionConfig {
     teamAssignments,
     aiNamingEnabled: raw.aiNamingEnabled === true,
     playoffRule: readDivisionPlayoffRule(raw.playoffRule),
+    rivalsTwice: raw.rivalsTwice === true,
     lastUpdatedAt: typeof raw.lastUpdatedAt === 'string' ? raw.lastUpdatedAt : null,
     lastUpdatedBy: typeof raw.lastUpdatedBy === 'string' ? raw.lastUpdatedBy : null,
   }
@@ -118,7 +126,7 @@ export function parseActiveLeagueDivisions(settings: unknown): ActiveLeagueDivis
   const teamDivision = new Map<string, string>()
   for (const [teamId, idx] of Object.entries(config.teamAssignments)) teamDivision.set(teamId, divisionKey(idx))
   if (teamDivision.size === 0) return null
-  return { divisions, teamDivision, playoffRule: config.playoffRule }
+  return { divisions, teamDivision, playoffRule: config.playoffRule, rivalsTwice: config.rivalsTwice }
 }
 
 /** The ids that identify one league team, for `matchLeagueTeam`. */
@@ -165,6 +173,21 @@ export function resolveRosterDivisions(
   return out
 }
 
+/**
+ * What a season's schedule needs from the commissioner's divisions: each season roster's division and
+ * whether rivals meet twice. `null` when the league has no divisions — the schedule is then built
+ * exactly as before divisions existed.
+ */
+export function scheduleDivisionsForRosters(
+  settings: unknown,
+  teams: ReadonlyArray<LeagueTeamIdentity>,
+  rosters: ReadonlyArray<{ rosterId: string; ids: ReadonlyArray<string | null | undefined> }>,
+): { byRoster: Map<string, LeagueDivision>; rivalsTwice: boolean } | null {
+  const active = parseActiveLeagueDivisions(settings)
+  if (!active) return null
+  return { byRoster: resolveRosterDivisions(active, teams, rosters), rivalsTwice: active.rivalsTwice }
+}
+
 /* ── Validation ─────────────────────────────────────────────────────── */
 
 export type DivisionSetupInput = {
@@ -172,11 +195,12 @@ export type DivisionSetupInput = {
   names: string[]
   teamAssignments: Record<string, number>
   playoffRule?: unknown
+  rivalsTwice?: unknown
 }
 
 export type DivisionSetupCheck =
   | { ok: true }
-  | { ok: false; code: 'COUNT_NOT_ALLOWED' | 'TOO_FEW_TEAMS' | 'NAME_REQUIRED' | 'NAME_DUPLICATE' | 'NAME_TOO_LONG' | 'UNKNOWN_TEAM' | 'BAD_DIVISION' | 'UNEVEN' | 'BAD_PLAYOFF_RULE'; error: string }
+  | { ok: false; code: 'COUNT_NOT_ALLOWED' | 'TOO_FEW_TEAMS' | 'NAME_REQUIRED' | 'NAME_DUPLICATE' | 'NAME_TOO_LONG' | 'UNKNOWN_TEAM' | 'BAD_DIVISION' | 'UNEVEN' | 'BAD_PLAYOFF_RULE' | 'BAD_RIVALS_TWICE'; error: string }
 
 /** Division sizes for `teamCount` teams split as evenly as possible: `[5, 5]`, `[4, 3, 3]`. */
 export function evenDivisionSizes(teamCount: number, count: number): number[] {
@@ -210,6 +234,9 @@ export function validateDivisionSetup(input: DivisionSetupInput, teamIds: Readon
   }
   if (input.playoffRule !== undefined && !(DIVISION_PLAYOFF_RULES as readonly unknown[]).includes(input.playoffRule)) {
     return { ok: false, code: 'BAD_PLAYOFF_RULE', error: 'Unknown division playoff rule.' }
+  }
+  if (input.rivalsTwice !== undefined && typeof input.rivalsTwice !== 'boolean') {
+    return { ok: false, code: 'BAD_RIVALS_TWICE', error: '"Play division rivals twice" must be on or off.' }
   }
   if (count === 0) return { ok: true }
   if (!divisionCountAllowed(teamCount, count)) {

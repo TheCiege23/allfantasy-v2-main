@@ -23,6 +23,7 @@ const m = vi.hoisted(() => {
   return {
     state,
     publish: vi.fn(async (_input: unknown) => undefined),
+    eligibility: vi.fn(async () => ({ eligible: true, reason: 'ok', currentSeason: 2026, isStartupLeague: false })),
     prisma: {
       league: {
         findUnique: vi.fn(async (args: { select?: Record<string, unknown> }) => {
@@ -53,7 +54,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: vi.fn(async () => true) }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: vi.fn(async () => true) }))
 vi.mock('@/lib/draft-lottery/dynastyYearGuard', () => ({
-  checkDynastyLotteryEligibility: vi.fn(async () => ({ eligible: true, reason: 'ok', currentSeason: 2026, isStartupLeague: false })),
+  checkDynastyLotteryEligibility: m.eligibility,
 }))
 vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: m.publish }))
 vi.mock('@/lib/draft-defaults/DraftRoomConfigResolver', () => ({
@@ -261,6 +262,7 @@ const changes = () => (published()?.meta.ruleChanges ?? null) as Array<{ key: st
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.eligibility.mockResolvedValue({ eligible: true, reason: 'ok', currentSeason: 2026, isStartupLeague: false })
   m.state.failReads = false
   m.state.db = {
     league: {
@@ -278,6 +280,15 @@ beforeEach(() => {
 })
 
 describe('PUT /draft-lottery/config → settings_changed.meta.ruleChanges', () => {
+  it('allows startup commissioners to save future lottery parameters without changing startup draft mode', async () => {
+    m.eligibility.mockResolvedValue({ eligible: false, reason: 'startup', currentSeason: 2026, isStartupLeague: true })
+    m.state.db.league.settings = { draft_order_mode: 'manual' }
+    expect((await put({ lotteryConfig: { lotteryTeamCount: 4 } })).status).toBe(200)
+    expect((m.state.db.league.settings as any).draft_order_mode).toBe('manual')
+    expect((m.state.db.league.settings as any).draft_lottery_config.lotteryTeamCount).toBe(4)
+    expect((await put({ draftOrderMode: 'weighted_lottery' })).status).toBe(403)
+  })
+
   it('an odds change in the rookie phase publishes the lottery rule, silently, and nothing from the hidden Draft section', async () => {
     const res = await put({ lotteryConfig: { weightingMode: 'inverse_max_pf' } })
     expect(res.status).toBe(200)

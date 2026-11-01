@@ -234,6 +234,7 @@ export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
     finals: "Stanley Cup",
   },
   nba_cup: {
+    cup_group_play: "Group Play",
     cup_quarterfinals: "Quarterfinals",
     cup_semifinals: "Semifinals",
     cup_championship: "Championship",

@@ -38,6 +38,8 @@ export interface SurvivorSummaryConfig {
   /** Commissioner headline (e.g. Heroes vs Villains); not a default tribe split. */
   seasonThemeLabel?: string | null
   visualThemeId?: string | null
+  /** Island banner scene picked by the commissioner; 'auto' (or absent) follows the season. */
+  islandScene?: string | null
   challengesSystemRun?: boolean
   regularSeasonEndWeek?: number | null
   faqSeededAt?: string | null

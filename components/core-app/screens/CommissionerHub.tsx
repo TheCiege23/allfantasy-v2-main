@@ -3,9 +3,10 @@ import CommissionerWeeklyPlan from '@/components/core-app/CommissionerWeeklyPlan
 import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, type CSSProperties, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
+import '@/components/core-app/af-core-redraft-standings.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { CommissionerOsActionsSummary } from '@/components/league-hub/CommissionerOsActionsSummary'
@@ -30,6 +31,8 @@ import {
   AuditTimeline,
   AuditTimelineFallback,
   ChartsFallback,
+  HealthBreakdown,
+  HealthBreakdownStatic,
   OperationalCharts,
   RecentChanges,
   RecentChangesFallback,
@@ -43,6 +46,8 @@ import { AutomationOverview } from '@/components/core-app/commissioner/Automatio
 import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonCalendar'
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -50,12 +55,14 @@ import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButto
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
+import { DynastyFormatCard } from '@/components/core-app/commissioner/DynastyFormatCard'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsBody } from '@/components/core-app/standings/WeekLineupsTable'
 import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
+import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -157,6 +164,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
   const activity = depthOpen ? loadActivityCharts(data.grant, now, language) : null
   const platformName = platformLabel(league.platform)
   const quiet = data.quietManagers
+  const healthRing = healthRingPct(data.health.score)
 
   return (
     <div className="af-ch afh" data-format="all" data-testid="commissioner-league-hub">
@@ -260,6 +268,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
+      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+      {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
+      {!league.native && data.role === 'commissioner' ? <ExternalListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
@@ -287,13 +298,17 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         )}
         {data.formatCards.length ? (
           <ul className="af-ch-areas">
-            {data.formatCards.map((card) => (
-              <li key={card.key}>
-                <strong>{t(card.title)}</strong>
-                <p>{t(card.detail)}</p>
-                <Link href={card.href}>{t(card.action)} →</Link>
-              </li>
-            ))}
+            {data.formatCards.map((card) =>
+              card.tone === 'dynasty' ? (
+                <DynastyFormatCard key={card.key} card={card} />
+              ) : (
+                <li key={card.key}>
+                  <strong>{t(card.title)}</strong>
+                  <p>{t(card.detail)}</p>
+                  <Link href={card.href}>{t(card.action)} →</Link>
+                </li>
+              ),
+            )}
           </ul>
         ) : (
           <p className="af-ch-muted">
@@ -352,6 +367,23 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.draftNote)}</p>
+        {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
+        {data.history.lotteries?.length ? (
+          <>
+            <h3>{t('Weighted lottery history')}</h3>
+            <p className="af-ch-muted">{t('Recorded AllFantasy draws; older or imported results may be missing.')}</p>
+            {data.history.lotteries.map((draw) => (
+              <details key={draw.id}>
+                <summary>{draw.season != null ? `${draw.season} · ` : ''}{new Date(draw.at).toLocaleDateString(hubDateLocale(language))}</summary>
+                <ol>
+                  {draw.slots.map((slot) => (
+                    <li key={slot.slot}>{t('Pick')} {slot.slot}: {slot.team}{slot.odds != null ? ` · ${slot.odds.toLocaleString(hubDateLocale(language), { maximumFractionDigits: 2 })}% ${t('odds at pick 1')}` : ''}</li>
+                  ))}
+                </ol>
+              </details>
+            ))}
+          </>
+        ) : null}
       </HubSection>
 
       {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
@@ -365,7 +397,30 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </div>
 
       {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
-      <HealthPanel data={data} language={language} />
+      {/*
+        The health panel inside a `display: contents` wrapper: it changes no layout anywhere, and carries the
+        engine score as `--rdc-health` for the redraft identity's score ring (af-core-redraft-standings.css).
+        No score, no variable and no ring — lib/core-app/redraftCoreRace.ts healthRingPct.
+      */}
+      <div
+        className="af-rdc-health"
+        style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
+        data-ring={healthRing == null ? undefined : 'true'}
+      >
+        <HealthPanel
+          data={data}
+          language={language}
+          breakdown={
+            activity ? (
+              <Suspense fallback={<HealthBreakdownStatic data={data} reason="loading" language={language} />}>
+                <HealthBreakdown data={data} activity={activity} language={language} />
+              </Suspense>
+            ) : (
+              <HealthBreakdownStatic data={data} reason="locked" language={language} />
+            )
+          }
+        />
+      </div>
 
       {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}
       <HubCalendar data={data} language={language} />

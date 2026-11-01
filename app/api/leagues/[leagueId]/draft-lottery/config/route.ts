@@ -64,13 +64,14 @@ export async function PUT(
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const lotteryEligibility = await checkDynastyLotteryEligibility(leagueId)
-  if (!lotteryEligibility.eligible) {
-    return NextResponse.json({ error: lotteryEligibility.reason }, { status: 403 })
-  }
-
   const body = (await req.json().catch(() => ({}))) as {
     draftOrderMode?: DraftOrderMode
     lotteryConfig?: Partial<WeightedLotteryConfig>
+  }
+
+  // Startup leagues may plan future rookie lottery settings, but may not change the startup draft mode.
+  if (!lotteryEligibility.eligible && !(lotteryEligibility.isStartupLeague && body.draftOrderMode === undefined)) {
+    return NextResponse.json({ error: lotteryEligibility.reason }, { status: 403 })
   }
 
   // The rules as members read them, before the write — for the league home's "What changed" card.

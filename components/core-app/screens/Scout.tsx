@@ -4,6 +4,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-scout.css'
+// Redraft /core shell only (batch B4): every rule is scoped under .af-shell[data-format=redraft].
+import '@/components/core-app/af-core-redraft-trades.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -77,9 +79,16 @@ export type ScoutProps = {
   eliminationStanding?: RailStanding | null
 }
 
-/** "Sep 21, 2025" / "21 sept 2025" — pinned to Eastern so the server paint and the client agree. */
-const DAY_EN = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
-const DAY_ES = new Intl.DateTimeFormat('es-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+/**
+ * "Sep 21, 2025" / "21 sept 2025" — pinned to Eastern so the server paint and the client agree. One
+ * formatter per locale (the catalog's `dayLocale`), built once.
+ */
+const DAY_FORMATS = new Map<string, Intl.DateTimeFormat>()
+function dayFormat(locale: string): Intl.DateTimeFormat {
+  let f = DAY_FORMATS.get(locale)
+  if (!f) DAY_FORMATS.set(locale, (f = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })))
+  return f
+}
 
 /**
  * The reader's language, for every part of this screen.
@@ -94,15 +103,15 @@ const DAY_ES = new Intl.DateTimeFormat('es-US', { month: 'short', day: 'numeric'
  */
 function useScoutCopy() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = messagesFor(scoutScreenMessages, language)
   return {
-    es,
-    m: messagesFor(scoutScreenMessages, language),
+    language,
+    m,
     copy: (english: string) => coreUiCopy(english, language),
     day: (iso: string | null): string | null => {
       if (!iso) return null
       const d = new Date(iso)
-      return Number.isNaN(d.getTime()) ? null : (es ? DAY_ES : DAY_EN).format(d)
+      return Number.isNaN(d.getTime()) ? null : dayFormat(m.dayLocale).format(d)
     },
   }
 }
@@ -131,7 +140,7 @@ function EdgeLine({ m }: { m: ScoutEdgeManager }) {
 
 /** What the edge counts are measured over — said once, above the cards, like the standings basis. */
 function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: CoreDepthAccess | null }) {
-  const { es, m, copy, day } = useScoutCopy()
+  const { language, m, copy, day } = useScoutCopy()
   if (!edge.available) {
     return <p className="af-sc-edge-basis">Competitive Edge: {copy(edge.reason).replace(/\.$/, '')}.</p>
   }
@@ -150,7 +159,7 @@ function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: Co
       {w.available
         ? m.edgeBasisWaivers(w.data.season, w.data.stale)
         : `${m.edgeBasisWaiversLabel}: ${copy(w.reason)}`}
-      .{access ? <> <FreeUntilNote access={access} lang={es ? 'es' : 'en'} /></> : null}
+      .{access ? <> <FreeUntilNote access={access} lang={language} /></> : null}
     </p>
   )
 }
@@ -486,7 +495,7 @@ export function Scout({
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
-  const { es, m, copy } = useScoutCopy()
+  const { language, m, copy } = useScoutCopy()
   return (
     <div className="af-sc">
       <header className="af-frame af-sc-head">
@@ -549,7 +558,7 @@ export function Scout({
           <CoreDepthLock
             access={edgeAccess}
             what={m.edgeLockWhat}
-            lang={es ? 'es' : 'en'}
+            lang={language}
           />
         ) : edge ? (
           <EdgeBasis edge={edge} access={edgeAccess} />

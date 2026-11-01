@@ -364,10 +364,11 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           'skipped' in r
             ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
             : {
-                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0),
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0),
                 warnings: [
                   ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
                   ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
+                  ...(r.rosters && (r.rosters.rosterSnapshotsRejected ?? 0) > 0 ? [`${r.rosters.rosterSnapshotsRejected} roster snapshots rejected`] : []),
                 ],
                 metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
               },

@@ -5,7 +5,7 @@
  * the IDP salary-cap transfer (a no-op for non-IDP leagues). It never moved `RedraftRosterPlayer`
  * rows or transferred `RedraftRoster.faabBalance`, so accepted trades did not actually change rosters.
  *
- * This module settles a two-party redraft trade for real:
+ * This module settles a redraft trade for real — two teams, or every team of a multi-team trade:
  *  - `player` assets: move the active `RedraftRosterPlayer` from the sending roster to the receiving
  *    roster (rosterId update; acquisitionType -> "trade"; slotType -> "BENCH").
  *  - `faab` assets: transfer the metadata amount between `RedraftRoster.faabBalance` with a
@@ -59,11 +59,15 @@ export async function settleRedraftTradeAssets(
     tradeId?: string
     proposerRosterId: string
     receiverRosterId: string
+    /** Multi-team trades: the teams beyond proposer and receiver (lib/redraft/tradeParticipants.ts). */
+    additionalRosterIds?: string[]
     assets: SettlementAssetRow[]
   },
 ): Promise<TradeSettlementResult> {
   const { proposerRosterId, receiverRosterId, assets } = input
-  const validRosterIds = new Set([proposerRosterId, receiverRosterId])
+  const additionalRosterIds = input.additionalRosterIds ?? []
+  // Every asset must move between two teams IN the trade — for a two-team trade, the same pair as ever.
+  const validRosterIds = new Set([proposerRosterId, receiverRosterId, ...additionalRosterIds])
 
   let playersMoved = 0
   let picksRecorded = 0
@@ -74,6 +78,7 @@ export async function settleRedraftTradeAssets(
   const faabDelta = new Map<string, number>([
     [proposerRosterId, 0],
     [receiverRosterId, 0],
+    ...additionalRosterIds.map((id): [string, number] => [id, 0]),
   ])
 
   const itemAssets = assets.filter(a => a.assetType === 'zombie_item')

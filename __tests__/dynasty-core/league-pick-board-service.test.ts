@@ -63,6 +63,13 @@ describe('loadLeaguePickBoard', () => {
     expect(r.board.teams[0]!.tradedAwayBySeason[2027]).toEqual([{ round: 1, label: '1st', toTeam: 'Aces' }])
   })
 
+  it('carries the league platform and sport, so the pick ledger opens the trade builder honestly', async () => {
+    m.league = { ...m.league, sport: 'NFL' }
+    const r = await loadLeaguePickBoard('L', 'u2')
+    if (!r.ok || !r.board) throw new Error('expected a board')
+    expect(r.trade).toEqual({ platform: 'manual', sport: 'NFL' })
+  })
+
   it('reads an imported Sleeper league’s picks in roster space', async () => {
     m.league = { ...m.league, platform: 'sleeper', settings: { status: 'in_season' } }
     m.imported.mockResolvedValue({

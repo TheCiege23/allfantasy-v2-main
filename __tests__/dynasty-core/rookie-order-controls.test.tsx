@@ -17,6 +17,38 @@ describe('rookie draft order settings', () => {
     expect(body.devyPickOrderMethod).toBe('custom')
     expect(screen.queryByText('Rookie pick order')).toBeNull()
   })
+  it('saves changes to lottery settings without requiring an unrelated settings edit', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({ ok: true, json: async () => init?.method === 'PUT' ? {} : ({
+      isDynasty: true,
+      effective: { rookiePickOrderMethod: 'weighted_lottery', rookieDraftRounds: 4, rookieDraftType: 'linear' },
+      constants: { rookiePickOrderMethods: [{ value: 'commissioner', label: 'Commissioner' }, { value: 'weighted_lottery', label: 'Weighted lottery' }] },
+      lotteryEligibility: { eligible: false, isStartupLeague: true },
+    }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<DynastySettingsPanel leagueId="league-1" isCommissioner />)
+    fireEvent.change(await screen.findByLabelText('Teams in lottery'), { target: { value: '4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/draft-lottery/config') && init?.method === 'PUT')).toBe(true))
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/draft-lottery/config'))!
+    expect(JSON.parse(String(call[1]?.body)).lotteryConfig.lotteryTeamCount).toBe(4)
+  })
+  it('explains all three commissioner options when auction is selected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
+      isDynasty: true,
+      effective: { rookiePickOrderMethod: 'commissioner', rookieDraftRounds: 2, rookieDraftType: 'linear' },
+      constants: { rookiePickOrderMethods: [{ value: 'commissioner', label: 'Commissioner' }] },
+    }) })))
+    render(<DynastySettingsPanel leagueId="league-1" isCommissioner />)
+    const type = (await screen.findByText('Linear')).closest('select')!
+    fireEvent.change(type, { target: { value: 'auction' } })
+    const policy = screen.getByLabelText('Traded rookie pick treatment') as HTMLSelectElement
+    expect(policy.value).toBe('block')
+    expect([...policy.options].map(option => option.value)).toEqual(['block', 'budget', 'nominations'])
+    expect(screen.getByText(/Budget: transfer the set round value/)).toBeTruthy()
+    fireEvent.change(policy, { target: { value: 'budget' } })
+    expect(screen.getByLabelText('Round 1 auction value')).toBeTruthy()
+    expect(screen.getByLabelText('Round 2 auction value')).toBeTruthy()
+  })
   it('directs standings and Max PF to automatic order instead of offering ineffective choices', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
       isDynasty: true,

@@ -1,3 +1,4 @@
+import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Full draft variant settings (config + UI + session variant + orphan status for commissioner).
@@ -65,7 +66,7 @@ function hasAfCommissionerSub(userId: string): Promise<boolean> {
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
-type DraftOrderTeamSlot = { position: number; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
+type DraftOrderTeamSlot = { position: number; teamId: string | null; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
 
 /**
  * The draft order as the settings panel lists it: the saved `LeagueSettings.draftOrderSlots` when
@@ -90,16 +91,16 @@ async function loadDraftOrderTeams(leagueId: string, savedSlots: unknown, league
       const team = ownerId ? byId.get(ownerId) : undefined
       if (team && !used.has(team.id)) {
         used.add(team.id)
-        out.push({ position: out.length + 1, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
+        out.push({ position: out.length + 1, teamId: team.id, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
       }
     }
   }
   for (const t of teams) {
     if (used.has(t.id)) continue
-    out.push({ position: out.length + 1, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
+    out.push({ position: out.length + 1, teamId: t.id, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
   }
   const size = typeof leagueSize === 'number' && leagueSize > 0 ? leagueSize : out.length
-  while (out.length < size) out.push({ position: out.length + 1, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
+  while (out.length < size) out.push({ position: out.length + 1, teamId: null, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
   return out
 }
 
@@ -519,8 +520,10 @@ export async function PATCH(
   const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true },
+    select: { id: true, status: true, draftModeLabel: true, draftType: true, rounds: true, auctionBudgetPerTeam: true },
   })
+  const rookieAuctionProblem = rookieAuctionStructureChangeError(draftSessionRow, { draftType: configPatch.draft_type, rounds: configPatch.rounds, auctionBudgetPerTeam: sessionVariantPatch.auctionBudgetPerTeam })
+  if (rookieAuctionProblem) return NextResponse.json({ error: rookieAuctionProblem, code: 'ROOKIE_AUCTION_STRUCTURE_LOCKED' }, { status: 409 })
   const isActiveDraft =
     draftSessionRow &&
     draftSessionRow.status === 'in_progress'
@@ -727,7 +730,7 @@ export async function PATCH(
     })
   } catch (e) {
     const code = (e as Error & { code?: string })?.code
-    if (code === 'THIRD_ROUND_REVERSAL_LOCKED') {
+    if (code === 'THIRD_ROUND_REVERSAL_LOCKED' || code === 'ROOKIE_AUCTION_STRUCTURE_LOCKED') {
       return NextResponse.json(
         { error: (e as Error).message, code },
         { status: 409 },

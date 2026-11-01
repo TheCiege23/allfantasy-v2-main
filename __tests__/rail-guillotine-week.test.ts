@@ -44,7 +44,7 @@ function h2hRows(): Row[] {
   ]
 }
 
-const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn(), mine: '1' }))
+const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn(), mine: '1', leagues: [] as unknown[], rosterRows: [] as unknown[], bestBall: vi.fn() }))
 
 vi.mock('@/lib/prisma', async () => {
   /* Applies each read's `where` — see the helper for why a fixed answer no longer tests anything. */
@@ -60,15 +60,22 @@ vi.mock('@/lib/prisma', async () => {
       ],
     },
     matchupFact: { findMany: async () => [] },
+    league: { findMany: async () => db.leagues },
+    roster: { findMany: async () => db.rosterRows },
     $queryRaw: db.queryRaw,
     $queryRawUnsafe: async () => [],
   },
   }
 })
 
-import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
+vi.mock('@/lib/core-app/bestBallField', () => ({ loadBestBallField: db.bestBall }))
+
+import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn, weeksLeftFrom } from '@/lib/core-app/railMatchups'
 
 beforeEach(() => {
+  db.leagues = []
+  db.rosterRows = []
+  db.bestBall.mockReset()
   db.rows = [...guillotineRows(), ...h2hRows()]
   db.queryRaw.mockReset()
   db.queryRaw.mockResolvedValue([{ id: 'AF-G', platformLeagueId: 'G', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } }])
@@ -227,6 +234,37 @@ describe('standingIn: the basis follows how much of the field has played', () =>
     expect(standingIn({ field: field({}), yourRosterId: 'a', sides: partial, elimination: true })).toBeNull()
   })
 
+  it('names the lowest team other than you, on the same basis, and carries the weeks left', () => {
+    const nameOf = (id: string) => `Team ${id.toUpperCase()}`
+    const above = standingIn({ field: field({ d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true, nameOf, weeksLeft: 11 })
+    expect(above).toMatchObject({ cutTeam: 'Team E', cutTeamValue: 90, weeksLeft: 11, played: 2 })
+    // At the bottom yourself, the named team is the one you need to pass.
+    const bottom = standingIn({ field: field({}), yourRosterId: 'e', sides: proj, elimination: true, nameOf })
+    expect(bottom).toMatchObject({ overCut: null, cutTeam: 'Team D', cutTeamValue: 100 })
+  })
+
+  it('a best-ball league ranks on projected finals all week, whatever has been played', () => {
+    // d and e have played (40, 35), a has not: on points a is at the cut; on projected finals a leads.
+    const finals = new Map([['a', 150], ['b', 120], ['c', 110], ['d', 96], ['e', 92]])
+    const s = standingIn({ field: field({ c: 80, d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true, bestBall: { finals, provisional: true } })
+    expect(s).toMatchObject({ basis: 'best_ball', provisional: true, rank: 1, overCut: 58, cutLine: 92 })
+  })
+
+  it('a best-ball field missing one roster falls back to the ordinary rule, never a partial rank', () => {
+    const finals = new Map([['a', 150], ['b', 120], ['c', 110], ['d', 96]])
+    const s = standingIn({ field: field({ c: 80, d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true, bestBall: { finals, provisional: true } })
+    expect(s?.basis).toBe('points')
+    expect(s).not.toHaveProperty('provisional')
+  })
+
+  it('weeks left counts this week: week 8 of an 18-week season is 11', () => {
+    const rows = Array.from({ length: 18 }, (_, i) => ({ week: i + 1 }))
+    expect(weeksLeftFrom(rows, 8)).toBe(11)
+    expect(weeksLeftFrom(rows, 18)).toBe(1)
+    expect(weeksLeftFrom(rows, 19)).toBeNull()
+    expect(weeksLeftFrom([], 8)).toBeNull()
+  })
+
   it('before any snap with the field priced, ranks on projection (unchanged)', () => {
     const s = standingIn({ field: field({}), yourRosterId: 'e', sides: proj, elimination: true })
     expect(s?.basis).toBe('projected')
@@ -290,3 +328,44 @@ describe('standingIn: the bubble', () => {
     expect([...(s?.bubble ?? [])].sort()).toEqual(['b', 'c', 'd', 'e'])
   })
 })
+
+/*
+ * A BEST-BALL guillotine league (owner's report 2026-10-30): the live field is valued on projected finals by
+ * bestBallField.ts. This checks the wiring — the live rosters, their stored players, and the finals becoming
+ * the rank — with the valuation itself tested in __tests__/core-app/best-ball-field.test.ts.
+ */
+describe('the rail in a best-ball Guilly league', () => {
+  beforeEach(() => {
+    db.leagues = [{ id: 'AF-G', name: 'BB Guilly', platform: 'sleeper', sport: 'NFL', settings: { best_ball: 1 }, bestBallMode: null, leagueVariant: null, leagueType: 'guillotine' }]
+    db.rosterRows = rosters.map((r) => ({ leagueId: 'AF-G', platformUserId: `g-${r}`, playerData: { players: [`p${r}a`, `p${r}b`], reserve: [`ir${r}`], taxi: [] } }))
+  })
+
+  it('values the 15 live rosters with their stored players and ranks you on their projected finals', async () => {
+    // You (1) lead on live points (95); on projected finals roster 18 is ahead of you and roster 3 is lowest.
+    db.bestBall.mockImplementation(async ({ rosters: field }: { rosters: Array<{ rosterId: string }> }) => ({
+      available: true,
+      provisional: true,
+      finals: new Map(field.map((r) => [r.rosterId, r.rosterId === '18' ? 160 : r.rosterId === '1' ? 150 : r.rosterId === '3' ? 70 : 110])),
+    }))
+    const standing = (await call()).byLeague['AF-G']?.standing
+    const arg = db.bestBall.mock.calls[0]![0] as { rosters: Array<{ rosterId: string; players: string[]; inactive: string[]; scoreboard: number }>; week: number }
+    expect(arg.week).toBe(4)
+    expect(arg.rosters.map((r) => r.rosterId).sort()).toEqual(rosters.filter((r) => !['2', '7', '15'].includes(r)).sort())
+    expect(arg.rosters.find((r) => r.rosterId === '1')).toEqual({ rosterId: '1', players: ['p1a', 'p1b'], inactive: ['ir1'], scoreboard: 95 })
+    expect(standing).toMatchObject({ basis: 'best_ball', provisional: true, rank: 2, outOf: 15, cutLine: 70, cutTeam: 'G3' })
+  })
+
+  it('a field it cannot value keeps the ordinary rule (the control)', async () => {
+    db.bestBall.mockResolvedValue({ available: false, reason: 'roster 3: the full roster is unavailable' })
+    const standing = (await call()).byLeague['AF-G']?.standing
+    expect(standing?.basis).toBe('points')
+    expect(standing).not.toHaveProperty('provisional')
+  })
+
+  it('an ordinary guillotine league never reads the best-ball field', async () => {
+    db.leagues = [{ id: 'AF-G', name: 'Guilly', platform: 'sleeper', sport: 'NFL', settings: {}, bestBallMode: null, leagueVariant: null, leagueType: 'guillotine' }]
+    await call()
+    expect(db.bestBall).not.toHaveBeenCalled()
+  })
+})
+

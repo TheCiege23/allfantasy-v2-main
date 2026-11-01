@@ -4,9 +4,9 @@ import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
-import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
-import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
 import type { DraftStatPlayerSource } from '@/lib/draft-room/draftSportStatColumns'
 import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
@@ -118,6 +118,8 @@ export type PlayerEntry = {
   yearsExp?: number | null
   /** D.7 — derived rookie flag (true when yearsExp === 0 or upstream marked as rookie). */
   isRookie?: boolean
+  /** NHL rookie drafts: a Fantrax-only prospect; `team` is his NHL org, null when unsigned. */
+  prospectSource?: 'fantrax'
   /** Provider-prioritized unified layer for fallback image/injury/source metadata */
   unifiedProductView?: UnifiedPlayerProductView | null
 }
@@ -210,6 +212,13 @@ export type PlayerPanelProps = {
    * only proven non-rookies were removed. The panel explains either with a banner.
    */
   rookieFilterState?: RookieFilterState
+  /** Dynasty leagues: the pool table shows the Rookie / Prospect chip. Redraft pools are unchanged. */
+  isDynasty?: boolean
+  /**
+   * A rookie draft (`draftModeLabel === 'rookie'`) opens with "Rookies only" on. The manager can
+   * still turn it off, and "Clear all" still clears it.
+   */
+  defaultRookiesOnly?: boolean
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -255,6 +264,7 @@ function PlayerListCards({
   const rowKey = (p: PlayerEntry) =>
     `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
   const selectedKey = selectedPlayer ? rowKey(selectedPlayer) : null
+  const { t } = useOptionalLanguage()
 
   return (
     <ProgressiveDraftPlayerList
@@ -262,6 +272,7 @@ function PlayerListCards({
       itemKey={p => p.id ?? rowKey(p)}
       renderItem={(p, index) => {
         const sel = selectedKey != null && rowKey(p) === selectedKey
+        const queued = Boolean(isPlayerQueued?.(p))
         return (
           <div
             key={p.id ?? rowKey(p)}
@@ -278,7 +289,7 @@ function PlayerListCards({
               draftSport={draftSport}
               presentationVariant={presentationVariant}
               isSelected={sel}
-              isQueued={Boolean(isPlayerQueued?.(p))}
+              isQueued={queued}
               aiWarRoomBadge={aiRowBadges?.[`${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}`] ?? null}
               isDrafted={isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)}
               variant="row"
@@ -357,10 +368,14 @@ function PlayerListCards({
                   type="button"
                   onClick={() => onAddToQueue(p)}
                   data-testid={`draft-queue-add-${index}`}
-                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${SKIN_PILL_IDLE}`}
-                  aria-label={`Add ${p.name} to queue`}
+                  data-queued={queued ? 'true' : 'false'}
+                  aria-pressed={queued}
+                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${queued ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
+                  // The name stays the same queued or not; aria-pressed carries the state.
+                  aria-label={t('draftRoom.queue.addPlayer').replace('{{name}}', p.name)}
                 >
-                  <Plus className="h-4 w-4" />
+                  {/* This button used to look identical before and after a tap. */}
+                  {queued ? <Check className="h-4 w-4" strokeWidth={3} aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
                 </button>
               }
             />
@@ -409,6 +424,8 @@ function PlayerPanelInner({
   draftSeasonYear,
   poolError = false,
   rookieFilterState,
+  isDynasty = false,
+  defaultRookiesOnly = false,
 }: PlayerPanelProps) {
   const effectiveUseAiAdp = canDisplayAiAdp(useAiAdp, aiAdpUnavailable, players)
   const marketAdpUnavailable = !loading && players.length > 0 && !players.some(p => typeof p.adp === 'number' && Number.isFinite(p.adp) && p.adp > 0)
@@ -446,7 +463,19 @@ function PlayerPanelInner({
   const [watchlistOnly, setWatchlistOnly] = useState(false)
   const [showAiOverlaysLocal, setShowAiOverlaysLocal] = useState(true)
   const aiOverlaysEnabled = showAiOverlays ?? showAiOverlaysLocal
-  const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [rookiesOnly, setRookiesOnly] = useState(defaultRookiesOnly)
+  /*
+   * The session snapshot can arrive after the panel mounts, so the default may flip from false
+   * to true once. Apply it on that transition only — never re-assert it after the manager has
+   * turned the filter off.
+   */
+  const appliedRookieDefaultRef = useRef(defaultRookiesOnly)
+  useEffect(() => {
+    if (!defaultRookiesOnly || appliedRookieDefaultRef.current) return
+    appliedRookieDefaultRef.current = true
+    setRookiesOnly(true)
+    setVetsOnly(false)
+  }, [defaultRookiesOnly])
   /** Commit N — companion to `rookiesOnly`. Mutually exclusive with rookies-only;
    *  toggling one turns the other off so the user can't accidentally produce an
    *  empty intersection. */
@@ -1503,6 +1532,7 @@ function PlayerPanelInner({
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
                   leftAtPick={leftAtPick}
+                  showExperienceLabel={isDynasty}
                 />
               </div>
             )

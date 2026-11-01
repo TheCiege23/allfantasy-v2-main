@@ -51,10 +51,28 @@ const spanish: Record<string, string> = {
   'My Leagues': 'Mis ligas',
   'My leagues': 'Mis ligas',
   'This league': 'Esta liga',
+  // A Survivor league's tab and section names (lib/core-app/survivorTheme.ts).
+  Camp: 'Campamento',
+  'Your shelter': 'Tu refugio',
+  'Immunity challenge': 'Prueba de inmunidad',
+  'Strategy hut': 'Choza de estrategia',
+  'Supply drop': 'Provisiones',
+  'Beach deals': 'Tratos en la playa',
+  'The marooning': 'El abandono',
+  'This episode': 'Este episodio',
+  'Challenge feed': 'Pruebas en vivo',
+  'Tribe standings': 'Clasificación de tribus',
+  'Island map': 'Mapa de la isla',
+  'Island control': 'Control de la isla',
+  'The island': 'La isla',
   'This week': 'Esta semana',
   'Your record': 'Tu historial',
   Manage: 'Administrar',
   'Create a league': 'Crear una liga',
+  'Exile Island': 'Isla del Exilio',
+  PUBLIC: 'PÚBLICA',
+  PRIVATE: 'PRIVADA',
+  'Exile Island for': 'Isla del Exilio de',
   'Find a league': 'Buscar una liga',
   'Import a league': 'Importar una liga',
   'Mock draft': 'Draft simulado',
@@ -1330,6 +1348,15 @@ const spanish: Record<string, string> = {
     "No pudimos leer tu historial en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguno.",
   "We could not load your leagues just now. This is a read failure on our side, not a sign that you have none.":
     "No pudimos cargar tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
+  // My team's no-game badge and Your week's season-race strip (redraft /core batch B2).
+  'Off day': 'Día libre',
+  'No games': 'Sin partidos',
+  'His team has no game today. A starter with no game scores nothing for the day.':
+    'Su equipo no juega hoy. Un titular sin partido no suma nada en el día.',
+  'His team has no games this week. A starter with no games scores nothing this week.':
+    'Su equipo no juega esta semana. Un titular sin partidos no suma nada en la semana.',
+  'Season race': 'Carrera de la temporada',
+  'by record': 'por récord',
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

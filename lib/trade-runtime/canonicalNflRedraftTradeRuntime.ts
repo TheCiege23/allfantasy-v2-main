@@ -579,6 +579,11 @@ export function validateNflRedraftTradeProposal(input: {
   state: NflRedraftTradeRuntimeState
   proposerRosterId: string
   receiverRosterId: string
+  /**
+   * Teams beyond proposer and receiver in a multi-team trade. Omitted or empty is a two-team trade,
+   * validated exactly as before.
+   */
+  additionalRosterIds?: string[]
   assets: NflRedraftTradeAssetInput[] | NflRedraftTradeAssetState[]
   now?: Date
   commissionerOverride?: boolean
@@ -598,36 +603,37 @@ export function validateNflRedraftTradeProposal(input: {
   const proposer = input.state.teams.find((team) => team.rosterId === input.proposerRosterId)
   const receiver = input.state.teams.find((team) => team.rosterId === input.receiverRosterId)
   if (!proposer || !receiver) return validationFailure('ROSTER_NOT_FOUND', 'Both trade rosters must exist in this season.')
+  // Multi-team: every extra team must exist too, and is checked below exactly like the first two.
+  const additionalIds = (input.additionalRosterIds ?? []).filter((id) => id && id !== input.proposerRosterId && id !== input.receiverRosterId)
+  const additionalTeams = additionalIds.map((id) => input.state.teams.find((team) => team.rosterId === id))
+  if (additionalTeams.some((team) => !team)) {
+    return validationFailure('ROSTER_NOT_FOUND', 'Every team in the trade must exist in this season.')
+  }
+  const participantTeams = [proposer, receiver, ...(additionalTeams as NflRedraftTradeTeamState[])]
+  const multiTeam = additionalIds.length > 0
 
   const assets = input.assets.map((asset, index) => toAssetState(asset, index))
   if (assets.length === 0) return validationFailure('NO_ASSETS', 'Trade must include at least one asset.')
 
-  const rosterIds = new Set([input.proposerRosterId, input.receiverRosterId])
+  const rosterIds = new Set(participantTeams.map((team) => team.rosterId))
   const ownerByPlayerId = playerOwnerMap(input.state.teams)
   // Empty on the NFL redraft runtime, so every outgoing player leaves the sender's count as before.
   const limitExempt = new Set(input.state.teams.flatMap((team) => team.rosterLimitExemptPlayerIds ?? []))
   const seenAssets = new Set<string>()
-  const playerDelta = new Map<string, number>([
-    [input.proposerRosterId, 0],
-    [input.receiverRosterId, 0],
-  ])
-  const faabDelta = new Map<string, number>([
-    [input.proposerRosterId, 0],
-    [input.receiverRosterId, 0],
-  ])
-  const incoming = new Map<string, string[]>([
-    [input.proposerRosterId, []],
-    [input.receiverRosterId, []],
-  ])
-  const outgoing = new Map<string, string[]>([
-    [input.proposerRosterId, []],
-    [input.receiverRosterId, []],
-  ])
+  const playerDelta = new Map<string, number>(participantTeams.map((team) => [team.rosterId, 0]))
+  const faabDelta = new Map<string, number>(participantTeams.map((team) => [team.rosterId, 0]))
+  const incoming = new Map<string, string[]>(participantTeams.map((team) => [team.rosterId, []]))
+  const outgoing = new Map<string, string[]>(participantTeams.map((team) => [team.rosterId, []]))
   const warnings: string[] = []
 
   for (const asset of assets) {
     if (!rosterIds.has(asset.fromRosterId) || !rosterIds.has(asset.toRosterId) || asset.fromRosterId === asset.toRosterId) {
-      return validationFailure('ASSET_DIRECTION_INVALID', 'Trade asset direction must move between the two trade rosters.')
+      return validationFailure(
+        'ASSET_DIRECTION_INVALID',
+        multiTeam
+          ? 'Every trade asset must move between two of the teams in this trade.'
+          : 'Trade asset direction must move between the two trade rosters.',
+      )
     }
 
     const key =
@@ -696,7 +702,7 @@ export function validateNflRedraftTradeProposal(input: {
   }
 
   const impacts: NflRedraftTradeRosterImpact[] = []
-  for (const team of [proposer, receiver]) {
+  for (const team of participantTeams) {
     const count = team.activeRosterCount + (playerDelta.get(team.rosterId) ?? 0)
     if (count > settings.activeRosterLimit) {
       return validationFailure('ROSTER_LIMIT', `${team.displayName ?? team.rosterId} would exceed the roster limit after this trade.`)

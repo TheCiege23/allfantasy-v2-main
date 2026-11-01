@@ -1,4 +1,5 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import type { EliminationSettle } from '@/lib/core-app/eliminationSettle'
 
 /**
  * Your week board (components/core-app/boards/WeekBoard.tsx).
@@ -37,6 +38,9 @@ export const weekBoardMessages = defineMessages({
       p.onTheBlock
         ? `Your ${p.yourScore?.toFixed(1)} is the lowest score in a field of ${p.fieldSize} — you are the one eliminated as it stands`
         : `Your ${p.yourScore?.toFixed(1)} is ${p.margin.toFixed(1)} points clear of the cut line of ${p.cutLine?.toFixed(1)}`,
+    /** A settled elimination badge's sub-line and aria. English is `settleBadge`'s own text, passed in. */
+    settleSub: (_settle: EliminationSettle, english: string): string => english,
+    settleAria: (_settle: EliminationSettle, english: string): string => english,
     // ── the notes ──
     fittedOn: (sample: string) => `Fitted on ${sample} roster-weeks.`,
     lowOddsNote: ' Low playoff odds never hide leagues or prove mathematical elimination. Point margins from different sports are not compared with each other.',
@@ -68,6 +72,32 @@ export const weekBoardMessages = defineMessages({
       p.onTheBlock
         ? `Tus ${p.yourScore?.toFixed(1)} puntos son la puntuación más baja entre ${p.fieldSize} equipos; por ahora quedas eliminado`
         : `Tus ${p.yourScore?.toFixed(1)} puntos están ${p.margin.toFixed(1)} por encima del corte de ${p.cutLine?.toFixed(1)}`,
+    settleSub: (settle, english) => {
+      switch (settle.verdict) {
+        case 'safe': return 'decidido'
+        case 'chopped': return 'decidido'
+        case 'no_chop': return 'sin eliminación esta semana'
+        case 'open': {
+          const pending = settle.yourUpcoming + settle.yourLive
+          if (pending > 0) return `${pending} por jugar`
+          if (settle.cutLinePending) return 'el último equipo sigue jugando'
+          return english
+        }
+      }
+    },
+    settleAria: (settle, english) => {
+      switch (settle.verdict) {
+        case 'safe': return 'A salvo esta semana: tus titulares y suficientes equipos por debajo ya terminaron'
+        case 'chopped': return 'Todos los equipos terminaron y el tuyo quedó eliminado esta semana'
+        case 'no_chop': return 'Nadie queda eliminado esta semana'
+        case 'open': {
+          const pending = settle.yourUpcoming + settle.yourLive
+          if (pending > 0) return `${pending} de tus titulares aún deben terminar`
+          if (settle.cutLinePending) return `Tus titulares terminaron; al equipo más bajo le faltan ${settle.cutLinePending} por terminar`
+          return english
+        }
+      }
+    },
     fittedOn: (sample) => `Modelo ajustado con ${sample} semanas de equipos.`,
     lowOddsNote: ' Las probabilidades bajas no ocultan ligas ni prueban una eliminación matemática. Los márgenes de deportes distintos no se comparan entre sí.',
     unprojectedMore: (n) => `${n} más no tienen pronóstico porque faltan semanas completas de uno o ambos equipos. `,

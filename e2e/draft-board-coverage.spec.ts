@@ -45,4 +45,22 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
   await expect(tabs.getByRole('tab', { name: 'Activity', exact: true })).toBeInViewport()
   await page.keyboard.press('Home')
   await expect(search).toBeVisible()
+
+  // Below 1280px the dock is the center tab bar (~300px at a 768 screen, ~400 at 1024). It used to be
+  // an equal-width grid whose labels wrapped and overflowed; every label must stay whole on one line.
+  for (const width of [240, 300, 400]) {
+    const bar = page.getByTestId(`coverage-mid-dock-${width}`).getByTestId('draft-bottom-dock-tabbar')
+    await bar.scrollIntoViewIfNeeded()
+    const tabsAt = await bar.evaluate(el => [...el.querySelectorAll('button')].map(b => ({
+      label: b.textContent, overflow: b.scrollWidth - b.clientWidth, height: b.getBoundingClientRect().height,
+    })))
+    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Intel', 'Chat', 'AF Legacy', 'Commish Edit'])
+    for (const t of tabsAt) {
+      expect(t.overflow, `${width}px ${t.label}`).toBeLessThanOrEqual(0)
+      expect(t.height, `${width}px ${t.label}`).toBeLessThan(40)
+    }
+    if (width === 400) expect(await bar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await bar.getByRole('tab', { name: 'Commish Edit' }).click()
+    await expect(bar.getByRole('tab', { name: 'Commish Edit' })).toHaveAttribute('aria-selected', 'true')
+  }
 })

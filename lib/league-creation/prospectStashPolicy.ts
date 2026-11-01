@@ -20,6 +20,17 @@
  *
  * `NA` (MLB "not active") and `RESERVE` are deliberately NOT stash slots here: `NA` is a standard
  * redraft slot that holds players already in our MLB pool.
+ *
+ * ⚠ 2026-10-31: NHL ROOKIE DRAFTS NOW OFFER FANTRAX PROSPECTS (`lib/player-identity/nhlFantraxProspects.ts`),
+ * and this gate was deliberately LEFT CLOSED. Since the same day the layer is also in NHL dynasty free
+ * agency (`lib/waiver-wire/nhlProspectFreeAgency.ts`), but nothing reads it for taxi eligibility, and it
+ * carries no age or draft year to tell a 19-year-old from an unsigned veteran, so a taxi rule could not
+ * say who belongs on one. Open it here, for NHL only, when real age or draft data exists.
+ *
+ * ⚠ 2026-10-31: MLB ROOKIE DRAFTS NOW OFFER FANTRAX PROSPECTS TOO (`lib/player-identity/mlbFantraxProspects.ts`),
+ * and the gate stays CLOSED for MLB for the same reason: the layer exists only on a rookie-draft board,
+ * nothing reads it for taxi or minors eligibility, and it has no age, draft year or level to tell a
+ * prospect from an unsigned veteran. Open it for MLB only when those exist.
  */
 
 /** Sports with no committed prospect / minor-league player pool. */

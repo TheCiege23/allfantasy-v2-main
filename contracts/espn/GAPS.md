@@ -31,7 +31,7 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-03` | Does the teams list ever include non-D1 or inactive programs? | UNVERIFIED — 362/362 were `isActive` on 2026-10-01 |
 | `E-04` | Rate limits. ESPN documents none. A full roster sweep is 362 requests. | UNVERIFIED — spread the sweep across cron ticks; do not burst |
 | `E-05` | Image rights for hotlinking ESPN headshots. Precedent exists (college football devy headshots already use this CDN), but TheSportsDB's contract restricts headshots to CC-licensed images. | **RESOLVED 2026-10-01 — owner decision:** use them for NCAAB on the same basis as college football. |
-| `E-06` | Scope of phase 2 given `M-02` (current players with no RI row). | **RESOLVED 2026-10-01 — owner decision:** photos only for ESPN athletes that match an existing RI row (same school, name + jersey). No ESPN-sourced player rows; newcomers fill in if RI later loads them. |
+| `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
 
 ## Probe protocol
 
@@ -82,3 +82,12 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
   ESPN's defensive block (8 DT · 9 DE · 10 LB · 11 DL · 12 CB · 13 S · 14 DB · 15 DP) and
   `lib/lineup-actions/sleeperSlotUtils.ts` already treats `DP` as IDP. It now counts as an IDP signal on
   import. A capture of a league using it would confirm which positions it accepts.
+# NBA Cup scoreboard verification — 2026-10-31
+
+Resolved: the four `scoreboard.NBA.*.json` fixtures capture Group Play (9 games),
+quarterfinals (2), semifinals (2), and championship (1). The final's label is
+`NBA Cup Championship`, without the hyphen used by the other stages. Results,
+real teams, dates and venue fields are verified; tournament seeds are not.
+The six-week date-range request returned HTTP 400. Runtime uses individual days.
+The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
+no spoofed headers or bypass retry was attempted. It is not a runtime source.

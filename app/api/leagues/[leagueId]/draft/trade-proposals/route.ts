@@ -131,6 +131,10 @@ export async function POST(
     return NextResponse.json({ error: 'No draft in progress' }, { status: 400 })
   }
 
+  if (draftSession.draftType === 'auction' && draftSession.draftModeLabel === 'rookie') {
+    return NextResponse.json({ error: 'Rookie pick rights are fixed when the auction is created and cannot be traded during the auction.' }, { status: 400 })
+  }
+
   const body = await req.json().catch(() => ({}))
   const giveRound = Math.max(1, Number(body.giveRound) || 1)
   const giveSlot = Math.max(1, Number(body.giveSlot) || 1)

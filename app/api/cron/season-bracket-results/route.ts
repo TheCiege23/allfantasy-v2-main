@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { syncSeasonBracketResults } from "@/lib/playoffs/syncSeasonBracketResults"
+import { syncNbaCupTournament } from "@/lib/playoffs/syncNbaCupTournament"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 /**
- * Railway may invoke this with POST and CRON_SECRET. Writes require both an
- * enabled environment flag and apply=true; all other authorized calls dry-run.
+ * Railway invokes this with POST and CRON_SECRET. NBA Cup automatically publishes
+ * schedules and results when apply=true. CFP retains its existing opt-in guard.
  */
 export async function POST(request: NextRequest) {
   if (!requireCronAuth(request, "CRON_SECRET")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -16,6 +17,10 @@ export async function POST(request: NextRequest) {
   const season = body.season == null ? new Date().getUTCFullYear() : Number(body.season)
   if (!sport || !Number.isInteger(season) || season < 2024 || season > 2100) {
     return NextResponse.json({ error: "Valid tournament and season required." }, { status: 400 })
+  }
+  if (sport === "nba_cup") {
+    const result = await syncNbaCupTournament({ season, apply: body.apply === true })
+    return NextResponse.json({ ok: result.failures.length === 0, ...result }, { status: result.failures.length ? 502 : 200 })
   }
   const apply = process.env.BRACKET_AUTO_RESULT_SYNC_ENABLED === "true" && body.apply === true
   const result = await syncSeasonBracketResults({ sport, season, apply })

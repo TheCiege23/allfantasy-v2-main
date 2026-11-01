@@ -12,6 +12,7 @@ import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
+import { requestsPickTradePackage } from '@/lib/chimmy/tradeFinderIntent'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
@@ -58,6 +59,7 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  currentQuestion?: string
   /**
    * "Start X over Y" calls the engines made during this answer, collected so the route can record
    * the ones the answer actually said (`lib/chimmy-advice/chatStartSitAdvice.ts`) and grade them later
@@ -159,6 +161,25 @@ export const CHIMMY_TOOL_SPECS = [
           },
         },
         required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'find_open_leagues',
+      description:
+        "Search Find a League for leagues with open seats the user could JOIN — not leagues they are already in. Use when they ask to find, join or look for a new league (\"find me a 12 team dynasty league\", \"any casual leagues drafting this weekend?\"). Pass their words as the query; it understands sport, league type, team count, draft type, draft time, time zone and vibe. Returns real listings with a link to the page. Free leagues only — paid ones are on the link.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: "What they are looking for, in their own words, e.g. '12 team dynasty snake weeknights casual'.",
+          },
+        },
+        required: ['query'],
+        additionalProperties: false,
       },
     },
   },
@@ -542,7 +563,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'find_trade_ideas',
       description:
-        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
+        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. Set goal and include_picks whenever the user says so — 'win now', 'contend', 'using my picks', 'a 2nd instead of my 1st' are search terms, not flavour. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
       parameters: {
         type: 'object',
         properties: {
@@ -554,6 +575,15 @@ export const CHIMMY_TOOL_SPECS = [
           trade_away: {
             type: 'string',
             description: 'Full name of a player on the USER\'s roster they want to move, when they named one.',
+          },
+          goal: {
+            type: 'string',
+            enum: ['win_now'],
+            description: "'win_now' when the user wants to improve THIS season (win now, contend, playoff push): only packages that raise their current-season value come back.",
+          },
+          include_picks: {
+            type: 'boolean',
+            description: 'True when the user offers their own draft picks as part of the package.',
           },
         },
         required: [],
@@ -773,6 +803,15 @@ export async function executeChimmyTool(
        * model — `findLeagueByName` only ever returns a league this user is
        * demonstrably a member of.
        */
+      /*
+       * Reads PUBLIC listings only — never the user's own leagues — so it needs no league in scope
+       * and binds none. The asker is used for their rank bands, nothing else.
+       */
+      case 'find_open_leagues': {
+        const { findOpenLeaguesForChimmy } = await import('@/lib/public-discovery/chimmyLeagueSearch')
+        return await findOpenLeaguesForChimmy(ctx.userId, typeof args.query === 'string' ? args.query.slice(0, 200) : '')
+      }
+
       case 'find_league_by_name': {
         if (!ctx.userId) {
           return 'I cannot tell who is signed in, so I cannot look up their leagues. Say that; do not name a league.'
@@ -1127,6 +1166,9 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           position: readTradeFinderPosition(args.position),
           tradeAway: typeof args.trade_away === 'string' && args.trade_away.trim() ? args.trade_away.trim().slice(0, 80) : null,
+          goal: args.goal === 'win_now' ? 'win_now' : null,
+          includePicks: args.include_picks === true,
+          ...(requestsPickTradePackage(ctx.currentQuestion ?? '') ? { requiresPicks: true } : {}),
         })
       }
 

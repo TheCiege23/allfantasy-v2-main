@@ -48,6 +48,14 @@ import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { useNhlProspectSearch } from "@/components/waiver-wire/useNhlProspectSearch"
+import {
+  isNhlProspectWireRow,
+  mergeProspectSearchRows,
+  parseNhlProspectListMeta,
+  placeProspectsAfterPlayers,
+  type NhlProspectListMeta,
+} from "@/lib/waiver-wire/prospectFreeAgentDisplay"
 import { confirmLineupWarning, isLineupWarningResponse } from "@/lib/waiver-wire/lineup-warning-prompt"
 import {
   claimProcessesAfterDate,
@@ -254,7 +262,9 @@ export default function WaiverWirePage({
   const isShadow = writeAuthority?.shadow === true
   const shadowSource = writeAuthority?.sourceLabel ?? "your host platform"
   const [players, setPlayers] = useState<Player[]>([])
-  const { language, tInterpolate } = useOptionalLanguage()
+  // NHL dynasty only: how many Fantrax prospects exist vs. how many the list carries (null elsewhere).
+  const [prospectMeta, setProspectMeta] = useState<NhlProspectListMeta | null>(null)
+  const { language, t, tInterpolate } = useOptionalLanguage()
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<{ claims: Claim[]; transactions: Transaction[] }>({ claims: [], transactions: [] })
   const [loading, setLoading] = useState(true)
@@ -370,6 +380,7 @@ export default function WaiverWirePage({
       else setClaims(Array.isArray(claimsData.claims) ? claimsData.claims : [])
       if (!playersRes.ok) setPlayers([])
       else setPlayers(Array.isArray(playersData.players) ? playersData.players : [])
+      setProspectMeta(playersRes.ok ? parseNhlProspectListMeta(playersData?.nhlProspects) : null)
       if (!historyRes.ok) setHistory({ claims: [], transactions: [] })
       else setHistory({ claims: historyData.claims ?? [], transactions: historyData.transactions ?? [] })
       applyRosterData(rosterData)
@@ -687,8 +698,12 @@ export default function WaiverWirePage({
     [players],
   )
 
+  // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
+  const prospectSearchRows = useNhlProspectSearch<Player>(leagueId, prospectMeta, deferredSearch)
+  const allPlayers = useMemo(() => mergeProspectSearchRows(players, prospectSearchRows), [players, prospectSearchRows])
+
   const filteredPlayers = useMemo(() => {
-    let list = [...players]
+    let list = [...allPlayers]
     const trendMap = new Map<string, number>()
     for (const tx of history.transactions) {
       if (tx.addPlayerId) trendMap.set(tx.addPlayerId, (trendMap.get(tx.addPlayerId) ?? 0) + 2)
@@ -786,8 +801,10 @@ export default function WaiverWirePage({
         return a.name.localeCompare(b.name)
       })
     }
-    return list
-  }, [players, history.transactions, deferredSearch, positionFilter, statusFilter, teamFilter, sort, claims, watchlistIdSet])
+    // Prospects have no projection, ADP or rank: after every real player, except a name/position/team sort.
+    return placeProspectsAfterPlayers(list, sort)
+  }, [allPlayers, history.transactions, deferredSearch, positionFilter, statusFilter, teamFilter, sort, claims, watchlistIdSet])
+  const listHasProspects = useMemo(() => filteredPlayers.some((p) => isNhlProspectWireRow(p)), [filteredPlayers])
 
   const trendScoreByPlayerId = useMemo(() => {
     const map = new Map<string, number>()
@@ -1191,6 +1208,16 @@ export default function WaiverWirePage({
             sport={settings?.sport ?? undefined}
             formatType={settings?.formatType ?? undefined}
           />
+          {listHasProspects || (prospectMeta && prospectMeta.total > prospectMeta.listed) ? (
+            <div className="space-y-0.5 px-1 pb-2 text-[11px] text-[var(--muted)] sm:px-0" data-testid="waiver-prospect-notes">
+              {listHasProspects ? <p data-testid="waiver-prospect-sort-note">{t("waiverWire.prospects.sortNote")}</p> : null}
+              {prospectMeta && prospectMeta.total > prospectMeta.listed ? (
+                <p data-testid="waiver-prospect-search-hint">
+                  {tInterpolate("waiverWire.prospects.searchHint", { listed: prospectMeta.listed, total: prospectMeta.total })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <ul className="max-h-[480px] space-y-1.5 overflow-y-auto px-1 pb-3 pt-1 sm:px-0">
             {activePlayerList.length === 0 ? (
               <li className="py-6 text-center text-sm text-[var(--muted)]">
@@ -1228,6 +1255,7 @@ export default function WaiverWirePage({
                       seasonStatsSummary: row.seasonStatsSummary,
                     }}
                     sport={settings?.sport ?? null}
+                    prospect={isNhlProspectWireRow(p)}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     addMode={immediateAddAllowed && !holdUntil}
                     waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil, { tInterpolate, language }) : null}

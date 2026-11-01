@@ -254,6 +254,7 @@ export function normalizeDraftPlayer(
       raw.rookieVerdict === 'rookie' || raw.rookieVerdict === 'not_rookie' || raw.rookieVerdict === 'unknown'
         ? raw.rookieVerdict
         : undefined,
+    ...(raw.prospectSource === 'fantrax' ? { prospectSource: 'fantrax' as const } : {}),
     // Block B.2-C — surface rookie inference inputs at the top level of the
     // normalized entry so isRookieEligibleForFilter can branch per-sport without
     // needing display.metadata. age is intentionally lifted to the top level

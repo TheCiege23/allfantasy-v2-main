@@ -4,9 +4,8 @@ import Link from 'next/link'
 import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashboard34Live'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { TopicTip } from '@/components/core-app/TopicTip'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
-import { dashGameDayBandMessages } from '@/lib/core-app/messages/dashGameDayBand'
+import { dashGameDayBandMessages, type DashGameDayBandMessages } from '@/lib/core-app/messages/dashGameDayBand'
 import { oddsText, playActionText } from '@/lib/core-app/homeBandsCopy'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { Next24Row } from '@/lib/core-app/todayStrip'
@@ -39,16 +38,14 @@ function initialsOf(name: string): string {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
-function headlineText(p: GameDayPlay, es: boolean): string {
-  if (!es) return p.headline
-  const action = playActionText(p.actionParts)
-  if (!action) return p.headline
-  return `${p.position ? `${p.playerName} (${p.position})` : p.playerName} ${action}`
+function headlineText(p: GameDayPlay, m: DashGameDayBandMessages): string {
+  return m.playHeadline(p.headline, p.position ? `${p.playerName} (${p.position})` : p.playerName, playActionText(p.actionParts))
 }
 
-function subText(row: GameDayRow, es: boolean): string | null {
-  if (!es || !row.parts) return row.sub
-  return [row.parts.sport, row.parts.week != null ? `Semana ${row.parts.week}` : null].filter(Boolean).join(' · ') || null
+/** The loader writes `sub` from `parts` and never as '' — so '' back from the catalog is "none". */
+function subText(row: GameDayRow, m: DashGameDayBandMessages): string | null {
+  if (!row.parts) return row.sub
+  return m.gameSub(row.sub ?? '', row.parts.sport, row.parts.week) || null
 }
 
 export function DashGameDayBandView({
@@ -60,8 +57,6 @@ export function DashGameDayBandView({
   plays: GameDayPlay[]
   upcoming: GameDayRow[]
 }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const m = useMessages(dashGameDayBandMessages)
 
   return (
@@ -115,7 +110,7 @@ export function DashGameDayBandView({
                 {p.type === 'BIG_PLAY' ? m.typeBigPlay : p.type === 'TURNOVER' ? m.typeTurnover : (TYPE_LABEL[p.type] ?? m.play)}
               </span>
               <span className="af-gd-line">
-                {headlineText(p, es)}
+                {headlineText(p, m)}
                 {p.team ? <span className="af-gd-team af-num"> {p.team}</span> : null}
               </span>
             </li>
@@ -156,9 +151,9 @@ export function DashGameDayBandView({
                     </>
                   ) : null}
                 </div>
-                {row.game ? <div className="af-gd-market">{es ? (oddsText(row.game.oddsParts) ?? row.game.odds) : row.game.odds}</div> : null}
+                {row.game ? <div className="af-gd-market">{m.odds(row.game.odds, oddsText(row.game.oddsParts))}</div> : null}
                 <div className="af-gd-nextsub">
-                  {subText(row, es)} · {m.startsIn} <Dash34Countdown to={row.time} initial="—" />
+                  {subText(row, m)} · {m.startsIn} <Dash34Countdown to={row.time} initial="—" />
                 </div>
               </div>
               {row.game ? (

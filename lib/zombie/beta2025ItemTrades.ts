@@ -12,6 +12,7 @@ export function zombieItemId(asset: Asset): string {
   return id
 }
 export async function validateBetaTradeItems(db: Tx, leagueId: string, rosterIds: string[], assets: readonly Asset[]) {
+  if (rosterIds.length !== 2) throw new Error('Zombie item trades currently support two teams.')
   const z = await db.zombieLeague.findUnique({ where: { leagueId } })
   if (!z || z.sport.toUpperCase() !== 'NFL' || !['active', 'in_progress'].includes(z.status)) throw new Error('Item trades require an active 2025 NFL Zombie league.')
   const resolution = await db.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } } })

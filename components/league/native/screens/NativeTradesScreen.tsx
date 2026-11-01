@@ -11,6 +11,10 @@ import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { Card, ScreenHead } from './NativeScreenParts'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { tradeCardState, tradeDeadlineState } from '@/lib/league-media/redraftScreens'
+import { RedraftDeadlineBar, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
+import { DynastyPickChip } from '@/components/dynasty/DynastyPickChip'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 /**
  * Trades — handoff §3, `Trades.png` / `MobileTrades.png`.
@@ -34,14 +38,15 @@ function gradeTone(letter: string | null | undefined): 'good' | 'warn' | 'bad' {
   return 'bad'
 }
 
-function AssetList({ assets }: { assets: LeagueTradeAsset[] }) {
+function AssetList({ assets, dynasty = false, teamName }: { assets: LeagueTradeAsset[]; dynasty?: boolean; teamName?: (rosterId: string) => string | null }) {
   if (!assets.length) return <p className="nls-muted">Nothing</p>
   return (
     <ul>
       {assets.map((a) => (
         <li key={a.id}>
-          {a.label}
-          {a.sublabel ? <small>{a.sublabel}</small> : null}
+          {/* Dynasty only: a pick is drawn as its chip; everything else, and every other league, as before. */}
+          {dynasty && a.pick ? <DynastyPickChip pick={a.pick} teamName={teamName} /> : a.label}
+          {a.sublabel && !(dynasty && a.pick) ? <small>{a.sublabel}</small> : null}
         </li>
       ))}
     </ul>
@@ -65,6 +70,11 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [counterTradeId, setCounterTradeId] = useState<string | null>(null)
+  // Redraft (lib/league-media/redraftIdentity.ts): deadline bar from settings, proposal cards with their state.
+  const rd = useRedraftScreen(league)
+  const dynasty = usesDynastyBackground(league)
+  // A pick's original team, by roster id. A native team's `externalId` is its roster id.
+  const teamName = useCallback((rosterId: string) => teams.find((t) => t.externalId === rosterId || t.id === rosterId)?.teamName ?? null, [teams])
 
   const load = useCallback(
     async (background = false) => {
@@ -144,11 +154,13 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
     })
 
   const deadline = league.tradeDeadlineWeek ? `Deadline · Wk ${league.tradeDeadlineWeek}` : 'Deadline · none'
+  const deadlineState = tradeDeadlineState(league.tradeDeadlineWeek, league.currentWeek)
 
   return (
-    <div className="nls" data-testid="native-trades-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-trades-screen" data-rd-screen={rd ? 'trades' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Trades`} title="Trade center">
-        <span className="nls-chip">{deadline}</span>
+        {!rd ? <span className="nls-chip">{deadline}</span> : null}
         <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Propose a trade</button>
       </ScreenHead>
 
@@ -159,6 +171,8 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         <div><span>Recent trades</span><strong>{recent.length}</strong></div>
       </section> : null}
       {isZombieLeagueLike(league) ? <p className="nls-zombie-trade-note">Survivors and Whisperers may trade. Zombies cannot trade.</p> : null}
+      {rd ? <RedraftDeadlineBar state={deadlineState} currentWeek={league.currentWeek} /> : null}
+
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {actionErr ? <p className="nls-error" role="alert">{actionErr}</p> : null}
       {loading && !panel ? <p className="nls-empty" role="status">Loading trades…</p> : null}
@@ -167,25 +181,31 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         const g = t.leagueGrade && t.leagueGrade.graded ? t.leagueGrade : null
         const isReview = t.status === 'awaiting_commissioner'
         return (
-          <section key={t.id} className="nls-card" data-tone="warn" aria-label={`Offer from ${t.partnerName}`}>
+          <section key={t.id} className={`nls-card${rd ? ' nls-rd-offer' : ''}`} data-tone="warn" data-rd-state={rd ? (isReview ? 'review' : 'offer') : undefined} aria-label={`Offer from ${t.partnerName}`}>
             <div className="nls-offer-head">
-              <span className="nls-chip" data-tone="warn">{isReview ? 'Needs your review' : 'Offer received'}</span>
+              <span className="nls-chip" data-tone={rd && !isReview ? 'accent' : 'warn'}>{isReview ? 'Needs your review' : 'Offer received'}</span>
               <strong>{isReview ? `${t.proposerName ?? t.partnerName} ⇄ ${t.receiverName ?? 'partner'}` : t.partnerName}</strong>
               <small>{ago(t.timestamp)}</small>
-              {g && !isReview ? (
+              {g && !isReview && !rd ? (
                 <span className="nls-offer-grade" data-pts={gradeTone(g.letter) === 'good' ? 'good' : gradeTone(g.letter) === 'bad' ? 'bad' : undefined}>
                   AF grade for you · {g.letter}
                 </span>
+              ) : null}
+              {g && !isReview && rd ? (
+                <>
+                  <span className="nls-rd-grade" data-pts={gradeTone(g.letter)}><span className="nls-sr">AF grade for you · </span>{g.letter}</span>
+                  <span className="nls-rd-grade-label" aria-hidden>AF grade<br />for you</span>
+                </>
               ) : null}
             </div>
             <div className="nls-givegets">
               <div>
                 <h4 className="nls-label">{isReview ? `${t.proposerName ?? 'Proposer'} gives` : 'You give'}</h4>
-                <AssetList assets={t.sent} />
+                <AssetList assets={t.sent} dynasty={dynasty} teamName={teamName} />
               </div>
               <div>
                 <h4 className="nls-label">{isReview ? `${t.receiverName ?? 'Receiver'} gives` : 'You get'}</h4>
-                <AssetList assets={t.received} />
+                <AssetList assets={t.received} dynasty={dynasty} teamName={teamName} />
               </div>
             </div>
             {g && !isReview && g.recommendation ? <p className="nls-muted nls-offer-note">{g.recommendation}</p> : null}
@@ -220,14 +240,18 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
             <Card label="Your open offers">
               {outgoing.length ? (
                 <ul className="nls-list">
-                  {outgoing.map((t) => (
+                  {outgoing.map((t) => {
+                    const state = rd ? tradeCardState(t.status) : null
+                    return (
                     <li key={t.id} className="nls-toolbar">
                       <span className="nls-grow">
                         To <b>{t.partnerName}</b>: {t.sent.map((a) => a.label).join(', ') || 'nothing'} for {t.received.map((a) => a.label).join(', ') || 'nothing'}
                       </span>
+                      {state ? <span className="nls-chip" data-tone={state.tone}>{state.label}</span> : null}
                       <button type="button" className="nls-btn" data-size="sm" disabled={busy === t.id} onClick={() => void act(t.id, 'cancel')}>Cancel</button>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
               ) : (
                 <p>No offers waiting on other managers.</p>
@@ -265,5 +289,6 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
 
       <ProposeTradeModal open={builderOpen} counterTradeId={counterTradeId} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
     </div>
+    </RedraftScreen>
   )
 }

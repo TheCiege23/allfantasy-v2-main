@@ -35,9 +35,10 @@ beforeEach(() => {
 describe('rookieDraftMirrorFields', () => {
   it('takes rounds and type the dynasty config can hold', () => {
     expect(rookieDraftMirrorFields({ rookieDraftRounds: '3', rookieDraftType: 'snake' })).toEqual({ rookieDraftRounds: 3, rookieDraftType: 'snake' })
+    expect(rookieDraftMirrorFields({ rookieDraftType: 'auction' })).toEqual({ rookieDraftType: 'auction' })
   })
   it('drops anything else — and never the pick order, whose vocabulary differs', () => {
-    expect(rookieDraftMirrorFields({ rookieDraftRounds: 0, rookieDraftType: 'auction', rookiePickOrderMethod: 'lottery' })).toEqual({})
+    expect(rookieDraftMirrorFields({ rookieDraftRounds: 0, rookieDraftType: 'unknown', rookiePickOrderMethod: 'lottery' })).toEqual({})
     expect(rookieDraftMirrorFields({ rookieDraftRounds: 2.5 })).toEqual({})
     expect(rookieDraftMirrorFields({ taxiSize: 6 })).toEqual({})
   })

@@ -29,6 +29,8 @@ export const dashTradeBandMessages = defineMessages({
     whyGrades: 'Why these grades',
     whyLocked: (plan: string) => `Why these grades · ${plan}`,
     allTrades: (league: string) => `All ${league} trades`,
+    /** A side's grade line: the loader's English, or (Spanish) its rebuild when there is one. */
+    gradeReason: (reason: string, _rebuilt: string | null): string => reason,
   },
   es: {
     title: 'Intercambios',
@@ -53,5 +55,6 @@ export const dashTradeBandMessages = defineMessages({
     whyGrades: 'Por qué estas calificaciones',
     whyLocked: (plan) => `Por qué estas calificaciones · ${plan}`,
     allTrades: (league) => `Todos los intercambios de ${league}`,
+    gradeReason: (reason, rebuilt) => rebuilt ?? reason,
   },
 })

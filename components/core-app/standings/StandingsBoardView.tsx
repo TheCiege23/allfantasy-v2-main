@@ -34,6 +34,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsBoardMessages } from '@/lib/core-app/messages/standingsScreen'
+import { redraftRaceTag } from '@/lib/core-app/redraftCoreRace'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -135,8 +136,10 @@ function ZoneChip({ team }: { team: BoardTeam }) {
   }
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
+  /* The proven race tag (lib/core-app/redraftCoreRace.ts) — styled only in a redraft league's shell. */
+  const race = redraftRaceTag(team)
   return (
-    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined}>
+    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined} data-race={race ?? undefined}>
       <span aria-hidden>{clinched ? '✓' : zone.icon}</span>
       {coreUiCopy(clinched ?? zone.label, language)}
     </span>
@@ -614,7 +617,7 @@ function OfficialTable({
                   <tr data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)}>
                     <td className="af-stb-sticky af-stb-sticky-rank af-num">{t.seed}</td>
                     <th scope="row" className="af-stb-sticky af-stb-sticky-team">
-                      <TeamCell team={t} showTiebreak tiebreakText={language === 'es' ? spanishTiebreak(board, t) : null} />
+                      <TeamCell team={t} showTiebreak tiebreakText={t.tiebreak ? m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t)) : null} />
                     </th>
                     <td>
                       <ZoneChip team={t} />
@@ -1087,7 +1090,7 @@ function Cards({
                         </div>
                       ) : null}
                     </dl>
-                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{language === 'es' ? spanishTiebreak(board, t) ?? t.tiebreak : t.tiebreak}</p> : null}
+                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t))}</p> : null}
                     {view === 'official' && t.projected ? (
                       <p className="af-stb-cardproj">
                         <span className="af-stb-projtag">{copy('Model')}</span>{' '}
@@ -1341,7 +1344,7 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
         lowSeed: low.seed,
         upOrd: ordinal(up.seed),
         lowOrd: ordinal(low.seed),
-        reason: language === 'es' ? spanishOrderReason(up, low, board) : explanation,
+        reason: m.orderReason(explanation, () => spanishOrderReason(up, low, board)),
       })
     }
   }
@@ -1686,7 +1689,7 @@ export function StandingsBoardView({
               <p>
                 {m.oddsLead}{' '}
                 <Link href={odds.href}>{m.oddsLink}</Link>
-                {m.oddsTail(odds.iterations.toLocaleString(language === 'es' ? 'es-ES' : 'en-US'))}
+                {m.oddsTail(odds.iterations.toLocaleString(m.numberLocale))}
               </p>
             ) : null}
             <p className="af-stb-projnote">

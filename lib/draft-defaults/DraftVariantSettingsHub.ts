@@ -1,3 +1,4 @@
+import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 /**
  * Unified Draft Variant Settings Hub.
  * Single source for all draft variants: live, mock, auction, slow, keeper, devy, C2C.
@@ -362,7 +363,12 @@ export async function updateDraftVariantSettings(
     sessionVariant?: Partial<SessionVariantSettings>
     sessionFlags?: Partial<DraftSessionFlags>
   }
-): Promise<DraftVariantSettings> {
+ ): Promise<DraftVariantSettings> {
+  if (patch.config?.draft_type !== undefined || patch.config?.rounds !== undefined || patch.sessionVariant?.auctionBudgetPerTeam !== undefined) {
+    const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { draftModeLabel: true, draftType: true, rounds: true, auctionBudgetPerTeam: true } })
+    const problem = rookieAuctionStructureChangeError(session, { draftType: patch.config?.draft_type, rounds: patch.config?.rounds, auctionBudgetPerTeam: patch.sessionVariant?.auctionBudgetPerTeam })
+    if (problem) throw Object.assign(new Error(problem), { code: 'ROOKIE_AUCTION_STRUCTURE_LOCKED' })
+  }
   if (patch.sessionFlags && Object.keys(patch.sessionFlags).length > 0) {
     const result = await updateDraftSessionFlags(leagueId, patch.sessionFlags)
     if (!result.ok) {

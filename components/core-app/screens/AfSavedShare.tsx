@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
 /**
@@ -23,7 +24,7 @@ export type SavedTip = {
 }
 
 /** The card's words (lib/core-app/messages/receiptsCard.ts) — `es` is the prop the Receipts card passes. */
-const savedCopy = (es: boolean) => messagesFor(receiptsCardMessages, es ? 'es' : 'en')
+const savedCopy = (es: boolean) => messagesFor(receiptsCardMessages, langFromFlag(es))
 
 export function savedMargin(t: SavedTip): number {
   return Math.round((t.recommended.points - t.instead.points) * 10) / 10

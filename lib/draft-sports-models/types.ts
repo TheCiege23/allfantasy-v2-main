@@ -182,6 +182,11 @@ export interface NormalizedDraftEntry {
    * rookie flag is `unknown` rather than a veteran (`lib/draft-room/rookieFilterState.ts`).
    */
   rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown'
+  /**
+   * NHL rookie drafts: a Fantrax-only prospect — on no NHL roster in our data
+   * (`lib/player-identity/nhlFantraxProspects.ts`). `team` is his NHL org, or null when unsigned.
+   */
+  prospectSource?: 'fantrax'
   /** Identifies how fantasyPointsPerGame was produced. */
   projectionSource?: ProjectionSourceTag | null
   /** Block B.2-C — rookie inference inputs surfaced from the resolver so the

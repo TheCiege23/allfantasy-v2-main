@@ -78,10 +78,24 @@ async function proposalAccess(proposalId: string, userId: string) {
       seasonId: true,
       proposerRosterId: true,
       receiverRosterId: true,
+      additionalRosterIds: true,
       status: true,
     },
   })
   if (!proposal) return { ok: false as const, status: 404 as const, error: 'Proposal not found' }
+  /*
+   * 🛑 THIS RUNTIME IS TWO-TEAM. Its accept settles on the receiver's word alone and its execution moves
+   * assets between proposer and receiver only, so a multi-team proposal acted on here would skip the
+   * other teams' acceptance. Multi-team trades are created, accepted, reviewed and settled through the
+   * Trade Center routes (`/api/redraft/trade-proposals`, `/api/redraft/trade-votes`), and refused here.
+   */
+  if (Array.isArray(proposal.additionalRosterIds) && proposal.additionalRosterIds.length > 0) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      error: 'This is a multi-team trade. Open it in the Trade Center to act on it.',
+    }
+  }
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: proposal.seasonId, id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
     select: { id: true, ownerId: true },

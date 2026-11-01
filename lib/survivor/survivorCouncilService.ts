@@ -9,6 +9,8 @@ import {
   type CouncilScopePlayer,
 } from './survivorBallotEligibility'
 import { getCouncilImmuneUserIds } from './survivorTribeImmunity'
+import { ballotsDueAt, readSurvivorFinaleSettings } from './survivorFinaleSettings'
+import { isImmunitySealed, sealCouncilImmunity } from './survivorSealedImmunity'
 
 /**
  * SURVIVOR COUNCIL + VOTE WINDOW SERVICE (canonical Phase 3).
@@ -70,6 +72,10 @@ export interface CouncilContext {
   userToRoster: Record<string, string>
   /** Publicly immune managers at this council (weekly necklace / challenge-won immunity). Never idol effects. */
   immuneUserIds?: string[]
+  /** Immune but sealed (sealedImmunity) while votes are open: still on the ballot. Never sent to a client. */
+  sealedImmuneUserIds?: string[]
+  /** When ballots are due: the close, or N hours before it (votesDueHoursBeforeCeremony). Later ballots are late. */
+  ballotsDueAt?: Date
 }
 
 function parseIdolPlays(raw: Prisma.JsonValue | null | undefined): IdolPlayRecord[] {
@@ -191,14 +197,21 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
     ? await db.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId } })
     : await getActiveCouncil(leagueId, db)
   if (!council) return null
-  const settings = await loadSettings(leagueId, db)
+  const leagueRow = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const rawSettings = leagueRow?.settings && typeof leagueRow.settings === 'object' ? (leagueRow.settings as Record<string, unknown>) : {}
+  const settings = normalizeSurvivorFoundationSettings(rawSettings)
   const idolsPlayed = parseIdolPlays(council.idolsPlayed)
   const { scopePlayers, challengeImmuneUserIds } = await loadScopePlayers(leagueId, council.phase, council.attendingTribeId, db)
   const game = await db.survivorGameState.findUnique({ where: { leagueId }, select: { immunePlayerId: true } })
   const scopeIds = new Set(scopePlayers.map((p) => p.userId))
   const necklaces = await getCouncilImmuneUserIds(leagueId, council.week, council.phase === 'merge' ? null : council.attendingTribeId)
-  const immuneUserIds = [...new Set([...(game?.immunePlayerId ? [game.immunePlayerId] : []), ...necklaces, ...challengeImmuneUserIds])].filter((id) => scopeIds.has(id))
-  const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, immuneUserIds)
+  const allImmuneUserIds = [...new Set([...(game?.immunePlayerId ? [game.immunePlayerId] : []), ...necklaces, ...challengeImmuneUserIds])].filter((id) => scopeIds.has(id))
+  // Sealed immunity: while votes are open the immune stay on every ballot and nobody is listed as
+  // immune; once the council closes the seal breaks, so the tally marks those votes target_safe.
+  const finaleSettings = readSurvivorFinaleSettings(rawSettings)
+  const sealed = sealCouncilImmunity(allImmuneUserIds, isImmunitySealed(finaleSettings.sealedImmunity, council))
+  const immuneUserIds = sealed.publicImmuneUserIds
+  const parts = buildCouncilContextParts(scopePlayers, idolsPlayed, settings, sealed.safeImmuneUserIds)
   const { rosterToUser, userToRoster } = parts
   const eligibility = council.phase === 'revote' ? restrictCouncilToRevote(parts.eligibility, council.tiePlayerIds) : parts.eligibility
   return {
@@ -225,6 +238,9 @@ export async function loadCouncilContext(leagueId: string, councilId?: string, d
     rosterToUser,
     userToRoster,
     immuneUserIds,
+    sealedImmuneUserIds: sealed.sealedImmuneUserIds,
+    // "Votes due N hours before the ceremony" (finale settings). A revote keeps its own short window.
+    ballotsDueAt: council.phase === 'revote' ? council.voteDeadlineAt : ballotsDueAt(council.voteDeadlineAt, finaleSettings.votesDueHoursBeforeCeremony),
   }
 }
 
@@ -366,6 +382,17 @@ export type CloseWindowOutcome =
 
 /** Close the vote window: lock the council, flag any post-deadline ballots per the late policy. */
 export async function closeVoteWindow(leagueId: string, councilId: string, actorUserId?: string): Promise<CloseWindowOutcome> {
+  const closed: { week: number | null } = { week: null }
+  const outcome = await closeVoteWindowTx(leagueId, councilId, actorUserId, closed)
+  if (outcome.ok && closed.week != null) {
+    // Sealed immunity breaks at the close: post the week's "won immunity" lines it held back.
+    const week = closed.week
+    await import('./leagueChatPoster').then(({ postDeferredImmunityLines }) => postDeferredImmunityLines(leagueId, week)).catch(() => {})
+  }
+  return outcome
+}
+
+async function closeVoteWindowTx(leagueId: string, councilId: string, actorUserId: string | undefined, closed: { week: number | null }): Promise<CloseWindowOutcome> {
   return prisma.$transaction(async (tx): Promise<CloseWindowOutcome> => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
     const game = await tx.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true } })
@@ -396,6 +423,7 @@ export async function closeVoteWindow(leagueId: string, councilId: string, actor
     }
 
     await tx.survivorTribalCouncil.update({ where: { id: councilId }, data: { status: 'closed', closedAt: now, voteDeadlineAt: deadline, votingDeadline: deadline } })
+    closed.week = council.week
     await tx.survivorAuditEntry.create({
       data: {
         leagueId,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -75,8 +75,18 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const canShowPickResultsToggle = activeEntry?.userId === view.viewerUserId || view.challenge.ownerUserId === view.viewerUserId || hasAdminPoolAccess
   const canShareEntry = ["ncaaf", "nba_cup"].includes(String(view.challenge.sport ?? "").toLowerCase())
   const isLiveSingleGame = canShareEntry && !view.challenge.isTestMode
+  const rollingCup = isLiveSingleGame && view.challenge.sport === "nba_cup"
+  useEffect(() => {
+    if (!rollingCup) return
+    let active = true
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      void getPlayoffBracketViewClient(view.challenge.id, view.activeEntry?.id).then((next) => { if (active) setView(next) }).catch(() => {})
+    }, 30_000)
+    return () => { active = false; clearInterval(timer) }
+  }, [rollingCup, view.challenge.id, view.activeEntry?.id])
   const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
-  const pastDeadline = isLiveSingleGame && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
+  const pastDeadline = isLiveSingleGame && !rollingCup && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
     if (!activeEntry) return
     try {
@@ -91,6 +101,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const showLockDiagnostics = canAdminPool || canUseLatePicks
   const completion = useMemo(
     () => view.completion ?? getPlayoffCompletionSummary(myProjectedSeries, picks, {
+      sport: view.challenge.sport,
       lockRule,
       isPoolOwner: view.challenge.ownerUserId === view.viewerUserId,
       isTestMode: view.challenge.isTestMode,
@@ -118,9 +129,9 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const completionMode = completion?.mode ?? "full_bracket_required"
   const validGuess = /^\d{1,3}$/.test(tiebreakerGuess) && Number(tiebreakerGuess) <= 500
   const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries)) &&
-    (!isLiveSingleGame || (validGuess && !pastDeadline && Boolean(firstGameStartsAt)))
+    (!isLiveSingleGame || (validGuess && !pastDeadline && (rollingCup || Boolean(firstGameStartsAt))))
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
-  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? "Update finalized picks" : "Finalize picks" :
+  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? rollingCup ? "Update tiebreaker" : "Update finalized picks" : "Finalize picks" :
     completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
   const reviewBadge = activeEntry?.isComplete
     ? completionMode === "available_picks_only"
@@ -267,7 +278,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
               >
                 {submitting
                   ? "Submitting…"
-                  : dirtySinceSubmit && activeEntry.isComplete
+                  : dirtySinceSubmit && activeEntry.isComplete && !rollingCup
                     ? isLiveSingleGame ? "Finalize updated picks" : `Re-${submitButtonLabel}`
                     : submitButtonLabel}
               </button>

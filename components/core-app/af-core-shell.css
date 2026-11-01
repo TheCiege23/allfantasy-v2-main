@@ -1517,6 +1517,27 @@
   text-align: left;
 }
 
+/*
+ * The ↕ between a Survivor league and its Exile Island (AfCoreShell pairs the rows). Centred under
+ * the 42px crest in both rail states: the collapsed rail centres everything, and the open row puts
+ * the crest 8px in, so its centre is 29px from the edge.
+ */
+.af-rail-exile-link {
+  flex: none;
+  width: 100%;
+  margin: -4px 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  color: var(--accent);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-exile-link {
+  padding-left: 23px;
+  text-align: left;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile {
   display: flex;
   align-items: center;
@@ -1786,6 +1807,17 @@
  * projections; "14th of 18" with no basis presents a projected ordering as a
  * played one.
  */
+/* An elimination league's chop line: the lowest team other than you, on the same basis as the rank. */
+.af-core .af-rail-row-rank-low {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+}
+
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
   font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
@@ -4078,46 +4110,55 @@ html[data-mode='light'] .af-core {
   column-gap: 6px;
 }
 
-.af-core .af-rail-row-side {
-  display: flex;
+.af-core .af-rail-row-line[data-vs='true'] {
+  row-gap: 8px;
+}
+/*
+ * One manager, Sleeper's shape (user call, 2026-10-30): picture and name on the first line, their
+ * points centred beneath on the second. Both managers read the same way round — picture, name — with
+ * VS between them, centred across both lines. `.af-rail-row-who` is `display: contents` so the name
+ * and the points sit straight on this grid: the points span the whole side and centre under it.
+ */
+.af-core .af-rail-row-side,
+.af-core .af-rail-row-side[data-side='them'] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
+  column-gap: 6px;
+  row-gap: 3px;
   min-width: 0;
   min-height: 0;
-}
-.af-core .af-rail-row-side[data-side='them'] {
-  flex-direction: row-reverse;
-  text-align: right;
+  text-align: left;
   border-top: 0;
   padding-top: 0;
 }
 .af-core .af-rail-row-av {
-  width: 26px;
-  height: 26px;
-  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
 }
 .af-core .af-rail-row-who {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1 1 auto;
-  min-width: 0;
+  display: contents;
 }
 .af-core .af-rail-row-team,
 .af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+  grid-column: 2;
+  grid-row: 1;
   font: 700 12px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--text);
 }
-/* Score and projection share a line when there is room and stack when there is not. */
-.af-core .af-rail-row-pts {
+/* Score and projection, centred under the manager; they share a line when there is room. */
+.af-core .af-rail-row-pts,
+.af-core .af-rail-row-side[data-side='them'] .af-rail-row-pts {
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: baseline;
   gap: 2px 6px;
   min-width: 0;
-}
-.af-core .af-rail-row-side[data-side='them'] .af-rail-row-pts {
-  justify-content: flex-end;
+  text-align: center;
 }
 .af-core .af-rail-row-score {
   font: 800 13px/1.1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
@@ -4151,8 +4192,8 @@ html[data-mode='light'] .af-core {
 /* Phones get a touch more room for names: the tray card is ≈270px+ wide. */
 @media (max-width: 720px) {
   .af-core .af-rail-row-av {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
   .af-core .af-rail-row-team,
   .af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
@@ -4161,24 +4202,34 @@ html[data-mode='light'] .af-core {
 }
 
 /*
- * The desktop and tablet rail cards are ≈200px wide, where side-by-side managers left each name
- * four or five characters and ran the projections into the VS (measured at 1280px). From 721px up
- * the two managers stack, VS between them; the phone tray (≈270px+ of card) keeps them side by side.
+ * The desktop and tablet rail cards are ≈200px wide. They keep the same side-by-side layout as the
+ * phone (user call, 2026-10-30: "1 manager shouldn't be above another"), just tighter: a smaller
+ * picture, a smaller VS and less padding, so each name keeps as many letters as the card allows and
+ * the rest ends in an ellipsis, as Sleeper's list does.
  */
 @media (min-width: 721px) {
   .af-core .af-rail-row-line[data-vs='true'] {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 5px;
+    column-gap: 4px;
+    padding: 8px 8px;
   }
+  .af-core .af-rail-row-side,
   .af-core .af-rail-row-side[data-side='them'] {
-    flex-direction: row;
-    text-align: left;
+    column-gap: 4px;
   }
-  .af-core .af-rail-row-side[data-side='them'] .af-rail-row-pts {
-    justify-content: flex-start;
+  .af-core .af-rail-row-av {
+    width: 18px;
+    height: 18px;
+  }
+  .af-core .af-rail-row-team,
+  .af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+    font-size: 11.5px;
   }
   .af-core .af-rail-row-vs {
-    justify-self: start;
+    padding: 2px 4px;
+    letter-spacing: 0.02em;
+  }
+  .af-core .af-rail-row-proj-label {
+    margin-right: 2px;
   }
 }
 
@@ -4383,6 +4434,59 @@ button.af-rail-sport:focus-visible {
 }
 
 /*
+ * Drag to reorder (useRailDrag). The dragged row fades, and a line in the accent colour marks where
+ * it will land — above the row it would go before, or below the last row. In reorder mode a finger
+ * drags instead of scrolling the list, so the rows take the touch themselves.
+ */
+.af-core [data-rail-id][data-dragging='true'] {
+  opacity: 0.45;
+}
+.af-core [data-rail-id][data-drop='before'] {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.af-core [data-rail-id][data-drop='after'] {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.af-core [data-reorder='true'] [data-rail-id] {
+  touch-action: none;
+  cursor: grab;
+}
+.af-core .af-rail-drag-handle {
+  flex: none;
+  align-self: center;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+.af-core .af-rail-reorder-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 6px 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text);
+  font: 600 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-rail-reorder-done {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+  font: 800 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+
+/*
  * A press-and-hold on a league opens Pin and Move — so the phone's own long-press link preview and
  * text selection must not get there first.
  */
@@ -4442,6 +4546,19 @@ button.af-rail-sport:focus-visible {
   opacity: 0.45;
   cursor: default;
 }
+.af-core .af-rail-menu-item[data-kind='hide'] {
+  padding-block: 8px;
+}
+.af-core .af-rail-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.af-core .af-rail-menu-label small {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
 .af-core .af-rail-menu-item[data-kind='done'] {
   justify-content: center;
   border-color: var(--accent);
@@ -4468,4 +4585,70 @@ button.af-rail-sport:focus-visible {
   margin: 0 -8px;
   padding: 6px 8px 8px;
   background: var(--rail);
+}
+
+/* ── The /league workspace rail, arranged like /core's (2026-10-30) ─────────────────────────────
+ * Same headings, chips and star as the /core rail above; the open state there is `data-expanded`.
+ */
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0 2px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::before,
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::after {
+  content: '';
+  flex: 1 1 0;
+  min-width: 12px;
+  height: 1px;
+  background: var(--line2, var(--line));
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-icon {
+  display: inline;
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-chevron {
+  display: inline;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail-leagues > .af-rail-filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 2px 0 8px;
+  background: var(--rail);
+}
+.nl-workspace .nl-rail-tile[data-favorite='true'] .af-rail-row-name::after {
+  content: ' ★';
+  color: #f6c445;
+  font-size: 11px;
+}
+.nl-workspace .nl-rail-leagues .nl-rail-tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

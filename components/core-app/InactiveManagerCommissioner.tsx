@@ -7,6 +7,7 @@ import { inactiveManagerCommissionerMessages } from '@/lib/core-app/messages/ina
 
 type AutopilotStyle = 'dynasty_owner' | 'win_now' | 'rebuild'
 type AutoHandover = { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null
+type ChimmyReport = { title: string; body: string; sentAt: string }
 
 type Team = {
   rosterId: string
@@ -15,6 +16,7 @@ type Team = {
   status: 'active' | 'at_risk' | 'inactive' | 'unknown'
   managed: { since: string; byUserId: string; autopilot?: { style: AutopilotStyle; since: string } } | null
   suggested: boolean
+  emptySeat?: boolean
 }
 
 /**
@@ -30,6 +32,9 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const [entitled, setEntitled] = useState(false)
   const [draftAsMe, setDraftAsMeState] = useState(true)
   const [autoHandover, setAutoHandoverState] = useState<AutoHandover>(null)
+  const [chimmyLimit, setChimmyLimit] = useState(4)
+  const [chimmyFreeTeams, setChimmyFreeTeams] = useState(1)
+  const [chimmyReports, setChimmyReports] = useState<ChimmyReport[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -37,8 +42,11 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
-      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; teams: Team[] }
+      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; chimmyFreeTeams?: number; chimmyReports?: ChimmyReport[]; teams: Team[] }
       setNative(body.native)
+      if (typeof body.chimmyLimit === 'number') setChimmyLimit(body.chimmyLimit)
+      if (typeof body.chimmyFreeTeams === 'number') setChimmyFreeTeams(body.chimmyFreeTeams)
+      setChimmyReports(Array.isArray(body.chimmyReports) ? body.chimmyReports : [])
       setEntitled(Boolean(body.autopilotEntitled))
       setDraftAsMeState(body.draftAsMe !== false)
       setAutoHandoverState(body.autoHandover ? { days: body.autoHandover.days, to: body.autoHandover.to } : null)
@@ -147,7 +155,13 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
         : m.styleRebuild
 
   if (!native) return null
-  const name = (team: Team) => team.teamName || team.managerName || m.team
+  const name = (team: Team) => (team.emptySeat && !team.teamName ? m.emptySeat : team.teamName || team.managerName || m.team)
+  const chimmyTeams = (teams ?? []).filter((team) => team.managed?.autopilot)
+  // Without the AF Commissioner plan Chimmy runs one team free; the plan raises it to the league limit.
+  const teamLimit = entitled ? chimmyLimit : chimmyFreeTeams
+  const atLimit = chimmyTeams.length >= teamLimit
+  // Empty seats first: they are the teams nobody else will run.
+  const chimmyRows = [...(teams ?? [])].sort((a, b) => Number(Boolean(b.emptySeat)) - Number(Boolean(a.emptySeat)))
   const shown = (teams ?? []).filter((team) => team.managed || team.suggested)
   const others = (teams ?? []).filter((team) => !team.managed && !team.suggested)
 
@@ -157,6 +171,56 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       <p>
         {m.intro}
       </p>
+      {teams && native ? (
+        <div data-testid="chimmy-managers">
+          <h3>{m.chimmyManagersTitle}</h3>
+          <p>{m.chimmyManagersIntro}</p>
+          <p role="status" data-testid="chimmy-manager-count">
+            {entitled ? m.chimmyCount(chimmyTeams.length, teamLimit) : m.chimmyFreeCount(chimmyTeams.length, teamLimit)}
+          </p>
+          {atLimit ? (
+            <p data-testid="chimmy-manager-limit">{entitled ? m.chimmyLimitReached(teamLimit) : m.chimmyFreeLimitReached(chimmyLimit)}</p>
+          ) : null}
+          <ul>
+            {chimmyRows.map((team) => {
+              const running = Boolean(team.managed?.autopilot)
+              return (
+                <li key={team.rosterId} data-testid="chimmy-manager-team" data-empty-seat={team.emptySeat ? 'true' : undefined}>
+                  <label>
+                    <strong>{name(team)}</strong>{' '}
+                    <select
+                      value={team.managed?.autopilot?.style ?? ''}
+                      disabled={busy !== null || (!running && atLimit)}
+                      onChange={(e) => void setAutopilot(team, (e.target.value || null) as AutopilotStyle | null)}
+                    >
+                      <option value="">{m.off}</option>
+                      <option value="dynasty_owner">{styleLabel('dynasty_owner')}</option>
+                      <option value="win_now">{styleLabel('win_now')}</option>
+                      <option value="rebuild">{styleLabel('rebuild')}</option>
+                    </select>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+          {entitled ? null : (
+            <a href="/commissioner-upgrade?highlight=chimmy_autopilot" data-testid="chimmy-free-upsell">{m.chimmyFreeUpsell(chimmyLimit)}</a>
+          )}
+          {chimmyReports.length > 0 ? (
+            <div data-testid="chimmy-reports">
+              <h4>{m.chimmyReportsTitle}</h4>
+              <ul>
+                {chimmyReports.map((report) => (
+                  <li key={`${report.sentAt}-${report.title}`} data-testid="chimmy-report">
+                    <strong>{report.title}</strong>
+                    {report.body.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <p data-testid="draft-as-me-toggle">
         {entitled ? (
           <label>

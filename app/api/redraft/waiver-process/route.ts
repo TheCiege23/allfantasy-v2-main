@@ -215,6 +215,29 @@ export async function GET(request: Request) {
     tradeAutoApprovals = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Seats the old orphan-teams "Assign AI manager" button left as `ai-manager-…` go back to ordinary
+   * empty seats run by Chimmy (lib/inactive-manager/repairAiManagerSeats.ts). Before the lineup run, so
+   * a repaired team gets its lineup set this same hour. Finds nothing once every seat is repaired.
+   */
+  let aiManagerSeatRepair: unknown = null
+  try {
+    const { repairAiManagerSeats } = await import('@/lib/inactive-manager/repairAiManagerSeats')
+    aiManagerSeatRepair = await withSyncJobRun(
+      { jobName: 'cron-ai-manager-seat-repair', trigger: 'cron' },
+      () => repairAiManagerSeats(),
+      (r) => ({
+        rowsRead: r.found,
+        rowsWritten: r.repaired,
+        errors: r.chimmyRefused.map((f) => `${f.rosterId}: ${f.error}`),
+        metadata: { chimmy: r.chimmy },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] ai-manager seat repair failed', e)
+    aiManagerSeatRepair = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   let inactiveLineups: InactiveLineupRunResult | { error: string } | null = null
   try {
     const { runInactiveManagerLineups } = await import('@/lib/inactive-manager/inactiveManagerService')
@@ -490,5 +513,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

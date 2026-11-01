@@ -18,7 +18,8 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async (args: { select?: unknown }) => (args.select ? { platform: state.platform, settings: state.settings } : { ...state.league, settings: state.settings, platform: state.platform })) },
-      roster: { findFirst: vi.fn() },
+      roster: { findFirst: vi.fn(), findMany: vi.fn(async () => [] as Array<{ id: string; platformUserId: string | null }>) },
+      survivorNotification: { findMany: vi.fn(async () => [] as Array<{ title: string; body: string; createdAt: Date }>) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -153,8 +154,29 @@ describe('the view', () => {
       { rosterId: 'r2', teamName: 'B', managerName: 'b', status: 'inactive', lastActionAt: null },
       { rosterId: 'r3', teamName: 'C', managerName: 'c', status: 'active', lastActionAt: null },
     ] })
+    m.prisma.roster.findMany.mockResolvedValueOnce([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }, { id: 'r3', platformUserId: 'orphan-r3' }])
     const view = await readInactiveManagerView('L')
     expect(view.teams.map((t) => [t.rosterId, t.suggested, Boolean(t.managed)])).toEqual([['r1', true, false], ['r2', false, true], ['r3', false, false]])
+    // Chimmy as a manager: empty seats are marked, and the commissioner sees the limit.
+    expect(view.teams.map((t) => t.emptySeat)).toEqual([false, false, true])
+    expect(view.chimmyLimit).toBe(4)
+    expect(view.chimmyFreeTeams).toBe(1)
+    expect(view.chimmyReports).toEqual([])
+  })
+
+  it('shows the commissioner the Chimmy reports already sent, newest first', async () => {
+    m.health.mockResolvedValue({ rows: [] })
+    m.prisma.survivorNotification.findMany.mockResolvedValueOnce([
+      { title: "Chimmy's week 6", body: 'Here is what Chimmy did.\nTeam 9 (Chimmy): still in the game.', createdAt: new Date('2026-10-20T12:00:00Z') },
+    ])
+    const view = await readInactiveManagerView('L')
+    expect(view.chimmyReports).toEqual([{ title: "Chimmy's week 6", body: 'Here is what Chimmy did.\nTeam 9 (Chimmy): still in the game.', sentAt: '2026-10-20T12:00:00.000Z' }])
+    expect(m.prisma.survivorNotification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'L', type: 'commissioner_chimmy_weekly_report' }, orderBy: { createdAt: 'desc' }, take: 8,
+    }))
+    // A read failure never breaks the Chimmy section.
+    m.prisma.survivorNotification.findMany.mockRejectedValueOnce(new Error('down'))
+    expect((await readInactiveManagerView('L')).chimmyReports).toEqual([])
   })
 })
 

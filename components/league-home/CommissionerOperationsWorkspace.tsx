@@ -21,6 +21,8 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
+import { RedraftCommishHealth } from '@/components/decide/RedraftCommishHealth'
+import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
@@ -60,13 +62,13 @@ function ActionCard({ action }: { action: WorkspaceAction }) {
       disabled={unavailable}
       onClick={action.onClick}
       data-testid={`commissioner-operation-${action.id}`}
-      className="af-admin-action flex min-h-[132px] w-full touch-manipulation flex-col rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-left transition enabled:hover:border-[#ff3d81]/30 enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
+      className="af-admin-action flex min-h-[132px] w-full touch-manipulation flex-col rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-left transition enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
     >
       <div className="flex w-full items-start justify-between gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff3d81]/10 text-[#ffb8d1]">
+        <span className="af-admin-action-icon flex h-10 w-10 items-center justify-center rounded-xl">
           <Icon className="h-5 w-5" aria-hidden />
         </span>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+        <span className="af-admin-action-state rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
           {label}
         </span>
       </div>
@@ -85,6 +87,7 @@ export function CommissionerOperationsWorkspace({
   onOpenSettings,
   onOpenTab,
 }: CommissionerOperationsWorkspaceProps) {
+  const rd = useRedraftDeck(league)
   if (!isCommissioner) {
     return (
       <div data-testid="commissioner-operations-denied" role="alert" className="m-4 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-5 text-sm text-amber-100">
@@ -162,12 +165,12 @@ export function CommissionerOperationsWorkspace({
   ]
 
   return (
-    <div className="af-core af-league-admin min-w-0 space-y-6 p-4 pb-8 sm:p-5" data-testid="commissioner-operations-workspace" data-league-id={leagueId}>
-      <header className="af-admin-header rounded-3xl border border-[#262c6a] bg-[#12163e]/70 p-5">
+    <div className="af-core af-league-admin min-w-0 space-y-6 p-4 pb-8 sm:p-5" data-testid="commissioner-operations-workspace" data-league-id={leagueId} {...rdDeckAttrs(rd)}>
+      <header className="af-admin-header rounded-3xl border p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="af-admin-eyebrow text-[11px] font-black uppercase italic tracking-[0.18em] text-[#ff8a3d]">Commissioner OS</p>
-            <h2 className="mt-1 text-xl font-black italic text-[#f0f2ff]">{league.name}</h2>
+            <p className="af-admin-eyebrow text-[11px] font-black uppercase italic tracking-[0.18em]">Commissioner OS</p>
+            <h2 className="mt-1 text-xl font-black italic">{league.name}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Run the league from one place — live manager-health signals from the Decision OS above, and every authoritative workflow one tap below.</p>
           </div>
           <span className="rounded-full px-3 py-1.5 text-xs font-extrabold" data-testid="commissioner-league-state">{leagueStateLabel}</span>
@@ -175,7 +178,7 @@ export function CommissionerOperationsWorkspace({
         <div className="af-admin-shortcuts mt-4 flex flex-wrap gap-2">
           <a
             href={`/league/${leagueId}/intelligence`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
             data-testid="commissioner-open-intelligence-hub"
           >
             Open League Intelligence Hub →
@@ -184,7 +187,7 @@ export function CommissionerOperationsWorkspace({
             <CommissionerOsLink
               href="/commissioner-os"
               leagueId={leagueId}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
             >
               Open Commissioner OS →
             </CommissionerOsLink>
@@ -192,7 +195,7 @@ export function CommissionerOperationsWorkspace({
           {!isNativePlatform(league.platform) ? (
             <a
               href={`/create-league?fromLeague=${encodeURIComponent(leagueId)}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
             >
               Create standalone AllFantasy league →
             </a>
@@ -211,7 +214,18 @@ export function CommissionerOperationsWorkspace({
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine
           the Decide tab renders: inactive/at-risk managers from counted signals
           (empty starters, transaction drought, scoring trend, orphan rosters). */}
-      <div className="bdx af-admin-pulse"><CommissionerPulse leagueId={leagueId} /></div>
+      {rd ? (
+        /* Redraft: the league-health panel from the approved Commish mock. CommissionerPulse reads a
+           Sleeper feed and renders nothing for a league AllFantasy runs, so it is not mounted here. */
+        <RedraftCommishHealth
+          leagueId={leagueId}
+          currentWeek={league.currentWeek ?? null}
+          tradeDeadlineWeek={league.tradeDeadlineWeek ?? null}
+          onOpenTab={onOpenTab}
+        />
+      ) : (
+        <div className="bdx af-admin-pulse"><CommissionerPulse leagueId={leagueId} /></div>
+      )}
 
       {groups.map((group) => (
         <section key={group.id} id={`commissioner-group-${group.id}`} aria-labelledby={`commissioner-title-${group.id}`} data-testid={`commissioner-group-${group.id}`}>

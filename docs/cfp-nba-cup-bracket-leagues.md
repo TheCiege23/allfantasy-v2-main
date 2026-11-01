@@ -4,9 +4,9 @@ This draft builds on the existing playoff challenge tables and Railway app. It a
 
 ## Player flow
 
-1. Create or join a CFP or NBA Cup league. The admin publishes the official field and a complete schedule with each game's name, start time, venue, and location. Brackets auto-fill from that published field.
+1. Create or join a CFP or NBA Cup league. CFP uses its published official field. NBA Cup automatically imports explicitly labelled Cup games through the Railway schedule sync: Group Play first, then confirmed knockout matchups. Each game includes real teams, time, venue and city when verified. Unconfirmed slots stay pending without blocking other games.
 2. Tap any matchup to open a full-screen view with the round, bowl/game name, time, venue, verified season record, win rate, point differential, and a transparently labeled Chimmy estimate. Unavailable facts show as unavailable. Chimmy's Choice picks the higher estimated team when enough data exists.
-3. Pick all winners, enter a final-game combined-score guess, and click **Finalize picks**. Editing a pick moves the bracket back to Draft. The user can revise and finalize again until the first scheduled game starts. All picks and finalization lock together at that instant.
+3. Pick winners, enter a final-game combined-score guess, and click **Finalize picks**. CFP retains its first-game deadline and Draft reset on edits. NBA Cup accepts late entrants: each game locks at tipoff, missed games earn zero, and finalization requires only currently available games. After the first finalization, upcoming pick edits save automatically without clearing earlier locked picks or earned points. A first submission after tipoff cannot score an earlier draft pick. The championship score guess locks at its tipoff.
 4. Invite friends and share a read-only entry. Opponents' picks reveal only after their games begin. Private leagues require membership to view shared entries.
 5. Watch pool and universal boards. Each finalized entry shows earned points, potential total, correct picks, and rank. Potential counts only saved picks whose teams have not been eliminated.
 
@@ -15,7 +15,7 @@ This draft builds on the existing playoff challenge tables and Railway app. It a
 | Tournament | Field | Round points | Maximum |
 | --- | ---: | --- | ---: |
 | CFP | 12 teams, 11 games | First round 1; quarterfinal 2; semifinal 4; title 8 | 28 |
-| NBA Cup | 8 teams, 7 games | Quarterfinal 1; semifinal 2; title 4 | 12 |
+| NBA Cup | 30 teams in Group Play, then 8 qualifiers and 7 knockout games | Group game 1; quarterfinal 1; semifinal 2; title 4 | 72 when all 60 group games are available |
 
 Ties are broken by closest predicted **combined championship score**, then more correct picks. Exact ties share a rank. Potential is shown for suspense and never breaks ties. The final-score guess stays private until the final is decided.
 
@@ -28,6 +28,24 @@ Confirmed cap: **one free bracket per user per tournament season**; **five total
 AllFantasy offers **no prizes, gambling, betting, bracket entry fees, or in-app payouts**. Commissioners handle any optional external arrangements independently. The repository's existing legal copy currently names FanCred for paid league dues, so broader third-party wording needs product/legal reconciliation before public launch.
 
 ## Operations on Railway
+
+### Automatic NBA Cup publication
+
+NBA Cup no longer requires the manual publication steps below. The existing
+`/api/cron/season-bracket-results` writer publishes schedules and verified finals
+with `sport=nba_cup` and `apply=true` under `CRON_SECRET`, independent of the CFP
+opt-in flag. `apply=false` never writes. CFP keeps its existing manual workflow.
+
+Discovery fetches at most four single-day ESPN scoreboards per run, prioritizing
+current games and published 2026 Cup nights, then rotating through October–December.
+Explicit Cup markers and matching season are required. Existing pools receive
+persisted games in rotating batches of 100. Page loads only read stored data.
+The existing separate Railway cron service runs every 15 minutes. Preserve its
+production URL/origin protection and the isolated staging database. No schema
+migration is added. Imported games omit seed numbers because the verified ESPN
+scoreboards do not supply tournament seeds. See `contracts/espn/ENDPOINTS.yaml`.
+
+### Existing CFP publication and result operations
 
 - The Prisma migration adds `finalized_at` and `tiebreaker_total_score` to `playoff_bracket_entries`. Run it with the repository's guarded production migration flow; never run bare `prisma migrate deploy` against production. Follow `AGENTS.md` and `CLAUDE.md`.
 - Build using the repository's Railway build/start scripts. Vercel status checks do not represent the user's deployment path.

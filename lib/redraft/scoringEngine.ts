@@ -6,13 +6,14 @@ import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
-import { isFootballC2CLeague } from '@/lib/c2c/campusLineup'
+import { campusSport } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
@@ -152,11 +153,26 @@ export function countsTowardScore(slotType: string | null | undefined, bestBall:
   return bestBall ? isBestBallCandidateSlot(slotType) : isScoringStarterSlot(slotType)
 }
 
+/**
+ * Lineups set themselves: a Best Ball league, or a Guilly league its commissioner made best ball
+ * (lib/guillotine/guillotineBestBall.ts — `settings.best_ball`, which only a guillotine league's
+ * scoring reads here, so an imported league carrying the provider's flag scores as before). A caller
+ * that wants the Guilly half must select `settings` and `guillotineMode` too.
+ */
 export function leagueIsBestBall(
-  league: { bestBallMode?: boolean | null; leagueVariant?: string | null; leagueType?: string | null } | null | undefined,
+  league:
+    | {
+        bestBallMode?: boolean | null
+        leagueVariant?: string | null
+        leagueType?: string | null
+        guillotineMode?: boolean | null
+        settings?: unknown
+      }
+    | null
+    | undefined,
 ): boolean {
   if (!league) return false
-  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
+  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
 }
 
 /**
@@ -712,6 +728,8 @@ async function scoreRosterBestBall(args: {
   seasonYear: number
   bestBall: BestBallScoringContext
   collectPlayerPoints?: boolean
+  /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
+  includeBench?: boolean
 }): Promise<RosterScoreSummary> {
   const players = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId: args.rosterId, droppedAt: null },
@@ -761,6 +779,13 @@ async function scoreRosterBestBall(args: {
     starterCount: candidates.length,
     scoredStarterCount: scored,
     points: Math.round(lineup.total * 100) / 100,
+    /*
+     * A best ball team's bench is everyone the optimal lineup left out. Without it a best ball Guilly
+     * league's `bench_points` tiebreak compared nothing with nothing and fell straight through.
+     */
+    ...(args.includeBench
+      ? { benchPoints: Math.round(inputs.filter((i) => !started.has(i.playerId)).reduce((sum, i) => sum + i.points, 0) * 100) / 100 }
+      : {}),
     missingPlayerIds,
     allFinal,
     bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
@@ -773,7 +798,7 @@ async function scoreRosterBestBall(args: {
 async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
   })
   if (!league || !leagueIsBestBall(league)) return null
   const sport = String(league.sport ?? 'NFL')
@@ -802,18 +827,23 @@ export async function scoreRosterForWeek(args: {
 
 /**
  * C2C (Campus to Canton): each team's campus starters score on top of its pro lineup — one total
- * (lib/c2c/campusScoring.ts). Native football C2C leagues only; null when no one starts a college
- * player, so a league without a campus lineup scores exactly as before. Imported lazily: the campus
- * scorer uses this module's stat scorer.
+ * (lib/c2c/campusScoring.ts). Native C2C leagues: NFL from college football weeks, NBA from the college
+ * basketball games inside the week's dates. Null when no one starts a college player, so a league
+ * without a campus lineup scores exactly as before. Imported lazily: the campus scorer uses this
+ * module's stat scorer.
  */
 async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
-  args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
+  args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
-  // Keep unrelated native formats out of the campus scorer and its circular import.
-  if (!league || !isNativePlatform(league.platform) || !isFootballC2CLeague(league)) return null
-  const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
-  return campusPointsForMatchup(prisma as never, args)
+  if (!league || !isNativePlatform(league.platform) || !campusSport(league)) return null
+  const { campusBasketballPointsForMatchup, campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
+  const sport = campusSport(league)
+  if (sport === 'football') {
+    return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
+  }
+  if (sport === 'basketball') return campusBasketballPointsForMatchup(prisma as never, args)
+  return null
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
@@ -894,7 +924,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   const campus =
     scoringMode === 'points' && !bestBall && !useDevyEngine
-      ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
+      ? await loadCampusPoints(scoringLeague, { season: seasonYear, week, homeRosterId, awayRosterId })
       : null
   if (campus) {
     home.points = Math.round((home.points + campus.home.points) * 100) / 100
@@ -1127,7 +1157,7 @@ async function updateByeRowScore(row: {
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
   // A C2C bye team's campus starters count toward its median / extra-game score too.
   const campus = !bestBall && !useDevyEngine
-    ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
   const isComplete =
@@ -1145,7 +1175,7 @@ async function updateByeRowScore(row: {
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,
-          ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
+          ...(campus ? { campus: { ...('cfbWeeks' in campus ? { cfbWeeks: campus.cfbWeeks } : { window: campus.window }), home: campus.home } } : {}),
         },
       },
     },

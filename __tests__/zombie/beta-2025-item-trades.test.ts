@@ -27,6 +27,10 @@ beforeEach(() => {
   }
 })
 describe('2025 native item trades', () => {
+  it('refuses multi-team item trades before any inventory is read', async () => {
+    await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B', 'RR-C'], assets)).rejects.toThrow('two teams')
+    expect(h.tx.zombieLeague.findUnique).not.toHaveBeenCalled()
+  })
   it('allows Survivor and Whisperer inventory through the common proposal workflow', async () => {
     await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).resolves.toMatchObject({ z: { id: 'z' } })
   })

@@ -13,7 +13,12 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { assignLeagueSeat, countSeatsHeldByPeople, releaseLeagueSeat } from '@/lib/league/leagueSeats'
+import {
+  assignLeagueSeat,
+  countSeatsHeldByPeople,
+  countSeatsHeldByPeopleByLeague,
+  releaseLeagueSeat,
+} from '@/lib/league/leagueSeats'
 
 type Row = Record<string, any>
 
@@ -110,6 +115,21 @@ describe('countSeatsHeldByPeople', () => {
     const db = nativeLeague()
     expect(db.roster.rows).toHaveLength(4)
     expect(await countSeatsHeldByPeople(db, 'L')).toBe(1)
+  })
+})
+
+describe('countSeatsHeldByPeopleByLeague', () => {
+  // League discovery counted rosters, so every native league showed as Full with no Join button.
+  it('counts people per league, gives 0 to a league nobody has joined, and ignores open seats', async () => {
+    const db = nativeLeague()
+    db.league.rows.push({ id: 'M', platform: 'manual', userId: 'amy' })
+    db.roster.rows.push(
+      { id: 'm1', leagueId: 'M', platformUserId: 'amy', playerData: {}, settings: {} },
+      { id: 'm2', leagueId: 'M', platformUserId: 'ben', playerData: {}, settings: {} },
+      { id: 'm3', leagueId: 'M', platformUserId: 'open-slot-M-3', playerData: {}, settings: { openSlot: true } },
+    )
+    const counts = await countSeatsHeldByPeopleByLeague(db, ['L', 'M', 'EMPTY'])
+    expect(Object.fromEntries(counts)).toEqual({ L: 1, M: 2, EMPTY: 0 })
   })
 })
 

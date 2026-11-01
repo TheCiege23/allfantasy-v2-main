@@ -16,7 +16,7 @@ for (const job of jobs) {
       method: "POST",
       headers: { "content-type": "application/json", "x-cron-secret": secret },
       body: JSON.stringify({ ...job, apply: true }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(90_000),
     })
     if (!response.ok) throw new Error(`Bracket worker HTTP ${response.status}`)
     const result = await response.json()
@@ -24,7 +24,9 @@ for (const job of jobs) {
       counts[row.outcome] = (counts[row.outcome] ?? 0) + 1
       return counts
     }, {})
-    console.log(JSON.stringify({ job, applied: result.applied, outcomes }))
+    console.log(JSON.stringify({ job, applied: result.applied, outcomes,
+      ...(job.sport === "nba_cup" ? { gamesPublished: result.gamesPublished ?? 0, poolsUpdated: result.poolsUpdated ?? 0, providerFailures: (result.failures ?? []).length } : {}),
+    }))
     if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score)$/.test(row.outcome))) {
       failed = true
     }

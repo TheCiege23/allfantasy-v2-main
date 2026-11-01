@@ -19,7 +19,7 @@ const MLB_ROUND_ORDER: PlayoffRoundKey[] = [
   "world_series",
 ]
 
-const CUP_ROUND_ORDER: PlayoffRoundKey[] = ["cup_quarterfinals", "cup_semifinals", "cup_championship"]
+const CUP_ROUND_ORDER: PlayoffRoundKey[] = ["cup_group_play", "cup_quarterfinals", "cup_semifinals", "cup_championship"]
 
 const CFP_ROUND_ORDER: PlayoffRoundKey[] = [
   "cfp_first_round",

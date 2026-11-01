@@ -149,6 +149,31 @@ beforeEach(() => {
   db.linked = new Map()
 })
 
+describe('🛑 a provider that reports no commissioner cannot clear one', () => {
+  it('keeps a stored commissioner flag when the provider left it undefined (Fantrax, MFL, Fleaflicker)', async () => {
+    await run([team('1', 'mgr-1', ['a'])])
+    const stored = db.teams.find((t) => t.externalId === '1') as any
+    stored.isCommissioner = true // set by an accepted import attestation
+
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: undefined, is_co_commissioner: undefined })])
+
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(true)
+  })
+
+  it('still lets a provider that DOES report it (Sleeper, ESPN, Yahoo) change it', async () => {
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: true })])
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(true)
+
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: false })])
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(false)
+  })
+
+  it('a brand-new team from such a provider is created non-commissioner', async () => {
+    await run([team('2', 'mgr-2', ['b'], { is_commissioner: undefined })])
+    expect((db.teams.find((t) => t.externalId === '2') as any).isCommissioner).toBe(false)
+  })
+})
+
 describe('🛑 every orphan team keeps its own roster', () => {
   const league = [
     team('1', 'mgr-1', ['a']),

@@ -39,6 +39,7 @@ import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
 import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
 import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
@@ -112,6 +113,16 @@ import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
 import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
 import { buildPlayerDraftOutlook, pickYoureUpSuggestion } from '@/lib/draft-room/playerDraftOutlook'
 import { YoureUpAlert } from '@/components/app/draft-room/YoureUpAlert'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  formatDynastyDraftKindLabel,
+  formatRookieAuctionPolicyNote,
+  normalizeDraftSeasonYear,
+  readRookieAuctionPolicyNote,
+  resolveDynastyDraftKind,
+  roomAnnouncesRoundOne,
+  shouldDefaultRookiesOnly,
+} from '@/lib/draft-room/dynastyDraftIdentity'
 import { buildAdpDeltaByOverall, buildAdpLookup } from '@/lib/draft-room/draftPulse'
 import {
   buildAssistantFeedByPlayerName,
@@ -272,7 +283,6 @@ export function DraftRoomPageClient({
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
-  type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -529,6 +539,8 @@ export function DraftRoomPageClient({
     }
   } | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<DraftRoomChromeTeam[]>([])
+  /** `League.season` from /api/league/settings — the rookie class year of a dynasty rookie draft. */
+  const [leagueSeasonYear, setLeagueSeasonYear] = useState<number | null>(null)
   const [rosterConfig, setRosterConfig] = useState<{
     starterSlots: Record<string, number>
     benchSlots: number
@@ -677,6 +689,7 @@ export function DraftRoomPageClient({
             graduatedToNFL: e.graduatedToNFL,
             poolType: e.poolType,
             nflDraftProjectionSplits: e.nflDraftProjectionSplits ?? null,
+            ...(e.prospectSource === 'fantrax' ? { prospectSource: 'fantrax' as const } : {}),
           }
         })
       : rawEntries.map((e: any) => {
@@ -811,7 +824,9 @@ export function DraftRoomPageClient({
       return
     }
 
-    const rsRoom = presentationVariant === 'redraft_snake' && !isDynasty
+    // Redraft snake rooms and every non-auction dynasty room announce round 1 (see
+    // `roomAnnouncesRoundOne` for why dynasty lost it and gets it back).
+    const rsRoom = roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session.draftType })
     const visualsOn = draftUISettings?.roundOnePickAnnouncementEnabled !== false
 
     for (const p of picks) {
@@ -831,6 +846,7 @@ export function DraftRoomPageClient({
     players,
     presentationVariant,
     isDynasty,
+    session?.draftType,
     draftUISettings?.roundOnePickAnnouncementEnabled,
   ])
 
@@ -1381,6 +1397,7 @@ export function DraftRoomPageClient({
       } else {
         setLeagueTeams([])
       }
+      setLeagueSeasonYear(settingsRes.ok ? normalizeDraftSeasonYear(settingsJson?.league?.season) : null)
 
       if (privacyRes.ok) {
         setInviteLink(resolveInviteLink(privacyJson))
@@ -3128,6 +3145,11 @@ export function DraftRoomPageClient({
         // bye-week clusters in the focus team's drafted starters.
         byeWeek: (p as { byeWeek?: number | null }).byeWeek ?? null,
         isDevy: devyRoundsSet.has(p.round) || c2cCollegeRoundsSet.has(p.round),
+        // ⚠ No `isTaxi` on purpose: nothing in a draft knows a pick is a taxi pick. There is no
+        // taxi-rounds setting, `DraftPick` has no taxi column or metadata, and post-draft roster
+        // assignment (`buildLineupSectionsFromPicks`) always writes `taxi: []` — managers move
+        // players to taxi on the roster afterwards. So the strip's Taxi section shows its slots
+        // empty rather than guessing from rookie status.
       })),
       teamCount: session?.teamCount ?? 0,
       rounds: session?.rounds ?? 0,
@@ -3193,6 +3215,24 @@ export function DraftRoomPageClient({
     () => (session?.picks ?? []).filter((p) => p.rosterId === currentUserRosterId),
     [session?.picks, currentUserRosterId],
   )
+
+  const { t: tRoom } = useOptionalLanguage()
+  /*
+   * Dynasty identity for the top bar and the pool. Dynasty rooms stay OFF the `redraft_snake`
+   * variant on purpose: that variant also switches on this-season-only behaviour — redraft
+   * starter hints, the copilot insight card, and a Chimmy scope line that says "not dynasty
+   * stash, devy, or multi-year planning". Dynasty gets a skin instead, never those semantics.
+   */
+  const dynastyDraftKind = resolveDynastyDraftKind(session?.draftModeLabel, isDynasty)
+  const dynastyDraftKindLabel = useMemo(
+    () => formatDynastyDraftKindLabel(dynastyDraftKind, leagueSeasonYear, tRoom),
+    [dynastyDraftKind, leagueSeasonYear, tRoom],
+  )
+  const rookieAuctionNote = useMemo(
+    () => (isDynasty ? formatRookieAuctionPolicyNote(readRookieAuctionPolicyNote(session), tRoom) : null),
+    [isDynasty, session, tRoom],
+  )
+  const defaultRookiesOnly = isDynasty && shouldDefaultRookiesOnly(session?.draftModeLabel)
 
   const redraftStarterHints = useMemo(
     () =>
@@ -3848,6 +3888,8 @@ export function DraftRoomPageClient({
         loadingMessage={poolLoadingMessage}
         poolError={poolError}
         rookieFilterState={draftPool?.rookieFilterState}
+        isDynasty={isDynasty}
+        defaultRookiesOnly={defaultRookiesOnly}
         useAiAdp={draftUISettings?.aiAdpEnabled ?? false}
         aiAdpUnavailable={aiAdpUnavailable}
         aiAdpUnavailableMessage={leagueAiAdp?.message ?? null}
@@ -3926,6 +3968,8 @@ export function DraftRoomPageClient({
       poolLoadingMessage,
       poolError,
       draftPool?.rookieFilterState,
+      isDynasty,
+      defaultRookiesOnly,
       draftUISettings?.aiAdpEnabled,
       aiAdpUnavailable,
       leagueAiAdp?.message,
@@ -4729,9 +4773,10 @@ export function DraftRoomPageClient({
       </div>
     ) : null}
     {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
-    {presentationVariant === 'redraft_snake' && !isDynasty ? (
+    {roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session?.draftType }) ? (
       <DraftRoundOneAnnouncementOverlay
-        presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+        presentationVariant={presentationVariant === 'redraft_snake' && !isDynasty ? 'redraft_snake' : 'default'}
+        dynastySkin={isDynasty}
         leagueName={leagueName}
         sportLabel={typeof sport === 'string' ? sport.toUpperCase() : ''}
         formatType={formatType}
@@ -4778,7 +4823,7 @@ export function DraftRoomPageClient({
     <DraftRoomShell
       layout="premium"
       playerSpacePriority={session.draftType !== 'auction'}
-      surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+      surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : isDynasty ? 'dynasty' : 'default'}
       // D.6 — War Room moved out of the left aside. teamPanel=null collapses the
       // aside; the WarRoomPopup below renders the same DraftTeamPanel content as
       // a floating bottom-right popup with notification badge.
@@ -4788,7 +4833,9 @@ export function DraftRoomPageClient({
           className={
             presentationVariant === 'redraft_snake'
               ? 'flex h-full min-h-0 flex-col bg-[radial-gradient(ellipse_100%_80%_at_50%_-10%,rgba(34,211,238,0.06),transparent),linear-gradient(180deg,#071826_0%,#050c18_50%,#040a14_100%)]'
-              : 'flex h-full min-h-0 flex-col bg-[#060d1e]'
+              : isDynasty
+                ? 'flex h-full min-h-0 flex-col bg-[var(--dyn-ink,#0B0F17)]'
+                : 'flex h-full min-h-0 flex-col bg-[#060d1e]'
           }
         >
           <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
@@ -4871,92 +4918,13 @@ export function DraftRoomPageClient({
 
             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
-                <div
-                  className={`grid ${
-                    (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 2
-                      ? 'grid-cols-5'
-                      : (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 1
-                        ? 'grid-cols-4'
-                        : 'grid-cols-3'
-                  } gap-1 border-b px-2 py-1.5 ${
-                    presentationVariant === 'redraft_snake'
-                      ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(5,12,24,0.98))] shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]'
-                      : 'border-white/8 bg-[#0a1228]'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('queue')}
-                    data-testid="draft-bottom-tab-queue"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'queue'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Queue
-                  </button>
-                  {session.draftType !== 'auction' ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('intel')}
-                      data-testid="draft-bottom-tab-intel"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'intel'
-                          ? presentationVariant === 'redraft_snake'
-                            ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                            : 'bg-white/12 text-cyan-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Intel
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('chat')}
-                    data-testid="draft-bottom-tab-chat"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'chat'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('ai')}
-                    data-testid="draft-bottom-tab-ai"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'ai'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-violet-500/30 to-fuchsia-500/15 text-violet-50 shadow-[0_0_22px_rgba(167,139,250,0.2)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    AF Legacy
-                  </button>
-                  {isCommissioner ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('commish')}
-                      data-testid="draft-bottom-tab-commish"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'commish'
-                          ? 'bg-white/12 text-amber-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Commish Edit
-                    </button>
-                  ) : null}
-                </div>
+                <DraftCenterDockTabBar
+                  active={centerDockTab}
+                  onSelect={setCenterDockTab}
+                  showIntel={session.draftType !== 'auction'}
+                  showCommish={isCommissioner}
+                  redraftSnake={presentationVariant === 'redraft_snake'}
+                />
 
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (
@@ -5359,6 +5327,9 @@ export function DraftRoomPageClient({
             aiRecommendationOverlay={showAiOverlays ? recommendationOverlaySummary : null}
             showAiOverlays={showAiOverlays}
             poolReadiness={poolReadiness}
+            dynastySkin={isDynasty}
+            dynastyDraftKindLabel={dynastyDraftKindLabel}
+            rookieAuctionNote={rookieAuctionNote}
           />
           <AutopickMeToggle
             viewerAutopick={session.viewerAutopick}

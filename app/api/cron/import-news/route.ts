@@ -258,6 +258,34 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       console.error('[cron/import-news] notification dispatch failed:', dispatchError)
     }
 
+    /*
+     * CLUBHOUSE SCHEDULED THREADS ride on this cron rather than taking a slot of their own
+     * (docs/crons.md: the declared-cron ceiling is full). It belongs here because the daily
+     * news desk is built from the player_news rows this run just wrote. Every thread is keyed
+     * by `systemKey`, so the 95 runs a day that find them already present cost three lookups.
+     *
+     * Same isolation as the dispatch above: its failure never touches `ok`. A run row is
+     * written only when it creates or fails something — about once a day — so the
+     * `cron-clubhouse-schedule` heartbeat means "a thread was due" rather than noise.
+     */
+    let clubhouse: unknown = null
+    if (budget.exhausted()) clubhouse = { skipped: 'run budget exhausted before phase start' }
+    else try {
+      const { CLUBHOUSE_SCHEDULE_JOB, runClubhouseSchedule, summarizeSchedule } = await import(
+        '@/lib/community/scheduled'
+      )
+      const clubhouseStarted = Date.now()
+      const outcome = await runClubhouseSchedule()
+      const summary = summarizeSchedule(outcome)
+      if (summary.rowsWritten > 0 || summary.errors.length > 0) {
+        await recordSyncJobRun({ jobName: CLUBHOUSE_SCHEDULE_JOB, trigger: 'cron' }, summary, Date.now() - clubhouseStarted)
+      }
+      clubhouse = outcome
+    } catch (err) {
+      clubhouse = { error: err instanceof Error ? err.message.slice(0, 200) : String(err) }
+      console.error('[cron/import-news] clubhouse schedule failed:', clubhouse)
+    }
+
     // `imported` counts rows OFFERED to createMany, not rows inserted
     // (skipDuplicates), so it cannot stand in for freshness. `articlesFetched` is
     // the number that actually moves sports_news forward.
@@ -276,6 +304,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         sports: result.sports,
         dispatch,
         dispatchError,
+        clubhouse,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
       },

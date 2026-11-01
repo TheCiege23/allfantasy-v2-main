@@ -1,3 +1,7 @@
+import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
+import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
+import { readPickTermsRecords, parseFuturePickRef } from '@/lib/league-trade-engine/pickTerms'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
@@ -37,6 +41,7 @@ import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNext
 import { carryDynastyRostersForward, isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 import {
   consumeNativeFuturePicksForDraft,
+  lockNativeFuturePicks,
   isNativeFuturePickLeague,
   resolveRookieDraftRounds,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -95,6 +100,8 @@ export type CreateNextDraftResult =
         | 'NO_SEASON'
         | 'SEASON_IN_PROGRESS'
         | 'NEEDS_DATABASE_UPDATE'
+        | 'ROOKIE_LOTTERY_UNAVAILABLE'
+        | 'ROOKIE_AUCTION_PICKS_UNRESOLVED'
       message: string
     }
 
@@ -190,6 +197,8 @@ export async function championAndRunnerUp(seasonId: string): Promise<{ championI
   return { championId: title.winnerRosterId, runnerUpId: runnerUp ?? null }
 }
 
+class RookieAuctionPickError extends Error {}
+
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: string }).code === 'P2002')
 }
@@ -274,7 +283,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       })
       .catch(() => null)
     rounds = resolveRookieDraftRounds(dynasty?.rookieDraftRounds)
-    draftType = dynasty?.rookieDraftType === 'snake' ? 'snake' : 'linear'
+    draftType = dynasty?.rookieDraftType === 'auction' ? 'auction' : dynasty?.rookieDraftType === 'snake' ? 'snake' : 'linear'
     thirdRoundReversal = false
 
     /*
@@ -288,6 +297,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
      * league chose the lottery and nobody pressed "Run" — one run now, stored and audited
      * (`rookieDraftLottery.ts`). A league that has not chosen it is not touched.
      */
+    const lotteryLeague = isWeightedRookieLottery(dynasty?.rookiePickOrderMethod)
     const lottery = (
       await ensureRookieDraftLottery({
         leagueId,
@@ -295,10 +305,13 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         previousDraftEndedAt: previous.completedAt ?? previous.updatedAt ?? null,
         actorUserId,
       }).catch((error) => {
-        console.warn('[next-draft] rookie lottery unavailable; using standings', { leagueId, error: String(error) })
+        console.warn('[next-draft] rookie lottery unavailable', { leagueId, error: String(error) })
         return null
       })
     )?.slotOrder ?? null
+    if (lotteryLeague && !seatsEveryRoster(lottery, draftRosters)) {
+      return { ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE', message: 'The weighted rookie lottery could not seat every team. Check the lottery settings and standings, then retry.' }
+    }
     if (seatsEveryRoster(lottery, draftRosters)) {
       slotOrder = lottery
       orderSource = 'lottery'
@@ -310,11 +323,8 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    const lotteryLeague = dynasty?.rookiePickOrderMethod === 'weighted_lottery'
     // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
-    // default (lib/rookie-order/automaticRookieOrder.ts). A lottery league whose draw could not run (not
-    // yet eligible, no standings) still falls back to worst-to-first — never to `buildSlotOrderForLeague`,
-    // which would seat a stale stored draw.
+    // default. A configured weighted lottery must have produced a complete draw above.
     const method = lotteryLeague
       ? 'weighted_lottery'
       : slotOrder
@@ -381,10 +391,12 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
   for (const k of keeperSelections) perRoster.set(k.rosterId, (perRoster.get(k.rosterId) ?? 0) + 1)
   const maxKeepers = Math.max(league.keeperCount ?? 0, ...perRoster.values(), 0)
 
+  const rookieAuction = readRookieAuctionSettings(league.settings)
   const now = new Date()
   const fromState = league.lifecycleState
   try {
     const created = await prisma.$transaction(async (tx) => {
+      if (kind === 'rookie' && draftType === 'auction' && isNativeFuturePickLeague(league)) await lockNativeFuturePicks(tx, leagueId)
       const session = await tx.draftSession.create({
         data: {
           leagueId,
@@ -401,7 +413,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           playerPool: kind === 'rookie' ? 'rookies_only' : 'all',
           draftModeLabel: kind,
           slotOrder: slotOrder as unknown as Prisma.InputJsonValue,
-          auctionBudgetPerTeam: draftType === 'auction' ? previous.auctionBudgetPerTeam : null,
+          auctionBudgetPerTeam: draftType === 'auction' ? (kind === 'rookie' ? rookieAuction.budgetPerTeam : previous.auctionBudgetPerTeam) : null,
           devyConfig: kind === 'standard' && previous.devyConfig != null ? (previous.devyConfig as Prisma.InputJsonValue) : undefined,
           c2cConfig: kind === 'standard' && previous.c2cConfig != null ? (previous.c2cConfig as Prisma.InputJsonValue) : undefined,
           keeperConfig: keeperSelections.length > 0 ? ({ maxKeepers } as Prisma.InputJsonValue) : undefined,
@@ -412,6 +424,17 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         },
         select: { id: true },
       })
+      // Auction conversion must not silently discard forfeited or unseated pick rights.
+      if (kind === 'rookie' && draftType === 'auction' && isNativeFuturePickLeague(league)) {
+        const rows = await tx.futureDraftPick.findMany({
+          where: { leagueId, pickSeason: incoming.season, status: { in: ['active', 'forfeited'] }, usedInDraftSessionId: null },
+          select: { status: true, round: true, originalRosterId: true, currentOwnerId: true },
+        })
+        const seated = new Set((slotOrder ?? []).map(entry => entry.rosterId))
+        if (rows.some(row => row.status === 'forfeited' || (row.currentOwnerId !== row.originalRosterId && (row.round > rounds || !seated.has(row.originalRosterId) || !seated.has(row.currentOwnerId))))) {
+          throw new RookieAuctionPickError('Resolve forfeited, unseated, or out-of-range rookie picks before creating this auction.')
+        }
+      }
       // Only a native league's rows are in Roster.id space; an import's are provider team ids.
       const tradedPicks = isNativeFuturePickLeague(league)
         ? await consumeNativeFuturePicksForDraft(tx, {
@@ -423,6 +446,22 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
             now,
           })
         : []
+      if (kind === 'rookie' && draftType === 'auction') {
+        // Settle protected/conditional picks in this transaction. Refuse uncertain outcomes; a
+        // thrown error rolls the draft, term settlements, and consumed pick rows back together.
+        if (isNativeFuturePickLeague(league)) {
+          const latestLeague = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+          const uncertain = Object.entries(readPickTermsRecords(latestLeague?.settings)).some(([id, record]) =>
+            parseFuturePickRef(id)?.season === incoming.season && record.result?.outcome === 'conveyed_unjudged')
+          if (uncertain) throw new RookieAuctionPickError('A conditional rookie pick could not be settled. Resolve its terms before creating this auction.')
+        }
+        try {
+          const plan = planRookieAuction({ ...rookieAuction, slotOrder: slotOrder ?? [], rounds, trades: tradedPicks })
+          await tx.draftSession.update({ where: { id: session.id }, data: { auctionState: { rookieAuction: { ...rookieAuction, trades: plan.trades } } as unknown as Prisma.InputJsonValue } })
+        } catch (error) {
+          throw new RookieAuctionPickError(error instanceof Error ? error.message : 'The rookie auction pick conversion is invalid.')
+        }
+      }
       if (tradedPicks.length > 0) {
         await tx.draftSession.update({
           where: { id: session.id },
@@ -475,6 +514,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       tradedPicksApplied: created.tradedPicksApplied,
     }
   } catch (error) {
+    if (error instanceof RookieAuctionPickError) return { ok: false, code: 'ROOKIE_AUCTION_PICKS_UNRESOLVED', message: error.message }
     if (!isUniqueViolation(error)) throw error
     const open = await prisma.draftSession.findFirst({
       where: { leagueId, status: { in: [...OPEN_DRAFT_SESSION_STATUSES] } },

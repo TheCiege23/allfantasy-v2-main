@@ -14,14 +14,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
 
 const h = vi.hoisted(() => {
-  const state = { lockAllMoves: false }
+  const state = { lockAllMoves: false, lifecycle: 'in_season', draft: 'completed' }
   const tx = {
     roster: { update: vi.fn(async () => ({})) },
     redraftRosterPlayer: { findMany: vi.fn(async () => []), updateMany: vi.fn(async () => ({ count: 1 })) },
   }
   const prisma = {
     league: {
-      findUnique: vi.fn(async () => ({ id: 'L', sport: 'NFL', settings: {}, platform: 'manual', lockAllMoves: state.lockAllMoves })),
+      findUnique: vi.fn(async () => ({ id: 'L', sport: 'NFL', settings: {}, platform: 'manual', lifecycleState: state.lifecycle, lockAllMoves: state.lockAllMoves })),
     },
     roster: { findFirst: vi.fn(async () => ({ id: 'af-1', leagueId: 'L', playerData: {}, redraftRosterId: 'rr-1' })) },
     redraftRoster: {
@@ -38,6 +38,9 @@ const h = vi.hoisted(() => {
         season: { season: 2026, sport: 'NFL', currentWeek: 1, totalWeeks: 17 },
       })),
     },
+    leagueWaiverSettings: { findUnique: vi.fn(async () => null) },
+    redraftSeason: { findFirst: vi.fn(async () => ({ id: 's1', status: 'active' })), count: vi.fn(async () => 0) },
+    draftSession: { findFirst: vi.fn(async () => ({ status: state.draft })) },
     redraftWaiverClaim: {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'c1', ...data })),
@@ -94,6 +97,8 @@ import { validateCanonicalRosterPayload } from '@/lib/roster-lineup-engine/roste
 beforeEach(() => {
   vi.clearAllMocks()
   h.state.lockAllMoves = false
+  h.state.lifecycle = 'in_season'
+  h.state.draft = 'completed'
 })
 
 const lineupMove = (toSlot: string) =>
@@ -143,6 +148,13 @@ describe('PATCH /api/redraft/roster — lineup and IR moves', () => {
 })
 
 describe('redraft waiver claims', () => {
+  it('refuses a pre-draft claim even when the commissioner move lock is off', async () => {
+    h.state.lifecycle = 'setup'; h.state.draft = 'in_progress'
+    const res = await redraftClaim()
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('pre_draft_locked')
+    expect(h.prisma.redraftWaiverClaim.create).not.toHaveBeenCalled()
+  })
   it('POST /api/redraft/waivers refuses under the lock and queues nothing', async () => {
     h.state.lockAllMoves = true
     const res = await redraftClaim()

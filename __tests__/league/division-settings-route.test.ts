@@ -62,6 +62,24 @@ describe('PUT division-settings', () => {
     expect(h.update).not.toHaveBeenCalled()
   })
 
+  it('saves "play division rivals twice", and refuses anything but on or off', async () => {
+    h.findUnique.mockResolvedValue(league(4))
+    const on = await put({ count: 2, names: ['East', 'West'], teamAssignments: split(4, [0, 0, 1, 1]), rivalsTwice: true })
+    expect(on.status).toBe(200)
+    expect(on.json.config.rivalsTwice).toBe(true)
+    const written = (h.update.mock.calls[0] as unknown as [{ data: { settings: Record<string, any> } }])[0].data.settings
+    expect(written.division_config.rivalsTwice).toBe(true)
+    expect((await put({ count: 2, rivalsTwice: 'yes' })).json.code).toBe('BAD_RIVALS_TWICE')
+    expect(h.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the saved rematch setting when a save does not mention it, and never sets it for tribes', async () => {
+    h.findUnique.mockResolvedValue(league(4, { settings: { division_config: { count: 2, names: ['East', 'West'], teamAssignments: split(4, [0, 0, 1, 1]), rivalsTwice: true } } }))
+    expect((await put({ names: ['North', 'South'] })).json.config.rivalsTwice).toBe(true)
+    h.findUnique.mockResolvedValue(league(16, { leagueVariant: 'survivor' }))
+    expect((await put({ count: 2, rivalsTwice: true })).json.config.rivalsTwice).toBe(false)
+  })
+
   it('keeps 8 tribes for a Survivor league', async () => {
     h.findUnique.mockResolvedValue(league(16, { leagueVariant: 'survivor' }))
     const { status, json } = await put({ count: 8 })
