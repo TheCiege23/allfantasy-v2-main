@@ -29,6 +29,8 @@ export type SurvivorRulesContext = {
   finale?: SurvivorFinaleSettings
   /** This season's finale windows, when set. */
   finaleWindows?: SurvivorFinaleWindows | null
+  /** Challenge settings: the weekly FAAB cap per winner and the real-game challenge setup. */
+  challenges?: { faabWeeklyCap: number; realGame: { enabled: boolean; perWeek: number; prizeText: string } } | null
 }
 
 function windowWhen(iso: string | null | undefined): string | null {
@@ -235,8 +237,29 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         '• Winning a challenge can also earn immunity.',
         (ctx.finale ?? SURVIVOR_FINALE_DEFAULTS).sealedImmunity ? '• Immunity is sealed: who holds individual immunity stays hidden until every vote is in, then it is read with the votes. Votes against them do not count.' : '',
       ].filter(Boolean).join('\n')
-    case 'challenges':
-      return '**Challenges**\n• Weekly challenges are posted in the league. Lock your pick before the challenge locks.\n• Rewards can include immunity, tokens or an advantage, and are settled from real game results.'
+    case 'challenges': {
+      const c = ctx.challenges
+      if (isEs(ctx)) {
+        return [
+          '**Retos**',
+          '• El comisionado crea retos semanales: el total de un partido, quién gana, más o menos, la estadística de un jugador o una pregunta propia. Cada uno dice si es individual o por tribu, cuándo abre y cuándo cierra (hora del Este).',
+          '• Respondes una sola vez: la primera respuesta cuenta. En un reto por tribu, la primera respuesta de la tribu cuenta para todos.',
+          '• Los retos ligados a un partido o a un jugador se resuelven solos con los resultados guardados; los demás los resuelve el comisionado.',
+          '• Los premios pueden ser puntos, FAAB, FAAB quitado a otra tribu, puntos para un compañero, un intercambio libre, un bloqueador o un robo, una ventaja o inmunidad. Algunos se pagan una semana después.',
+          c ? `• El FAAB de los retos tiene un tope de $${c.faabWeeklyCap} por ganador y semana.` : '',
+          c?.realGame.enabled ? `• Retos de partido real: ${c.realGame.perWeek} por semana, premio ${c.realGame.prizeText}.` : '',
+        ].filter(Boolean).join('\n')
+      }
+      return [
+        '**Challenges**',
+        '• The commissioner posts weekly challenges: a game total, who wins, over/under, a player stat, or their own question. Each says whether it is individual or tribe, when it opens and when it locks (Eastern time).',
+        '• You answer once: the first answer stands. In a tribe challenge, the first answer from your tribe counts for everyone.',
+        '• Challenges tied to a game or a player settle themselves from the stored results; the commissioner settles the rest.',
+        '• Prizes can be points, FAAB, FAAB taken from another tribe, points to place on a tribemate, a free trade, a steal blocker or a steal, an advantage, or immunity. Some pay out a week later.',
+        c ? `• Challenge FAAB is capped at $${c.faabWeeklyCap} per winner per week.` : '',
+        c?.realGame.enabled ? `• Real-game challenges: ${c.realGame.perWeek} a week, prize ${c.realGame.prizeText}.` : '',
+      ].filter(Boolean).join('\n')
+    }
     case 'schedule':
       return `**Schedule**\n• ${scheduleLine(ctx)}`
     case 'overview':

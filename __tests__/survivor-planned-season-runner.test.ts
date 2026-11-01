@@ -33,6 +33,8 @@ const weeklyCall = vi.hoisted(() => ({ ensure: vi.fn(async () => undefined), set
 vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ ensureWeeklyCall: weeklyCall.ensure, settleWeeklyCall: weeklyCall.settle }))
 const realGame = vi.hoisted(() => ({ ensure: vi.fn(async () => 'created'), settle: vi.fn(async () => ({ settled: 0, voided: 0, pending: 0 })) }))
 vi.mock('@/lib/survivor/survivorRealGameChallenges', () => ({ ensureRealGameChallenges: realGame.ensure, settleRealGameChallenges: realGame.settle }))
+const builder = vi.hoisted(() => ({ step: vi.fn(async () => ({ opened: 0, locked: 0, settled: 0, chimmyAnswered: 0 })) }))
+vi.mock('@/lib/survivor/survivorChallengeBuilder', () => ({ runChallengeBuilderStep: builder.step }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
 const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn(), sitOut: vi.fn() }))
 vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard, redrawTribesForSitOutBalance: redraw.sitOut }))
@@ -182,6 +184,8 @@ describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick',
     // Real-game challenges open with the week and settle on every tick, independent of the slate.
     expect(realGame.ensure).toHaveBeenCalledWith('league-1', plan.eliminationWeeks[0], expect.objectContaining({ sport: plan.sport, season: plan.season }))
     expect(realGame.settle).toHaveBeenCalledWith('league-1', expect.any(Date))
+    // Commissioner challenges open, lock and settle on every tick too.
+    expect(builder.step).toHaveBeenCalledWith('league-1', expect.any(Date))
     // The never-freeze guard runs before every council the runner opens.
     expect(redraw.guard).toHaveBeenCalledTimes(engine.triggerTribalOpen.mock.calls.length)
     expect(redraw.guard.mock.invocationCallOrder[0]).toBeLessThan(engine.triggerTribalOpen.mock.invocationCallOrder[0])

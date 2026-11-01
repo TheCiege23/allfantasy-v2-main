@@ -14,6 +14,11 @@ const h = vi.hoisted(() => ({
     survivorCommissionerAction: { create: vi.fn() },
     roster: { findFirst: vi.fn() },
     league: { findUnique: vi.fn() },
+    survivorPlayer: { findMany: vi.fn(async () => [
+      { redraftRosterId: 'my-roster', tribeId: 't1', displayName: 'Me' },
+      { redraftRosterId: 'mate', tribeId: 't1', displayName: 'Mate' },
+      { redraftRosterId: 'rival', tribeId: 't2', displayName: 'Rival' },
+    ]) },
   },
   apply: vi.fn(),
   choose: vi.fn(),
@@ -117,6 +122,8 @@ describe('/api/survivor/rewards (a manager’s own)', () => {
     expect(h.list).toHaveBeenCalledWith('L1', { rosterId: 'my-roster' })
     const body = await res.json()
     expect(body.rewards[0]).toMatchObject({ rewardId: 'tp', holder: true, text: expect.stringContaining('compañero') })
+    // The choice UI's candidates: tribemates only for "points on a tribemate".
+    expect(body.rewards[0].targets).toEqual([{ rosterId: 'mate', name: 'Mate' }])
   })
 
   it('lets the holder choose, as themselves', async () => {

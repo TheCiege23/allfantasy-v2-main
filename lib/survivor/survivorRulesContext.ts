@@ -5,6 +5,8 @@ import type { SurvivorRulesContext } from './survivorRulesAnswers'
 import { survivorIdolConfigFallback } from './survivorIdolConfigService'
 import { readSurvivorHouseRules, readSurvivorWeeklyPrizes } from './survivorWeeklyPrizes'
 import { readSurvivorFinaleSettings, readSurvivorFinaleWindows } from './survivorFinaleSettings'
+import { readChallengeFaabWeeklyCap } from './survivorChallengeBuilderModel'
+import { prizeLabel, readRealGameSettings, realGameLang } from './survivorRealGameChallengeLogic'
 
 /** The settings, plan and live cast count the rules answers are built from. Null for an unknown league. */
 export async function loadSurvivorRulesContext(leagueId: string): Promise<SurvivorRulesContext | null> {
@@ -28,5 +30,9 @@ export async function loadSurvivorRulesContext(leagueId: string): Promise<Surviv
     language: row.language ?? null,
     finale: readSurvivorFinaleSettings(raw),
     finaleWindows: readSurvivorFinaleWindows(raw),
+    challenges: (() => {
+      const realGame = readRealGameSettings(raw)
+      return { faabWeeklyCap: readChallengeFaabWeeklyCap(raw), realGame: { enabled: realGame.enabled, perWeek: realGame.perWeek, prizeText: prizeLabel(realGame.prize, realGameLang(row.language)) } }
+    })(),
   }
 }

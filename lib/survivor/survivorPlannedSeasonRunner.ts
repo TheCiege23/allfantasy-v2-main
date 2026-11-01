@@ -91,6 +91,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await settleRealGameChallenges(leagueId, now).catch(error => {
     console.warn('[survivor] real-game challenge settlement failed', error instanceof Error ? error.message : error)
   })
+  // Commissioner challenges (the challenge builder): open and lock on the clock with a host line,
+  // Chimmy answers for its seats near the lock, and the kinds our stored data can settle settle
+  // themselves. Idempotent, audited, best-effort: a failure never holds up the island.
+  {
+    const { runChallengeBuilderStep } = await import('./survivorChallengeBuilder')
+    await runChallengeBuilderStep(leagueId, now).catch(error => {
+      console.warn('[survivor] challenge builder step failed', error instanceof Error ? error.message : error)
+    })
+  }
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
   // like its council turn: a failure never holds up the island.
   {

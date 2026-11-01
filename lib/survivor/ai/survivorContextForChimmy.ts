@@ -62,6 +62,11 @@ export async function buildSurvivorContextForChimmy(
   const qaStr = qa
     ? `Finale windows: questions ${qa.windows.questionState}${qa.windows.questionsDeadline ? ` until ${qa.windows.questionsDeadline}` : ''}, answers ${qa.windows.answerState}${qa.windows.answersDeadline ? ` until ${qa.windows.answersDeadline}` : ''}, closing speeches ${qa.windows.speechState}${qa.windows.speechesDeadline ? ` until ${qa.windows.speechesDeadline}` : ''}${qa.windows.votingHeldForSpeeches ? ', jury voting opens when speeches close' : ''}. User's finale to-do: ${qa.viewer.todo.questionsToAsk.length} question(s) to ask, ${qa.viewer.todo.questionsToAnswer.length} to answer, ${qa.viewer.todo.answersToRead.length} answer(s) to mark seen, closing speech ${qa.viewer.todo.speechMissing ? 'not posted' : 'n/a or posted'}.`
     : ''
+  // Commissioner challenges: what is open, when it locks, the prize, and THIS manager's own answer
+  // (never anyone else's before the lock, never any while sealed).
+  const challengesStr = await import('../survivorChallengeBuilder')
+    .then(({ summarizeBuilderChallengesForChimmy }) => summarizeBuilderChallengesForChimmy(leagueId, userId))
+    .catch(() => '')
   const councilStr = ctx.council
     ? `Council week ${ctx.council.week}, phase ${ctx.council.phase}, deadline ${ctx.council.voteDeadlineAt.toISOString()}, closed: ${!!ctx.council.closedAt}`
     : 'No council this week'
@@ -76,6 +81,7 @@ Exile return: ${ctx.config.exileReturnEnabled}, tokens needed: ${ctx.config.exil
 Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalists.map((rosterId) => ctx.rosterDisplayNames[rosterId] ?? rosterId).join(', ') || 'None'}, jury votes ${ctx.finale.juryVotesSubmitted}/${ctx.finale.juryVotesRequired}, winner ${ctx.finale.winnerRosterId ? (ctx.rosterDisplayNames[ctx.finale.winnerRosterId] ?? ctx.finale.winnerRosterId) : 'TBD'}` : 'Not in finale yet'}.
 ${finaleRulesStr}
 ${qaStr}
+${challengesStr}
 User's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'N/A'}. User's idols: ${ctx.myIdols.map((i) => i.powerType).join(', ') || 'None'}.
 User's active effects: ${ctx.myActiveEffects.map((effect) => `${effect.rewardType}${effect.appliedMode === 'queued' ? ' (queued)' : effect.appliedMode === 'record_only' ? ' (tracked)' : ''}`).join(', ') || 'None'}.
 User's Survivor rewards (their own only): ${(ctx.myRewards ?? []).map((r) => `${r.text}${r.open && r.status === 'awaiting_choice' ? ' [waiting for the manager to choose a target; the commissioner can also set it in the Hub]' : ''}`).join('; ') || 'None'}.

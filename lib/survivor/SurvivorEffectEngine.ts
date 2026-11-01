@@ -224,6 +224,7 @@ function challengeRewardSpec(reward: SurvivorResolvedRewardInput, rosterId: stri
     case 'score_penalty':
       return rosterId ? { type, rosterId, points: amount } : null
     case 'faab_grant':
+    case 'faab_penalty':
       return rosterId ? { type, rosterId, amount } : null
     case 'faab_transfer': {
       const fromTribeId = readString(raw, 'fromTribeId')

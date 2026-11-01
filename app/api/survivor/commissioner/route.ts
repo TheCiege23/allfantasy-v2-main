@@ -81,6 +81,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ rewards: await listSurvivorRewards(leagueId) })
   }
 
+  if (type === 'challenges' || type === 'challenge_games' || type === 'challenge_players') {
+    // The challenge builder (Mini Games tab): every commissioner challenge with its answers, and the
+    // stored games / rostered players a new one can be about. DB only, never a provider.
+    const builder = await import('@/lib/survivor/survivorChallengeBuilder')
+    if (type === 'challenges') return NextResponse.json({ challenges: await builder.listBuilderChallengesForCommissioner(leagueId), meta: await builder.builderMeta(leagueId) })
+    if (type === 'challenge_games') {
+      const rawWeek = req.nextUrl.searchParams?.get('week')?.trim() ?? ''
+      const week = rawWeek ? Number(rawWeek) : NaN
+      if (!Number.isInteger(week) || week < 0 || week > 60) return NextResponse.json({ error: 'week required' }, { status: 400 })
+      return NextResponse.json({ games: await builder.listChallengeGameChoices(leagueId, week) })
+    }
+    return NextResponse.json({ players: await builder.listChallengePlayerChoices(leagueId, (req.nextUrl.searchParams?.get('q') ?? '').slice(0, 60)) })
+  }
+
   if (type === 'finale') {
     // The jury, finale and reunion rules plus this season's windows, for the Hub and league settings.
     const [league, session, openCouncil] = await Promise.all([
@@ -353,6 +367,44 @@ export async function POST(req: NextRequest) {
         })
     if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: rewardErrorStatus(result.code) })
     if (!result.duplicate) await log(action, action === 'reverse_reward' ? `Reversed reward ${rewardId}` : `Chose the target for reward ${rewardId}`, { newState: { rewardId, status: result.status } })
+    return NextResponse.json(result)
+  }
+
+  // The challenge builder (lib/survivor/survivorChallengeBuilder.ts): create, edit, open, lock,
+  // settle (preview first, then confirm), reverse and cancel. Validated on the server; idempotent.
+  if (action.startsWith('challenge_')) {
+    const builder = await import('@/lib/survivor/survivorChallengeBuilder')
+    const challengeId = typeof body.challengeId === 'string' ? body.challengeId.trim() : ''
+    if (action !== 'challenge_create' && !challengeId) return NextResponse.json({ error: 'challengeId required' }, { status: 400 })
+    const draft = body.challenge && typeof body.challenge === 'object' && !Array.isArray(body.challenge) ? (body.challenge as Record<string, unknown>) : null
+    const manual = body.manual && typeof body.manual === 'object' && !Array.isArray(body.manual) ? (body.manual as Record<string, unknown>) : null
+    let result: { ok: boolean; status?: number; error?: string } & Record<string, unknown>
+    switch (action) {
+      case 'challenge_create':
+        if (!draft) return NextResponse.json({ error: 'challenge required' }, { status: 400 })
+        result = await builder.createBuilderChallenge(leagueId, userId, draft)
+        break
+      case 'challenge_update':
+        if (!draft) return NextResponse.json({ error: 'challenge required' }, { status: 400 })
+        result = await builder.updateBuilderChallenge(leagueId, challengeId, userId, draft)
+        break
+      case 'challenge_open': result = await builder.openBuilderChallengeNow(leagueId, challengeId, userId); break
+      case 'challenge_lock': result = await builder.lockBuilderChallengeNow(leagueId, challengeId, userId); break
+      case 'challenge_cancel': result = await builder.cancelBuilderChallenge(leagueId, challengeId, userId); break
+      case 'challenge_settle_preview': result = await builder.previewBuilderSettlement(leagueId, challengeId, manual); break
+      case 'challenge_settle':
+        // The confirm step: the Hub shows the preview, then sends confirm: true.
+        if (body.confirm !== true) return NextResponse.json({ error: 'Confirm the settlement (preview it first).' }, { status: 400 })
+        result = await builder.settleBuilderChallenge(leagueId, challengeId, { manual, actorUserId: userId })
+        break
+      case 'challenge_reverse':
+        result = await builder.reverseBuilderChallenge(leagueId, challengeId, userId, typeof body.notes === 'string' ? body.notes.slice(0, 300) : null)
+        break
+      default:
+        return NextResponse.json({ error: 'Unknown challenge action' }, { status: 400 })
+    }
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status ?? 400 })
+    if (action !== 'challenge_settle_preview') await log(action, `Challenge builder: ${action.replace('challenge_', '')}${challengeId ? ` ${challengeId}` : ''}`, { newState: { challengeId: challengeId || result.challengeId } })
     return NextResponse.json(result)
   }
 

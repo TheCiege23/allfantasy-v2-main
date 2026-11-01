@@ -19,7 +19,7 @@ import {
   type SurvivorSettingsLocks,
 } from '@/lib/survivor/survivorSettingsScreen'
 import { SurvivorStateCard } from './core/SurvivorStateCard'
-import { SurvivorExileExtras, SurvivorJuryExtras, SurvivorPrizesSection, SurvivorRulesSection, survivorSettingsExtrasMessages } from './SurvivorSettingsExtras'
+import { SurvivorChallengeSettingsSection, SurvivorExileExtras, SurvivorJuryExtras, SurvivorPrizesSection, SurvivorRulesSection, survivorSettingsExtrasMessages } from './SurvivorSettingsExtras'
 import { useMessages } from '@/components/i18n/useMessages'
 import { SvkEmpty, SvkField, SvkSegmented, SvkSkeleton, SvkStepper, SvkToggle } from './core/SurvivorKit'
 import './survivor-core.css'
@@ -41,6 +41,7 @@ const SECTIONS = [
   { id: 'svt-swap', label: 'Swap, merge, jury', icon: '/survivor/late/jury-icon.svg' },
   { id: 'svt-prizes', label: 'Weekly prizes', icon: '/survivor/weekly/urn.svg' },
   { id: 'svt-rules', label: 'League rules', icon: '/survivor/exile/wax-seal.svg' },
+  { id: 'svt-challenges', label: 'Challenges', icon: '/survivor/weekly/torch-lit-icon.svg' },
   { id: 'svt-sharing', label: 'Sharing', icon: '/survivor/late/champion-icon.svg' },
 ] as const
 
@@ -268,6 +269,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
 
         <SurvivorPrizesSection {...extraProps} icon="/survivor/weekly/urn.svg" sport={state.context.sport} />
         <SurvivorRulesSection {...extraProps} icon="/survivor/exile/wax-seal.svg" />
+        <SurvivorChallengeSettingsSection {...extraProps} icon="/survivor/weekly/torch-lit-icon.svg" />
 
         <section id="svt-sharing" className="svk-card svt-sec" aria-labelledby="svt-sharing-h">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -205,7 +205,11 @@ describe('settlement rules (pure)', () => {
   })
 
   it('pays only allowed prizes: FAAB (default $5, clamped) or none, never immunity', () => {
-    expect(readRealGameSettings(null)).toEqual({ enabled: true, prize: { type: 'faab', amount: 5 } })
+    expect(readRealGameSettings(null)).toEqual({ enabled: true, perWeek: 2, prize: { type: 'faab', amount: 5 } })
+    // Commissioner settings (challenge builder): one game a week, and points through the reward API.
+    expect(readRealGameSettings({ survivorRealGameChallenges: { perWeek: 1 } }).perWeek).toBe(1)
+    expect(readRealGameSettings({ survivorRealGameChallenges: { perWeek: 7 } }).perWeek).toBe(2)
+    expect(readRealGameSettings({ survivorRealGameChallenges: { prizeType: 'score_bonus', pointsAmount: 500 } }).prize).toEqual({ type: 'score_bonus', amount: 50 })
     expect(readRealGameSettings({ survivorRealGameChallenges: { prizeType: 'immunity' } }).prize).toEqual({ type: 'faab', amount: 5 })
     expect(readRealGameSettings({ survivorRealGameChallenges: { prizeType: 'tribe_immunity' } }).prize.type).toBe('faab')
     expect(readRealGameSettings({ survivorRealGameChallenges: { faabAmount: 500 } }).prize.amount).toBe(25)

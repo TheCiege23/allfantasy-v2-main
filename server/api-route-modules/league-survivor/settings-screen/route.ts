@@ -39,6 +39,8 @@ import {
   SURVIVOR_HOUSE_RULES_KEY,
   SURVIVOR_WEEKLY_PRIZES_KEY,
 } from '@/lib/survivor/survivorWeeklyPrizes'
+import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/survivorRealGameChallengeLogic'
+import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
@@ -49,6 +51,8 @@ import {
   type SurvivorSettingsForm,
   type SurvivorSettingsLocks,
   weeklyPrizesFromForm,
+  realGameSettingsFromForm,
+  SURVIVOR_CHALLENGE_SETTING_DEFAULTS,
 } from '@/lib/survivor/survivorSettingsScreen'
 
 export const dynamic = 'force-dynamic'
@@ -95,6 +99,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
   const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, league.sport) }
   const plan = readSurvivorFullSeasonPlan(settings)
   const prizes = readSurvivorWeeklyPrizes(settings)
+  const realGame = readRealGameSettings(settings)
   const [draftStarted, assigned, idolView] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
@@ -138,6 +143,11 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       topScorerAmount: prizes.topScorerAmount,
       topScorerPowerType: prizes.topScorerPowerType,
       tribeTieBreakPosition: prizes.tribeTieBreakPosition,
+      realGameEnabled: realGame.enabled,
+      realGamePerWeek: realGame.perWeek,
+      realGamePrizeType: realGame.prize.type,
+      realGamePrizeAmount: realGame.prize.type === 'none' ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : realGame.prize.amount,
+      challengeFaabWeeklyCap: readChallengeFaabWeeklyCap(settings),
     },
     context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL') },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
@@ -225,6 +235,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if ((['winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType', 'tribeTieBreakPosition'] as const).some(has)) {
       latePatch[SURVIVOR_WEEKLY_PRIZES_KEY] = weeklyPrizesFromForm(next)
     }
+    if ((['realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount'] as const).some(has)) {
+      latePatch[REAL_GAME_SETTINGS_KEY] = realGameSettingsFromForm(next, current[REAL_GAME_SETTINGS_KEY])
+    }
+    if (has('challengeFaabWeeklyCap')) latePatch[SURVIVOR_CHALLENGE_FAAB_CAP_KEY] = next.challengeFaabWeeklyCap
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}

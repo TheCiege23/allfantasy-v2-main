@@ -53,6 +53,7 @@ function form(over: Partial<SurvivorSettingsForm> = {}): SurvivorSettingsForm {
     swapEnabled: true, swapWeek: 5, mergeTrigger: 'week', mergeWeek: 8, mergeActivePlayerCount: 7, finalistCount: 3, shareCardsEnabled: true, publicMomentPages: true, spectatorPageEnabled: false,
     coCommissionerMode: 'disabled', mergeNamingMode: 'commissioner', juryEnabled: true, tribeChatsEnabled: true, exileHarshTokenLoss: false, houseRules: '',
     winningTribeFaabPerPlayer: 0, topScorerReward: 'none', topScorerAmount: 0, topScorerPowerType: 'extra_vote', tribeTieBreakPosition: 'none',
+    realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40,
     ...over,
   }
 }
@@ -228,6 +229,25 @@ describe('weekly prizes, house rules and the newly exposed settings', () => {
     const res = await POST(req({ form: { ...before, coCommissionerMode: 'same_privacy_as_commissioner', juryEnabled: false, tribeChatsEnabled: false } }), params)
     expect(res.status).toBe(200)
     expect(m.tx.league.update.mock.calls[0][0].data.settings).toMatchObject({ coCommissionerMode: 'same_privacy_as_commissioner', juryEnabled: false, tribeChatsEnabled: false })
+  })
+
+  it('challenge settings: today’s behaviour by default, editable all season, written to their own keys', async () => {
+    m.draftStarted = true
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    expect(before).toMatchObject({ realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40 })
+    const res = await POST(req({ form: { ...before, realGamePerWeek: 1, realGamePrizeType: 'score_bonus', realGamePrizeAmount: 10, challengeFaabWeeklyCap: 100 } }), params)
+    expect(res.status).toBe(200)
+    expect(m.tx.league.update.mock.calls[0][0].data.settings).toMatchObject({
+      survivorRealGameChallenges: { enabled: true, perWeek: 1, prizeType: 'score_bonus', pointsAmount: 10 },
+      survivorChallengeFaabWeeklyCap: 100,
+    })
+    m.tx.league.update.mockClear()
+    const bad = await POST(req({ form: { ...before, challengeFaabWeeklyCap: 0 } }), params)
+    expect(bad.status).toBe(422)
+    expect((await bad.json()).error).toMatch(/challenge FAAB cap/)
+    expect((await POST(req({ form: { ...before, realGamePrizeType: 'faab', realGamePrizeAmount: 99 } }), params)).status).toBe(422)
+    expect(m.tx.league.update).not.toHaveBeenCalled()
   })
 
   it('rejects an invalid prize (422) and a junk co-commissioner mode (400)', async () => {

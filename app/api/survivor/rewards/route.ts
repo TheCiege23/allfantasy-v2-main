@@ -34,6 +34,23 @@ export async function GET(req: NextRequest) {
   if (!rosterId) return NextResponse.json({ rewards: [] })
   const language = await leagueLanguage(leagueId)
   const rewards = await listSurvivorRewards(leagueId, { rosterId })
+  // Who the manager may pick for a reward waiting on them: tribemates for "points on a tribemate",
+  // rivals for a steal (other tribes before the merge, anyone else after). Public facts only — names
+  // and tribes — never anyone's blocker.
+  const needsChoice = rewards.some((r) => r.status === 'awaiting_choice' && r.holderRosterIds.includes(rosterId))
+  const cast = needsChoice
+    ? await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { redraftRosterId: true, tribeId: true, displayName: true } })
+    : []
+  const me = cast.find((c) => c.redraftRosterId === rosterId)
+  const targetsFor = (r: (typeof rewards)[number]) => {
+    if (r.status !== 'awaiting_choice' || !r.holderRosterIds.includes(rosterId)) return undefined
+    const pool = cast.filter((c) => c.redraftRosterId && (r.spec.type === 'tribemate_points'
+      ? (c.redraftRosterId !== rosterId || r.spec.allowSelf === true) && (!me?.tribeId || c.tribeId === me.tribeId)
+      : c.redraftRosterId !== rosterId && (!me?.tribeId || c.tribeId !== me.tribeId)))
+    // After the merge everyone shares one tribe: a steal may then target anyone else.
+    const list = pool.length || r.spec.type !== 'steal' ? pool : cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== rosterId)
+    return list.map((c) => ({ rosterId: c.redraftRosterId!, name: c.displayName })).sort((a, b) => a.name.localeCompare(b.name))
+  }
   return NextResponse.json({
     rewards: rewards.map((r) => ({
       rewardId: r.rewardId,
@@ -43,6 +60,7 @@ export async function GET(req: NextRequest) {
       applyWeek: r.applyWeek,
       holder: r.holderRosterIds.includes(rosterId),
       text: describeSurvivorReward(r, language),
+      targets: targetsFor(r),
     })),
   })
 }

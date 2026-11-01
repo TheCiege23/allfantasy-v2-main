@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { WeeklyCallCard } from '@/app/survivor/components/WeeklyCallCard'
 import { RealGameChallengeCard } from '@/app/survivor/components/RealGameChallengeCard'
+import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
 
 type PastChallenge = { id: string; week: number; title: string; scope: string; status: string; challengeType: string; resultSummary: string | null }
 
@@ -127,6 +128,7 @@ export default function SurvivorChallengesPage() {
         )}
       </div>
 
+      {leagueId ? <SurvivorChallengeBoardCard leagueId={leagueId} /> : null}
       {leagueId ? <RealGameChallengeCard leagueId={leagueId} /> : null}
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 

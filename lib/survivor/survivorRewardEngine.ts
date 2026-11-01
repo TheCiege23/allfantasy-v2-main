@@ -223,6 +223,12 @@ async function executeReward(
       const applied = await adjustFaab(db, leagueId, spec.rosterId, spec.amount)
       return { status: 'applied', changes: applied ? [{ kind: 'faab', rosterId: spec.rosterId, delta: applied }] : [], note: applied ? null : 'no_budget_to_credit' }
     }
+    case 'faab_penalty': {
+      await requireActive(db, leagueId, spec.rosterId, 'That manager')
+      // adjustFaab never takes a balance below 0; the change records what was really taken.
+      const applied = await adjustFaab(db, leagueId, spec.rosterId, -spec.amount)
+      return { status: 'applied', changes: applied ? [{ kind: 'faab', rosterId: spec.rosterId, delta: applied }] : [], note: applied ? null : 'nothing_to_take' }
+    }
     case 'faab_transfer': {
       const [from, to] = await Promise.all([activeTribeRosterIds(db, leagueId, spec.fromTribeId), activeTribeRosterIds(db, leagueId, spec.toTribeId)])
       if (!from.length || !to.length) throw new RewardRefusal('not_found', 'Both tribes need active castaways for a FAAB transfer.')

@@ -63,6 +63,10 @@ export type AttentionSignalType =
   | 'survivor_finalist_answer_due'
   | 'survivor_closing_speech'
   | 'survivor_votes_due'
+  /** Survivor challenges (`survivorChallengeSignals.ts`): a commissioner challenge locks soon and the
+   * manager (or their tribe) has not answered, or the manager just won one. */
+  | 'survivor_challenge_due'
+  | 'survivor_challenge_won'
 
 export type AttentionSignalSource =
   | 'league_health_engine'

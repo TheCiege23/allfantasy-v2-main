@@ -19,6 +19,7 @@ export const SURVIVOR_REWARD_TYPES = [
   'score_bonus',
   'score_penalty',
   'faab_grant',
+  'faab_penalty',
   'faab_transfer',
   'tribemate_points',
   'free_trade_token',
@@ -51,6 +52,11 @@ export type SurvivorRewardSpec =
   | { type: 'score_penalty'; rosterId: string; points: number; targetWeek?: number | null }
   /** FAAB credited to one manager. */
   | { type: 'faab_grant'; rosterId: string; amount: number }
+  /**
+   * FAAB taken from one manager (a lost challenge wager, a missed prop): never below 0 — a manager
+   * who cannot pay gives what they have. Added for the challenge builder.
+   */
+  | { type: 'faab_penalty'; rosterId: string; amount: number }
   /**
    * FAAB taken from one tribe and given to another. `per_member` (default): each source member
    * gives `amount`; `total`: the source tribe gives `amount` split evenly. Nobody drops below 0 —
@@ -182,6 +188,7 @@ export function validateSurvivorRewardSpec(spec: unknown): string | null {
       if (!optWeek('targetWeek')) return 'The target week is not valid.'
       return null
     case 'faab_grant':
+    case 'faab_penalty':
       if (!isId(r.rosterId)) return 'Choose the manager.'
       if (!isWhole(r.amount, SURVIVOR_REWARD_LIMITS.faab)) return `FAAB must be a whole amount from $1 to $${SURVIVOR_REWARD_LIMITS.faab}.`
       return null
@@ -418,6 +425,7 @@ export function describeSurvivorReward(record: Pick<SurvivorRewardRecord, 'spec'
     case 'score_bonus': line = es ? `+${fmtPts(s.points)} puntos en la semana ${wk}` : `+${fmtPts(s.points)} points in week ${wk}`; break
     case 'score_penalty': line = es ? `−${fmtPts(s.points)} puntos en la semana ${wk}` : `−${fmtPts(s.points)} points in week ${wk}`; break
     case 'faab_grant': line = es ? `$${s.amount} de FAAB` : `$${s.amount} FAAB`; break
+    case 'faab_penalty': line = es ? `−$${s.amount} de FAAB` : `−$${s.amount} FAAB`; break
     case 'faab_transfer': line = es ? `FAAB tomado de la otra tribu ($${s.amount}${(s.basis ?? 'per_member') === 'per_member' ? ' por jugador' : ' en total'})` : `FAAB taken from the other tribe ($${s.amount}${(s.basis ?? 'per_member') === 'per_member' ? ' per player' : ' total'})`; break
     case 'tribemate_points': line = es ? `${fmtPts(s.points)} puntos para colocar en un compañero de tribu (semana ${wk})` : `${fmtPts(s.points)} points to place on a tribemate (week ${wk})`; break
     case 'free_trade_token': line = es ? `Un intercambio libre${s.samePositionOnly === false ? '' : ' de la misma posición'} que se salta las reglas de intercambio de Survivor` : `A free${s.samePositionOnly === false ? '' : ' same-position'} trade that skips the Survivor trade rules`; break

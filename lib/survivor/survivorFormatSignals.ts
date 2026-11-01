@@ -3,6 +3,7 @@ import 'server-only'
 import type { DecisionOsAttentionSignal } from '@/lib/decision-os/attentionSignals'
 import { loadSurvivorDecisionSignals } from './survivorDecisionSignals'
 import { loadSurvivorFinaleSignals } from './survivorFinaleSignalsLoader'
+import { loadSurvivorChallengeSignals } from './survivorChallengeSignalsLoader'
 
 /**
  * The ONE Survivor argument the Manager Hub's command center takes (`formatSignals`, the 5th
@@ -22,6 +23,7 @@ export async function loadSurvivorFormatSignals(args: { userId: string; leagueId
   const settled = await Promise.allSettled([
     loadSurvivorDecisionSignals(args),
     loadSurvivorFinaleSignals(args.userId, args.leagueIds, args.now),
+    loadSurvivorChallengeSignals(args),
   ])
   const out: DecisionOsAttentionSignal[] = []
   for (const result of settled) {

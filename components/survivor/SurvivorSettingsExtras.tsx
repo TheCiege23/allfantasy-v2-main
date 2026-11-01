@@ -6,6 +6,8 @@ import { defineMessages } from '@/lib/i18n/messages'
 import type { SurvivorSettingsForm, SurvivorSettingsKey } from '@/lib/survivor/survivorSettingsScreen'
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from '@/lib/survivor/survivorRewardModel'
 import { SURVIVOR_HOUSE_RULES_MAX, SURVIVOR_WEEKLY_PRIZE_LIMITS, survivorTieBreakPositions } from '@/lib/survivor/survivorWeeklyPrizes'
+import { REAL_GAME_PRIZE_LIMITS } from '@/lib/survivor/survivorRealGameChallengeLogic'
+import { CHALLENGE_FAAB_WEEKLY_CAP_RANGE } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { SvkField, SvkSegmented, SvkToggle } from './core/SurvivorKit'
 
 /**
@@ -46,6 +48,18 @@ export const survivorSettingsExtrasMessages = defineMessages({
     tieBreakHint: 'When two tribes tie on points: the tribe whose starter at this position scored more wins.',
     tieNone: 'Tribe order (default)',
     power: (p: string): string => p.replace(/_/g, ' '),
+    challengesHeading: 'Challenges',
+    realGame: 'Real-game challenges',
+    realGameHint: 'Each week the island features real games: castaways pick the winner before kickoff, and the stored final score settles it.',
+    perWeek: 'Games a week',
+    perWeekOne: 'One', perWeekTwo: 'Up to two',
+    realPrize: 'Real-game prize',
+    realPrizeHint: 'Paid to every castaway who calls it (before the merge: every member of the tribe with the best share of correct picks).',
+    pFaab: 'FAAB', pPoints: 'Points', pNone: 'Bragging rights',
+    realAmountFaab: (max: number): string => `FAAB per winner ($1–$${max})`,
+    realAmountPoints: (max: number): string => `Points per winner (1–${max})`,
+    faabCap: 'Weekly FAAB cap for challenge prizes',
+    faabCapHint: 'The most challenge FAAB one winner can collect in a week, across all challenges. $40 by default.',
   },
   es: {
     rulesHeading: 'Reglas de la liga',
@@ -79,6 +93,18 @@ export const survivorSettingsExtrasMessages = defineMessages({
     tieBreak: 'Desempate de tribus',
     tieBreakHint: 'Si dos tribus empatan en puntos, gana la tribu cuyo titular en esta posición puntuó más.',
     tieNone: 'Orden de tribus (predeterminado)',
+    challengesHeading: 'Retos',
+    realGame: 'Retos de partidos reales',
+    realGameHint: 'Cada semana la isla destaca partidos reales: los náufragos eligen al ganador antes del inicio y el marcador final guardado lo resuelve.',
+    perWeek: 'Partidos por semana',
+    perWeekOne: 'Uno', perWeekTwo: 'Hasta dos',
+    realPrize: 'Premio del partido real',
+    realPrizeHint: 'Para cada náufrago que acierte (antes de la fusión: cada miembro de la tribu con mayor proporción de aciertos).',
+    pFaab: 'FAAB', pPoints: 'Puntos', pNone: 'El orgullo',
+    realAmountFaab: (max: number): string => `FAAB por ganador ($1–$${max})`,
+    realAmountPoints: (max: number): string => `Puntos por ganador (1–${max})`,
+    faabCap: 'Tope semanal de FAAB en premios de retos',
+    faabCapHint: 'Lo máximo en FAAB de retos que un ganador puede cobrar en una semana, sumando todos los retos. $40 por defecto.',
   },
 })
 
@@ -171,4 +197,35 @@ export function SurvivorExileExtras({ draft, set, disabled, lockNote }: ExtraPro
     {lockNote('exileHarshTokenLoss')}
     <SvkToggle label={m.harsh} checked={draft.exileHarshTokenLoss} onChange={v => set('exileHarshTokenLoss', v)} disabled={disabled('exileHarshTokenLoss')} testId="survivor-settings-harsh" />
   </SvkField>
+}
+
+/** Challenge settings: the real-game challenges (count, prize) and the weekly challenge FAAB cap. */
+export function SurvivorChallengeSettingsSection({ draft, set, disabled, lockNote, icon }: ExtraProps & { icon: string }) {
+  const m = useMessages(survivorSettingsExtrasMessages)
+  const limit = draft.realGamePrizeType === 'score_bonus' ? REAL_GAME_PRIZE_LIMITS.score_bonus : REAL_GAME_PRIZE_LIMITS.faab
+  return <section id="svt-challenges" className="svk-card svt-sec" aria-labelledby="svt-challenges-h" data-testid="survivor-settings-challenges">
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <h2 id="svt-challenges-h"><img src={icon} alt="" />{m.challengesHeading}</h2>
+    <SvkField title={m.realGame} hint={m.realGameHint}>
+      {lockNote('realGameEnabled')}
+      <SvkToggle label={m.realGame} checked={draft.realGameEnabled} onChange={v => set('realGameEnabled', v)} disabled={disabled('realGameEnabled')} testId="survivor-settings-real-game" />
+      {draft.realGameEnabled && <SvkSegmented label={m.perWeek} value={draft.realGamePerWeek} onChange={v => set('realGamePerWeek', v)} disabled={disabled('realGamePerWeek')} options={[
+        { value: 1, label: m.perWeekOne },
+        { value: 2, label: m.perWeekTwo },
+      ]} testId="survivor-settings-real-game-per-week" />}
+    </SvkField>
+    {draft.realGameEnabled && <SvkField title={m.realPrize} hint={m.realPrizeHint}>
+      {lockNote('realGamePrizeType')}
+      <SvkSegmented label={m.realPrize} value={draft.realGamePrizeType} onChange={v => set('realGamePrizeType', v)} disabled={disabled('realGamePrizeType')} options={[
+        { value: 'faab', label: m.pFaab },
+        { value: 'score_bonus', label: m.pPoints },
+        { value: 'none', label: m.pNone },
+      ]} testId="survivor-settings-real-game-prize" />
+      {draft.realGamePrizeType !== 'none' && <input className="svk-input" type="number" min={1} max={limit} step={1} aria-label={draft.realGamePrizeType === 'faab' ? m.realAmountFaab(limit) : m.realAmountPoints(limit)} value={draft.realGamePrizeAmount} onChange={e => set('realGamePrizeAmount', numberOr(e.target.value, 1))} disabled={disabled('realGamePrizeAmount')} data-testid="survivor-settings-real-game-amount" />}
+    </SvkField>}
+    <SvkField title={m.faabCap} hint={m.faabCapHint}>
+      {lockNote('challengeFaabWeeklyCap')}
+      <input className="svk-input" type="number" min={CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0]} max={CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]} step={1} aria-label={m.faabCap} value={draft.challengeFaabWeeklyCap} onChange={e => set('challengeFaabWeeklyCap', numberOr(e.target.value, 40))} disabled={disabled('challengeFaabWeeklyCap')} data-testid="survivor-settings-challenge-faab-cap" />
+    </SvkField>
+  </section>
 }

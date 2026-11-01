@@ -14,6 +14,8 @@ export type ChimmyReportRow = {
   /** Councils Chimmy voted at this week. */
   voted: number
   exileTeam: string | null
+  /** Commissioner challenges Chimmy answered for this seat this week (optional; older callers omit it). */
+  challenges?: number
 }
 
 type ReportLang = 'en' | 'es'
@@ -54,6 +56,7 @@ export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReport
         : (r.voted === 1 ? 'voted at Tribal Council' : `voted at ${r.voted} Tribal Councils`))
     }
     if (r.exileTeam) parts.push(es ? `jugó con ${r.exileTeam} en el Exilio` : `played ${r.exileTeam} on Exile`)
+    if (r.challenges && r.challenges > 0) parts.push(es ? (r.challenges === 1 ? 'respondió un reto' : `respondió ${r.challenges} retos`) : (r.challenges === 1 ? 'answered a challenge' : `answered ${r.challenges} challenges`))
     return `${r.name}: ${parts.join(', ')}.`
   })
   const intro = es
@@ -88,10 +91,14 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
     prisma.exileWeeklyEntry.findMany({ where: { leagueId, week, userId: { in: userIds } }, select: { userId: true, submittedLineup: true } }),
   ])
 
+  // Challenges Chimmy answered for each seat (the challenge builder's audit rows). Best-effort.
+  const answered = await import('./survivorChallengeBuilder')
+    .then(({ countChimmyChallengeAnswers }) => countChimmyChallengeAnswers(leagueId, week, chimmy.flatMap((p) => (p.redraftRosterId ? [p.redraftRosterId] : []))))
+    .catch(() => new Map<string, number>())
   const rows: ChimmyReportRow[] = chimmy.map((p) => {
     const voted = new Set(votes.filter((v) => v.voterUserId === p.userId).map((v) => v.councilId))
     const team = readExileRoster(entries.find((e) => e.userId === p.userId)?.submittedLineup)?.team ?? null
-    return { name: p.displayName, state: p.playerState, voted: voted.size, exileTeam: team }
+    return { name: p.displayName, state: p.playerState, voted: voted.size, exileTeam: team, challenges: p.redraftRosterId ? answered.get(p.redraftRosterId) ?? 0 : 0 }
   })
   const sent = await notifySurvivorCommissionerOnce(leagueId, 'chimmy_weekly_report', {
     dedupeKey: String(week),

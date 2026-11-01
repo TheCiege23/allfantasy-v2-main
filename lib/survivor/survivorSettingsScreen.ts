@@ -25,6 +25,8 @@ import {
   type SurvivorTopScorerReward,
 } from './survivorWeeklyPrizes'
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from './survivorRewardModel'
+import { CHALLENGE_FAAB_WEEKLY_CAP_RANGE, DEFAULT_CHALLENGE_FAAB_WEEKLY_CAP } from './survivorChallengeBuilderModel'
+import { REAL_GAME_ALLOWED_PRIZES, REAL_GAME_PRIZE_LIMITS, type RealGamePrizeType } from './survivorRealGameChallengeLogic'
 
 export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
 /** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
@@ -74,6 +76,25 @@ export interface SurvivorSettingsForm {
   topScorerAmount: number
   topScorerPowerType: SurvivorRewardAdvantagePower
   tribeTieBreakPosition: string
+  /**
+   * Challenges (League.settings.survivorRealGameChallenges and survivorChallengeFaabWeeklyCap). The
+   * defaults are today's behaviour: real-game challenges on, up to two a week, $5 FAAB; challenge
+   * FAAB capped at $40 per winner per week. The system-run weekly challenges toggle stays where it
+   * was (league settings → Challenges panel).
+   */
+  realGameEnabled: boolean
+  realGamePerWeek: 1 | 2
+  realGamePrizeType: RealGamePrizeType
+  realGamePrizeAmount: number
+  challengeFaabWeeklyCap: number
+}
+
+export const SURVIVOR_CHALLENGE_SETTING_DEFAULTS = {
+  realGameEnabled: true,
+  realGamePerWeek: 2 as 1 | 2,
+  realGamePrizeType: 'faab' as RealGamePrizeType,
+  realGamePrizeAmount: 5,
+  challengeFaabWeeklyCap: DEFAULT_CHALLENGE_FAAB_WEEKLY_CAP,
 }
 
 export type SurvivorSettingsKey = keyof SurvivorSettingsForm
@@ -86,6 +107,8 @@ export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey
   // and the weekly prizes apply going forward, so changing them never rewrites a past week.
   'mergeNamingMode', 'exileHarshTokenLoss', 'houseRules',
   'winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType',
+  // Challenge settings apply to the next challenge opened; a running one keeps its own prize.
+  'realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount', 'challengeFaabWeeklyCap',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -171,7 +194,33 @@ export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSe
   }
   if ((form.houseRules ?? '').length > SURVIVOR_HOUSE_RULES_MAX) errors.push(`House rules can be at most ${SURVIVOR_HOUSE_RULES_MAX} characters.`)
   errors.push(...validateSurvivorWeeklyPrizes(weeklyPrizesFromForm(form), ctx.sport))
+  errors.push(...validateChallengeSettings(form))
   return errors
+}
+
+/** The challenge part of the form. Tolerates an older form without these fields (the defaults). */
+export function validateChallengeSettings(form: Partial<SurvivorSettingsForm>): string[] {
+  const d = SURVIVOR_CHALLENGE_SETTING_DEFAULTS
+  const errors: string[] = []
+  const type = form.realGamePrizeType ?? d.realGamePrizeType
+  const amount = form.realGamePrizeAmount ?? d.realGamePrizeAmount
+  const perWeek = form.realGamePerWeek ?? d.realGamePerWeek
+  const cap = form.challengeFaabWeeklyCap ?? d.challengeFaabWeeklyCap
+  if (perWeek !== 1 && perWeek !== 2) errors.push('Real-game challenges run one or two a week.')
+  if (!(REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(type)) errors.push('Choose FAAB, points or no prize for real-game challenges.')
+  if (type === 'faab' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.faab)) errors.push(`A real-game FAAB prize is $1 to $${REAL_GAME_PRIZE_LIMITS.faab}.`)
+  if (type === 'score_bonus' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.score_bonus)) errors.push(`A real-game points prize is 1 to ${REAL_GAME_PRIZE_LIMITS.score_bonus} points.`)
+  if (!Number.isInteger(cap) || cap < CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0] || cap > CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]) errors.push(`The weekly challenge FAAB cap is $${CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0]} to $${CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]}.`)
+  return errors
+}
+
+/** The stored `survivorRealGameChallenges` block for a form (merged over what is stored). */
+export function realGameSettingsFromForm(form: SurvivorSettingsForm, stored: unknown): Record<string, unknown> {
+  const prev = stored && typeof stored === 'object' && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {}
+  const block: Record<string, unknown> = { ...prev, enabled: form.realGameEnabled, perWeek: form.realGamePerWeek, prizeType: form.realGamePrizeType }
+  if (form.realGamePrizeType === 'faab') block.faabAmount = form.realGamePrizeAmount
+  if (form.realGamePrizeType === 'score_bonus') block.pointsAmount = form.realGamePrizeAmount
+  return block
 }
 
 /**
@@ -319,8 +368,14 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     topScorerAmount: r.topScorerAmount == null ? 0 : num('topScorerAmount'),
     topScorerPowerType: power ?? 'extra_vote',
     tribeTieBreakPosition: (str('tribeTieBreakPosition') ?? 'none').trim() || 'none',
+    // Challenge settings: a form from before them keeps today's behaviour.
+    realGameEnabled: bool('realGameEnabled') ?? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGameEnabled,
+    realGamePerWeek: r.realGamePerWeek === 1 ? 1 : SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePerWeek,
+    realGamePrizeType: (REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(String(r.realGamePrizeType)) ? (r.realGamePrizeType as RealGamePrizeType) : SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeType,
+    realGamePrizeAmount: r.realGamePrizeAmount == null ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : num('realGamePrizeAmount'),
+    challengeFaabWeeklyCap: r.challengeFaabWeeklyCap == null ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.challengeFaabWeeklyCap : num('challengeFaabWeeklyCap'),
   }
-  const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount', 'winningTribeFaabPerPlayer', 'topScorerAmount']
+  const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount', 'winningTribeFaabPerPlayer', 'topScorerAmount', 'realGamePrizeAmount', 'challengeFaabWeeklyCap']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null
   return form
 }

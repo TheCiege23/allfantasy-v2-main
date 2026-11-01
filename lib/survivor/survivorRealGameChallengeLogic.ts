@@ -119,7 +119,7 @@ export function selectFeaturedFixtures(
   fixtures: readonly RealGameFixture[],
   rosteredByTeam: ReadonlyMap<string, number>,
   now: Date,
-  max = REAL_GAME_CHALLENGE_NUMBERS.length,
+  max: number = REAL_GAME_CHALLENGE_NUMBERS.length,
 ): Array<RealGameFixture & { rostered: number }> {
   const scored = fixtures
     .filter(f => f.kickoff.getTime() - now.getTime() >= MIN_PICK_LEAD_MS)
@@ -220,19 +220,25 @@ export function settleRealGamePicks(input: {
  *     opened, breaks the council. EXCLUDED.
  *   - `tribe_immunity`: keeps a tribe out of council for the week. Same problem. EXCLUDED.
  *   - `advantage`: mints an idol (extra vote by default) — a vote changer. EXCLUDED.
- *   - `score_boost`: adds to the season points the legacy vote tie-break and the finale read
- *     (`getSeasonPointsFromRosterPerformance`), keyed by a LEGACY `Roster.id` — the id this path
- *     does not have (castaways carry a `redraftRosterId`). It would either reach a tie-break or do
- *     nothing. EXCLUDED until it is keyed on the castaway's roster.
+ *   - `score_boost` (legacy): adds to the season points the legacy vote tie-break reads, keyed by a
+ *     LEGACY `Roster.id` — the id this path does not have. EXCLUDED.
+ *   - `score_bonus` (the reward API, `applySurvivorReward`): real points on the castaway's weekly
+ *     Survivor score, keyed by the castaway's own roster and recorded in the reward ledger (so the
+ *     commissioner can reverse it). It changes a weekly total the same way a lineup does — never a
+ *     ballot or an immunity directly. ALLOWED since the challenge builder (commissioner setting).
  * `none` (bragging rights) is the other allowed setting.
  */
-export const REAL_GAME_ALLOWED_PRIZES = ['faab', 'none'] as const
+export const REAL_GAME_ALLOWED_PRIZES = ['faab', 'score_bonus', 'none'] as const
 export type RealGamePrizeType = (typeof REAL_GAME_ALLOWED_PRIZES)[number]
 export type RealGamePrize = { type: RealGamePrizeType; amount: number }
 export const REAL_GAME_DEFAULT_PRIZE: RealGamePrize = { type: 'faab', amount: 5 }
-const MAX_FAAB_PRIZE = 25
+export const REAL_GAME_PRIZE_LIMITS = { faab: 25, score_bonus: 50 } as const
+const MAX_FAAB_PRIZE = REAL_GAME_PRIZE_LIMITS.faab
+/** Up to two featured games a week (today's behaviour); the commissioner can choose one. */
+export const REAL_GAME_DEFAULT_PER_WEEK = 2
+export const REAL_GAME_SETTINGS_KEY = 'survivorRealGameChallenges'
 
-export type RealGameSettings = { enabled: boolean; prize: RealGamePrize }
+export type RealGameSettings = { enabled: boolean; prize: RealGamePrize; perWeek: 1 | 2 }
 
 /**
  * The commissioner's choice, read from `League.settings.survivorRealGameChallenges`:
@@ -245,16 +251,22 @@ export function readRealGameSettings(leagueSettings: unknown): RealGameSettings 
   const raw = root.survivorRealGameChallenges
   const block = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   const enabled = block.enabled !== false
+  const perWeek: 1 | 2 = block.perWeek === 1 ? 1 : REAL_GAME_DEFAULT_PER_WEEK
   const type = (REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(String(block.prizeType)) ? (block.prizeType as RealGamePrizeType) : REAL_GAME_DEFAULT_PRIZE.type
-  if (type === 'none') return { enabled, prize: { type, amount: 0 } }
+  if (type === 'none') return { enabled, perWeek, prize: { type, amount: 0 } }
+  if (type === 'score_bonus') {
+    const p = typeof block.pointsAmount === 'number' && Number.isFinite(block.pointsAmount) ? Math.round(block.pointsAmount) : 5
+    return { enabled, perWeek, prize: { type, amount: Math.min(REAL_GAME_PRIZE_LIMITS.score_bonus, Math.max(1, p)) } }
+  }
   const n = typeof block.faabAmount === 'number' && Number.isFinite(block.faabAmount) ? Math.round(block.faabAmount) : REAL_GAME_DEFAULT_PRIZE.amount
-  return { enabled, prize: { type, amount: Math.min(MAX_FAAB_PRIZE, Math.max(1, n)) } }
+  return { enabled, perWeek, prize: { type, amount: Math.min(MAX_FAAB_PRIZE, Math.max(1, n)) } }
 }
 
 // ── Words ─────────────────────────────────────────────────────────────────────────────────────────
 
 export function prizeLabel(prize: RealGamePrize, lang: RealGameLang): string {
   if (prize.type === 'faab' && prize.amount > 0) return lang === 'es' ? `${prize.amount} $ de FAAB` : `$${prize.amount} FAAB`
+  if (prize.type === 'score_bonus' && prize.amount > 0) return lang === 'es' ? `+${prize.amount} puntos` : `+${prize.amount} points`
   return lang === 'es' ? 'el orgullo' : 'bragging rights'
 }
 

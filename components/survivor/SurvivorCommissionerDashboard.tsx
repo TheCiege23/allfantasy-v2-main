@@ -33,6 +33,7 @@ import { TournamentSubscriptionTokensPanel } from '@/components/tournament/Tourn
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
 import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleControls'
+import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
@@ -620,7 +621,8 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               title="Mini games"
               subtitle="Challenges pull real sport schedules for the active week — see Challenges hub."
             >
-              <Link href={`${base}/challenges`} className="text-emerald-300 hover:text-emerald-200">
+              <SurvivorChallengeBuilderPanel leagueId={leagueId} />
+              <Link href={`${base}/challenges`} className="mt-4 inline-block text-emerald-300 hover:text-emerald-200">
                 Go to challenges →
               </Link>
             </WarRoomPanel>

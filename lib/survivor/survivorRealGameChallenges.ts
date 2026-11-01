@@ -57,7 +57,7 @@ function readConfig(value: unknown): ChallengeConfig | null {
   return {
     kind: 'pick_winner', sport: String(row.sport ?? ''), lang: row.lang === 'es' ? 'es' : 'en', fixture, options,
     tribes: Array.isArray(row.tribes) ? (row.tribes as TribeSnapshot[]) : null,
-    prize: prize.type === 'faab' && typeof prize.amount === 'number' && prize.amount > 0 ? prize : { type: 'none', amount: 0 },
+    prize: (prize.type === 'faab' || prize.type === 'score_bonus') && typeof prize.amount === 'number' && prize.amount > 0 ? prize : { type: 'none', amount: 0 },
     rostered: typeof row.rostered === 'number' ? row.rostered : 0,
   }
 }
@@ -126,7 +126,7 @@ export async function ensureRealGameChallenges(
     const abbr = player.team ? resolve(player.team) : null
     if (abbr) rosteredByTeam.set(abbr, (rosteredByTeam.get(abbr) ?? 0) + 1)
   }
-  const featured = selectFeaturedFixtures(fixtures, rosteredByTeam, now)
+  const featured = selectFeaturedFixtures(fixtures, rosteredByTeam, now, settings.perWeek)
   if (!featured.length) return 'no_games'
 
   let tribes: TribeSnapshot[] | null = null
@@ -153,7 +153,7 @@ export async function ensureRealGameChallenges(
         leagueId, configId: config.id, week, challengeNumber, challengeType: REAL_GAME_PICK_TYPE, scope: tribes ? 'tribe' : 'individual',
         title: copy.title, description: copy.description, instructions: copy.instructions,
         submissionMode: 'app', status: 'open', locksAt: game.kickoff, lockAt: game.kickoff,
-        rewardType: settings.prize.type === 'faab' ? 'faab' : null, rewardAmount: settings.prize.type === 'faab' ? settings.prize.amount : null,
+        rewardType: settings.prize.type === 'none' ? null : settings.prize.type, rewardAmount: settings.prize.type === 'none' ? null : settings.prize.amount,
         configJson: configJson as unknown as Prisma.InputJsonValue,
       },
       update: {},
@@ -243,9 +243,11 @@ async function settleOne(
   const claim = await prisma.survivorChallenge.updateMany({ where: { id: challenge.id, status: 'open' }, data: { status: 'settling' } })
   if (claim.count !== 1) return 'skipped'
 
-  const paid = outcome.state === 'final' && answerAbbr && config.prize.type === 'faab' ? settlement.prizeUserIds : []
+  const paid = outcome.state === 'final' && answerAbbr && config.prize.type !== 'none' ? settlement.prizeUserIds : []
   const rosterOf = new Map(active.map(p => [p.userId, p.redraftRosterId]))
-  const rewards = paid.flatMap(userId => { const rosterId = rosterOf.get(userId); return rosterId ? [{ rewardType: 'faab', rosterId, amount: config.prize.amount }] : [] })
+  // FAAB keeps the original path; points go through the reward API (applyChallengeRewards routes
+  // `score_bonus` to applySurvivorReward with a stable key per challenge and roster).
+  const rewards = paid.flatMap(userId => { const rosterId = rosterOf.get(userId); return rosterId ? [{ rewardType: config.prize.type, rosterId, amount: config.prize.amount }] : [] })
   let appliedRewards: unknown[] = []
   let rewardError: string | null = null
   if (rewards.length) {

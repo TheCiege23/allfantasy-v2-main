@@ -337,3 +337,20 @@ export async function postDeferredImmunityLines(leagueId: string, week: number):
     console.warn('[survivor] deferred immunity lines failed', error instanceof Error ? error.message : error)
   }
 }
+
+/**
+ * A challenge-builder host line (open / lock / result) in league chat. The caller passes a
+ * deterministic message id, so a runner tick that repeats the step posts nothing new. The words are
+ * already in the league's language and spoiler-safe (survivorChallengeBuilderModel.ts).
+ */
+export async function postChallengeBuilderLine(
+  leagueId: string,
+  content: string,
+  messageId: string,
+  cardData: Record<string, unknown>,
+): Promise<boolean> {
+  const channelId = await getLeagueChatChannelId(leagueId)
+  if (!channelId) return false
+  await postToChannel(leagueId, channelId, 'league', content, 'system', cardData, messageId)
+  return true
+}
