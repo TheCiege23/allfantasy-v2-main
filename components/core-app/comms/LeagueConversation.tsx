@@ -939,9 +939,16 @@ export function LeagueConversation({
           }
           onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
           onPin={tribe || !canPin ? undefined : (m) => void pinMessage(m.id)}
+          /*
+           * Two kinds of card share this one slot: a league move (imported leagues, read from the
+           * activity table) and a native league's own event notice (`renderEvent`, redraft only). They
+           * never describe the same row — a move card's id is `move:…`, which no message carries — so
+           * the move is asked first and anything else goes to `renderEvent`.
+           */
           renderSystem={(m) => {
             const move = m.messageType === LEAGUE_MOVE_MESSAGE_TYPE ? moveById.get(m.id) : undefined
-            return move ? <LeagueMoveCard move={move} /> : null
+            if (move) return <LeagueMoveCard move={move} />
+            return renderEvent ? renderEvent(m) : null
           }}
           pinBusy={pinBusy}
           onEdit={editMessage}
@@ -950,7 +957,6 @@ export function LeagueConversation({
           onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
-          renderSystem={renderEvent}
           eventKindFor={eventKindFor}
           tagFor={(m) =>
             // 'broadcast' is server-owned (sanitizeClientMessageType turns it into 'text'): only a
