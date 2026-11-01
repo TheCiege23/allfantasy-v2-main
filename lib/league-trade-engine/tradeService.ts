@@ -48,6 +48,7 @@ import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -935,6 +936,8 @@ export async function acceptAfLeagueTrade(input: {
   if (!rosterTxGateAccept.ok) throw new Error(rosterTxGateAccept.error)
   const survivorAtAccept = await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
   const survivorHeld = survivorAtAccept.holdForCommissioner
+  // The hold copy follows League.language (lib/survivor/survivorGovernanceCopy.ts).
+  const survivorHoldCopy = governanceCopy((league as { language?: string | null } | null)?.language)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
@@ -990,7 +993,7 @@ export async function acceptAfLeagueTrade(input: {
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
       body: survivorHeld
-        ? 'The Survivor trade check could not run, so it is held for the commissioner to approve or veto.'
+        ? survivorHoldCopy.tradeHeldForCommissioner
         : held
         ? 'The league integrity check flagged it, so it is held for commissioner review before processing.'
         : 'It now goes to commissioner review before processing.',
@@ -1000,7 +1003,7 @@ export async function acceptAfLeagueTrade(input: {
       status: 'accepted',
       actorUserId: input.userId,
       detail: survivorHeld
-        ? 'The Survivor trade check could not run, so it is held for the commissioner to approve or veto.'
+        ? survivorHoldCopy.tradeHeldForCommissioner
         : held
         ? 'The league integrity check flagged it, so it is held for commissioner review.'
         : 'It goes to commissioner review before it processes.',
@@ -1008,7 +1011,7 @@ export async function acceptAfLeagueTrade(input: {
     announceTradeInLeagueChat(
       trade.id,
       survivorHeld
-        ? 'Accepted. Held for the commissioner: the Survivor trade check could not run.'
+        ? survivorHoldCopy.tradeHeldChat
         : held
         ? 'Accepted. Held for commissioner review by the league integrity check.'
         : 'Accepted. It goes to commissioner review before it processes.',

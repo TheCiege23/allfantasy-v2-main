@@ -46,6 +46,19 @@ export async function holdRedraftProposalForCommissioner(args: { leagueId: strin
   }
 }
 
+/**
+ * The league's language for the hold copy (lib/survivor/survivorGovernanceCopy.ts). Never throws: the
+ * database just failed once, so an unreadable row gives null (English).
+ */
+export async function survivorLeagueLanguage(leagueId: string): Promise<string | null> {
+  try {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { language: true } })
+    return row?.language ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Redraft proposal ids held this way, for the review-window sweep to leave alone. Never throws. */
 export async function survivorHeldRedraftProposalIds(now = new Date()): Promise<string[]> {
   let rows: Array<{ relatedEntityId: string | null }> = []

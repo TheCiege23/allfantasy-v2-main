@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { checkSurvivorTradeRules, type SurvivorTradeRuleCheck } from '@/lib/survivor/survivorTradeRuleHook'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
 import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
@@ -571,7 +572,7 @@ async function assertSurvivorTradeRulesOpen(
   if (!check.ok) throw new Error(check.message)
   // The check could not run and the league holds such trades: it stays pending for the commissioner,
   // whose override (commissionerOverride) executes it. Never settled on an unchecked read.
-  if (atSettlement && check.holdForCommissioner) throw new Error(governanceCopy(null).tradeHeldForCommissioner)
+  if (atSettlement && check.holdForCommissioner) throw new Error(governanceCopy(await survivorLeagueLanguage(leagueId)).tradeHeldForCommissioner)
   return check
 }
 

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
-import { holdRedraftProposalForCommissioner } from '@/lib/survivor/survivorTradeCheckHold'
+import { holdRedraftProposalForCommissioner, survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 import { refreshCapProjections } from '@/lib/idp/capEngine'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
@@ -558,7 +558,7 @@ export async function POST(req: NextRequest) {
         status: 'accepted',
         actorUserId: userId,
         detail: survivorHeld
-          ? governanceCopy(null).tradeHeldForCommissioner
+          ? governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner
           : held
           ? 'The league integrity check flagged it, so it is held until the commissioner approves or vetoes it.'
           : proposal.vetoMode === 'league_vote'
@@ -713,7 +713,7 @@ export async function POST(req: NextRequest) {
       if (survivorAtVote.hold) {
         // The check could not run and the league holds such trades: the vote cannot settle it; the commissioner decides.
         await holdRedraftProposalForCommissioner({ leagueId: proposal.leagueId, proposalId: proposal.id, actorUserId: userId })
-        return NextResponse.json({ error: governanceCopy(null).tradeHeldForCommissioner, code: 'SURVIVOR_TRADE_CHECK_HELD' }, { status: 409 })
+        return NextResponse.json({ error: governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner, code: 'SURVIVOR_TRADE_CHECK_HELD' }, { status: 409 })
       }
     }
 

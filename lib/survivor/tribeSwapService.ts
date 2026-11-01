@@ -316,7 +316,7 @@ export async function getTribeShuffleView(leagueId: string, viewerUserId: string
     console.error('[survivor-swap] reveal failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
   })
   const [league, swap, tribes, players, rosters, ctx] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, survivorSwapWeek: true, survivorMergeWeek: true, settings: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, survivorSwapWeek: true, survivorMergeWeek: true, settings: true, language: true } }),
     prisma.survivorTribeSwap.findFirst({ where: { leagueId }, orderBy: { executedAt: 'desc' } }),
     prisma.survivorTribe.findMany({ where: { leagueId }, orderBy: { slotIndex: 'asc' }, select: { id: true, name: true, colorHex: true, logoUrl: true, isMerged: true, isActive: true, catalogId: true } }),
     prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, displayName: true, redraftRosterId: true, playerState: true } }),
@@ -351,6 +351,8 @@ export async function getTribeShuffleView(leagueId: string, viewerUserId: string
     ? activeVoters.map((p) => p.redraftRosterId ?? rosters.find((r) => r.platformUserId === p.userId)?.id).filter((id): id is string => Boolean(id))
     : []
   return {
+    /** League.language: the screen's copy follows it (lib/survivor/tribeShuffleMessages.ts). */
+    language: league?.language ?? null,
     swapWeek: league?.survivorSwapWeek ?? swap?.week ?? null,
     mergeWeek: league?.survivorMergeWeek ?? null,
     names,
