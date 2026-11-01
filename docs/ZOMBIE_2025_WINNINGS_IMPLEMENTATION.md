@@ -19,7 +19,11 @@
 
 ## Verification
 
-The full Zombie suite passed 473 tests in 63 files before the final privacy/review-hold additions; the final affected native-week, ledger and matchup suites then passed 48 tests in three files. These counts overlap. The delivery summary records the final committed-candidate check results. Added scenarios cover the 2025 role matrix, exact and fractional margins, balances below the margin, zero balances, exact 60-point combat boundaries, stacked Survivor awards, ties, reversed home/away winners, duplicate matchups, failed/repeated transactions, historical policy protection, score corrections, trade permissions and secrecy.
+The committed implementation `f8a7321eb` passed all 475 tests in 63 Zombie test files (including the trade-value suite). ESLint on the initial changed file set exited zero; the final committed set is checked separately in the delivery summary. The DB-first guard passed against `HEAD^..HEAD`; the decision boundary guard reported no monitored changed source files for the same range.
+
+The first full TypeScript run exhausted its heap. After a larger-heap run completed, it reported 150 total diagnostics, with zero diagnostics pointing to this change's files. That is a failing full-project check, not a clean compiler gate or a proven baseline comparison. An incremental check of the final candidate is recorded in the delivery summary. No error baseline was increased.
+
+Added scenarios cover the 2025 role matrix, exact and fractional margins, balances below the margin, zero balances, exact 60-point combat boundaries, stacked Survivor awards, ties, reversed home/away winners, duplicate matchups, failed/repeated transactions, historical policy protection, score corrections, trade permissions and secrecy.
 
 The transaction rollback test uses a transaction double; it is not evidence of a new real PostgreSQL or live-manager rehearsal. The earlier four-sport fixture rehearsals do not establish acceptance of these new winnings rules. Full compiler status and boundary guards are reported separately; a process that has not finished is not counted as passing.
 
