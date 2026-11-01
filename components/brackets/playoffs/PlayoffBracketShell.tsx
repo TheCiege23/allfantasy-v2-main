@@ -13,6 +13,8 @@ import {
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
+import { useNbaCupLiveView } from "./useNbaCupLiveView"
+import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -68,6 +70,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const tournamentUsed = view.viewerTournamentBracketUsed ?? null
   const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
   const rollingCup = safeChallenge.sport === "nba_cup" && !safeChallenge.isTestMode
+  useNbaCupLiveView(safeChallenge.id, rollingCup, setView)
   const tournamentLocked = singleGameSport && !rollingCup && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
@@ -486,6 +489,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           <PlayoffSyncDiagnosticsPanel diagnostics={syncDiagnostics} />
         </section>
       ) : null}
+
+      {rollingCup ? <NbaCupTournamentPanel series={series} season={safeChallenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

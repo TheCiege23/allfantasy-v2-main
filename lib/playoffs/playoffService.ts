@@ -549,6 +549,7 @@ export async function getPlayoffBracketView(input: {
     })),
     teamProfiles,
     teamLogos,
+    nbaCupLastSyncedAt: challenge.sport === "nba_cup" ? (await readNbaCupSnapshot(challenge.seasonYear).catch(() => null))?.syncedAt || null : null,
     picks: picks.map((pick: any) => ({
       id: pick.id,
       entryId: pick.entryId,

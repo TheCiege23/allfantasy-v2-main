@@ -1,13 +1,15 @@
 import type { PlayoffSeriesView } from "./types"
+import { cupPointsLeaders, type CupGameDetails } from "./nbaCupProgress"
 
 export type CupRound = "cup_group_play" | "cup_quarterfinals" | "cup_semifinals" | "cup_championship"
-export type NbaCupGame = {
+export type NbaCupGame = CupGameDetails & {
   eventId: string; round: CupRound; label: string; startsAt: string | null
   homeTeamName: string; awayTeamName: string; conference: "east" | "west" | "finals"
   venue: string | null; location: string | null
   status: "scheduled" | "in_progress" | "final"; blocked: boolean
   homeScore: number | null; awayScore: number | null; winnerTeamName: string | null
   seriesNumber?: number
+  scoreboardDate?: string
 }
 
 const EAST = new Set(["Atlanta Hawks", "Boston Celtics", "Brooklyn Nets", "Charlotte Hornets", "Chicago Bulls", "Cleveland Cavaliers", "Detroit Pistons", "Indiana Pacers", "Miami Heat", "Milwaukee Bucks", "New York Knicks", "Orlando Magic", "Philadelphia 76ers", "Toronto Raptors", "Washington Wizards"])
@@ -53,11 +55,23 @@ export function parseNbaCupScoreboard(payload: unknown, season: number): NbaCupG
     // Cross-conference group games and incorrectly labelled rounds are not valid Cup games.
     if (!conference) continue
     const venue = competition.venue
+    const period = Number.isSafeInteger(event.status?.period) && event.status.period > 0 ? event.status.period : null
+    const regulationPoints = (team: any) => {
+      const quarters = team?.linescores?.slice(0, 4)
+      return Array.isArray(quarters) && quarters.length === 4 && quarters.every((row: any) => Number.isSafeInteger(row.value) && row.value >= 0)
+        ? quarters.reduce((total: number, row: any) => total + row.value, 0) : null
+    }
     games.set(event.id, {
       eventId: event.id, round, label, startsAt: blocked ? null : new Date(timestamp).toISOString(),
       homeTeamName: h, awayTeamName: a, conference, venue: venue?.fullName ?? null,
       location: [venue?.address?.city, venue?.address?.state].filter(Boolean).join(", ") || null,
       status, blocked, homeScore: hs, awayScore: as, winnerTeamName: winner,
+      period, clock: status === "in_progress" && typeof event.status?.displayClock === "string" ? event.status.displayClock : null,
+      statusDetail: blocked ? "Schedule pending" : typeof type?.shortDetail === "string" ? type.shortDetail : status,
+      homeLeaders: status === "scheduled" ? [] : cupPointsLeaders(home),
+      awayLeaders: status === "scheduled" ? [] : cupPointsLeaders(away),
+      homeRegulationPoints: status === "final" ? regulationPoints(home) : null,
+      awayRegulationPoints: status === "final" ? regulationPoints(away) : null,
     })
   }
   return [...games.values()]

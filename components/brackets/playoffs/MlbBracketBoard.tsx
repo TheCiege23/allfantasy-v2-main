@@ -27,6 +27,8 @@ import SingleGameMatchupModal from "./SingleGameMatchupModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
 import { TeamLogo } from "@/app/components/TeamLogo"
 import { nbaCupLockedReason } from "@/lib/playoffs/nbaCupTournament"
+import { nbaCupGroupStandings } from "@/lib/playoffs/nbaCupProgress"
+import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -137,6 +139,7 @@ function TeamRow({
         </span>
       )}
       <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? name : abbreviate(name) : "TBD"}</span>
+      {sport === "nba_cup" && (series.status === "in_progress" || series.status === "final") ? <strong className="af-pb-mono" aria-label={`${name} score`}>{(side === "home" ? series.liveHomeScore : series.liveAwayScore) ?? "—"}</strong> : null}
       {official && isPlaceholderName(name) ? (
         <span className="af-pb-team-slot">slot</span>
       ) : null}
@@ -162,6 +165,8 @@ export default function MlbBracketBoard({
   const sport = String(view.challenge.sport ?? "").toLowerCase()
   const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
   const teamLogos = view.teamLogos ?? {}
+  const cupRecords = useMemo(() => Object.fromEntries(nbaCupGroupStandings(view.series, view.challenge.seasonYear)
+    .flatMap((group) => group.teams.map((team) => [team.team, `${team.wins}–${team.losses}`]))), [view.series, view.challenge.seasonYear])
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
   const rollingCup = singleGame && sport === "nba_cup"
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
@@ -178,7 +183,7 @@ export default function MlbBracketBoard({
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const [groupFilter, setGroupFilter] = useState<"upcoming" | "all">("upcoming")
   const groupGames = projectedSeries.filter((game) => game.round === "cup_group_play")
-    .filter((game) => groupFilter === "all" || !nbaCupLockedReason(game))
+    .filter((game) => groupFilter === "all" || game.status === "in_progress" || !nbaCupLockedReason(game))
     .sort((a, b) => Date.parse(a.startsAt ?? "") - Date.parse(b.startsAt ?? ""))
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
@@ -467,6 +472,7 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {rollingCup ? <NbaCupTournamentPanel series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
           {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
             <div className="af-pb-cup-group-heading"><div>
               <h2>NBA Cup scoring</h2>
@@ -478,13 +484,14 @@ export default function MlbBracketBoard({
             <div className="af-pb-cup-group-heading">
               <div><h2>Group Play</h2><p>{pointsForSeries({ round: "cup_group_play" }, sport)} point per correct winner pick · Tap a game for Chimmy Intelligence</p></div>
               <div className="af-pb-cup-filters" aria-label="Group Play filter">
-                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "upcoming"} onClick={() => setGroupFilter("upcoming")}>Upcoming</button>
+                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "upcoming"} onClick={() => setGroupFilter("upcoming")}>Live &amp; upcoming</button>
                 <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "all"} onClick={() => setGroupFilter("all")}>All games</button>
               </div>
             </div>
             {groupGames.length ? <div className="af-pb-cup-games">{groupGames.map((game) => <div key={game.id}>
               {renderMatch({ series: game, roundIndex: 0, side: "left", sourceHome: null, sourceAway: null })}
               <p className="af-pb-cup-game-footer">{game.venue || "Venue pending"}{game.location ? ` · ${game.location}` : ""}<br />
+                {game.status === "in_progress" ? `Live · ${game.liveStatus || "In progress"} · ` : ""}
                 {game.winnerTeamName ? `${game.winnerTeamName} won` : nbaCupLockedReason(game) || (picksBySeries.has(game.id) ? "✓ Pick saved" : "Choose your winner")}
               </p>
             </div>)}</div> : <p className="af-pb-note" role="status">{projectedSeries.some((game) => game.round === "cup_group_play") ? "No upcoming group games right now. View all games or check the knockout bracket below." : "Confirmed Cup games will appear here automatically as the schedule syncs. You can create your bracket now."}</p>}
@@ -590,6 +597,7 @@ export default function MlbBracketBoard({
         const modalSeries = projectedSeries.find((item) => item.id === liveNode)
         return modalSeries ? <SingleGameMatchupModal
           series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}} teamLogos={teamLogos}
+          cupRecords={cupRecords}
           picked={picksBySeries.get(liveNode) ?? null}
           locked={!bracketReady || Boolean(lockedReasonFor(modalSeries))}
           saving={saving === liveNode}

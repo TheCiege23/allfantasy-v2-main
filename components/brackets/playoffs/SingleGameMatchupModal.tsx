@@ -7,12 +7,14 @@ import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
 import { pointsForSeries } from "@/lib/playoffs/playoffScoring"
 import { TeamLogo } from "@/app/components/TeamLogo"
 import { isNbaCupTeam } from "@/lib/playoffs/nbaCupTournament"
+import { NbaCupGameSummary } from "./NbaCupTournamentPanel"
 
 type Props = {
   series: PlayoffSeriesView
   sport: string
   profiles: Record<string, BracketTeamProfile>
   teamLogos: Record<string, string>
+  cupRecords?: Record<string, string>
   picked: string | null
   locked: boolean
   saving: boolean
@@ -30,7 +32,7 @@ function chance(series: PlayoffSeriesView, home?: BracketTeamProfile, away?: Bra
   return null
 }
 
-export default function SingleGameMatchupModal({ series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose }: Props) {
+export default function SingleGameMatchupModal({ series, sport, profiles, teamLogos, cupRecords, picked, locked, saving, onPick, onClose }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeRef.current?.focus()
@@ -84,6 +86,7 @@ export default function SingleGameMatchupModal({ series, sport, profiles, teamLo
       </div>
       <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-5xl">{series.gameLabel || (sport === "ncaaf" && series.roundIndex > 1 && series.roundIndex < 4 ? "Bowl assignment to be announced" : "Tournament matchup")}</h1>
       <p className="mt-3 text-slate-300">{dateLabel} · {series.venue || "Venue to be announced"}{series.location ? ` · ${series.location}` : ""}</p>
+      {sport === "nba_cup" && (series.status === "in_progress" || series.status === "final") ? <div className="mt-5"><NbaCupGameSummary game={series} records={cupRecords} /></div> : null}
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         {teamCard(series.homeTeamName, series.homeSeed, home, estimate?.home ?? null)}
         {teamCard(series.awayTeamName, series.awaySeed, away, estimate?.away ?? null)}

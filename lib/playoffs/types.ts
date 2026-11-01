@@ -209,6 +209,7 @@ export type PlayoffChallengeView = {
   teamProfiles?: Record<string, BracketTeamProfile>
   /** Published-team crest URLs, resolved from ingested team rows at request time. */
   teamLogos?: Record<string, string>
+  nbaCupLastSyncedAt?: string | null
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null
