@@ -15,20 +15,13 @@ import { athletesInPlayText } from '@/lib/live/espnGameSummary'
  *                 within 7. Extra points and 2-pt tries are NEVER sent outside that window.
  *                 Checkpoints: NFL halftime + final; NCAAF end of Q1, halftime, end of Q3, final.
  *                 NCAAF only for Top 25 teams (the caller applies that gate — see topRankedGame).
- *   NBA / WNBA / NCAAB
- *                 No per-play alerts. End of Q1, halftime, end of Q3 (college men play halves:
- *                 halftime only), and the final. In the last 60 seconds of the final period or OT,
- *                 a score that produces a tie, a lead change or a 1-4 point game. NCAAB Top 25 only.
- *   NHL           End of each period with the score, and the final. In the last 2:00 of any period,
- *                 every goal in a game within two (close, or one team rallying), with the scorer's
- *                 name and headshot; every OT goal. In the last 2:00 of the 3rd/OT in a one-goal or
- *                 tied game, a save on the trailing team's shot names the goalie (two per game, max).
- *   MLB           Every scoring play, naming the batter, with a headshot. No inning-by-inning score
- *                 updates through six innings — the scoring plays already say the score changed.
- *                 Then the seventh-inning stretch, the end of every inning from the 7th on, and
- *                 the final.
- *   All sports    A close-game alert, with the score and where to watch, to everyone who follows
- *                 the sport.
+ *   NBA / WNBA / NCAAB  Period checkpoints, one close alert in the final period at a gap of 7
+ *                 points or less, and the final. No basket or starter milestone alerts.
+ *   NHL           Every goal, period checkpoints, one close alert in the third/OT at a gap of
+ *                 2 goals or less, and the final. No save alerts.
+ *   MLB           End of each completed inning, one close alert in the ninth or extras at a gap
+ *                 of 2 runs or less, and the final. No at-bat or starter alerts.
+ *   SOCCER        Every goal and the final. No halftime or close-game alert.
  *
  * WHO HEARS WHAT. Every alert names an `audience`:
  *   'game'  — people with a stake in THIS game: followers of either team, and managers starting a
@@ -57,10 +50,9 @@ export type GameAlert = {
 }
 
 export type GameObservation = Pick<LiveScoreRow, 'gameId' | 'homeTeam' | 'awayTeam' | 'homeScore' | 'awayScore' | 'status' | 'statusDetail' | 'period' | 'clock' | 'completed'> &
-  Partial<Pick<LiveScoreRow, 'homeLinescores' | 'awayLinescores' | 'eventName' | 'playoffSeries' | 'homeTeamId' | 'awayTeamId' | 'season' | 'startTime' | 'homeTeamFull' | 'awayTeamFull' | 'broadcast' | 'homeRank' | 'awayRank'>>
+  Partial<Pick<LiveScoreRow, 'homeLinescores' | 'awayLinescores' | 'eventName' | 'playoffSeries' | 'homeTeamId' | 'awayTeamId' | 'season' | 'startTime' | 'homeTeamFull' | 'awayTeamFull' | 'homeLogo' | 'awayLogo' | 'broadcast' | 'homeRank' | 'awayRank'>>
 
 const FOOTBALL = new Set(['NFL', 'NCAAF'])
-const BASKETBALL = new Set(['NBA', 'WNBA', 'NCAAB'])
 const TOP25 = new Set(['NCAAF', 'NCAAB'])
 
 const final = (g: GameObservation) => g.completed || /final|full_time|completed/i.test(g.status)
@@ -113,7 +105,7 @@ function checkpointPeriods(sport: string, reg: number): number[] {
     case 'NCAAB': return reg === 2 ? [1] : [1, 2, 3]
     // The 3rd period's end is the final, or the overtime alert when tied.
     case 'NHL': return [1, 2]
-    case 'SOCCER': return [1]
+    case 'SOCCER': return []
     default: return []
   }
 }
@@ -128,10 +120,9 @@ export function isCloseLateGame(sport: string, g: GameObservation): boolean {
   const lastMinutes = (limit: number) => g.period > reg || (g.period === reg && secs != null && secs <= limit)
   switch (sport) {
     case 'NFL': case 'NCAAF': return gap <= 8 && lastMinutes(120)
-    case 'NBA': case 'WNBA': case 'NCAAB': return gap <= 4 && lastMinutes(60)
-    case 'NHL': return gap <= 1 && lastMinutes(120)
-    case 'MLB': case 'NCAABASE': return gap <= 1 && g.period >= 8
-    case 'SOCCER': return gap <= 1 && g.period >= 2 && Number.parseInt(g.clock, 10) >= 80
+    case 'NBA': case 'WNBA': case 'NCAAB': return gap <= 7 && g.period >= reg
+    case 'NHL': return gap <= 2 && g.period >= 3
+    case 'MLB': case 'NCAABASE': return gap <= 2 && g.period >= 9
     default: return false
   }
 }
@@ -157,17 +148,9 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
   const alerts: GameAlert[] = []
 
   if (sport === 'MLB' || sport === 'NCAABASE') {
-    // Through six innings the scoring plays carry every score change; inning updates start at the stretch.
-    // "Past the top of the 7th": the middle, the bottom or the end of the 7th, or any later inning.
-    const pastTop7 = (g: GameObservation) => g.period > 7 || g.period === 7 && ['mid', 'bottom', 'end'].includes(inningHalf(g) ?? '')
     const endedInning = inningHalf(next) === 'end' ? next.period : next.period > previous.period ? previous.period : 0
-    const inningEnd = endedInning >= 7 && !final(next)
-    // The stretch, unless the same poll already shows the end of the 7th (one buzz, not two).
-    if (pastTop7(next) && !pastTop7(previous) && !final(next) && !(inningEnd && endedInning === 7)) {
-      alerts.push({ key: 'inning:7:mid', type: 'game_inning', audience: checkpointAudience, title: `⚾ 7th-inning stretch: ${scoreLine(next)}`, body: `Middle of the 7th.${watch(next)}` })
-    }
-    if (inningEnd) {
-      alerts.push({ key: `inning:${endedInning}:end`, type: 'game_inning', audience: checkpointAudience, title: `⚾ End of the ${ordinal(endedInning)}: ${scoreLine(next)}`, body: next.period > endedInning ? `Heading to the ${ordinal(endedInning + 1)}.` : `${next.statusDetail}.` })
+    if (endedInning >= 1 && !final(next) && (next.period === endedInning || (sumThrough(next.awayLinescores, endedInning) != null && sumThrough(next.homeLinescores, endedInning) != null))) {
+      alerts.push({ key: `inning:${endedInning}:end`, type: 'game_inning', audience: checkpointAudience, title: `⚾ End of the ${ordinal(endedInning)}: ${scoreThrough(next, endedInning)}`, body: next.period > endedInning ? `Heading to the ${ordinal(endedInning + 1)}.` : `${next.statusDetail}.` })
     }
   } else {
     // End-of-period checkpoints. Reached either at the break itself or on the first poll of the next period.
@@ -176,13 +159,16 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
     if (ended > 0 && !final(next) && checkpointPeriods(sport, reg).includes(ended)) {
       const isHalf = (reg === 4 && ended === 2) || (reg === 2 && ended === 1)
       const label = isHalf ? 'Halftime' : sport === 'NHL' ? `End of the ${ordinal(ended)} period` : `End of the ${ordinal(ended)} quarter`
-      const score = scoreThrough(next, ended)
+      // A poll may miss the break. Use line scores, or the last score from the prior period;
+      // never label the later live score as the checkpoint score.
+      const score = next.period > ended && (sumThrough(next.awayLinescores, ended) == null || sumThrough(next.homeLinescores, ended) == null)
+        ? scoreLine(previous) : scoreThrough(next, ended)
       alerts.push({ key: isHalf ? 'halftime' : `interval:${ended}`, type: isHalf ? 'game_halftime' : 'game_period_end', audience: checkpointAudience,
         title: `${label}: ${score}`, body: `${next.statusDetail || label}.${watch(next)}` })
     }
     // Overtime is the closest game there is: everyone in the sport hears about it, once.
     const inOt = (g: GameObservation) => !final(g) && (g.period > reg || /overtime|STATUS_OVERTIME|STATUS_SHOOTOUT/i.test(`${g.status} ${g.statusDetail}`))
-    if (inOt(next) && !inOt(previous) && sport !== 'SOCCER') {
+    if (inOt(next) && !inOt(previous) && FOOTBALL.has(sport)) {
       alerts.push({ key: 'overtime', type: 'game_close', audience: 'broad', severity: 'high', title: `⏱️ Overtime: ${scoreLine(next)}`, body: `Headed to overtime.${watch(next)}` })
     }
   }
@@ -196,29 +182,7 @@ export function gameStateAlerts(sport: string, previous: GameObservation | null,
     alerts.push({ key: 'close', type: 'game_close', audience: 'broad', severity: 'high', title: `🔥 Close game: ${scoreLine(next)}`, body: `${next.statusDetail}.${watch(next) || ' Tune in.'}` })
   }
 
-  // Basketball crunch time: in the last 60 seconds, every score that ties it, flips the lead or leaves a 1-4 point game.
-  if (BASKETBALL.has(sport) && !final(next) && !alerts.some(a => a.key === 'close' || a.key === 'overtime')) {
-    const swing = crunchTimeSwing(previous, next, reg)
-    if (swing) {
-      const scorer = detail ? lastScorer(detail) : null
-      alerts.push({ key: `crunch:${next.period}:${next.awayScore}-${next.homeScore}`, type: 'game_close', audience: 'broad', severity: 'high',
-        title: `${swing === 'tie' ? '🟰 Tied' : swing === 'lead_change' ? '🔄 Lead change' : '🔥 Crunch time'}: ${scoreLine(next)}`,
-        body: `${scorer ? `${scorer.name} scores. ` : ''}${next.statusDetail}.${watch(next)}`, imageUrl: scorer?.headshot ?? null })
-    }
-  }
   return alerts
-}
-
-function crunchTimeSwing(prev: GameObservation, next: GameObservation, reg: number): 'tie' | 'lead_change' | 'close' | null {
-  if (next.homeScore == null || next.awayScore == null || prev.homeScore == null || prev.awayScore == null) return null
-  if (next.homeScore === prev.homeScore && next.awayScore === prev.awayScore) return null
-  const secs = clockSeconds(next.clock)
-  if (!(next.period > reg || (next.period === reg && secs != null && secs <= 60))) return null
-  const was = Math.sign(prev.homeScore - prev.awayScore), now = Math.sign(next.homeScore - next.awayScore)
-  if (now === 0) return 'tie'
-  if (was !== 0 && was !== now) return 'lead_change'
-  const gap = Math.abs(next.homeScore - next.awayScore)
-  return gap >= 1 && gap <= 4 ? 'close' : null
 }
 
 function finalBody(g: GameObservation): string {
@@ -244,12 +208,6 @@ function athlete(detail: LiveGameDetail, id: string | null | undefined): Named |
   return line ? { id, name: line.name, headshot: line.headshot, group: lines.map(l => l.group).join(',') } : null
 }
 
-function lastScorer(detail: LiveGameDetail): Named | null {
-  const plays = detail.basketball?.plays ?? []
-  for (let i = plays.length - 1; i >= 0; i--) if (plays[i]!.scoring) return athlete(detail, plays[i]!.athleteIds[0])
-  return null
-}
-
 /** "QB Patrick Mahomes → Travis Kelce" for a football play; the skill player's headshot leads. */
 function footballPlayers(detail: LiveGameDetail, text: string): { line: string; imageUrl: string | null; ids: string[] } {
   const named = athletesInPlayText(text, detail.players ?? {}, 3).map(id => athlete(detail, id)).filter((a): a is Named => !!a)
@@ -270,6 +228,8 @@ type FootballKind = { kind: string; emoji: string; label: string }
 /** What kind of football play this is, read from ESPN's type label and its play text. */
 export function footballPlayKind(p: Pick<GameDetailPlay, 'type' | 'text' | 'scoring'>): FootballKind | null {
   const s = `${p.type ?? ''} ${p.text}`
+  // Wiped out by a penalty ("field goal is GOOD, NULLIFIED by Penalty … - No Play"): the play never counted.
+  if (/\bNULLIFIED\b|\bNo Play\b/i.test(p.text)) return null
   if (/extra point|\bPAT\b|two.?point|2.?pt|conversion/i.test(p.type ?? '')) return { kind: 'try', emoji: '🏈', label: /two.?point|2.?pt|conversion/i.test(s) ? 'Two-point try' : 'Extra point' }
   if (/field goal/i.test(s) && !/touchdown/i.test(s)) {
     if (/blocked/i.test(s)) return { kind: 'fg_blocked', emoji: '🚫', label: 'Field goal BLOCKED' }
@@ -360,64 +320,22 @@ export function gamePlayAlerts(detail: LiveGameDetail): GameAlert[] {
 
   if (sport === 'NHL') {
     const plays = detail.hockey?.plays ?? []
-    let prev = { home: 0, away: 0 }
-    let saves = 0
     const goalieIds = new Set([...(detail.hockey?.box.home?.goalies ?? []), ...(detail.hockey?.box.away?.goalies ?? [])].map(g => g.athleteId))
     for (const p of plays) {
-      const before = prev
-      if (p.homeScore != null && p.awayScore != null) prev = { home: p.homeScore, away: p.awayScore }
-      const secs = clockSeconds(p.clock)
-      const period = p.period ?? 0
-      const lastTwo = secs != null && secs <= 120
-      const ot = period > 3
-      const gapBefore = Math.abs(before.home - before.away)
+      if (!p.scoring || !p.id || !p.text) continue
       const when = periodClock(sport, p.period, p.clock)
-      if (p.scoring) {
-        if (!(ot || lastTwo && gapBefore <= 2)) continue
-        const scorer = athlete(detail, p.athleteIds.find(id => !goalieIds.has(id)))
-        add({ key: `play:${p.id}`, type: 'game_scoring_play', severity: 'high',
-          title: `🚨 ${ot ? 'OT goal' : 'Late goal'}${score(p.awayScore, p.homeScore)}`,
-          body: `${scorer ? `${scorer.name} scores. ` : ''}${p.text}${when ? ` (${when})` : ''}`, imageUrl: scorer?.headshot ?? null, athleteIds: scorer ? [scorer.id] : [] })
-      } else if (/shot/i.test(p.type ?? '') && !/miss|block/i.test(p.type ?? '') && (ot || period === 3 && lastTwo) && gapBefore <= 1 && saves < 2) {
-        // A save that keeps a lead or a tie in the final two minutes.
-        const goalie = athlete(detail, p.athleteIds.find(id => goalieIds.has(id)))
-        if (!goalie) continue
-        const shooterHome = p.teamId != null && detail.home?.id != null ? p.teamId === detail.home.id : null
-        const trailingShot = shooterHome == null || before.home === before.away || (shooterHome ? before.home < before.away : before.away < before.home)
-        if (!trailingShot) continue
-        saves++
-        add({ key: `play:${p.id}`, type: 'game_big_play', severity: 'medium', title: `🧤 Big save${score(before.away, before.home)}`,
-          body: `${goalie.name} makes the stop. ${p.text}${when ? ` (${when})` : ''}`, imageUrl: goalie.headshot, athleteIds: [goalie.id] })
-      }
-    }
-  }
-
-  if (sport === 'MLB' || sport === 'NCAABASE') {
-    for (const ab of detail.baseball?.atBats ?? []) {
-      const hr = /home run|grand slam/i.test(ab.resultType ?? '')
-      if (!ab.scoring && !hr) continue
-      const batter = athlete(detail, ab.batterId)
-      const half = ab.half ? `${ab.half === 'top' ? 'Top' : 'Bot'} ${ordinal(ab.inning ?? 0)}` : ''
-      const text = ab.result ?? ab.events.join('. ')
-      if (!ab.id || !text) continue
-      add({ key: `play:${ab.id}`, type: 'game_scoring_play', severity: hr ? 'high' : 'medium',
-        title: `⚾ ${hr ? runsLabel(text) : 'Run scores'}${score(ab.awayScore, ab.homeScore)}`,
-        body: `${batter ? `${batter.name}: ` : ''}${text}${half ? ` (${half})` : ''}`, imageUrl: batter?.headshot ?? null, athleteIds: batter ? [batter.id] : [] })
+      const scorer = athlete(detail, p.athleteIds.find(id => !goalieIds.has(id)))
+      add({ key: `play:${p.id}`, type: 'game_scoring_play', severity: 'high',
+        title: `🏒 ${p.period && p.period > 3 ? 'OT goal' : 'Goal'}${score(p.awayScore, p.homeScore)}`,
+        body: `${scorer ? `${scorer.name} scores. ` : ''}${p.text}${when ? ` (${when})` : ''}`, imageUrl: scorer?.headshot ?? null, athleteIds: scorer ? [scorer.id] : [] })
     }
   }
 
   if (sport === 'SOCCER') {
     for (const p of detail.scoringPlays) if (p.id && p.text) add({ key: `play:${p.id}`, type: 'game_scoring_play', title: `⚽ Goal${score(p.awayScore, p.homeScore)}`, body: p.text })
   }
-  // NBA, WNBA and NCAAB send no per-play alerts: their scores are checkpoints and crunch-time swings.
+  // Baseball and basketball notify at checkpoints, close-game entry and final only.
   return [...out.values()]
-}
-
-function runsLabel(text: string): string {
-  if (/grand slam/i.test(text)) return 'Grand slam'
-  const m = /(\d|two|three|four)[- ]run/i.exec(text)
-  const n = m ? ({ two: 2, three: 3, four: 4 } as Record<string, number>)[m[1]!.toLowerCase()] ?? Number(m[1]) : null
-  return n && n > 1 ? `${n}-run home run` : 'Home run'
 }
 
 /* ── post-game recap ───────────────────────────────────────────────────────── */
@@ -454,26 +372,11 @@ export function gameRecap(sport: string, g: GameObservation, detail: LiveGameDet
     body: `${finalBody(g)}\nYour starters:\n${lines.map(l => `• ${l}`).join('\n')}` }
 }
 
-/* ── personal starter alerts: NBA / WNBA / NCAAB, NHL, MLB ─────────────────── */
-
-const POINT_MILESTONES = [20, 30, 40, 50]
-
-function boxNumber(lines: GameDetailPlayerLine[] | undefined, label: string): number | null {
-  for (const line of lines ?? []) {
-    const i = line.labels.indexOf(label)
-    const n = i >= 0 ? Number.parseInt(line.stats[i] ?? '', 10) : NaN
-    if (Number.isFinite(n)) return n
-  }
-  return null
-}
+/* ── personal hockey scoring alerts ───────────────────────────────────────── */
 
 /**
- * "Your starter" alerts for the sports the NFL-only bigPlayNotifier does not cover. Kept deliberately
- * rare, because these reach a person once per starter:
- *   MLB    — a scoring at-bat or home run by the batter.
- *   NHL    — a goal, or an assist on one.
- *   NBA / WNBA / NCAAB — milestones only: 20/30/40/50 points, a double-double, a triple-double. One
- *          alert per basket would be the spam this whole module exists to stop.
+ * A goal or assist by a started hockey player is personalized. Baseball and basketball
+ * use only the game checkpoints, close-game alert and final.
  * Each alert names `starterAthleteId`; the caller sends it only to managers starting that athlete.
  */
 export function starterAlerts(detail: LiveGameDetail): GameAlert[] {
@@ -487,32 +390,13 @@ export function starterAlerts(detail: LiveGameDetail): GameAlert[] {
     out.push({ key: `starter:${key}:${id}`, type: 'game_starter_play', audience: 'game', severity: 'high', starterAthleteId: id,
       title: `⭐ Your starter ${who.name}: ${title}`, body, imageUrl: who.headshot, athleteIds: [id], ...extra })
   }
-  if (sport === 'MLB' || sport === 'NCAABASE') {
-    for (const ab of detail.baseball?.atBats ?? []) {
-      const hr = /home run|grand slam/i.test(ab.resultType ?? '')
-      if (!ab.batterId || !ab.id || !(ab.scoring || hr)) continue
-      const text = ab.result ?? ab.events.join('. ')
-      mk(ab.batterId, ab.id, hr ? runsLabel(text) : 'drives in a run', `${text}${score(ab.awayScore, ab.homeScore)}`)
-    }
-  } else if (sport === 'NHL') {
+  if (sport === 'NHL') {
     const goalies = new Set([...(detail.hockey?.box.home?.goalies ?? []), ...(detail.hockey?.box.away?.goalies ?? [])].map(g => g.athleteId))
     for (const p of detail.hockey?.plays ?? []) {
       if (!p.scoring || !p.id) continue
       const skaters = p.athleteIds.filter(id => !goalies.has(id))
       const when = periodClock(sport, p.period, p.clock)
       skaters.forEach((id, i) => mk(id, p.id, i === 0 ? 'GOAL' : 'assist', `${p.text}${score(p.awayScore, p.homeScore)}${when ? ` (${when})` : ''}`))
-    }
-  } else if (BASKETBALL.has(sport)) {
-    for (const [id, lines] of Object.entries(detail.players ?? {})) {
-      const pts = boxNumber(lines, 'PTS')
-      if (pts == null) continue
-      const cats = ['PTS', 'REB', 'AST', 'STL', 'BLK'].map(l => boxNumber(lines, l) ?? 0)
-      const tens = cats.filter(n => n >= 10).length
-      const line = `${pts} PTS, ${cats[1]} REB, ${cats[2]} AST`
-      const passed = POINT_MILESTONES.filter(m => pts >= m)
-      passed.forEach((m, i) => mk(id, `pts${m}`, `${m} points`, line, i < passed.length - 1 ? { silent: true } : {}))
-      if (tens >= 3) mk(id, 'triple_double', 'triple-double', line)
-      if (tens >= 2) mk(id, 'double_double', 'double-double', line, tens >= 3 ? { silent: true } : {})
     }
   }
   return out

@@ -2,6 +2,7 @@ import 'server-only'
 import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import {
   resolveImportCoverageSummary,
   type ImportCoverageSummary,
@@ -23,6 +24,8 @@ import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manage
 import { memberActivityFromReads, staleActivityReason } from './commissioner/activity'
 import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { buildRedraftHomeDeck, type RedraftHomeDeck } from './redraftLeagueHome'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
 import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type RecentTrade } from './recentTrades'
@@ -36,6 +39,8 @@ import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/lea
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
+import { rosterPlayerIds } from './myRoster'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -132,6 +137,11 @@ export type LeagueStanding = {
 export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
+  /**
+   * The redraft season-race deck for an imported league whose stored data positively says redraft
+   * (lib/core-app/redraftLeagueHome.ts). Absent or null: every other league — Home renders as before.
+   */
+  redraft?: RedraftHomeDeck | null
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
   calendar?: LeagueCalendarEvent[]
@@ -150,6 +160,7 @@ export type LeagueHomeData = {
     variant: string | null
     name: string
     platform: string
+    canRemoveImported?: boolean
     format: string | null
     sport: string
     season: number | null
@@ -180,6 +191,9 @@ export type LeagueHomeData = {
    */
   stage: string | null
   preSeason: boolean
+  /** Provider teams remain visible before standings have any scored games. */
+  teamDirectory: Array<{ id: string; name: string; ownerName: string; isYou: boolean }>
+  rosteredPlayerCount: number
   /**
    * The week the scoreboard is showing, and the weeks it could show.
    *
@@ -637,15 +651,15 @@ export async function getLeagueHomeData(
   const [rosterRows, waiverSettings] = await Promise.all([
     prisma.roster.findMany({
         where: { leagueId },
-        select: { platformUserId: true, faabRemaining: true },
+        select: { platformUserId: true, faabRemaining: true, playerData: true },
       })
-      .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => []),
+      .catch((): Array<{ platformUserId: string; faabRemaining: number | null; playerData: unknown }> => []),
     prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } })
       .catch(() => null),
   ])
   const faabEnabled = waiverSettings?.waiverType?.toLowerCase() === 'faab'
 
-  const rosterCountForDraft = rosterRows.length
+  const rosteredPlayerCount = rosterRows.reduce((total, row) => total + rosterPlayerIds(row.playerData).length, 0)
   const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
 
   /*
@@ -721,7 +735,7 @@ export async function getLeagueHomeData(
    * are the evidence. Without this, a league with full rosters on screen was
    * told "no draft has been set up".
    */
-  const draftedAlready = rosterCountForDraft > 0
+  const draftedAlready = rosteredPlayerCount > 0
 
 
   // A league whose teams all sit at 0-0 has been imported but never had results
@@ -875,6 +889,51 @@ export async function getLeagueHomeData(
         }).catch(() => null)
       : null
 
+  /*
+   * The redraft "season race" deck (lib/core-app/redraftLeagueHome.ts), for an imported league whose
+   * STORED data positively says redraft (lib/league-media/redraftIdentity.ts). Everything it shows is
+   * already read above except the recap's week, which is the same WeeklyMatchup read as `board` for
+   * the week before the current one — skipped when `board` already is that week. Null for every other
+   * league, which renders exactly as before.
+   */
+  const redraftIdentity = resolveRedraftIdentity({
+    platform: league.platform,
+    sport: league.sport,
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    isDynasty: league.isDynasty,
+    bestBallMode: league.bestBallMode,
+    guillotineMode: league.guillotineMode,
+    settings: league.settings,
+  })
+  const recapWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null
+  const lastWeekBoard =
+    redraftIdentity && !preSeason && recapWeek != null && league.season != null
+      ? board?.week === recapWeek
+        ? board
+        : await getLeagueScoreboard({
+            leagueId: league.id,
+            platformLeagueId: league.platformLeagueId,
+            seasonYear: league.season,
+            week: recapWeek,
+            yourRosterId: yours?.externalId ?? null,
+            scoringSettings: extractScoringSettings(league.settings),
+            projectionWeek: null,
+          }).catch(() => null)
+      : null
+  const redraft = redraftIdentity
+    ? buildRedraftHomeDeck({
+        identity: redraftIdentity,
+        settings: league.settings,
+        currentWeek,
+        stage,
+        preSeason,
+        standings: standings.available ? standings.data : null,
+        board,
+        lastWeekBoard,
+      })
+    : null
+
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
@@ -952,8 +1011,16 @@ export async function getLeagueHomeData(
         }
 
   return {
+    redraft,
     stage,
     preSeason,
+    teamDirectory: teams.map((team) => ({
+      id: team.id,
+      name: team.teamName,
+      ownerName: team.ownerName,
+      isYou: team.id === yours?.id,
+    })),
+    rosteredPlayerCount,
     pairing,
     calendar: leagueCalendar(league.settings),
     league: {
@@ -961,6 +1028,7 @@ export async function getLeagueHomeData(
       variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
+      canRemoveImported: league.userId === userId || isImportedPlatform(league.platform),
       format: league.leagueType ?? null,
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,
@@ -1041,7 +1109,8 @@ export async function getLeagueHomeData(
       ? {
           available: true,
           data: {
-            href: `/core/draft-hq?league=${league.id}`,
+            // A live draft goes straight to the room; Draft HQ is the planning screen.
+            href: draftRow.phase === 'live' ? draftRoomHref(league.id) : `/core/draft-hq?league=${league.id}`,
             linkLabel:
               draftRow.phase === 'done'
                 ? 'Open the draft board'

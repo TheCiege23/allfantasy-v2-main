@@ -1,5 +1,8 @@
 import 'server-only'
 import { attachLeagueHubs } from './attachLeagueHubs'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
+import { attachLeagueAudience } from './attachLeagueAudience'
+import type { LeagueAudience } from '@/lib/league-privacy/leagueAudience'
 import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
@@ -77,6 +80,8 @@ export type MyLeaguesLeague = Dash34League & {
   isCommissioner: boolean
   /** The single most specific blocking cause, already phrased by the 34a chip builder. */
   reason: string | null
+  /** Public or private for a league made here; null for a league on another platform. */
+  audience?: LeagueAudience | null
 }
 
 export type MyLeaguesData = {
@@ -213,7 +218,8 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     season: seasonOf(r),
   }))
 
-  await attachLeagueHubs(userId, leagues)
+  // Exile Island rows learn their Survivor league, so /leagues can draw each island under it.
+  await Promise.all([attachLeagueHubs(userId, leagues), attachSurvivorExileLinks(leagues), attachLeagueAudience(leagues)])
 
   const platforms = Array.from(new Set(leagues.map((l) => String(l.platform).toLowerCase()))).sort()
 

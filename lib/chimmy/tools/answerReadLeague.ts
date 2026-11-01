@@ -4,6 +4,7 @@
  */
 export const WORLD_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'find_league_by_name',
+  'find_open_leagues',
   'get_player_game_log',
   'get_player_season_stats',
   'get_season_stat_leaders',

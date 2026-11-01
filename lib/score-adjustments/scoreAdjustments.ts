@@ -35,6 +35,11 @@ export type ScoreAdjustment = {
   reason: string
   byUserId: string
   at: string
+  /**
+   * Set when the adjustment applies a stat correction the league office posted after the week was
+   * sealed (lib/stat-corrections). Absent on a commissioner's own adjustment.
+   */
+  source?: 'stat_correction'
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -59,6 +64,26 @@ export function adjustmentFor(list: readonly ScoreAdjustment[], matchupId: strin
   let sum = 0
   for (const a of list) if (a.matchupId === matchupId && a.rosterId === rosterId) sum += a.points
   return round2(sum)
+}
+
+/**
+ * The actor automatic corrections are recorded under (lib/stat-corrections/extendedCorrections.ts
+ * re-exports it). Defined here so this module can recognise them without importing that one.
+ */
+export const STAT_CORRECTION_ACTOR = 'system:stat-corrections'
+
+/**
+ * Whether an adjustment applies a stat correction: the commissioner's Apply (tagged `source`) or an
+ * automatic extended correction (recorded under STAT_CORRECTION_ACTOR). Both paths count both, so a
+ * correction landed one way is never added again the other way.
+ */
+export function isStatCorrectionAdjustment(a: ScoreAdjustment): boolean {
+  return a.source === 'stat_correction' || a.byUserId === STAT_CORRECTION_ACTOR
+}
+
+/** The part of a team's adjustment in one matchup that applies stat corrections. */
+export function statCorrectionApplied(list: readonly ScoreAdjustment[], matchupId: string, rosterId: string): number {
+  return adjustmentFor(list.filter(isStatCorrectionAdjustment), matchupId, rosterId)
 }
 
 /** A computed score with the commissioner's adjustment on top. */

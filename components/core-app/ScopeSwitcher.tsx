@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { coreLeagueHref } from '@/lib/core-app/leagueNavigation'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { usePathname, useRouter } from 'next/navigation'
@@ -17,8 +19,12 @@ import {
   type ScopeOption,
 } from '@/lib/core-app/homeScope'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
+import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { scopeSwitcherMessages } from '@/lib/core-app/messages/scopeSwitcher'
 import '@/components/core-app/af-scope-switcher.css'
 
 /**
@@ -66,6 +72,8 @@ export type ScopeSwitcherLeague = {
   imageUrl?: string | null
   /** The viewer commissions it — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
+  /** On an Exile Island: its Survivor league's id. The list draws the island under that league. */
+  exileOf?: string
 }
 
 type Props = {
@@ -118,7 +126,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
    * translated: `label` is only passed through `scopeLabelText` when no league is selected.
    */
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(scopeSwitcherMessages)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set(favoriteIds))
@@ -171,14 +179,21 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             platformLabel(l.platform).toLowerCase().includes(q),
         )
       : offered.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
-    // Starred first, then the order the rail uses (by name) — stable within each group.
-    return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
+    // Starred first, then the order the rail uses (by name) — stable within each group. Each Exile
+    // Island then moves directly under its Survivor league when that league is in the list.
+    return pairExileUnderSurvivor([...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id))))
   }, [leagues, labels, favorites, q, hiddenKey, archivedKey, selectedLeagueId])
+  const exileRows = useMemo(() => pairedExileIds(shownLeagues), [shownLeagues])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?view=all&${HOME_SCOPE_PARAM}=all` : `/core?view=all&${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
 
-  const leagueHref = (id: string) => coreLeagueHref(pathname, id, leagueScreen)
+  const leagueHref = (id: string) => {
+    const league = leagues.find(row => row.id === id)
+    return league && isNativePlatform(league.platform)
+      ? leagueEntryHref(league)
+      : coreLeagueHref(pathname, id, leagueScreen)
+  }
 
   const navigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -214,8 +229,8 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
 
   const groups: Array<{ key: ScopeOption['group']; title: string | null }> = [
     { key: 'all', title: null },
-    { key: 'sport', title: es ? 'Deporte' : 'Sport' },
-    { key: 'platform', title: es ? 'Plataforma' : 'Platform' },
+    { key: 'sport', title: m.sport },
+    { key: 'platform', title: m.platform },
   ]
 
   const isCurrent = (option: ScopeOption) => !selectedLeagueId && option.value === scopeValue
@@ -232,10 +247,10 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
         onClick={() => setOpen((v) => !v)}
       >
         <span className="af-scope-kicker" aria-hidden="true">
-          {selectedLeagueId ? (es ? 'Liga' : 'League') : es ? 'Viendo' : 'Viewing'}
+          {selectedLeagueId ? m.kickerLeague : m.kickerViewing}
         </span>
         <span className="af-scope-label">
-          <span className="af-sr-only">{es ? 'Viendo: ' : 'Viewing: '}</span>
+          <span className="af-sr-only">{m.viewingSr}</span>
           {selectedLeagueId ? label : scopeLabelText(label, language)}
         </span>
         <span className="af-scope-caret" aria-hidden="true">
@@ -250,13 +265,13 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             type="button"
             tabIndex={-1}
             className="af-scope-scrim"
-            aria-label={es ? 'Cerrar el selector de ligas' : 'Close league picker'}
+            aria-label={m.closePicker}
             onClick={() => setOpen(false)}
           />
-          <div ref={panelRef} id={panelId} className="af-scope-panel" role="dialog" aria-modal="true" aria-label={es ? 'Elige qué ligas ver' : 'Choose which leagues to view'}>
+          <div ref={panelRef} id={panelId} className="af-scope-panel" role="dialog" aria-modal="true" aria-label={m.chooseLeagues}>
             <div className="af-scope-head">
-              <strong>{es ? '¿Qué ligas?' : 'Which leagues?'}</strong>
-              <button type="button" className="af-scope-close" aria-label={es ? 'Cerrar el selector de ligas' : 'Close league picker'} onClick={() => setOpen(false)}>
+              <strong>{m.whichLeagues}</strong>
+              <button type="button" className="af-scope-close" aria-label={m.closePicker} onClick={() => setOpen(false)}>
                 ×
               </button>
             </div>
@@ -268,7 +283,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                 )
                 if (inGroup.length === 0) return null
                 return (
-                  <div className="af-scope-group" key={group.key} role="group" aria-label={group.title ?? (es ? 'Alcance' : 'Scope')}>
+                  <div className="af-scope-group" key={group.key} role="group" aria-label={group.title ?? m.scope}>
                     {group.title ? <span className="af-scope-group-title">{group.title}</span> : null}
                     <div className="af-scope-chips">
                       {inGroup.map((option) => {
@@ -279,9 +294,9 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                             key={key}
                             className="af-scope-chip"
                             aria-disabled="true"
-                            title={es ? 'Marca una liga con la estrella para usar esto' : 'Star a league below to use this'}
+                            title={m.starToUse}
                           >
-                            ★ {es ? 'Favoritas' : 'Favorites'} <b>0</b>
+                            ★ {m.favorites} <b>0</b>
                           </span>
                         ) : (
                           <Link
@@ -304,36 +319,33 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             </div>
 
             <label className="af-scope-search">
-              <span className="af-sr-only">{es ? 'Busca una liga' : 'Find a league'}</span>
+              <span className="af-sr-only">{m.findLeague}</span>
               <input
                 ref={inputRef}
                 type="search"
                 value={query}
-                placeholder={es ? 'Busca una liga, deporte o plataforma' : 'Find a league, sport or platform'}
+                placeholder={m.findPlaceholder}
                 onChange={(event) => setQuery(event.target.value)}
                 autoComplete="off"
               />
             </label>
 
-            <ul className="af-scope-list" aria-label={es ? 'Ligas' : 'Leagues'}>
+            <ul className="af-scope-list" aria-label={m.leagues}>
               {shownLeagues.length === 0 ? (
                 <li className="af-scope-empty">
-                  {es ? 'Ninguna liga coincide con' : 'No league matches'} &ldquo;{query}&rdquo;.
+                  {m.noLeagueMatches} &ldquo;{query}&rdquo;.
                 </li>
               ) : (
                 shownLeagues.map((league) => {
                   const starred = favorites.has(league.id)
-                  return (
-                    <li key={league.id} className="af-scope-row" data-current={league.id === selectedLeagueId}>
+                  const isExile = exileRows.has(league.id)
+                  const row = (
+                    <li key={league.id} className="af-scope-row" data-current={league.id === selectedLeagueId} data-exile={isExile ? 'true' : undefined}>
                       <button
                         type="button"
                         className="af-scope-star"
                         aria-pressed={starred}
-                        aria-label={
-                          es
-                            ? `${starred ? 'Quitar' : 'Añadir'} ${labelOf(league)} ${starred ? 'de' : 'a'} favoritas`
-                            : `${starred ? 'Remove' : 'Add'} ${labelOf(league)} ${starred ? 'from' : 'to'} favorites`
-                        }
+                        aria-label={m.starLabel(starred, labelOf(league))}
                         onClick={() => toggleFavorite(league.id)}
                       >
                         {starred ? '★' : '☆'}
@@ -342,12 +354,13 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         href={leagueHref(league.id)}
                         className="af-scope-league"
                         aria-current={league.id === selectedLeagueId ? 'true' : undefined}
+                        aria-label={isExile ? labelOf(league) : undefined}
                         prefetch={false}
                         onClick={(event) => navigate(event, leagueHref(league.id))}
                       >
                         <span className="af-scope-league-art"><LeagueMark src={league.imageUrl} letter={Array.from(league.name)[0] ?? "L"} /></span>
                         <span className="af-scope-league-name">
-                          {labelOf(league)}
+                          {isExile ? coreUiCopy('Exile Island', language) : labelOf(league)}
                           {league.isCommissioner ? <CommissionerBadge /> : null}
                         </span>
                         <span className="af-scope-league-meta">
@@ -356,11 +369,16 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                       </Link>
                     </li>
                   )
+                  if (!isExile) return row
+                  return [
+                    <li key={`exile-link-${league.id}`} className="af-scope-exile-link" data-testid="scope-exile-link" aria-hidden>↕</li>,
+                    row,
+                  ]
                 })
               )}
             </ul>
             <p className="af-scope-note">
-              {es ? 'Las favoritas se guardan en este dispositivo.' : 'Favorites are saved on this device.'}
+              {m.favoritesNote}
             </p>
           </div>
         </>

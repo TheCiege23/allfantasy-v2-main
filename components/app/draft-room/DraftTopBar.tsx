@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
@@ -69,6 +69,8 @@ export type DraftTopBarProps = {
   isReconnecting?: boolean
   /** Orphan roster on clock: show CPU/AI Manager badge and allow Run pick */
   isOrphanOnClock?: boolean
+  /** The team on the clock is a Chimmy AI manager slot, which picks on its own after a short delay. */
+  chimmyManagerOnClock?: boolean
   /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "AI Manager" */
   orphanDrafterMode?: 'cpu' | 'ai'
   /** Selected setting mode; used to show fallback state when requested AI runs in CPU fallback. */
@@ -124,6 +126,15 @@ export type DraftTopBarProps = {
     syncedAt: string | null
   } | null
   startDraftDisabled?: boolean
+  /**
+   * Dynasty leagues only: the room's dynasty skin (ink/vault ground, trophy-gold hairline) and
+   * the draft-kind chip. Redraft rooms leave this false and render exactly as before.
+   */
+  dynastySkin?: boolean
+  /** "Rookie draft · 2027" / "Startup draft" — from `formatDynastyDraftKindLabel`. */
+  dynastyDraftKindLabel?: string | null
+  /** One line on how a rookie auction converted traded rookie picks; null hides it. */
+  rookieAuctionNote?: string | null
 }
 
 const TIMER_COLORS = {
@@ -155,39 +166,62 @@ function translateTimerMode(mode: TimerMode, t: (key: string) => string): string
   return mode.replace(/_/g, ' ')
 }
 
-function resolveDraftFormatLabel(
+export function resolveDraftFormatLabel(
   draftType: string,
   thirdRoundReversal: boolean,
+  t: (key: string) => string,
 ): string {
   const norm = draftType.trim().toLowerCase()
-  if (norm === 'auction') return 'Auction'
-  if (norm === 'linear') return 'Linear'
-  if (norm === 'snake') return thirdRoundReversal ? 'Snake + 3RR' : 'Snake'
+  if (norm === 'auction') return t('draftRoom.draftType.auction')
+  if (norm === 'linear') return t('draftRoom.draftType.linear')
+  if (norm === 'snake') return thirdRoundReversal ? t('draftRoom.topBar.format.snake3rr') : t('draftRoom.draftType.snake')
   return draftType
 }
 
-function formatTimerSummary(timerSeconds: number | null | undefined): string {
-  if (!timerSeconds || timerSeconds <= 0) return 'Untimed picks'
-  if (timerSeconds < 60) return `${timerSeconds} Seconds Per Pick`
+function withCount(template: string, count: number): string {
+  return template.replace('{{count}}', String(count))
+}
+
+export function formatTimerSummary(timerSeconds: number | null | undefined, t: (key: string) => string): string {
+  if (!timerSeconds || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
+  if (timerSeconds < 60) return withCount(t('draftRoom.topBar.timer.seconds'), timerSeconds)
   if (timerSeconds < 3600) {
     const minutes = Math.round(timerSeconds / 60)
-    return `${minutes} Minute${minutes === 1 ? '' : 's'} Per Pick`
+    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
   }
   if (timerSeconds < 86400) {
     const hours = Math.round(timerSeconds / 3600)
-    return `${hours} Hour${hours === 1 ? '' : 's'} Per Pick`
+    return withCount(t(hours === 1 ? 'draftRoom.topBar.timer.hourOne' : 'draftRoom.topBar.timer.hours'), hours)
   }
   const days = Math.round(timerSeconds / 86400)
-  return `${days} Day${days === 1 ? '' : 's'} Per Pick`
+  return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
 }
 
 function formatPoolReadinessLabel(
   sport: string,
   poolReadiness: DraftTopBarProps['poolReadiness'],
+  t: (key: string) => string,
 ): string | null {
   if (!poolReadiness) return null
-  if (poolReadiness.ready) return `Draft pool ready: ${poolReadiness.entryCount} players`
-  return `Preparing ${sport} draft pool...`
+  if (poolReadiness.ready) return withCount(t('draftRoom.topBar.poolReady'), poolReadiness.entryCount)
+  return t('draftRoom.topBar.poolPreparing').replace('{{sport}}', sport)
+}
+
+/** Dynasty skin tokens, always with the fallback so the room works before the token sheet lands. */
+const DYN = {
+  ink: 'var(--dyn-ink,#0B0F17)',
+  vault: 'var(--dyn-vault,#121826)',
+  line: 'var(--dyn-line,#2A3345)',
+  gold: 'var(--dyn-gold,#D4A24C)',
+  goldSoft: 'var(--dyn-gold-soft,#F3D79F)',
+  faint: 'var(--dyn-faint,#9AA4B2)',
+} as const
+
+/** Archivo condensed 700 uppercase — the dynasty pick-label face. */
+const DYN_CONDENSED_STYLE: CSSProperties = {
+  fontFamily: "'Archivo', ui-sans-serif, system-ui, sans-serif",
+  fontStretch: '75%',
+  fontWeight: 700,
 }
 
 export function DraftTopBar({
@@ -222,6 +256,7 @@ export function DraftTopBar({
   commissionerPauseControlsEnabled = true,
   isReconnecting = false,
   isOrphanOnClock = false,
+  chimmyManagerOnClock = false,
   orphanDrafterMode = 'cpu',
   orphanDrafterRequestedMode = orphanDrafterMode,
   orphanFallbackActive = false,
@@ -248,8 +283,11 @@ export function DraftTopBar({
   showAiOverlays = true,
   poolReadiness = null,
   startDraftDisabled = false,
+  dynastySkin = false,
+  dynastyDraftKindLabel = null,
+  rookieAuctionNote = null,
 }: DraftTopBarProps) {
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,
@@ -376,7 +414,7 @@ export function DraftTopBar({
           ? formatTimerRemaining(0)
           : formatTimerRemaining(effectiveRemaining ?? 0)
 
-  const timerSummary = useMemo(() => formatTimerSummary(timerSeconds), [timerSeconds])
+  const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const urgentLowTimer =
     timerStatus === 'running' &&
     timerEndAtIso != null &&
@@ -406,9 +444,9 @@ export function DraftTopBar({
     isCurrentUserOnClock
   const statusLabel = translateDraftStatus(draftStatus, t)
   const draftTypeLabel = translateDraftType(draftType, t)
-  const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal)
+  const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal, t)
   const timerModeLabel = translateTimerMode(timerMode, t)
-  const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness)
+  const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness, t)
 
   const centerCta = (() => {
     /** Completed state: show a clear broadcast "Draft Complete" badge. */
@@ -416,7 +454,7 @@ export function DraftTopBar({
       return (
         <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-emerald-400/35 bg-gradient-to-br from-emerald-500/18 via-[#0a1228] to-[#070d18] px-4 py-2 text-sm font-bold text-emerald-50 shadow-[0_8px_28px_rgba(16,185,129,0.18)]">
           <Sparkles className="h-4 w-4 shrink-0 text-emerald-300" />
-          <span>Draft Complete</span>
+          <span>{t('draftRoom.topBar.draftComplete')}</span>
         </div>
       )
     }
@@ -429,10 +467,10 @@ export function DraftTopBar({
           disabled={commissionerLoading || startDraftDisabled}
           data-testid="draft-topbar-start-draft"
           className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55"
-          title={startDraftDisabled ? (poolReadinessLabel ?? 'Preparing draft pool...') : 'Start draft'}
+          title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
         >
           <Grid2x2 className="h-4 w-4" />
-          START DRAFT
+          {t('draftRoom.topBar.startDraftCta')}
         </button>
       )
     }
@@ -467,11 +505,11 @@ export function DraftTopBar({
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
             <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
-              Resume
+              {t('draftRoom.topBar.resumeBadge')}
             </span>
           ) : draftStatus === 'paused' ? (
             <span className="rounded border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
-              Paused
+              {t('draftRoom.topBar.timerPaused')}
             </span>
           ) : null}
         </>
@@ -492,25 +530,25 @@ export function DraftTopBar({
           : 'cursor-default'
       }`
       const pillTooltip = isPausedCommissioner
-        ? 'Click to resume the draft. Time remaining is restored from when it was paused.'
+        ? t('draftRoom.topBarHint.clockResume')
         : draftStatus === 'paused'
-          ? 'Draft is paused by the commissioner. Resume from the commissioner control center.'
+          ? t('draftRoom.topBarHint.clockPaused')
           : criticalLowTimer
-            ? 'Pick clock under 5 seconds — autopick about to fire.'
+            ? t('draftRoom.topBarHint.clockUnder5')
             : urgentLowTimer
-              ? 'Pick clock under 10 seconds.'
+              ? t('draftRoom.topBarHint.clockUnder10')
               : dangerLowTimer
-                ? 'Pick clock under 30 seconds.'
+                ? t('draftRoom.topBarHint.clockUnder30')
                 : timerStatus === 'expired'
-                ? 'Pick clock expired. Soft timer leagues wait for a manual pick.'
-                : 'On-the-clock pick timer.'
+                ? t('draftRoom.topBarHint.clockExpired')
+                : t('draftRoom.topBarHint.clockRunning')
       if (handlePillClick) {
         return (
           <button
             type="button"
             onClick={handlePillClick}
             disabled={commissionerLoading}
-            aria-label="Resume draft"
+            aria-label={t('draftRoom.topBar.aria.resume')}
             title={pillTooltip}
             data-testid={isPausedCommissioner ? 'draft-topbar-resume-draft' : 'draft-topbar-clock'}
             data-paused={draftStatus === 'paused' ? 'true' : 'false'}
@@ -564,17 +602,34 @@ export function DraftTopBar({
         : t('draftRoom.topBar.cpuManager')
 
   const rs = draftRoomPresentation === 'redraft_snake'
+  // The dynasty skin never stacks on the redraft look: page.tsx keeps dynasty out of
+  // `redraft_snake`, and this guard keeps it that way if a caller ever passes both.
+  const dyn = dynastySkin && !rs
 
   return (
     <header
       className={`relative z-30 border-b px-3 pb-0.5 pt-0.5 backdrop-blur-xl sm:px-4 ${
         rs
           ? 'border-cyan-400/25 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(34,211,238,0.14),transparent),linear-gradient(180deg,#0b1829_0%,#060f1e_45%,#050814_100%)] shadow-[0_16px_56px_rgba(8,145,178,0.14)]'
-          : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'
+          : dyn
+            ? ''
+            : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'
       }`}
+      data-dynasty-skin={dyn ? 'true' : undefined}
+      style={
+        dyn
+          ? {
+              borderColor: DYN.line,
+              background: `radial-gradient(ellipse 120% 80% at 50% -20%, rgba(212,162,76,0.10), transparent), linear-gradient(180deg, ${DYN.vault} 0%, ${DYN.ink} 100%)`,
+            }
+          : undefined
+      }
     >
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent"
+        className={`pointer-events-none absolute inset-x-0 top-0 h-px ${
+          dyn ? '' : 'bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent'
+        }`}
+        style={dyn ? { background: `linear-gradient(90deg, transparent, ${DYN.gold}, transparent)`, opacity: 0.55 } : undefined}
         aria-hidden
       />
       {/*
@@ -619,10 +674,19 @@ export function DraftTopBar({
                 <h1 className="truncate text-sm font-bold tracking-tight text-white drop-shadow-sm sm:text-base">
                   {leagueName}
                 </h1>
+                {dyn && dynastyDraftKindLabel ? (
+                  <span
+                    data-testid="draft-topbar-dynasty-kind"
+                    className="hidden shrink-0 items-center sm:inline-flex rounded-md border px-1.5 py-0.5 text-[11px] uppercase leading-none tracking-[0.08em]"
+                    style={{ ...DYN_CONDENSED_STYLE, borderColor: DYN.gold, color: DYN.goldSoft, background: 'rgba(212,162,76,0.10)' }}
+                  >
+                    {dynastyDraftKindLabel}
+                  </span>
+                ) : null}
                 {onlineCount != null && onlineCount > 0 && (
                   <span
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/12 px-2 py-0.5 text-[11px] font-semibold text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
-                    title={`${onlineCount} manager${onlineCount === 1 ? '' : 's'} online`}
+                    title={tInterpolate(onlineCount === 1 ? 'draftRoom.topBarHint.onlineOne' : 'draftRoom.topBarHint.onlineMany', { count: onlineCount })}
                     data-testid="draft-topbar-online-count"
                   >
                     <span className="relative flex h-2 w-2">
@@ -638,6 +702,17 @@ export function DraftTopBar({
                   inline meta line below (`{teamCount} Teams · {rounds} Rounds ·
                   {sport} · {draftTypeLabel}`). Removing them de-clutters the
                   draft-room header without losing any information. */}
+              {dyn && dynastyDraftKindLabel ? (
+                // Phones: the chip beside the name would squeeze the name to nothing, so the
+                // draft kind gets its own line under it instead.
+                <p
+                  className="mt-0 truncate text-[11px] uppercase tracking-[0.08em] sm:hidden"
+                  style={{ ...DYN_CONDENSED_STYLE, color: DYN.goldSoft }}
+                  data-testid="draft-topbar-dynasty-kind-mobile"
+                >
+                  {dynastyDraftKindLabel}
+                </p>
+              ) : null}
               {poolReadinessLabel && !poolReadiness?.ready ? (
                 <p className="mt-0 truncate text-[11px] text-amber-200 md:hidden" data-testid="draft-topbar-pool-readiness-mobile">
                   {poolReadinessLabel}
@@ -646,13 +721,13 @@ export function DraftTopBar({
           <div className="mt-0 hidden flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7] md:flex">
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
-                <span>{teamCount} Teams</span>
+                <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
                 <span className="text-white/24">·</span>
-                <span>{rounds} Rounds</span>
+                <span>{withCount(t('draftRoom.topBar.roundsCount'), rounds)}</span>
                 <span className="text-white/24">·</span>
                 <span className="text-white/55">{sport}</span>
                 <span className="text-white/24">·</span>
-                <span title={`Draft type: ${draftTypeLabel}`}>{draftFormatLabel}</span>
+                <span title={t('draftRoom.topBar.draftTypeTitle').replace('{{type}}', draftTypeLabel)}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
                     <span className="text-white/24">·</span>
@@ -669,10 +744,10 @@ export function DraftTopBar({
                     <span className="text-white/24">·</span>
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
-                      title="Third Round Reversal: rounds 2 and 3 go in the same direction."
+                      title={t('draftRoom.topBar.thirdRoundReversalTitle')}
                       className="inline-flex items-center rounded-md border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100"
                     >
-                      3RR On
+                      {t('draftRoom.topBar.thirdRoundReversalOn')}
                     </span>
                   </>
                 ) : null}
@@ -685,11 +760,21 @@ export function DraftTopBar({
                   data-testid="draft-copy-invite-inline"
                   className="inline-flex items-center gap-1 text-[#c6d0ff] transition duration-150 hover:text-white"
                 >
-                  Invite Leaguemates
+                  {t('draftRoom.topBar.inviteLeaguemates')}
                   <Copy className="h-3.5 w-3.5" />
                 </button>
-                {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
+                {copyFeedback === 'copied' ? <span className="text-cyan-300">{t('draftRoom.topBar.copied')}</span> : null}
               </div>
+              {dyn && rookieAuctionNote ? (
+                <p
+                  data-testid="draft-topbar-rookie-auction-note"
+                  className="mt-0.5 truncate text-[11px]"
+                  style={{ color: DYN.faint }}
+                  title={rookieAuctionNote}
+                >
+                  {rookieAuctionNote}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -698,7 +783,7 @@ export function DraftTopBar({
               <div
                 className="inline-flex max-w-full items-center gap-1 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2 py-1 text-[11px] text-cyan-100"
                 data-testid="draft-topbar-ai-overlay"
-                title={aiRecommendationOverlay.note ?? 'AI recommendation overlay'}
+                title={aiRecommendationOverlay.note ?? t('draftRoom.topBarHint.aiOverlay')}
               >
                 {aiRecommendationOverlay.label ? (
                   <span className="rounded border border-cyan-300/35 bg-cyan-500/20 px-1 py-0.5 font-semibold uppercase tracking-[0.1em] text-[11px]">
@@ -713,15 +798,15 @@ export function DraftTopBar({
                 {aiRecommendationOverlay.valueDelta != null && Number.isFinite(aiRecommendationOverlay.valueDelta) ? (
                   <span className={aiRecommendationOverlay.valueDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}>
                     {aiRecommendationOverlay.valueDelta >= 0
-                      ? `Value +${aiRecommendationOverlay.valueDelta.toFixed(1)}`
-                      : `Reach ${aiRecommendationOverlay.valueDelta.toFixed(1)}`}
+                      ? tInterpolate('draftRoom.topBarHint.valuePlus', { value: aiRecommendationOverlay.valueDelta.toFixed(1) })
+                      : tInterpolate('draftRoom.topBarHint.reach', { value: aiRecommendationOverlay.valueDelta.toFixed(1) })}
                   </span>
                 ) : null}
                 {aiRecommendationOverlay.stackAvailable ? (
-                  <span className="text-violet-100">Stack</span>
+                  <span className="text-violet-100">{t('draftRoom.topBarHint.stack')}</span>
                 ) : null}
                 {aiRecommendationOverlay.byeWeekConflict ? (
-                  <span className="text-amber-200">Bye conflict</span>
+                  <span className="text-amber-200">{t('draftRoom.topBarHint.byeConflict')}</span>
                 ) : null}
                 {aiRecommendationOverlay.confidencePct != null ? (
                   <span className="text-cyan-100/85">{aiRecommendationOverlay.confidencePct}%</span>
@@ -819,10 +904,12 @@ export function DraftTopBar({
                   isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock
+                {isOrphanOnClock && chimmyManagerOnClock
+                  ? t('draftRoom.topBarHint.chimmyPicking')
+                  : isOrphanOnClock
                   ? orphanModeLabel
                   : isCurrentUserOnClock
-                    ? "You're on the clock"
+                    ? t('draftRoom.topBarHint.youOnClock')
                     : t('draftRoom.topBar.onTheClock')}
               </span>
             </div>
@@ -842,10 +929,10 @@ export function DraftTopBar({
                   ? 'border-emerald-400/40 bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/20'
                   : 'border-amber-400/40 bg-amber-500/12 text-amber-100 hover:bg-amber-500/20'
               } disabled:cursor-not-allowed disabled:opacity-45`}
-              title={draftStatus === 'paused' ? 'Resume the draft' : 'Pause the draft'}
+              title={draftStatus === 'paused' ? t('draftRoom.topBarHint.resumeTheDraft') : t('draftRoom.topBarHint.pauseTheDraft')}
             >
               {draftStatus === 'paused' ? <Sparkles className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-              {draftStatus === 'paused' ? 'Resume' : 'Pause'}
+              {draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}
             </button>
           ) : null}
           <button
@@ -858,15 +945,15 @@ export function DraftTopBar({
                 : 'border-white/14 bg-white/6 text-white/62 hover:border-white/25 hover:bg-white/10'
             } disabled:cursor-not-allowed disabled:opacity-50`}
             data-testid="draft-topbar-autopick-pill"
-            title="Toggle autopick: when enabled, will auto-pick when timer expires"
+            title={t('draftRoom.topBarHint.autoPickToggle')}
           >
             <span
               className={`h-2 w-2 rounded-full ${autoPickEnabled ? 'bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/35'}`}
               aria-hidden
             />
-            <span className="hidden sm:inline">Auto-pick </span>
-            <span className="sm:hidden">Auto </span>
-            {autoPickEnabled ? 'On' : 'Off'}
+            <span className="hidden sm:inline">{`${t('draftRoom.topBarHint.autoPickLong')} `}</span>
+            <span className="sm:hidden">{`${t('draftRoom.topBarHint.autoPickShort')} `}</span>
+            {autoPickEnabled ? t('draftRoom.topBarHint.autoPickOn') : t('draftRoom.topBarHint.autoPickOff')}
           </button>
 
           <button
@@ -874,7 +961,7 @@ export function DraftTopBar({
             onClick={handleToggleTimerMute}
             data-testid="draft-topbar-timer-mute-toggle"
             aria-pressed={timerMuted}
-            title={timerMuted ? 'Timer beeps muted — click to enable' : 'Mute timer beeps (10s / 5s / final)'}
+            title={timerMuted ? t('draftRoom.topBarHint.beepsMuted') : t('draftRoom.topBarHint.muteBeeps')}
             className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition duration-150 cursor-pointer ${
               timerMuted
                 ? 'border-white/14 bg-white/6 text-white/55 hover:border-white/25 hover:bg-white/10'
@@ -898,7 +985,7 @@ export function DraftTopBar({
               data-testid="draft-topbar-menu-toggle"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/12 bg-[#7180a8]/20 text-white/85 transition duration-150 hover:bg-[#7b89af]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
               aria-expanded={menuOpen}
-              aria-label="Draft options"
+              aria-label={t('draftRoom.topBarHint.draftOptions')}
             >
               <Menu className="h-4 w-4" />
             </button>
@@ -921,9 +1008,9 @@ export function DraftTopBar({
                 >
                   <Copy className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                   <span>
-                    <span className="block text-sm font-semibold text-white">Copy Invite Link</span>
+                    <span className="block text-sm font-semibold text-white">{t('draftRoom.topBarMenu.copyInvite')}</span>
                     <span className="block text-xs text-white/55">
-                      Your friends can join via this link
+                      {t('draftRoom.topBarMenu.copyInviteDesc')}
                     </span>
                   </span>
                 </button>
@@ -939,9 +1026,9 @@ export function DraftTopBar({
                   >
                     <Tv className="mt-0.5 h-4 w-4 text-[#dbe1ff]" aria-hidden />
                     <span>
-                      <span className="block text-sm font-semibold text-white">Big Screen Mode</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBarMenu.bigScreen')}</span>
                       <span className="block text-xs text-white/55">
-                        Read-only board view for casting to a TV.
+                        {t('draftRoom.topBarMenu.bigScreenDesc')}
                       </span>
                     </span>
                   </Link>
@@ -959,8 +1046,8 @@ export function DraftTopBar({
                   >
                     <LayoutGrid className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                     <span>
-                      <span className="block text-sm font-semibold text-white">Set Draft Order</span>
-                      <span className="block text-xs text-white/55">Set or edit the draft order</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBarMenu.setOrder')}</span>
+                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.setOrderDesc')}</span>
                     </span>
                   </button>
                 ) : null}
@@ -977,9 +1064,9 @@ export function DraftTopBar({
                   >
                     <ArrowLeftRight className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                     <span>
-                      <span className="block text-sm font-semibold text-white">Trades</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBar.trades')}</span>
                       <span className="block text-xs text-white/55">
-                        {pendingTradesCount > 0 ? `${pendingTradesCount} pending trade${pendingTradesCount === 1 ? '' : 's'}` : 'Open pick trade center'}
+                        {pendingTradesCount > 0 ? tInterpolate(pendingTradesCount === 1 ? 'draftRoom.topBarMenu.pendingTradesOne' : 'draftRoom.topBarMenu.pendingTradesMany', { count: pendingTradesCount }) : t('draftRoom.topBarMenu.openTradeCenter')}
                       </span>
                     </span>
                   </button>
@@ -998,8 +1085,8 @@ export function DraftTopBar({
                   >
                     <RefreshCw className={`mt-0.5 h-4 w-4 text-[#dbe1ff] ${resyncLoading ? 'animate-spin' : ''}`} />
                     <span>
-                      <span className="block text-sm font-semibold text-white">Resync</span>
-                      <span className="block text-xs text-white/55">Refresh timer, queue, and board state</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBar.resync')}</span>
+                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.resyncDesc')}</span>
                     </span>
                   </button>
                 ) : null}
@@ -1017,9 +1104,9 @@ export function DraftTopBar({
                     <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                       <span>
                         <span className="block text-sm font-semibold text-white">
-                        {isCommissioner ? 'Draft Room Preferences' : t('draftRoom.topBar.viewDraftSettings')}
+                        {isCommissioner ? t('draftRoom.topBarMenu.roomPreferences') : t('draftRoom.topBar.viewDraftSettings')}
                       </span>
-                      <span className="block text-xs text-white/55">Room timer, automation, and presentation</span>
+                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.roomPreferencesDesc')}</span>
                       </span>
                   </button>
                 ) : leagueDraftSettingsHref ? (
@@ -1032,7 +1119,7 @@ export function DraftTopBar({
                     <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                     <span>
                       <span className="block text-sm font-semibold text-white">{t('draftRoom.topBar.leagueDraftSettings')}</span>
-                      <span className="block text-xs text-white/55">Open full draft settings</span>
+                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.openFullSettings')}</span>
                     </span>
                   </Link>
                 ) : null}
@@ -1045,14 +1132,14 @@ export function DraftTopBar({
                       setMenuOpen(false)
                     }}
                     data-testid="draft-topbar-open-settings"
-                    title="Commissioner control center"
+                    title={t('draftRoom.topBarMenu.controlCenterTitle')}
                     className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
                   >
                     <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                       <span>
-                      <span className="block text-sm font-semibold text-white">Commissioner Control Center</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBarMenu.controlCenter')}</span>
                       <span className="block text-xs text-white/55">
-                        Start, pause, resume, picks, and automation
+                        {t('draftRoom.topBarMenu.controlCenterDesc')}
                       </span>
                     </span>
                   </button>
@@ -1068,13 +1155,13 @@ export function DraftTopBar({
                     }}
                     disabled={startDraftDisabled || commissionerLoading}
                     data-testid="draft-topbar-menu-start"
-                    title={startDraftDisabled ? (poolReadinessLabel ?? 'Preparing draft pool...') : 'Start draft'}
+                    title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBarMenu.preparingPool')) : t('draftRoom.topBarMenu.startDraftTitle')}
                     className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8 disabled:opacity-45"
                   >
                     <Sparkles className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                     <span>
-                      <span className="block text-sm font-semibold text-white">Start Draft</span>
-                      <span className="block text-xs text-white/55">Finalize settings and start the draft now</span>
+                      <span className="block text-sm font-semibold text-white">{t('draftRoom.topBarMenu.startDraft')}</span>
+                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.startDraftDesc')}</span>
                     </span>
                   </button>
                 ) : null}
@@ -1099,17 +1186,17 @@ export function DraftTopBar({
                     title={
                       commissionerPauseControlsEnabled
                         ? undefined
-                        : 'Pause controls are disabled in league draft / automation settings'
+                        : t('draftRoom.topBarMenu.pauseDisabled')
                     }
                     className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <Clock className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
                     <span>
                       <span className="block text-sm font-semibold text-white">
-                        {draftStatus === 'paused' ? 'Resume Draft' : 'Pause Draft'}
+                        {draftStatus === 'paused' ? t('draftRoom.topBarMenu.resumeDraft') : t('draftRoom.topBarMenu.pauseDraft')}
                       </span>
                       <span className="block text-xs text-white/55">
-                        {draftStatus === 'paused' ? 'Restart the draft timer' : 'Pause the current draft clock'}
+                        {draftStatus === 'paused' ? t('draftRoom.topBarMenu.resumeDraftDesc') : t('draftRoom.topBarMenu.pauseDraftDesc')}
                       </span>
                     </span>
                   </button>
@@ -1128,10 +1215,10 @@ export function DraftTopBar({
                     <Sparkles className="mt-0.5 h-4 w-4 text-violet-200" />
                     <span>
                       <span className="block text-sm font-semibold text-white">
-                        {runAiPickLoading ? 'Running AI Pick' : 'Run AI Pick'}
+                        {runAiPickLoading ? t('draftRoom.topBarMenu.runningAiPick') : t('draftRoom.topBarMenu.runAiPick')}
                       </span>
                       <span className="block text-xs text-white/55">
-                        Trigger the orphan team drafter for the current pick
+                        {t('draftRoom.topBarMenu.runAiPickDesc')}
                       </span>
                     </span>
                   </button>
@@ -1150,7 +1237,7 @@ export function DraftTopBar({
                         data-testid="draft-topbar-reset-timer"
                         className="rounded-xl border border-white/12 bg-white/5 px-3 py-2 text-xs text-white/82 transition duration-150 hover:bg-white/12 disabled:opacity-45"
                       >
-                        Reset Timer
+                        {t('draftRoom.topBarMenu.resetTimer')}
                       </button>
                     ) : null}
                     {onUndoPick ? (
@@ -1164,7 +1251,7 @@ export function DraftTopBar({
                         data-testid="draft-topbar-undo-pick"
                         className="rounded-xl border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-100 transition duration-150 hover:bg-red-500/20 disabled:opacity-45"
                       >
-                        Undo Pick
+                        {t('draftRoom.topBarMenu.undoPick')}
                       </button>
                     ) : null}
                   </div>
@@ -1182,9 +1269,9 @@ export function DraftTopBar({
                   ? 'border-amber-400/35 bg-amber-500/15 text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.25)]'
                   : 'text-amber-300'
               }`}
-              title="Draft session poll failed several times in a row. The room keeps your last good snapshot; polls retry automatically."
+              title={t('draftRoom.topBarHint.syncIssueTitle')}
             >
-              Sync issue
+              {t('draftRoom.topBarHint.syncIssue')}
             </span>
           ) : null}
         </div>
@@ -1200,7 +1287,7 @@ export function DraftTopBar({
             className="inline-flex min-h-[42px] items-center gap-1.5 rounded-full border border-cyan-300/35 bg-gradient-to-r from-cyan-500/18 to-violet-500/12 px-4 py-2 text-xs font-semibold text-cyan-100 shadow-[0_8px_28px_rgba(34,211,238,0.15)] transition duration-150 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 disabled:opacity-55 active:scale-[0.98]"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            {useQueueLoading ? 'Using Queue...' : t('draftRoom.topBar.useQueue')}
+            {useQueueLoading ? t('draftRoom.topBarHint.usingQueue') : t('draftRoom.topBar.useQueue')}
           </button>
         </div>
       ) : null}

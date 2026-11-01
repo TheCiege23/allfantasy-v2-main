@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, SlidersHorizontal } from 'lucide-react'
+import { ClipboardList, Search, SlidersHorizontal } from 'lucide-react'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import type { UserLeague } from '@/app/dashboard/types'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { TeamLogo } from '@/app/components/TeamLogo'
@@ -25,6 +26,9 @@ import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPla
 import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 // Roster codes ("ACT"/"INACT") are not injuries — this used to dot every healthy RI-mapped player.
 import { injuryNeedsAttention } from '@/lib/injuries/injuryStatusDisplay'
+import { REDRAFT_POSITION_FILTERS, isFootballTheme } from '@/lib/league-media/redraftScreens'
+import { PosPill } from '@/components/league/native/screens/NativeScreenParts'
+import { RedraftScreen, useRedraftScreen } from '@/components/league/native/screens/RedraftScreenParts'
 
 type RiBatchEntry = {
   season: string | null
@@ -110,6 +114,16 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const normalizedPlayerSurfaceEnabled =
     sportU === 'NFL' && isNflRedraftCoreDashboardFromUserLeague(league)
   const { players, loading: sleeperLoading } = useSleeperPlayers(resolvedSport)
+  /*
+   * Redraft (lib/league-media/redraftIdentity.ts). Sleeper's player map exists for NFL and NBA only, and the
+   * hook answers every other sport with the NFL map — so an NHL, MLB, soccer or college league listed NFL
+   * players here. A redraft league in those sports lists ITS OWN pool instead (the league's waiver-wire
+   * players route, the same DB-backed read the Free Agents view uses); the football stat columns are shown
+   * for football only; the position filters are the sport's.
+   */
+  const rd = useRedraftScreen(league)
+  const leaguePool = Boolean(rd && rd.sport !== 'nfl' && rd.sport !== 'nba')
+  const footballStats = !rd || isFootballTheme(rd.sport)
   const seasonYear = new Date().getFullYear()
   const [weekNum, setWeekNum] = useState(1)
   const [seasonSel, setSeasonSel] = useState(seasonYear)
@@ -132,10 +146,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const waiverSurfaceMode = activeSubtab === 'waivers' || activeSubtab === 'claims'
 
   const positionRow = useMemo(() => {
+    if (rd) return ['ALL', ...REDRAFT_POSITION_FILTERS[rd.sport]]
     if (sportU === 'NBA') return NBA_FILTERS
     if (sportU === 'NFL' || sportU === 'NCAAF') return NFL_FILTERS
     return GENERIC_FILTERS
-  }, [sportU])
+  }, [sportU, rd])
 
   useEffect(() => {
     setWlIds(readWatchlist(league.id))
@@ -203,7 +218,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 
   useEffect(() => {
-    if (!freeAgents || normalizedPlayerSurfaceEnabled) {
+    if (!(freeAgents || (leaguePool && !waiverSurfaceMode)) || normalizedPlayerSurfaceEnabled) {
       setFaRows(null)
       return
     }
@@ -235,7 +250,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       cancelled = true
       window.clearTimeout(t)
     }
-  }, [freeAgents, normalizedPlayerSurfaceEnabled, league.id, pos, playerQuery, teamQuery])
+  }, [freeAgents, leaguePool, waiverSurfaceMode, normalizedPlayerSurfaceEnabled, league.id, pos, playerQuery, teamQuery])
 
   useEffect(() => {
     if (!normalizedPlayerSurfaceEnabled || waiverSurfaceMode || !redraftSeasonId) {
@@ -298,7 +313,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
     if (normalizedPlayerSurfaceEnabled && !waiverSurfaceMode) {
       return normalizedPoolList
     }
-    if (freeAgents && faRows) {
+    if ((freeAgents || leaguePool) && faRows) {
       return faRows.map((r) => ({
         id: r.id,
         name: r.name,
@@ -306,8 +321,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         team: r.team?.trim() || 'FA',
       }))
     }
+    // Redraft, not NFL/NBA: never fall back to the NFL map (see `leaguePool`).
+    if (leaguePool) return []
     return Object.values(players)
-  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, faRows, players])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players])
 
   const filtered = useMemo(() => {
     let rows = poolList.filter((p) => p.position)
@@ -399,10 +416,13 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       ? false
       : normalizedPlayerSurfaceEnabled
         ? normalizedLoading
-        : sleeperLoading || (freeAgents && faLoading)
+        : leaguePool
+          ? faLoading || faRows == null
+          : sleeperLoading || (freeAgents && faLoading)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <RedraftScreen identity={rd}>
+    <div className="rdp flex min-h-0 flex-1 flex-col" data-rd-screen={rd ? 'players' : undefined}>
       {(() => {
         const betaStatus = getNcaafBetaStatus(league)
         const bannerInfo = getNcaafBetaBannerInfo(betaStatus)
@@ -420,7 +440,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center"
           data-testid="player-pool-pending-state"
         >
-          <p className="text-[28px]">📋</p>
+          {usesDynastyBackground(league) ? (
+            <ClipboardList className="h-7 w-7 text-[var(--dyn-faint,#9AA4B2)]" aria-hidden />
+          ) : (
+            <p className="text-[28px]">📋</p>
+          )}
           <p className="text-[14px] font-semibold text-white/80">Draft player pool pending</p>
           <p className="max-w-xs text-[12px] leading-relaxed text-white/40">
             Player data import is not connected yet for this league format. Roster shells, scoring
@@ -439,7 +463,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </div>
         </div>
       ) : null}
-      <div className="sticky top-0 z-10 space-y-3 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
+      <div className="rdp-bar sticky top-0 z-10 space-y-3 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
         <div className="flex flex-wrap gap-1.5" data-testid="players-tab-waiver-subnav">
           {PLAYER_SUBTABS.map((tab) => (
             <button
@@ -447,7 +471,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               type="button"
               onClick={() => setActiveSubtab(tab.id)}
               data-testid={`players-tab-subtab-${tab.id}`}
-              className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
+              aria-pressed={activeSubtab === tab.id}
+              className={`rdp-sub rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
                 activeSubtab === tab.id
                   ? 'border-[#ff3d81]/60 bg-[#ff3d81]/20 text-[#ffd7e5]'
                   : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80'
@@ -467,7 +492,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               value={playerQuery}
               onChange={(e) => setPlayerQuery(e.target.value)}
               placeholder="Find player"
-              className="w-full rounded-xl border border-white/[0.08] bg-[#0c0c1e] py-2 pl-8 pr-3 text-xs text-white placeholder:text-white/35"
+              className="rdp-input w-full rounded-xl border border-white/[0.08] bg-[#0c0c1e] py-2 pl-8 pr-3 text-xs text-white placeholder:text-white/35"
               data-testid="players-tab-search-name"
             />
           </div>
@@ -477,7 +502,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               value={teamQuery}
               onChange={(e) => setTeamQuery(e.target.value)}
               placeholder="Team (abbr)"
-              className="w-full rounded-xl border border-white/[0.08] bg-[#0c0c1e] py-2 px-3 text-xs text-white placeholder:text-white/35"
+              className="rdp-input w-full rounded-xl border border-white/[0.08] bg-[#0c0c1e] py-2 px-3 text-xs text-white placeholder:text-white/35"
               data-testid="players-tab-search-team"
             />
           </div>
@@ -489,7 +514,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               key={p}
               type="button"
               onClick={() => setPos(p)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              aria-pressed={pos === p}
+              className={`rdp-posbtn rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 pos === p
                   ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-[#ff3d81]'
                   : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
@@ -502,9 +528,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-white/[0.08] bg-white/[0.04] p-0.5">
+          <div className="rdp-seg inline-flex rounded-lg border border-white/[0.08] bg-white/[0.04] p-0.5">
             <button
               type="button"
+              aria-pressed={projection}
               onClick={() => setProjection(true)}
               className={`rounded-md px-3 py-1 text-[11px] font-semibold ${
                 projection ? 'bg-white/15 text-white' : 'text-white/45'
@@ -514,6 +541,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             </button>
             <button
               type="button"
+              aria-pressed={!projection}
               onClick={() => setProjection(false)}
               className={`rounded-md px-3 py-1 text-[11px] font-semibold ${
                 !projection ? 'bg-white/15 text-white' : 'text-white/45'
@@ -527,7 +555,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <select
               value={seasonSel}
               onChange={(e) => setSeasonSel(Number(e.target.value))}
-              className="rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-2 py-1 text-[11px] text-white"
+              className="rdp-select rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-2 py-1 text-[11px] text-white"
             >
               {[seasonYear - 1, seasonYear, seasonYear + 1].map((y) => (
                 <option key={y} value={y}>
@@ -541,7 +569,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <select
               value={weekNum}
               onChange={(e) => setWeekNum(Number(e.target.value))}
-              className="rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-2 py-1 text-[11px] text-white"
+              className="rdp-select rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-2 py-1 text-[11px] text-white"
             >
               {Array.from({ length: sportU === 'NFL' || sportU === 'NCAAF' ? 18 : 24 }, (_, i) => i + 1).map(
                 (w) => (
@@ -563,7 +591,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               key={key}
               type="button"
               onClick={toggle}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+              aria-pressed={on}
+              className={`rdp-toggle inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
                 on
                   ? 'border-[#ff3d81]/50 bg-[#ff3d81]/15 text-[#ffb8d1]'
                   : 'border-white/10 bg-transparent text-white/45 hover:border-white/20'
@@ -590,7 +619,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <SlidersHorizontal className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-[11px] text-white/35">
+        <p className="rdp-note text-[11px] text-white/35">
           Showing top <span className="text-white/55">100</span> by projected points for this filter.{' '}
           {freeAgents ? 'Free agents are not on any roster in this league (when available).' : null}{' '}
           {normalizedPlayerSurfaceEnabled
@@ -602,7 +631,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             )}
         </p>
 
-        <div className="rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
+        <div className="rdp-compare rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
           <StartVsComparisonLauncher
             leagueId={league.id}
@@ -626,16 +655,21 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         </div>
       ) : (
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto px-5 pb-6">
-        <div className="min-w-[960px]">
-          <div className="sticky top-0 z-[1] border-b border-white/[0.07] bg-[#07071a]">
+        <div className={footballStats ? 'min-w-[960px]' : 'min-w-0'}>
+          <div className="rdp-thead sticky top-0 z-[1] border-b border-white/[0.07] bg-[#07071a]">
             <div className="flex py-1 text-[11px] font-semibold uppercase tracking-wide text-white/35">
               <div className="w-8 shrink-0" />
-              <div className="w-[200px] shrink-0">Player</div>
-              <div className="w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
-              <div className="w-[120px] shrink-0 text-center">Rushing</div>
-              <div className="w-[160px] shrink-0 text-center">Receiving</div>
-              <div className="min-w-0 flex-1 text-center">Passing</div>
+              <div className={footballStats ? 'w-[200px] shrink-0' : 'min-w-0 flex-1'}>Player</div>
+              <div className="rdp-pts w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
+              {footballStats ? (
+                <>
+                  <div className="w-[120px] shrink-0 text-center">Rushing</div>
+                  <div className="w-[160px] shrink-0 text-center">Receiving</div>
+                  <div className="min-w-0 flex-1 text-center">Passing</div>
+                </>
+              ) : null}
             </div>
+            {footballStats ? (
             <div className="flex border-t border-white/[0.04] py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/25">
               <div className="w-8 shrink-0" />
               <div className="w-[200px] shrink-0" />
@@ -658,8 +692,9 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                 <span className="w-6 text-right">TD</span>
               </div>
             </div>
+            ) : null}
           </div>
-          <div className="divide-y divide-white/[0.05]">
+          <div className="rdp-rows divide-y divide-white/[0.05]">
             {busy ? (
               Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="flex animate-pulse items-center gap-2 py-2">
@@ -702,12 +737,13 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                 return (
                   <div
                     key={p.id}
-                    className="flex w-full items-center gap-1 py-2 text-left transition hover:bg-white/[0.03]"
+                    className="rdp-row flex w-full items-center gap-1 py-2 text-left transition hover:bg-white/[0.03]"
                   >
                     <button
                       type="button"
                       onClick={() => toggleWatchPlayer(p.id)}
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
+                      aria-pressed={wlIds.has(p.id)}
+                      className={`rdp-watch flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
                         wlIds.has(p.id)
                           ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
                           : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
@@ -737,7 +773,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                         variant="round"
                       />
                       <div className="w-[200px] shrink-0">
-                        <p className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                        <p className="rdp-name flex items-center gap-1.5 text-xs font-semibold text-white">
                           <span className="min-w-0 truncate">{p.name}</span>
                           {injuryNeedsAttention(inj) ? (
                             <span
@@ -747,10 +783,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                             />
                           ) : null}
                         </p>
-                        <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/40">
-                          <span className="rounded border border-white/15 bg-white/5 px-1 text-[11px] font-semibold text-white/60">
-                            {badgePosition(p)}
-                          </span>
+                        <p className="rdp-meta flex flex-wrap items-center gap-1 text-[11px] text-white/40">
+                          {rd ? (
+                            <PosPill label={badgePosition(p)} />
+                          ) : (
+                            <span className="rounded border border-white/15 bg-white/5 px-1 text-[11px] font-semibold text-white/60">
+                              {badgePosition(p)}
+                            </span>
+                          )}
                           {p.team && p.team !== 'FA' ? (
                             <>
                               <TeamLogo
@@ -767,7 +807,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                         </p>
                       </div>
                     </button>
-                    <div className="w-14 shrink-0 text-right text-[11px] text-white/60">
+                    <div className="rdp-pts-cell w-14 shrink-0 text-right text-[11px] text-white/60">
                       {projection && projPts == null ? (
                         <ProjectionValue
                           projection={{ state: 'unavailable', value: null, source: null, reason: 'provider_missing' }}
@@ -795,25 +835,30 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                         <span className="text-white/35">—</span>
                       )}
                     </div>
-                    <RushStatRow stats={normalizedStats ?? ri?.stats ?? null} />
-                    <RecStatRow stats={normalizedStats ?? ri?.stats ?? null} />
-                    <PassStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                    {footballStats ? (
+                      <>
+                        <RushStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                        <RecStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                        <PassStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                      </>
+                    ) : null}
                   </div>
                 )
               })
             )}
           </div>
           {!busy && filtered.length === 0 ? (
-            <p className="py-8 text-center text-sm text-white/40">No players match filters.</p>
+            <p className="rdp-empty py-8 text-center text-sm text-white/40">No players match filters.</p>
           ) : null}
         </div>
       </div>
       )}
     </div>
+    </RedraftScreen>
   )
 }
 
-const dash = 'text-[11px] text-white/40 tabular-nums'
+const dash = 'rdp-stat text-[11px] text-white/40 tabular-nums'
 
 function RushStatRow({ stats }: { stats: RollingInsightsTableStats | null }) {
   const s = stats

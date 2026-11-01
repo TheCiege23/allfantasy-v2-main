@@ -12,6 +12,7 @@ import {
 } from '@/lib/waiver-wire/roster-utils'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { recordSettledPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import {
   CodedTradeError,
   checkRedraftPickAsset,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/league-trade-engine/redraftDraftPicks'
 import { settleTradeContracts, type SalarySettlementEvidence } from '@/lib/salary-cap/TradeContractSettlement'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type LeagueTradeTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -146,6 +148,8 @@ export async function applyTradeAssetsInTransaction(
           toRosterId: toId,
           tradeId: input.tradeId ?? null,
         })
+        // Terms the offer gave this pick (./pickTerms.ts) are recorded with the move, in this transaction.
+        await recordSettledPickTerms(tx, { leagueId: input.leagueId, assets: [a], tradeId: input.tradeId ?? null })
         continue
       }
       const fromData = dataByRoster.get(fromId)
@@ -197,6 +201,9 @@ export async function applyTradeAssetsInTransaction(
       },
     })
   }
+  // Only rosters that traded FAAB: the loop above writes 0 for a null budget, which must not reach faabBalance.
+  const faabParties = input.assets.filter((a) => a.itemType === 'faab').flatMap((a) => [a.fromRosterId, a.toRosterId])
+  await copyGenericFaabToRedraft(tx, faabParties.filter((id): id is string => typeof id === 'string'))
   // Native scoring reads `RedraftRosterPlayer`; without this a traded player scores for his old team.
   await applyRedraftRosterMoves(tx, {
     leagueId: input.leagueId,

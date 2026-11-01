@@ -95,6 +95,10 @@ export interface NormalizedLeagueSettings {
    * only thing that can, and it is otherwise discarded at import.
    */
   is_keeper?: boolean
+  /** Sleeper's raw `settings.type` (0 redraft, 1 keeper, 2 dynasty); absent when Sleeper sent none. */
+  sleeper_league_type?: number
+  /** ESPN's raw keeper count, only when ESPN sent a number (see EspnAdapter `espnKeeperCount`). */
+  espn_keeper_count?: number
   /**
    * Sleeper's own waiver-schedule settings, exactly as Sleeper sent them — present only for a
    * Sleeper import that carried at least one. `daily_waivers_hour` is the Pacific run hour

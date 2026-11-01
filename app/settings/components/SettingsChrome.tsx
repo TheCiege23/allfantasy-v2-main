@@ -13,6 +13,7 @@ import {
   FileText,
   Gift,
   Home,
+  LayoutList,
   LayoutDashboard,
   Link2,
   Search,
@@ -31,6 +32,8 @@ import '../nocturne-settings.css'
 export type SettingsTabId =
   | 'profile'
   | 'preferences'
+  | 'home'
+  | 'leagues'
   | 'security'
   | 'notifications'
   | 'connected'
@@ -54,6 +57,9 @@ type NavDef = {
 const NAV_DEFS: NavDef[] = [
   { id: 'profile', icon: User },
   { id: 'preferences', icon: Sliders },
+  // Which /core home sections show, and their alerts (2026-10-24) — HomeSectionsSettingsSection.
+  { id: 'home', icon: LayoutList },
+  { id: 'leagues', icon: LayoutDashboard },
   { id: 'command', icon: LayoutDashboard },
   { id: 'security', icon: Shield },
   { id: 'notifications', icon: Bell },
@@ -245,6 +251,8 @@ function SidebarProfileCard({
 const HUB_ORDER: SettingsTabId[] = [
   'profile',
   'preferences',
+  'home',
+  'leagues',
   'notifications',
   'security',
   'connected',
@@ -264,8 +272,8 @@ const HUB_ORDER: SettingsTabId[] = [
  */
 const HUB_GROUPS: ReadonlyArray<{ id: 'account' | 'app' | 'leagues' | 'plan'; tabs: SettingsTabId[] }> = [
   { id: 'account', tabs: ['profile', 'security', 'account'] },
-  { id: 'app', tabs: ['preferences', 'notifications', 'command'] },
-  { id: 'leagues', tabs: ['connected', 'legacy', 'rank'] },
+  { id: 'app', tabs: ['preferences', 'home', 'notifications', 'command'] },
+  { id: 'leagues', tabs: ['leagues', 'connected', 'legacy', 'rank'] },
   { id: 'plan', tabs: ['billing', 'referral', 'legal'] },
 ]
 
@@ -274,6 +282,8 @@ type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
 const HUB_CTA: Record<SettingsTabId, HubCta> = {
   profile: 'edit',
   preferences: 'edit',
+  home: 'edit',
+  leagues: 'edit',
   notifications: 'manage',
   security: 'review',
   connected: 'manage',

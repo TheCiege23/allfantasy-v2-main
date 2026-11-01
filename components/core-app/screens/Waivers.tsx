@@ -3,8 +3,11 @@
 import Link from 'next/link'
 import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
+import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
+import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
 import '@/components/core-app/af-waivers.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
@@ -14,6 +17,8 @@ import { platformLabel, verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiversMessages } from '@/lib/core-app/messages/waivers'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import type { HelpTopicId } from '@/lib/core-app/helpTopics'
 
@@ -47,25 +52,40 @@ export function waiverRuleText(english: string, language: string): string {
   }).join(' · ')
 }
 
+/**
+ * The share of the league's FAAB budget still left, 0–1, or null when it cannot be drawn honestly: no
+ * budget on file, a zero budget, or a remaining figure above the budget (a commissioner top-up the
+ * budget column does not reflect — a bar pinned at 100% would hide that). Exported for tests.
+ */
+export function faabTrack(remaining: number | null | undefined, budget: number | null | undefined): number | null {
+  if (remaining == null || budget == null || !Number.isFinite(remaining) || !Number.isFinite(budget)) return null
+  if (budget <= 0 || remaining < 0 || remaining > budget) return null
+  return remaining / budget
+}
+
 function Tile({
   label,
   state,
   render,
   sub,
   help,
+  tile,
 }: {
   label: string
   state: SectionState<unknown>
-  render?: (d: never) => { value: string; sub?: string }
+  /** `track`, 0–1: a share of a known total, drawn as a bar only in the redraft identity (see below). */
+  render?: (d: never) => { value: string; sub?: string; track?: number | null }
   sub?: string
   /** A "?" beside the label (lib/core-app/helpTopics.ts). */
   help?: HelpTopicId
+  /** Which tile this is, for the redraft stylesheet (af-core-redraft-waivers-finder.css). */
+  tile?: string
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   if (!state.available) {
     return (
-      <div className="af-wv-tile" data-missing="true">
+      <div className="af-wv-tile" data-missing="true" data-tile={tile}>
         <div className="af-wv-tile-value af-num">—</div>
         <div className="af-label">
           {copy(label)}
@@ -75,22 +95,33 @@ function Tile({
       </div>
     )
   }
-  const out = render ? render(state.data as never) : { value: String(state.data), sub }
+  const out: { value: string; sub?: string; track?: number | null } = render ? render(state.data as never) : { value: String(state.data), sub }
   return (
-    <div className="af-wv-tile">
+    <div className="af-wv-tile" data-tile={tile}>
       <div className="af-wv-tile-value af-num">{out.value}</div>
       <div className="af-label">
         {copy(label)}
         {help ? <> <TopicTip topic={help} /></> : null}
       </div>
       {out.sub ? <div className="af-wv-tile-sub">{copy(out.sub)}</div> : null}
+      {/*
+        A decorative bar for a share the screen already states in text (the tile's "$63", the rules'
+        "$100 budget"). Empty inline spans: with no stylesheet rule they take no space and draw nothing,
+        so every league outside the redraft identity renders exactly as before (the capture script's
+        dynasty control proves it pixel for pixel). aria-hidden: the figure is already read out above.
+      */}
+      {out.track != null ? (
+        <span className="af-wv-track" aria-hidden="true" data-testid="waiver-faab-track">
+          <span className="af-wv-track-fill" style={{ width: `${Math.round(out.track * 100)}%` }} />
+        </span>
+      ) : null}
     </div>
   )
 }
 
 export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiversMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   /** A league AllFantasy runs takes its claims (and its free-agent board) here; any other is only read. */
   const claimsHere = data.league.platform !== 'manual' && platformLabel(data.league.platform) === 'AllFantasy'
@@ -99,6 +130,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
     'waivers',
   )
   const isFaab = data.waiverType.available && data.waiverType.data.kind === 'faab'
+  /* The league's starting budget, when it was read — the denominator of the FAAB bar. */
+  const faabBudget = isFaab && data.waiverType.available ? data.waiverType.data.budget : null
   const schedule = data.processTime.available ? data.processTime.data.schedule : null
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
@@ -127,7 +160,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <span className="af-label">
             {copy('Next waiver run')} <TopicTip topic="waiverRun" />
           </span>{' '}
-          <WaiverRunClock schedule={schedule} yourTime={es ? ' (tu hora)' : ' your time'} />
+          <WaiverRunClock schedule={schedule} yourTime={m.yourTime} />
         </p>
       ) : null}
       <div className="af-wv-layout">
@@ -137,6 +170,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             <Tile
               label="Your FAAB"
               help="faab"
+              tile="faab"
               state={data.budget}
               render={(d: never) => {
                 const b = d as unknown as {
@@ -148,8 +182,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                   value: `$${b.faabRemaining}`,
                   sub:
                     b.rankByBudget != null
-                      ? es ? `${b.rankByBudget} de ${b.rostersWithBudget} por presupuesto restante` : `${b.rankByBudget} of ${b.rostersWithBudget} by budget left`
+                      ? m.budgetRank(b.rankByBudget, b.rostersWithBudget)
                       : undefined,
+                  track: faabTrack(b.faabRemaining, faabBudget),
                 }
               }}
             />
@@ -160,7 +195,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               state={data.waiverPriority}
               render={(d: never) => {
                 const w = d as unknown as { priority: number; leagueRosters: number }
-                return { value: `#${w.priority}`, sub: es ? `de ${w.leagueRosters} equipos` : `of ${w.leagueRosters} rosters` }
+                return { value: `#${w.priority}`, sub: m.ofRosters(w.leagueRosters) }
               }}
             />
 
@@ -171,7 +206,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
                 return {
                   value: String(r.playersHeld),
-                  sub: es ? `${r.starters} titulares · ${r.bench} suplentes${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}` : `${r.starters} starting · ${r.bench} bench${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}`,
+                  sub: m.rosterLoad(r.starters, r.bench, r.reserve),
                 }
               }}
             />
@@ -190,6 +225,22 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         </div>
 
         <div className="af-wv-area-main">
+          {/*
+            ── Orphan auction ──────────────────────────────────────────────
+
+            First while one is open: an abandoned team's players and picks for sealed FAAB bids, with
+            a closing time (lib/orphan-auction). Renders nothing when the league has no auction.
+          */}
+          <OrphanAuctionBids leagueId={data.league.id} />
+
+          {/*
+            ── Taxi stealing ───────────────────────────────────────────────
+
+            Claims on your taxi players first — they have a deadline — then claims you can make
+            (lib/taxi/taxiStealing.ts). Renders nothing when the league does not run the rule.
+          */}
+          <TaxiStealCard leagueId={data.league.id} />
+
           {/*
             ── Worth adding ─────────────────────────────────────────────────
 
@@ -283,7 +334,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             */}
             {providerClaim ? (
               <a className="af-btn af-wv-browse" href={providerClaim.href} target="_blank" rel="noopener noreferrer">
-                {es ? `Reclamar en ${providerClaim.platformLabel}` : `Claim on ${providerClaim.platformLabel}`} ↗
+                {m.claimOn(providerClaim.platformLabel)} ↗
               </a>
             ) : null}
 
@@ -294,7 +345,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               ? copy('Claims are made on your platform. AllFantasy only reads your league.')
               : claimsHere
                 ? copy('Claims for this league are made here, on AllFantasy.')
-                : es ? `Los reclamos se hacen en ${platformLabel(data.league.platform)}. AllFantasy solo lee tu liga.` : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
+                : m.claimsMadeOn(platformLabel(data.league.platform))}
           </p>
         </div>
 
@@ -356,20 +407,18 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                     */}
                     {data.processTime.data.observedRuns != null ? (
                       <span className="af-wv-rule-observed">
-                        {es
-                          ? `según las últimas ${data.processTime.data.observedRuns} ejecuciones de esta liga`
-                          : `seen over this league's last ${data.processTime.data.observedRuns} runs`}
+                        {m.observedRuns(data.processTime.data.observedRuns)}
                       </span>
                     ) : data.processTime.data.fromSleeperSetting ? (
                       <span className="af-wv-rule-observed">
-                        {es ? 'según la configuración de Sleeper de esta liga' : "from this league's Sleeper settings"}
+                        {m.fromSleeperSettings}
                       </span>
                     ) : null}
                     {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
                     <span className="af-wv-rule-local">
                       <WaiverRunClock
                         schedule={data.processTime.data.schedule}
-                        yourTime={es ? ' (tu hora)' : ' your time'}
+                        yourTime={m.yourTime}
                         localOnly
                       />
                     </span>
@@ -404,8 +453,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <div className="af-wv-context">
             <span className="af-label">{copy('Priced for this league')}</span>
             <p className="af-wv-context-body">
-              {es ? 'Las ofertas y recomendaciones se calculan para ' : 'Bids and targets are priced against '}<strong>{data.league.name}</strong>
-              {data.league.format ? ` — ${data.league.format}` : ''}. {es ? 'Un mismo jugador puede valer distinto en otra liga.' : 'The same player is worth a different amount in a different league.'}
+              {m.pricedAgainst}<strong>{data.league.name}</strong>
+              {data.league.format ? ` — ${data.league.format}` : ''}. {m.differentLeague}
             </p>
           </div>
 

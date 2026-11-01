@@ -23,9 +23,11 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
+import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
+import { readGuillotineBestBall } from '@/lib/guillotine/guillotineBestBall'
 import type {
   DangerTier,
   DataState,
@@ -138,7 +140,8 @@ export async function buildGuillotineWarRoomContext(
     .catch(() => [])) as RosterStateRow[]
   const stateByRoster = new Map(rosterStates.map((s) => [s.rosterId, s]))
 
-  const dangerRows = await getDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => [])
+  // Live while the week is played (lib/guillotine/chopWatch.ts): the engine's tiers ranked on last week's totals.
+  const { rows: dangerRows, live: dangerLive } = await getLiveDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => ({ rows: [], live: false }))
   const dangerByRoster = new Map(dangerRows.map((d) => [d.rosterId, d]))
 
   type PeriodScoreRow = { rosterId: string; periodPoints: number; seasonPointsCumul: number }
@@ -236,7 +239,8 @@ export async function buildGuillotineWarRoomContext(
       choppedInPeriod: stateByRoster.get(t.rosterId)?.choppedInPeriod ?? null,
       rank: t.eliminated ? null : (danger?.rank ?? null),
       seasonPointsCumul: danger?.seasonPointsCumul ?? score?.seasonPointsCumul ?? 0,
-      periodPoints: score?.periodPoints ?? null,
+      // This week's score is not saved until the chop; a live row carries it.
+      periodPoints: score?.periodPoints ?? (dangerLive && danger ? danger.projectedPoints : null),
       tier,
       pointsFromChopZone: t.eliminated ? null : (danger?.pointsFromChopZone ?? null),
     }
@@ -260,7 +264,9 @@ export async function buildGuillotineWarRoomContext(
       take: 60,
     })
     .catch(() => [])) as ReleaseRow[]
-  const droppedPlayers: GuillotineDroppedPlayer[] = releases.map((r) => ({
+  // The pool is who is still out there: a released player on a team again has been claimed.
+  const claimedReleases = await claimedPlayerIds(leagueId, releases.map((r) => r.playerId)).catch(() => new Set<string>())
+  const droppedPlayers: GuillotineDroppedPlayer[] = releases.filter((r) => !claimedReleases.has(r.playerId)).map((r) => ({
     playerId: r.playerId,
     playerName: r.playerName,
     position: (r.position || 'UNK').toUpperCase(),
@@ -337,10 +343,12 @@ export async function buildGuillotineWarRoomContext(
       injuriesAsOf: injuryNews.injuriesAsOf ? injuryNews.injuriesAsOf.toISOString() : null,
     },
     missingDataFlags,
+    bestBallLineups: readGuillotineBestBall(league.settings),
     featureAvailability: {
       survivalRisk: survivalAvailable,
       rosterRisk: availability.rosters === 'available',
-      lineupSafety: availability.rosters === 'available' && rosterRulesState === 'available',
+      // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to make safe.
+      lineupSafety: !readGuillotineBestBall(league.settings) && availability.rosters === 'available' && rosterRulesState === 'available',
       waivers: availability.rosters === 'available',
       faabPlan: availability.rosters === 'available',
       droppedPlayers: availability.droppedPlayerPool === 'available',

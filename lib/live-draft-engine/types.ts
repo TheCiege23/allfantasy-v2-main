@@ -124,7 +124,7 @@ export interface DraftSessionSnapshot {
   /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
   viewerAutopick?: {
     enabled: boolean
-    mode: 'standard' | 'ai_queue'
+    mode: 'standard' | 'ai_queue' | 'draft_as_me'
     isProEligible: boolean
     updatedAt: string | null
   } | null
@@ -281,6 +281,10 @@ export interface AuctionNomination {
 }
 
 export interface AuctionState {
+  /** One-time transferred nomination turns followed by the ordinary repeating rotation. */
+  nominationOrder?: SlotOrderEntry[]
+  nominationFallbackStart?: number
+  rookieAuction?: unknown
   /** Index into slotOrder for who nominates next (0-based). */
   nominationOrderIndex: number
   /** Currently nominated player (on the block). */

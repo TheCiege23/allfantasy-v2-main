@@ -7,8 +7,8 @@
  * what keeps the test side fast + transform-safe.
  */
 
-export const SLEEPER_POOL_TABLE_ROW_HEIGHT = 32
-export const SLEEPER_POOL_TABLE_HEADER_HEIGHT = 26
+export const SLEEPER_POOL_TABLE_ROW_HEIGHT = 60
+export const SLEEPER_POOL_TABLE_HEADER_HEIGHT = 40
 
 export interface ColumnSpec {
   key: string
@@ -31,7 +31,7 @@ export const SLEEPER_POOL_TABLE_COLUMNS: readonly (ColumnSpec & { statLabel?: st
   { key: 'rk', label: 'RK', width: 44, align: 'right', title: 'Current rank by selected sort (defaults to ADP rank)' },
   { key: 'player', label: 'PLAYER', width: 240, align: 'left', title: 'Player — click to sort alphabetically' },
   { key: 'adp', label: 'ADP', width: 60, align: 'right', title: 'Average Draft Position', statLabel: 'ADP' },
-  { key: 'aiAdp', label: 'AI ADP', width: 64, align: 'right', title: 'AllFantasy AI Draft Position', statLabel: 'AI ADP' },
+  { key: 'afAdp', label: 'AF ADP', width: 66, align: 'right', title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts', statLabel: 'AF ADP' },
   { key: 'bye', label: 'BYE', width: 44, align: 'right', title: 'NFL bye week', statLabel: 'bye week' },
   { key: 'pts', label: 'PTS', width: 60, align: 'right', title: 'Total fantasy points (season)', statLabel: 'fantasy points' },
   { key: 'avg', label: 'AVG', width: 56, align: 'right', title: 'Fantasy points per game', statLabel: 'fantasy points per game' },
@@ -45,7 +45,7 @@ export const SLEEPER_POOL_TABLE_COLUMNS: readonly (ColumnSpec & { statLabel?: st
   { key: 'pa_yds', label: 'PA YDS', width: 68, align: 'right', title: 'Passing yards', statLabel: 'passing yards' },
   { key: 'pa_td', label: 'PA TD', width: 56, align: 'right', title: 'Passing touchdowns', statLabel: 'passing touchdowns' },
   { key: 'pa_int', label: 'PA INT', width: 60, align: 'right', title: 'Passing interceptions', statLabel: 'passing interceptions' },
-  { key: 'actions', label: '', width: 124, align: 'right' },
+  { key: 'actions', label: '', width: 160, align: 'right' },
 ] as const
 
 /**

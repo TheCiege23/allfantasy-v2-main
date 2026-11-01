@@ -57,7 +57,8 @@ export type LineupIntegrityReport =
       weeks: number[]
       latestWeek: number | null
       requiredStarters: number
-      findings: Array<TeamWeekFinding & { text: string; flagged: boolean }>
+      /** `playerNames`: the finding's players by id, where known — an accusation names people, not ids. */
+      findings: Array<TeamWeekFinding & { text: string; flagged: boolean; playerNames: Record<string, string> }>
       summary: TeamSeasonSummary[] | null
       fullSeason: boolean
       basis: string
@@ -137,7 +138,12 @@ export async function readLineupIntegrity(leagueId: string, opts: { fullSeason: 
     weeks: opts.fullSeason ? allWeeks : latestWeek != null ? [latestWeek] : [],
     latestWeek,
     requiredStarters,
-    findings: audit.findings.map((f) => ({ ...f, text: describeFinding(f, playerName), flagged: isFlagged(f) })),
+    findings: audit.findings.map((f) => ({
+      ...f,
+      text: describeFinding(f, playerName),
+      flagged: isFlagged(f),
+      playerNames: Object.fromEntries([...f.byeStarters, ...f.ruledOutStarters].flatMap((id) => (nameById.has(id) ? [[id, nameById.get(id)!]] : []))),
+    })),
     summary: opts.fullSeason ? audit.summary : null,
     fullSeason: opts.fullSeason,
     basis: BASIS[source],
@@ -157,7 +163,8 @@ async function readSleeperRows(league: LeagueRow, fullSeason: boolean): Promise<
 
   const ids = [...new Set(rows.map((r) => r.playerId))]
   const [players, teams] = await Promise.all([
-    ids.length ? prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true, team: true, position: true } }) : Promise.resolve([]),
+    // Audits are NFL-only (`unsupported`); a Sleeper id names someone else in another sport.
+    ids.length ? prisma.sportsPlayer.findMany({ where: { sport: 'NFL', sleeperId: { in: ids } }, select: { sleeperId: true, name: true, team: true, position: true } }) : Promise.resolve([]),
     prisma.leagueTeam.findMany({ where: { leagueId: league.id }, select: { externalId: true, teamName: true, ownerName: true } }),
   ])
   const nameById = new Map<string, string>()

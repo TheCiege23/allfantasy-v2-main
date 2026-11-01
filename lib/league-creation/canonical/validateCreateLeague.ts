@@ -31,8 +31,7 @@ import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
 } from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
@@ -46,6 +45,7 @@ import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
   PROSPECT_STASH_UNAVAILABLE_MESSAGE,
   sportSupportsProspectStash,
+  leagueSupportsTaxiDevy,
 } from '@/lib/league-creation/prospectStashPolicy'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
@@ -219,10 +219,27 @@ export function validateCreatePayload(
     return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
   }
-  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
-      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
-    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
-      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  if (formatId === 'survivor') {
+    const fee = readSurvivorEntryFee(
+      data.conceptSetup?.survivorEntryFeeMode ?? data.conceptSetup?.survivor_entry_fee_mode,
+      data.conceptSetup?.survivorEntryFeeAmountCents ?? data.conceptSetup?.survivor_entry_fee_amount_cents,
+    )
+    if ('error' in fee) {
+      return { ok: false, error: fee.error, status: 400,
+        errors: [{ path: 'conceptSetup.survivorEntryFeeAmountCents', message: fee.error }] }
+    }
+  }
+  if (!leagueSupportsTaxiDevy({ leagueType: formatId })) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const devy = Number(setup.devySlots ?? setup.devySize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : Number.isFinite(devy) && devy > 0 ? 'conceptSetup.devySlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      const message = 'Taxi and devy slots are available only in Dynasty, Devy, Salary Cap, and C2C leagues.'
+      return { ok: false, status: 400, error: message, errors: [{ path, message, code: 'TAXI_DEVY_NOT_AVAILABLE' }] }
+    }
   }
   // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.
   if (!sportSupportsProspectStash(sport)) {

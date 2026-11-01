@@ -1,3 +1,5 @@
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
+
 /**
  * `L(english, spanish)` for the reader's language (2026-10-05).
  *
@@ -6,5 +8,6 @@
  * English, so every other caller reads exactly what it always did. PURE and client-safe.
  */
 export function pickLanguage(language: string | null | undefined = 'en') {
-  return (english: string, spanish: string): string => (language === 'es' ? spanish : english)
+  const lang = coreLang(language)
+  return (english: string, spanish: string): string => ({ en: english, es: spanish })[lang]
 }

@@ -29,6 +29,7 @@ import {
   getDraftTypeOptions,
   getIdpDraftTypeOptions,
   getScoringPresetOptionsForSelection,
+  getSurvivorTribeOptions,
   getTeamCountOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
@@ -81,14 +82,24 @@ function everyReachableChoice(): Choice[] {
           for (const teamCount of teamCounts) {
             if (teamCount == null) continue
             // Team count is typed on the Basics step after the format tile; the input handler
-            // also refits the dynasty and Best Ball playoff blocks, which this reproduces.
+            // also refits the dynasty and Best Ball playoff blocks and the survivor tribe count, which this reproduces.
             let state = apply(afterFormat, { teamCount })
             if (leagueType === 'dynasty') {
               const playoffTeamCount = Math.min(state.dynasty.playoffTeamCount, Math.max(2, teamCount))
               state = apply(state, { dynasty: { ...state.dynasty, playoffTeamCount, playoffByeCount: 2 ** Math.ceil(Math.log2(playoffTeamCount)) - playoffTeamCount } })
             }
+            if (leagueType === 'survivor') {
+              const tribeOptions = getSurvivorTribeOptions(teamCount)
+              if (!tribeOptions.includes(state.survivorTribeCount)) state = apply(state, { survivorTribeCount: tribeOptions[0] ?? 2 })
+            }
             if (leagueType === 'best_ball') {
               state = apply(state, { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, teamCount) } })
+            }
+            // ...and the Survivor tribe count, which must split the cast. The NFL cast sizes on offer
+            // shrink as the season runs (`survivorCastSizesThatFitNow` reads the real clock while this
+            // matrix is built), so a size whose default tribe count does not divide it appears mid-season.
+            if (leagueType === 'survivor' && !getSurvivorTribeOptions(teamCount).includes(state.survivorTribeCount)) {
+              state = apply(state, { survivorTribeCount: getSurvivorTribeOptions(teamCount)[0] ?? 2 })
             }
             state = apply(state, { draftType: draft.id as WizardDraftType, scoringPresetId: preset.id })
             choices.push({ label: `${sport}/${format.id}/${draft.id}/${preset.id}/${teamCount}`, state })
@@ -131,6 +142,12 @@ describe('every option the create wizard offers is creatable', () => {
     expect(choices.length).toBeGreaterThan(200)
     expect(choices.some((c) => c.label.startsWith('NFL/idp/'))).toBe(true)
     expect(choices.some((c) => c.label.startsWith('SOCCER/'))).toBe(true)
+  })
+
+  it('chooses a valid tribe count when a 15-manager cast selects Survivor', () => {
+    const state = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, teamCount: 15, survivorTribeCount: 4 }
+    const patch = nextStateForLeagueType(state, 'survivor')
+    expect(patch.survivorTribeCount).toBe(3)
   })
 
   it('every reachable combination passes the wizard checks and the server validator', async () => {

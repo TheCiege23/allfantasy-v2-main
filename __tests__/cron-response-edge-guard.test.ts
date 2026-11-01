@@ -156,3 +156,69 @@ describe('respondBeforeEdge — observability', () => {
     expect(log.mock.calls.map(String).some((l) => l.includes('[edge-guard] cron armed'))).toBe(true)
   })
 })
+
+describe('respondBeforeEdge — stopping the work after the response', () => {
+  it('aborts the signal it handed the work when the deadline fires', async () => {
+    vi.useFakeTimers()
+    let seen: AbortSignal | undefined
+    const p = respondBeforeEdge<string>(
+      (signal) => {
+        seen = signal
+        return new Promise<string>(() => {})
+      },
+      () => 'partial',
+      1_000,
+    )
+    expect(seen?.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await p
+
+    expect(seen?.aborted).toBe(true)
+  })
+
+  it('does NOT abort the signal when the work finishes in time', async () => {
+    let seen: AbortSignal | undefined
+    await respondBeforeEdge<string>(
+      async (signal) => {
+        seen = signal
+        return 'done'
+      },
+      () => 'partial',
+      1_000,
+    )
+    expect(seen?.aborted).toBe(false)
+  })
+
+  it('stops a unit loop built on that signal at its next unit, instead of running the rest of the list', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { createRunBudget } = await import('@/lib/cron/runBudget')
+    const started: number[] = []
+    let finished = false
+    const p = respondBeforeEdge<void>(
+      async (signal) => {
+        // A generous budget, so only the abort can stop the loop early.
+        const budget = createRunBudget(60_000, Date.now, signal)
+        for (let unit = 0; unit < 10; unit += 1) {
+          if (budget.exhausted()) break
+          started.push(unit)
+          await new Promise((resolve) => setTimeout(resolve, 400))
+        }
+        finished = true
+      },
+      () => undefined,
+      1_000,
+    )
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(p).resolves.toMatchObject({ overran: true })
+    // Units 0, 1, 2 began before the deadline; unit 2 is the one in flight when it fires.
+    expect(started).toEqual([0, 1, 2])
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    // The in-flight unit ran to its end, and the loop then stopped: no unit 3..9.
+    expect(started).toEqual([0, 1, 2])
+    expect(finished).toBe(true)
+  })
+})

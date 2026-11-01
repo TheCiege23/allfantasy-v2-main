@@ -5,6 +5,8 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { afterExileReturnResolved } from './shareCards/hooks'
 import { createSurvivorChatMessage } from './survivorChatBridge'
+import { readSurvivorSideGameSettings } from './survivorSideGameSettings'
+import { exileReturnFaab } from './survivorSideGameRules'
 
 export interface ExileReturnCandidate {
   userId: string; tokenBalance: number; totalTokensEarned: number; eliminatedWeek: number | null
@@ -33,7 +35,21 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
     const game = await tx.survivorGameState.findUnique({ where: { leagueId } })
     if (!game || ['finale', 'complete'].includes(game.phase) || game.activeCouncilId) return null
     const players = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile', eliminatedWeek: { lt: settings.exileReturnWeek } } })
-    const finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week: settings.exileReturnWeek, action: 'exile_week_scored' }, select: { id: true, data: true } })
+    let finalized = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week: settings.exileReturnWeek, action: 'exile_week_scored' }, select: { id: true, data: true } })
+    // ⚠ NOBODY ON EXILE SET A ROSTER IN THE RETURN WEEK. scoreExileWeek only runs when the week has an
+    // entry, so it never writes this snapshot and the season used to wait here forever (found by the
+    // staging season rehearsal, 2026-10-25). With no entries no token can be earned or wiped that
+    // week, so today's balances ARE the deadline balances; record them as the week's snapshot.
+    if (!finalized && players.length) {
+      const island = await tx.exileIsland.findUnique({ where: { leagueId }, select: { id: true } })
+      const entryCount = island ? await tx.exileWeeklyEntry.count({ where: { exileId: island.id, week: settings.exileReturnWeek } }) : 0
+      if (entryCount === 0) {
+        const balances = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile' }, select: { userId: true, tokenBalance: true, totalTokensEarned: true, eliminatedWeek: true } })
+        finalized = await tx.survivorAuditEntry.create({ data: { leagueId, week: settings.exileReturnWeek, category: 'exile', action: 'exile_week_scored',
+          data: { entryCount: 0, bossScore: null, bossWon: false, winnerUserId: null, noEntries: true, balances }, isVisibleToCommissioner: true, isVisibleToPublic: false },
+          select: { id: true, data: true } })
+      }
+    }
     const recorded = finalized?.data as { balances?: ExileReturnCandidate[] } | null
     if (players.length && !Array.isArray(recorded?.balances)) return null
     // Retry in a later week uses the deadline snapshot, never tokens earned after the cutoff.
@@ -51,11 +67,17 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
       const merged = Boolean(game.mergeTriggeredAt) || ['merge', 'post_merge', 'jury'].includes(game.phase)
       const tribe = merged ? null : await tx.survivorTribe.findFirst({ where: { leagueId, isActive: true, isMerged: false }, orderBy: { slotIndex: 'asc' }, select: { id: true } })
       if (!merged && !tribe) throw new Error('An active tribe is required for a pre-merge Exile return.')
+      // Token → FAAB (League.settings.survivorSideGames.exileTokenFaabRate; 0 = off, today's behaviour):
+      // the conversion consumes the tokens it pays for, so a converted return leaves none behind. The
+      // FAAB itself is paid through the reward API after this transaction (settleExileReturnFaab).
+      const sideGames = readSurvivorSideGameSettings(league.settings)
+      const tokensHeld = player.tokenBalance
+      const faab = exileReturnFaab({ rate: sideGames.exileTokenFaabRate, basis: sideGames.exileTokenFaabBasis, held: tokensHeld, required: settings.exileReturnTokens })
       await tx.survivorPlayer.update({ where: { id: player.id }, data: {
         playerState: 'active', eliminatedWeek: null, tribeId: tribe?.id ?? null,
         canAccessTribeChat: !merged, canAccessMergeChat: merged, canAccessExileChat: false,
         canAccessJuryChat: false, isJuryMember: false, exileReturnEligible: false,
-        tokenBalance: { decrement: settings.exileReturnTokens },
+        tokenBalance: { decrement: sideGames.exileTokenFaabRate > 0 ? tokensHeld : settings.exileReturnTokens },
       } })
       await tx.survivorJuryMember.deleteMany({ where: { leagueId, rosterId: roster.id } })
       if (tribe) await tx.survivorTribeMember.upsert({ where: { tribeId_rosterId: { tribeId: tribe.id, rosterId: roster.id } }, create: { tribeId: tribe.id, rosterId: roster.id }, update: {} })
@@ -69,7 +91,7 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
       await tx.survivorGameState.update({ where: { leagueId }, data: { activePlayerCount: { increment: 1 }, exilePlayerCount: { decrement: 1 } } })
       // The old roster remains released. The returning manager rebuilds through normal waivers.
       await tx.survivorAuditEntry.create({ data: { leagueId, week: settings.exileReturnWeek, category: 'exile', action: 'return_to_island', targetUserId: player.userId,
-        relatedEntityId: roster.id, relatedEntityType: 'roster', data: { tokensSpent: settings.exileReturnTokens, rosterRebuild: 'waivers' }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+        relatedEntityId: roster.id, relatedEntityType: 'roster', data: { tokensSpent: settings.exileReturnTokens, rosterRebuild: 'waivers', tokensHeld, faabPerToken: sideGames.exileTokenFaabRate, faabBasis: sideGames.exileTokenFaabBasis, faab }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }
     await tx.survivorPlayer.updateMany({ where: { leagueId, playerState: 'exile' }, data: { exileReturnEligible: false } })
     await tx.survivorAuditEntry.create({ data: { leagueId, week: settings.exileReturnWeek, category: 'exile', action: 'scheduled_exile_return_resolved',
@@ -81,5 +103,36 @@ export async function resolveScheduledExileReturn(leagueId: string, completedWee
   }, { timeout: 30_000, maxWait: 10_000 })
   // Share cards: the returning manager's "back from Exile" card.
   if (winnerUserId) afterExileReturnResolved(leagueId)
+  // Tokens → FAAB, through the reward API. Idempotent; the season runner retries it every tick.
+  if (winnerUserId) await settleExileReturnFaab(leagueId).catch((error) => console.warn('[survivor] exile return FAAB failed', error instanceof Error ? error.message : error))
   return winnerUserId
+}
+
+/**
+ * Pay the FAAB a return converted tokens into (recorded on the `return_to_island` row). Through the
+ * reward API, in stable chunks of at most $1000, keyed on the league, the manager and the chunk, so a
+ * retry — this call after the return, then every season-runner tick — never pays twice.
+ */
+export async function settleExileReturnFaab(leagueId: string): Promise<number> {
+  const rows = await prisma.survivorAuditEntry.findMany({ where: { leagueId, category: 'exile', action: 'return_to_island' }, select: { week: true, targetUserId: true, relatedEntityId: true, data: true } })
+  let paid = 0
+  for (const row of rows) {
+    const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>
+    const faab = typeof data.faab === 'number' ? Math.floor(data.faab) : 0
+    if (faab < 1 || !row.targetUserId || !row.relatedEntityId) continue
+    const { applySurvivorReward } = await import('./SurvivorEffectEngine')
+    const { chunkFaab } = await import('./survivorSideGameRules')
+    for (const [i, amount] of chunkFaab(faab).entries()) {
+      const result = await applySurvivorReward({
+        leagueId,
+        idempotencyKey: `exile_return:${row.targetUserId}:faab:${i + 1}`,
+        source: { kind: 'exile', id: `exile-return-${row.week ?? 0}`, label: `Exile return: ${data.tokensHeld ?? 0} tokens at $${data.faabPerToken ?? 0}` },
+        week: row.week ?? 0,
+        reward: { type: 'faab_grant', rosterId: row.relatedEntityId, amount },
+      })
+      if (result.ok && !result.duplicate) paid += amount
+      if (!result.ok) console.warn('[survivor] exile return FAAB not paid', { leagueId, error: result.error })
+    }
+  }
+  return paid
 }

@@ -3,7 +3,8 @@
  *
  * Every setting that moves the final is checked here: the playoff team count (rounds =
  * ceil(log2(teams)) — 9 to 16 teams is four rounds, which overruns every sport's default window), the
- * start week, weeks per round and the championship length (lib/playoff-runtime/playoffFit.ts). Only the
+ * start week, weeks per round, the championship length (lib/playoff-runtime/playoffFit.ts), and the
+ * best-of-N series lengths (lib/playoff-runtime/playoffSeries.ts — a best-of-5 round is five weeks). Only the
  * championship length used to be checked, so a commissioner could raise the field to twelve on an NFL
  * league starting in week 15 and get a week-18 final the 17-week season never plays.
  *
@@ -30,8 +31,10 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from './playoffRoundWeeks'
 import { maxPlayoffTeamsThatFit, playoffRoundsForTeams } from './playoffFit'
+import { PLAYOFF_SERIES_SETTINGS_KEY, playoffSeriesSettingsValue, readPlayoffSeriesLengths } from './playoffSeries'
 
 export type PlayoffFitOverflow = {
   lastPlayoffWeek: number
@@ -56,6 +59,8 @@ type LeagueForFit = {
   playoffWeeksPerRound?: number | null
   playoffStartWeek?: number | null
   dynastyConfig?: { regularSeasonWeeks: number } | null
+  /** A redraft or keeper league's season follows the 24-week regular-season cap (regularSeasonCap.ts). */
+  leagueType?: string | null
   bestBallMode?: boolean | null
   bbContestId?: string | null
 }
@@ -66,6 +71,18 @@ export type PlayoffFitChange = {
   playoffStartWeek?: number | null
   playoffWeeksPerRound?: number | null
   championshipLength?: number | null
+  /**
+   * Best-of-N series per round (lib/playoff-runtime/playoffSeries.ts). `null` turns series off
+   * (cumulative mode); undefined keeps the league's current setting. A series round lasts N weeks.
+   */
+  seriesLengths?: number[] | null
+}
+
+function withSeriesLengths(settings: Record<string, unknown>, seriesLengths: number[] | null | undefined): Record<string, unknown> {
+  if (seriesLengths === undefined) return settings
+  const { [PLAYOFF_SERIES_SETTINGS_KEY]: _drop, ...rest } = settings
+  const value = playoffSeriesSettingsValue(seriesLengths)
+  return value ? { ...rest, [PLAYOFF_SERIES_SETTINGS_KEY]: value } : rest
 }
 
 function withChampionshipLength(settings: unknown, championshipLength: number | null): Record<string, unknown> {
@@ -92,6 +109,8 @@ export async function playoffFitOverflow(
   const nextTeams = Number(pick(change.playoffTeams, league.playoffTeams) ?? 0)
   const currentTeams = Number(league.playoffTeams ?? 0)
   const nextPerRound = pick(change.playoffWeeksPerRound, league.playoffWeeksPerRound)
+  const currentSeries = readPlayoffSeriesLengths(league.settings)
+  const nextSeries = change.seriesLengths !== undefined ? change.seriesLengths : currentSeries
 
   const season = await db.redraftSeason.findFirst({
     where: { leagueId: league.id },
@@ -138,13 +157,16 @@ export async function playoffFitOverflow(
         dynastyConfig,
         playoffTeams: nextTeams,
         playoffWeeksPerRound: nextPerRound,
-        settings: withChampionshipLength(league.settings, nextLength),
+        settings: withSeriesLengths(withChampionshipLength(league.settings, nextLength), change.seriesLengths),
       },
       cfg?.defaultSeasonWeeks ?? 17,
     )
+    const startCap = league.leagueType !== undefined ? maxPlayoffStartWeekFor(league) : null
     const startFor = (raw: unknown) => {
       const n = Number(raw)
-      return Number.isInteger(n) && n >= 2 && n <= seasonWeeks ? n : cfg?.defaultPlayoffStartWeek ?? 15
+      return Number.isInteger(n) && n >= 2 && n <= seasonWeeks && (startCap == null || n <= startCap)
+        ? n
+        : Math.min(cfg?.defaultPlayoffStartWeek ?? 15, startCap ?? Infinity)
     }
     currentStart = startFor(league.playoffStartWeek)
     nextStart = startFor(pick(change.playoffStartWeek, league.playoffStartWeek))
@@ -154,7 +176,13 @@ export async function playoffFitOverflow(
   }
   if (nextRounds < 1) return null
 
-  const lastWeek = (start: number, rounds: number, perRound: number | null | undefined, length: number | null) =>
+  const lastWeek = (
+    start: number,
+    rounds: number,
+    perRound: number | null | undefined,
+    length: number | null,
+    series: number[] | null,
+  ) =>
     rounds < 1
       ? 0
       : lastWeekOfPlayoffRound({
@@ -163,9 +191,10 @@ export async function playoffFitOverflow(
           weeksPerRound: perRound,
           finalRoundNumber: rounds,
           championshipLength: length,
+          seriesLengths: series,
         })
-  const next = lastWeek(nextStart, nextRounds, nextPerRound, nextLength)
-  const current = lastWeek(currentStart, currentRounds, league.playoffWeeksPerRound, currentLength)
+  const next = lastWeek(nextStart, nextRounds, nextPerRound, nextLength, nextSeries)
+  const current = lastWeek(currentStart, currentRounds, league.playoffWeeksPerRound, currentLength, currentSeries)
   if (next <= seasonWeeks || next <= current) return null
   return {
     lastPlayoffWeek: next,
@@ -177,6 +206,7 @@ export async function playoffFitOverflow(
       playoffStartWeek: nextStart,
       weeksPerRound: nextPerRound,
       championshipLength: nextLength,
+      seriesLengths: nextSeries,
       leagueSize: league.leagueSize,
     }),
     teamsDecideRounds,
@@ -185,7 +215,7 @@ export async function playoffFitOverflow(
 
 export function playoffFitOverflowMessage(o: PlayoffFitOverflow): string {
   const head = `Those playoff settings would end the final in week ${o.lastPlayoffWeek}, past the season's last week (${o.seasonWeeks}).`
-  if (!o.teamsDecideRounds) return `${head} Shorten the final or the rounds, or move the playoffs earlier.`
+  if (!o.teamsDecideRounds) return `${head} Shorten the final, the rounds or the series, or move the playoffs earlier.`
   if (o.maxPlayoffTeams >= 2) {
     return `${head} With playoffs starting in week ${o.playoffStartWeek}, at most ${o.maxPlayoffTeams} playoff teams fit — choose ${o.maxPlayoffTeams} or fewer, shorten the rounds or the final, or move the playoffs earlier.`
   }

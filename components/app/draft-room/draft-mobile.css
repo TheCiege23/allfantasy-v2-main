@@ -1,6 +1,6 @@
 /* Dense board-cell actions keep their own layout; enlarging absolute controls there would overlap. */
 /* Keep these rules on the phone room; desktop tables retain their compact density. */
-@media(max-width:767px){
+@media (max-width: 767px), (max-width: 1023px) and (max-height: 600px) and (pointer: coarse){
   .draft-touch-room{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
   body:has(.draft-touch-room [data-testid=draft-mobile-quick-dock]) [data-testid=war-room-popup-trigger]{display:none}
   .draft-touch-room :is(button,a[aria-label],summary):not([data-testid^="draft-board-cell-"]){min-height:44px;min-width:44px;touch-action:manipulation}

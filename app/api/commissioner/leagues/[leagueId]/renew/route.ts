@@ -25,6 +25,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { isImportedPlatform, isNativePlatform } from '@/lib/league/isNativeLeague'
 import { renewNativeRedraft, RedraftRenewalError } from '@/lib/redraft/offseason/renewNativeRedraft'
+import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague, storedFaabRolloverRule, type RenewalFamily } from '@/lib/waiver-wire/faab-rollover'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
 import { readBracketResult } from '@/lib/redraft/offseason/RedraftOffseasonService'
@@ -85,6 +86,7 @@ export async function GET(
     select: {
       userId: true, season: true, sport: true, isDynasty: true,
       leagueVariant: true, status: true, settings: true, scoring: true,
+      zombieLeague: { select: { universeId: true } },
       name: true, leagueSize: true,
       lifecycleState: true, lifecycleMetadata: true,
       teams: {
@@ -203,6 +205,9 @@ export async function GET(
     }),
     lifecycleState: league.lifecycleState,
     tournamentFeeder,
+    zombieRenewal: league.zombieLeague || league.leagueVariant === 'zombie' ? {
+      renewFromHubPath: league.zombieLeague?.universeId ? '/zombie/universe/' + league.zombieLeague.universeId : '/league/' + leagueId + '/zombie-commissioner',
+    } : null,
     draftTeams,
     draftOrderModes: RENEW_DRAFT_ORDER_MODES,
     defaultDraftOrder: resolveRenewDraftOrderMode(savedDraftOrderMethod) ?? 'standings',
@@ -226,7 +231,7 @@ export async function POST(
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
-      userId: true, season: true, settings: true, leagueVariant: true, platform: true,
+      userId: true, season: true, settings: true, leagueType: true, leagueVariant: true, platform: true,
       isDynasty: true, sport: true, name: true, scoring: true,
       waiverBudget: true, status: true, lifecycleState: true, lifecycleMetadata: true,
       teams: {
@@ -240,6 +245,13 @@ export async function POST(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
+  if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
+    error: 'zombie_season_renewal_required',
+    message: 'Use Zombie season renewal to preserve role, item, prize and movement history.',
+    renewFromHubPath: zombie?.universeId ? '/zombie/universe/' + zombie.universeId : '/league/' + leagueId + '/zombie-commissioner',
+  }, { status: 409 })
+
   /*
    * 🛑 AN IMPORTED LEAGUE IS RENEWED ON ITS PLATFORM. Writing `season + 1` here left the row pointing at
    * last season's provider league, and every sync then refused it for a season mismatch. A Sleeper
@@ -289,11 +301,19 @@ export async function POST(
       { status: 409 },
     )
   }
+  /*
+   * FAAB's default family (lib/waiver-wire/faab-rollover.ts): a format the commissioner switches to in
+   * the modal decides; otherwise the league's own format — keeper and dynasty carry balances over even
+   * where the classifier above reads a modifier variant (an IDP keeper league) as redraft.
+   */
+  const faabFamily: RenewalFamily = newLeagueType
+    ? (shouldResetRostersForRenewal(renewalKind) ? 'redraft' : 'carry_rosters')
+    : faabRolloverFamilyForLeague(league)
   if (renewalKind === 'redraft_reset' && isNativePlatform(league.platform) && league.sport === 'NBA') {
     try {
       return NextResponse.json(await renewNativeRedraft({ leagueId, userId: session.user.id,
         expectedSeason: typeof body.expectedSeason === 'number' ? body.expectedSeason : league.season ?? new Date().getFullYear(),
-        removeMemberIds, duesEnabled, duesAmount, listInFinder, draftOrder: body.draftOrder, manualOrder: body.manualOrder }))
+        removeMemberIds, duesEnabled, duesAmount, listInFinder, draftOrder: body.draftOrder, manualOrder: body.manualOrder, faabFamily }))
     } catch (error) {
       if (error instanceof RedraftRenewalError) return NextResponse.json({ error: error.message }, { status: error.status })
       if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: 'Concurrent league change. Reload and retry renewal.' }, { status: 409 })
@@ -344,6 +364,7 @@ export async function POST(
     const result = await renewRedraftLeague(leagueId, session.user.id, {
       draftOrder: body.draftOrder,
       manualOrder: body.manualOrder,
+      faabFamily,
     })
     if (result.ok) {
       redraftRenewal = result
@@ -483,15 +504,29 @@ export async function POST(
   })
 
   // ─── 4b. REDRAFT (Sleeper-style): clear rosters for a full startup draft — keep dynasty/keeper player groups ───
+  // FAAB follows the commissioner's rollover rule (lib/waiver-wire/faab-rollover.ts). Unset, a redraft
+  // reset restores the budget (as it always did) and a keeper / dynasty renewal carries balances over.
+  const rolloverFaab = typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
+  let storedRolloverRule: ReturnType<typeof storedFaabRolloverRule> = null
+  try {
+    const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
+    storedRolloverRule = storedFaabRolloverRule(row?.waiverEngineConfig)
+  } catch {
+    // Unreadable: the family default applies, which is what every renewal did before the setting.
+  }
   if (resetsRosters && !redraftRenewal) {
-    const faab = typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
+    const resetFaab = effectiveFaabRolloverRule(storedRolloverRule, faabFamily) === 'reset'
     await prisma.roster.updateMany({
       where: { leagueId },
       data: {
         playerData: toPrismaJsonInput({}),
-        faabRemaining: faab,
+        ...(resetFaab ? { faabRemaining: rolloverFaab } : {}),
       },
     })
+    if (!resetFaab) await prisma.roster.updateMany({ where: { leagueId, faabRemaining: null }, data: { faabRemaining: rolloverFaab } })
+  } else if (!resetsRosters && storedRolloverRule === 'reset') {
+    // A keeper / dynasty league that chose "reset" starts the new season on the full budget.
+    await prisma.roster.updateMany({ where: { leagueId }, data: { faabRemaining: rolloverFaab } })
   }
 
   // ─── 5. UPDATE league type if changed ───

@@ -75,6 +75,13 @@ export interface FormatAdjustment {
   multiplier: number
   /** One sentence, addressed to a manager, naming the rule and its effect. */
   reason: string
+  /**
+   * `reason` as a stable code and its values, so a client can say it in the reader's language
+   * (`tradeCenter.value.formatReason.<code>`). Absent where the sentence is built from another
+   * module's prose: show `reason`.
+   */
+  reasonCode?: string
+  reasonParams?: Record<string, string | number>
 }
 
 /** Why an asset cannot be traded right now. Legality, not valuation. */
@@ -82,6 +89,9 @@ export interface TradeLegality {
   ok: boolean
   /** Present only when `ok` is false. Names the rule, not a generic refusal. */
   reason?: string
+  /** `reason` as a code and its values, as on `FormatAdjustment`. */
+  reasonCode?: string
+  reasonParams?: Record<string, string | number>
 }
 
 export interface FormatValueModel {

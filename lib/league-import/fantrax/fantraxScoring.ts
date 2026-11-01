@@ -66,12 +66,78 @@ const CATEGORY_KEYS: Record<string, string[]> = {
   INDIVIDUAL_RETURN_TOUCHDOWNS: ['kr_td', 'pr_td'],
 }
 
+/**
+ * ⚠ THE SAME CODE MEANS DIFFERENT STATS IN DIFFERENT SPORTS, SO THESE GROUPS ARE READ FIRST.
+ * `INDIVIDUAL_SAVES` is a baseball save in an MLB league and a goalie save in an NHL one, and
+ * `INDIVIDUAL_ASSISTS` / `INDIVIDUAL_BLOCKS` exist in basketball and hockey alike. Each scoring
+ * group says which sport (and side of the ball) its codes belong to. Keys are each sport's own
+ * vocabulary: Sleeper's for football (what `importedNflScoring` reads), the native engine's for
+ * basketball and hockey. Codes and groups are from real public leagues captured 2026-10-26 —
+ * tests/fixtures/fantrax/{nba,nhl,nfl}-public-2026.json.
+ */
+const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
+  BASKETBALL_PLAYER: {
+    INDIVIDUAL_POINTS: ['pts'],
+    INDIVIDUAL_REBOUNDS: ['reb'],
+    INDIVIDUAL_ASSISTS: ['ast'],
+    INDIVIDUAL_STEALS: ['stl'],
+    INDIVIDUAL_BLOCKS: ['blk'],
+    INDIVIDUAL_TURNOVERS: ['to'],
+  },
+  HOCKEY_SKATING: {
+    INDIVIDUAL_GOALS: ['g'],
+    INDIVIDUAL_ASSISTS: ['a'],
+    INDIVIDUAL_SHOTS_ON_GOAL: ['sog'],
+    INDIVIDUAL_POWER_PLAY_POINTS: ['ppp'],
+    INDIVIDUAL_SHORT_HANDED_GOALS: ['shg'],
+    INDIVIDUAL_HITS: ['hits'],
+    INDIVIDUAL_BLOCKS: ['blks'],
+    INDIVIDUAL_PENALTY_MINUTES: ['pim'],
+  },
+  HOCKEY_GOALIE: {
+    INDIVIDUAL_GOALIE_WINS: ['g_win'],
+    INDIVIDUAL_SAVES: ['g_sv'],
+    INDIVIDUAL_GOALS_AGAINST: ['g_ga'],
+    INDIVIDUAL_SHUTOUTS: ['g_so'],
+    /* A goalie's assists and penalty minutes are the skater stats; the engine keeps one rule each. */
+    INDIVIDUAL_ASSISTS: ['a'],
+    INDIVIDUAL_PENALTY_MINUTES: ['pim'],
+  },
+  FOOTBALL_OFFENSE: {
+    INDIVIDUAL_FUMBLES_LOST: ['fum_lost'],
+    INDIVIDUAL_INTERCEPTIONS_THROWN: ['pass_int'],
+  },
+  FOOTBALL_KICKING: {
+    INDIVIDUAL_EXTRA_POINTS_MADE: ['xpm'],
+    INDIVIDUAL_FIELD_GOALS_MADE: ['fgm'],
+  },
+  /* The defence group scores individual defenders (the captured league starts DL / LB / DB). */
+  FOOTBALL_DEFENSE: {
+    INDIVIDUAL_TACKLES: ['idp_tkl'],
+    INDIVIDUAL_TACKLES_FOR_LOSS: ['idp_tkl_loss'],
+    INDIVIDUAL_SACKS_DEFENSIVE: ['idp_sack'],
+    INDIVIDUAL_QB_HITS: ['idp_qb_hit'],
+    INDIVIDUAL_PASSES_DEFENSED: ['idp_pass_def'],
+    INDIVIDUAL_INTERCEPTIONS_CAUGHT: ['idp_int'],
+    INDIVIDUAL_FUMBLES_FORCED: ['idp_ff'],
+    INDIVIDUAL_FUMBLES_RECOVERED: ['idp_fum_rec'],
+    INDIVIDUAL_BLOCKED_KICKS: ['idp_blk_kick'],
+    INDIVIDUAL_INTERCEPTIONS_CAUGHT_TOUCHDOWNS: ['idp_def_td'],
+    INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS: ['idp_def_td'],
+  },
+}
+
+/** Groups whose codes must never fall back to the baseball/football table above. */
+const NO_FALLBACK_GROUP = /^(BASKETBALL|HOCKEY|SOCCER)_/
+
 /** Position-specific reception values map to a bonus, keyed by position code. */
 const RECEPTION_BONUS_BY_POSITION: Record<string, string> = {
   TE: 'bonus_rec_te',
 }
 
 type Config = {
+  /** The scoring group's code (`BASKETBALL_PLAYER`, `HOCKEY_GOALIE`, …), copied onto each config. */
+  group?: string
   points?: unknown
   position?: { shortName?: string; code?: string } | null
   scoringCategory?: { code?: string; name?: string; shortName?: string } | null
@@ -79,10 +145,10 @@ type Config = {
 
 function readConfigs(info: FantraxLeagueInfo): Config[] {
   const system = info.scoringSystem as
-    | { scoringCategorySettings?: Array<{ configs?: Config[] }> }
+    | { scoringCategorySettings?: Array<{ configs?: Config[]; group?: { code?: string } | null }> }
     | null
     | undefined
-  return system?.scoringCategorySettings?.flatMap((s) => s.configs ?? []) ?? []
+  return system?.scoringCategorySettings?.flatMap((s) => (s.configs ?? []).map((c) => ({ ...c, group: s.group?.code }))) ?? []
 }
 
 /**
@@ -137,12 +203,25 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
       continue
     }
 
-    const keys = CATEGORY_KEYS[code]
+    const group = config.group ?? ''
+    const keys =
+      GROUP_CATEGORY_KEYS[group]?.[code] ?? (NO_FALLBACK_GROUP.test(group) ? undefined : CATEGORY_KEYS[code])
     if (!keys) {
       gaps.push(`${config.scoringCategory?.name ?? code} has no equivalent here, so it is not scored`)
       continue
     }
-    for (const key of keys) rules.push({ stat_key: key, points_value: round(points) })
+    for (const key of keys) {
+      /* Two source categories feeding one rule (a goalie's and a skater's penalty minutes) keep
+         the first value; a disagreement is reported rather than silently averaged. */
+      const existing = rules.find((r) => r.stat_key === key)
+      if (existing) {
+        if (existing.points_value !== round(points)) {
+          gaps.push(`${config.scoringCategory?.name ?? code} is worth ${round(points)} here but shares one rule worth ${existing.points_value}`)
+        }
+        continue
+      }
+      rules.push({ stat_key: key, points_value: round(points) })
+    }
   }
 
   return { rules, gaps }

@@ -454,3 +454,20 @@
     row-gap: 3px;
   }
 }
+
+/*
+ * The team column stays put while the numeric columns scroll under it (760px floor, scrolls in
+ * its own box on a phone). Opaque so the scrolled columns do not show through; the viewer's row
+ * keeps its tint by layering the same translucent accent over the surface.
+ */
+.af-sol-table thead th:first-child,
+.af-sol-table tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.af-sol-table tbody tr[data-you='true'] th {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
+}

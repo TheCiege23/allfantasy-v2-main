@@ -20,6 +20,9 @@ export type SurvivorCommissionerAlertKind =
   | 'tie_unresolved'
   | 'jury_overdue'
   | 'exile_setup_failed'
+  | 'tribes_rebalanced'
+  /** Not a problem: the weekly summary of what Chimmy did for the teams it runs. */
+  | 'chimmy_weekly_report'
 
 export const SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION = 'commissioner_alert_sent'
 

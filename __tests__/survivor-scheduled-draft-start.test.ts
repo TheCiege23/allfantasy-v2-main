@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   due: vi.fn(), session: vi.fn(), pool: vi.fn(), prewarm: vi.fn(), start: vi.fn(), lock: vi.fn(),
   notifyStart: vi.fn(), enqueue: vi.fn(), priorNotice: vi.fn(), league: vi.fn(),
-  readiness: vi.fn(), alert: vi.fn(),
+  readiness: vi.fn(), alert: vi.fn(), report: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -20,6 +20,7 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ startDraftSessio
 vi.mock('@/lib/draft/draftLock', () => ({ withControlLock: m.lock }))
 vi.mock('@/lib/survivor/survivorDraftStartReadiness', () => ({ getSurvivorDraftStartReadiness: m.readiness }))
 vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({ notifySurvivorCommissionerOnce: m.alert, SURVIVOR_SEATS_ALERT_LEAD_MS: 24 * 60 * 60 * 1000 }))
+vi.mock('@/lib/survivor/survivorAutomationReporting', () => ({ reportSurvivorAutomationError: m.report }))
 
 import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
 
@@ -60,6 +61,17 @@ describe('scheduled Survivor draft start', () => {
     await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
     expect(m.alert).not.toHaveBeenCalled()
   })
+  it('a draft that fails to start is reported to Sentry with its league; a normal start reports nothing', async () => {
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.report).not.toHaveBeenCalled()
+    const boom = new Error('session write failed')
+    m.start.mockRejectedValue(boom)
+    expect((await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))).errors).toHaveLength(1)
+    expect(m.report).toHaveBeenCalledWith(boom, { job: 'draft_start', leagueId: 'league-1' })
+    m.start.mockResolvedValue({ ok: false, reason: 'POOL_EMPTY', error: 'pool is empty' })
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.report).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'Scheduled Survivor draft did not start: pool is empty' }), { job: 'draft_start', leagueId: 'league-1' })
+  })
   it('starts a due native live draft exactly once through the control lock', async () => {
     const now = new Date('2026-10-20T19:00:00Z')
     expect(await startScheduledSurvivorDrafts(now)).toMatchObject({ scanned: 1, started: 1, errors: [] })
@@ -68,7 +80,8 @@ describe('scheduled Survivor draft start', () => {
     }))
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
-    expect(m.notifyStart).toHaveBeenCalledWith('league-1')
+    // startDraftSession owns the lifecycle alert; this scheduler must not send a second one.
+    expect(m.notifyStart).not.toHaveBeenCalled()
   })
   it('scans Guilly leagues as well as survivor leagues', async () => {
     await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))

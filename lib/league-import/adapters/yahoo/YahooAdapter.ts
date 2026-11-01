@@ -4,6 +4,12 @@ import type { YahooImportPayload } from './types'
 import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 import { commissionerTeamSet } from '../commissionerTeamSet'
 
+/** Yahoo baseball and hockey carry an `NA` minors slot; that is the taxi squad there. */
+function yahooMinorsAreTaxi(sport: string | null | undefined): boolean {
+  const s = String(sport ?? '').trim().toUpperCase()
+  return s === 'MLB' || s === 'NHL'
+}
+
 function detectYahooScoringFormat(raw: YahooImportPayload): string | null {
   const receptionCategory = raw.settings?.statCategories.find((category) => {
     const name = `${category.name ?? ''} ${category.displayName ?? ''}`.toLowerCase()
@@ -42,9 +48,21 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
     }
 
     const rosterPositions = raw.settings?.rosterPositions ?? []
+    /*
+     * MLB/NHL `NA` (not active / minors) is the taxi squad: its players go to `taxi_ids` rather than
+     * the injured reserve, its slot count becomes `taxi_slots`, and it leaves `rosterSize` — a taxi
+     * player does not count against the roster limit (lib/league/rosterLimit.ts), so the limit must
+     * not hold his slot either. Every other sport is unchanged.
+     */
+    const minorsAsTaxi = yahooMinorsAreTaxi(raw.league.sport)
+    const taxiSlotCount = minorsAsTaxi
+      ? rosterPositions
+          .filter((slot) => slot.position.toUpperCase() === 'NA')
+          .reduce((total, slot) => total + Math.max(0, slot.count), 0)
+      : 0
     const rosterSize =
       rosterPositions.length > 0
-        ? rosterPositions.reduce((total, slot) => total + Math.max(0, slot.count), 0)
+        ? rosterPositions.reduce((total, slot) => total + Math.max(0, slot.count), 0) - taxiSlotCount
         : null
     const scoringFormat = detectYahooScoringFormat(raw)
     const isDynasty = detectYahooDynasty(raw)
@@ -59,7 +77,9 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
       raw.headCommissionerTeamKeys,
       raw.teams.map((team) => team.teamKey),
     )
-    const rosters = raw.teams.map((team) => ({
+    const rosters = raw.teams.map((team) => {
+      const minors = minorsAsTaxi ? new Set(team.minorsPlayerIds ?? []) : new Set<string>()
+      return {
       source_team_id: team.teamKey,
       source_manager_id: team.managerGuid || team.managerId || team.teamKey,
       owner_name: team.managerName || team.teamName,
@@ -73,13 +93,14 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
       points_against: team.pointsAgainst ?? undefined,
       player_ids: team.rosterPlayerIds,
       starter_ids: team.starterPlayerIds,
-      reserve_ids: team.reservePlayerIds,
-      taxi_ids: [],
+      reserve_ids: team.reservePlayerIds.filter((id) => !minors.has(id)),
+      taxi_ids: team.rosterPlayerIds.filter((id) => minors.has(id)),
       faab_remaining: team.faabBalance,
       waiver_priority: team.waiverPriority,
       /* IMP-04 — a rejected roster request must not read as an empty roster. */
       fetch_status: team.rosterFetchStatus,
-    }))
+      }
+    })
 
     const statCategoryById = new Map(
       (raw.settings?.statCategories ?? []).map((category) => [category.statId, category])
@@ -185,6 +206,7 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
         matchup_frequency: raw.settings?.scoringType ?? 'head',
         waiver_type: raw.settings?.usesFaab ? 'faab' : 'priority',
         faab_budget: null,
+        ...(taxiSlotCount > 0 ? { taxi_slots: taxiSlotCount } : {}),
         roster_positions: rosterPositions.map((slot) => `${slot.position}:${slot.count}`),
         yahoo_settings: raw.settings?.raw ?? null,
       },

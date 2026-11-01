@@ -90,6 +90,16 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
   })
 
+  it('sends the selected startup auction and weighted future rookie order', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'dynasty', draftType: 'auction', dynasty: { ...DEFAULT_V2_STATE.dynasty, startupDraftType: 'auction', rookieDraftOrderMethod: 'weighted_lottery' } }))
+    expect(lastFetchBody()).toMatchObject({ draftType: 'auction', conceptSetup: { rookieDraftOrderMethod: 'weighted_lottery' } })
+  })
+
+  it('normalizes the older saved lottery choice to weighted lottery', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'dynasty', dynasty: { ...DEFAULT_V2_STATE.dynasty, rookieDraftOrderMethod: 'lottery' } }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ rookieDraftOrderMethod: 'weighted_lottery' })
+  })
+
   it('uses concept idp when IDP card is selected', async () => {
     await submitCreateLeagueV2(
       state({
@@ -153,6 +163,26 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
       draftDate: '2026-08-30',
       draftTime: '20:00',
     })
+  })
+
+  it('sends the Survivor free/paid label and optional dues, never a payment', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4 }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'free' })
+    expect(lastFetchBody().conceptSetup).not.toHaveProperty('survivorEntryFeeAmountCents')
+
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorEntryFeeMode: 'paid', survivorDuesUsd: '$25.50' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'paid', survivorEntryFeeAmountCents: 2550 })
+
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorEntryFeeMode: 'paid', survivorDuesUsd: '' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorEntryFeeMode: 'paid' })
+    expect(lastFetchBody().conceptSetup).not.toHaveProperty('survivorEntryFeeAmountCents')
+  })
+
+  it("sends the Survivor twist preset: Classic by default, or the commissioner's choice", async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4 }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorTwistPreset: 'classic' })
+    await submitCreateLeagueV2(state({ leagueType: 'survivor', teamCount: 16, survivorTribeCount: 4, survivorTwistPreset: 'simple' }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ survivorTwistPreset: 'simple' })
   })
 
   it('a Guilly league never carries a median game, even one ticked before switching concept', async () => {

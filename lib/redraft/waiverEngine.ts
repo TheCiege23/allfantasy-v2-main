@@ -1,11 +1,12 @@
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
-import { getChopHoldStart, getWaiverBlindWindowStart } from '@/lib/guillotine/sportConfig'
+import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -161,43 +162,9 @@ export function compareClaimsWithCurrentRosterPriority(
 
 /**
  * A guillotine league holds claims during the blind window before its sport's scheduled waiver run,
- * so the FAAB bids on a chopped team's players compete together instead of first-come-first-served
- * (the cron runs hourly and used to settle every pending claim each run). Outside the window claims
- * settle as they arrive. Returns the cutoff (claims submitted before it are due), or null for no gate.
+ * so the FAAB bids on a chopped team's players compete together (lib/guillotine/blindWaiverCutoff.ts,
+ * shared with lib/waiver-wire/process-engine.ts).
  */
-const BLIND_WAIVER_GUILLOTINE_SPORTS = new Set(['NBA', 'NFL'])
-
-async function guillotineClaimsCutoff(leagueId: string, now: Date): Promise<Date | null> {
-  let league: { sport: string | null; guillotineMode: boolean | null; leagueVariant: string | null } | null = null
-  try {
-    league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true } })
-  } catch {
-    return null
-  }
-  if (!league) return null
-  const isGuillotine = league.guillotineMode === true || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine'
-  if (!isGuillotine) return null
-  const sport = String(league.sport ?? '').toUpperCase()
-  // NBA and NFL (owner's decision, 2026-10-17, including NFL leagues already in season). Other sports
-  // keep settling every run until their schedules are checked against their engines.
-  if (!BLIND_WAIVER_GUILLOTINE_SPORTS.has(sport)) return null
-  let lastChop: { choppedAt: Date | null } | null = null
-  try {
-    lastChop = await prisma.guillotineRosterState.findFirst({
-      where: { leagueId, choppedAt: { not: null } },
-      orderBy: { choppedAt: 'desc' },
-      select: { choppedAt: true },
-    })
-  } catch {
-    lastChop = null
-  }
-  // The earlier of the calendar window and a hold anchored on the chop itself (an early or late chop).
-  const starts = [getWaiverBlindWindowStart(sport, now), getChopHoldStart(sport, lastChop?.choppedAt, now)]
-    .filter((d): d is Date => d != null)
-  if (starts.length === 0) return null
-  return new Date(Math.min(...starts.map((d) => d.getTime())))
-}
-
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
@@ -334,6 +301,7 @@ export async function processWaiverWindow(
             where: { id: claim.rosterId },
             data: { faabBalance: Math.max(0, roster.faabBalance - bid) },
           })
+          await copyRedraftFaabToGeneric(tx, [claim.rosterId])
         }
       })
     } catch (err) {

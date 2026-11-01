@@ -3,14 +3,24 @@
  * immediately without waiting for a client-side fetch.
  */
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId, coOwnerTableMissing } from '@/lib/team-coowners/access'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
+import { labelSameNamedLeagues } from '@/lib/dashboard/labelSameNamedLeagues'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
+
+async function validCoOwnedLeagues(userId: string): Promise<string[]> {
+  const invitations = await prisma.teamCoOwner?.findMany({ where: { userId, acceptedAt: { not: null } }, select: { leagueId: true } }).catch((error: unknown) => { if (coOwnerTableMissing(error)) return []; throw error }) ?? []
+  const verified = await Promise.all(invitations.map(async ({ leagueId }) => await acceptedCoOwnerRosterId(leagueId, userId) ? leagueId : null))
+  return verified.filter((id): id is string => id !== null)
+}
 
 /**
  * `NOT (sleeper import-shaped)` sub-clause shared by the full dashboard list and the lean activity
@@ -54,7 +64,8 @@ const NOT_SLEEPER_IMPORT_SHAPED = {
  * that already skips `hasUnifiedRecord === false` rows.
  */
 export async function getActivityLeaguesForUser(userId: string): Promise<ActivityLeagueEntry[]> {
-  const [nativeLeagues, sleeperLeagues] = await Promise.all([
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
+  const [nativeLeagues, sleeperLeagues, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
         where: {
@@ -87,6 +98,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
@@ -125,6 +137,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         console.error('[Activity Leagues] sleeper leagues query failed', err)
         return [] as Array<Record<string, unknown>>
       }),
+    removedLeagueKeysFor(userId),
   ])
 
   const native: ActivityLeagueEntry[] = (nativeLeagues as Array<Record<string, unknown>>)
@@ -138,6 +151,10 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         settings: lg.settings,
       }),
     )
+    .filter((lg) =>
+      !isImportedPlatform(lg.platform as string | null) ||
+      !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
+    )
     .map((lg) => ({
       id: lg.id as string,
       name: (lg.name as string | null) ?? undefined,
@@ -148,7 +165,9 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
       sport: (lg.sport as string | null) ?? null,
     }))
 
-  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>).map((lg) => ({
+  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>)
+    .filter((lg) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
+    .map((lg) => ({
     id: lg.id as string,
     name: (lg.name as string | null) ?? undefined,
     platform: 'sleeper',
@@ -414,6 +433,22 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(
 }
 
 /**
+ * Lookup keys of every league this viewer removed. A failed read hides nothing: the list is the
+ * /core membership gate, and a removal that briefly reappears beats a list that fails.
+ */
+async function removedLeagueKeysFor(userId: string): Promise<Set<string>> {
+  try {
+    const rows = await prisma.deletedLeagueTombstone.findMany({
+      where: { userId },
+      select: { platform: true, platformLeagueId: true },
+    })
+    return new Set(rows.map((r) => tombstoneLookupKey(r.platform, r.platformLeagueId)))
+  } catch (err) {
+    console.error('[League List] tombstone read failed', err)
+    return new Set()
+  }
+}
+/**
  * Each league's `settings`, minus the importer's `identity_mappings` table — and minus the retired
  * manager-label keys (`psychologyCache`), which this list must never hand a client
  * (`lib/league/clientLeagueSettings.ts`).
@@ -491,7 +526,8 @@ export async function getDashboardLeagueListForUser(
       .catch(() => null),
   ])
 
-  const [genericLeagues, sleeperLeagues, tournaments, legacyBoardItems] = await Promise.all([
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
+  const [genericLeaguesRead, sleeperLeagues, tournaments, legacyBoardItems, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
         where: {
@@ -524,6 +560,7 @@ export async function getDashboardLeagueListForUser(
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
@@ -580,6 +617,7 @@ export async function getDashboardLeagueListForUser(
           lifecycleState: true,
           tradeDeadlineWeek: true,
           playoffStartWeek: true,
+          playoffLowerBracket: true,
           leagueSettings: {
             select: { draftDateUtc: true },
           },
@@ -589,7 +627,7 @@ export async function getDashboardLeagueListForUser(
           },
           teams: {
             where: { claimedByUserId: userId },
-            select: { isCommissioner: true, isCoCommissioner: true, role: true },
+            select: { isCommissioner: true, isCoCommissioner: true, role: true, teamName: true },
           },
           rosters:
             opts?.rosterDetail === 'count'
@@ -661,7 +699,21 @@ export async function getDashboardLeagueListForUser(
         return []
       }),
     appUser?.legacyUserId ? getLegacyLeagueBoardItems(appUser.legacyUserId) : Promise.resolve([]),
+    removedLeagueKeysFor(userId),
   ])
+
+  /*
+   * A league someone else imported, which this viewer removed from their list (DELETE
+   * /api/league/[id] writes only their tombstone for it — the league is shared, so nothing is
+   * deleted). Viewer-owned imported rows can also be shared through claims, so their
+   * tombstones hide the row without deleting it. Native leagues are never tombstoned by
+   * that route, and the check is imported-only so a stray key cannot hide one.
+   */
+  const genericLeagues = (genericLeaguesRead as Array<{ userId?: unknown; platform?: unknown; platformLeagueId?: unknown }>).filter(
+    (lg) =>
+      !isImportedPlatform(String(lg.platform ?? '')) ||
+      !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
+  ) as any[]
 
   const genericLeagueIds = (genericLeagues as { id: string }[]).map((lg) => lg.id).filter(Boolean)
   const [redraftSeasonMaxRows, leagueHistoryMaxRows, settingsById] =
@@ -767,17 +819,34 @@ export async function getDashboardLeagueListForUser(
       hasUnifiedRecord: true,
       teamCount: teamCountForFilter,
       isCommissioner,
+      /*
+       * Whether this `League` row is the viewer's own copy — the only kind `DELETE /api/league/[id]`
+       * deletes (it matches on `userId`). The owner id itself is stripped above and stays stripped;
+       * only these booleans leave.
+       */
+      viewerOwnsRow: String(leagueRowOwnerId ?? '') === userId,
+      /* The viewer's own team here, so two copies of one league (two teams in it) can be told apart. */
+      viewerTeamName: typeof myTeam?.teamName === 'string' ? myTeam.teamName : null,
+      /*
+       * Whether that route can take this league off the viewer's list: their own copy, or an
+       * imported league someone else imported (tombstoned for them alone, filtered above). A
+       * native league they only joined is not a list preference.
+       */
+      viewerCanRemove:
+        String(leagueRowOwnerId ?? '') === userId || isImportedPlatform(String(lgCore.platform ?? '')),
       userRole,
       isPaid,
       entryFee: entryFee ?? null,
       lifecycleState: lgCore.lifecycleState ?? null,
       tradeDeadlineWeek: lgCore.tradeDeadlineWeek ?? null,
       playoffStartWeek: lgCore.playoffStartWeek ?? null,
+      playoffLowerBracket: lgCore.playoffLowerBracket ?? null,
       draftDate: viewerLeagueSettings?.draftDateUtc ? viewerLeagueSettings.draftDateUtc.toISOString() : null,
     }
   })
 
   const normalizedSleeper = sleeperLeagues
+    .filter((lg: any) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
     .map((lg: any) => {
       const unifiedLeagueId = unifiedSleeperLeagueIdMap.get(lg.sleeperLeagueId) ?? null
       return {
@@ -902,7 +971,7 @@ export async function getDashboardLeagueListForUser(
     const own = Number(viewerOwnedRowIds.has(String(b.id))) - Number(viewerOwnedRowIds.has(String(a.id)))
     return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
   }
-  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap, preferViewerRow)
+  const deduped = labelSameNamedLeagues(collapseLeagueSeasons(filtered as any[], seriesMap, preferViewerRow))
 
   const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0

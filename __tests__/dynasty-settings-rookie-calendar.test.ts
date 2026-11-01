@@ -10,7 +10,9 @@ const m = vi.hoisted(() => ({
   leagueUpdate: vi.fn(),
   dynastyFindUnique: vi.fn(),
   upsert: vi.fn(),
+  publish: vi.fn(async () => undefined),
 }))
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: m.publish }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'commish' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -92,5 +94,30 @@ describe('dynasty settings PUT — rookie draft calendar', () => {
   it('[control] a save without calendar keys does not write the calendar', async () => {
     await put({ scoring_format_type: 'standard' })
     expect(savedSettings()[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]).toBeUndefined()
+  })
+})
+
+describe('dynasty settings PUT — "start it N days after it opens" and the What changed card (2026-10-29)', () => {
+  it('saves the day count and tells members, with rookie-draft and taxi changes alongside', async () => {
+    m.dynastyFindUnique.mockResolvedValue({ rookiePickOrderMethod: 'max_pf', rookieDraftRounds: 4, rookieDraftType: 'linear', taxiSlots: 4, taxiEligibilityYears: 1, futurePicksYearsOut: 3 })
+    m.upsert.mockResolvedValue({ rookiePickOrderMethod: 'max_pf', rookieDraftRounds: 5, rookieDraftType: 'linear', taxiSlots: 4, taxiEligibilityYears: 1, futurePicksYearsOut: 3 })
+    const res = await put({ rookieDraftAutoStartDays: 7, rookieDraftRounds: 5 })
+    expect(res.status).toBe(200)
+    expect(readRookieDraftCalendarSettings(savedSettings()).autoStartDays).toBe(7)
+    expect(m.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        section: 'dynasty',
+        changes: expect.arrayContaining([
+          { key: 'rookieDraftRounds', before: 4, after: 5 },
+          { key: 'rookieDraftAutoStartDays', before: null, after: 7 },
+        ]),
+      }),
+    )
+  })
+
+  it('refuses a day count it does not offer', async () => {
+    const res = await put({ rookieDraftAutoStartDays: 5 })
+    expect(res.status).toBe(400)
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
   })
 })

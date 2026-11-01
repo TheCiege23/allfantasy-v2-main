@@ -21,7 +21,8 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
  *     walks allowed, outs) are removed, so ERA and WHIP go unqualified while W / SV / K still count.
  *   - Minimums are judged on the stored data as it stands, so mid-week the score is the score the week
  *     would end with if no more games were played. The live indicator says how far off the minimum is.
- *   - Caps count only games that COUNTED: a day zeroed by the cap adds nothing to usage. A week voided by
+ *   - Caps count only STARTING-LINEUP games (bench and IL days add nothing — owner, 2026-10-25), and only
+ *     games that COUNTED: a day zeroed by the cap adds nothing to usage. A week voided by
  *     a minimum does not refund cap usage — the games were played in the slot.
  *
  * Only daily-lineup leagues are scored this way: a cap needs to know which slot a player held on each

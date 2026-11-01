@@ -21,17 +21,36 @@ import {
   ChevronRight,
   ScanEye,
   Send,
+  Gavel,
 } from 'lucide-react'
 import { SurvivorIslandAmbient } from '@/components/survivor/SurvivorIslandAmbient'
 import {
   WarRoomHeroCard,
-  WarRoomPanel,
+  WarRoomPanel as WarRoomPanelBase,
   WarRoomStatOrb,
   WarRoomTabButton,
 } from '@/components/tournament/TournamentWarRoomPrimitives'
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
+import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleControls'
+import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
+import { SurvivorRewardsHubPanel } from '@/components/survivor/SurvivorRewardsHubPanel'
+import { Gift } from 'lucide-react'
+import { useMessages } from '@/components/i18n/useMessages'
+import { survivorHubTabMessages } from '@/components/survivor/survivorHubTabMessages'
+import type { ComponentProps } from 'react'
+
+/** Every Hub panel's title and subtitle through the EN/ES lookup (falls back to the English text). */
+function WarRoomPanel(props: ComponentProps<typeof WarRoomPanelBase>) {
+  const hub = useMessages(survivorHubTabMessages)
+  return <WarRoomPanelBase {...props} title={hub.text(props.title)} subtitle={hub.text(props.subtitle)} />
+}
+import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
+import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
+import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
+import { SurvivorSideGamesHubPanel } from '@/components/survivor/SurvivorSideGamesHubPanel'
+import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -45,7 +64,9 @@ type TabId =
   | 'operations'
   | 'tribes'
   | 'tribal'
+  | 'governance'
   | 'minigames'
+  | 'rewards'
   | 'exile'
   | 'jury'
   | 'settings'
@@ -60,7 +81,9 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'operations', label: 'Operations', icon: <Scale className="h-4 w-4" /> },
   { id: 'tribes', label: 'Tribes', icon: <Users className="h-4 w-4" /> },
   { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
+  { id: 'governance', label: 'Rules & conduct', icon: <Gavel className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
+  { id: 'rewards', label: 'Rewards', icon: <Gift className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
   { id: 'settings', label: 'Settings', icon: <Settings2 className="h-4 w-4" /> },
@@ -102,6 +125,8 @@ type DashboardPayload = {
   week: number
   tribes: { id: string; name: string; emoji?: string | null; members: { rosterId: string; userId?: string | null; displayName?: string | null }[] }[]
   tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null; defaultDecision?: string; options?: string[] } | null
+  /** Older servers omit it. */
+  todo?: SurvivorCommissionerTodo
   council: unknown
   privateBallots: []
   privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -116,7 +141,15 @@ type DashboardPayload = {
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
-  const [tab, setTab] = useState<TabId>(searchParams?.get('tab') === 'tribes' ? 'tribes' : 'overview')
+  // A to-do or alert link names the tab to open (?tab=tribes, ?tab=operations, ?tab=tribal).
+  const hubText = useMessages(survivorHubTabMessages)
+  const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams?.get('tab'))?.id ?? 'overview')
+  const tabParam = searchParams?.get('tab') ?? null
+  useEffect(() => {
+    // The to-do links stay on this page, so follow the URL when it changes too.
+    const next = TABS.find(t => t.id === tabParam)?.id
+    if (next) setTab(next)
+  }, [tabParam])
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tribeDrafts, setTribeDrafts] = useState<Record<string, { name: string; emoji: string }>>({})
@@ -328,7 +361,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   active={tab === t.id}
                   onClick={() => setTab(t.id)}
                   icon={t.icon}
-                  label={t.label}
+                  label={hubText.tab(t.id, t.label)}
                   testId={`survivor-commissioner-tab-${t.id}`}
                 />
               ))}
@@ -349,6 +382,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
         <div className="mt-6 space-y-6">
           {tab === 'overview' && data && (
             <>
+              {data.todo ? <SurvivorCommissionerTodoCard todo={data.todo} /> : null}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <WarRoomStatOrb label="Phase" value={gs?.phase ?? '—'} hint="Game state" accent="emerald" />
                 <WarRoomStatOrb
@@ -450,6 +484,17 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`/league/${leagueId}?tab=trades`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Review trades</Link>
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
+              </WarRoomPanel>
+              <WarRoomPanel title="Fix a problem" subtitle="Score corrections, a manager who quit, or an early merge.">
+                <SurvivorSeasonFixPanel
+                  leagueId={leagueId}
+                  week={data.gameState?.currentWeek ?? data.week}
+                  merged={data.merged}
+                  managers={[...new Map(data.tribes.flatMap(tribe => tribe.members)
+                    .filter(member => member.userId)
+                    .map(member => [member.userId as string, { userId: member.userId as string, name: member.displayName || 'Manager' }])).values()]
+                    .sort((a, b) => a.name.localeCompare(b.name))}
+                />
               </WarRoomPanel>
               {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
@@ -590,14 +635,27 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             </div>
           )}
 
+          {tab === 'governance' && (
+            <WarRoomPanel title="Rules & conduct" subtitle="Conduct strikes, Rooks vs Vets and tribe swaps.">
+              <SurvivorGovernanceHubPanel leagueId={leagueId} />
+            </WarRoomPanel>
+          )}
+
           {tab === 'minigames' && (
             <WarRoomPanel
               title="Mini games"
               subtitle="Challenges pull real sport schedules for the active week — see Challenges hub."
             >
-              <Link href={`${base}/challenges`} className="text-emerald-300 hover:text-emerald-200">
+              <SurvivorChallengeBuilderPanel leagueId={leagueId} />
+              <Link href={`${base}/challenges`} className="mt-4 inline-block text-emerald-300 hover:text-emerald-200">
                 Go to challenges →
               </Link>
+            </WarRoomPanel>
+          )}
+
+          {tab === 'rewards' && (
+            <WarRoomPanel title="Rewards" subtitle="Grant, reverse and settle pending reward choices.">
+              <SurvivorRewardsHubPanel leagueId={leagueId} />
             </WarRoomPanel>
           )}
 
@@ -606,14 +664,15 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               <Link href={`${base}/exile`} className="text-emerald-300 hover:text-emerald-200">
                 Exile dashboard →
               </Link>
+              <div className="mt-4">
+                <SurvivorSideGamesHubPanel leagueId={leagueId} />
+              </div>
             </WarRoomPanel>
           )}
 
           {tab === 'jury' && (
             <WarRoomPanel title="Jury" subtitle="Jury phase and finale votes — see Jury hub.">
-              <Link href={`${base}/jury`} className="text-emerald-300 hover:text-emerald-200">
-                Jury chamber →
-              </Link>
+              <SurvivorFinaleControls leagueId={leagueId} />
             </WarRoomPanel>
           )}
 
@@ -659,6 +718,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               leagueId={leagueId}
               plan={data.monetization.afPlan ?? null}
               tokensRemaining={data.monetization.afTokensRemaining ?? null}
+              isCommissioner
             />
           )}
 

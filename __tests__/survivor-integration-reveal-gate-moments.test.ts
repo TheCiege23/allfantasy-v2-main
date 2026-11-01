@@ -76,9 +76,9 @@ describe('mid-read', () => {
 describe('after the last ballot', () => {
   beforeEach(() => { h.council = { ...h.council!, revealStartsAt: new Date(Date.now() - 60_000) } })
 
-  it('share-cards captures the out and idol moments', async () => {
-    expect(await captureCouncilShareMoments('l1', 'c1')).toBe(2)
-    expect(h.created.map(row => row.type).sort()).toEqual(['idol', 'out'])
+  it('share-cards captures the out and idol moments, and the league week recap', async () => {
+    expect(await captureCouncilShareMoments('l1', 'c1')).toBe(3)
+    expect(h.created.map(row => row.type).sort()).toEqual(['idol', 'out', 'recap'])
   })
 
   it('weekly-loop shows the torch-out', async () => {

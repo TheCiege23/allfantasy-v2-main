@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-const h = vi.hoisted(() => ({ observation: vi.fn(), saveObservation: vi.fn(), injuries: vi.fn(), native: vi.fn(), rosters: vi.fn(), profile: vi.fn(), exists: vi.fn(), identity: vi.fn(), recipients: vi.fn(), dispatch: vi.fn() }))
+const h = vi.hoisted(() => ({ impacts: vi.fn(), observation: vi.fn(), saveObservation: vi.fn(), injuries: vi.fn(), native: vi.fn(), rosters: vi.fn(), profile: vi.fn(), exists: vi.fn(), identity: vi.fn(), recipients: vi.fn(), dispatch: vi.fn() }))
 /*
  * Observations are read in one batch (`findMany`) since P4/P5 stage A. The batch is answered from the
  * same `h.observation` mock the per-row read used, so every scenario below keeps its meaning. Only
@@ -19,6 +19,14 @@ async function observationBatch({ where }: { where: { cacheKey: { in: string[] }
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsDataCache: { findUnique: h.observation, findMany: observationBatch, upsert: h.saveObservation }, sportsInjury: { findMany: h.injuries }, redraftRosterPlayer: { findMany: h.native }, roster: { findMany: h.rosters }, userProfile: { findUnique: h.profile }, platformNotification: { findUnique: h.exists } } }))
 vi.mock('@/lib/notifications/playerNewsRecipients', () => ({ FINISHED_SEASON_STATUSES: ['completed'], resolvePlayerNewsIdentity: h.identity, resolvePlayerNewsRecipients: h.recipients }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
+/*
+ * The lineup read (the Player Finder's picker) is stubbed: by default it answers the way its own
+ * fallback does — starter or not, from the roster slot — so these tests pin the routing, and the
+ * swap cases set their own answer.
+ */
+vi.mock('@/lib/notifications/lineupImpact', () => ({ resolveLineupImpacts: h.impacts }))
+vi.mock('@/lib/roster/LineupTemplateValidation', () => ({ getNormalizedLineupSections: (data: { lineup_sections?: { starters?: unknown[] } }) => ({ starters: data?.lineup_sections?.starters ?? [] }) }))
+import { lineupImpactKind } from '@/lib/notifications/lineupImpactCopy'
 import { notifySyncedInjuries, importedPlayerIsStarting } from '@/lib/engagement-alerts/injuryAlerts'
 beforeEach(() => {
   vi.resetAllMocks()
@@ -28,15 +36,18 @@ beforeEach(() => {
   h.identity.mockImplementation(async ({ playerName, sport }) => ({ status: 'resolved', identity: { identityId: playerName, sport, sleeperId: '1' } }))
   h.recipients.mockResolvedValue({ byUser: new Map([['u', ['league']]]), degraded: false })
   h.dispatch.mockResolvedValue({ delivered: 1, failed: 0 })
+  h.impacts.mockImplementation(async (a: { leagueIds: string[]; startingLeagueIds: string[]; bucket: never; prior: never }) =>
+    a.leagueIds.map((leagueId) => ({ leagueId, leagueName: 'League', kind: lineupImpactKind({ bucket: a.bucket, prior: a.prior, isStarting: a.startingLeagueIds.includes(leagueId), call: null }),
+      startName: null, benchName: null, delta: null, freeAgent: null, fixHref: null })))
 })
 describe('injury alerts', () => {
-  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('groups all actionable starters on a team in %s', async sport => {
-    h.injuries.mockResolvedValue(Array.from({ length: 8 }, (_, i) => ({ playerName: `Player ${i}`, status: 'Out', source: 'espn', externalId: String(i), date: new Date(), team: 'Team' })))
+  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('a ruled-out starter is a lineup alert, one per player, by push and email in %s', async sport => {
+    h.injuries.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ playerName: `Player ${i}`, status: 'Out', source: 'espn', externalId: String(i), date: new Date(), team: 'Team' })))
     const result = await notifySyncedInjuries(sport)
-    expect(result.delivered).toBe(1)
-    expect(h.dispatch).toHaveBeenCalledTimes(1)
-    expect(h.dispatch.mock.calls[0][0].meta.playerCount).toBe(8)
+    expect(result.delivered).toBe(3)
+    expect(h.dispatch).toHaveBeenCalledTimes(3)
     expect(h.dispatch.mock.calls[0][0]).toMatchObject({ category: 'lineup_alerts', type: 'injured_starter', skipChannels: { sms: true }, severity: 'high' })
+    expect(h.dispatch.mock.calls[0][0].title).toMatch(/is OUT — your lineup options/)
   })
   it('keeps bench injuries as injury updates', async () => {
     h.native.mockResolvedValue([])
@@ -112,7 +123,8 @@ describe('healthy recaps are not injury events', () => {
  })
 })
 
-it('sends one summary per team and does not repeat delivered members', async () => {
+it('bell-only updates are grouped per team and not repeated once delivered', async () => {
+ h.native.mockResolvedValue([])
  h.injuries.mockResolvedValue([
   {playerName:'One',team:'ARI',status:'Out',source:'espn',date:new Date()},
   {playerName:'Two',team:'ARI',status:'Out',source:'espn',date:new Date()},
@@ -136,17 +148,38 @@ it('names the player and says they are still in the starting lineup', async () =
  expect(lineupAlertTitle([{ playerName: 'A', status: 'out' }, { playerName: 'B', status: 'out' }])).toBe('🚨 2 of your starters are out — fix your lineup')
 })
 
-describe('the player-news gate on the injury sync (owner, 2026-10-22)', () => {
- it('a starter is pushed now and a bench player waits for the digest; neither is emailed', async () => {
+describe('only lineup changes are pushed and emailed (owner, 2026-10-25)', () => {
+ it('a starter ruled out gets lineup options; a bench injury gets push and bell', async () => {
+  h.impacts.mockResolvedValueOnce([{ leagueId: 'league', leagueName: 'Dynasty', kind: 'starter_out', startName: 'Backup Guy', benchName: null, delta: null, freeAgent: null, fixHref: '/fix' }])
   h.injuries.mockResolvedValue([{ playerName: 'Player', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
   await notifySyncedInjuries('NFL')
-  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true })
-  expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'instant', starter: true })
+  const out = h.dispatch.mock.calls[0][0]
+  expect(out.skipChannels).toEqual({ sms: true })
+  expect(out.body).toBe('Dynasty: start Backup Guy in place of Player.')
+  expect(out.actionHref).toBe('/fix')
+  expect(out.meta.playerNews).toMatchObject({ delivery: 'instant', digest: false })
   h.dispatch.mockClear(); h.native.mockResolvedValue([])
   h.injuries.mockResolvedValue([{ playerName: 'Bench Guy', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
   await notifySyncedInjuries('NFL')
-  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true, push: true })
-  expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'digest', starter: false })
+  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true })
+  expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'bell', digest: false, starter: false })
+ })
+ it('a bench player back healthy who out-projects a starter is told who to swap', async () => {
+  h.native.mockResolvedValue([])
+  h.observation.mockImplementation(async ({ where }) => where.cacheKey.startsWith('injury-observation:') ? { data: { status: 'questionable' } } : null)
+  h.impacts.mockResolvedValueOnce([{ leagueId: 'league', leagueName: 'Dynasty', kind: 'bench_should_start', startName: 'Healthy Guy', benchName: 'Weak Starter', delta: 4.2, freeAgent: null, fixHref: null }])
+  h.injuries.mockResolvedValue([{ playerName: 'Healthy Guy', team: 'Team', status: 'Active', source: 'espn', date: new Date() }])
+  await notifySyncedInjuries('NFL')
+  const out = h.dispatch.mock.calls[0][0]
+  expect(out.title).toBe('💪 Healthy Guy is healthy — start him over Weak Starter')
+  expect(out.body).toBe('Dynasty: start Healthy Guy over Weak Starter (+4.2 projected).')
+  expect(out.skipChannels).toEqual({ sms: true })
+ })
+ it('a starter cleared from questionable is told he stays in', async () => {
+  h.observation.mockImplementation(async ({ where }) => where.cacheKey.startsWith('injury-observation:') ? { data: { status: 'questionable' } } : null)
+  h.injuries.mockResolvedValue([{ playerName: 'Player', team: 'Team', status: 'Active', source: 'espn', date: new Date() }])
+  await notifySyncedInjuries('NFL')
+  expect(h.dispatch.mock.calls[0][0]).toMatchObject({ title: '✅ Player is cleared to play', skipChannels: { sms: true } })
  })
  it('a player already on IR listed Out again is recorded and not sent', async () => {
   h.observation.mockImplementation(async ({ where }) => where.cacheKey.startsWith('injury-observation:') ? { data: { status: 'Injured Reserve' } } : null)

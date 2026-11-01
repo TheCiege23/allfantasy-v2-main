@@ -54,6 +54,9 @@ describe('readLineupIntegrity', () => {
     expect(rep.findings.map((f) => [f.teamName, f.flagged])).toEqual([['bob', false], ['Tankers', true]])
     expect(rep.findings.find((f) => f.rosterId === '1')?.text).toBe('Week 6: Tankers — 1 empty starting slot; started Patrick Mahomes on a bye.')
     expect(rep.findings.find((f) => f.rosterId === '2')?.ruledOutStarters).toEqual(['hurt'])
+    // Names travel with the finding, so a flag built from it accuses a player, not an id.
+    expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
+    expect(rep.findings.find((f) => f.rosterId === '2')?.playerNames).toEqual({ hurt: 'Hurt Guy' })
   })
 
   it('full season adds the team-by-team record', async () => {
@@ -73,5 +76,21 @@ describe('Action Queue tasks', () => {
   it('nothing for leagues it cannot audit', async () => {
     state.league = { ...sleeper, platform: 'fleaflicker' }
     expect(await readLineupIntegrityTasks('L1')).toEqual([])
+  })
+})
+
+describe('player names are read in the league’s sport', () => {
+  it('an NFL audit never names a starter from another sport’s row with the same Sleeper id', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.sportsPlayer.findMany).mockImplementationOnce((async ({ where }: { where: Record<string, unknown> }) =>
+      [
+        { sport: 'NBA', sleeperId: 'mahomes', name: 'Hoops Impostor', team: 'KC', position: 'PG' },
+        { sport: 'NFL', sleeperId: 'mahomes', name: 'Patrick Mahomes', team: 'KC', position: 'QB' },
+        { sport: 'NFL', sleeperId: 'hurts', name: 'Jalen Hurts', team: 'PHI', position: 'QB' },
+        { sport: 'NFL', sleeperId: 'hurt', name: 'Hurt Guy', team: 'DAL', position: 'WR' },
+      ].filter((r) => where.sport == null || r.sport === where.sport)) as never)
+    const rep = await readLineupIntegrity('L1', { fullSeason: false })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
   })
 })

@@ -43,8 +43,16 @@ const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
 const NFL_TABS: TabDef[] = FOOTBALL_REDRAFT_COMPACT_TABS
 const NCAAF_TABS: TabDef[] = FOOTBALL_REDRAFT_COMPACT_TABS
 
+/**
+ * NBA, MLB, NHL and NCAAB share this list, and all of them carry the Draft tab the football shell
+ * has always had. Without it their league pages had no path to the live draft room at all —
+ * reported by an Android manager during a live NBA draft, 2026-10-26. The tab renders the same
+ * pre-draft setup / DraftTab ("Enter Draft Room") as football, and the group bar already lands its
+ * Draft pill on `draft`.
+ */
 const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'roster', label: 'Roster' },
+  { id: 'draft', label: 'Draft' },
   { id: 'redraft', label: 'Redraft' },
   { id: 'team', label: 'My Team' },
   { id: 'matchups', label: 'Matchups' },
@@ -60,8 +68,10 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'history', label: 'History' },
 ]
 
+/** Soccer (EPL, MLS) carries the same Draft tab as the basketball-like sports — see above. */
 const SOCCER_TABS: TabDef[] = [
   { id: 'squad', label: 'Squad' },
+  { id: 'draft', label: 'Draft' },
   { id: 'redraft', label: 'Redraft' },
   { id: 'team', label: 'My Team' },
   { id: 'league', label: 'League' },
@@ -176,6 +186,9 @@ const LEAGUE_TAB_I18N_KEY: Record<string, string> = {
   bb_command: 'league.tab.bbCommand',
   idp: 'league.tab.idp',
   keeper: 'league.tab.keepers',
+  dynasty: 'league.tab.dynasty',
+  dynasty_taxi: 'league.tab.dynastyTaxi',
+  dynasty_picks: 'league.tab.dynastyPicks',
   settings: 'league.tab.settings',
 }
 

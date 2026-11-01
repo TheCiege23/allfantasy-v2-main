@@ -41,7 +41,7 @@ export async function POST(
    * ⚠ `action: 'reverse_preflight'` EXISTS SO THE ANSWER CAN BE ASKED FOR WITHOUT ACTING. Reversal
    * overwrites two rosters; a UI that can only find out by trying is a UI that reverses by accident.
    */
-  const body = (await req.json().catch(() => ({}))) as { action?: string; reason?: string }
+  const body = (await req.json().catch(() => ({}))) as { action?: string; reason?: string; commissionerOverride?: boolean }
 
   if (body.action === 'reverse_preflight') {
     const readiness = await evaluateGenericTradeReversalReadiness(prisma, tradeId)
@@ -102,7 +102,14 @@ export async function POST(
 
 
   try {
-    await finalizeAfLeagueTradeProcessing({ tradeId, actorUserId: userId })
+    /*
+     * `commissionerOverride: true` forces a still-pending offer through after the trade deadline — the
+     * redraft runtime's convention, opted into explicitly and never the default. The elevated
+     * commissioner gate above is what makes it safe to read from the body.
+     */
+    // Elevated-commissioner only (gate above), so this processing is the commissioner's decision: a
+    // Survivor free-trade token the managers hold is not spent by it (survivorBypassSourceToRedeem).
+    await finalizeAfLeagueTradeProcessing({ tradeId, actorUserId: userId, commissionerOverride: body.commissionerOverride === true, commissionerApproved: true })
     return NextResponse.json({ ok: true, ...(sports.decision ? { sportsDataDecision: sports.decision } : {}) })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

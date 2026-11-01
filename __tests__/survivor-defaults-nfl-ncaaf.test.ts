@@ -9,6 +9,8 @@ import {
 } from '../lib/league-concepts/survivorDefaults'
 import { resolveConceptPreset, mergeConceptPresetSettings } from '../lib/league-concepts/resolveConceptPreset'
 import { CONCEPT_PRESET_CATALOG } from '../lib/league-concepts/conceptPresetCatalog'
+import { resolveMlbRosterTemplate } from '../lib/mlb-roster/MlbRosterTemplates'
+import { resolveNhlRosterTemplate } from '../lib/nhl-roster/NhlRosterTemplates'
 
 // ── isSurvivorEligibleSport ───────────────────────────────────────────────────
 
@@ -176,7 +178,7 @@ describe('getSurvivorDefaultContract — NFL', () => {
   })
 
   it('returns null for unsupported sport', () => {
-    expect(getSurvivorDefaultContract({ sport: 'MLB' })).toBeNull()
+    expect(getSurvivorDefaultContract({ sport: 'SOCCER' })).toBeNull()
   })
 })
 
@@ -202,6 +204,47 @@ describe('getSurvivorDefaultContract — NCAAF', () => {
   it('scoringPreset = ncaaf_half_ppr', () => expect(contract.scoring_preset_id).toBe('ncaaf_half_ppr'))
   it('survivorStructure: castSize = 20', () => expect(contract.survivorStructure.castSize).toBe(20))
   it('survivorStructure: mergeAtCount = 10', () => expect(contract.survivorStructure.tribeSettings.mergeAtCount).toBe(10))
+})
+
+describe('getSurvivorDefaultContract — MLB', () => {
+  const contract = getSurvivorDefaultContract({ sport: 'MLB' })!
+
+  it('MLB is a Survivor sport', () => expect(isSurvivorEligibleSport('MLB')).toBe(true))
+  it('returns an MLB points contract for a cast of 20', () => {
+    expect(contract.sport).toBe('MLB')
+    expect(contract.teams).toBe(20)
+    expect(contract.scoring_preset_id).toBe('mlb_points')
+  })
+  // Pitchers are stored as plain P, so SP / RP slots could never be filled.
+  it('starts pitchers in P slots, never SP or RP', () => {
+    expect(contract.rosterTemplate.starterSlots).toEqual({ C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, P: 4 })
+    expect(contract.rosterTemplate.flexDefinitions).toContainEqual({ slotName: 'P', allowedPositions: ['SP', 'RP', 'P'] })
+    expect(contract.rosterTemplate.draftablePlayerPositions).toContain('P')
+  })
+  it('drafts one round per roster spot', () => {
+    expect(contract.rosterTemplate.benchSlots).toBe(5)
+    expect(contract.rosterTemplate.draftRounds).toBe(18)
+  })
+  // The roster engine saves its own survivor template over the creation roster. The MLB rehearsal
+  // ran with that template's SP / RP slots, which no MLB pitcher (stored as P) can fill.
+  it('the roster engine survivor template is the same roster', () => {
+    const { BN, ...starters } = resolveMlbRosterTemplate('survivor').slots
+    expect(starters).toEqual(contract.rosterTemplate.starterSlots)
+    expect(BN).toBe(contract.rosterTemplate.benchSlots)
+  })
+})
+
+describe('getSurvivorDefaultContract — NHL', () => {
+  const contract = getSurvivorDefaultContract({ sport: 'NHL' })!
+
+  // The roster engine saves its own survivor template over the creation roster. When they differed,
+  // the draft ran 16 rounds into 17 spots and every team carried an empty one.
+  it('is the roster the roster engine saves, and drafts one round per spot', () => {
+    const { BN, ...starters } = resolveNhlRosterTemplate('survivor').slots
+    expect(starters).toEqual(contract.rosterTemplate.starterSlots)
+    expect(BN).toBe(contract.rosterTemplate.benchSlots)
+    expect(contract.rosterTemplate.draftRounds).toBe(17)
+  })
 })
 
 // ── Auction draft type ────────────────────────────────────────────────────────
@@ -251,7 +294,7 @@ describe('buildSurvivorSettingsSnapshot — NFL', () => {
   it('has creationPlan block', () => expect(snap.creationPlan).toBeDefined())
 
   it('returns null for unsupported sport', () => {
-    expect(buildSurvivorSettingsSnapshot({ sport: 'MLB' })).toBeNull()
+    expect(buildSurvivorSettingsSnapshot({ sport: 'SOCCER' })).toBeNull()
   })
 })
 

@@ -59,7 +59,7 @@ describe('normalizeStatsSport / nameToken', () => {
     expect(normalizeStatsSport('baseball')).toBe('MLB')
     expect(normalizeStatsSport('basketball')).toBe('NBA')
     expect(normalizeStatsSport('hockey')).toBe('NHL')
-    expect(normalizeStatsSport('soccer')).toBeNull()
+    expect(normalizeStatsSport('soccer')).toBe('SOCCER')
     expect(normalizeStatsSport('WNBA')).toBeNull()
   })
 
@@ -112,10 +112,11 @@ describe('get_player_season_stats', () => {
     expect(out).toMatch(/NO NFL SEASON STATS ARE STORED AT ALL/)
   })
 
-  it('refuses an unsupported sport without querying', async () => {
+  it('keeps soccer season totals separate from its sourced per-match logs', async () => {
     const { db, calls } = fakeDb(() => [])
     const out = await buildPlayerSeasonStatsContext({ playerName: 'Erling Haaland', sport: 'soccer' }, db)
-    expect(out).toMatch(/only NFL, college football, MLB, NBA, NHL and college basketball/)
+    expect(out).toMatch(/Verified soccer season totals are not stored/)
+    expect(out).toMatch(/get_player_game_log/)
     expect(calls).toHaveLength(0)
   })
 })

@@ -10,6 +10,7 @@ const hasFirstChopHappened = vi.fn()
 const evaluateUserFeatureAccess = vi.fn()
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/guillotine/weeklyRecap', () => ({ hasGuillotineAiRecapPlan: async () => false }))
 vi.mock('@/lib/prisma', () => {
   const tx = {
     $queryRaw: (...a: unknown[]) => queryRaw(...a),
@@ -63,6 +64,8 @@ const CURRENT: GuillotineRules = {
   dangerMarginPoints: 10,
   rosterReleaseTiming: 'next_waiver_run',
   aiRecapAuto: true,
+  faabOnChop: 'keep',
+  bestBall: false,
 }
 
 describe('normalizeGuillotineRulesPatch', () => {
@@ -104,6 +107,51 @@ describe('paidFieldsChanged', () => {
   it('keeps endgame and release timing free', () => {
     expect(GUILLOTINE_PAID_RULE_FIELDS.has('endgame')).toBe(false)
     expect(GUILLOTINE_PAID_RULE_FIELDS.has('rosterReleaseTiming')).toBe(false)
+  })
+})
+
+describe('best ball lineups (lib/guillotine/guillotineBestBall.ts)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getGuillotineConfig.mockResolvedValue(CONFIG)
+    configFindUnique.mockResolvedValue({ id: 'cfg1' })
+    hasFirstChopHappened.mockResolvedValue(false)
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: false })
+  })
+  const league = (over: Record<string, unknown> = {}) => ({ sport: 'NBA', settings: {}, guillotineEndgame: 'last_team_standing', status: 'pre_draft', lifecycleState: null, ...over })
+
+  it('is a yes/no; anything else is refused', () => {
+    expect(normalizeGuillotineRulesPatch({ bestBall: true }, { startWeek: 2, seasonWeeks: 24 })).toEqual({ ok: true, value: { bestBall: true } })
+    expect(normalizeGuillotineRulesPatch({ bestBall: 'yes' }, { startWeek: 2, seasonWeeks: 24 })).toMatchObject({ ok: false, error: { field: 'bestBall' } })
+  })
+
+  it('a free commissioner turns it on before the draft, and it lands in settings.best_ball', async () => {
+    leagueFindUnique.mockResolvedValue(league())
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.best_ball).toBe(true)
+    // Not a Best Ball league: the format column is never touched.
+    expect(leagueUpdate.mock.calls[0]![0].data).not.toHaveProperty('bestBallMode')
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+  })
+
+  it('reads back as on, and unlocked before the draft', async () => {
+    leagueFindUnique.mockResolvedValue(league({ settings: { best_ball: true } }))
+    const r = await saveGuillotineRules('L1', 'u1', { rosterReleaseTiming: 'immediate' })
+    expect(r).toMatchObject({ ok: true, view: { rules: { bestBall: true }, bestBallLocked: false } })
+  })
+
+  it.each(['drafting', 'in_season', 'post_draft'])('once the league is %s it is fixed (409) and nothing is written', async (status) => {
+    leagueFindUnique.mockResolvedValue(league({ status }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r).toMatchObject({ ok: false, status: 409, field: 'bestBall' })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('a locked league can still save its other rules, sending best ball unchanged', async () => {
+    leagueFindUnique.mockResolvedValue(league({ status: 'in_season', settings: { best_ball: true } }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true, rosterReleaseTiming: 'immediate' })
+    expect(r).toMatchObject({ ok: true, view: { bestBallLocked: true } })
   })
 })
 
@@ -153,6 +201,31 @@ describe('saveGuillotineRules', () => {
     expect(data.settings.guillotineAiRecapAuto).toBe(false)
     expect(data).not.toHaveProperty('guillotineEndgame')
     expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+  })
+
+  it('sharing a chopped team\'s FAAB is AF Commissioner: refused (402) for a free commissioner', async () => {
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
+    expect(r).toMatchObject({ ok: false, status: 402, fields: ['faabOnChop'] })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('a free commissioner can still put a league left on "split" back to "keep"', async () => {
+    leagueFindUnique.mockResolvedValue({ sport: 'NBA', settings: { guillotineFaabOnChop: 'split' }, guillotineEndgame: 'last_team_standing' })
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'keep' })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('keep')
+  })
+
+  it('saves the chopped-team FAAB choice to League.settings for an AF Commissioner', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('split')
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+    expect(normalizeGuillotineRulesPatch({ faabOnChop: 'give_to_commish' }, { startWeek: 2, seasonWeeks: 24 })).toMatchObject({
+      ok: false,
+      error: { field: 'faabOnChop' },
+    })
   })
 
   it('locks the endgame once the first chop has happened (409)', async () => {

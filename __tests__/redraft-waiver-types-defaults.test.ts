@@ -99,8 +99,8 @@ describe('every engine waiver type is selectable, accepted and processed', () =>
     const a = claim('a', 5, 2, 'ua', '2026-10-20T10:00:00Z')
     const b = claim('b', 20, 3, 'ub', '2026-10-20T11:00:00Z')
     const c = claim('c', 1, 1, 'uc', '2026-10-20T12:00:00Z')
-    // Standings rank: ub last (1 = worst, gets first pick).
-    const ranks = new Map([['ub', 1], ['uc', 2], ['ua', 3]])
+    // Standings rank (1 = first place): ub is last, so it gets first pick.
+    const ranks = new Map([['ub', 3], ['uc', 2], ['ua', 1]])
     const ids = (type: string) => orderClaimsForProcessing([a, b, c], type, ranks).map((x) => x.id)
     expect(ids('faab')).toEqual(['b', 'a', 'c'])
     expect(ids('rolling')).toEqual(['c', 'a', 'b'])

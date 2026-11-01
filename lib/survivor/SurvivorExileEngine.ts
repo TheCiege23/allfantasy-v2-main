@@ -2,7 +2,10 @@
  * Survivor Exile Island: create/link exile league, enroll eliminated (PROMPT 346). Deterministic.
  */
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { withPlayoffStartWeekCopies } from '@/lib/playoff-settings/playoffStartWeekCopies'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
 
@@ -23,9 +26,15 @@ export async function getOrCreateExileLeague(
 
   const main = await prisma.league.findUnique({
     where: { id: mainLeagueId },
-    select: { userId: true, sport: true, name: true, scoring: true, season: true, leagueSize: true },
+    select: { userId: true, sport: true, name: true, scoring: true, season: true, leagueSize: true, playoffStartWeek: true, settings: true },
   })
   if (!main) throw new Error('Main league not found')
+
+  // Exile Island plays the main league's season and has no bracket of its own. Without these it took
+  // the schema defaults — a 4-team bracket from week 14 — with no settings JSON beside them.
+  // The week after the main league's plan, as the main league stores it (createCanonicalLeagueInTransaction).
+  const planEnd = readSurvivorFullSeasonPlan(main.settings)?.endWeek
+  const playoffStartWeek = planEnd != null ? planEnd + 1 : main.playoffStartWeek ?? null
 
   const exileLeague = await prisma.league.create({
     data: {
@@ -39,6 +48,9 @@ export async function getOrCreateExileLeague(
       leagueSize: main.leagueSize ?? 20,
       scoring: main.scoring ?? undefined,
       isDynasty: false,
+      playoffTeams: 0,
+      playoffStartWeek,
+      settings: withPlayoffStartWeekCopies({ playoff_team_count: 0 }, playoffStartWeek) as Prisma.InputJsonValue,
     },
   })
 

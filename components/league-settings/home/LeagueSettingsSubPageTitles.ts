@@ -14,6 +14,8 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   'guillotine-rules': 'League rules',
   playoffs: 'Playoffs',
   members: 'Managers',
+  'team-settings': 'Team settings',
+  'previous-leagues': 'Previous Leagues',
   'co-commissioners': 'Co-commissioners',
   divisions: 'Divisions',
   ai: 'League AI',

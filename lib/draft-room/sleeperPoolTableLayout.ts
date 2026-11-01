@@ -53,7 +53,7 @@ function statColumnWidth(def: DraftStatColumnDef, sport: ReturnType<typeof norma
 export type SleeperPoolTableLayoutExtras = {
   /**
    * Pick label (e.g. "4.16") for the viewer's next pick. When set, a LEFT @ column follows
-   * AI ADP with each player's estimated chance of still being on the board there.
+   * AF ADP with each player's estimated chance of still being on the board there.
    */
   leftAtPickLabel?: string | null
 }
@@ -91,13 +91,18 @@ export function buildSleeperPoolTableLayout(
       title: 'Average Draft Position',
       statLabel: 'ADP',
     },
+    /*
+     * TWO ADPs, by design: the market's, and AllFantasy's. AF ADP replaced the AI ADP column — it
+     * already contains our own drafts, plus imported-league drafts and the market, so showing both
+     * would be the same evidence twice. `aiAdp` stays on the row for Chimmy, Intel and sorting.
+     */
     {
-      key: 'aiAdp',
-      label: 'AI ADP',
-      width: 64,
+      key: 'afAdp',
+      label: 'AF ADP',
+      width: 66,
       align: 'right',
-      title: 'AllFantasy AI Draft Position',
-      statLabel: 'AI ADP',
+      title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts',
+      statLabel: 'AF ADP',
     },
   ]
 
@@ -139,7 +144,7 @@ export function buildSleeperPoolTableLayout(
   const actions: SleeperColumnSpec = {
     key: 'actions',
     label: '',
-    width: 124,
+    width: 160,
     align: 'right',
   }
 

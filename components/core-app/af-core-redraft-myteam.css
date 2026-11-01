@@ -1,0 +1,175 @@
+/* Redraft identity on /core — batch B2: My team, Your week, Defense Hub (2026-10-31).
+ *
+ * EVERY RULE HERE IS SCOPED TO `.af-core.af-shell[data-format=redraft]`, the stamp AfCoreShell puts on its
+ * root for a redraft league (lib/core-app/coreShellRedraftIdentity.ts). No stamp, no effect: the default
+ * look, every other league type, the standalone /idp/defense-hub route (no shell) and the cross-league
+ * week board are untouched. The tokens are the foundation's (components/league/native/redraft-identity.css,
+ * docs/design/redraft-identity.md) — `--rd-*` plus /core's own palette, which is mode-aware, so LIGHT MODE
+ * NEEDS NO SECOND BLOCK HERE: --bad, --good, --surface… already carry the light values.
+ *
+ * ⚠ NO HEX, NO rgba() LITERAL. Every colour is a token or a color-mix() of tokens.
+ *
+ * ⚠ SPECIFICITY. The prefix alone is (0,3,0). af-my-team.css's light-mode chips are
+ * `html[data-mode='light'] .af-core .af-mt-slot[data-pos='qb']` (0,4,1); the redraft chip below is
+ * (0,5,0) plus the `:not()` guards, so it wins in both modes without !important.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK AT THE END, NOT NESTED (CLAUDE.md, af-matchup.css 2026-08-30).
+ *
+ * Files this batch styles but does not edit: af-my-team.css, af-team-workspace.css,
+ * highlights/recent-clips.css, af-week-league.css, af-week-lineup.css, af-week-blueprint.css. It never
+ * reaches af-player-card.css or af-core-lock.css (batch B0) — the player name is PlayerName's link and is
+ * left alone. */
+
+/* ── My team · the team header, as the season-race hero ───────────────────────────────────────────── */
+
+/* The hero card: a sport frame and the faint glow the foundation keeps for heroes (--rd-glow is fainter
+ * than --rd-accent-soft, so every text colour on it keeps the contrast the foundation measured on
+ * --surface). The background-image sits OVER .af-frame's own --surface background-color. */
+.af-core.af-shell[data-format=redraft] .af-mt-head{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
+.af-core.af-shell[data-format=redraft] .af-mt-crest{border-radius:12px}
+/* The lead projection tile reads as THE number of the week. */
+.af-core.af-shell[data-format=redraft] .af-mt-tile--lead{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+.af-core.af-shell[data-format=redraft] .af-mt-tile--lead .af-mt-tile-value{color:var(--rd-accent-text)}
+
+/* The decision card's border and wash were a hardcoded cyan (af-my-team.css `.af-mt-decision`), which in a
+ * redraft league is another league's colour, and in light mode a near-invisible tint. */
+.af-core.af-shell[data-format=redraft] .af-mt-decision{border-color:var(--rd-accent-line);background:var(--surface);background-image:linear-gradient(115deg,var(--rd-glow),transparent 70%)}
+
+/* The lock banner: in the sport line until it is urgent, when --bad wins (af-my-team.css). */
+.af-core.af-shell[data-format=redraft] .af-mt-lock:not([data-urgent='true']){border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-mt-lock:not([data-urgent='true']) .af-mt-lock-label{color:var(--rd-accent-text)}
+
+/* A deep-linked row: the outline used `--af-accent` with a cyan fallback; /core never defines that name. */
+.af-core.af-shell[data-format=redraft] .af-mt-row:target,
+.af-core.af-shell[data-format=redraft] .af-mt-row[data-lineup-target='true']{outline-color:var(--rd-accent)}
+
+/* Section headings: a short sport bar before the label, so Starters / Bench read as one system. */
+.af-core.af-shell[data-format=redraft] .af-mt-section-head > h2.af-label{display:inline-flex;align-items:center;gap:8px;color:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-mt-section-head > h2.af-label::before{content:'';width:14px;height:3px;border-radius:2px;background:var(--rd-accent)}
+
+/* ── My team · lineup by slot: sport-correct position chips ───────────────────────────────────────── */
+
+/* ⚠ THE BASE RULE MUST NOT SET --rd-pos. It is (0,5,0)+ and the per-tone rules are (0,4,0), so a default
+ * declared here overrode every tone and painted all chips --text2 — caught by the capture script's
+ * chip-colour read, not by eye. The default lives in the var() fallback instead.
+ * The tone comes from `data-rd-pos` (lib/core-app/redraftCoreMyTeam.ts `redraftCorePosTone`, per SPORT):
+ * C is a centre in the NBA and NHL and a catcher in MLB, G a guard or a goalie, DEF a defence or a
+ * defender. The football-only `data-pos` chips stay underneath for every other league. Each tone is an
+ * existing mode-aware token; the tint is 9% of it over --surface2, the construction PR #3101 uses on the
+ * /league screens, so a chip reads the same on both surfaces.
+ * ⚠ An EMPTY or BYE row keeps af-my-team.css's red slot: a hole outranks a position. */
+.af-core.af-shell[data-format=redraft] .af-mt-row:not([data-empty='true']):not([data-bye='true']) .af-mt-slot[data-rd-pos]{color:var(--rd-pos,var(--text2));border-color:color-mix(in srgb,var(--rd-pos,var(--text2)) 42%,transparent);background:color-mix(in srgb,var(--rd-pos,var(--text2)) 9%,var(--surface2));border-radius:7px}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='red']{--rd-pos:var(--bad)}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='green']{--rd-pos:var(--good)}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='blue']{--rd-pos:var(--tier-blue-fg)}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='amber']{--rd-pos:var(--warn)}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='violet']{--rd-pos:var(--p-yahoo-fg)}
+.af-core.af-shell[data-format=redraft] .af-mt-slot[data-rd-pos='slate']{--rd-pos:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-mt-row:not([data-empty='true']):not([data-bye='true']) .af-mt-slot[data-rd-pos='flex']{--rd-pos:var(--rd-accent-text);border-style:dashed;background:var(--surface2)}
+.af-core.af-shell[data-format=redraft] .af-mt-row:not([data-empty='true']):not([data-bye='true']) .af-mt-slot[data-rd-pos='bench']{--rd-pos:var(--muted);background:transparent}
+.af-core.af-shell[data-format=redraft] .af-mt-row:not([data-empty='true']):not([data-bye='true']) .af-mt-slot[data-rd-pos='ir']{--rd-pos:var(--bad);background:transparent}
+
+/* ── My team · status, bye and off-day badges ─────────────────────────────────────────────────────── */
+
+/* Injury designation: a filled pill with a hairline in its own tone. */
+.af-core.af-shell[data-format=redraft] .af-mt-status[data-tone='warn']{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warn) 40%,transparent)}
+.af-core.af-shell[data-format=redraft] .af-mt-status[data-tone='bad']{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bad) 40%,transparent)}
+/* Bye (football) stays the loud filled badge. An off day (daily lineup) and an idle week (weekly NBA /
+ * NHL / MLB) are the same fact for the period, said one step quieter: a dashed --bad outline, so a
+ * starter with no game still reads as a zero without every rest day shouting like a bye. */
+.af-core.af-shell[data-format=redraft] .af-mt-bye{border-radius:999px;padding:1px 7px;font-family:var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);text-transform:uppercase}
+.af-core.af-shell[data-format=redraft] .af-mt-bye[data-kind]{background:transparent;border-style:dashed}
+
+/* ⚠ The badge must survive a long name. The name line is a nowrap flex row with overflow:hidden
+ * (af-my-team.css), so at 1440 — where the roster column is ~150px for the name — a badge after an
+ * ellipsised name was clipped away entirely (measured: "Logan Kowals…" with no OFF DAY in sight). Under
+ * the stamp the line wraps, and the badge drops under the name instead of disappearing. */
+.af-core.af-shell[data-format=redraft] .af-mt-player-name{flex-wrap:wrap;row-gap:3px}
+.af-core.af-shell[data-format=redraft] .af-mt-player-name > :first-child{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+
+/* The period chip in the Starters header: the one day (or week) the lineup was priced for.
+ * ⚠ THE ONE UNSCOPED RULE IN THIS FILE'S MY TEAM HALF, and it only HIDES: the chip renders on every
+ * league, and outside the redraft stamp the default look stays exactly what it was. */
+.af-mt-period{display:none}
+.af-core.af-shell[data-format=redraft] .af-mt-period{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border:1px solid var(--rd-accent-line);border-radius:999px;background:var(--rd-accent-soft);color:var(--rd-accent-text);font:700 11px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.af-core.af-shell[data-format=redraft] .af-mt-period-tag{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-mt-period time{color:var(--text)}
+
+/* Game day: a live game is the sport colour, not the generic accent. */
+.af-core.af-shell[data-format=redraft] .af-mt-gameday[data-state='live']{color:var(--rd-accent-text);border-color:var(--rd-accent-line);background:var(--rd-accent-soft)}
+
+/* The matchup card and the byes card sit in the sport line. */
+.af-core.af-shell[data-format=redraft] .af-mt-matchup{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-mt-mu-win[data-favoured='true'] .af-mt-mu-win-pct{color:var(--rd-accent-text)}
+
+/* ── My team · light-mode fixes for the cards this screen embeds ──────────────────────────────────── */
+
+/* highlights/recent-clips.css reads `--panel` and `--border`, which /core never defines, so it always
+ * painted its dark fallbacks (#101625, #283345) — a navy card on a white page in light mode. */
+.af-core.af-shell[data-format=redraft] .af-recent-clips{background:var(--surface);border-color:var(--line);color:var(--text)}
+.af-core.af-shell[data-format=redraft] .af-recent-clips select,
+.af-core.af-shell[data-format=redraft] .af-recent-clips button{background:var(--surface2);border-color:var(--line2);color:var(--text)}
+.af-core.af-shell[data-format=redraft] .af-recent-clips button:hover,
+.af-core.af-shell[data-format=redraft] .af-recent-clips button:focus-visible{border-color:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-recent-clips a{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-recent-clips header > span,
+.af-core.af-shell[data-format=redraft] .af-x-note{color:var(--muted)}
+.af-core.af-shell[data-format=redraft] :is(.af-x-card,.af-x-badges > *){border-color:var(--line2)}
+/* af-team-workspace.css's focus target outline had a cyan fallback for a name /core never sets. */
+.af-core.af-shell[data-format=redraft] :is(#af-team-alert-decision,#af-team-deadline-alert):focus{outline-color:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-tw-panel{border-color:var(--line)}
+
+/* ── Your week · the week in the season race ──────────────────────────────────────────────────────── */
+
+.af-core.af-shell[data-format=redraft] .af-wl-hero:not([data-empty='true']){border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
+/* "Your matchup" is the filled chip the mock puts on the hero; other chips stay quiet. */
+.af-core.af-shell[data-format=redraft] .af-wl-hero-top > .af-wl-chip:first-child:not([data-tone]){background:var(--rd-accent);color:var(--rd-accent-ink);border-radius:999px}
+.af-core.af-shell[data-format=redraft] .af-wl-chip{border-radius:999px}
+.af-core.af-shell[data-format=redraft] .af-wl-side[data-you='true'] .af-wl-side-proj{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-wl-prob-bar{height:8px;background:var(--rd-track)}
+.af-core.af-shell[data-format=redraft] .af-wl-prob-you{background:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-wl-card-bar{background:var(--rd-track)}
+.af-core.af-shell[data-format=redraft] .af-wl-card-bar > span{background:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-wl-card{border-radius:14px}
+
+/* The season-race line (YourWeekLeague: week · your record · your place by record). ⚠ Unscoped, and it
+ * only HIDES: outside the redraft stamp the default look stays exactly what it was. */
+.af-wl-race{display:none}
+.af-core.af-shell[data-format=redraft] .af-wl-race{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 0}
+.af-core.af-shell[data-format=redraft] .af-wl-race-chip{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 10px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--text);font:700 12px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.04em}
+.af-core.af-shell[data-format=redraft] .af-wl-race-chip[data-kind='week']{background:var(--rd-accent);border-color:var(--rd-accent);color:var(--rd-accent-ink)}
+.af-core.af-shell[data-format=redraft] .af-wl-race-chip[data-kind='rank']{border-color:var(--rd-accent-line);background:var(--rd-accent-soft);color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-wl-race-k{font-weight:600;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.08em}
+.af-core.af-shell[data-format=redraft] .af-wl-race-chip[data-kind='rank'] .af-wl-race-k{color:var(--rd-accent-text)}
+
+/* The weekly blueprint on the same screen: its calendar picker was hardcoded dark (#111c2f on #f8fafc,
+ * `color-scheme: dark`), a black box on a light page. Tokens here, both modes. */
+.af-core.af-shell[data-format=redraft] .af-wbp-calendar{border-color:var(--line2)}
+.af-core.af-shell[data-format=redraft] .af-wbp-calendar select{background-color:var(--surface2);color:var(--text);border-color:var(--line2);background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%)}
+.af-core.af-shell[data-format=redraft] .af-wbp-calendar-events li{background:var(--chip)}
+html[data-mode='light'] .af-core.af-shell[data-format=redraft] .af-wbp-calendar{color-scheme:light}
+.af-core.af-shell[data-format=redraft] .af-wbp{border-color:var(--rd-accent-line)}
+
+/* ── Defense Hub (IDP; sport-gated by the nav exactly as before) ──────────────────────────────────── */
+
+/* ⚠ TODAY THIS NEVER MATCHES: an IDP league is excluded from the redraft identity (redraft-identity.md,
+ * "Known conservative exclusion"), and Defense Hub only shows for IDP leagues. The rules are here so the
+ * screen is ready the day that exclusion is lifted, and the harness renders them under a stamped shell. */
+.af-core.af-shell[data-format=redraft] .af-dh-title{letter-spacing:-.03em}
+.af-core.af-shell[data-format=redraft] .af-dh-label{display:flex;align-items:center;gap:8px;color:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-dh-label::before{content:'';width:14px;height:3px;border-radius:2px;background:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-dh-card{border-radius:14px}
+.af-core.af-shell[data-format=redraft] .af-dh-table{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 55%)}
+.af-core.af-shell[data-format=redraft] .af-dh-proj-head,
+.af-core.af-shell[data-format=redraft] .af-dh-proj{color:var(--rd-accent-text)}
+/* The IDP group chip (DL / LB / DB): red, blue, green — the job, whatever the provider's spelling. */
+.af-core.af-shell[data-format=redraft] .af-dh-pos{display:inline-block;min-width:34px;padding:3px 6px;border:1px solid color-mix(in srgb,var(--rd-pos,var(--text2)) 42%,transparent);border-radius:7px;background:color-mix(in srgb,var(--rd-pos,var(--text2)) 9%,var(--surface2));color:var(--rd-pos,var(--text2));font-weight:800;letter-spacing:.06em;text-align:center}
+.af-core.af-shell[data-format=redraft] .af-dh-pos[data-dh-group='DL']{--rd-pos:var(--bad)}
+.af-core.af-shell[data-format=redraft] .af-dh-pos[data-dh-group='LB']{--rd-pos:var(--tier-blue-fg)}
+.af-core.af-shell[data-format=redraft] .af-dh-pos[data-dh-group='DB']{--rd-pos:var(--good)}
+
+/* ── Phone (one top-level block) ──────────────────────────────────────────────────────────────────── */
+@media (max-width:720px){
+  .af-core.af-shell[data-format=redraft] .af-wl-race{gap:6px}
+  .af-core.af-shell[data-format=redraft] .af-wl-race-chip{min-height:28px}
+}

@@ -25,7 +25,7 @@ import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPla
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
-import { resolveLineupMove, seatStartersInSlots, type LineupMoveContext, type LineupSpot } from '@/lib/league/native/lineupMoves'
+import { resolveLineupMove, resolveLineupTap, seatStartersInSlots, startersOnBye, type LineupMoveContext, type LineupSpot, type LineupTap } from '@/lib/league/native/lineupMoves'
 import { isIrEligibleStatus, type IrRules } from '@/lib/roster-lineup-engine/irEligibility'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { writeAuthorityCopy } from '@/lib/league/write-authority'
@@ -35,6 +35,29 @@ import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, project
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { AutoBenchByeToggle } from './AutoBenchByeToggle'
+import { MyTeamAutomations } from './MyTeamAutomations'
+import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
+import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
+import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
+import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
+import {
+  OFFLINE_LINEUP_SYNC_EVENT,
+  flushQueuedLineupEdits,
+  queueLineupEdit,
+  readOfflineRosterData,
+  readQueuedLineupEdit,
+  saveOfflineRosterData,
+  type LineupSyncResult,
+  type QueuedLineupEdit,
+} from '@/lib/pwa/offlineLineupQueue'
+import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
+import { dailyOffDayIds, isOnBye } from '@/lib/league-media/redraftScreens'
+import { RedraftBadge, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { isRookieByExperience, taxiSeasonOf } from '@/lib/dynasty-core/dynastyDetails'
+import '@/components/dynasty/dynasty-details.css'
 
 /**
  * My team / Lineup — handoff §3, `Lineup.png` / `MobileLineup.png`.
@@ -45,7 +68,8 @@ import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreen
  * server still validates every save. "Optimize lineup" proposes the exact optimum over the
  * players whose games have not started; it never moves a locked player.
  *
- * Moves work by CLICK ("Move") or DRAG (the grip handle, @dnd-kit). Both go through
+ * Moves work by TAP TO SWAP (tap a player or slot, then tap where he goes — Sleeper's model, the one
+ * that works on a phone), by the "Move" list, or by DRAG (the grip handle, @dnd-kit). All go through
  * `resolveLineupMove`, so slot eligibility (`playerEligibleForSlot`), lock and IR rules are decided
  * once, and both end in the same `save`. Dropping on an occupied slot swaps; dropping a starter on
  * the bench leaves his slot empty; IR takes only an IR-eligible designation under the league's flags.
@@ -57,6 +81,8 @@ type DbRoster = {
   roster: unknown
   unifiedRoster?: UnifiedPlayerWireDto[]
   rosterId?: string
+  /** Echoed back on save as `expectedLineupVersion` (lib/roster/lineupVersion.ts). */
+  lineupVersion?: string
   faabRemaining?: number | null
   leagueWeek?: number
   starterSlots?: ExpandedStarterSlot[]
@@ -64,10 +90,15 @@ type DbRoster = {
   lineupLockHelp?: string | null
   /** Daily-lineup leagues only: the week day by day (`lib/redraft/dailyLineupView.ts`). */
   dailyLineups?: DailyLineupView | null
-  slotLimits?: { bench?: number | null; ir?: number | null } | null
+  slotLimits?: { bench?: number | null; ir?: number | null; taxi?: number | null } | null
   /** Per-player locks from the server's lock context (kickoff, daily-lineup schedule locks). */
   lineupLock?: { lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
   irRules?: IrRules | null
+  /**
+   * Dynasty taxi tenure (lib/taxi/taxiMaxYears.ts): the league's max seasons on the squad (null is no
+   * limit) and each taxi player's completed seasons on one. Absent outside a native dynasty league.
+   */
+  taxiTenure?: { maxYears: number | null; seasonsUsed: Record<string, number> } | null
 }
 /** Absent `irRules` (older server): only explicit IR designations qualify, never a league option. */
 const STRICT_IR_RULES: IrRules = { irAllowOut: false, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false }
@@ -76,6 +107,7 @@ const DRAG_PREFIX = 'player:'
 function spotFromDropId(id: string): LineupSpot | null {
   if (id === 'bench') return { kind: 'bench' }
   if (id === 'ir') return { kind: 'ir' }
+  if (id === 'taxi') return { kind: 'taxi' }
   const m = /^slot:(\d+)$/.exec(id)
   return m ? { kind: 'starter', slotIndex: Number(m[1]) } : null
 }
@@ -107,6 +139,32 @@ function DragHandle({ id, name }: { id: string; name: string }) {
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
+const TAP_HELP = 'Tap a player, then tap where he goes or who he swaps with. You can also drag by the handle.'
+
+function sameTap(a: LineupTap, b: LineupTap): boolean {
+  if (a.kind === 'slot' && b.kind === 'slot') return a.slotIndex === b.slotIndex
+  if (a.kind === 'player' && b.kind === 'player') return a.playerId === b.playerId
+  return false
+}
+
+/** What a screen reader hears for the tap target on a row. */
+function tapLabel(o: { name?: string; empty: boolean; slot: string; picked: boolean; target?: 'ok' | 'no'; waiting: boolean }): string {
+  const who = o.empty ? `Empty ${o.slot} slot` : `${o.name ?? 'Player'}, ${o.slot}`
+  if (o.picked) return `${who}. Selected. Tap again to cancel.`
+  if (o.waiting) return o.target === 'ok' ? `${who}. Tap to move here.` : `${who}. Not a legal move.`
+  return `${who}. Tap to select.`
+}
+
+/** The player cell: a button while the lineup is editable, so a row is one tap target on a phone. */
+function PlayerCell({ tappable, picked, label, disabled, onTap, children }: { tappable: boolean; picked: boolean; label: string; disabled: boolean; onTap: () => void; children: ReactNode }) {
+  if (!tappable) return <div className="nls-player">{children}</div>
+  return (
+    <button type="button" className="nls-player nls-tap" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={onTap} data-testid="lineup-tap">
+      {children}
+    </button>
+  )
+}
+
 function kickoff(p: DisplayPlayerRecord | undefined): Date | null {
   const iso = p?.kickoffTimeIso
   if (!iso) return null
@@ -131,7 +189,8 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   if (!p) return ''
   const bits: string[] = []
   if (p.team) bits.push(p.team)
-  if (p.opponent) bits.push(`${p.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`)
+  if (String(p.opponent ?? '').toUpperCase() === 'BYE') bits.push('Bye week')
+  else if (p.opponent) bits.push(`${p.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`)
   if (gameDone(p)) bits.push('Final')
   else if (p.gameClock) bits.push(p.gameClock)
   else {
@@ -146,6 +205,12 @@ function dayLabel(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** NBA / NHL / MLB: "C12" beside the name — rank within position by season points in this league's scoring. */
+function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
+  if (!p?.positionRankLabel) return null
+  return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
+}
+
 function untilLabel(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000))
   const h = Math.floor(m / 60)
@@ -157,52 +222,110 @@ function untilLabel(ms: number): string {
 export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: UserLeague; userTeam: LeagueTeam | null; onSelectTab: (id: string) => void }) {
   const [data, setData] = useState<DbRoster | null>(null)
   const [lists, setLists] = useState<RosterLineupLists | null>(null)
+  const { t, tInterpolate } = useOptionalLanguage()
+  const dynasty = usesDynastyBackground(league)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
+  /** Tap to swap: the first tap, waiting for the second. */
+  const [picked, setPicked] = useState<LineupTap | null>(null)
   const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
   const [pendingClaims, setPendingClaims] = useState<number | null>(null)
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
   const [faabBudget, setFaabBudget] = useState<number | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [pickedDay, setPickedDay] = useState<string | null>(null)
-  const copy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  /** Set only when the roster fetch failed for lack of a network and a saved copy exists. */
+  const [offlineSnapshot, setOfflineSnapshot] = useState<OfflineLineupSnapshot | null>(null)
+  /** When the roster on screen came from this device's copy rather than the server: that copy's time. */
+  const [offlineSince, setOfflineSince] = useState<string | null>(null)
+  /** A lineup change kept on this device and not yet accepted by the server (lib/pwa/offlineLineupQueue.ts). */
+  const [pendingEdit, setPendingEdit] = useState<QueuedLineupEdit | null>(null)
+  const copy =useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  /** Only the newest load may land: switching days quickly must not let an older day's answer win. */
+  const loadSeq = useRef(0)
+
+  /** Puts a roster answer on screen, with a not-yet-sent change on top of it when there is one for it. */
+  const showRoster = useCallback((json: DbRoster, pending: QueuedLineupEdit | null) => {
+    setData(json)
+    const mine = pending && pending.rosterId === json.rosterId && pending.week === (json.leagueWeek ?? 1) ? pending : null
+    setPendingEdit(mine)
+    const slots = json.starterSlots ?? []
+    if (mine) setLists(mine.lists)
+    else if (slots.length) {
+      const base = initOrSyncLineupLists(json.roster, slots)
+      // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
+      // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
+      const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
+      setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
+    } else setLists(null)
+  }, [])
 
   const load = useCallback(async () => {
     if (!userTeam) {
       setLoading(false)
       return
     }
+    const seq = ++loadSeq.current
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/league/roster?leagueId=${encodeURIComponent(league.id)}`, { cache: 'no-store' })
+      // Daily leagues: the AF projection, its games and the opponent are for the day being looked at.
+      const dayParam = pickedDay ? `&day=${encodeURIComponent(pickedDay)}` : ''
+      const res = await fetch(`/api/league/roster?leagueId=${encodeURIComponent(league.id)}${dayParam}`, { cache: 'no-store' })
       const json = (await res.json().catch(() => ({}))) as DbRoster
+      const pending = await readQueuedLineupEdit(league.id)
+      if (seq !== loadSeq.current) return
       if (!res.ok) {
         setError(res.status === 404 ? 'No roster yet for your team.' : 'We could not load your roster.')
         setData(null)
         return
       }
-      setData(json)
-      const slots = json.starterSlots ?? []
-      if (slots.length) {
-        const base = initOrSyncLineupLists(json.roster, slots)
-        // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
-        // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
-        const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
-        setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
-      } else setLists(null)
+      showRoster(json, pending)
+      setOfflineSince(null)
+      setOfflineSnapshot(null)
+      // The editor's own data, so the whole screen — editing included — opens with no network next time.
+      if (!pickedDay) void saveOfflineRosterData(league.id, json)
     } catch {
-      setError('We could not load your roster.')
+      // The fetch itself failed — no network, not a server answer. Fall back to what this screen kept
+      // on its last online load: the full roster if there is one (editable; changes are queued), else the
+      // read-only snapshot. Only an error when there is nothing to show.
+      const cached = pickedDay ? null : await readOfflineRosterData<DbRoster>(league.id)
+      const pending = await readQueuedLineupEdit(league.id)
+      const snapshot = cached ? null : await readOfflineLineupSnapshot(league.id)
+      if (seq !== loadSeq.current) return
+      if (cached) {
+        showRoster(cached.data, pending)
+        setOfflineSince(cached.savedAt)
+      } else if (snapshot) setOfflineSnapshot(snapshot)
+      else setError('We could not load your roster.')
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
-  }, [league.id, userTeam])
+  }, [league.id, userTeam, pickedDay, showRoster])
 
   useEffect(() => {
     void load()
   }, [load])
+  // Back online: reload, which replaces the offline copy with the live lineup.
+  useEffect(() => {
+    const onOnline = () => void load()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [load])
+  // A change kept on this device was sent (components/pwa/OfflineLineupSync.tsx says how it went):
+  // show what the server now holds.
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const r = (e as CustomEvent<LineupSyncResult>).detail
+      if (r?.leagueId !== league.id || r.outcome === 'kept') return
+      setPendingEdit(null)
+      void load()
+    }
+    window.addEventListener(OFFLINE_LINEUP_SYNC_EVENT, onSync)
+    return () => window.removeEventListener(OFFLINE_LINEUP_SYNC_EVENT, onSync)
+  }, [league.id, load])
   useLeagueRealtimeRefresh(league.id, (env) => {
     const t = String(env.eventType ?? '')
     if (t === 'player_changed' || t === 'league_changed' || t.includes('score')) void load()
@@ -233,6 +356,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   }, [league.id])
 
   const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(null, data?.unifiedRoster ?? []), [data])
+  // Redraft (lib/league-media/redraftIdentity.ts): sport position chips and the bye / off-day badge.
+  const rd = useRedraftScreen(league)
+  // Daily leagues: players whose team has no game on the day shown — only when the day's schedule was read.
+  const offDay = useMemo(() => (rd && data?.dailyLineups ? dailyOffDayIds(data.unifiedRoster as Array<{ id: string; periodOpponent?: string | null }> | undefined) : new Set<string>()), [rd, data])
   const slots = useMemo(() => data?.starterSlots ?? [], [data])
   const daily = data?.dailyLineups ?? null
   const weekLock = useMemo(
@@ -262,6 +389,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   /** Bench spots the commissioner set (roster positions → BN); each unfilled one shows as an open slot. */
   const benchCapacity = data?.slotLimits?.bench ?? null
   const hasIr = (irCapacity ?? 0) > 0 || Boolean(lists?.ir.some(Boolean))
+  const taxiCapacity = data?.slotLimits?.taxi ?? null
+  /** Shown when the league has a taxi squad, or when someone already sits on one. */
+  const hasTaxi = (taxiCapacity ?? 0) > 0 || Boolean(lists?.taxi.some(Boolean))
 
   const nextLock = useMemo(() => {
     if (!lists) return null
@@ -272,6 +402,12 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     }
     return best
   }, [lists, players, now])
+
+  /** Weekly lineups only: a daily league has no bye weeks, only days without a game. */
+  const byeStarters = useMemo(
+    () => (lists && editable && !daily ? startersOnBye(lists.starters, (id) => players[id], data?.leagueWeek) : []),
+    [lists, editable, daily, players, data?.leagueWeek],
+  )
 
   const savingRef = useRef(false)
   const save = useCallback(
@@ -289,20 +425,55 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
           devy: next.devy.map((id) => buildPlayerRow(id, players)),
         }
-        const res = await fetch('/api/leagues/roster/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leagueId: league.id, rosterId: data.rosterId, week: data.leagueWeek ?? 1, roster }),
-        })
-        const j = (await res.json().catch(() => ({}))) as { writeAuthority?: { copy?: { title?: string; detail?: string } }; error?: string }
+        const rosterId = data.rosterId
+        const week = data.leagueWeek ?? 1
+        // No network: keep the change on this device; it is sent, and judged by the server, on reconnect.
+        // A change already waiting goes the same way even online, so the two are sent as one, in order.
+        const keep = async (quiet: boolean) => {
+          const stored = await queueLineupEdit({ leagueId: league.id, rosterId, week, roster, lists: next, baseVersion: data.lineupVersion ?? null })
+          if (!stored) {
+            toast.error('Lineup was not saved. You are offline and this device could not keep the change.')
+            return false
+          }
+          setPendingEdit(stored)
+          setLists(next)
+          setMove(null)
+          setPicked(null)
+          if (!quiet) toast.success('Saved on this device', { description: 'It will be sent when you are back online. A player whose game starts before then cannot be moved.' })
+          return true
+        }
+        const online = !offlineSince && (typeof navigator === 'undefined' || navigator.onLine !== false)
+        if (!online) return await keep(false)
+        if (pendingEdit) {
+          const kept = await keep(true)
+          if (kept) void flushQueuedLineupEdits()
+          return kept
+        }
+        let res: Response
+        try {
+          res = await fetch('/api/leagues/roster/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leagueId: league.id, rosterId, week, roster, ...(data.lineupVersion ? { expectedLineupVersion: data.lineupVersion } : {}) }),
+          })
+        } catch {
+          // The request never reached the server — the connection dropped. Keep it rather than lose it.
+          return await keep(false)
+        }
+        const j = (await res.json().catch(() => ({}))) as { writeAuthority?: { copy?: { title?: string; detail?: string } }; error?: string; code?: string; lineupVersion?: string }
         if (!res.ok) {
           toast.error(j.error ? `Lineup was not saved: ${j.error}` : 'Lineup was not saved. Your previous lineup is still active.')
+          // Built on a roster that has since changed: show the current one rather than the stale screen.
+          if (j.code === 'LINEUP_CONFLICT') void load()
           return false
         }
         const c = j.writeAuthority?.copy ?? copy
         toast.success(c.title ?? copy.title, { description: c.detail || undefined })
+        // The next move is built on this save, before the reload below lands.
+        if (j.lineupVersion) setData((d) => (d ? { ...d, lineupVersion: j.lineupVersion } : d))
         setLists(next)
         setMove(null)
+        setPicked(null)
         invalidateIntelligence({ leagueId: league.id, reason: 'lineup_saved' })
         void load()
         return true
@@ -314,15 +485,15 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         setSaving(false)
       }
     },
-    [data, editable, players, league.id, copy, load],
+    [data, editable, players, league.id, copy, load, offlineSince, pendingEdit],
   )
 
   const moveCtx: LineupMoveContext | null = useMemo(
     () =>
       lists
-        ? { lists, slots, positionOf: (id: string) => players[id]?.position, isLocked: locked, lockReason, canIr, limits: { bench: data?.slotLimits?.bench ?? null, ir: hasIr ? irCapacity : 0 } }
+        ? { lists, slots, positionOf: (id: string) => players[id]?.position, isLocked: locked, lockReason, canIr, limits: { bench: data?.slotLimits?.bench ?? null, ir: hasIr ? irCapacity : 0, taxi: hasTaxi ? taxiCapacity : 0 } }
         : null,
-    [lists, slots, players, locked, lockReason, canIr, data?.slotLimits?.bench, hasIr, irCapacity],
+    [lists, slots, players, locked, lockReason, canIr, data?.slotLimits?.bench, hasIr, irCapacity, hasTaxi, taxiCapacity],
   )
   const tryMove = useCallback((playerId: string, target: LineupSpot) => (moveCtx ? resolveLineupMove(moveCtx, playerId, target) : null), [moveCtx])
   const doMove = useCallback(
@@ -363,7 +534,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     (dropId: string) => {
       const t = spotFromDropId(dropId)
       if (!t) return 'nowhere'
-      return t.kind === 'starter' ? `the ${slots[t.slotIndex]?.label ?? ''} slot` : t.kind === 'ir' ? 'injured reserve' : 'the bench'
+      return t.kind === 'starter' ? `the ${slots[t.slotIndex]?.label ?? ''} slot` : t.kind === 'ir' ? 'injured reserve' : t.kind === 'taxi' ? 'the taxi squad' : 'the bench'
     },
     [slots],
   )
@@ -383,7 +554,69 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     return tryMove(dragId, target)?.ok ? 'ok' : 'no'
   }
 
+  /** Tap to swap: what the second tap would do, for every row and section while a first tap waits. */
+  const tapMove = (second: LineupTap) => (picked && lists ? resolveLineupTap(lists, picked, second) : null)
+  const tapState = (second: LineupTap): 'ok' | 'no' | undefined => {
+    if (!picked || dragId || sameTap(picked, second)) return undefined
+    const m = tapMove(second)
+    return m && tryMove(m.playerId, m.target)?.ok ? 'ok' : 'no'
+  }
+  const onTap = (tap: LineupTap) => {
+    if (!editable || saving || !lists) return
+    if (picked && sameTap(picked, tap)) return setPicked(null)
+    const m = picked ? tapMove(tap) : null
+    if (m) {
+      setPicked(null)
+      doMove(m.playerId, m.target)
+      return
+    }
+    // A first tap, or a second tap that makes no move: it becomes the new first tap.
+    if (tap.kind === 'section') return setPicked(null)
+    const id = tap.kind === 'player' ? tap.playerId : lists.starters[tap.slotIndex] ?? ''
+    if (id && locked(id)) {
+      toast.error(lockReason(id) ?? 'This player is locked.')
+      return setPicked(null)
+    }
+    setMove(null)
+    setPicked(tap)
+  }
+  useEffect(() => {
+    if (!picked) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPicked(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked])
+  /** Section header button: "Move here" while a first tap could land in this section. */
+  const sectionTap = (section: 'bench' | 'ir' | 'taxi', label: string) =>
+    picked && tapState({ kind: 'section', section }) === 'ok' ? (
+      <button type="button" className="nls-btn" data-size="sm" disabled={saving} onClick={() => onTap({ kind: 'section', section })}>
+        Move to {label}
+      </button>
+    ) : null
+
   const optimal = useMemo(() => (lists && editable ? optimalLineupListsRespectingLocks(slots, lists, players, locked) : null), [lists, editable, slots, players, locked])
+
+  // Keep the device's offline copy current. Only the live lineup is saved — a past or future day in a
+  // daily league is a view of another day, not what the reader would want to see with no signal.
+  const teamName = userTeam?.teamName ?? ''
+  useEffect(() => {
+    // Not while a change is unsent: the cold-launch page would show it as the lineup the server holds.
+    if (!data || !lists || !slots.length || !teamName || viewingOtherDay || pendingEdit) return
+    void saveOfflineLineupSnapshot(
+      buildOfflineLineupSnapshot({
+        leagueId: league.id,
+        leagueName: league.name,
+        sport: String(league.sport ?? ''),
+        teamName,
+        week: data.leagueWeek,
+        slots,
+        lists,
+        players,
+      }),
+    )
+  }, [data, lists, slots, players, teamName, viewingOtherDay, pendingEdit, league.id, league.name, league.sport])
 
   if (!userTeam) {
     return (
@@ -397,6 +630,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const record = formatRecord({ wins: userTeam.wins, losses: userTeam.losses, ties: userTeam.ties })
   const place = ordinal(userTeam.currentRank)
   const startersProj = lists ? projectedTotal(lists.starters, players) : null
+  const afFormProjected = Object.values(players).some((p) => p.projectionsSource === AF_FORM_PROJECTION_SOURCE)
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
 
@@ -410,8 +644,15 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         : !editable
           ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
           : daily
-            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. Drag a player by the handle, or tap Move.`
-            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Drag a player by the handle, or tap Move.`
+            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. ${TAP_HELP}`
+            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} ${TAP_HELP}`
+
+  /** Redraft only: a real bye (weekly) or a day with no game (daily). Nothing when the data does not say. */
+  const dayBadge = (id: string) => {
+    if (!rd || !id) return null
+    if (daily) return offDay.has(id) && (!viewDay || viewDay.status !== 'past') ? <RedraftBadge tone="off" testId={`lineup-off-day-${id}`}>Off day</RedraftBadge> : null
+    return isOnBye(players[id], data?.leagueWeek) ? <RedraftBadge tone="off" testId={`lineup-bye-${id}`}>Bye</RedraftBadge> : null
+  }
 
   const renderPastDay = (d: DailyLineupDay) => {
     const ids = Object.keys(d.slots)
@@ -442,7 +683,23 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     )
   }
 
-  type RowKind = 'starter' | 'bench' | 'ir'
+  type RowKind = 'starter' | 'bench' | 'ir' | 'taxi'
+  /** Dynasty taxi rows only: a Rookie badge (no completed pro seasons) and which taxi season this is. */
+  const renderTaxiBadges = (id: string) => {
+    const rookie = isRookieByExperience(players[id]?.years_exp)
+    const tenure = data?.taxiTenure ? taxiSeasonOf(data.taxiTenure.seasonsUsed[id] ?? 0, data.taxiTenure.maxYears) : null
+    if (!rookie && !tenure) return null
+    return (
+      <>
+        {rookie ? <span className="dyd-badge" data-kind="rookie" data-testid="taxi-rookie-badge">{t('dynasty.badge.rookie')}</span> : null}
+        {tenure ? (
+          <span className="dyd-badge" data-kind="taxi" data-testid="taxi-season-badge" title={tInterpolate('dynasty.badge.taxiSeasonTitle', { season: tenure.season, of: tenure.of })}>
+            {tInterpolate('dynasty.badge.taxiSeason', { season: tenure.season, of: tenure.of })}
+          </span>
+        ) : null}
+      </>
+    )
+  }
   const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: RowKind, slotIndex?: number) => {
     const p = id ? players[id] : undefined
     const isLocked = id ? locked(id) : false
@@ -452,20 +709,34 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         ((move.kind === 'starter' && kind === 'starter' && move.slotIndex === slotIndex) ||
           (move.kind === 'bench' && kind === 'bench' && move.playerId === id)),
     )
-    const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : 'BN'
+    const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : kind === 'taxi' ? 'TX' : 'BN'
+    // Redraft: a bench / IR / taxi row shows the player's own position chip (the section already says where he is).
+    const rdPill = rd && kind !== 'starter' && p?.position ? p.position : null
+    const tap: LineupTap = kind === 'starter' ? { kind: 'slot', slotIndex: slotIndex ?? 0 } : { kind: 'player', playerId: id }
+    const isPicked = Boolean(picked && sameTap(picked, tap))
+    const tapTarget = tapState(tap)
     const reasonId = reason ? `nls-lock-${kind}-${slotIndex ?? id}` : undefined
     const cells = (
       <>
         {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
-        <PosPill label={pill} tone={kind === 'starter' ? slot?.label : pill} />
-        <div className="nls-player">
+        <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+        <PlayerCell
+          tappable={editable}
+          picked={isPicked}
+          label={tapLabel({ name: p?.name, empty: !id, slot: pill, picked: isPicked, target: tapTarget, waiting: Boolean(picked) })}
+          disabled={saving}
+          onTap={() => onTap(tap)}
+        >
           <strong>
             {p?.name ?? (id ? 'Unknown player' : 'Empty')}
-            {kind !== 'starter' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
+            {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
+            <RankTag p={p} />
             <InjuryFlag status={p?.injuryStatus} />
+            {dayBadge(id)}
           </strong>
-          <small>{gameLine(p) || (id ? '—' : 'Open slot')}</small>
-        </div>
+          {/* On the second line, so a long name truncating on a phone never hides them. */}
+          <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
+        </PlayerCell>
         <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
         <span className="nls-lrow-action">
           {editable ? (
@@ -474,7 +745,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 <button type="button" className="nls-btn" data-size="sm" disabled aria-describedby={reasonId}>Locked</button>
                 {reason ? <small className="nls-lock-reason" id={reasonId}>{reason}</small> : null}
               </>
-            ) : kind === 'ir' ? (
+            ) : kind === 'ir' || kind === 'taxi' ? (
               <button type="button" className="nls-btn" data-size="sm" disabled={saving} aria-label={`Move ${p?.name ?? 'player'} to bench`} onClick={() => doMove(id, { kind: 'bench' })}>
                 To bench
               </button>
@@ -497,15 +768,15 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     return (
       <li key={`${kind}-${slotIndex ?? id}`}>
         {kind === 'starter' && editable ? (
-          <DropZone id={`slot:${slotIndex}`} className="nls-lrow" row moving={moving} state={dropState({ kind: 'starter', slotIndex: slotIndex ?? 0 })}>
+          <DropZone id={`slot:${slotIndex}`} className="nls-lrow" row moving={moving || isPicked} state={dragId ? dropState({ kind: 'starter', slotIndex: slotIndex ?? 0 }) : tapTarget}>
             {cells}
           </DropZone>
         ) : (
-          <div className="nls-lrow" data-moving={moving || undefined} data-dnd={editable || undefined}>
+          <div className="nls-lrow" data-moving={moving || isPicked || undefined} data-dnd={editable || undefined} data-drop={tapTarget}>
             {cells}
           </div>
         )}
-        {moving && lists && kind !== 'ir' ? renderSwapper(kind, id, slotIndex) : null}
+        {moving && lists && (kind === 'starter' || kind === 'bench') ? renderSwapper(kind, id, slotIndex) : null}
       </li>
     )
   }
@@ -516,7 +787,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     const name = players[id]?.name ?? 'this player'
     const bench = kind === 'starter' ? tryMove(id, { kind: 'bench' }) : null
     const ir = hasIr && canIr(id) ? tryMove(id, { kind: 'ir' }) : null
-    if (!bench && !ir) return null
+    const taxi = hasTaxi ? tryMove(id, { kind: 'taxi' }) : null
+    if (!bench && !ir && !taxi) return null
     return (
       <div className="nls-swapper-actions">
         {bench ? (
@@ -527,6 +799,11 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         {ir ? (
           <button type="button" className="nls-btn" data-size="sm" disabled={!ir.ok || saving} title={ir.ok ? `Move ${name} to injured reserve` : ir.reason} onClick={() => doMove(id, { kind: 'ir' })}>
             Move to IR
+          </button>
+        ) : null}
+        {taxi ? (
+          <button type="button" className="nls-btn" data-size="sm" disabled={!taxi.ok || saving} title={taxi.ok ? `Move ${name} to the taxi squad` : taxi.reason} onClick={() => doMove(id, { kind: 'taxi' })}>
+            {t('dynasty.lineup.moveToTaxi')}
           </button>
         ) : null}
       </div>
@@ -594,7 +871,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const allRoster = data ? [...(lists?.starters ?? []), ...(lists?.bench ?? []), ...(lists?.ir ?? []), ...(lists?.taxi ?? []), ...(lists?.devy ?? [])].filter(Boolean) : []
 
   return (
-    <div className="nls" data-testid="native-lineup-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
       <ScreenHead eyebrow={`${league.name} · My team`} title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
         <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
@@ -607,10 +885,22 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !data ? <p className="nls-empty" role="status">Loading your roster…</p> : null}
+      {!data && offlineSnapshot ? <OfflineLineupSnapshotView snapshot={offlineSnapshot} /> : null}
 
       {data ? (
         <div className="nls-cols">
           <div className="nls nls-stack">
+            {pendingEdit ? (
+              <div className="nls-lockbar" role="status" data-testid="lineup-pending-sync">
+                <span className="nls-chip" data-tone="warn">Not sent yet</span>
+                <span>Your lineup changes are saved on this device and will be sent when you are back online. A player whose game starts before then cannot be moved.</span>
+              </div>
+            ) : offlineSince ? (
+              <div className="nls-lockbar" role="status" data-testid="lineup-offline">
+                <span className="nls-chip" data-tone="warn">Offline</span>
+                <span>{snapshotAgeLabel(offlineSince)}. Changes you make are saved on this device and sent when you reconnect.</span>
+              </div>
+            ) : null}
             {lockText ? (
               <div className="nls-lockbar" data-tone={editable ? undefined : 'locked'} role="status">
                 {editable && nextLock ? <span className="nls-chip" data-tone="warn">Next lock {untilLabel(nextLock.getTime() - now.getTime())}</span> : null}
@@ -635,12 +925,24 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             ) : tab === 'lineup' ? (
               lists && slots.length ? (
                 <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)} accessibility={{ announcements }}>
+                  {byeStarters.length ? (
+                    <p className="nls-error" role="alert" data-testid="lineup-bye-warning">
+                      {byeStarters.length === 1
+                        ? `${players[byeStarters[0]]?.name ?? 'A starter'} is on bye this week and will score 0. Swap him out before lock.`
+                        : `${byeStarters.length} starters are on bye this week and will score 0: ${byeStarters.map((id) => players[id]?.name ?? 'Unknown').join(', ')}. Swap them out before lock.`}
+                    </p>
+                  ) : null}
+                  {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
+                  {data?.rosterId ? <WelcomeBackCard leagueId={league.id} /> : null}
+                  {data?.rosterId ? <MyTeamAutomations leagueId={league.id} /> : null}
+                  {data?.rosterId ? <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} /> : null}
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
+                    {afFormProjected ? <p className="nls-muted" data-testid="lineup-af-projection-note">{AF_FORM_PROJECTION_EXPLAINER}{daily && viewDay ? ` Projections are for ${viewDay.status === 'today' ? 'today' : dayLabel(viewDay.day)}.` : ''}</p> : null}
                   </section>
-                  <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
-                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
+                  <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dragId ? dropState({ kind: 'bench' }) : tapState({ kind: 'section', section: 'bench' })}>
+                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : sectionTap('bench', 'bench') ?? (benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null)}</h3>
                     <ul className="nls-rows">
                       {lists.bench.filter(Boolean).map((id) => renderRow(id, null, 'bench'))}
                       {benchCapacity != null
@@ -655,12 +957,23 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     </ul>
                   </DropZone>
                   {hasIr ? (
-                    <DropZone as="section" id="ir" className="nls-card nls-card-flush nls-dropzone" label="Injured reserve" state={dropState({ kind: 'ir' })}>
-                      <h3 className="nls-label nls-card-head"><span>Injured reserve</span><span>{irCapacity != null ? `${lists.ir.filter(Boolean).length} / ${irCapacity}` : ''}</span></h3>
+                    <DropZone as="section" id="ir" className="nls-card nls-card-flush nls-dropzone" label="Injured reserve" state={dragId ? dropState({ kind: 'ir' }) : tapState({ kind: 'section', section: 'ir' })}>
+                      <h3 className="nls-label nls-card-head"><span>Injured reserve</span>{sectionTap('ir', 'IR') ?? <span>{irCapacity != null ? `${lists.ir.filter(Boolean).length} / ${irCapacity}` : ''}</span>}</h3>
                       <ul className="nls-rows">
                         {lists.ir.filter(Boolean).map((id) => renderRow(id, null, 'ir'))}
                         {!lists.ir.some(Boolean) ? (
                           <li><div className="nls-lrow nls-lrow-empty"><PosPill label="IR" /><span>Empty — move an injured player here to free a roster spot.</span></div></li>
+                        ) : null}
+                      </ul>
+                    </DropZone>
+                  ) : null}
+                  {hasTaxi ? (
+                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label={t('dynasty.lineup.taxiSquad')} state={dragId ? dropState({ kind: 'taxi' }) : tapState({ kind: 'section', section: 'taxi' })}>
+                      <h3 className="nls-label nls-card-head"><span>{t('dynasty.lineup.taxiSquad')}</span>{sectionTap('taxi', 'taxi') ?? <span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span>}</h3>
+                      <ul className="nls-rows">
+                        {lists.taxi.filter(Boolean).map((id) => renderRow(id, null, 'taxi'))}
+                        {!lists.taxi.some(Boolean) ? (
+                          <li><div className="nls-lrow nls-lrow-empty"><PosPill label="TX" /><span>Empty: stash a young player here and he stays off your active roster.</span></div></li>
                         ) : null}
                       </ul>
                     </DropZone>
@@ -682,7 +995,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                       <li key={id}>
                         <div className="nls-lrow" data-cols="3">
                           <PosPill label={p?.position ?? '—'} />
-                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<InjuryFlag status={p?.injuryStatus} /></strong><small>{gameLine(p) || '—'}</small></div>
+                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} />{dayBadge(id)}</strong><small>{gameLine(p) || '—'}</small></div>
                           <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
                         </div>
                       </li>
@@ -714,5 +1027,6 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         </div>
       ) : null}
     </div>
+    </RedraftScreen>
   )
 }

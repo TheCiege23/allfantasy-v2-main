@@ -21,6 +21,9 @@ type SurvivorAIPanelType =
   | 'tribal_help'
   | 'exile_help'
   | 'bestball_help'
+  | 'idol_timing_help'
+  | 'jury_help'
+  | 'weekly_plan'
 
 const TYPE_LABELS: Record<SurvivorAIPanelType, string> = {
   host_intro: 'Host: Intro post',
@@ -34,6 +37,9 @@ const TYPE_LABELS: Record<SurvivorAIPanelType, string> = {
   tribal_help: 'Helper: Tribal risk & vote exposure',
   exile_help: 'Helper: Exile strategy',
   bestball_help: 'Helper: Bestball tribe score & jury',
+  idol_timing_help: 'Helper: Idol timing plan (hold or play, with the deadline)',
+  jury_help: 'Helper: Jury management',
+  weekly_plan: 'Helper: Weekly game plan',
 }
 
 const HOST_TYPES: SurvivorAIPanelType[] = [
@@ -50,6 +56,9 @@ const HELPER_TYPES: SurvivorAIPanelType[] = [
   'tribal_help',
   'exile_help',
   'bestball_help',
+  'idol_timing_help',
+  'jury_help',
+  'weekly_plan',
 ]
 
 /** Matches `/api/.../survivor/ai` — intro, scroll, and idol advice are not subscription-gated. */

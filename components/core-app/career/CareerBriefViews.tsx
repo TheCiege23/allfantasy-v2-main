@@ -9,6 +9,7 @@ import type { CareerCoverageExtras, CareerRecordBook } from '@/lib/core-app/care
 import { platformLabel } from '@/lib/core-app/rankingsEngine'
 import { CareerProgressChart } from './CareerProgressChart'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The career brief's views. Every one renders absence as absence: an empty
@@ -16,7 +17,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
  * number the data never held.
  */
 
-const nf = (n: number) => n.toLocaleString('en-US')
+const nf = (n: number) => n.toLocaleString(getAppIntlLocale())
 const pct = (n: number | null) => (n == null ? '—' : `${(Math.round(n * 1000) / 10).toFixed(1)}%`)
 
 /* ── 1. accomplishments first ───────────────────────────────────────────── */

@@ -31,6 +31,7 @@ import {
 } from '@/lib/core-app/playerCardCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import GamesCountWeekPanel from './GamesCountWeekPanel'
 import { isGamesCountSport } from '@/lib/redraft/gamesCount'
 
@@ -166,7 +167,7 @@ function TradeRows({ trades, subject, language }: { trades: PlayerCardTrade[]; s
                   {c.paid} <b>{t.grade.senderLetter}</b>
                 </span>
                 <span className="af-pc-faint">
-                  {c.gradeLine(t.grade.got.toLocaleString(), t.grade.gave.toLocaleString(), gradeMoment(t.grade, language))}
+                  {c.gradeLine(t.grade.got.toLocaleString(getAppIntlLocale()), t.grade.gave.toLocaleString(getAppIntlLocale()), gradeMoment(t.grade, language))}
                 </span>
               </div>
             ) : t.grade && !t.grade.graded ? (
@@ -692,7 +693,7 @@ export default function PlayerCardSheet({
                   {league.price.available ? (
                     <Tile
                       label={c.leaguePrice}
-                      value={league.price.data.value.toLocaleString()}
+                      value={league.price.data.value.toLocaleString(getAppIntlLocale())}
                       tone="accent"
                       sub={
                         <span className="af-pc-faint">
@@ -712,13 +713,13 @@ export default function PlayerCardSheet({
                   {!league ? (
                     <Tile
                       label={c.tradePrice}
-                      value={market.data.value.toLocaleString()}
+                      value={market.data.value.toLocaleString(getAppIntlLocale())}
                       tone="accent"
                       sub={
                         market.data.delta ? (
                           <span className={market.data.delta.change >= 0 ? 'af-pc-up' : 'af-pc-down'}>
                             {market.data.delta.change >= 0 ? '+' : ''}
-                            {market.data.delta.change.toLocaleString()} · {c.deltaDays(market.data.delta.days)}
+                            {market.data.delta.change.toLocaleString(getAppIntlLocale())} · {c.deltaDays(market.data.delta.days)}
                           </span>
                         ) : depthLocked && depth ? (
                           <span className="af-pc-faint">{c.priceMoveLocked(depth.planName)}</span>
@@ -816,7 +817,7 @@ export default function PlayerCardSheet({
                         <div key={r.name} className="af-pc-row">
                           <span className="af-pc-row-k">{r.name}</span>
                           <span className="af-pc-row-v af-num">
-                            {r.value != null ? r.value.toLocaleString() : '—'}
+                            {r.value != null ? r.value.toLocaleString(getAppIntlLocale()) : '—'}
                           </span>
                         </div>
                       ))
@@ -869,7 +870,7 @@ export default function PlayerCardSheet({
                             {data.comps.data.map((c) => (
                               <button key={c.sleeperId} type="button" className="af-pc-chip" onClick={() => openComp(c)}>
                                 {c.name}
-                                <span className="af-pc-faint af-num"> {c.value.toLocaleString()}</span>
+                                <span className="af-pc-faint af-num"> {c.value.toLocaleString(getAppIntlLocale())}</span>
                               </button>
                             ))}
                           </div>

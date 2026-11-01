@@ -8,6 +8,7 @@ import { resolveNotificationPreferences } from "@/lib/notification-settings/Noti
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { isLeagueSmsCategory } from "@/lib/notifications/channelPolicy"
+import { isCategoryHiddenByHomeSection } from "@/lib/core-app/homeSections"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import type { SmsSendResult } from "./types"
@@ -43,6 +44,10 @@ export async function sendCriticalSms(
   const catPrefs = prefs.categories?.[category]
   if (!catPrefs?.enabled || !catPrefs.sms) {
     return { ok: false, userId, error: "SMS disabled for category" }
+  }
+  // Settings → Home page: a hidden home section silences its alerts (lib/core-app/homeSections.ts).
+  if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
+    return { ok: false, userId, error: "Home section hidden" }
   }
 
   const availability = getDeliveryMethodAvailability({

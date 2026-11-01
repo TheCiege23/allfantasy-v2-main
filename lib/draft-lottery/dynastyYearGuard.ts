@@ -26,7 +26,7 @@ export function isDynastyLeagueRow(league: {
  * Weighted rookie draft lottery is only valid for dynasty leagues in year 2+
  * (established league with prior season / completed draft data — not the founding startup year).
  */
-export async function checkDynastyLotteryEligibility(leagueId: string): Promise<DynastyLotteryEligibility> {
+export async function checkDynastyLotteryEligibility(leagueId: string, targetSeason?: number): Promise<DynastyLotteryEligibility> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
@@ -38,11 +38,6 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
       settings: true,
       // The league's FIRST season — see `foundingSeason` below.
       redraftSeasons: { select: { season: true }, orderBy: { season: 'asc' }, take: 1 },
-      _count: {
-        select: {
-          redraftDrafts: { where: { status: 'completed' } },
-        },
-      },
     },
   })
 
@@ -68,7 +63,6 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
   const currentSeason = typeof league.season === 'number' ? league.season : null
   const startupSeason =
     typeof settings.startup_season === 'number' ? settings.startup_season : undefined
-  const completedDrafts = league._count.redraftDrafts
   /*
    * 🛑 THE FOUNDING SEASON, NOT THE YEAR THE ROW WAS CREATED. This compared against
    * `createdAt.getFullYear()`, but a league is stamped with the season it will PLAY
@@ -83,16 +77,11 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
     league.redraftSeasons?.[0]?.season ??
     resolveLeagueCreationSeason(String(league.sport ?? ''), new Date(league.createdAt))
 
-  let isStartupLeague = false
-  if (startupSeason != null && currentSeason != null && currentSeason === startupSeason) {
-    isStartupLeague = true
-  } else if (completedDrafts === 0 && currentSeason != null) {
-    if (startupSeason == null) {
-      isStartupLeague = currentSeason <= foundingSeason
-    } else {
-      isStartupLeague = currentSeason <= startupSeason
-    }
-  }
+  const draftSeason = Number.isInteger(targetSeason) ? targetSeason! : currentSeason
+  const firstSeason = startupSeason ?? foundingSeason
+  if (draftSeason == null) return { eligible: false, reason: 'The draft season is unavailable.', currentSeason, isStartupLeague: false }
+  // A completed startup does not turn its first season into a future rookie draft.
+  const isStartupLeague = draftSeason != null && draftSeason <= firstSeason
 
   if (isStartupLeague) {
     return {

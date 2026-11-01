@@ -3343,7 +3343,7 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it — 'sleeper' today; espn/yahoo would each add their own.
+  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -3956,6 +3956,7 @@ model AppUser {
   creatorProfile                           CreatorProfile?
   devyImportSessionsCommissioned           DevyImportSession[]                    @relation("DevyImportSessionCommissioner")
   discordGuildLinks                        DiscordGuildLink[]
+  teamCoOwnerships                        TeamCoOwner[]
   draftAutopickSettings                    DraftAutopickSetting[]
   liveDraftAutopickPreferences             LiveDraftAutopickPreference[]
   draftRoomChatMessages                    DraftRoomChatMessage[]
@@ -3982,6 +3983,13 @@ model AppUser {
   platformChatThreadMemberships            PlatformChatThreadMember[]
   platformChatThreadsCreated               PlatformChatThread[]                   @relation("PlatformChatThreadCreator")
   platformMessageReports                   PlatformMessageReport[]                @relation("PlatformMessageReportReporter")
+  communityPosts                           CommunityPost[]                        @relation("CommunityPostAuthor")
+  communityReplies                         CommunityReply[]                       @relation("CommunityReplyAuthor")
+  communityReactions                       CommunityReaction[]                    @relation("CommunityReactionUser")
+  communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
+  communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
+  findLeagueSpotRequests                   FindLeagueSpotRequest[]                @relation("FindLeagueSpotRequester")
+  savedLeagueSearches                      SavedLeagueSearch[]                    @relation("SavedLeagueSearchOwner")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -4046,6 +4054,7 @@ model AppUser {
   legalAcceptances                         LegalAcceptance[]
   coreBracketPicks                         CoreBracketPick[]
 
+  dispersalDraftsCreated DispersalDraft[] @relation("DispersalDraftCreatedBy")
   @@map("app_users")
 }
 
@@ -4620,10 +4629,12 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String                  @id @default(cuid())
-  challengeId String                  @map("challenge_id")
-  userId      String                  @map("user_id")
-  name        String
+  id                    String                  @id @default(cuid())
+  challengeId           String                  @map("challenge_id")
+  userId                String                  @map("user_id")
+  name                  String
+  finalizedAt           DateTime?               @map("finalized_at")
+  tiebreakerTotalScore  Int?                    @map("tiebreaker_total_score")
   createdAt   DateTime                @default(now()) @map("created_at")
   updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -4633,6 +4644,7 @@ model PlayoffBracketEntry {
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, finalizedAt])
   @@map("playoff_bracket_entries")
 }
 
@@ -6529,8 +6541,10 @@ model League {
   /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
   /// 2026-09-24; read the current one with `orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1`.
   draftSessions                         DraftSession[]
+  dispersalDrafts                       DispersalDraft[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
+  findLeagueSpotRequests                FindLeagueSpotRequest[]
   guillotineAiInsights                  GuillotineAIInsight[]
   guillotineConfig                      GuillotineLeagueConfig?
   guillotineSeasons                     GuillotineSeason[]
@@ -6553,6 +6567,7 @@ model League {
   leagueSettings                        LeagueSettings?
   storylines                            LeagueStoryline[]
   teams                                 LeagueTeam[]
+  teamCoOwners                          TeamCoOwner[]
   waiverSettings                        LeagueWaiverSettings?
   bbContest                             BestBallContest?                       @relation("LeagueBestBallContest", fields: [bbContestId], references: [id])
   legacyLeague                          LegacyLeague?                          @relation(fields: [legacyLeagueId], references: [id])
@@ -8092,6 +8107,7 @@ model LeagueChatMessage {
   discordMessageId  String?  @db.VarChar(64)
   sourceDiscord     Boolean  @default(false)
   globalBroadcastId String?  @db.VarChar(64)
+  zombieWeeklyAnnouncementId String? @unique @db.VarChar(64)
   /// @chimmy private thread â€” only `visibleToUserId` should see the row when true.
   isPrivate         Boolean  @default(false)
   mentionedUserIds  String[] @default([])
@@ -8223,6 +8239,54 @@ model FindLeagueListing {
   @@map("find_league_listings")
 }
 
+/// A player asking for a spot in a league that plays on another platform (Sleeper, ESPN, …) and
+/// was listed in Find a League by its verified commissioner. The seats live on the other
+/// platform, so there is no join here: the commissioner accepts and sends their own invite.
+/// See lib/public-discovery/externalListing.ts. One row per player per league; asking again
+/// after a decline reopens the same row.
+model FindLeagueSpotRequest {
+  id              String    @id @default(cuid())
+  leagueId        String
+  requesterUserId String
+  message         String?   @db.VarChar(500)
+  /// pending | accepted | declined | withdrawn
+  status          String    @default("pending") @db.VarChar(16)
+  /// The commissioner's reply: their platform invite link, or why not.
+  responseNote    String?   @db.VarChar(500)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  respondedAt     DateTime?
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  requester       AppUser   @relation("FindLeagueSpotRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, requesterUserId])
+  @@index([leagueId, status])
+  @@index([requesterUserId, createdAt])
+  @@map("find_league_spot_requests")
+}
+
+/// A Find a League search a player asked to be alerted about. Once a day the morning-briefing
+/// cron re-runs it (lib/public-discovery/savedSearchAlerts.ts) and sends one in-app notification
+/// when leagues appear that it hasn't shown them before. Up to 5 per player.
+model SavedLeagueSearch {
+  id             String    @id @default(cuid())
+  userId         String
+  /// What the person sees: "NFL · dynasty · 12 teams".
+  label          String    @db.VarChar(160)
+  /// The discovery query string, exactly what /api/discover/leagues receives (no page).
+  query          String    @db.VarChar(1000)
+  /// League ids already shown for this search, so an alert only ever names new ones. Capped.
+  seenLeagueIds  String[]  @default([])
+  lastCheckedAt  DateTime?
+  lastAlertedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  user           AppUser   @relation("SavedLeagueSearchOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, query])
+  @@index([lastCheckedAt])
+  @@map("saved_league_searches")
+}
+
 model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
@@ -8253,6 +8317,7 @@ model Roster {
   settings             Json?
   dispersalDraftPasses Boolean                    @default(false)
   devyRights           DevyRights[]
+  coOwners             TeamCoOwner[]
   keeperDeclarations   KeeperDeclaration[]
   redraftDraftPicks    RedraftDraftPick[]
   redraftDraftQueue    RedraftDraftQueue[]
@@ -8275,6 +8340,28 @@ model Roster {
   @@index([leagueId, updatedAt])
   @@index([platformUserId])
   @@map("rosters")
+}
+
+/// A league member invited to help manage one canonical roster. Pending invites grant no access.
+model TeamCoOwner {
+  id              String   @id @default(uuid())
+  leagueId        String
+  rosterId        String
+  userId          String
+  invitedByUserId String
+  rosterOwnerKey  String
+  claimedOwnerId  String?
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  roster          Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId])
+  @@index([rosterId])
+  @@index([userId, acceptedAt])
+  @@map("team_co_owners")
 }
 
 /// Normalized weekly lineup rows (mirrors `Roster.playerData.lineup_sections`) for scoring queries and audits.
@@ -8599,6 +8686,8 @@ model LeagueTeam {
   @@index([leagueId, pointsFor])
   @@index([divisionId])
   @@index([aiPowerScore])
+  /// The Clubhouse Commish badge looks claimed commissioner teams up by user, on every render.
+  @@index([claimedByUserId])
   @@map("league_teams")
 }
 
@@ -9880,6 +9969,25 @@ model SurvivorShareMoment {
   @@map("survivor_share_moments")
 }
 
+/// A fan's call of who goes home at one Tribal Council (spectator mode, the public watch page).
+/// Fans are signed-in users who do not play in the league. Scored when read, against the council's
+/// own result once its read is complete, so nothing has to run when a council ends.
+model SurvivorFanPrediction {
+  id           String   @id @default(uuid())
+  leagueId     String   @db.VarChar(64)
+  councilId    String   @db.VarChar(64)
+  week         Int
+  fanUserId    String   @db.VarChar(64)
+  /// The castaway picked (SurvivorPlayer.userId). Never sent to a client.
+  pickedUserId String   @db.VarChar(64)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([councilId, fanUserId])
+  @@index([leagueId, fanUserId])
+  @@map("survivor_fan_predictions")
+}
+
 /// Big Brother league config: HOH, nomination, veto, vote, eviction, jury, finale settings.
 model BigBrotherLeagueConfig {
   id                                  String                 @id @default(uuid())
@@ -10158,6 +10266,8 @@ model ZombieLeague {
   potTotal                 Float                    @default(0)
   season                   Int                      @default(2026)
   seasonStartWeek          Int?
+  experienceMode           String                   @default("enhanced") @db.VarChar(16)
+  rulesSnapshot            Json?
   slug                     String                   @default("") @db.VarChar(160)
   sport                    String                   @default("NFL") @db.VarChar(12)
   status                   String                   @default("setup")
@@ -10167,6 +10277,7 @@ model ZombieLeague {
   ultimateSurvivorPot      Boolean                  @default(false)
   weeklyPayoutEnabled      Boolean                  @default(false)
   whispererAmbushCount     Int                      @default(3)
+  whispererCount           Int                      @default(1)
   whispererIsPublic        Boolean                  @default(true)
   whispererSelectionMode   String                   @default("random")
   /// 0=Sun â€¦ 6=Sat (UTC). Null = no scheduled weekly post.
@@ -10197,8 +10308,10 @@ model ZombieLeague {
   resources                ZombieResourceLedger[]
   rulesDocuments           ZombieRulesDocument[]
   weeklyResolutions        ZombieWeeklyResolution[]
+  externalWeeklyPayouts    ZombieExternalWeeklyPayout[]
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
+  coWhisperers             ZombieCoWhisperer[]
 
   @@index([universeId])
   @@index([levelId])
@@ -10232,6 +10345,27 @@ model WhispererRecord {
   @@index([zombieLeagueId])
   @@index([userId])
   @@map("zombie_whisperer_records")
+}
+
+/// Optional second Whisperer seat for NBA, NHL, and MLB. Primary record remains intact.
+model ZombieCoWhisperer {
+  id                  String       @id @default(cuid())
+  zombieLeagueId      String       @unique
+  userId              String
+  displayName         String
+  selectionMode       String
+  selectedAt          DateTime     @default(now())
+  isPubliclyRevealed  Boolean      @default(true)
+  ambushesGranted     Int          @default(3)
+  ambushesUsed        Int          @default(0)
+  ambushesRemaining   Int          @default(3)
+  wasDefeated         Boolean      @default(false)
+  defeatedAtWeek      Int?
+  createdAt           DateTime     @default(now())
+  league              ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, userId])
+  @@map("zombie_co_whisperers")
 }
 
 model ZombieInfectionEvent {
@@ -10279,6 +10413,7 @@ model ZombieWeeklyResolution {
   weaponAwards           Json?
   resolvedAt             DateTime?
   requiresStatCorrection Boolean      @default(false)
+  settlementSnapshot     Json?
   createdAt              DateTime     @default(now())
   league                 ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
@@ -10383,6 +10518,7 @@ model ZombieAnnouncement {
   createdAt      DateTime     @default(now())
   /// When set, post only after this time (cron queue).
   scheduledFor   DateTime?
+  idempotencyKey String?      @unique @db.VarChar(128)
   league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
   @@index([zombieLeagueId, type])
@@ -10404,6 +10540,26 @@ model ZombieNameRecord {
 
   @@index([universeId])
   @@map("zombie_name_records")
+}
+
+/// Commissioner-recorded amount won on an external fantasy payout platform. No money moves here.
+model ZombieExternalWeeklyPayout {
+  id             String        @id @default(cuid())
+  zombieLeagueId String
+  week           Int
+  winnerRosterId String        @db.VarChar(64)
+  amountCents    Int
+  providerName   String        @db.VarChar(80)
+  status         String        @default("recorded") @db.VarChar(24)
+  reference      String?       @db.VarChar(160)
+  recordedById   String        @db.VarChar(64)
+  recordedAt     DateTime      @default(now())
+  confirmedAt    DateTime?
+  league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, week])
+  @@index([winnerRosterId])
+  @@map("zombie_external_weekly_payouts")
 }
 
 model ZombiePaidConfig {
@@ -10697,6 +10853,7 @@ model ZombieLeagueConfig {
   infectionLossToWhisperer  Boolean  @default(true)
   infectionLossToZombie     Boolean  @default(true)
   serumReviveCount          Int      @default(2)
+  autoSerumRevive           Boolean  @default(false)
   serumAwardHighScore       Boolean  @default(true)
   serumAwardOnBashMaul      Boolean  @default(true)
   serumUseBeforeLastStarter Boolean  @default(true)
@@ -11769,6 +11926,8 @@ model ZombieTeamItem {
   activatesAtWeek Int?
   /// ready | pending_activation â€” serum registers before kickoff, resolves at score finalization.
   activationState String           @default("ready")
+  acquiredAtWeek  Int?
+  awardKey        String?          @unique @db.VarChar(160)
   team            ZombieLeagueTeam @relation(fields: [teamStatusId], references: [id], onDelete: Cascade)
 
   @@index([teamStatusId])
@@ -14863,6 +15022,10 @@ model RedraftTradeProposal {
   seasonId          String
   proposerRosterId  String
   receiverRosterId  String
+  /// Teams in the trade beyond proposer + receiver (3- and 4-team trades). Empty for a two-team trade.
+  additionalRosterIds String[]                 @default([])
+  /// Non-proposer teams that have accepted. The trade is agreed only once every one of them has.
+  acceptedRosterIds String[]                   @default([])
   status            String                     @default("pending")
   vetoMode          String                     @default("commissioner")
   vetoThreshold     Int?
@@ -16009,6 +16172,8 @@ model GuillotineElimination {
   eliminatedAt         DateTime         @default(now())
   season               GuillotineSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
+  /// One elimination per team per week: a re-run of a week cannot record it twice (lib/guillotine/guillotineChopAudit.ts).
+  @@unique([seasonId, scoringPeriod, eliminatedRosterId])
   @@index([seasonId, scoringPeriod])
   @@index([leagueId])
   @@map("guillotine_eliminations")
@@ -19650,4 +19815,276 @@ model RookieEligibilityRecord {
   @@unique([sport, season, playerKey, source])
   @@index([sport, season, isRookie])
   @@map("rookie_eligibility_records")
+}
+
+/// Private Play receipt store. Tokens are AES-GCM encrypted; identity is package-scoped SHA-256.
+/// Ownership survives account deletion to prevent reassigning a previously fulfilled purchase.
+model GooglePlayPurchase {
+  checkoutIntentId String? @unique
+  tokenHash       String @id @db.VarChar(64)
+  tokenCiphertext String
+  ownerId         String?
+  productId       String @db.VarChar(64)
+  sku             String @db.VarChar(64)
+  purchaseType    String @db.VarChar(32)
+  state           String @db.VarChar(64)
+  orderId         String? @db.VarChar(256)
+  revokedAt       DateTime?
+  finalizedAt     DateTime?
+  lastCheckedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([lastCheckedAt])
+  @@map("google_play_purchases")
+}
+
+/// Checkout authorization retained for delayed payments and interrupted verification.
+model GooglePlayCheckoutIntent {
+  id        String @id @default(uuid())
+  userId    String
+  sku       String @db.VarChar(64)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("google_play_checkout_intents")
+}
+
+/// Dispersal draft (lib/dispersal-draft): an orphaned or dissolved team's assets drafted by the rest of
+/// the league. These models describe tables that already exist — created by migration
+/// 20260410143800_fix_schema_drift under their older "supplemental" names — and were missing from this
+/// schema, so the generated client had no `dispersalDraft` and every call to the engine threw.
+model DispersalDraft {
+  id                   String                      @id @default(cuid())
+  leagueId             String
+  scenario             String                      @db.VarChar(32)
+  status               String                      @default("pending") @db.VarChar(24)
+  participantRosterIds String[]                    @default([])
+  passedRosterIds      String[]                    @default([])
+  draftOrder           String[]                    @default([])
+  currentPickIndex     Int                         @default(0)
+  totalRounds          Int                         @default(0)
+  picksPerRound        Int                         @default(0)
+  sourceRosterIds      String[]                    @default([])
+  assetPool            Json                        @default("[]")
+  orderMode            String                      @default("randomized") @db.VarChar(24)
+  draftType            String                      @default("linear") @db.VarChar(16)
+  pickTimeSeconds      Int                         @default(120)
+  autoPickOnTimeout    Boolean                     @default(true)
+  createdByUserId      String
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @default(now()) @updatedAt
+  league               League                      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  createdBy            AppUser                     @relation("DispersalDraftCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  picks                DispersalDraftPick[]
+  rosters              DispersalDraftRoster[]
+  /// The asset-pool rows. `assetPool` above is the JSON copy the engine reads.
+  assetPoolRows        DispersalAssetPool[]
+  participants         DispersalDraftParticipant[]
+
+  @@index([leagueId, status])
+  @@map("supplemental_drafts")
+}
+
+model DispersalDraftPick {
+  id               String         @id @default(cuid())
+  dispersalDraftId String         @map("supplementalDraftId")
+  pickNumber       Int
+  round            Int
+  pickInRound      Int
+  rosterId         String
+  assetType        String?        @db.VarChar(24)
+  assetId          String?        @db.VarChar(128)
+  assetDisplayName String?        @db.VarChar(256)
+  isPassed         Boolean        @default(false)
+  isAutoPick       Boolean        @default(false)
+  pickedAt         DateTime?
+  draft            DispersalDraft @relation(fields: [dispersalDraftId], references: [id], onDelete: Cascade)
+
+  @@unique([dispersalDraftId, pickNumber], map: "supplemental_draft_picks_draftId_pickNumber_key")
+  @@index([dispersalDraftId, rosterId], map: "supplemental_draft_picks_draftId_rosterId_idx")
+  @@map("supplemental_draft_picks")
+}
+
+model DispersalDraftRoster {
+  id                  String         @id @default(cuid())
+  draftId             String
+  leagueId            String
+  userId              String
+  teamId              String?
+  players             Json           @default("[]")
+  draftSlot           Int?
+  isEligible          Boolean        @default(true)
+  ineligibilityReason String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @default(now()) @updatedAt
+  draft               DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, userId])
+  @@index([draftId])
+  @@map("dispersal_draft_rosters")
+}
+
+model DispersalAssetPool {
+  id             String         @id @default(cuid())
+  draftId        String
+  leagueId       String
+  playerId       String
+  playerName     String
+  playerPosition String?
+  playerTeam     String?
+  playerAge      Int?
+  sourceRosterId String?
+  sourcePlatform String?
+  isAvailable    Boolean        @default(true)
+  pickedInPickId String?
+  metadata       Json?          @default("{}")
+  createdAt      DateTime       @default(now())
+  draft          DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, playerId])
+  @@index([draftId])
+  @@index([isAvailable])
+  @@map("dispersal_asset_pool")
+}
+
+model DispersalDraftParticipant {
+  id             String         @id @default(cuid())
+  draftId        String
+  leagueId       String
+  userId         String
+  displayName    String?
+  teamName       String?
+  draftSlot      Int?
+  isCommissioner Boolean        @default(false)
+  isReady        Boolean        @default(false)
+  isOnTheClock   Boolean        @default(false)
+  isConnected    Boolean        @default(false)
+  lastSeenAt     DateTime?
+  joinedAt       DateTime       @default(now())
+  draft          DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, userId])
+  @@index([draftId])
+  @@map("dispersal_draft_participants")
+}
+
+/// Clubhouse — the public community board (lib/community/). A post lives in one fixed
+/// channel (lib/community/channels.ts); `channel` is a slug, not an FK, so adding a
+/// channel is a code change rather than a migration.
+///
+/// `replyCount` and `lastActivityAt` are denormalized so a channel list sorts and counts
+/// without a join; both are written in the same transaction as the reply that moves them.
+/// A removed post keeps its row (`removedAt`) so a moderation decision can be reviewed
+/// and reversed, and so reply notifications already sent do not point at nothing.
+model CommunityPost {
+  id              String           @id @default(uuid())
+  channel         String           @db.VarChar(32)
+  authorUserId    String
+  title           String           @db.VarChar(160)
+  body            String
+  tags            String[]         @default([])
+  isPinned        Boolean          @default(false)
+  isLocked        Boolean          @default(false)
+  replyCount      Int              @default(0)
+  lastActivityAt  DateTime         @default(now())
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  /// "post", or "idea" for a League Lab idea (the idea* columns below apply only to those).
+  kind            String           @default("post") @db.VarChar(16)
+  /// Null while an idea is open; then "under_review" | "building" | "shipped", set by staff.
+  ideaStatus      String?          @db.VarChar(16)
+  ideaStatusAt    DateTime?
+  /// { hook, sport, teamSize, draftType } from the short idea form.
+  ideaDetails     Json?
+  /// Denormalised count of CommunityIdeaVote rows, so the board can sort by it.
+  upvoteCount     Int              @default(0)
+  /// Set only on threads the Clubhouse writes itself ("prompt:2026-11-02", "news:2026-11-02",
+  /// "gameday:2026-11-02"). Unique, so a cron that fires twice converges on one row.
+  systemKey       String?          @unique @db.VarChar(64)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  replies         CommunityReply[]
+  ideaVotes       CommunityIdeaVote[]
+
+  @@index([channel, isPinned, lastActivityAt])
+  @@index([lastActivityAt])
+  @@index([authorUserId, createdAt])
+  @@index([kind, upvoteCount])
+  @@map("community_posts")
+}
+
+/// One upvote per (person, idea).
+model CommunityIdeaVote {
+  id        String        @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      AppUser       @relation("CommunityIdeaVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_idea_votes")
+}
+
+model CommunityReply {
+  id              String        @id @default(uuid())
+  postId          String
+  authorUserId    String
+  body            String
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  post            CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          AppUser       @relation("CommunityReplyAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("community_replies")
+}
+
+/// One row per (person, target, emoji). `targetType` is "post" or "reply"; polymorphic,
+/// so no FK on `targetId` — a reaction outliving its target is harmless and invisible.
+model CommunityReaction {
+  id         String   @id @default(uuid())
+  userId     String
+  targetType String   @db.VarChar(8)
+  targetId   String
+  emoji      String   @db.VarChar(16)
+  createdAt  DateTime @default(now())
+  user       AppUser  @relation("CommunityReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId, emoji])
+  @@index([targetType, targetId])
+  @@map("community_reactions")
+}
+
+/// One report per (reporter, target): reporting twice does not make a thing twice as bad.
+model CommunityReport {
+  id               String    @id @default(uuid())
+  reporterUserId   String
+  targetType       String    @db.VarChar(8)
+  targetId         String
+  reason           String    @db.VarChar(32)
+  details          String?   @db.VarChar(500)
+  status           String    @default("pending") @db.VarChar(16)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  createdAt        DateTime  @default(now())
+  reporter         AppUser   @relation("CommunityReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_reports")
 }

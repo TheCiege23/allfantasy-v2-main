@@ -266,6 +266,7 @@
 .af3a-mono { font-family: 'JetBrains Mono', monospace; }
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
@@ -765,6 +766,9 @@
 .af-core .af3a-league-body b { display: block; color: var(--text); font-size: 14px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
 .af-core .af3a-league-body em { display: block; margin-top: 3px; color: var(--muted); font: 500 12px/1.4 system-ui, sans-serif; }
 .af-core .af3a-league-arrow { font-size: 24px; color: var(--muted); }
+/* A Survivor league and its Exile Island: one cell, the island under the league, joined by ↕. */
+.af-core .af3a-league-pair { display: grid; gap: 0; min-width: 0; }
+.af-core .af3a-exile-link { margin: -2px 0; font-size: 15px; font-weight: 800; line-height: 1.2; text-align: center; color: var(--accent); }
 .af-core .af3a-league-score { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-top: 8px; font-variant-numeric: tabular-nums; }
 .af-core .af3a-league-score strong { font-size: 17px; color: var(--text); }
 .af-core .af3a-league-score small { color: var(--muted); font-size: 12px; }

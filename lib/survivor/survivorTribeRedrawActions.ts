@@ -39,3 +39,17 @@ export function tribeBelowHalfOfLargest(activeSizes: readonly number[]): boolean
   const min = Math.min(...activeSizes)
   return max > 0 && min * 2 < max
 }
+
+/** Smallest tribe a redraw aims for: a council of two settles on a tie draw every time. */
+export const SURVIVOR_REDRAW_MIN_TRIBE_SIZE = 3
+
+/**
+ * How many tribes a redraw keeps. Never more than today, never fewer than two, and only as many as
+ * can each hold three managers, so a shrinking cast folds into fewer, fuller tribes instead of
+ * being spread thin until one tribe is down to a single manager. Null when even two tribes of two
+ * cannot be formed: that cast belongs in the merge.
+ */
+export function survivorRedrawTribeCount(activeCount: number, currentTribeCount: number): number | null {
+  if (activeCount < 4 || currentTribeCount < 2) return null
+  return Math.max(2, Math.min(currentTribeCount, Math.floor(activeCount / SURVIVOR_REDRAW_MIN_TRIBE_SIZE)))
+}

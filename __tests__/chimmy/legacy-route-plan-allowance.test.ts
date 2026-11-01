@@ -31,11 +31,14 @@ vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'sess
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/ai-protection', () => ({ runAiProtection: async () => null }))
 vi.mock('@/lib/subscription/entitlement-middleware', () => ({ requireFeatureEntitlement: h.requireFeatureEntitlement }))
+vi.mock('@/lib/subscription/FeatureGateService', () => ({ FeatureGateService: class {
+  async evaluateUserFeatureAccess() { return { allowed: false, entitlement: { plans: [] } } }
+} }))
 vi.mock('@/lib/tokens/TokenSpendService', () => ({
   TokenSpendService: vi.fn().mockImplementation(() => ({ refundSpendByLedger: h.refundSpendByLedger })),
 }))
 vi.mock('@/lib/chimmy/planAllowance', () => ({
-  readChimmyPlanAllowance: h.readPlan,
+  readChimmyAnswerAllowance: h.readPlan,
   takeChimmyPlanAllowance: h.takePlan,
   releaseChimmyPlanAllowance: h.releasePlan,
 }))
@@ -87,7 +90,7 @@ describe('/api/chimmy and the AF Pro allowance', () => {
     h.readPlan.mockResolvedValue(LEFT)
     const res = await ask()
     expect(res.status).toBe(200)
-    expect(h.requireFeatureEntitlement).toHaveBeenCalledWith(expect.objectContaining({ forceTokenFallback: false }))
+    expect(h.requireFeatureEntitlement).not.toHaveBeenCalled()
     expect(h.takePlan).toHaveBeenCalledWith({ userId: 'session-user', state: LEFT })
     expect(h.checkDailyCap).not.toHaveBeenCalled()
   })
@@ -108,11 +111,15 @@ describe('/api/chimmy and the AF Pro allowance', () => {
     expect(h.checkDailyCap).not.toHaveBeenCalled()
   })
 
-  it('keeps the hard cap for accounts without the plan', async () => {
-    h.readPlan.mockResolvedValue(null)
+  it('includes a free daily answer before requiring tokens or a subscription', async () => {
+    const free = { ...LEFT, kind: 'free', planName: 'Free Chimmy', limit: 2, used: 0, remaining: 2 }
+    h.readPlan.mockResolvedValue(free)
+    h.takePlan.mockResolvedValue({ ...free, used: 1, remaining: 1 })
     await ask()
-    expect(h.checkDailyCap).toHaveBeenCalledWith('chimmy', 'session-user', 'pro')
-    expect(h.takePlan).not.toHaveBeenCalled()
+    expect(h.requireFeatureEntitlement).not.toHaveBeenCalled()
+    expect(h.checkDailyCap).not.toHaveBeenCalled()
+    expect(h.takePlan).toHaveBeenCalledWith({ userId: 'session-user', state: free })
+    expect(h.runAgentPipeline.mock.calls[0][1].tier).toBe('pro')
   })
 
   it('gives the included answer back when the pipeline fails', async () => {

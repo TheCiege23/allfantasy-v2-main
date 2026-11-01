@@ -13,7 +13,8 @@
  * a 6-team one crowns its champion a week before the season's end and leaves the last week unplayed.
  * `fittedPlayoffStartWeek` places the final in the season's last week instead.
  *
- * The weeks themselves come from `playoffRoundWeeks.ts`, the rule the scorer uses.
+ * The weeks themselves come from `playoffRoundWeeks.ts`, the rule the scorer uses — series mode
+ * included: a best-of-N round lasts N weeks, so `rounds × N` weeks must fit before the season ends.
  */
 
 import { lastWeekOfPlayoffRound } from './playoffRoundWeeks'
@@ -37,6 +38,8 @@ type BracketShape = {
   teams: number | null | undefined
   weeksPerRound?: number | null
   championshipLength?: number | null
+  /** Series mode (lib/playoff-runtime/playoffSeries.ts): each round lasts its best-of length. */
+  seriesLengths?: readonly number[] | null
 }
 
 /** How many weeks the bracket is played over, the final included; 0 when there is no bracket. */
@@ -49,6 +52,7 @@ export function playoffBracketWeeks(input: BracketShape): number {
     weeksPerRound: input.weeksPerRound,
     finalRoundNumber: rounds,
     championshipLength: input.championshipLength,
+    seriesLengths: input.seriesLengths,
   })
 }
 
@@ -74,6 +78,7 @@ export function maxPlayoffTeamsThatFit(input: {
   playoffStartWeek: number
   weeksPerRound?: number | null
   championshipLength?: number | null
+  seriesLengths?: readonly number[] | null
   leagueSize?: number | null
 }): number {
   const size = Math.floor(Number(input.leagueSize))

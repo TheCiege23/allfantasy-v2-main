@@ -16,6 +16,9 @@ import {
   type GuillotineRules,
   type RulesPatchError,
 } from './guillotineRules'
+import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
+import { hasGuillotineAiRecapPlan } from './weeklyRecap'
+import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -38,9 +41,11 @@ export type GuillotineRulesView = {
   seasonWeeks: number
   /** The first chop has happened: the endgame is fixed for the season. */
   endgameLocked: boolean
+  /** The draft has started: best ball lineups are fixed for the season. */
+  bestBallLocked: boolean
   /** The viewer can change the AF Commissioner fields — the same check the save enforces. */
   canEditPaid: boolean
-  /** The viewer's plan includes Chimmy recaps (`guillotine_ai`), so `aiRecapAuto` takes effect. */
+  /** The viewer's plan includes Chimmy recaps (AF Pro or AF Commissioner), so `aiRecapAuto` takes effect. */
   aiRecapAvailable: boolean
 }
 
@@ -52,7 +57,7 @@ export async function viewerCanEditPaidGuillotineRules(userId: string): Promise<
 export async function readGuillotineRules(leagueId: string, userId: string): Promise<GuillotineRulesView | null> {
   const [config, league] = await Promise.all([
     getGuillotineConfig(leagueId),
-    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, guillotineEndgame: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, guillotineEndgame: true, status: true, lifecycleState: true } }),
   ])
   if (!config || !league) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
@@ -60,7 +65,7 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
   const [endgameLocked, canEditPaid, aiRecapAvailable] = await Promise.all([
     hasFirstChopHappened(leagueId).catch(() => false),
     viewerCanEditPaidGuillotineRules(userId),
-    new FeatureGateService().evaluateUserFeatureAccess(userId, 'guillotine_ai').then((a) => Boolean(a?.allowed)).catch(() => false),
+    hasGuillotineAiRecapPlan(userId).catch(() => false),
   ])
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   return {
@@ -74,10 +79,13 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       // `custom_time` has no editor yet; show it as the default rather than an option nobody can pick.
       rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
       aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
+      faabOnChop: readFaabOnChop(settings),
+      bestBall: readGuillotineBestBall(settings),
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
     endgameLocked,
+    bestBallLocked: !canChangeGuillotineBestBall(league),
     canEditPaid,
     aiRecapAvailable,
   }
@@ -108,7 +116,16 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, ...configPatch } = patch
+  if (patch.bestBall !== undefined && patch.bestBall !== current.rules.bestBall && current.bestBallLocked) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'The draft has started, so best ball lineups are fixed for this season.',
+      field: 'bestBall',
+    }
+  }
+
+  const { endgame, aiRecapAuto, faabOnChop, bestBall, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -135,7 +152,9 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
 
   const endgameChanged = endgame !== undefined && endgame !== current.rules.endgame
   const recapChanged = aiRecapAuto !== undefined && aiRecapAuto !== current.rules.aiRecapAuto
-  if (endgameChanged || recapChanged) {
+  const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
+  const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
+  if (endgameChanged || recapChanged || faabChanged || bestBallChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -143,6 +162,8 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
+      if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
+      if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
       await tx.league.update({
         where: { id: leagueId },
         data: {

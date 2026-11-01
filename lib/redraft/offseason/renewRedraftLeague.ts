@@ -11,7 +11,8 @@
  * waiver claims and pending trades carried into a season whose players no longer existed.
  *
  * What one call does, in ONE transaction:
- *   (a) resets every roster — players and lineups cleared, teams and owners kept, FAAB restored;
+ *   (a) resets every roster — players and lineups cleared, teams and owners kept, FAAB restored
+ *       (or carried over, by the commissioner's rule — lib/waiver-wire/faab-rollover.ts);
  *       pending waiver claims and pending trades are CANCELLED (not deleted, so they stay
  *       readable as history);
  *   (b) creates the next `RedraftSeason` (via `ensureNextRedraftSeasonShell`, now writing through
@@ -45,6 +46,7 @@ import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNext
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { logAction } from '@/server/services/auditService'
+import { effectiveFaabRolloverRule, storedFaabRolloverRule, type RenewalFamily } from '@/lib/waiver-wire/faab-rollover'
 
 export type RenewDraftOrderMode = 'random' | 'standings' | 'reverse_standings' | 'manual'
 
@@ -187,6 +189,8 @@ export type RenewRedraftLeagueOptions = {
   manualOrder?: unknown
   /** Test seam for the shuffle; production uses crypto. */
   random?: () => number
+  /** Whose default FAAB rollover applies when none is stored (faabRolloverFamilyForLeague); redraft when omitted. */
+  faabFamily?: RenewalFamily
 }
 
 const ALREADY_RENEWED_MESSAGE = 'This league has already been renewed into its next season.'
@@ -235,6 +239,7 @@ export async function renewRedraftLeague(
       lifecycleState: true,
       lifecycleMetadata: true,
       settings: true,
+      waiverSettings: { select: { waiverEngineConfig: true } },
     },
   })
   if (!league) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League not found.' }
@@ -331,6 +336,9 @@ export async function renewRedraftLeague(
 
   const faab =
     typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
+  // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets
+  // and a keeper / dynasty league (the caller's `faabFamily`) carries its balances over.
+  const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), opts.faabFamily ?? 'redraft')
   const now = new Date()
   const fromState = league.lifecycleState
 
@@ -359,8 +367,10 @@ export async function renewRedraftLeague(
         // (a) the reset. Teams and owners (Roster rows, platformUserId, LeagueTeam) are untouched.
         const rosters = await tx.roster.updateMany({
           where: { leagueId },
-          data: { playerData: {}, faabRemaining: faab },
+          data: { playerData: {}, ...(faabRule === 'reset' ? { faabRemaining: faab } : {}) },
         })
+        // Carry over: each team keeps its balance; only one with none yet is given the budget.
+        if (faabRule === 'carry_over') await tx.roster.updateMany({ where: { leagueId, faabRemaining: null }, data: { faabRemaining: faab } })
         await tx.afRosterLineupAssignment.deleteMany({ where: { leagueId } })
         await tx.afLineupLockState.deleteMany({ where: { leagueId } })
         // A redraft starts every team empty, even when the next-season shell already existed.

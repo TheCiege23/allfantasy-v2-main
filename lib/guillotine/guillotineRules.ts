@@ -11,6 +11,8 @@
  *   statCorrectionHours   nativeGuillotineWeek (how long to wait before a chop is final)
  *   dangerMarginPoints    GuillotineDangerEngine (who shows as "in danger")
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
+ *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
+ *   bestBall              scoringEngine.leagueIsBestBall → each team's best lineup (./guillotineBestBall.ts)
  *
  * components/league/GuillotineFormatTab.tsx used to list ~25 settings, most of which nothing read
  * (AI toggles, "Chop Clock", "FAAB visible"…) and whose save always failed. It was deleted rather
@@ -20,6 +22,7 @@
 import type { GuillotineEndgameFormat } from './endgameRules'
 import type { TiebreakStep } from './types'
 import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
+import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from './faabOnChop'
 
 export type GuillotineRules = {
   teamsPerChop: number
@@ -31,6 +34,13 @@ export type GuillotineRules = {
   rosterReleaseTiming: 'immediate' | 'next_waiver_run'
   /** Chimmy writes the weekly recap after each chop (paid leagues; ./weeklyRecap.ts). Stored in League.settings. */
   aiRecapAuto: boolean
+  /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
+  faabOnChop: FaabOnChop
+  /**
+   * Lineups set themselves: every team is scored on its best possible lineup each week. Stored as
+   * League.settings.best_ball (./guillotineBestBall.ts); changeable only before the draft.
+   */
+  bestBall: boolean
 }
 
 /** League.settings key for `aiRecapAuto`. Absent = on. */
@@ -50,6 +60,9 @@ export const GUILLOTINE_PAID_RULE_FIELDS: ReadonlySet<GuillotineRuleField> = new
   'tiebreakerOrder',
   'statCorrectionHours',
   'dangerMarginPoints',
+  // Owner's call, 2026-10-25: sharing a chopped team's FAAB is an AF Commissioner rule. Gating the
+  // setting rather than the chop means a lapsed plan never changes a league's rules mid-season.
+  'faabOnChop',
 ])
 
 export const ENDGAME_OPTIONS: ReadonlyArray<{ value: GuillotineEndgameFormat; label: string; help: string }> = [
@@ -79,8 +92,10 @@ export const RULE_LIMITS = {
 } as const
 
 /** Values a lapsed plan may always return to, so a league is never stuck on rules it cannot edit. */
-export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints'> = {
+export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints' | 'faabOnChop'> = {
   teamsPerChop: 1,
+  // Anyone may put the FAAB rule back to "keep", so a league left on "split" by a lapsed plan can undo it.
+  faabOnChop: 'keep',
   tiebreakerOrder: ['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'],
   statCorrectionHours: 48,
   dangerMarginPoints: 10,
@@ -91,6 +106,7 @@ export type RulesPatchError = { field: GuillotineRuleField | null; message: stri
 const ENDGAMES = new Set(ENDGAME_OPTIONS.map((o) => o.value))
 const TIEBREAKS = new Set(TIEBREAK_OPTIONS.map((o) => o.value))
 const RELEASES = new Set(RELEASE_OPTIONS.map((o) => o.value))
+const FAAB_ON_CHOP = new Set<string>(FAAB_ON_CHOP_OPTIONS.map((o) => o.value))
 
 function int(raw: unknown): number | null {
   const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw
@@ -163,6 +179,16 @@ export function normalizeGuillotineRulesPatch(
   if ('aiRecapAuto' in r) {
     if (typeof r.aiRecapAuto !== 'boolean') return { ok: false, error: { field: 'aiRecapAuto', message: 'Turn the Chimmy recap on or off.' } }
     out.aiRecapAuto = r.aiRecapAuto
+  }
+  if ('faabOnChop' in r) {
+    if (typeof r.faabOnChop !== 'string' || !FAAB_ON_CHOP.has(r.faabOnChop)) {
+      return { ok: false, error: { field: 'faabOnChop', message: "Pick what happens to a chopped team's FAAB." } }
+    }
+    out.faabOnChop = r.faabOnChop as FaabOnChop
+  }
+  if ('bestBall' in r) {
+    if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }
+    out.bestBall = r.bestBall
   }
   if (Object.keys(out).length === 0) return { ok: false, error: { field: null, message: 'Nothing to save.' } }
   return { ok: true, value: out }

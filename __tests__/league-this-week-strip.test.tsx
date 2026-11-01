@@ -243,7 +243,7 @@ describe('🛑 the Decide home lays out by its OWN width', () => {
     expect(css).toMatch(/@container bdx-home \(max-width: 480px\) \{\s*\.bdx \.bdx-kpis \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/)
     expect(css).toMatch(/@container bdx-home \(max-width: 560px\) \{\s*\.bdx \.bdx-week-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
     expect(css).toMatch(/@container bdx-home \(max-width: 720px\) \{\s*\.bdx \.bdx-support\.bdx-support--pair \{ grid-template-columns: minmax\(0, 1fr\); \}/)
-    expect(await read('components/decide/DecideHome.tsx')).toContain('<div className="bdx bdx-home" data-testid="decide-home">')
+    expect(await read('components/decide/DecideHome.tsx')).toContain('<div className="bdx bdx-home" data-testid="decide-home"') // the redraft deck adds a `data-rd-deck` spread after it
   })
   it('Matchup Center pairs use the class, never an inline grid that out-ranks the collapse', async () => {
     const src = await read('components/decide/MatchupCenter.tsx')

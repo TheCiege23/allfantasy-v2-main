@@ -281,7 +281,7 @@ describe('D.3 — SleeperPoolTable header wiring', () => {
   })
 
   it('focus ring styling is keyboard-accessible (Enter / Space activate the button)', () => {
-    expect(src).toMatch(/focus-visible:ring-cyan-400\/45/)
+    expect(src).toMatch(/focus-visible:ring-white\/30/)
   })
 })
 

@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { tradeDeadlineRefusal } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,9 @@ export async function POST(
   const action = (body.action ?? body.response ?? 'reject').toLowerCase()
 
   if (action === 'accept') {
+    // Acceptance is where the deadline binds a trade (lib/trade-deadline/tradeDeadlineWindow.ts).
+    const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
+    if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
     const draftPickTradingAllowed = await isDraftPickTradingAllowedForLeague(leagueId)
     if (!draftPickTradingAllowed) {
       return NextResponse.json({ error: 'Draft pick trading is disabled in Tournament Mode leagues.' }, { status: 403 })
@@ -62,10 +66,15 @@ export async function POST(
     }
 
     const slotOrder = (proposal.session?.slotOrder as { slot: number; rosterId: string; displayName: string }[]) ?? []
-    const giveEntry = slotOrder.find((e: any) => e.slot === proposal.giveSlot)
-    const receiveEntry = slotOrder.find((e: any) => e.slot === proposal.receiveSlot)
-    const previousGive = giveEntry?.displayName ?? proposal.proposerName ?? 'Team'
-    const previousReceive = receiveEntry?.displayName ?? proposal.receiverName ?? 'Team'
+    /*
+     * 🛑 THE TWO TEAMS TRADING, BY ROSTER — NOT THE ORIGINAL OWNERS OF THE TWO SLOTS. These were read
+     * by `giveSlot`/`receiveSlot`, which is the same team only for a pick that has never moved. Once a
+     * pick had been traded, flipping it again named the new owner after its first owner: the board and
+     * the on-the-clock banner showed a third team's name against the right roster (2026-10-26).
+     */
+    const nameOf = (rosterId: string) => slotOrder.find((e: any) => e.rosterId === rosterId)?.displayName
+    const previousGive = nameOf(proposal.proposerRosterId) ?? proposal.proposerName ?? 'Team'
+    const previousReceive = nameOf(proposal.receiverRosterId) ?? proposal.receiverName ?? 'Team'
     const newTrades = [
       {
         round: proposal.giveRound,

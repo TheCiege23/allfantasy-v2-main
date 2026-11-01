@@ -1,4 +1,5 @@
 import { gameAlertDeadline } from "./gameAlertFreshness"
+import { readBracketAlerts } from "@/lib/playoffs/bracketExperience"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 /**
  * NOTIFICATION OUTBOX RELAY — the delivery half of `notification_outbox`.
@@ -45,6 +46,7 @@ import { resolveNotificationPreferences } from "@/lib/notification-settings/Noti
 import { decidePush } from "./pushGate"
 import { quietHoursSuppression } from "./quietHours"
 import { isCategoryAllowedForLeague } from "./leagueOverrides"
+import { isCategoryHiddenByHomeSection } from '@/lib/core-app/homeSections'
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { pushTagFor } from "./pushTag"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
@@ -140,10 +142,22 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   if (category && row.userId && (row.channel === 'push' || row.channel === 'email')) {
     const profile = await getSettingsProfile(row.userId)
     if (!profile) return { outcome: 'skipped', error: 'profile unavailable' }
+    if (row.eventType === 'bracket_personal_update') {
+      if (typeof metadata.challengeId !== 'string') return { outcome: 'skipped', error: 'bracket scope missing' }
+      const personal = readBracketAlerts(profile.notificationPreferences, metadata.challengeId)
+      const keys = { missing: 'missingPicks', lock: 'locks', result: 'results', rank: 'rankChanges' } as const
+      const kinds = Array.isArray(metadata.bracketAlertKinds) ? metadata.bracketAlertKinds : []
+      if (!personal.enabled || !kinds.length || !kinds.every(k => typeof k === 'string' && k in keys && personal[keys[k as keyof typeof keys]])) return { outcome: 'skipped', error: 'bracket alerts muted' }
+      if (personal.spoilerSafe && metadata.spoilerSafe !== true) return { outcome: 'skipped', error: 'spoiler preference changed' }
+    }
     const prefs = resolveNotificationPreferences(profile.notificationPreferences as NotificationPreferences | null)
     const cat = prefs.categories?.[category]
     if (!prefs.globalEnabled || !cat?.enabled || !isCategoryAllowedForLeague(prefs, category, row.leagueId)) {
       return { outcome: 'skipped', error: 'notifications muted' }
+    }
+    // Hidden from the home in Settings → Home page after this row was queued (lib/core-app/homeSections.ts).
+    if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
+      return { outcome: 'skipped', error: 'home section hidden' }
     }
     const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
     if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }

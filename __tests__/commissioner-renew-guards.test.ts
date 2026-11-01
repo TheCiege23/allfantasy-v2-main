@@ -37,6 +37,7 @@ vi.mock('@/lib/commissioner/CommissionerRatingTrigger', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    zombieLeague: { findUnique: vi.fn().mockResolvedValue(null) },
     league: { findUnique: leagueFindUniqueMock, update: leagueUpdateMock },
     leagueSeason: { findUnique: leagueSeasonFindUniqueMock, upsert: leagueSeasonUpsertMock },
     redraftSeason: { findFirst: redraftSeasonFindFirstMock },

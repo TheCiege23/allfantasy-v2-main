@@ -5,15 +5,20 @@
  *   dynasty rules   → PUT /api/leagues/[id]/dynasty-settings, same keys as DynastySettingsPanel sent
  * Plus the pre-draft NBA/NHL/MLB dynasty format preset control and the create-wizard picker.
  */
-import React from 'react'
+import React, { useLayoutEffect } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const lang = vi.hoisted(() => ({ language: 'en' }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key, language: lang.language }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', () => ({
+  useLanguage: () => ({ t: (key: string) => key, language: lang.language }),
+  // The dynasty-only "What this changes" panel and nav labels read the dictionaries through this.
+  useOptionalLanguage: () => ({ t: (key: string) => key, tInterpolate: (key: string) => key, language: lang.language }),
+}))
 vi.mock('next/navigation', () => ({ useParams: () => ({ leagueId: 'L1' }) }))
 
 import { RosterComplianceSettingsPanel } from '@/app/league/[leagueId]/components/settings/RosterComplianceSettingsPanel'
+import { DynastyFormatPresetSection } from '@/app/league/[leagueId]/components/settings/DynastyFormatPresetSection'
 import { DraftStep } from '@/components/create-league-v2/CreateLeagueWizard'
 import { DEFAULT_V2_STATE, getDefaultDynastySetup, type CreateLeagueV2State } from '@/lib/create-league-v2/state'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
@@ -56,7 +61,9 @@ describe('Taxi squad section — League columns round-trip', () => {
     expect(screen.getAllByText('Taxi squad slots')).toHaveLength(1)
     expect(screen.getAllByText('Allow non-rookies on taxi')).toHaveLength(1)
     expect(screen.getAllByText('Taxi years experience limit')).toHaveLength(1)
-    expect(screen.getAllByText('Taxi deadline (week)')).toHaveLength(1)
+    // The inert League-column deadline is gone; the enforced lock week lives in TaxiRulesPanel.
+    expect(screen.queryByText('Taxi deadline (week)')).toBeNull()
+    expect(screen.queryByTestId('taxi-deadline-week')).toBeNull()
     // …and the advanced reserve block no longer carries any of them.
     expect(within(screen.getByTestId('roster-advanced-reserve-settings')).queryByText(/taxi/i)).toBeNull()
   })
@@ -67,17 +74,14 @@ describe('Taxi squad section — League columns round-trip', () => {
     const section = screen.getByTestId('taxi-squad-settings-section')
     expect((screen.getByTestId('taxi-slots') as HTMLSelectElement).value).toBe('3')
     expect((screen.getByTestId('taxi-years-limit') as HTMLSelectElement).value).toBe('2')
-    expect((screen.getByTestId('taxi-deadline-week') as HTMLSelectElement).value).toBe('4')
 
     fireEvent.change(screen.getByTestId('taxi-slots'), { target: { value: '5' } })
     fireEvent.click(within(section).getAllByRole('switch')[0]!)
     fireEvent.change(screen.getByTestId('taxi-years-limit'), { target: { value: '0' } })
-    fireEvent.change(screen.getByTestId('taxi-deadline-week'), { target: { value: '9' } })
     expect(save.mock.calls.map((c) => c[0])).toEqual([
       { taxiSlots: 5 },
       { taxiAllowNonRookies: true },
       { taxiYearsLimit: 0 },
-      { taxiDeadlineWeek: 9 },
     ])
   })
 
@@ -128,7 +132,8 @@ describe('Taxi squad section — dynasty lock & promotion rules', () => {
     const calls = dynastyFetch({ taxiLockBehavior: 'once_promoted_no_return', taxiInSeasonMoves: true, taxiPostseasonMoves: false, taxiScoringOn: false, taxiPromotionDeadlineWeek: null })
     render(<RosterComplianceSettingsPanel initialData={{ ...base, isDynasty: true }} canEdit debouncedSave={vi.fn()} />)
     const rules = await screen.findByTestId('taxi-dynasty-rules')
-    expect(calls[0]).toMatchObject({ url: '/api/leagues/L1/dynasty-settings', method: 'GET' })
+    // The dynasty config, plus the taxi counts the over-the-limit warning reads (TaxiRulesExplainer).
+    expect(calls.filter((c) => c.method === 'GET').map((c) => c.url).sort()).toEqual(['/api/leagues/L1/dynasty-settings', '/api/leagues/L1/taxi-steals'])
 
     await act(async () => { fireEvent.change(screen.getByTestId('taxi-lock-behavior'), { target: { value: 'free_move' } }) })
     const toggles = within(rules).getAllByRole('switch')
@@ -157,6 +162,39 @@ describe('Taxi squad section — dynasty lock & promotion rules', () => {
 
 describe('Pre-draft dynasty format preset (Roster tab)', () => {
   const formats = { sportFormats: [{ id: 'nba_dynasty_points_taxi', sport: 'NBA' }, { id: 'nba_dynasty_points_deep', sport: 'NBA' }] }
+
+  it('keeps a choice made as settings arrive, before passive effects run', async () => {
+    const saveDynasty = vi.fn(async () => ({ ok: true }))
+    function LoadingPreset({ loaded }: { loaded: boolean }) {
+      useLayoutEffect(() => {
+        if (loaded) {
+          const select = screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement
+          select.value = 'nba_dynasty_points_deep'
+          select.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      }, [loaded])
+      return <DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={loaded ? {
+        presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true },
+      } : null} />
+    }
+    const { rerender } = render(<LoadingPreset loaded={false} />)
+    rerender(<LoadingPreset loaded />)
+    expect((screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement).value).toBe('nba_dynasty_points_deep')
+    await act(async () => { fireEvent.click(screen.getByTestId('dynasty-format-preset-apply')) })
+    expect(saveDynasty).toHaveBeenCalledWith({ sportPresetId: 'nba_dynasty_points_deep' })
+  })
+
+  it('adopts a newly published current preset without retaining a stale choice', () => {
+    const saveDynasty = vi.fn(async () => ({ ok: true }))
+    const { rerender } = render(<DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={{
+      presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true },
+    }} />)
+    fireEvent.change(screen.getByTestId('dynasty-format-preset-select'), { target: { value: 'nba_dynasty_points_deep' } })
+    rerender(<DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={{
+      presets: formats, sportFormatPreset: { current: null, editable: true },
+    }} />)
+    expect((screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement).value).toBe('nba_dynasty_points_taxi')
+  })
 
   it('applies the chosen preset through PUT { sportPresetId }', async () => {
     const calls = dynastyFetch({}, { presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true } })

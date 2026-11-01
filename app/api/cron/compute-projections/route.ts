@@ -29,6 +29,7 @@ import {
 } from '@/lib/af-projections/writeAfProjectionSnapshots'
 import type { ScoringFormat } from '@/lib/af-projections/types'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { projectionSportOrder } from '@/lib/af-projections/projectionSportOrder'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -386,11 +387,15 @@ async function handle(req: NextRequest) {
   const results: Array<{ body: Record<string, unknown>; failed: boolean }> = []
   const deferred: string[] = []
 
-  for (const sport of rotateForFairness(
-    SUPPORTED_SPORTS.map((s) => String(s)),
-    undefined,
-    undefined,
-    SPORT_LEAD_SHARE,
+  // In the NFL season NFL always goes first, so the budget can never run out before it
+  // (`lib/af-projections/projectionSportOrder.ts`); the others keep their rotation behind it.
+  for (const sport of projectionSportOrder(
+    rotateForFairness(
+      SUPPORTED_SPORTS.map((s) => String(s)),
+      undefined,
+      undefined,
+      SPORT_LEAD_SHARE,
+    ),
   )) {
     if (budget.exhausted()) {
       deferred.push(sport)
