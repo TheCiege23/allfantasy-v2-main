@@ -69,7 +69,7 @@ describe('league-gated analyst tools', () => {
 
   it('reads fantasy history only for the session league and forwards season/week filters', async () => {
     await executeChimmyTool('get_fantasy_matchup_history', { leagueId: 'SOMEONE-ELSES', season: 2024, week: 8 }, CTX)
-    expect(h.fantasyHistory).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', season: 2024, week: 8, limit: null })
+    expect(h.fantasyHistory).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', season: 2024, week: 8, limit: null, player: null })
   })
 
   it('hands the letters the engine gave to the route’s collector, and only when there is one', async () => {

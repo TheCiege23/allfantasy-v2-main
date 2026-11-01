@@ -118,7 +118,7 @@ describe('other-sport league start/sit', () => {
     const out = await buildOtherSportStartSit(inputs)
     expect(out.ready).toBe(true)
     expect(out.text).toContain('Lean Home Star')
-    expect(out.text).toContain('Soccer season finalization is not certified')
+    expect(out.text).toContain('Soccer comparison uses the verified current gameweek')
   })
 
   it('does not reuse a past league season for an active start/sit call', async () => {
