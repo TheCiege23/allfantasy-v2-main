@@ -444,7 +444,8 @@ export function ProposeTradeFlow(props: {
 type M = (typeof proposeTradeFlowMessages)['en']
 
 function Avatar({ url, name }: { url: string | null; name: string }) {
-  const initials = name.split(/\s+/).map((w) => w.charAt(0)).join('').slice(0, 2).toUpperCase()
+  // Letters only, so "Fourth & Long" reads FL, not F&.
+  const initials = name.split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '').charAt(0)).join('').slice(0, 2).toUpperCase()
   return url
     ? <img className="af-ptf-avatar" src={url} alt="" />
     : <span className="af-ptf-avatar" aria-hidden>{initials}</span>
