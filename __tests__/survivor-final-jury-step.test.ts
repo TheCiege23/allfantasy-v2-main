@@ -129,18 +129,16 @@ describe('final jury step: Chimmy explains it', () => {
 })
 
 // ── The server step ────────────────────────────────────────────────────────────────────────────────
+// The elimination itself is the Tribal code path (eliminateCastawayInTransaction), mocked here; its
+// two outcomes run for real in survivor-final-jury-step-outcome.test.ts.
 
 const h = vi.hoisted(() => {
   const state = { applied: false, settings: {} as Record<string, unknown>, phase: 'merge' }
   const tx = {
     survivorAuditEntry: { findFirst: vi.fn(async () => (state.applied ? { id: 'a' } : null)), create: vi.fn(async (args: { data: { action: string } }) => { if (args.data.action === 'final_jury_step_applied') state.applied = true; return {} }) },
-    survivorPlayer: { updateMany: vi.fn(async () => ({ count: 1 })), count: vi.fn(async () => 3) },
-    survivorJuryMember: { upsert: vi.fn(async () => ({})) },
-    survivorChatChannel: { findMany: vi.fn(async () => [{ id: 'merge', memberUserIds: ['u1', 'u2', 'u3', 'u4'] }]), update: vi.fn(async () => ({})) },
-    survivorGameState: { updateMany: vi.fn(async () => ({ count: 1 })) },
   }
   const db = {
-    league: { findUnique: vi.fn(async () => ({ settings: state.settings, survivorFinal3: true, language: 'en' })) },
+    league: { findUnique: vi.fn(async () => ({ settings: state.settings, survivorFinal3: true, language: 'en', platform: 'manual' })) },
     survivorGameState: { findUnique: vi.fn(async () => ({ phase: state.phase })) },
     survivorPlayer: { findMany: vi.fn(async () => ['1', '2', '3', '4'].map((n) => ({ userId: `u${n}`, displayName: `P${n}`, redraftRosterId: `r${n}` }))) },
     survivorAuditEntry: { findFirst: vi.fn(async () => (state.applied ? { id: 'a' } : null)) },
@@ -151,13 +149,21 @@ const h = vi.hoisted(() => {
       { rosterId: 'r3', submission: { answer: { value: 52 } }, submittedAt: new Date(t(3)) },
     ]) },
     survivorChatChannel: { findFirst: vi.fn(async () => ({ id: 'league-ch' })) },
+    roster: { findFirst: vi.fn(async () => ({ redraftRosterId: 'season-r4' })) },
   }
-  return { state, tx, db, chat: vi.fn(async () => ({})) }
+  return {
+    state, tx, db, chat: vi.fn(async () => ({})),
+    eliminate: vi.fn(async (_tx: unknown, input: { userId: string; relatedEntityId: string }) => ({ ok: true, alreadyResolved: false, outcome: 'removed_to_waivers', eliminatedUserId: input.userId, eliminatedRosterId: 'r4', removedFromChats: 1, pendingRelease: false, pendingExile: false })),
+    after: vi.fn(async () => {}),
+    voidTrades: vi.fn(async () => 0),
+  }
 })
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: h.db }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: async (_l: string, fn: (tx: typeof h.tx) => unknown) => fn(h.tx) }))
 vi.mock('@/lib/survivor/survivorChatBridge', () => ({ createSurvivorChatMessage: h.chat }))
+vi.mock('@/lib/survivor/survivorEliminationService', () => ({ eliminateCastawayInTransaction: h.eliminate, afterCastawayEliminated: h.after }))
+vi.mock('@/lib/redraft/voidPendingTradesForElimination', () => ({ voidPendingRedraftTradesForRoster: h.voidTrades }))
 
 import { applyFinalJuryStepIfDue, finalJuryStepHoldsCouncil } from '@/lib/survivor/survivorFinalJuryStepService'
 
@@ -169,23 +175,32 @@ describe('applyFinalJuryStepIfDue', () => {
     h.state.settings = { finalJuryStepEnabled: true, finalJuryStepCount: 1, finalistCount: 3 }
   })
 
-  it('is a no-op while the setting is off', async () => {
+  it('is a no-op while the setting is off, or when the league has no jury', async () => {
     h.state.settings = {}
     expect(await applyFinalJuryStepIfDue('L1', 17)).toBe('off')
-    expect(h.tx.survivorJuryMember.upsert).not.toHaveBeenCalled()
+    h.state.settings = { finalJuryStepEnabled: true, finalJuryStepCount: 1, finalistCount: 3, juryEnabled: false }
+    expect(await applyFinalJuryStepIfDue('L1', 17)).toBe('off')
+    expect(h.eliminate).not.toHaveBeenCalled()
   })
 
-  it('sends the worst finisher to the jury once, names only them, and a re-run changes nothing', async () => {
+  it('eliminates the worst finisher through the Tribal elimination path once, voids their trades, names only them', async () => {
     expect(await applyFinalJuryStepIfDue('L1', 17)).toBe('applied')
-    expect(h.tx.survivorJuryMember.upsert).toHaveBeenCalledTimes(1)
-    expect(h.tx.survivorJuryMember.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { leagueId: 'L1', rosterId: 'r4', votedOutWeek: 17 } }))
-    expect(h.tx.survivorPlayer.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L1', userId: 'u4', playerState: 'active' }, data: expect.objectContaining({ isJuryMember: true, canAccessJuryChat: true, playerState: 'eliminated' }) }))
-    expect(h.tx.survivorChatChannel.update).toHaveBeenCalledWith({ where: { id: 'merge' }, data: { memberUserIds: ['u1', 'u2', 'u3'] } })
+    expect(h.eliminate).toHaveBeenCalledTimes(1)
+    expect(h.eliminate).toHaveBeenCalledWith(h.tx, expect.objectContaining({ leagueId: 'L1', userId: 'u4', week: 17, phase: 'merge', relatedEntityId: 'final_jury_step:c-final:r4', relatedEntityType: 'final_jury_step' }))
+    expect(h.after).toHaveBeenCalledTimes(1)
+    expect(h.voidTrades.mock.calls.map((c) => (c as unknown[])[1])).toEqual(['r4', 'season-r4'])
     const line = (h.chat.mock.calls[0] as unknown as [unknown, { data: { content: string } }])[1].data.content
     expect(line).toBe('After the last immunity, P4 joins the jury. Everyone else goes to the finale.')
     expect(line).not.toContain('P1') // the immunity winner is never named
     expect(await applyFinalJuryStepIfDue('L1', 17)).toBe('done')
-    expect(h.tx.survivorJuryMember.upsert).toHaveBeenCalledTimes(1)
+    expect(h.eliminate).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed elimination rolls the whole step back: no gate written, so the next tick retries', async () => {
+    h.eliminate.mockResolvedValueOnce({ ok: false, status: 409, code: 'roster_missing', error: 'x' } as never)
+    await expect(applyFinalJuryStepIfDue('L1', 17)).rejects.toThrow('roster_missing')
+    expect(h.state.applied).toBe(false)
+    expect(await applyFinalJuryStepIfDue('L1', 17)).toBe('applied')
   })
 
   it('waits for the final immunity, and holds planned Tribals at the step size', async () => {

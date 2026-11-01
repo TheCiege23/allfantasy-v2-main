@@ -5,6 +5,10 @@ import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 import { finaleCopyLang, readSurvivorFinaleSettings } from './survivorFinaleSettings'
 import { CHALLENGE_BUILDER_TYPE, readChallengeBuilderConfig, readSubmission } from './survivorChallengeBuilderModel'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { afterCastawayEliminated, eliminateCastawayInTransaction, type EliminationOutcome } from './survivorEliminationService'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { createSurvivorChatMessage } from './survivorChatBridge'
 import { finalJuryStepAnnouncement, finalJuryStepSkipsCouncil, planFinalJuryStep, type FinalJuryStepChallenge, type FinalJuryStepPlan } from './survivorFinalJuryStep'
 
@@ -51,14 +55,17 @@ async function loadFinalImmunityChallenge(leagueId: string, week: number): Promi
 
 async function loadStepFacts(leagueId: string) {
   const [league, game, active, applied] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorFinal3: true, language: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorFinal3: true, language: true, platform: true } }),
     prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true } }),
     prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, displayName: true, redraftRosterId: true } }),
     prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: FINAL_JURY_STEP_AUDIT_ACTION }, select: { id: true } }),
   ])
-  const settings = readSurvivorFinaleSettings(league?.settings)
+  const finale = readSurvivorFinaleSettings(league?.settings)
+  // No jury in this league (or not hosted here, so no roster to release): the step does not apply.
+  const juryEnabled = normalizeSurvivorFoundationSettings((league?.settings && typeof league.settings === 'object' ? league.settings : {}) as Record<string, unknown>).juryEnabled
+  const settings = juryEnabled && isNativePlatform(league?.platform) ? finale : { ...finale, finalJuryStepEnabled: false }
   const { finalistCount } = readSurvivorLateSeasonSettings(league?.settings, { survivorFinal3: league?.survivorFinal3 })
-  return { league, settings, finalistCount, merged: Boolean(game && !PRE_MERGE.has(game.phase)), active, applied: Boolean(applied) }
+  return { league, settings, finalistCount, merged: Boolean(game && !PRE_MERGE.has(game.phase)), phase: game?.phase ?? null, active, applied: Boolean(applied) }
 }
 
 /** For the runner's elimination branch: should this planned council be skipped for the jury step? */
@@ -80,38 +87,50 @@ export async function applyFinalJuryStepIfDue(leagueId: string, week: number, op
   if (plan.status !== 'apply') return plan.status
   if (!plan.cutRosterIds.length) return 'not_due'
 
-  const joined = await withSurvivorSetupTransaction(leagueId, async (tx) => {
+  const phase = f.phase ?? 'merge'
+  const lang = finaleCopyLang(f.league?.language)
+  // Every cut castaway goes through the league's normal elimination outcome — the SAME code a Tribal
+  // vote-out runs (eliminateCastawayInTransaction): roster released to waivers, or Exile Island when
+  // it is on; cast state; the jury after the merge; chat membership; audit. All in one transaction
+  // under the setup lock, so the step lands whole or not at all (a failure retries next tick).
+  const committed = await withSurvivorSetupTransaction(leagueId, async (tx) => {
     // Re-checked under the lock: two ticks (or a tick and the commissioner) never both apply it.
     if (await tx.survivorAuditEntry.findFirst({ where: { leagueId, action: FINAL_JURY_STEP_AUDIT_ACTION }, select: { id: true } })) return null
     const names: string[] = []
-    const userIds: string[] = []
+    const results: EliminationOutcome[] = []
     for (const rosterId of plan.cutRosterIds) {
       const player = byRoster.get(rosterId)
       if (!player) continue
-      const updated = await tx.survivorPlayer.updateMany({
-        where: { leagueId, userId: player.userId, playerState: 'active' },
-        data: { playerState: 'eliminated', eliminatedWeek: week, isJuryMember: true, canAccessJuryChat: true, canAccessTribeChat: false, canAccessMergeChat: false },
+      const result = await eliminateCastawayInTransaction(tx, {
+        leagueId, userId: player.userId, week, phase, settingsJson: f.league?.settings,
+        relatedEntityId: `final_jury_step:${plan.challengeId}:${rosterId}`, relatedEntityType: 'final_jury_step', actorUserId: opts.actorUserId ?? null,
+        notice: lang === 'es'
+          ? { title: 'Una persona más al jurado', body: `Semana ${week}: tras la última inmunidad, un mánager se une al jurado.`, deepLinkPath: `/survivor/${leagueId}/jury` }
+          : { title: 'One more to the jury', body: `Week ${week}: after the last immunity, a manager joins the jury.`, deepLinkPath: `/survivor/${leagueId}/jury` },
       })
-      if (updated.count === 0) continue
-      await tx.survivorJuryMember.upsert({ where: { leagueId_rosterId: { leagueId, rosterId } }, create: { leagueId, rosterId, votedOutWeek: week }, update: {} })
-      await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'jury', action: 'jury_joined', targetUserId: player.userId,
-        relatedEntityId: rosterId, relatedEntityType: 'roster', data: { via: 'final_jury_step', challengeId: plan.challengeId }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+      if (!result.ok) throw new Error(`final jury step: ${result.code}`)
+      results.push(result)
       names.push(player.displayName)
-      userIds.push(player.userId)
     }
-    const channels = await tx.survivorChatChannel.findMany({ where: { leagueId, channelType: { in: ['tribe', 'merge', 'alliance'] } }, select: { id: true, memberUserIds: true } })
-    for (const ch of channels) if (ch.memberUserIds.some((u) => userIds.includes(u))) {
-      await tx.survivorChatChannel.update({ where: { id: ch.id }, data: { memberUserIds: ch.memberUserIds.filter((u) => !userIds.includes(u)) } })
-    }
-    const activeCount = await tx.survivorPlayer.count({ where: { leagueId, playerState: 'active' } })
-    await tx.survivorGameState.updateMany({ where: { leagueId }, data: { activePlayerCount: activeCount } })
     await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'jury', action: FINAL_JURY_STEP_AUDIT_ACTION, actorUserId: opts.actorUserId ?? null,
       relatedEntityId: plan.challengeId, relatedEntityType: 'challenge',
       // The immune castaway is kept for the commissioner's audit only; the public line never names them.
       data: { cutRosterIds: plan.cutRosterIds, immuneRosterId: plan.immuneRosterId, ranking: plan.ranking }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
-    return names
+    return { names, results }
   })
-  if (!joined) return 'done'
+  if (!committed) return 'done'
+  const joined = committed.names
+  // After the commit, as after a Tribal: legacy tribe-chat rows, and every pending trade touching the
+  // roster is voided (main roster and its season roster). Best-effort; never undoes the step.
+  for (const result of committed.results) {
+    await afterCastawayEliminated(leagueId, result).catch(() => {})
+    const rosterId = result.ok ? result.eliminatedRosterId : null
+    if (!rosterId) continue
+    const seasonRosterId = (await prisma.roster.findFirst({ where: { leagueId, id: rosterId }, select: { redraftRosterId: true } }).catch(() => null))?.redraftRosterId ?? null
+    for (const id of [rosterId, seasonRosterId].filter((x): x is string => Boolean(x))) {
+      await voidPendingRedraftTradesForRoster(leagueId, id, { actorUserId: opts.actorUserId ?? null }).catch(() => {})
+    }
+  }
   // The announcement never holds up the step.
   await (async () => {
     const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
