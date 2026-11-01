@@ -16,8 +16,10 @@ const lang = vi.hoisted(() => ({ language: 'en' }))
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
   // The real catalog: CustomizeLeagueLink reads its label through `t`.
   const { translations: dict } = await import('@/lib/i18n/translations')
+  const { interpolateTemplate } = await import('@/lib/i18n/interpolate')
   const t = (k: string) => dict[lang.language]?.[k] ?? dict.en[k] ?? k
-  return { useOptionalLanguage: () => ({ language: lang.language, t }) }
+  const tInterpolate = (k: string, v: Record<string, string | number> = {}) => interpolateTemplate(t(k), v)
+  return { useOptionalLanguage: () => ({ language: lang.language, t, tInterpolate }) }
 })
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ prefetch() {}, push() {}, replace() {}, refresh() {} }),
