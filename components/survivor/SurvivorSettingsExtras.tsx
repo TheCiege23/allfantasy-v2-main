@@ -7,7 +7,16 @@ import type { SurvivorSettingsForm, SurvivorSettingsKey } from '@/lib/survivor/s
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from '@/lib/survivor/survivorRewardModel'
 import { SURVIVOR_HOUSE_RULES_MAX, SURVIVOR_WEEKLY_PRIZE_LIMITS, survivorTieBreakPositions } from '@/lib/survivor/survivorWeeklyPrizes'
 import { REAL_GAME_PRIZE_LIMITS } from '@/lib/survivor/survivorRealGameChallengeLogic'
-import { CHALLENGE_FAAB_WEEKLY_CAP_RANGE } from '@/lib/survivor/survivorChallengeBuilderModel'
+import {
+  CHALLENGE_FAAB_WEEKLY_CAP_RANGE,
+  CHALLENGE_PRIZE_TYPES,
+  defaultPrizePhaseRules,
+  SURVIVOR_PRIZE_PHASES,
+  TRIBE_ONLY_PRIZE_TYPES,
+  type ChallengePrizeType,
+  type SurvivorPrizePhase,
+  type SurvivorPrizePhaseRules,
+} from '@/lib/survivor/survivorChallengeBuilderModel'
 import { SvkField, SvkSegmented, SvkToggle } from './core/SurvivorKit'
 
 /**
@@ -60,6 +69,15 @@ export const survivorSettingsExtrasMessages = defineMessages({
     realAmountPoints: (max: number): string => `Points per winner (1–${max})`,
     faabCap: 'Weekly FAAB cap for challenge prizes',
     faabCapHint: 'The most challenge FAAB one winner can collect in a week, across all challenges. $40 by default.',
+    postMerge: 'Also pay in post-merge tribe weeks',
+    postMergeHint: 'Off: tribe prizes stop at the merge. On: they are paid in any post-merge week where tribes really compete (a surprise two-tribe week), to the tribe that won that week.',
+    thieves: 'Thieves cannot steal from each other',
+    thievesHint: 'A manager who holds or has used a steal cannot be the target of a steal that same week. Off by default.',
+    phaseRules: 'Prizes allowed in each phase',
+    phaseRulesHint: 'Untick a prize to stop challenges and hand-granted rewards using it in that phase. Two rules always hold: tribe prizes (FAAB from the other tribes) only before the merge, and immunity only as an individual prize.',
+    phase: (p: string): string => ({ pre_merge: 'Before the merge', post_merge: 'After the merge', finale: 'Finale' } as Record<string, string>)[p] ?? p,
+    prizeType: (t: string): string => ({ score_bonus: 'Points', faab_grant: 'FAAB', faab_transfer: 'FAAB from the other tribes', tribemate_points: 'Points on a tribemate', free_trade_token: 'Free trade', steal_blocker: 'Steal blocker', steal: 'Steal', advantage: 'Advantage', immunity: 'Immunity (individual)' } as Record<string, string>)[t] ?? t,
+    preMergeOnly: 'before the merge only',
   },
   es: {
     rulesHeading: 'Reglas de la liga',
@@ -105,6 +123,15 @@ export const survivorSettingsExtrasMessages = defineMessages({
     realAmountPoints: (max: number): string => `Puntos por ganador (1–${max})`,
     faabCap: 'Tope semanal de FAAB en premios de retos',
     faabCapHint: 'Lo máximo en FAAB de retos que un ganador puede cobrar en una semana, sumando todos los retos. $40 por defecto.',
+    postMerge: 'Pagar también en semanas de tribus tras la fusión',
+    postMergeHint: 'Desactivado: los premios de tribu terminan en la fusión. Activado: se pagan en cualquier semana posterior a la fusión en que compitan tribus (una semana sorpresa de dos tribus), a la tribu que ganó esa semana.',
+    thieves: 'Los ladrones no se roban entre sí',
+    thievesHint: 'Quien tiene o ya usó un robo no puede ser objetivo de otro robo esa misma semana. Desactivado por defecto.',
+    phaseRules: 'Premios permitidos en cada fase',
+    phaseRulesHint: 'Desmarca un premio para que los retos y las recompensas manuales no lo usen en esa fase. Dos reglas siempre se cumplen: los premios de tribu (FAAB de las otras tribus) solo antes de la fusión, y la inmunidad solo como premio individual.',
+    phase: (p: string): string => ({ pre_merge: 'Antes de la fusión', post_merge: 'Después de la fusión', finale: 'Final' } as Record<string, string>)[p] ?? p,
+    prizeType: (t: string): string => ({ score_bonus: 'Puntos', faab_grant: 'FAAB', faab_transfer: 'FAAB de las otras tribus', tribemate_points: 'Puntos para un compañero', free_trade_token: 'Intercambio libre', steal_blocker: 'Bloqueador de robos', steal: 'Robo', advantage: 'Ventaja', immunity: 'Inmunidad (individual)' } as Record<string, string>)[t] ?? t,
+    preMergeOnly: 'solo antes de la fusión',
   },
 })
 
@@ -171,7 +198,44 @@ export function SurvivorPrizesSection({ draft, set, disabled, lockNote, icon, sp
         {[...new Set([...positions, ...(draft.tribeTieBreakPosition !== 'none' ? [draft.tribeTieBreakPosition] : [])])].map(p => <option key={p} value={p}>{p}</option>)}
       </select>
     </SvkField>
+    <SvkField title={m.postMerge} hint={m.postMergeHint}>
+      {lockNote('payInTribeWeeksAfterMerge')}
+      <SvkToggle label={m.postMerge} checked={draft.payInTribeWeeksAfterMerge === true} onChange={v => set('payInTribeWeeksAfterMerge', v)} disabled={disabled('payInTribeWeeksAfterMerge')} testId="survivor-settings-prizes-post-merge" />
+    </SvkField>
+    <SvkField title={m.thieves} hint={m.thievesHint}>
+      {lockNote('thievesCannotStealFromEachOther')}
+      <SvkToggle label={m.thieves} checked={draft.thievesCannotStealFromEachOther === true} onChange={v => set('thievesCannotStealFromEachOther', v)} disabled={disabled('thievesCannotStealFromEachOther')} testId="survivor-settings-thieves" />
+    </SvkField>
+    <SvkField title={m.phaseRules} hint={m.phaseRulesHint}>
+      {lockNote('prizePhaseRules')}
+      <PrizePhaseRulesGrid rules={draft.prizePhaseRules ?? defaultPrizePhaseRules()} disabled={disabled('prizePhaseRules')} onChange={rules => set('prizePhaseRules', rules)} />
+    </SvkField>
   </section>
+}
+
+/** A checkbox per prize type per phase. Structural rules show as fixed (tribe FAAB pre-merge only). */
+function PrizePhaseRulesGrid({ rules, disabled, onChange }: { rules: SurvivorPrizePhaseRules; disabled: boolean; onChange: (next: SurvivorPrizePhaseRules) => void }) {
+  const m = useMessages(survivorSettingsExtrasMessages)
+  const toggle = (phase: SurvivorPrizePhase, type: ChallengePrizeType, on: boolean) => {
+    const current = new Set(rules[phase])
+    if (on) current.add(type)
+    else current.delete(type)
+    onChange({ ...rules, [phase]: CHALLENGE_PRIZE_TYPES.filter(t => current.has(t)) })
+  }
+  return <div data-testid="survivor-settings-prize-phases" style={{ display: 'grid', gap: 10 }}>
+    {SURVIVOR_PRIZE_PHASES.map(phase => <fieldset key={phase} style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend className="svk-lbl">{m.phase(phase)}</legend>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
+        {CHALLENGE_PRIZE_TYPES.map(type => {
+          const structural = phase !== 'pre_merge' && TRIBE_ONLY_PRIZE_TYPES.includes(type)
+          return <label key={type} style={{ fontSize: 13, display: 'inline-flex', gap: 6, alignItems: 'center', opacity: structural ? 0.55 : 1 }}>
+            <input type="checkbox" checked={!structural && rules[phase].includes(type)} disabled={disabled || structural} onChange={e => toggle(phase, type, e.target.checked)} data-testid={`prize-phase-${phase}-${type}`} />
+            {m.prizeType(type)}{structural ? ` (${m.preMergeOnly})` : ''}
+          </label>
+        })}
+      </div>
+    </fieldset>)}
+  </div>
 }
 
 export function SurvivorJuryExtras({ draft, set, disabled, lockNote }: ExtraProps) {

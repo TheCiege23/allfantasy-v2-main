@@ -41,6 +41,8 @@ export type SurvivorRulesContext = {
   finaleWindows?: SurvivorFinaleWindows | null
   /** Challenge settings: the weekly FAAB cap per winner and the real-game challenge setup. */
   challenges?: { faabWeeklyCap: number; realGame: { enabled: boolean; perWeek: number; prizeText: string } } | null
+  /** Reward house rules: "thieves cannot steal from each other" (off by default). */
+  rewardRules?: { thievesCannotStealFromEachOther: boolean } | null
 }
 
 function windowWhen(iso: string | null | undefined): string | null {
@@ -169,7 +171,9 @@ function prizesAnswer(ctx: SurvivorRulesContext): string {
     if (p.topScorerReward === 'score_boost') lines.push(es ? `• El máximo anotador de esa tribu gana +${p.topScorerAmount} puntos en la semana siguiente.` : `• That tribe's top scorer wins +${p.topScorerAmount} points on the next week's score.`)
     if (p.topScorerReward === 'advantage') lines.push(es ? `• El máximo anotador de esa tribu gana una ventaja (${p.topScorerPowerType.replace(/_/g, ' ')}).` : `• That tribe's top scorer wins an advantage (${p.topScorerPowerType.replace(/_/g, ' ')}).`)
     if (p.tribeTieBreakPosition !== 'none') lines.push(es ? `• Si dos tribus empatan en puntos, gana la tribu con el ${p.tribeTieBreakPosition} titular que más puntuó.` : `• If two tribes tie on points, the tribe whose starting ${p.tribeTieBreakPosition} scored more wins the tie.`)
+    if (p.payInTribeWeeksAfterMerge && weeklyPrizesActive(p)) lines.push(es ? '• Después de la fusión, estos premios también se pagan en cualquier semana en que compitan tribus (por ejemplo, una semana sorpresa de dos tribus).' : '• After the merge, these prizes are also paid in any week where tribes compete (for example a surprise two-tribe week).')
   }
+  if (ctx.rewardRules?.thievesCannotStealFromEachOther) lines.push(es ? '• Los ladrones no se roban entre sí: quien tiene o ya usó un robo esa semana no puede ser objetivo de otro robo.' : '• Thieves cannot steal from each other: a manager who holds or has used a steal that week cannot be the target of another steal.')
   lines.push(es
     ? '• Las recompensas de los retos pueden incluir puntos (a favor o en contra), FAAB tomado de otra tribu, puntos para un compañero, un premio para la semana siguiente, un intercambio libre o un robo que un bloqueador cancela. Pregúntame "¿qué gané?" para ver los tuyos.'
     : '• Challenge rewards can include points (up or down), FAAB taken from another tribe, points you place on a tribemate, a prize that pays next week, a free trade, or a steal that a blocker cancels. Ask me "what did I win?" to see yours.')

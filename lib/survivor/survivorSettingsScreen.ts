@@ -20,13 +20,15 @@ import {
   SURVIVOR_HOUSE_RULES_MAX,
   SURVIVOR_TOP_SCORER_REWARDS,
   SURVIVOR_WEEKLY_PRIZE_DEFAULTS,
-  validateSurvivorWeeklyPrizes,
+  survivorWeeklyPrizeErrors,
   weeklyPrizesActive,
   type SurvivorTopScorerReward,
 } from './survivorWeeklyPrizes'
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from './survivorRewardModel'
 import { CHALLENGE_FAAB_WEEKLY_CAP_RANGE, DEFAULT_CHALLENGE_FAAB_WEEKLY_CAP } from './survivorChallengeBuilderModel'
 import { REAL_GAME_ALLOWED_PRIZES, REAL_GAME_PRIZE_LIMITS, type RealGamePrizeType } from './survivorRealGameChallengeLogic'
+import { defaultPrizePhaseRules, validatePrizePhaseRules, type SurvivorPrizePhaseRules } from './survivorChallengeBuilderModel'
+import { seasonPreviewMessages, settingsErrorMessages, type SeasonPreviewCopy, type SettingsError, type SettingsErrorCode, type SettingsErrorCopy } from './survivorSettingsScreenCopy'
 
 export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
 /** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
@@ -93,6 +95,15 @@ export interface SurvivorSettingsForm {
    * resetting a commissioner's pick to 'auto'. Stored as league.settings.survivorIslandScene.
    */
   islandScene?: SurvivorIslandScenePreference
+  /**
+   * Rewards. Defaults keep today's behaviour: weekly tribe prizes before the merge only
+   * (League.settings.survivorWeeklyPrizes.payInTribeWeeksAfterMerge), steals unrestricted
+   * (League.settings.survivorThievesCannotStealFromEachOther), and every prize type allowed per phase
+   * except the tribe FAAB transfer after the merge (League.settings.survivorPrizePhaseRules).
+   */
+  payInTribeWeeksAfterMerge: boolean
+  thievesCannotStealFromEachOther: boolean
+  prizePhaseRules: SurvivorPrizePhaseRules
 }
 
 export const SURVIVOR_CHALLENGE_SETTING_DEFAULTS = {
@@ -130,6 +141,8 @@ export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey
   'winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType',
   // Challenge settings apply to the next challenge opened; a running one keeps its own prize.
   'realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount', 'challengeFaabWeeklyCap',
+  // Reward rules apply to the next reward handed out; nothing already paid changes.
+  'payInTribeWeeksAfterMerge', 'thievesCannotStealFromEachOther', 'prizePhaseRules',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -189,50 +202,62 @@ export function effectiveMergeWeek(form: SurvivorSettingsForm, ctx: SurvivorSett
   return ctx.firstWeek + Math.max(0, ctx.managers - form.mergeActivePlayerCount)
 }
 
-export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext): string[] {
-  const errors: string[] = []
+/** The form's problems as messages (English by default; pass `messagesFor(settingsErrorMessages, lang)`). */
+export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext, t: SettingsErrorCopy = settingsErrorMessages.en): string[] {
+  return settingsFormErrors(form, ctx, t).map(e => e.message)
+}
+
+/** The form's problems with a stable code each, in the reader's language (`settingsErrorMessages`). */
+export function settingsFormErrors(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
+  const errors: SettingsError[] = []
+  const push = (code: SettingsErrorCode, message: string) => errors.push({ code, message })
   const finale = ctx.lastWeek
   const merge = effectiveMergeWeek(form, ctx)
   const inRange = (n: number, [min, max]: readonly [number, number]) => Number.isInteger(n) && n >= min && n <= max
-  if (!inRange(form.tribeCount, SURVIVOR_SETTINGS_LIMITS.tribeCount)) errors.push('Choose between 2 and 5 tribes.')
+  if (!inRange(form.tribeCount, SURVIVOR_SETTINGS_LIMITS.tribeCount)) push('tribeCount', t.tribeCount)
   else {
     const slotError = validateTribeSlots(defaultTribeSlots(ctx.managers, form.tribeCount), ctx.managers, form.tribeCount)
-    if (slotError) errors.push(slotError)
+    if (slotError) push('tribeSlots', t.tribeSlots(slotError))
   }
-  if (!inRange(form.idolCount, SURVIVOR_SETTINGS_LIMITS.idolCount)) errors.push('Choose 6, 7 or 8 idols.')
-  if (!(SURVIVOR_VOTE_DAYS as readonly string[]).includes(form.voteDay)) errors.push('Pick a day for votes to close.')
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.voteTime)) errors.push('Pick a time for votes to close.')
-  if (form.exileEnabled && (!Number.isInteger(form.exileReturnTokens) || form.exileReturnTokens < 1)) errors.push('Exile Island needs at least one token to return.')
-  if (form.exileBossMode === 'fixed' && (form.exileBossFixedScore == null || !Number.isFinite(form.exileBossFixedScore) || form.exileBossFixedScore < 0 || form.exileBossFixedScore > 10000)) errors.push('A fixed boss score must be a number from 0 to 10000.')
-  if (form.exileBossMode === 'topN' && !inRange(form.exileBossTopN, SURVIVOR_SETTINGS_LIMITS.exileBossTopN)) errors.push('The top-N boss averages between 1 and 20 scores.')
-  if (form.finalistCount !== 2 && form.finalistCount !== 3) errors.push('Choose 2 or 3 finalists.')
-  if (form.mergeTrigger === 'week' && (!Number.isInteger(form.mergeWeek) || form.mergeWeek <= ctx.firstWeek)) errors.push('The merge must come after the first week.')
-  if (form.mergeTrigger === 'active_player_count' && (!Number.isInteger(form.mergeActivePlayerCount) || form.mergeActivePlayerCount <= form.finalistCount || form.mergeActivePlayerCount >= ctx.managers)) errors.push(`Merge with between ${form.finalistCount + 1} and ${ctx.managers - 1} managers left.`)
-  if (merge >= finale) errors.push('The merge must come before the finale.')
-  if (form.islandScene !== undefined && !isSurvivorIslandScenePreference(form.islandScene)) errors.push('Pick one of the island scenes, or follow the season.')
+  if (!inRange(form.idolCount, SURVIVOR_SETTINGS_LIMITS.idolCount)) push('idolCount', t.idolCount)
+  if (!(SURVIVOR_VOTE_DAYS as readonly string[]).includes(form.voteDay)) push('voteDay', t.voteDay)
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.voteTime)) push('voteTime', t.voteTime)
+  if (form.exileEnabled && (!Number.isInteger(form.exileReturnTokens) || form.exileReturnTokens < 1)) push('exileTokens', t.exileTokens)
+  if (form.exileBossMode === 'fixed' && (form.exileBossFixedScore == null || !Number.isFinite(form.exileBossFixedScore) || form.exileBossFixedScore < 0 || form.exileBossFixedScore > 10000)) push('bossFixed', t.bossFixed)
+  if (form.exileBossMode === 'topN' && !inRange(form.exileBossTopN, SURVIVOR_SETTINGS_LIMITS.exileBossTopN)) push('bossTopN', t.bossTopN)
+  if (form.finalistCount !== 2 && form.finalistCount !== 3) push('finalists', t.finalists)
+  if (form.mergeTrigger === 'week' && (!Number.isInteger(form.mergeWeek) || form.mergeWeek <= ctx.firstWeek)) push('mergeAfterFirst', t.mergeAfterFirst)
+  if (form.mergeTrigger === 'active_player_count' && (!Number.isInteger(form.mergeActivePlayerCount) || form.mergeActivePlayerCount <= form.finalistCount || form.mergeActivePlayerCount >= ctx.managers)) push('mergeCount', t.mergeCount(form.finalistCount + 1, ctx.managers - 1))
+  if (merge >= finale) push('mergeBeforeFinale', t.mergeBeforeFinale)
+  if (form.islandScene !== undefined && !isSurvivorIslandScenePreference(form.islandScene)) push('islandScene', t.islandScene)
   if (form.swapEnabled) {
-    if (!Number.isInteger(form.swapWeek) || form.swapWeek <= ctx.firstWeek) errors.push('The swap must come after the first Tribal Council.')
-    else if (form.swapWeek >= merge) errors.push('The swap must come before the merge.')
+    if (!Number.isInteger(form.swapWeek) || form.swapWeek <= ctx.firstWeek) push('swapAfterFirst', t.swapAfterFirst)
+    else if (form.swapWeek >= merge) push('swapBeforeMerge', t.swapBeforeMerge)
   }
-  if ((form.houseRules ?? '').length > SURVIVOR_HOUSE_RULES_MAX) errors.push(`House rules can be at most ${SURVIVOR_HOUSE_RULES_MAX} characters.`)
-  errors.push(...validateSurvivorWeeklyPrizes(weeklyPrizesFromForm(form), ctx.sport))
-  errors.push(...validateChallengeSettings(form))
+  if ((form.houseRules ?? '').length > SURVIVOR_HOUSE_RULES_MAX) push('houseRules', t.houseRules(SURVIVOR_HOUSE_RULES_MAX))
+  errors.push(...survivorWeeklyPrizeErrors(weeklyPrizesFromForm(form), ctx.sport, t))
+  errors.push(...challengeSettingsErrors(form, t))
+  if (form.prizePhaseRules !== undefined && !validatePrizePhaseRules(form.prizePhaseRules, 'en').ok) push('phaseRules', t.phaseRules)
   return errors
 }
 
 /** The challenge part of the form. Tolerates an older form without these fields (the defaults). */
-export function validateChallengeSettings(form: Partial<SurvivorSettingsForm>): string[] {
+export function validateChallengeSettings(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): string[] {
+  return challengeSettingsErrors(form, t).map(e => e.message)
+}
+
+export function challengeSettingsErrors(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
   const d = SURVIVOR_CHALLENGE_SETTING_DEFAULTS
-  const errors: string[] = []
+  const errors: SettingsError[] = []
   const type = form.realGamePrizeType ?? d.realGamePrizeType
   const amount = form.realGamePrizeAmount ?? d.realGamePrizeAmount
   const perWeek = form.realGamePerWeek ?? d.realGamePerWeek
   const cap = form.challengeFaabWeeklyCap ?? d.challengeFaabWeeklyCap
-  if (perWeek !== 1 && perWeek !== 2) errors.push('Real-game challenges run one or two a week.')
-  if (!(REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(type)) errors.push('Choose FAAB, points or no prize for real-game challenges.')
-  if (type === 'faab' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.faab)) errors.push(`A real-game FAAB prize is $1 to $${REAL_GAME_PRIZE_LIMITS.faab}.`)
-  if (type === 'score_bonus' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.score_bonus)) errors.push(`A real-game points prize is 1 to ${REAL_GAME_PRIZE_LIMITS.score_bonus} points.`)
-  if (!Number.isInteger(cap) || cap < CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0] || cap > CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]) errors.push(`The weekly challenge FAAB cap is $${CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0]} to $${CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]}.`)
+  if (perWeek !== 1 && perWeek !== 2) errors.push({ code: 'realPerWeek', message: t.realPerWeek })
+  if (!(REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(type)) errors.push({ code: 'realPrize', message: t.realPrize })
+  if (type === 'faab' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.faab)) errors.push({ code: 'realFaab', message: t.realFaab(REAL_GAME_PRIZE_LIMITS.faab) })
+  if (type === 'score_bonus' && (!Number.isInteger(amount) || amount < 1 || amount > REAL_GAME_PRIZE_LIMITS.score_bonus)) errors.push({ code: 'realPoints', message: t.realPoints(REAL_GAME_PRIZE_LIMITS.score_bonus) })
+  if (!Number.isInteger(cap) || cap < CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0] || cap > CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]) errors.push({ code: 'faabCap', message: t.faabCap(CHALLENGE_FAAB_WEEKLY_CAP_RANGE[0], CHALLENGE_FAAB_WEEKLY_CAP_RANGE[1]) })
   return errors
 }
 
@@ -258,6 +283,7 @@ export function weeklyPrizesFromForm(form: SurvivorSettingsForm) {
     topScorerAmount: reward === 'none' || reward === 'advantage' ? 0 : form.topScorerAmount ?? 0,
     topScorerPowerType: form.topScorerPowerType ?? d.topScorerPowerType,
     tribeTieBreakPosition: form.tribeTieBreakPosition ?? d.tribeTieBreakPosition,
+    payInTribeWeeksAfterMerge: form.payInTribeWeeksAfterMerge ?? d.payInTribeWeeksAfterMerge,
   }
 }
 
@@ -270,28 +296,31 @@ export interface SeasonPreview {
   errors: string[]
 }
 
-const FORMATION_LABEL: Record<SurvivorTribeFormation, string> = { random: 'random', commissioner_manual: 'by the commissioner', draft_pattern: 'snake by draft' }
-
-function describeBoss(form: SurvivorSettingsForm): string {
+function describeBoss(form: SurvivorSettingsForm, t: SeasonPreviewCopy): string {
   switch (form.exileBossMode) {
-    case 'fixed': return `a fixed ${form.exileBossFixedScore ?? 0}`
-    case 'topN': return `the top-${form.exileBossTopN} average`
-    case 'chimmy_roster': return "Chimmy's locked roster"
-    default: return 'the league median'
+    case 'fixed': return t.bossFixed(form.exileBossFixedScore ?? 0)
+    case 'topN': return t.bossTopN(form.exileBossTopN)
+    case 'chimmy_roster': return t.bossChimmy
+    default: return t.bossMedian
   }
 }
 
-function describePrizes(form: SurvivorSettingsForm): string {
+function describePrizes(form: SurvivorSettingsForm, t: SeasonPreviewCopy): string {
   const parts: string[] = []
-  if (form.winningTribeFaabPerPlayer > 0) parts.push(`$${form.winningTribeFaabPerPlayer} FAAB per player`)
-  if (form.topScorerReward === 'faab') parts.push(`$${form.topScorerAmount} more for its top scorer`)
-  if (form.topScorerReward === 'score_boost') parts.push(`+${form.topScorerAmount} points next week for its top scorer`)
-  if (form.topScorerReward === 'advantage') parts.push('an advantage for its top scorer')
-  return `Weekly tribe prize: ${parts.join(', ')}`
+  if (form.winningTribeFaabPerPlayer > 0) parts.push(t.prizeFaab(form.winningTribeFaabPerPlayer))
+  if (form.topScorerReward === 'faab') parts.push(t.prizeTopFaab(form.topScorerAmount))
+  if (form.topScorerReward === 'score_boost') parts.push(t.prizeTopBoost(form.topScorerAmount))
+  if (form.topScorerReward === 'advantage') parts.push(t.prizeTopAdvantage)
+  if (form.payInTribeWeeksAfterMerge) parts.push(t.prizePostMerge)
+  return t.prizeLine(parts.join(', '))
 }
 
-/** The right-hand preview: a strip of every week, a plain-English summary and the validation. */
-export function buildSeasonPreview(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext): SeasonPreview {
+/**
+ * The right-hand preview: a strip of every week, a plain-language summary and the validation. The
+ * summary speaks the reader's language: pass `messagesFor(seasonPreviewMessages, language)`
+ * (English by default).
+ */
+export function buildSeasonPreview(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext, t: SeasonPreviewCopy = seasonPreviewMessages.en, errorCopy: SettingsErrorCopy = settingsErrorMessages.en): SeasonPreview {
   const merge = effectiveMergeWeek(form, ctx)
   const weeks: SeasonPreview['weeks'] = []
   for (let week = ctx.firstWeek; week <= ctx.lastWeek; week++) {
@@ -306,22 +335,19 @@ export function buildSeasonPreview(form: SurvivorSettingsForm, ctx: SurvivorSett
   const remainingAtMerge = Math.max(form.finalistCount, ctx.managers - Math.max(0, merge - ctx.firstWeek))
   const jurors = Math.max(0, remainingAtMerge - form.finalistCount)
   const summary = [
-    `${form.tribeCount} tribes of ${perTribe}, formed ${FORMATION_LABEL[form.tribeFormation]}`,
-    `${form.idolCount} hidden idols, revealed to holders by DM after the draft`,
-    form.exileEnabled
-      ? `Exile Island on: ${form.exileReturnTokens} ${form.exileReturnTokens === 1 ? 'token' : 'tokens'} to return, boss score is ${describeBoss(form)}`
-      : 'Exile Island off: voted-out managers are out for good',
+    t.tribes(form.tribeCount, perTribe, t.formation(form.tribeFormation)),
+    t.idols(form.idolCount),
+    form.exileEnabled ? t.exileOn(form.exileReturnTokens, describeBoss(form, t)) : t.exileOff,
     form.mergeTrigger === 'week'
-      ? form.swapEnabled ? `Swap in week ${form.swapWeek}, merge in week ${form.mergeWeek}` : `No swap, merge in week ${form.mergeWeek}`
-      : form.swapEnabled ? `Swap in week ${form.swapWeek}, merge at ${form.mergeActivePlayerCount} managers left` : `No swap, merge at ${form.mergeActivePlayerCount} managers left`,
-    form.juryEnabled !== false
-      ? `${jurors} ${jurors === 1 ? 'juror picks' : 'jurors pick'} from ${form.finalistCount} finalists in week ${ctx.lastWeek}`
-      : `No jury: ${form.finalistCount} finalists in week ${ctx.lastWeek}`,
-    ...(weeklyPrizesActive(weeklyPrizesFromForm(form)) ? [describePrizes(form)] : []),
+      ? form.swapEnabled ? t.swapMergeWeek(form.swapWeek, form.mergeWeek) : t.mergeWeek(form.mergeWeek)
+      : form.swapEnabled ? t.swapMergeCount(form.swapWeek, form.mergeActivePlayerCount) : t.mergeCount(form.mergeActivePlayerCount),
+    form.juryEnabled !== false ? t.jury(jurors, form.finalistCount, ctx.lastWeek) : t.noJury(form.finalistCount, ctx.lastWeek),
+    ...(weeklyPrizesActive(weeklyPrizesFromForm(form)) ? [describePrizes(form, t)] : []),
+    ...(form.thievesCannotStealFromEachOther ? [t.thieves] : []),
   ]
   const weekCount = ctx.lastWeek - ctx.firstWeek + 1
-  const note = `One manager goes home each week. With ${ctx.managers} managers and ${weekCount} weeks there is room for ${form.finalistCount} finalists${form.exileEnabled ? ' plus Exile returns' : ''}.`
-  return { weeks, summary, note, errors: validateSettingsForm(form, ctx) }
+  const note = t.note(ctx.managers, weekCount, form.finalistCount, form.exileEnabled)
+  return { weeks, summary, note, errors: validateSettingsForm(form, ctx, errorCopy) }
 }
 
 /** Shape check for a posted form (types only; ranges are validateSettingsForm's job). */
@@ -399,6 +425,11 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     realGamePrizeType: (REAL_GAME_ALLOWED_PRIZES as readonly string[]).includes(String(r.realGamePrizeType)) ? (r.realGamePrizeType as RealGamePrizeType) : SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeType,
     realGamePrizeAmount: r.realGamePrizeAmount == null ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : num('realGamePrizeAmount'),
     challengeFaabWeeklyCap: r.challengeFaabWeeklyCap == null ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.challengeFaabWeeklyCap : num('challengeFaabWeeklyCap'),
+    // Reward rules: a form from before them keeps today's behaviour. A bad phase-rules shape is
+    // kept as sent, so validateSettingsForm reports it rather than silently resetting it.
+    payInTribeWeeksAfterMerge: bool('payInTribeWeeksAfterMerge') ?? false,
+    thievesCannotStealFromEachOther: bool('thievesCannotStealFromEachOther') ?? false,
+    prizePhaseRules: r.prizePhaseRules == null ? defaultPrizePhaseRules() : (r.prizePhaseRules as SurvivorPrizePhaseRules),
   }
   const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount', 'winningTribeFaabPerPlayer', 'topScorerAmount', 'realGamePrizeAmount', 'challengeFaabWeeklyCap']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null
