@@ -142,7 +142,7 @@ export async function assignSurvivorTribes(
   // returning castaways into separate tribes. Only the random formation splits.
   const governance = readSurvivorGovernanceSettings(snapshot)
   const experience = (opts.mode ?? 'random') === 'random' && governance.tribeSplit === 'rooks_vs_vets'
-    ? await loadCastawayExperienceFlags(leagueId, participants.map((p) => p.userId), governance.experienceOverrides, db)
+    ? await loadCastawayExperienceFlags(leagueId, participants.map((p) => p.userId), governance.experienceOverrides, db, { crossLeague: governance.experienceCrossLeague })
     : null
   const assignment = computeTribeAssignment({
     experience,

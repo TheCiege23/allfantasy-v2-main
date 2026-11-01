@@ -125,7 +125,8 @@ export type SettingsNavTabId =
   | 'native_devy'
   | 'native_c2c'
 
-type NavEntry = { id: SettingsNavTabId; label: string; icon: LucideIcon }
+/** `labelKey`: a dictionary key (English and Spanish) that wins over the fixed English `label`. */
+type NavEntry = { id: SettingsNavTabId; label: string; icon: LucideIcon; labelKey?: string }
 
 /** One row in the nav. `key` is unique even where two rows open the same tab (Format & roster / Taxi squad). */
 export type SettingsNavItem = {
@@ -239,7 +240,7 @@ const SURVIVOR_NAV: NavEntry[] = [
   { id: 'survivor_merge', label: 'Merge & Jury', icon: Waves },
   { id: 'survivor_chat', label: 'Chat & Permissions', icon: MessageSquare },
   { id: 'survivor_ai', label: 'League Guide', icon: Bot },
-  { id: 'survivor_governance', label: 'Rules & Conduct', icon: Scale },
+  { id: 'survivor_governance', label: 'Rules & Conduct', icon: Scale, labelKey: 'settingsNav.survivor.governance' },
   { id: 'survivor_advanced', label: 'Advanced Rules', icon: SlidersHorizontal },
 ]
 
@@ -255,7 +256,7 @@ export type SettingsNavOptions = {
   dynasty?: boolean
 }
 
-const asItems = (entries: NavEntry[]): SettingsNavItem[] => entries.map((e) => ({ key: e.id, id: e.id, label: e.label, icon: e.icon }))
+const asItems = (entries: NavEntry[]): SettingsNavItem[] => entries.map((e) => ({ key: e.id, id: e.id, label: e.label, icon: e.icon, ...(e.labelKey ? { labelKey: e.labelKey } : {}) }))
 const base = (id: SettingsNavTabId): SettingsNavItem => {
   const e = BASE_NAV.find((n) => n.id === id)!
   return { key: e.id, id: e.id, label: e.label, icon: e.icon }

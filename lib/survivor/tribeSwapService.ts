@@ -27,6 +27,8 @@ import { createSurvivorChatMessage } from './survivorChatBridge'
 import { isNewTribeKey, planTribeSwap } from './survivorSwapPlanner'
 import { swapAnnouncementCopy } from './survivorGovernanceCopy'
 import type { SurvivorScheduledSwap } from './survivorGovernanceSettings'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { castawayNameWithTribeEmoji, tribeEmojiFor } from './survivorTribeEmoji'
 
 const HOST = { senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true, contentType: 'host_announcement' } as const
 
@@ -299,25 +301,37 @@ export async function castMergeNameVote(leagueId: string, userId: string, name: 
 
 // ---------------------------------------------------------------- view
 
-export interface ShuffleTribeMeta { id: string; name: string; crestUrl: string | null; primary: string; secondary: string }
+export interface ShuffleTribeMeta {
+  id: string
+  name: string
+  crestUrl: string | null
+  primary: string
+  secondary: string
+  /** "Tribe emoji in names" on: the tribe's emoji, else null. Display only; the stored name is unchanged. */
+  emoji?: string | null
+}
 
 export async function getTribeShuffleView(leagueId: string, viewerUserId: string, now = new Date()) {
   await revealDueTribeSwap(leagueId, { now }).catch((error) => {
     console.error('[survivor-swap] reveal failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
   })
   const [league, swap, tribes, players, rosters, ctx] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, survivorSwapWeek: true, survivorMergeWeek: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, survivorSwapWeek: true, survivorMergeWeek: true, settings: true } }),
     prisma.survivorTribeSwap.findFirst({ where: { leagueId }, orderBy: { executedAt: 'desc' } }),
-    prisma.survivorTribe.findMany({ where: { leagueId }, orderBy: { slotIndex: 'asc' }, select: { id: true, name: true, colorHex: true, logoUrl: true, isMerged: true, isActive: true } }),
+    prisma.survivorTribe.findMany({ where: { leagueId }, orderBy: { slotIndex: 'asc' }, select: { id: true, name: true, colorHex: true, logoUrl: true, isMerged: true, isActive: true, catalogId: true } }),
     prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, displayName: true, redraftRosterId: true, playerState: true } }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
     mergeContext(leagueId),
   ])
   const sport = league?.sport ?? 'NFL'
+  // "Tribe emoji in names" (display only): each column's tribe carries its emoji, so a castaway shows the
+  // emoji of the column they stand in — the revealed tribe after the swap, never a sealed one.
+  const emojiOn = readSurvivorGovernanceSettings(league?.settings).tribeEmojiInNames
   const meta = (t: (typeof tribes)[number]): ShuffleTribeMeta => {
     const entry = catalog.find((c) => c.name.toLowerCase() === t.name.toLowerCase())
     const colors = buffColorsForTribe({ name: t.name, colorHex: t.colorHex ?? entry?.primary ?? null }, catalog)
-    return { id: t.id, name: t.name, crestUrl: t.logoUrl ?? (entry ? tribeCrestUrl(entry.id, sport) : null), ...colors }
+    const emoji = emojiOn ? tribeEmojiFor({ name: t.name, catalogId: t.catalogId ?? entry?.id ?? null }) : null
+    return { id: t.id, name: castawayNameWithTribeEmoji(t.name, emoji, emojiOn), crestUrl: t.logoUrl ?? (entry ? tribeCrestUrl(entry.id, sport) : null), ...colors, emoji }
   }
   const names: Record<string, string> = {}
   for (const r of rosters) {

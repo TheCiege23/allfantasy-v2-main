@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { TribeShuffleView } from '@/lib/survivor/tribeSwapService'
 import { swapHeadline } from '@/lib/survivor/tribeSwapHeadline'
+import { castawayNameWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
 import { TribeBuff } from './TribeBuff'
 import { LateAvatar, usePrefersReducedMotion } from './lateUi'
 import './late-season.css'
@@ -36,7 +37,7 @@ function TribeColumn({ tribe, members, subtitle, names, phase, statusFor }: {
             <li key={`${phase}-${rosterId}`} className={`svl-member ${phase === 'after' ? 'svl-card-pop' : ''}`} style={phase === 'after' ? { animationDelay: `${index * 0.12}s` } : undefined}>
               <LateAvatar id={rosterId} name={names[rosterId] ?? 'Manager'} ring={tribe.primary} />
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{names[rosterId] ?? 'Manager'}</p>
+                <p style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{castawayNameWithTribeEmoji(names[rosterId] ?? 'Manager', tribe.emoji, Boolean(tribe.emoji))}</p>
                 <p style={{ fontSize: 14, color: status.gold ? '#f1c95b' : 'var(--svl-t3)' }}>{status.text}</p>
               </div>
               <span

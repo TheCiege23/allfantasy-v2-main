@@ -67,7 +67,7 @@ export async function setSurvivorCastawayExperience(
 
 /** The Hub's governance tab: settings and locks, each castaway's strikes and experience, swap history (no assignments). */
 export async function loadSurvivorGovernanceView(leagueId: string, now = new Date()) {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorSwapWeek: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, survivorSwapWeek: true, sport: true } })
   const settings = readSurvivorGovernanceSettings(league?.settings)
   const ctx = await governanceContext(leagueId, league?.settings, league?.survivorSwapWeek ?? null)
   const [players, strikes, swaps] = await Promise.all([
@@ -75,10 +75,12 @@ export async function loadSurvivorGovernanceView(leagueId: string, now = new Dat
     listSurvivorConductStrikes(leagueId),
     prisma.survivorTribeSwap.findMany({ where: { leagueId }, orderBy: { executedAt: 'desc' }, take: 10, select: { id: true, week: true, swapType: true, revealAt: true, revealedAt: true } }),
   ])
-  const experience = await loadCastawayExperience(leagueId, players.map((p) => p.userId), settings.experienceOverrides)
+  const experience = await loadCastawayExperience(leagueId, players.map((p) => p.userId), settings.experienceOverrides, undefined, { crossLeague: settings.experienceCrossLeague })
   const foundation = normalizeSurvivorFoundationSettings(rec(league?.settings))
   return {
     settings,
+    /** For the cross-tribe window presets (NFL has the original league's two windows). */
+    sport: league?.sport ?? null,
     locked: lockedGovernanceKeys(ctx),
     context: ctx,
     tradeWindow: survivorTradeWindowStatus(settings, { tribalDay: foundation.tribalCouncilDay, tribalTime: foundation.tribalCouncilTime, now }, ctx.merged),

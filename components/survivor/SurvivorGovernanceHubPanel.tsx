@@ -5,18 +5,19 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { survivorGovernanceMessages } from '@/lib/survivor/survivorGovernanceUiMessages'
 import type { SurvivorGovernanceSettings, SurvivorSwapMode } from '@/lib/survivor/survivorGovernanceSettings'
+import { survivorTradeWindowText, type TradeWindowJson } from '@/lib/survivor/survivorTradeWindowText'
 
 type Castaway = {
   userId: string
   displayName: string
   playerState: string
   strikes: { id: string; reason: string; issuedAt: string }[]
-  experience: { experience: 'rookie' | 'veteran'; source: 'manual' | 'history' | 'default' }
+  experience: { experience: 'rookie' | 'veteran'; source: 'manual' | 'history' | 'platform' | 'default' }
 }
 type View = {
   settings: SurvivorGovernanceSettings
   castaways: Castaway[]
-  tradeWindow?: { crossTribeOpen: boolean; crossTribeClosesAt: string | null; frozen: boolean } | null
+  tradeWindow?: TradeWindowJson | null
   context?: { merged?: boolean }
 }
 
@@ -98,7 +99,7 @@ export function SurvivorGovernanceHubPanel({ leagueId }: { leagueId: string }) {
       <p className="text-xs text-white/55">{m.hubSubtitle}</p>
       {view.settings.tradeRulesEnabled && tw && (
         <p className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-sm text-white/80" data-testid="survivor-governance-trade-window">
-          {tw.frozen ? m.tradeFrozen : tw.crossTribeClosesAt ? m.tradeWindowOpen(when(tw.crossTribeClosesAt)) : tw.crossTribeOpen ? m.crossAllowed : m.tradeWindowClosed}
+          {survivorTradeWindowText(m, tw, when)}
         </p>
       )}
       <div className="overflow-x-auto">
@@ -122,7 +123,8 @@ export function SurvivorGovernanceHubPanel({ leagueId }: { leagueId: string }) {
                     value={c.experience.source === 'manual' ? c.experience.experience : ''}
                     onChange={(e) => void act({ action: 'set_experience', userId: c.userId, experience: e.target.value || null })}
                   >
-                    <option value="">{m.expAuto(c.experience.source === 'manual' ? 'rookie' : c.experience.experience)}</option>
+                    {/* A platform veteran shows only that: never which other leagues. */}
+                    <option value="">{c.experience.source === 'platform' ? m.expPlatform : m.expAuto(c.experience.source === 'manual' ? 'rookie' : c.experience.experience)}</option>
                     <option value="rookie">{m.expRookie}</option>
                     <option value="veteran">{m.expVeteran}</option>
                   </select>

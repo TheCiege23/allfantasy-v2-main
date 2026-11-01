@@ -38,6 +38,8 @@ import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorCha
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
+import { useMessages } from '@/components/i18n/useMessages'
+import { survivorGovernanceMessages } from '@/lib/survivor/survivorGovernanceUiMessages'
 import { SurvivorSideGamesHubPanel } from '@/components/survivor/SurvivorSideGamesHubPanel'
 import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
@@ -127,6 +129,8 @@ type DashboardPayload = {
 
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const searchParams = useSearchParams()
+  // The Rules & conduct tab is bilingual (EN/ES); the other tabs keep their fixed English labels.
+  const governanceM = useMessages(survivorGovernanceMessages)
   const created = searchParams?.get('created') === '1'
   // A to-do or alert link names the tab to open (?tab=tribes, ?tab=operations, ?tab=tribal).
   const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams?.get('tab'))?.id ?? 'overview')
@@ -347,7 +351,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   active={tab === t.id}
                   onClick={() => setTab(t.id)}
                   icon={t.icon}
-                  label={t.label}
+                  label={t.id === 'governance' ? governanceM.hubTitle : t.label}
                   testId={`survivor-commissioner-tab-${t.id}`}
                 />
               ))}
@@ -622,7 +626,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'governance' && (
-            <WarRoomPanel title="Rules & conduct" subtitle="Conduct strikes, Rooks vs Vets and tribe swaps.">
+            <WarRoomPanel title={governanceM.hubTitle} subtitle={governanceM.hubPanelSubtitle}>
               <SurvivorGovernanceHubPanel leagueId={leagueId} />
             </WarRoomPanel>
           )}
