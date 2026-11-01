@@ -300,6 +300,33 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
 .af-core .sv-rule dt { font: 700 12px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
 .af-core .sv-rule dd { margin: 4px 0 0; font-size: 14px; color: var(--text); }
 
+/* ── Island control: scene picker and inline rules (components/core-app/survivor/SurvivorIslandSettings.tsx) ── */
+
+.af-core .sv-scene-hint { margin: -4px 0 12px; }
+.af-core .sv-scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.af-core .sv-scene {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); background: var(--surface2); color: var(--text); font: inherit;
+}
+.af-core .sv-scene:hover { border-color: rgba(240, 163, 94, 0.55); }
+.af-core .sv-scene[aria-checked='true'] { border-color: #f0a35e; box-shadow: 0 0 0 1px #f0a35e inset; }
+.af-core .sv-scene:disabled { cursor: progress; opacity: 0.7; }
+.af-core .sv-scene-art { display: block; aspect-ratio: 16 / 9; border-radius: 8px; background-size: cover; background-position: center; background-color: #10131c; }
+.af-core .sv-scene[data-scene='auto'] .sv-scene-art { filter: saturate(0.6); }
+.af-core .sv-scene-name { font-size: 13px; font-weight: 600; padding: 0 2px 2px; }
+.af-core .sv-rule-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.af-core .sv-rule-field { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); }
+.af-core .sv-rule-field label { font: 700 12px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-rule-field label small { font: 600 11px Inter, sans-serif; letter-spacing: 0; text-transform: none; color: var(--faint); }
+.af-core .sv-rule-field select, .af-core .sv-rule-field input[type='number'] {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.af-core .sv-rule-field input[type='checkbox'] { width: 18px; height: 18px; accent-color: #f0a35e; }
+.af-core .sv-rule-field[data-locked='true'] { opacity: 0.6; }
+.af-core .sv-note[data-tone='error'] { color: #f08a72; }
+.af-core .sv-panel button.sv-btn { cursor: pointer; font: inherit; font-weight: 600; font-size: 14px; }
+.af-core .sv-panel button.sv-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+
 /*
  * ── Survivor host lines in league chat (ChatMessageList, lib/core-app/survivorChatCard.ts) ──────
  * A bridge-mirrored, Chimmy-marked row is an island card: torch avatar, parchment border, a

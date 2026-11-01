@@ -12,6 +12,9 @@
  *    assignment or a locked tribe plan;
  *  - the idol draw stays where IdolSetup put it: the idol count is saved through
  *    saveSurvivorIdolConfig, keeping its mode, picks and hide flag; the drawn types are never read.
+ *  - the island banner scene (settings.survivorIslandScene) is optional in the form, editable all
+ *    season, and must be one of SURVIVOR_ISLAND_SCENES or 'auto' (400 otherwise). Island control on
+ *    the /core Commissioner screen saves it, and its inline rule edits, through this same POST.
  *  - house rules → League.settings.survivorHouseRules; weekly tribe prizes →
  *    League.settings.survivorWeeklyPrizes; harsh token loss → League.survivorExileHarshTokenLoss;
  *    merge naming → League.settings.mergeNamingMode (the late-season reader); co-commissioner mode,
@@ -44,8 +47,10 @@ import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/l
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
+  isSurvivorIslandScenePreference,
   lockedChanges,
   parseSettingsForm,
+  readSurvivorIslandScene,
   validateSettingsForm,
   type SurvivorSettingsContext,
   type SurvivorSettingsForm,
@@ -132,6 +137,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
       spectatorPageEnabled: foundation.spectatorPageEnabled,
+      islandScene: readSurvivorIslandScene(settings),
       coCommissionerMode: foundation.coCommissionerMode,
       mergeNamingMode: stored.mergeNamingMode,
       juryEnabled: foundation.juryEnabled,
@@ -170,6 +176,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId, userId, access } = auth
   const viewer = { canSeeDraw: access.decisions.canSeeHiddenIdolAssignments }
   const body = rec(await req.json().catch(() => null))
+  const sceneRaw = rec(body.form).islandScene
+  if (sceneRaw !== undefined && !isSurvivorIslandScenePreference(sceneRaw)) {
+    return NextResponse.json({ error: 'Unknown island scene.' }, { status: 400 })
+  }
   const next = parseSettingsForm(body.form)
   if (!next) return NextResponse.json({ error: 'Send the whole settings form.' }, { status: 400 })
 
@@ -229,6 +239,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('exileBossMode')) latePatch.exileBossMode = next.exileBossMode
     if (has('exileBossFixedScore') || (has('exileBossMode') && next.exileBossMode === 'fixed')) latePatch.exileBossFixedScore = next.exileBossFixedScore
     if (has('exileBossTopN')) latePatch.exileBossTopN = next.exileBossTopN
+    // The island banner's scene (lib/core-app/survivorIsland.ts islandView reads it from the summary).
+    if (has('islandScene') && next.islandScene) latePatch.survivorIslandScene = next.islandScene
     if (has('mergeNamingMode')) latePatch.mergeNamingMode = next.mergeNamingMode
     // League-rule extras that live beside the foundation settings, not in them.
     if (has('houseRules')) latePatch[SURVIVOR_HOUSE_RULES_KEY] = next.houseRules.trim()

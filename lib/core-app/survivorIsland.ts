@@ -4,8 +4,9 @@
  * tested without rendering.
  */
 import type { SurvivorSummary } from '@/components/survivor/types'
+import { SURVIVOR_ISLAND_SCENES, type SurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
 
-export type IslandScene = 'beach' | 'tribal' | 'merge' | 'finale' | 'exile' | 'jungle' | 'volcano' | 'lagoon'
+export type IslandScene = SurvivorIslandScene
 
 export type IslandMoment =
   | { kind: 'pre_draft' }
@@ -33,7 +34,18 @@ export type IslandView = {
 const isOpenCouncil = (c: SurvivorSummary['council']) => Boolean(c && !c.closedAt && !c.isRevealed)
 const isReading = (c: SurvivorSummary['council']) => Boolean(c && c.isRevealed && c.revealComplete === false)
 
+/**
+ * The banner for this moment. The commissioner can pin a scene on Island control
+ * (summary.config.islandScene); a pinned scene replaces the art only, so the headline and the clock
+ * still follow the season. 'auto', a missing value or an unknown one follows the season too.
+ */
 export function islandView(s: SurvivorSummary | null | undefined): IslandView {
+  const v = seasonView(s)
+  const pinned = s?.config?.islandScene
+  return pinned && (SURVIVOR_ISLAND_SCENES as readonly string[]).includes(pinned) ? { ...v, scene: pinned as IslandScene } : v
+}
+
+function seasonView(s: SurvivorSummary | null | undefined): IslandView {
   if (!s) return { scene: 'beach', moment: { kind: 'camp' }, clock: null, week: null, sport: null, myTribe: null, castawaysLeft: 0, castawaysTotal: 0 }
   const tribeName = (id: string | null | undefined) => (id ? s.tribes.find((t) => t.id === id)?.name ?? null : null)
   const names = s.rosterDisplayNames ?? {}

@@ -48,6 +48,7 @@ import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { readSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
 import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
 import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
 import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
@@ -345,6 +346,8 @@ export async function GET(
       minigameFrequency: config.minigameFrequency,
       seasonThemeLabel: config.seasonThemeLabel,
       visualThemeId: config.visualThemeId,
+      // The commissioner's island banner scene ('auto' follows the season), from league settings.
+      islandScene: readSurvivorIslandScene(leagueSettingsJson),
       challengesSystemRun: config.challengesSystemRun,
       regularSeasonEndWeek: config.regularSeasonEndWeek,
       faqSeededAt: config.faqSeededAt,
