@@ -1,0 +1,83 @@
+/* Redraft Live scores (2026-11-01, design board LiveScores.dc.html): the dark "now" strip, the games
+ * strip with how many of your starters are in each game and its "Live now" filter, and your matchup as
+ * a scoreboard card with a LIVE chip and a win-chance bar.
+ *
+ * EVERY RULE IS SCOPED TO `.af-core.af-shell[data-format=redraft]` (the stamp AfCoreShell puts on a native
+ * redraft league, lib/core-app/coreShellRedraftIdentity.ts) EXCEPT the first one, which only HIDES the
+ * elements this batch adds — so /core/live with no league held, and every other league, renders exactly
+ * as before.
+ *
+ * The data rules are the components' own (LiveNowStrip.tsx, lib/live/liveSlateStrip.ts,
+ * LiveMatchupStrip.tsx): counts by `gameStage`, starters one per player, no bar without a model
+ * probability or on a final week. Nothing here invents a number.
+ *
+ * ⚠ THE DARK CARDS STAY DARK IN EVERY MODE, on the scoreboard tokens Matchup already uses (`--mu-sb-*`,
+ * af-core.css): a scoreboard is a broadcast object, and its ink pairs were measured on those grounds.
+ * ⚠ NO HEX, NO rgba(). Tokens and color-mix() of tokens only. 11px is the floor; taps are ≥44px.
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END (CLAUDE.md, af-matchup.css 2026-08-30). */
+
+.af-live-now-wrap,
+.af-live-matchup-eyebrow,
+.af-live-matchup-wp{display:none}
+
+/* ── The "now" strip ──────────────────────────────────────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-live-now-wrap{display:flex;flex-direction:column;gap:14px;margin:0 0 16px;min-width:0}
+.af-core.af-shell[data-format=redraft] .af-live-now{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;min-height:52px;padding:10px 18px;box-sizing:border-box;border:1px solid var(--mu-sb-line);border-radius:14px;background:var(--mu-sb-bg);color:var(--mu-sb-text)}
+.af-core.af-shell[data-format=redraft] .af-live-now-main{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;min-width:0}
+.af-core.af-shell[data-format=redraft] .af-live-now-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--mu-sb-bad);box-shadow:0 0 0 4px var(--mu-sb-live-bg)}
+.af-core.af-shell[data-format=redraft] .af-live-now-clock{font:700 16px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--mu-sb-text)}
+.af-core.af-shell[data-format=redraft] .af-live-now-counts{font:600 13px/1.3 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--mu-sb-text2)}
+.af-core.af-shell[data-format=redraft] .af-live-now-starters{font:700 13px/1.3 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--mu-sb-good)}
+
+/* ── The games strip ──────────────────────────────────────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-live-chips{display:flex;flex-direction:column;gap:10px;min-width:0}
+.af-core.af-shell[data-format=redraft] .af-live-chips-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}
+.af-core.af-shell[data-format=redraft] .af-live-chips-title{margin:0;font:700 12px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.1em;text-transform:uppercase;color:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter[aria-pressed='true']{border-color:var(--bad);background:var(--bad);color:var(--surface)}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter:disabled{opacity:.55;cursor:default}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter:focus-visible{outline:2px solid var(--rd-accent);outline-offset:2px}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter-n{min-width:20px;padding:1px 6px;border-radius:999px;background:var(--chip);color:var(--text);font-size:12px;text-align:center}
+.af-core.af-shell[data-format=redraft] .af-live-chips-filter[aria-pressed='true'] .af-live-chips-filter-n{background:color-mix(in srgb,var(--surface) 22%,transparent);color:var(--surface)}
+.af-core.af-shell[data-format=redraft] .af-live-chips-list{display:flex;gap:8px;margin:0;padding:2px 2px 8px;list-style:none;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin}
+.af-core.af-shell[data-format=redraft] .af-live-chips-list > li{flex:none;scroll-snap-align:start}
+.af-core.af-shell[data-format=redraft] .af-live-chip{display:flex;flex-direction:column;gap:3px;min-width:132px;min-height:44px;padding:9px 12px;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);text-decoration:none}
+.af-core.af-shell[data-format=redraft] .af-live-chip[data-yours='true']{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-live-chip[data-stage='live']{border-color:color-mix(in srgb,var(--bad) 50%,transparent)}
+.af-core.af-shell[data-format=redraft] .af-live-chip:hover{background:var(--surface2)}
+.af-core.af-shell[data-format=redraft] .af-live-chip:focus-visible{outline:2px solid var(--rd-accent);outline-offset:2px}
+.af-core.af-shell[data-format=redraft] .af-live-chip-status{font:700 11px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.af-core.af-shell[data-format=redraft] .af-live-chip[data-stage='live'] .af-live-chip-status{color:var(--bad)}
+.af-core.af-shell[data-format=redraft] .af-live-chip-team{display:flex;justify-content:space-between;gap:12px;font:700 14px/1.3 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace)}
+.af-core.af-shell[data-format=redraft] .af-live-chip[data-stage='final'] .af-live-chip-team{color:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-live-chip-yours{margin-top:2px;font-size:11px;font-weight:700;color:var(--rd-accent-text);white-space:nowrap}
+
+/* The "Live now" filter's own empty state. */
+.af-core.af-shell[data-format=redraft] .af-live-empty-action{margin-top:8px}
+
+/* ── Your matchup, as a scoreboard card ───────────────────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-live-matchup{padding:16px 20px;border-color:var(--mu-sb-line);border-radius:16px;background:var(--mu-sb-bg);color:var(--mu-sb-text)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-eyebrow{display:flex;align-items:center;gap:8px;margin:0 0 8px;font:700 11px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.1em;text-transform:uppercase;color:var(--mu-sb-muted)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-live{padding:2px 8px;border-radius:999px;background:var(--mu-sb-live-bg);color:var(--mu-sb-live-fg);font-weight:800}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-team{color:var(--mu-sb-text);font-weight:700}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-score{font:700 28px/1.1 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--mu-sb-text)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-vs{color:var(--mu-sb-muted)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup[data-lead='lead'] .af-live-matchup-score[data-side='you'],
+.af-core.af-shell[data-format=redraft] .af-live-matchup[data-lead='trail'] .af-live-matchup-score[data-side='them']{color:var(--mu-sb-good)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup[data-state='standing'][data-lead='lead'] .af-live-matchup-score[data-side='you']{color:var(--mu-sb-good)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup[data-state='standing'][data-lead='tied'] .af-live-matchup-score[data-side='you']{color:var(--mu-sb-warn)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup[data-state='standing'][data-lead='trail'] .af-live-matchup-score[data-side='you']{color:var(--mu-sb-bad)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-wp{display:block;height:8px;margin:12px 0 0;border-radius:999px;background:var(--mu-sb-track);overflow:hidden}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-wp-you{display:block;height:100%;border-radius:999px;background:var(--mu-sb-good)}
+.af-core.af-shell[data-format=redraft] .af-live-matchup-meta,
+.af-core.af-shell[data-format=redraft] .af-live-matchup-note{color:var(--mu-sb-text2);opacity:1}
+.af-core.af-shell[data-format=redraft] .af-live-matchup a{display:inline-flex;align-items:center;min-height:44px;color:var(--mu-sb-accent);font-weight:700}
+
+/* ── Phone (one top-level block) ──────────────────────────────────────────────────────────────────── */
+@media (max-width:720px){
+  .af-core.af-shell[data-format=redraft] .af-live-now{padding:10px 14px}
+  .af-core.af-shell[data-format=redraft] .af-live-now-starters{flex-basis:100%}
+  .af-core.af-shell[data-format=redraft] .af-live-chip{min-width:118px}
+  .af-core.af-shell[data-format=redraft] .af-live-matchup{padding:14px 16px}
+  .af-core.af-shell[data-format=redraft] .af-live-matchup-score{font-size:24px}
+}
