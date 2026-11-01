@@ -22,6 +22,9 @@ import type { ChatListMessage } from "@/components/core-app/comms/ChatMessageLis
 import type { RedraftSportTheme } from "@/lib/league-media/redraftIdentity"
 import { readRedraftChatEvent, type PinnedMatchupInput } from "@/lib/league-chat/redraftChatEvents"
 import { RedraftChatEventCard, RedraftChatPinnedScore } from "./RedraftChatEventCard"
+import type { DynastySeasonClock } from "@/lib/league-chat/dynastyChatSkin"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { DynastySeasonClockLine } from "./DynastyChatParts"
 
 /**
  * The league page's chat: League chat · Messages · Chimmy.
@@ -46,6 +49,11 @@ type Props = {
   leagueId: string
   leagueName?: string
   dynastyBackground?: boolean
+  /**
+   * "Year N · YYYY" under the league name, dynasty leagues only (`dynastySeasonClock`). Omitted —
+   * not guessed — when the league's first season cannot be read.
+   */
+  dynastyClock?: DynastySeasonClock | null
   isCommissioner?: boolean
   /** Kept for callers; the panel is always open where it is mounted. */
   defaultOpen?: boolean
@@ -96,6 +104,7 @@ export default function LeagueChatPanel({
   leagueId,
   leagueName = "League",
   dynastyBackground = false,
+  dynastyClock = null,
   isCommissioner = false,
   onClose,
   className = "",
@@ -104,6 +113,7 @@ export default function LeagueChatPanel({
   pinnedMatchup = null,
 }: Props) {
   const { data: session } = useSession()
+  const { t } = useOptionalLanguage()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
   const currentUserId = (session?.user as { id?: string } | undefined)?.id ?? null
   const searchParams = useSearchParams()
@@ -179,7 +189,16 @@ export default function LeagueChatPanel({
   return (
     <section
       className={`flex min-h-0 flex-col rounded-2xl border shadow-xl ${className}`}
-      style={{ borderColor: "var(--border)", background: "var(--panel)" }}
+      style={
+        dynastyBackground
+          ? {
+              /* Dynasty Era: ink, with the gold glow at the top (Chat.dc.html). */
+              borderColor: "var(--dyn-rail,#1C2333)",
+              background:
+                "radial-gradient(120% 60% at 50% 0%, rgba(212,162,76,0.10), transparent 60%), var(--dyn-ink,#0B0F17)",
+            }
+          : { borderColor: "var(--border)", background: "var(--panel)" }
+      }
       aria-label="League chat"
       data-testid="league-chat-panel"
       data-dynasty-background={dynastyBackground ? "true" : undefined}
@@ -189,9 +208,21 @@ export default function LeagueChatPanel({
           {tribeIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={tribeIcon.markUrl} alt="" width={28} height={28} className="h-7 w-7 shrink-0 rounded-full" data-testid="tribe-chat-channel-icon" />
-          ) : (
+          ) : dynastyBackground ? null : (
             <MessageCircle className="h-5 w-5 shrink-0" style={{ color: redraftSport ? "var(--rd-accent-text)" : "var(--accent-cyan-strong)" }} />
           )}
+          {dynastyBackground && !tribeSource ? (
+            <div className="min-w-0" data-testid="dynasty-chat-header">
+              <p className="lcc-dyn-title truncate">{leagueName}</p>
+              {dynastyClock ? (
+                <DynastySeasonClockLine clock={dynastyClock} />
+              ) : (
+                <p className="text-[11px]" style={{ color: "var(--dyn-faint,#9AA4B2)" }}>
+                  League chat · Messages · Chimmy
+                </p>
+              )}
+            </div>
+          ) : (
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
               {leagueName}
@@ -200,6 +231,7 @@ export default function LeagueChatPanel({
               {tribeSource ? `${tribeIcon ? `${tribeIcon.name} tribe chat` : "Tribe chat"} · Messages · Chimmy` : "League chat · Messages · Chimmy"}
             </p>
           </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {/*
@@ -276,7 +308,13 @@ export default function LeagueChatPanel({
               }}
               data-testid={`league-chat-channel-${c.id}`}
             >
-              <span aria-hidden>#</span> {c.id}
+              {dynastyBackground ? (
+                t(`dynastyChat.channel.${c.id}`)
+              ) : (
+                <>
+                  <span aria-hidden>#</span> {c.id}
+                </>
+              )}
             </button>
           ))}
           <button
@@ -305,6 +343,7 @@ export default function LeagueChatPanel({
             channel={channels && !tribeSource ? channel : null}
             renderEvent={redraftSport && !tribeSource ? renderRedraftEvent : undefined}
             eventKindFor={redraftSport && !tribeSource ? redraftEventKind : undefined}
+            dynasty={dynastyBackground}
           />
         </div>
       ) : null}

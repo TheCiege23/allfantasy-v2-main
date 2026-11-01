@@ -36,11 +36,14 @@ import LeagueChatPanel from '@/components/chat/LeagueChatPanel'
 import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import type { PinnedMatchupInput } from '@/lib/league-chat/redraftChatEvents'
 import './redraft-chat.css'
+import type { DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
 
 export type LeagueChatSurfaceProps = {
   leagueId: string
   leagueName: string
   dynastyBackground?: boolean
+  /** "Year N · YYYY" for a dynasty league's chat header; null when it cannot be derived. */
+  dynastyClock?: DynastySeasonClock | null
   /** Source platform. Empty / 'allfantasy' / 'af' means AllFantasy hosts this league. */
   platform: string | null | undefined
   isCommissioner: boolean
@@ -113,6 +116,7 @@ export default function LeagueChatSurface({
   leagueId,
   leagueName,
   dynastyBackground = false,
+  dynastyClock = null,
   platform,
   isCommissioner,
   teamCount,
@@ -216,6 +220,7 @@ export default function LeagueChatSurface({
             leagueId={leagueId}
             leagueName={leagueName}
             dynastyBackground={dynastyBackground}
+            dynastyClock={dynastyClock}
             isCommissioner={isCommissioner}
             defaultOpen
             channels

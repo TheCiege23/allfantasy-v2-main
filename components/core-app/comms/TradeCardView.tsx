@@ -15,6 +15,7 @@ import {
   type TradeCardGrade,
 } from '@/lib/league-chat/tradeCardGradeView'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { DynastyPickChip, DynastyTradeEyebrow } from '@/components/chat/DynastyChatParts'
 
 type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
 
@@ -76,33 +77,52 @@ export function TradeCardView({
   card,
   metadata,
   viewerUserId,
+  dynasty = false,
 }: {
   card?: TradeCard | null
   /** The message's raw metadata. Pass it and an offer or status message renders as one. */
   metadata?: Record<string, unknown> | null
   /** Picks this viewer's own link on an imported-league offer. */
   viewerUserId?: string | null
+  /**
+   * A dynasty league's chat: the completed card gains the "Trade accepted" eyebrow and draws its
+   * picks as chips. Off everywhere else, where the card renders exactly as before.
+   */
+  dynasty?: boolean
 }) {
   const offer = metadata ? readTradeOffer(metadata) : null
   if (offer) return <TradeOfferView offer={offer} viewerUserId={viewerUserId ?? null} />
   const status = metadata ? readTradeOfferStatus(metadata) : null
   if (status) return <TradeOfferStatusView note={status} />
   if (!card) return null
-  return <CompletedTradeView card={card} />
+  return <CompletedTradeView card={card} dynasty={dynasty} />
 }
 
 const fmtValue = (n: number) => Math.round(n).toLocaleString(getAppIntlLocale())
 
-function CompletedTradeView({ card }: { card: TradeCard }) {
+function CompletedTradeView({ card, dynasty = false }: { card: TradeCard; dynasty?: boolean }) {
   const side = (assets: TradeAsset[], picks: number, extras: string[] = []) => {
     const parts: string[] = assets.map((a) => {
       const meta = [a.position, a.team].filter(Boolean).join(' · ')
       return meta ? `${a.name ?? 'Unknown player'} (${meta})` : (a.name ?? 'Unknown player')
     })
-    if (picks > 0) parts.push(`${picks} pick${picks === 1 ? '' : 's'}`)
+    /* A dynasty card draws its picks as chips under the list instead. */
+    if (picks > 0 && !dynasty) parts.push(`${picks} pick${picks === 1 ? '' : 's'}`)
     parts.push(...extras)
-    return parts.length > 0 ? parts : ['nothing']
+    return parts.length > 0 || (dynasty && picks > 0) ? parts : ['nothing']
   }
+  /*
+   * ⚠ A COUNT, NOT A LIST. The card stores how many picks moved, never which — so each chip is a
+   * plain "Pick" in the line outline, not a round (and never a gold R1) this message cannot back.
+   */
+  const pickChips = (picks: number) =>
+    dynasty && picks > 0 ? (
+      <span className="lcc-dyn-pick-row">
+        {Array.from({ length: Math.min(picks, 12) }, (_, i) => (
+          <DynastyPickChip key={i} />
+        ))}
+      </span>
+    ) : null
   const valued = typeof card.valueGave === 'number' && typeof card.valueGot === 'number'
 
   const when = [
@@ -113,7 +133,8 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
     .join(' · ')
 
   return (
-    <div className="af-cm-trade">
+    <div className="af-cm-trade" data-dynasty={dynasty || undefined}>
+      {dynasty ? <DynastyTradeEyebrow /> : null}
       <p className="af-cm-trade-head">
         <span className="af-cm-trade-icon" aria-hidden="true">
           ⇄
@@ -137,6 +158,7 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
               <li key={`got-${i}`}>{t}</li>
             ))}
           </ul>
+          {pickChips(card.picksGot)}
         </div>
         <div className="af-cm-trade-side">
           <span className="af-cm-trade-label">
@@ -148,6 +170,7 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
               <li key={`gave-${i}`}>{t}</li>
             ))}
           </ul>
+          {pickChips(card.picksGave)}
         </div>
       </div>
 
