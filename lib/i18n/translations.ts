@@ -7116,6 +7116,8 @@ export const translations: Record<string, Record<string, string>> = {
     "taxiPanel.overOffOne": "1 team still holds taxi players: {{teams}}.",
     "taxiPanel.overOff": "{{count}} teams still hold taxi players: {{teams}}.",
     "taxiPanel.overHint": "Lower the count once they promote or release a player, or keep it where it is.",
+    "draftRoom.queue.addPlayer": "Add {{name}} to queue",
+    "draftRoom.queue.queuePlayer": "Queue {{name}}",
   },
   es: {
     ...translationsEsParity,

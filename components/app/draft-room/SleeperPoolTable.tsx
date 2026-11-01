@@ -12,7 +12,7 @@
 
 import React, { useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { AlertTriangle, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Check, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
 
 import { PlayerAvatar } from './PlayerAvatar'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
@@ -510,8 +510,11 @@ function SleeperRow(props: SleeperRowProps) {
                 onAddToQueue()
               }}
               disabled={drafted}
-              aria-label={`Queue ${p.name}`}
+              aria-pressed={queued}
+              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
               data-testid={`${testIdBase}-queue`}
+              data-queued={queued ? 'true' : 'false'}
               className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
                 drafted
                   ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
@@ -521,7 +524,8 @@ function SleeperRow(props: SleeperRowProps) {
               }`}
               title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
             >
-              <Plus className="h-2.5 w-2.5" />
+              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
+              {queued && !drafted ? <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-2.5 w-2.5" aria-hidden />}
             </button>
             {canNominate && onNominateRequest ? (
               <button
