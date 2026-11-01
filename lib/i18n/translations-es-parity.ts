@@ -4913,6 +4913,9 @@ export const translationsEsParity: Record<string, string> = {
   "tradeCenter.value.emptySide": "Nada en este lado.",
   "tradeCenter.value.unpriced.one": "⚠ No se pudo valorar {{count}} jugador de este intercambio, así que los totales de arriba están incompletos. Faltan datos por nuestra parte; no significa que no valga nada.",
   "tradeCenter.value.unpriced.many": "⚠ No se pudieron valorar {{count}} jugadores de este intercambio, así que los totales de arriba están incompletos. Faltan datos por nuestra parte; no significa que no valgan nada.",
+  "dynastyEra.seasonClock.label": "Reloj de la temporada dynasty",
+  "dynastyEra.seasonClock.yearSeason": "Año {{year}} · {{season}}",
+  "dynastyEra.seasonClock.seasonOnly": "Temporada {{season}}",
   // Texto del servidor del Centro de intercambios (2026-10-31). lib/i18n/trade-center-server-text.ts.
   "tradeCenter.reviewText.notGraded": "El intercambio no está calificado: {{reason}}",
   "tradeCenter.reviewText.lopsided.raised": "{{team}} recibe un {{gap}} más de valor de liga: supera la línea del {{line}}% de un intercambio muy desequilibrado.",

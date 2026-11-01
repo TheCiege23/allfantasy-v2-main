@@ -6962,6 +6962,9 @@ export const translations: Record<string, Record<string, string>> = {
     "tradeCenter.value.emptySide": "Nothing on this side.",
     "tradeCenter.value.unpriced.one": "⚠ {{count}} player in this trade could not be priced, so the totals above are incomplete. That is missing data on our side, not a judgement that he is worthless.",
     "tradeCenter.value.unpriced.many": "⚠ {{count}} players in this trade could not be priced, so the totals above are incomplete. That is missing data on our side, not a judgement that they are worthless.",
+    "dynastyEra.seasonClock.label": "Dynasty season clock",
+    "dynastyEra.seasonClock.yearSeason": "Year {{year}} · {{season}}",
+    "dynastyEra.seasonClock.seasonOnly": "{{season}} season",
     // Trade Center server text (2026-10-31): codes the server sends beside its English. lib/i18n/trade-center-server-text.ts.
     "tradeCenter.reviewText.notGraded": "The trade is not graded: {{reason}}",
     "tradeCenter.reviewText.lopsided.raised": "{{team}} receives {{gap}} more league value — past the {{line}}% line for a heavily lopsided trade.",
