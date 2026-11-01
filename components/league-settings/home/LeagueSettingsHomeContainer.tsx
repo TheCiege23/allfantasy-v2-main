@@ -28,6 +28,8 @@ import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
 import { SetupDecisionsCard } from './SetupDecisionsCard'
+import { buildRedraftSettingsView } from '@/lib/league-media/redraftSettings'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
 function useWideLayout(): boolean {
@@ -232,6 +234,23 @@ export function LeagueSettingsHomeContainer({
 
   const wide = useWideLayout()
   const phase = nativeLeaguePhase(ctx.displayLeague)
+  const { language } = useOptionalLanguage()
+  // Redraft identity (A5): the same league object the workspace root stamps `data-format="redraft"` from,
+  // with this page's saved overrides for the weeks. Null for every other league type → default page.
+  const redraft = useMemo(
+    () =>
+      buildRedraftSettingsView(
+        {
+          ...ctx.displayLeague,
+          playoffStartWeek: effectiveLeague.playoffStartWeek ?? ctx.displayLeague.playoffStartWeek ?? null,
+          tradeDeadlineWeek: effectiveLeague.tradeDeadlineWeek ?? ctx.displayLeague.tradeDeadlineWeek ?? null,
+          settings: effectiveLeague.settings ?? ctx.displayLeague.settings,
+        },
+        phase,
+        language,
+      ),
+    [ctx.displayLeague, effectiveLeague, phase, language],
+  )
   // Before the draft, the commissioner is walked through the five settings that matter most.
   const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
   const header =
@@ -257,6 +276,7 @@ export function LeagueSettingsHomeContainer({
         }}
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
         header={header}
+        redraft={redraft}
       />
     )
   }
@@ -271,6 +291,7 @@ export function LeagueSettingsHomeContainer({
       onSubPageClosed={() => setReloadKey((k) => k + 1)}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
+      redraft={redraft}
     />
   )
 }

@@ -5,6 +5,7 @@ import { Sparkles, X } from 'lucide-react'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { roundOneHypeLine } from '@/lib/draft-room/roundOneHypeLine'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -37,6 +38,7 @@ export function DraftRoundOneAnnouncementOverlay({
   const rs = presentationVariant === 'redraft_snake'
   const current = queue[0]
   const [entered, setEntered] = useState(false)
+  const { t: tl, tInterpolate } = useOptionalLanguage()
 
   useEffect(() => {
     if (!current || current.pick.round === 1) return
@@ -79,13 +81,13 @@ export function DraftRoundOneAnnouncementOverlay({
   if (!current || current.pick.round !== 1) return null
 
   const { pick, headshotUrl, teamLogoUrl } = current
-  const mgr = pick.displayName ?? 'Draft board'
-  const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}Round 1 · Pick ${pick.slot} · #${pick.overall} overall`
-  const hypeLine = roundOneHypeLine({ sport: sportLabel, position: pick.position, formatType })
+  const mgr = pick.displayName ?? tl('draftRoom.roundOne.draftBoard')
+  const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}${tInterpolate('draftRoom.roundOne.subtitle', { slot: pick.slot, overall: pick.overall })}`
+  const hypeLine = roundOneHypeLine({ sport: sportLabel, position: pick.position, formatType }, tl)
   const chips = [
-    `Pick ${pick.pickLabel}`,
-    `Overall #${pick.overall}`,
-    pick.byeWeek != null ? `Bye ${pick.byeWeek}` : null,
+    tInterpolate('draftRoom.roundOne.chipPick', { label: pick.pickLabel }),
+    tInterpolate('draftRoom.roundOne.chipOverall', { overall: pick.overall }),
+    pick.byeWeek != null ? tInterpolate('draftRoom.roundOne.chipBye', { week: pick.byeWeek }) : null,
     pick.amount != null ? `$${pick.amount}` : null,
   ].filter((v): v is string => Boolean(v))
 
@@ -96,7 +98,7 @@ export function DraftRoundOneAnnouncementOverlay({
       } transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none`}
       role="dialog"
       aria-modal="true"
-      aria-label="Round one pick announcement"
+      aria-label={tl('draftRoom.roundOne.dialogAria')}
       data-testid="draft-round-one-announcement"
       onClick={onDismissFront}
     >
@@ -149,23 +151,23 @@ export function DraftRoundOneAnnouncementOverlay({
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : 'text-violet-300'}`} />
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">{tl('draftRoom.roundOne.selection')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={onDismissFront}
                   className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
-                  aria-label="Skip announcement"
+                  aria-label={tl('draftRoom.roundOne.skipAria')}
                   data-testid="draft-round-one-announcement-skip"
                 >
-                  Skip
+                  {tl('draftRoom.roundOne.skip')}
                 </button>
                 <button
                   type="button"
                   onClick={onDismissFront}
                   className="rounded-lg border border-white/10 bg-black/30 p-1.5 text-white/55 transition hover:bg-white/10 hover:text-white"
-                  aria-label="Dismiss announcement"
+                  aria-label={tl('draftRoom.roundOne.dismissAria')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -200,7 +202,7 @@ export function DraftRoundOneAnnouncementOverlay({
 
         {queue.length > 1 ? (
           <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[11px] font-medium text-white/40">
-            +{queue.length - 1} more Round 1 pick{queue.length > 2 ? 's' : ''} queued
+            {tInterpolate(queue.length > 2 ? 'draftRoom.roundOne.queuedMany' : 'draftRoom.roundOne.queuedOne', { count: queue.length - 1 })}
           </div>
         ) : null}
       </div>

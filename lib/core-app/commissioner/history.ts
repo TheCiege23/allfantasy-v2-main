@@ -17,9 +17,37 @@ export type CommissionerHistory = {
   }>
   tradeNote: string
   draftNote: string
+  /** Only draws that were actually recorded in the league audit log. */
+  lotteries?: Array<{ id: string; at: string; season: number | null; slots: Array<{ slot: number; team: string; odds: number | null }> }>
+  lotteryReadFailed?: boolean
 }
 
 const MAX_TRADE_ASSETS = 6
+
+export function recordedLottery(row: { id: string; createdAt: Date; afterState: unknown }): NonNullable<CommissionerHistory['lotteries']>[number] | null {
+  const data = row.afterState && typeof row.afterState === 'object' && !Array.isArray(row.afterState) ? row.afterState as Record<string, unknown> : null
+  if (!data || !Array.isArray(data.slotOrder)) return null
+  const odds = new Map<string, number>()
+  const ambiguousOdds = new Set<string>()
+  for (const raw of Array.isArray(data.oddsSnapshot) ? data.oddsSnapshot : []) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const value = raw as Record<string, unknown>
+    if (typeof value.rosterId === 'string' && typeof value.oddsPercent === 'number' && Number.isFinite(value.oddsPercent) && value.oddsPercent >= 0 && value.oddsPercent <= 100) {
+      if (odds.has(value.rosterId)) { odds.delete(value.rosterId); ambiguousOdds.add(value.rosterId) }
+      else if (!ambiguousOdds.has(value.rosterId)) odds.set(value.rosterId, value.oddsPercent)
+    }
+  }
+  const rosterIds = new Set<string>()
+  const slots = data.slotOrder.flatMap((raw): Array<{ slot: number; team: string; odds: number | null }> => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+    const value = raw as Record<string, unknown>
+    if (!Number.isSafeInteger(value.slot) || (value.slot as number) < 1 || typeof value.rosterId !== 'string' || !value.rosterId || typeof value.displayName !== 'string' || !value.displayName.trim()) return []
+    rosterIds.add(value.rosterId)
+    return [{ slot: value.slot as number, team: value.displayName.trim(), odds: odds.get(value.rosterId) ?? null }]
+  }).sort((a, b) => a.slot - b.slot)
+  if (!slots.length || slots.length !== data.slotOrder.length || rosterIds.size !== slots.length || slots.some((slot, index) => slot.slot !== index + 1)) return null
+  return { id: row.id, at: row.createdAt.toISOString(), season: Number.isSafeInteger(data.season) ? data.season as number : null, slots }
+}
 
 /**
  * An imported trade as a commissioner reads it: who traded, and what moved.
@@ -49,12 +77,12 @@ export async function loadCommissionerHistory(
   leagueId: string,
   native: boolean,
   /** The league's provider and sport, so an ESPN or Yahoo player id is named in its own id space. */
-  provider: { platform?: string | null; sport?: string | null } = {},
+  provider: { platform?: string | null; sport?: string | null; settings?: unknown } = {},
   /** The reader's language for the labels and notes written here; default English. */
   language = 'en',
 ): Promise<CommissionerHistory> {
   const m = messagesFor(commissionerBuildersMessages, language)
-  const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections] = await Promise.all([
+  const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections, lotteryAudit] = await Promise.all([
     native ? prisma.redraftLeagueTrade.findMany({
       where: { leagueId }, orderBy: { createdAt: 'desc' }, take: 10,
       select: { id: true, createdAt: true, status: true, proposerRoster: { select: { teamName: true, ownerName: true } }, receiverRoster: { select: { teamName: true, ownerName: true } } },
@@ -71,12 +99,30 @@ export async function loadCommissionerHistory(
     prisma.draftPickAuditLog.findMany({
       where: { leagueId }, select: { draftSessionId: true, overallPickNumber: true, action: true, oldPlayerName: true, newPlayerName: true, reason: true }, orderBy: { createdAt: 'desc' }, take: 500,
     }).catch(() => null),
+    native ? prisma.leagueAuditLog.findMany({ where: { leagueId, actionType: 'draft_lottery_run' }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, createdAt: true, afterState: true } }).catch(() => null) : Promise.resolve([]),
   ])
 
   // Naming is best-effort: a failed lookup leaves the trade dated and sourced, never dropped.
   const namedTrades = importedTrades?.length
-    ? await describeImportedActivityRows(importedTrades, { leagueId, ...provider }).then((r) => r.items).catch(() => null)
+    ? await describeImportedActivityRows(importedTrades, { leagueId, platform: provider.platform, sport: provider.sport }).then((r) => r.items).catch(() => null)
     : null
+
+  const lotteries = (lotteryAudit ?? []).flatMap(row => { const lottery = recordedLottery(row); return lottery ? [lottery] : [] })
+  // Older manual draws saved only the latest result, without an audit row. Show that actual
+  // saved draw once, without inventing its season or duplicating an audited draw.
+  const settings = provider.settings && typeof provider.settings === 'object' && !Array.isArray(provider.settings) ? provider.settings as Record<string, unknown> : null
+  const saved = settings?.draft_lottery_last_result
+  const savedRecord = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved as Record<string, unknown> : null
+  const savedAt = typeof savedRecord?.runAt === 'string' ? new Date(savedRecord.runAt) : null
+  const alreadyRecorded = Boolean(savedRecord && typeof savedRecord.seed === 'string' && typeof savedRecord.runAt === 'string' && (lotteryAudit ?? []).some(row => {
+    const state = row.afterState && typeof row.afterState === 'object' && !Array.isArray(row.afterState) ? row.afterState as Record<string, unknown> : null
+    return state?.seed === savedRecord.seed && state?.runAt === savedRecord.runAt
+  }))
+  if (native && savedRecord && savedAt && Number.isFinite(savedAt.getTime()) && !alreadyRecorded) {
+    const last = recordedLottery({ id: 'latest-saved-lottery', createdAt: savedAt, afterState: savedRecord })
+    if (last) lotteries.push(last)
+  }
+  lotteries.sort((a, b) => b.at.localeCompare(a.at))
 
   const correctionsByPick = new Map<string, string[]>()
   for (const row of corrections ?? []) {
@@ -105,6 +151,8 @@ export async function loadCommissionerHistory(
       ? (nativeTrades ?? []).map((trade) => ({ id: trade.id, at: trade.createdAt.toISOString(), label: `${trade.proposerRoster.teamName ?? trade.proposerRoster.ownerName} ↔ ${trade.receiverRoster.teamName ?? trade.receiverRoster.ownerName}`, status: trade.status, source: 'AllFantasy' }))
       : (importedTrades ?? []).map((trade, i) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: namedTrades?.[i] ? importedTradeLabel(namedTrades[i], language) : m.historyTradeDetailsUnavailable, status: 'recorded', source: trade.provider })),
     drafts,
+    ...(lotteries.length ? { lotteries: lotteries.slice(0, 10) } : {}),
+    ...(native && lotteryAudit === null ? { lotteryReadFailed: true } : {}),
     tradeNote: nativeTrades === null || importedTrades === null ? m.historyTradeUnread : native ? m.historyTradeNoteNative : m.historyTradeNoteImported,
     draftNote: sessions === null || redraftDrafts === null || corrections === null ? m.historyDraftUnread : m.historyDraftNote,
   }

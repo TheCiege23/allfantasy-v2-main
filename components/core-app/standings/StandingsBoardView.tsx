@@ -34,6 +34,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsBoardMessages } from '@/lib/core-app/messages/standingsScreen'
+import { redraftRaceTag } from '@/lib/core-app/redraftCoreRace'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -135,8 +136,10 @@ function ZoneChip({ team }: { team: BoardTeam }) {
   }
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
+  /* The proven race tag (lib/core-app/redraftCoreRace.ts) — styled only in a redraft league's shell. */
+  const race = redraftRaceTag(team)
   return (
-    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined}>
+    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined} data-race={race ?? undefined}>
       <span aria-hidden>{clinched ? '✓' : zone.icon}</span>
       {coreUiCopy(clinched ?? zone.label, language)}
     </span>
