@@ -7,6 +7,7 @@ export const runtime = "nodejs"
 
 const submitEntrySchema = z.object({
   action: z.literal("submit_entry"),
+  tiebreakerTotalScore: z.number().int().min(0).max(500).optional(),
 })
 
 export async function POST(request: Request, context: { params: Promise<{ challengeId: string; entryId: string }> }) {
@@ -30,6 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ challe
       entryId: params.data.entryId,
       userId: auth.user.id,
       user: auth.user,
+      tiebreakerTotalScore: parsed.data.tiebreakerTotalScore,
     })
 
     return NextResponse.json({ ok: true, ...result })

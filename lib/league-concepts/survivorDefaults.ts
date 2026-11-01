@@ -1,5 +1,5 @@
 /**
- * Canonical Survivor league defaults for NFL, NCAAF, NBA, and NHL creation. Follows the redraft/dynasty/tournament pattern.
+ * Canonical Survivor league defaults for NFL, NCAAF, NBA, NHL and MLB creation. Follows the redraft/dynasty/tournament pattern.
  *
  * Survivor is a progressive-elimination format layered on top of redraft fantasy.
  * Each "week" is a scoring period. Tribes compete in weekly challenges. The losing
@@ -35,6 +35,7 @@
  *   NCAAF: 14 cast (2 tribes × 7), merge at 7, ~14 college weeks → mirrors season length
  */
 import { NEW_LEAGUE_EXILE_BOSS_MODE } from '@/lib/survivor/lateSeasonSettings'
+import { survivorCouncilDefaultsForSport } from '@/lib/survivor/survivorCouncilDefaults'
 import type { LeagueSport } from '@prisma/client'
 import { getScoringDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import {
@@ -45,12 +46,13 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL'
+export type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL' | 'MLB'
 
 export const SURVIVOR_DRAFT_TYPE_IDS = SURVIVOR_CANONICAL_DRAFT_TYPE_IDS
 export type SurvivorDraftType = (typeof SURVIVOR_DRAFT_TYPE_IDS)[number]
 
-type EngineDraftType = SurvivorDraftType
+/** What the draft engine runs. An execution mode (offline, auto) runs as a snake draft underneath. */
+type EngineDraftType = 'snake' | 'linear' | 'auction'
 
 export type SurvivorPhase =
   | 'setup'
@@ -248,17 +250,18 @@ const NCAAF_SURVIVOR_ROSTER_CONFIG = {
 
 export function isSurvivorEligibleSport(sport: unknown): sport is SurvivorEligibleSport {
   const normalized = String(sport ?? '').trim().toUpperCase()
-  return normalized === 'NFL' || normalized === 'NCAAF' || normalized === 'NBA' || normalized === 'NHL'
+  return normalized === 'NFL' || normalized === 'NCAAF' || isSurvivorDailySport(normalized)
 }
 
 function normalizeEngineDraftType(draftType: unknown): EngineDraftType {
-  return normalizeSurvivorDraftType(draftType)
+  const requested = normalizeSurvivorDraftType(draftType)
+  return requested === 'offline' || requested === 'auto' ? 'snake' : requested
 }
 
 function normalizeSurvivorDraftType(value: unknown): SurvivorDraftType {
   const raw = String(value ?? '').trim().toLowerCase().replace(/-/g, '_')
-  if (raw === 'team') return 'by_team'
-  if (raw === 'realtime') return 'real_time'
+  // Retired Phase 1 ids. Neither ever reached the engine as anything but a snake draft.
+  if (raw === 'team' || raw === 'by_team' || raw === 'realtime' || raw === 'real_time') return 'snake'
   return (SURVIVOR_DRAFT_TYPE_IDS as readonly string[]).includes(raw)
     ? (raw as SurvivorDraftType)
     : 'snake'
@@ -268,8 +271,14 @@ function starterCount(slots: Record<string, number>): number {
   return Object.values(slots).reduce((t, n) => t + n, 0)
 }
 
+type SurvivorDailySport = 'NBA' | 'NHL' | 'MLB'
+
+function isSurvivorDailySport(sport: string): sport is SurvivorDailySport {
+  return sport === 'NBA' || sport === 'NHL' || sport === 'MLB'
+}
+
 /**
- * Survivor's own NBA/NHL roster. It used to read the sport-defaults registry's base roster, which is
+ * Survivor's own NBA/NHL/MLB roster. It used to read the sport-defaults registry's base roster, which is
  * now the redraft layout (lib/sportConfig/dailySportRedraftRoster.ts); pinned here so moving the
  * redraft default does not silently resize a beta survivor league. These are the values it read.
  */
@@ -283,20 +292,47 @@ const SURVIVOR_DAILY_ROSTERS = {
       { slotName: 'UTIL', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] },
     ],
   },
+  /*
+   * The roster the NHL roster engine's survivor template (lib/nhl-roster/NhlRosterTemplates.ts) saves
+   * over this one after creation, so every live NHL Survivor league already plays it. This used to say
+   * D 2, G 1 and bench 6: the draft ran 16 rounds into the template's 17 spots and left one spot
+   * empty on every team (NHL rehearsal, 2026-10-28). Owner's call: keep the standard hockey lineup.
+   */
   NHL: {
-    starter_slots: { C: 2, LW: 2, RW: 2, D: 2, G: 1, UTIL: 1 } as Record<string, number>,
-    bench_slots: 6,
+    starter_slots: { C: 2, LW: 2, RW: 2, D: 4, G: 2, UTIL: 1 } as Record<string, number>,
+    bench_slots: 4,
     flex_definitions: [{ slotName: 'UTIL', allowedPositions: ['C', 'LW', 'RW', 'D'] }],
+  },
+  /*
+   * MLB pitchers are stored as plain `P`: every active MLB pitcher in `Player`, and every pitcher in
+   * `sports_players`, carries `P`, never `SP` or `RP` (measured 2026-10-27). The redraft layout's
+   * SP and RP slots take only `SP` / `RP`, so they could never be filled from this pool. Survivor
+   * starts four `P` slots instead, which take any pitcher.
+   */
+  MLB: {
+    starter_slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, P: 4 } as Record<string, number>,
+    bench_slots: 5,
+    flex_definitions: [
+      { slotName: 'OF', allowedPositions: ['OF', 'LF', 'CF', 'RF'] },
+      { slotName: 'UTIL', allowedPositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH'] },
+      { slotName: 'P', allowedPositions: ['SP', 'RP', 'P'] },
+    ],
   },
 } as const
 
+const SURVIVOR_DAILY_DRAFTABLE_POSITIONS: Record<SurvivorDailySport, string[]> = {
+  NBA: ['PG', 'SG', 'SF', 'PF', 'C'],
+  NHL: ['C', 'LW', 'RW', 'D', 'G'],
+  MLB: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'P', 'SP', 'RP'],
+}
+
 function rosterConfig(sport: SurvivorEligibleSport) {
-  if (sport === 'NBA' || sport === 'NHL') {
+  if (isSurvivorDailySport(sport)) {
     const defaults = SURVIVOR_DAILY_ROSTERS[sport]
     const starterSlots = defaults.starter_slots
     return { starterSlots, benchSlots: defaults.bench_slots, rosterSize: starterCount(starterSlots) + defaults.bench_slots,
-      defensePosition: null, draftablePlayerPositions: sport === 'NBA' ? ['PG', 'SG', 'SF', 'PF', 'C'] : ['C', 'LW', 'RW', 'D', 'G'],
-      queueSizeLimit: 70, scoringPreset: sport === 'NBA' ? 'nba_points' : 'nhl_points', castSize: 20, tribeCount: 4, mergeAtCount: 10 }
+      defensePosition: null, draftablePlayerPositions: SURVIVOR_DAILY_DRAFTABLE_POSITIONS[sport],
+      queueSizeLimit: 70, scoringPreset: `${sport.toLowerCase()}_points`, castSize: 20, tribeCount: 4, mergeAtCount: 10 }
   }
   return sport === 'NCAAF' ? NCAAF_SURVIVOR_ROSTER_CONFIG : NFL_SURVIVOR_ROSTER_CONFIG
 }
@@ -414,7 +450,7 @@ function buildRosterTemplate(sport: SurvivorEligibleSport): SurvivorRosterTempla
   return {
     rosterMode: 'survivor',
     starterSlots: cfg.starterSlots,
-    flexDefinitions: sport === 'NBA' || sport === 'NHL' ? SURVIVOR_DAILY_ROSTERS[sport].flex_definitions.map((f) => ({ slotName: f.slotName, allowedPositions: [...f.allowedPositions] })) : [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
+    flexDefinitions: isSurvivorDailySport(sport) ? SURVIVOR_DAILY_ROSTERS[sport].flex_definitions.map((f) => ({ slotName: f.slotName, allowedPositions: [...f.allowedPositions] })) : [{ slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] }],
     benchSlots: cfg.benchSlots,
     irSlots: 0,
     taxiSlots: 0,
@@ -430,7 +466,7 @@ function buildScoringSettings(
   sport: SurvivorEligibleSport,
   scoringPresetId: string,
 ): Record<string, unknown> {
-  if (sport === 'NBA' || sport === 'NHL') {
+  if (isSurvivorDailySport(sport)) {
     const defaults = getScoringDefaults(sport)
     return { source: 'af', sport, preset: scoringPresetId, scoringPresetId, scoringTemplateId: defaults.scoring_template_id,
       scoringMode: 'points', scoringFormat: defaults.scoring_format, format: defaults.scoring_format, survivor: true }
@@ -497,7 +533,7 @@ function buildPlayerPoolRules(
   rosterTemplate: SurvivorRosterTemplate,
 ): Record<string, unknown> {
   const positions = rosterTemplate.draftablePlayerPositions
-  if (sport === 'NBA' || sport === 'NHL') return { sport, poolKey: sport.toLowerCase() + '_active_fantasy_players', source: 'sports_player',
+  if (isSurvivorDailySport(sport)) return { sport, poolKey: sport.toLowerCase() + '_active_fantasy_players', source: 'sports_player',
     includeActiveOnly: true, includeCollegePlayers: false, includeNflPlayers: false, collegeOnly: false, rookieOnly: false, positions, rankingSource: 'adp' }
   if (sport === 'NCAAF') {
     return {
@@ -762,6 +798,10 @@ export function buildSurvivorSettingsSnapshot(input: {
     draft_roster_fill_order: draftSettings.rosterFillOrder,
     draft_position_filter_behavior: draftSettings.positionFilterBehavior,
     draft_order: draftSettings.draftType === 'auction' ? 'auction' : 'snake',
+    // How the draft runs (DraftUISettingsResolver.executionMode): the room, the computer, or in person.
+    draft_execution_mode: draftSettings.requestedDraftType === 'offline' ? 'offline' : draftSettings.requestedDraftType === 'auto' ? 'auto' : 'live',
+    // Survivor drafts talk: the room shares the league chat stream while the draft runs.
+    draft_live_chat_sync_enabled: true,
     third_round_reversal: false,
     rounds: draftSettings.rounds,
     timer_seconds: draftSettings.timerSeconds,
@@ -859,6 +899,9 @@ export function buildSurvivorSettingsSnapshot(input: {
 
     ...contract.enabledFeatures,
     ...buildSurvivorSettingsSnapshotPatch({
+      // Council rules by sport: ceremony day/time after final scores, revote-then-rocks, ballots
+      // changeable until close, missing ballots auto-cast (owner's call, 2026-10-20).
+      ...survivorCouncilDefaultsForSport(contract.sport),
       defaultTeamCount: contract.teams,
       tribeCount: tribeSettings.tribeCount,
       mergeActivePlayerCount: tribeSettings.mergeAtCount,

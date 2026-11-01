@@ -28,20 +28,20 @@ export const DYNASTY_SPORT_PRESET_COPY: Record<string, Record<DynastyFormatLang,
     es: { label: 'Dinastía por puntos profunda', hint: '10 titulares · 12 banca · 4 IL · 6 taxi (hasta 3.er año).' },
   },
   nhl_dynasty_points_taxi: {
-    en: { label: 'Skater/goalie points dynasty + taxi', hint: '14 starters (2 G) · 9 bench · 3 IR · 4 taxi (rookies + 2nd year).' },
-    es: { label: 'Dinastía por puntos (patinadores/porteros) + taxi', hint: '14 titulares (2 G) · 9 banca · 3 IR · 4 taxi (novatos + 2.º año).' },
+    en: { label: 'Skater/goalie points dynasty', hint: '14 starters (2 G) · 13 bench · 3 IR.' },
+    es: { label: 'Dinastía por puntos (patinadores/porteros)', hint: '14 titulares (2 G) · 13 banca · 3 IR.' },
   },
   nhl_dynasty_points_minors: {
-    en: { label: 'Points dynasty with deep minors (taxi)', hint: '14 starters (2 G) · 10 bench · 3 IR · 8 taxi for prospects (up to 3rd year).' },
-    es: { label: 'Dinastía por puntos con ligas menores (taxi)', hint: '14 titulares (2 G) · 10 banca · 3 IR · 8 taxi para prospectos (hasta 3.er año).' },
+    en: { label: 'Deep-bench points dynasty', hint: '14 starters (2 G) · 18 bench · 3 IR.' },
+    es: { label: 'Dinastía por puntos con banca profunda', hint: '14 titulares (2 G) · 18 banca · 3 IR.' },
   },
   mlb_dynasty_points_minors: {
-    en: { label: 'Points dynasty with minor-league slots', hint: '23 starters · 12 bench · 4 IL · 6 minor-league (taxi) slots.' },
-    es: { label: 'Dinastía por puntos con plazas de ligas menores', hint: '23 titulares · 12 banca · 4 IL · 6 plazas de ligas menores (taxi).' },
+    en: { label: 'Points dynasty (standard)', hint: '23 starters · 18 bench · 4 IL.' },
+    es: { label: 'Dinastía por puntos (estándar)', hint: '23 titulares · 18 banca · 4 IL.' },
   },
   mlb_dynasty_points_deep: {
-    en: { label: 'Deep-bench points dynasty', hint: '23 starters · 16 bench · 6 IL · 10 minor-league (taxi) slots.' },
-    es: { label: 'Dinastía por puntos con banca profunda', hint: '23 titulares · 16 banca · 6 IL · 10 plazas de ligas menores (taxi).' },
+    en: { label: 'Deep-bench points dynasty', hint: '23 starters · 26 bench · 6 IL.' },
+    es: { label: 'Dinastía por puntos con banca profunda', hint: '23 titulares · 26 banca · 6 IL.' },
   },
 }
 
@@ -85,9 +85,7 @@ export const TAXI_SECTION_COPY = {
     yearsLimit: 'Taxi years experience limit',
     noMax: 'No max',
     years: (n: number) => (n === 1 ? '1 year' : `${n} years`),
-    deadline: 'Taxi deadline (week)',
     week: (n: number) => `Week ${n}`,
-    deadlineHelp: 'After this week, taxi promotions follow your league’s promotion rules.',
     rulesTitle: 'Lock & promotion rules',
     lockBehavior: 'Lock rule',
     inSeasonMoves: 'Allow taxi moves in season',
@@ -96,6 +94,7 @@ export const TAXI_SECTION_COPY = {
     promotionDeadline: 'Promotion deadline (week)',
     none: 'None',
     saveFailed: 'Could not save the taxi rule',
+    unavailableForSport: 'Taxi squads aren’t available for NHL/MLB leagues.',
   },
   es: {
     title: 'Escuadrón taxi',
@@ -105,9 +104,7 @@ export const TAXI_SECTION_COPY = {
     yearsLimit: 'Límite de años de experiencia del taxi',
     noMax: 'Sin máximo',
     years: (n: number) => (n === 1 ? '1 año' : `${n} años`),
-    deadline: 'Fecha límite del taxi (semana)',
     week: (n: number) => `Semana ${n}`,
-    deadlineHelp: 'Después de esta semana, los ascensos del taxi siguen las reglas de ascenso de tu liga.',
     rulesTitle: 'Reglas de bloqueo y ascenso',
     lockBehavior: 'Regla de bloqueo',
     inSeasonMoves: 'Permitir movimientos de taxi en temporada',
@@ -116,6 +113,7 @@ export const TAXI_SECTION_COPY = {
     promotionDeadline: 'Fecha límite de ascenso (semana)',
     none: 'Ninguna',
     saveFailed: 'No se pudo guardar la regla del taxi',
+    unavailableForSport: 'Los escuadrones taxi no están disponibles para ligas de NHL/MLB.',
   },
 } as const
 

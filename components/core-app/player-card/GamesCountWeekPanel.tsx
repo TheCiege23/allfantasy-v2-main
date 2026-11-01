@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { GamesCountState } from '@/lib/redraft/gamesCountService'
 
 /**
@@ -21,7 +22,7 @@ type ApiState = GamesCountState
 function dayLabel(day: string, language: string): string {
   const d = new Date(`${day}T12:00:00.000Z`)
   if (Number.isNaN(d.getTime())) return day
-  return d.toLocaleDateString(language === 'es' ? 'es' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return d.toLocaleDateString(coreLocale(language).intlLocale, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 export default function GamesCountWeekPanel({ leagueId, playerIds }: { leagueId: string; playerIds: Array<string | null | undefined> }) {

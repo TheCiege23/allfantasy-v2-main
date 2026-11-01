@@ -5,6 +5,7 @@ import {
   SURVIVOR_TRIBE_CATALOG, SURVIVOR_TRIBE_SPORTS, defaultTribeSlots, isTribeHex, tribeCrestAlt, tribeCrestUrl, tribeSportKey,
   validateTribeSlots, type SurvivorTribeSlot, type SurvivorTribeSportKey,
 } from '@/lib/survivor/survivorTribeIdentity'
+import { SelectionCheck } from '@/components/ui/selection-check'
 
 const SPORT_LABEL: Record<SurvivorTribeSportKey, string> = { nfl: 'NFL', ncaaf: 'NCAAF', nba: 'NBA', ncaab: 'NCAAB', mlb: 'MLB', nhl: 'NHL', soccer: 'Soccer' }
 
@@ -97,7 +98,8 @@ export function SurvivorTribePicker({ sport, managers, tribeCount, value, onChan
           const selected = slots[editing]?.catalogId === t.id
           const taken = slots.some((s, i) => i !== editing && s.catalogId === t.id)
           // A new identity starts from its own catalogue colours.
-          return <button key={t.id} type="button" aria-pressed={selected} disabled={taken} onClick={() => update(editing, { catalogId: t.id, primaryColor: undefined, secondaryColor: undefined })} className={`rounded-lg border p-2 text-center text-xs text-white disabled:opacity-30 ${selected ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 hover:border-white/40'}`}>
+          return <button key={t.id} type="button" aria-pressed={selected} disabled={taken} onClick={() => update(editing, { catalogId: t.id, primaryColor: undefined, secondaryColor: undefined })} className={`relative rounded-lg border p-2 text-center text-xs text-white disabled:opacity-30 ${selected ? 'border-amber-400 bg-amber-400/10' : 'border-white/10 hover:border-white/40'}`} data-testid={`survivor-tribe-option-${t.id}`}>
+            <SelectionCheck selected={selected} hideWhenOff className="absolute right-1.5 top-1.5" testId={`survivor-tribe-option-${t.id}-check`} />
             <img src={tribeCrestUrl(t.id, sport) ?? undefined} alt="" width={100} height={119} loading="lazy" className="mx-auto h-[119px] w-[100px] object-contain" />{t.name}<span className="block text-white/50">{t.mascot}{taken ? ' · Selected' : ''}</span>
           </button>
         })}

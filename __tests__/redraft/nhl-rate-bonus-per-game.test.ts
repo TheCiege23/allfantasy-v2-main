@@ -43,7 +43,13 @@ vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false
 import { NHL_ALL_SCORING_CATEGORIES } from '@/lib/nhl-scoring/NhlScoringCategories'
 import { NHL_SCORING_ENGINE_VERSION } from '@/lib/nhl-scoring/nhlScoringEngineContract'
 import { buildLeagueStatScorer, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
-import { aggregateWeeklyStats, normalizeNhlGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import {
+  NHL_GAA_MIN_GOALIE_MINUTES,
+  NHL_SAVE_PCT_MIN_SHOTS_AGAINST,
+  NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL,
+  aggregateWeeklyStats,
+  normalizeNhlGameStats,
+} from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const goalieLine = (saves: number, shotsAgainst: number, goalsAllowed: number, minutes = 60) => ({
@@ -122,6 +128,58 @@ describe('shooting % bonus — per game', () => {
 
   it('no shots, no bonus', () => {
     expect(normalizeNhlGameStats(skaterLine(0, 0)).stats.sh_pct_bonus).toBeUndefined()
+  })
+})
+
+/*
+ * Minimum samples (owner's decision 2026-10-23): a game below the minimum earns 0 for that bonus,
+ * never an error and never a perfect rate; exactly at the minimum it is earned.
+ */
+describe('minimum sample per game', () => {
+  it('the minimums are 4 shots on goal, 20 shots faced and 40 goalie minutes', () => {
+    expect(NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL).toBe(4)
+    expect(NHL_SAVE_PCT_MIN_SHOTS_AGAINST).toBe(20)
+    expect(NHL_GAA_MIN_GOALIE_MINUTES).toBe(40)
+  })
+
+  it('shooting %: 1 goal on 1 shot earns nothing, not 90 points over 10%', () => {
+    expect(normalizeNhlGameStats(skaterLine(1, 1)).stats.sh_pct_bonus).toBeUndefined()
+    expect(normalizeNhlGameStats(skaterLine(2, 3)).stats.sh_pct_bonus).toBeUndefined()
+  })
+
+  it('shooting %: exactly 4 shots on goal earns it', () => {
+    expect(normalizeNhlGameStats(skaterLine(2, 4)).stats.sh_pct_bonus).toBeCloseTo(40, 9)
+  })
+
+  it('save %: a reliever stopping 3 of 3 earns nothing, not a perfect 1.000', () => {
+    const relief = normalizeNhlGameStats(goalieLine(3, 3, 0, 15)).stats
+    expect(relief.g_sv_pct_bonus).toBeUndefined()
+    expect(relief.g_sv).toBe(3) // the saves themselves still count
+    expect(normalizeNhlGameStats(goalieLine(19, 19, 0)).stats.g_sv_pct_bonus).toBeUndefined()
+  })
+
+  it('save %: exactly 20 shots faced earns it', () => {
+    expect(normalizeNhlGameStats(goalieLine(19, 20, 1)).stats.g_sv_pct_bonus).toBeCloseTo(5, 9) // .950
+  })
+
+  it('GAA: a 30-minute relief appearance earns nothing, though it allowed no goal', () => {
+    expect(normalizeNhlGameStats(goalieLine(15, 15, 0, 30)).stats.g_gaa_bonus).toBeUndefined()
+    expect(normalizeNhlGameStats(goalieLine(15, 15, 0, 39.9)).stats.g_gaa_bonus).toBeUndefined()
+  })
+
+  it('GAA: exactly 40 goalie minutes earns it', () => {
+    expect(normalizeNhlGameStats(goalieLine(20, 21, 1, 40)).stats.g_gaa_bonus).toBe(1) // GAA 1.50
+  })
+
+  it('a below-minimum game adds nothing to a week that also holds full games', () => {
+    const scorer = scorerFor({ save_pct_bonus: 1, gaa_bonus: 3, shooting_pct_bonus: 1 })
+    const full = [GOOD, goalieLine(29, 30, 1)]
+    const withRelief = [...full, goalieLine(3, 3, 0, 15)]
+    const points = (lines: unknown[]) => scorer(aggregateWeeklyStats(lines, normalizeNhlGameStats).stats)
+    expect(points(withRelief)).toBeCloseTo(points(full), 9)
+    expect(points(full)).toBeCloseTo(4 + 20 / 3 + 3, 9)
+    const shots = [skaterLine(1, 4), skaterLine(1, 1)]
+    expect(points(shots)).toBeCloseTo(15, 9)
   })
 })
 

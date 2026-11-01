@@ -72,7 +72,14 @@ export async function collectPlayers(sessionId: string): Promise<ExternalPlayerR
     if (Array.isArray(raw.rosters) && raw.sleeperPlayerNames && typeof raw.sleeperPlayerNames === 'object') {
       const names = raw.sleeperPlayerNames as Record<string, string>
       for (const roster of raw.rosters as Record<string, unknown>[]) {
-        const owner = roster.owner_id ? String(roster.owner_id) : undefined
+        // Key the owner exactly as matchManagers keys a manager (`username || user_id`), because
+        // executeMerge finds a player's manager by that key. Keying on the raw owner_id never
+        // matched a manager whose username is set, so every Sleeper player was skipped at merge.
+        const owner = roster.ownerUsername
+          ? String(roster.ownerUsername)
+          : roster.owner_id
+            ? String(roster.owner_id)
+            : undefined
         const players = Array.isArray(roster.players) ? (roster.players as string[]) : []
         for (const pid of players) {
           out.push({
@@ -247,6 +254,16 @@ export async function matchManagers(sessionId: string, existingLeagueManagers: M
           displayName: String(u.display_name ?? u.displayName ?? ''),
           platform,
         })
+      }
+    } else if (Array.isArray(raw.players)) {
+      // A CSV source has no user list — its owners are the owner column. Without a manager row
+      // for each, executeMerge could not place a single CSV player on a roster.
+      const seen = new Set(external.filter(e => e.platform === platform).map(e => e.username))
+      for (const p of raw.players as Record<string, unknown>[]) {
+        const owner = typeof p.managerExternalUserId === 'string' ? p.managerExternalUserId.trim() : ''
+        if (!owner || seen.has(owner)) continue
+        seen.add(owner)
+        external.push({ userId: '', username: owner, displayName: owner, platform })
       }
     }
   }

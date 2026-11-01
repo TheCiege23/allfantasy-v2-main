@@ -1,0 +1,136 @@
+/* Redraft identity on the /core Standings, Season Outlook, Commissioner and Brackets screens
+ * (batch B6 of the redraft visual upgrade, 2026-10-31). Design notes: docs/design/redraft-core-standings.md.
+ *
+ * ⚠ EVERY RULE IS SCOPED TO `.af-core.af-shell[data-format=redraft]` — the attribute AfCoreShell stamps for a
+ * native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts). Any other league, and /core with no
+ * league, render exactly as before. __tests__/core-app/redraft-core-standings-css.test.ts enforces it.
+ *
+ * ⚠ TOKENS ONLY, NO HEX. Colours are the foundation's `--rd-*` (components/league/native/redraft-identity.css,
+ * measured light/dark by __tests__/league-media/redraftIdentityContrast.test.ts) and /core's own palette.
+ * Text sits on `--surface`/`--surface2`/`--bg` or on an `--rd-accent` fill with `--rd-accent-ink` — never on
+ * `--rd-accent-soft` over the art.
+ *
+ * ⚠ SHARED STYLESHEETS ARE NOT EDITED. af-standings.css, af-outlook.css, af-commish-hub.css (open in #3082),
+ * af-format-hubs.css and af-bracket.css are read, and this file layers on top at higher specificity.
+ *
+ * ⚠ ODDS ARE A NEUTRAL FILL. A playoff-odds bar in the sport colour reads as a warning in MLB (stitch red)
+ * and as good news in NFL (field green) for the same number; a red bar for 4% was the "alarming" note on the
+ * native screens. Bars are ink on the track; only a PROVEN clinch takes the sport fill.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md, af-matchup.css 2026-08-30).
+ * 11px is the type floor (__tests__/core-app/type-floor.test.ts). */
+
+/* ── Standings ─────────────────────────────────────────────────────────────────────────────────── */
+
+/* The league name is the sport's eyebrow; the header closes on a sport rule. */
+.af-core.af-shell[data-format=redraft] .af-st-eyebrow,
+.af-core.af-shell[data-format=redraft] .af-sol-eyebrow,
+.af-core.af-shell[data-format=redraft] .af-bk-eyebrow{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-st-head{padding-bottom:14px;border-bottom:2px solid var(--rd-accent-line)}
+
+/* The four tiles about you: lifted toward the sport, the table position first and filled. */
+.af-core.af-shell[data-format=redraft] .af-st-tile{background:var(--rd-surface-elev);border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-st-tile:first-child{box-shadow:inset 0 3px 0 var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-st-tile-v[data-tone='accent']{color:var(--rd-accent-text)}
+
+/* What is at stake: the race panel, marked down its leading edge. */
+.af-core.af-shell[data-format=redraft] .af-st-stakes{background:var(--rd-surface-elev);border-color:var(--rd-accent-line);box-shadow:inset 4px 0 0 var(--rd-accent)}
+/* The odds number in ink: in MLB's stitch red a 67% read as a warning. */
+.af-core.af-shell[data-format=redraft] .af-st-stakes-pct{color:var(--text)}
+
+/* The table: your row in the sport tint with a leading bar. Opaque on purpose — the rank and team cells are
+ * sticky, and a translucent tint lets the scrolled columns show through them. */
+.af-core.af-shell[data-format=redraft] .af-stb-table tbody tr[data-you='true'] > *{background-color:color-mix(in srgb,var(--rd-accent) 12%,var(--surface))}
+.af-core.af-shell[data-format=redraft] .af-stb-table tbody tr[data-you='true'] > :first-child{box-shadow:inset 4px 0 0 var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-stb-you{background:var(--rd-accent);color:var(--rd-accent-ink)}
+
+/* The playoff line, labelled, in the sport colour; the bye line a quieter dashed rule above it.
+ * Scoped to the table row: `.af-stb-line` is also the history chart's SVG series class. */
+.af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line td{border-top:2px solid var(--rd-accent);background:var(--rd-surface-elev)}
+.af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line[data-line='bye'] td{border-top:2px dashed var(--rd-accent-line);background:transparent}
+.af-core.af-shell[data-format=redraft] .af-stb-table tr.af-stb-line .af-stb-linetext{color:var(--rd-accent-text);font-weight:800;letter-spacing:.06em}
+
+/* Race tags — only what standingsModel PROVED (data-race, lib/core-app/redraftCoreRace.ts). A clinch takes
+ * the sport fill; eliminated is quiet ink, not an alarm. Positional zones (bye spot, playoff spot, bubble,
+ * out) carry no data-race and keep their outline look, so they never read as a claim. */
+.af-core.af-shell[data-format=redraft] .af-stb-zone[data-race='clinched'],
+.af-core.af-shell[data-format=redraft] .af-stb-zone[data-race='clinched-bye']{background:var(--rd-accent);color:var(--rd-accent-ink);box-shadow:none}
+.af-core.af-shell[data-format=redraft] .af-stb-zone[data-race='eliminated']{background:var(--surface2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line2)}
+.af-core.af-shell[data-format=redraft] .af-stb-zone:not([data-race]){background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+.af-core.af-shell[data-format=redraft] .af-stb-table tbody tr[data-zone='eliminated'] > *{color:var(--muted)}
+
+/* Playoff odds: a neutral bar, the number in ink. A proven clinch fills in the sport colour. */
+.af-core.af-shell[data-format=redraft] .af-stb-odds{color:var(--text2)}
+.af-core.af-shell[data-format=redraft] .af-stb-oddsbar{background:var(--rd-track)}
+.af-core.af-shell[data-format=redraft] .af-stb-oddsbar i{background:var(--text2)}
+/* "Good" odds (60%+) are still a forecast, so the sport fill keys off the row's PROVEN tag, not the tone. */
+.af-core.af-shell[data-format=redraft] .af-stb-table tbody tr:has(.af-stb-zone[data-race^='clinched']) .af-stb-oddsbar i{background:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-stb-table tbody tr:has(.af-stb-zone[data-race^='clinched']) .af-stb-odds{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-stb-card:has(.af-stb-zone[data-race^='clinched']) .af-stb-oddsbar i{background:var(--rd-accent)}
+
+/* Cards layout: your card framed in the sport, a playoff seed's card on the sport rule. */
+.af-core.af-shell[data-format=redraft] .af-stb-card[data-you='true']{border-color:var(--rd-accent);box-shadow:inset 4px 0 0 var(--rd-accent);background:color-mix(in srgb,var(--rd-accent) 8%,var(--surface))}
+
+/* Your place by week: the current bar in the sport fill, your best in its tint. */
+.af-core.af-shell[data-format=redraft] .af-st-bar[data-tone='now'] .af-st-bar-fill{background:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-st-bar[data-tone='now'] .af-st-bar-rank{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-st-bar[data-tone='best'] .af-st-bar-fill{background:var(--rd-accent-soft);box-shadow:inset 0 0 0 1px var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-st-bar[data-tone='best'] .af-st-bar-rank{color:var(--rd-accent-text)}
+
+/* ── Season Outlook ────────────────────────────────────────────────────────────────────────────── */
+
+.af-core.af-shell[data-format=redraft] .af-sol-head{padding-bottom:14px;border-bottom:2px solid var(--rd-accent-line)}
+
+/* The forecast is the season race: lifted toward the sport, a sport bar across its top. */
+.af-core.af-shell[data-format=redraft] .af-olk-hero{background:var(--rd-surface-elev);border-color:var(--rd-accent-line);box-shadow:inset 0 4px 0 var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-olk-hero-head .af-label{color:var(--rd-accent-text)}
+/* Playoffs leads the row: framed in the sport line. The other tiles stay on --surface2. */
+.af-core.af-shell[data-format=redraft] .af-olk-odds-row > .af-olk-odds:first-child{background:var(--surface);border-color:var(--rd-accent-line);box-shadow:inset 0 3px 0 var(--rd-accent)}
+/* The likely range: a neutral band on the track, the headline as the sport dot. */
+.af-core.af-shell[data-format=redraft] .af-olk-range-track{background:var(--rd-track)}
+.af-core.af-shell[data-format=redraft] .af-olk-range-band{background:var(--line2);box-shadow:none}
+.af-core.af-shell[data-format=redraft] .af-olk-range-dot{background:var(--rd-accent)}
+/* Clinched is a simulation-and-arithmetic status the loader certifies; it takes the sport fill. */
+.af-core.af-shell[data-format=redraft] .af-olk-pill[data-status='clinched']{background:var(--rd-accent);color:var(--rd-accent-ink);border-color:transparent}
+.af-core.af-shell[data-format=redraft] .af-olk-next{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-olk-next .af-label{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-olk-tab[aria-selected='true']{color:var(--rd-accent-text);border-bottom-color:var(--rd-accent);border-bottom-width:3px}
+.af-core.af-shell[data-format=redraft] .af-sol-clinch{border-color:var(--rd-accent-line);box-shadow:inset 4px 0 0 var(--rd-accent)}
+
+/* ── Commissioner ──────────────────────────────────────────────────────────────────────────────── */
+
+.af-core.af-shell[data-format=redraft] .af-ch .afh-head .afh-label{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-ch .afh-badge{background:var(--rd-accent);color:var(--rd-accent-ink)}
+.af-core.af-shell[data-format=redraft] .af-ch .af-ch-section{border-top:3px solid var(--rd-accent-line)}
+
+/* This week's checklist: the season checklist, on the sport rule; a done item takes a sport tick. */
+.af-core.af-shell[data-format=redraft] .af-ch .af-ch-week{border-top-color:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-ch .af-ch-week-item[data-status='done'] .af-ch-week-mark{background:var(--rd-accent);color:var(--rd-accent-ink);border-color:transparent}
+.af-core.af-shell[data-format=redraft] .af-ch .af-ch-week-item[data-status='heads_up'] .af-ch-week-mark{color:var(--rd-accent-text)}
+
+/* League health: the score as a ring — in ink, like the odds: a healthy 84 drawn in MLB's red read as an alarm. The fill is `--rdc-health` (0–100), set by CommissionerHub on a
+ * `display: contents` wrapper only when the engine score is available (lib/core-app/redraftCoreRace.ts
+ * healthRingPct). No score → no variable → the panel keeps its "—" and reason, and no ring is drawn. */
+.af-core.af-shell[data-format=redraft] .af-rdc-health[data-ring] .af-ch-health-score[data-available='true'] .af-ch-health-num{display:grid;place-items:center;width:76px;height:76px;border-radius:50%;font-size:26px;color:var(--text);background:radial-gradient(closest-side,var(--surface2) 78%,transparent 79% 100%),conic-gradient(var(--text2) calc(var(--rdc-health) * 1%),var(--rd-track) 0)}
+.af-core.af-shell[data-format=redraft] .af-ch .af-ch-health-score{border-color:var(--rd-accent-line)}
+
+/* ── Brackets ──────────────────────────────────────────────────────────────────────────────────── */
+
+.af-core.af-shell[data-format=redraft] .af-bk-head{padding-bottom:14px;border-bottom:2px solid var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-bk-sport[aria-current='page']{background:var(--rd-accent);color:var(--rd-accent-ink)}
+/* A "Soon" sport is dimmed to .62; on the sport fill that left its own label unreadable, so the current chip is
+ * drawn at full strength and its tag in the fill's ink. */
+.af-core.af-shell[data-format=redraft] .af-bk-sport[aria-current='page'][data-soon='true']{opacity:1}
+.af-core.af-shell[data-format=redraft] .af-bk-sport[aria-current='page'] .af-bk-soon{color:var(--rd-accent-ink);background:transparent}
+.af-core.af-shell[data-format=redraft] .af-bk-key-item--total{border-top-color:var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-bk-match{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-bk-side-label{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-bk-champ{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+
+/* ── Phone ─────────────────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width:640px){
+  /* A smaller ring keeps the status sentence beside it at 390. */
+  .af-core.af-shell[data-format=redraft] .af-rdc-health[data-ring] .af-ch-health-score[data-available='true'] .af-ch-health-num{width:62px;height:62px;font-size:21px}
+  .af-core.af-shell[data-format=redraft] .af-st-stakes{box-shadow:inset 0 4px 0 var(--rd-accent)}
+}

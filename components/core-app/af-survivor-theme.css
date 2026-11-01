@@ -1,0 +1,406 @@
+/*
+ * The island theme for a Survivor league (lib/core-app/survivorTheme.ts).
+ *
+ * Applied only while the shell holds a Survivor league: AfCoreShell sets
+ * `data-league-theme="survivor"` on its root. It re-points the shell's own tokens rather than
+ * restyling screens one by one, so every screen inside the shell picks up the island palette, and a
+ * screen that has not been themed yet still reads correctly.
+ *
+ * ⚠ SPECIFICITY. af-core.css switches modes with `html[data-mode='light'] .af-core` (0,2,1). The
+ * dark block below matches that weight and loads after it, so it wins in the dark modes; the light
+ * block adds the mode attribute and wins in light mode. Do not drop the leading `html`.
+ */
+
+html .af-core[data-league-theme='survivor'] {
+  --bg: #07080d;
+  --surface: #0f1118;
+  --surface2: #0b0d13;
+  --rail: #0a0b10;
+  --line: rgba(255, 236, 214, 0.08);
+  --line2: rgba(255, 236, 214, 0.14);
+  --text: #f1ece4;
+  --text2: #d6cfc3;
+  --muted: #a8a196;
+  --faint: #857e73;
+  --accent: #f0a35e;
+  --accent-ink: #1a0f05;
+  --accent-soft: rgba(240, 163, 94, 0.13);
+  --accent-line: rgba(240, 163, 94, 0.34);
+  --chip: rgba(255, 236, 214, 0.05);
+  --chip-line: rgba(255, 236, 214, 0.11);
+  --chimmy: linear-gradient(160deg, #241a12, #0f1118 58%);
+  --hero: none;
+  --sv-scene: url('/survivor/scenes/tribal.svg');
+  --sv-scene-fade: linear-gradient(180deg, rgba(7, 8, 13, 0.1) 0, rgba(7, 8, 13, 0.7) 300px, #07080d 480px);
+  --sv-heading: #e8c98e;
+}
+
+html[data-mode='light'] .af-core[data-league-theme='survivor'] {
+  --bg: #f6efe4;
+  --surface: #fffaf2;
+  --surface2: #f1e7d7;
+  --rail: #fbf4e8;
+  --line: rgba(60, 38, 16, 0.1);
+  --line2: rgba(60, 38, 16, 0.18);
+  --text: #20160c;
+  --text2: #463523;
+  --muted: #6b5a45;
+  --faint: #7d6a52;
+  --accent: #a3501a;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(163, 80, 26, 0.1);
+  --accent-line: rgba(163, 80, 26, 0.32);
+  --chip: rgba(60, 38, 16, 0.05);
+  --chip-line: rgba(60, 38, 16, 0.12);
+  --chimmy: linear-gradient(160deg, #fbe9d4, #fffaf2 58%);
+  --sv-scene: url('/survivor/scenes/beach.svg');
+  --sv-scene-fade: linear-gradient(180deg, rgba(246, 239, 228, 0.15) 0, rgba(246, 239, 228, 0.85) 300px, #f6efe4 480px);
+  --sv-heading: #7a3d12;
+}
+
+/* The scene sits behind the top of the page and fades into the background before the content gets busy. */
+.af-shell[data-league-theme='survivor'] {
+  background-color: var(--bg);
+  background-image: var(--sv-scene-fade), var(--sv-scene);
+  /* The fade layer spans the whole shell; its stops are in px, so it is solid page colour well before
+     the bottom of the scene at any width (the scene is 3:8, 540px tall at 1440px). */
+  background-size: 100% 100%, max(100%, 1280px) auto;
+  background-position: 0 0, center top;
+  background-repeat: no-repeat;
+}
+
+/* The section rail reads as carved wood rather than glass. */
+.af-shell[data-league-theme='survivor'] .af-nav {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rail) 82%, transparent), var(--rail) 240px);
+  backdrop-filter: blur(6px);
+}
+.af-shell[data-league-theme='survivor'] .af-nav-heading {
+  color: var(--sv-heading);
+  font-family: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.16em;
+}
+
+/* The active tab carries a torch-coloured bar and a warm glow. */
+.af-shell[data-league-theme='survivor'] .af-nav-item[data-active='true'] {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 90%);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--text);
+}
+.af-shell[data-league-theme='survivor'] .af-nav-item[data-active='true'] .af-nav-glyph {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-line);
+}
+
+.af-shell[data-league-theme='survivor'] .af-rail {
+  background: color-mix(in srgb, var(--rail) 88%, transparent);
+}
+
+@media (max-width: 720px) {
+  .af-shell[data-league-theme='survivor'] {
+    background-size: 100% 100%, auto 300px;
+  }
+}
+
+/* ── The island banner and tribe board (components/core-app/survivor/SurvivorIslandBanner.tsx) ── */
+
+.af-core .sv-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background-color: #05060a;
+  background-size: cover;
+  /* The art sits right of centre so the title reads on the left (as the Zombie scenes do). */
+  background-position: 62% 60%;
+  margin-bottom: 18px;
+  color: #f1ece4;
+}
+.af-core .sv-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 6, 10, 0.92) 0%, rgba(5, 6, 10, 0.7) 36%, rgba(5, 6, 10, 0.12) 66%, rgba(5, 6, 10, 0) 82%),
+    linear-gradient(180deg, rgba(5, 6, 10, 0) 58%, rgba(5, 6, 10, 0.8) 100%);
+}
+.af-core .sv-banner-in {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 26px;
+  align-items: center;
+  padding: 30px 32px;
+  min-height: 300px;
+}
+.af-core .sv-banner[data-variant='compact'] .sv-banner-in { grid-template-columns: minmax(0, 1fr) auto; min-height: 170px; padding: 22px 26px; }
+.af-core .sv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.af-core .sv-chips span {
+  padding: 3px 10px; border-radius: 8px; font-size: 12.5px; color: #e4ddd2;
+  border: 1px solid rgba(255, 236, 214, 0.16); background: rgba(10, 12, 18, 0.6);
+}
+.af-core .sv-title {
+  margin: 0;
+  font: 900 46px/1.04 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+  color: #f0a35e;
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
+}
+.af-core .sv-banner[data-scene='finale'] .sv-title { color: #f2c46b; }
+.af-core .sv-banner[data-scene='merge'] .sv-title { color: #e9b04f; }
+.af-core .sv-banner[data-variant='compact'] .sv-title { font-size: 32px; }
+.af-core .sv-sub { margin: 8px 0 0; font-weight: 600; font-size: 16.5px; color: #f1e3cf; }
+.af-core .sv-desc { margin: 6px 0 0; max-width: 600px; color: #c3bdb2; font-size: 14.5px; }
+.af-core .sv-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.af-core .sv-btn {
+  padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; text-decoration: none; color: #f1ece4;
+  border: 1px solid rgba(255, 236, 214, 0.18); background: rgba(14, 16, 24, 0.82);
+}
+.af-core .sv-btn:hover { border-color: rgba(240, 163, 94, 0.55); }
+.af-core .sv-btn-primary { background: #f0a35e; border-color: transparent; color: #1a0f05; }
+.af-core .sv-clock {
+  min-width: 230px; padding: 16px 20px; border-radius: 14px; text-align: center;
+  border: 1px solid rgba(255, 236, 214, 0.16); background: rgba(8, 9, 14, 0.78); backdrop-filter: blur(4px);
+}
+.af-core .sv-clock-label { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #f0a35e; }
+.af-core .sv-clock-time { font: 700 40px/1.1 'JetBrains Mono', ui-monospace, monospace; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+.af-core .sv-clock-at { font-size: 12.5px; color: #b9b2a6; }
+.af-core .sv-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: sv-flick 1.3s ease-in-out infinite alternate; }
+.af-core .sv-flame-2 { animation-duration: 1.7s; animation-delay: -0.4s; }
+@keyframes sv-flick { 0% { transform: scale(1, 1); } 40% { transform: scale(0.94, 1.06) skewX(2deg); } 100% { transform: scale(1.03, 0.96) skewX(-2deg); } }
+
+.af-core .sv-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; }
+.af-core .sv-panel-h { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.af-core .sv-eyebrow { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+.af-core .sv-tribes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.af-core .sv-tribe { background: var(--surface2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.af-core .sv-tribe[data-mine='true'] { border-color: var(--accent-line); }
+.af-core .sv-tribe-h { display: flex; justify-content: space-between; align-items: baseline; }
+.af-core .sv-tribe-h strong { font: 700 15px 'Cinzel', Georgia, serif; letter-spacing: 0.12em; text-transform: uppercase; }
+.af-core .sv-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.af-core .sv-strip { display: flex; gap: 4px; margin: 10px 0 8px; }
+.af-core .sv-strip i, .af-core .sv-legend i { flex: 1; height: 16px; border-radius: 3px; display: block; }
+.af-core .sv-strip i[data-out='true'], .af-core .sv-legend i[data-out='true'] { background: repeating-linear-gradient(135deg, #3a3f50 0 4px, #141720 4px 8px) !important; }
+.af-core .sv-strip i[data-immune='true'], .af-core .sv-legend i[data-immune='true'] { box-shadow: 0 0 0 2px #f2c46b inset, 0 0 10px rgba(242, 196, 107, 0.5); }
+.af-core .sv-strip i[data-me='true'], .af-core .sv-legend i[data-me='true'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.af-core .sv-note { font-size: 12.5px; color: var(--muted); }
+.af-core .sv-danger { color: #f08a72; }
+.af-core .sv-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+.af-core .sv-legend span { display: inline-flex; gap: 6px; align-items: center; }
+.af-core .sv-legend i { flex: none; width: 14px; height: 10px; background: var(--faint); }
+
+@media (max-width: 720px) {
+  .af-core .sv-banner { background-position: 66% 60%; }
+  .af-core .sv-banner-in, .af-core .sv-banner[data-variant='compact'] .sv-banner-in { grid-template-columns: 1fr; padding: 20px 18px; gap: 14px; min-height: 0; }
+  .af-core .sv-emblem { display: none; }
+  .af-core .sv-title { font-size: 32px; }
+  .af-core .sv-banner[data-variant='compact'] .sv-title { font-size: 26px; }
+  .af-core .sv-clock { min-width: 0; }
+  .af-core .sv-clock-time { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .sv-flame { animation: none; }
+}
+
+/* ── Tribal Council vote reading (components/core-app/survivor/SurvivorVoteReading.tsx) ── */
+
+.af-core .sv-reading { border-color: var(--accent-line); background: linear-gradient(170deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 60%); }
+.af-core .sv-reading-sub { margin: -6px 0 14px; font: 700 15px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-reading-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.af-core .sv-ballot {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: 22px 18px 20px; border-radius: 6px; color: #2b1a0c;
+  background:
+    radial-gradient(120% 90% at 50% 40%, rgba(255, 248, 228, 0.65), rgba(255, 248, 228, 0) 70%),
+    linear-gradient(175deg, #ecd9b0, #d9bd86 55%, #c9a66a);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), inset 0 0 22px rgba(120, 76, 30, 0.35);
+  transform: rotate(-1.2deg);
+  animation: sv-ballot-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.af-core .sv-ballot-ord { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #6b4a26; display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.af-core .sv-ballot-extra { padding: 1px 7px; border-radius: 6px; border: 1px solid #8a5a24; color: #7a3d12; letter-spacing: 0.08em; }
+.af-core .sv-ballot-name {
+  font-family: 'Caveat', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  font-size: 40px; line-height: 1.1; font-weight: 700; color: #1d1208; overflow-wrap: anywhere;
+}
+.af-core .sv-ballot[data-void='true'] .sv-ballot-name { text-decoration: line-through; text-decoration-color: rgba(150, 40, 20, 0.75); text-decoration-thickness: 3px; opacity: 0.75; }
+.af-core .sv-ballot-stamp {
+  margin-top: 4px; padding: 3px 10px; border: 2px solid #a3311b; border-radius: 4px; transform: rotate(-3deg);
+  font: 700 12px/1.3 Inter, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #a3311b;
+}
+.af-core .sv-ballot-wait { margin: 0; padding: 22px 12px; text-align: center; color: var(--muted); font-style: italic; }
+.af-core .sv-tally ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.af-core .sv-tally li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; font-size: 14px; color: var(--text2); }
+.af-core .sv-tally li[data-leading='true'] { color: var(--text); font-weight: 600; }
+.af-core .sv-tally-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-core .sv-pips { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 160px; justify-content: flex-end; }
+.af-core .sv-pips i { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent-line); }
+.af-core .sv-tally-count { min-width: 1.5em; text-align: right; }
+.af-core .sv-spoken {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  margin-top: 16px; padding: 16px 14px; border-radius: 12px; border: 1px solid var(--accent-line); background: var(--surface2);
+  animation: sv-ballot-in 0.9s ease-out both;
+}
+.af-core .sv-spoken-h { font: 900 22px/1.2 'Cinzel', Georgia, serif; letter-spacing: 0.08em; color: var(--accent); }
+.af-core .sv-spoken-name { font-size: 16px; font-weight: 600; color: var(--text); }
+.af-core .sv-spoken-margin, .af-core .sv-spoken-note { font-size: 13px; color: var(--muted); }
+@keyframes sv-ballot-in { from { opacity: 0; transform: translateY(10px) rotate(2deg) scale(0.96); } to { opacity: 1; transform: rotate(-1.2deg); } }
+.af-core .sv-spoken { animation-name: sv-fade-in; }
+@keyframes sv-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 720px) {
+  .af-core .sv-reading-grid { grid-template-columns: 1fr; }
+  .af-core .sv-ballot-name { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .sv-ballot, .af-core .sv-spoken { animation: none; }
+}
+
+/* ── Island control (components/core-app/survivor/SurvivorIslandControl.tsx) ── */
+
+.af-core .sv-health { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; }
+.af-core .sv-hc { text-align: center; padding: 12px 8px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--line); }
+.af-core .sv-hc[data-state='out'] { border-color: rgba(224, 86, 59, 0.4); }
+.af-core .sv-hc strong { display: block; font-size: 13px; margin-top: 4px; color: var(--text); }
+.af-core .sv-hc small { display: block; font-size: 12px; color: var(--faint); }
+.af-core .sv-torch { display: block; margin: 0 auto; }
+.af-core .sv-link { font-size: 13px; color: var(--accent); text-decoration: none; }
+.af-core .sv-clear { margin: 0; font-size: 14px; }
+.af-core .sv-issues { display: flex; flex-direction: column; gap: 10px; }
+.af-core .sv-issue {
+  display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 14px; align-items: center;
+  padding: 12px 14px 12px 0; border-radius: 12px; background: var(--surface2); border: 1px solid var(--line); overflow: hidden;
+}
+.af-core .sv-issue > i { align-self: stretch; background: #d9a441; }
+.af-core .sv-issue[data-tone='action'] > i { background: #e0563b; }
+.af-core .sv-issue strong { display: block; color: var(--text); }
+.af-core .sv-issue small { display: block; color: var(--muted); font-size: 13px; }
+.af-core .sv-issue-tag { font: 600 11px/1.4 Inter, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.af-core .sv-issue[data-tone='action'] .sv-issue-tag { color: #f08a72; }
+.af-core .sv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (max-width: 720px) {
+  .af-core .sv-issue { grid-template-columns: 4px minmax(0, 1fr); }
+  .af-core .sv-issue > .sv-btn { grid-column: 2; justify-self: start; }
+}
+
+/* ── Season rulebook (components/core-app/survivor/SurvivorRulebook.tsx) ── */
+
+.af-core .sv-rulebook summary { cursor: pointer; list-style: none; }
+.af-core .sv-rulebook summary::-webkit-details-marker { display: none; }
+.af-core .sv-rulebook summary::after { content: ' ▾'; color: var(--faint); }
+.af-core .sv-rulebook[open] summary { margin-bottom: 12px; }
+.af-core .sv-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.af-core .sv-rule {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 6%, var(--surface2)), var(--surface2));
+}
+.af-core .sv-rule dt { font: 700 12px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-rule dd { margin: 4px 0 0; font-size: 14px; color: var(--text); }
+
+/* ── Island control: scene picker and inline rules (components/core-app/survivor/SurvivorIslandSettings.tsx) ── */
+
+.af-core .sv-scene-hint { margin: -4px 0 12px; }
+.af-core .sv-scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.af-core .sv-scene {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); background: var(--surface2); color: var(--text); font: inherit;
+}
+.af-core .sv-scene:hover { border-color: rgba(240, 163, 94, 0.55); }
+.af-core .sv-scene[aria-checked='true'] { border-color: #f0a35e; box-shadow: 0 0 0 1px #f0a35e inset; }
+.af-core .sv-scene:disabled { cursor: progress; opacity: 0.7; }
+.af-core .sv-scene-art { display: block; aspect-ratio: 16 / 9; border-radius: 8px; background-size: cover; background-position: center; background-color: #10131c; }
+.af-core .sv-scene[data-scene='auto'] .sv-scene-art { filter: saturate(0.6); }
+.af-core .sv-scene-name { font-size: 13px; font-weight: 600; padding: 0 2px 2px; }
+.af-core .sv-rule-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.af-core .sv-rule-field { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); }
+.af-core .sv-rule-field label { font: 700 12px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-rule-field label small { font: 600 11px Inter, sans-serif; letter-spacing: 0; text-transform: none; color: var(--faint); }
+.af-core .sv-rule-field select, .af-core .sv-rule-field input[type='number'] {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.af-core .sv-rule-field input[type='checkbox'] { width: 18px; height: 18px; accent-color: #f0a35e; }
+.af-core .sv-rule-field[data-locked='true'] { opacity: 0.6; }
+.af-core .sv-note[data-tone='error'] { color: #f08a72; }
+.af-core .sv-panel button.sv-btn { cursor: pointer; font: inherit; font-weight: 600; font-size: 14px; }
+.af-core .sv-panel button.sv-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/*
+ * ── Survivor host lines in league chat (ChatMessageList, lib/core-app/survivorChatCard.ts) ──────
+ * A bridge-mirrored, Chimmy-marked row is an island card: torch avatar, parchment border, a
+ * Cinzel "HOST" / "CASTAWAY" byline. Keyed on the row's own `data-survivor-host`, NOT on the shell's
+ * league theme: the comms drawer can show a Survivor league's chat while the shell holds another
+ * league, and the card should read the same either way. Colours are explicit for that reason.
+ * Top-level blocks on purpose — nothing here sits inside an @media query.
+ */
+.af-core .af-cm-row[data-survivor-host='true'] .af-cm-bubble {
+  background: linear-gradient(165deg, #2a1d12 0%, #17110b 70%);
+  color: #f1e3cf;
+  box-shadow: inset 0 0 0 1px rgba(232, 201, 142, 0.42), 0 1px 0 rgba(240, 163, 94, 0.12);
+  border-radius: 14px;
+}
+.af-core .af-cm-row[data-survivor-host='true'] .af-cm-bubble:has(> .af-cm-rich:only-child) {
+  padding: 6px;
+  background: linear-gradient(165deg, #2a1d12 0%, #17110b 70%);
+}
+/* The card's border outranks the list's own selection rings, so restate them (af-comms.css). */
+.af-core .af-cm-row[data-survivor-host='true'][data-menu='true'] .af-cm-bubble { box-shadow: 0 0 0 2px var(--accent-line); }
+.af-core .af-cm-row[data-survivor-host='true'][data-flash='true'] .af-cm-bubble { box-shadow: 0 0 0 3px var(--accent); }
+.af-core .af-cm-avatar.af-cm-avatar-sv-host {
+  background: radial-gradient(circle at 50% 35%, rgba(240, 163, 94, 0.32), rgba(42, 29, 18, 0.95) 70%);
+  box-shadow: inset 0 0 0 1px rgba(232, 201, 142, 0.5);
+  color: #f2862b;
+}
+.af-core .af-cm-col > .af-cm-msg-author.af-cm-sv-host-byline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding-left: 2px;
+}
+.af-core .af-cm-sv-host-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid rgba(240, 163, 94, 0.45);
+  border-radius: 999px;
+  background: rgba(240, 163, 94, 0.13);
+  color: #f0a35e;
+  font: 700 11px/1.5 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.af-core .af-cm-sv-host-name { color: #e8c98e; font-size: 11.5px; font-weight: 700; }
+
+html[data-mode='light'] .af-core .af-cm-row[data-survivor-host='true'] .af-cm-bubble,
+html[data-mode='light'] .af-core .af-cm-row[data-survivor-host='true'] .af-cm-bubble:has(> .af-cm-rich:only-child) {
+  background: linear-gradient(165deg, #fbefdc 0%, #f4e4c8 100%);
+  color: #20160c;
+  box-shadow: inset 0 0 0 1px rgba(122, 61, 18, 0.32);
+}
+html[data-mode='light'] .af-core .af-cm-sv-host-role { color: #a3501a; border-color: rgba(163, 80, 26, 0.4); background: rgba(163, 80, 26, 0.08); }
+html[data-mode='light'] .af-core .af-cm-sv-host-name { color: #7a3d12; }
+
+/*
+ * ── Survivor rows in the notifications centre (lib/core-app/survivorNotificationIcon.ts) ────────
+ * A row whose stored type is `survivor:*` gets a small icon by kind and the torch-orange accent.
+ */
+.af-core .af-nt-row[data-survivor] { border-left-color: #f0a35e; }
+.af-core .af-nt-sv-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: -2px;
+  border-radius: 8px;
+  background: rgba(240, 163, 94, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(240, 163, 94, 0.34);
+  color: #f0a35e;
+}
+.af-core .af-nt-row[data-survivor][data-read='true'] .af-nt-sv-icon { color: var(--muted); background: var(--chip); box-shadow: inset 0 0 0 1px var(--line2); }
+html[data-mode='light'] .af-core .af-nt-row[data-survivor] { border-left-color: #a3501a; }
+html[data-mode='light'] .af-core .af-nt-sv-icon { color: #a3501a; background: rgba(163, 80, 26, 0.08); box-shadow: inset 0 0 0 1px rgba(163, 80, 26, 0.3); }

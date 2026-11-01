@@ -6,6 +6,7 @@ import {
   qualifyDeal,
   rankSuggestions,
   runDateOf,
+  survivorTradeGroups,
   type AgentSuggestion,
 } from '@/lib/decision-os/trade/tradeAgentRules'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -40,8 +41,38 @@ describe('agentLeagueRefusal — which leagues the agent works in', () => {
 
   it('refuses other sports, no-trade formats and other league types, each with a reason', () => {
     expect(agentLeagueRefusal({ sport: 'NCAAF', leagueType: 'redraft' })).toMatch(/NFL leagues only/)
-    expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'redraft', concept: 'guillotine' })).toMatch(/does not allow trades/)
+    expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'redraft', tradeBan: 'There are no trades allowed in this league.' })).toMatch(/does not allow trades/)
+    expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'redraft', concept: 'guillotine' })).toMatch(/guillotine trades yet/)
     expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'devy' })).toMatch(/devy leagues yet/)
+  })
+
+  it('Survivor leagues trade, so the agent works in them (the catalog, not the concept name, bans trades)', () => {
+    expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'survivor', concept: 'survivor' })).toBeNull()
+    expect(agentLeagueRefusal({ sport: 'NFL', leagueType: 'survivor', concept: 'survivor', tradeBan: 'no trades' })).toMatch(/does not allow trades/)
+  })
+})
+
+describe('survivorTradeGroups — who may trade with whom in Survivor', () => {
+  const seats = [
+    { userId: 'a', playerState: 'active', tribeId: 't1' },
+    { userId: 'b', playerState: 'active', tribeId: 't1' },
+    { userId: 'c', playerState: 'active', tribeId: 't2' },
+    { userId: 'd', playerState: 'eliminated', tribeId: 't1' },
+    { userId: 'e', playerState: 'exile', tribeId: null },
+  ]
+
+  it('before the merge: tribemates only, and nobody who is out of the game', () => {
+    const groups = survivorTradeGroups(seats, false)
+    expect(groups.get('a')).toBe(groups.get('b'))
+    expect(groups.get('a')).not.toBe(groups.get('c'))
+    expect(groups.has('d')).toBe(false)
+    expect(groups.has('e')).toBe(false)
+  })
+
+  it('after the merge: every manager still playing is one group', () => {
+    const groups = survivorTradeGroups(seats, true)
+    expect([...groups.keys()].sort()).toEqual(['a', 'b', 'c'])
+    expect(new Set(groups.values()).size).toBe(1)
   })
 })
 

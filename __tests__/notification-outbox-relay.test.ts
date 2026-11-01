@@ -103,6 +103,33 @@ beforeEach(() => {
 })
 
 describe('notification outbox relay', () => {
+  it('drops a queued bracket alert after its pool opt-in is withdrawn', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { bracketCoach: { pool: { enabled: false } } } })
+    stageRows([row({ channel: 'push', eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['missing'], spoilerSafe: true } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('bracket alerts muted')
+  })
+
+  it('drops a queued result when the user later hides spoilers', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { bracketCoach: { pool: { enabled: true, spoilerSafe: true } } } })
+    stageRows([row({ eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['result'], spoilerSafe: false } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendNotificationEmail).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('spoiler preference changed')
+  })
+
+  it('keeps the global bracket channel gate after the pool opts in', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { globalEnabled: false, bracketCoach: { pool: { enabled: true } } } })
+    stageRows([row({ channel: 'push', eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['rank'], spoilerSafe: true } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('notifications muted')
+  })
+
   it('retries a partial device failure instead of losing the failed phone', async () => {
     stageRows([row({ channel: 'push' })])
     sendPushToUser.mockResolvedValue([{ ok: true }, { ok: false, error: '503' }])
@@ -285,4 +312,21 @@ it.each(['email', 'push'])('suppresses a queued %s during quiet hours without mo
   expect(sendPushToUser).not.toHaveBeenCalled()
   expect(writeback().lastError).toContain('quiet hours')
  } finally { vi.useRealTimers() }
+})
+
+describe('stale game retry suppression', () => {
+  it.each(['email', 'push'])('drops legacy %s rows without expiry metadata', async channel => {
+    stageRows([row({ channel, eventType: 'game_final', createdAt: new Date(Date.now() - 86400_000) })])
+    await relayNotificationOutbox()
+    expect(sendNotificationEmail).not.toHaveBeenCalled()
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(outboxUpdate.mock.calls.some(call => call[0].data.lastError === 'notification expired before delivery')).toBe(true)
+  })
+})
+
+it('preserves fresh game email retries', async () => {
+  stageRows([row({channel:'email',eventType:'game_period_end',createdAt:new Date()})])
+  await relayNotificationOutbox()
+  expect(sendNotificationEmail).toHaveBeenCalled()
+  expect(writeback().status).toBe('sent')
 })

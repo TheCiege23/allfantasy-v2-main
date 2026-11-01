@@ -12,10 +12,15 @@
  * unchanged until its entries are added here.
  *
  * `__tests__/core-app/commissioner-hub-copy.test.tsx` parses every hub component and fails on raw
- * English in JSX, and on any prose literal without Spanish. PURE and client-safe: no imports.
+ * English in JSX, and on any prose literal without Spanish. PURE and client-safe: its one import is
+ * the EN/ES locale catalog.
  */
 
+import { coreLocale } from './messages/coreLocale'
+
 const ES: Record<string, string> = {
+  // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
+  'Storyline Studio': 'Estudio de historias',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
   'Core · Commissioner': 'Core · Comisionado',
@@ -58,6 +63,11 @@ const ES: Record<string, string> = {
   'Audit log': 'Registro de cambios',
   'Commissioner intelligence': 'Inteligencia del comisionado',
   'Trades and draft archive': 'Intercambios y archivo de drafts',
+  'Weighted lottery history': 'Historial de la lotería ponderada',
+  'Lottery history is temporarily unavailable.': 'El historial de lotería no está disponible temporalmente.',
+  Pick: 'Selección',
+  'Recorded AllFantasy draws; older or imported results may be missing.': 'Sorteos registrados por AllFantasy; pueden faltar resultados antiguos o importados.',
+  'odds at pick 1': 'probabilidad de la primera selección',
   'Step-by-step guides': 'Guías paso a paso',
   'This week’s lineups, projected': 'Alineaciones proyectadas de esta semana',
   'nothing here changes a standing or a ruling.': 'nada de esto cambia una clasificación ni una decisión.',
@@ -95,10 +105,12 @@ const ES: Record<string, string> = {
 
   // ── Rules and access ──────────────────────────────────────────────────
   Disputes: 'Disputas',
+  'Lineup integrity': 'Integridad de alineaciones',
   'Deadline autopilot': 'Piloto automático de fechas límite',
   'Weekly recap': 'Resumen semanal',
   'Share the dispute desk with your league →': 'Comparte la mesa de disputas con tu liga →',
   'League constitution and amendments →': 'Constitución de la liga y enmiendas →',
+  'League log: who can see your actions →': 'Registro de la liga: quién ve tus acciones →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',
   you: 'tú',
@@ -197,8 +209,14 @@ const ES: Record<string, string> = {
   // ── Chimmy ────────────────────────────────────────────────────────────
   unknown: 'desconocido',
   'Ask Chimmy about this league': 'Pregúntale a Chimmy sobre esta liga',
-  'Guidance uses the selected league’s evidence. If this league belongs to a network you own, Chimmy also knows its member names. It cannot make rulings or change settings here.':
-    'La orientación usa los datos de la liga seleccionada. Si esta liga pertenece a una red tuya, Chimmy también conoce los nombres de sus miembros. No puede tomar decisiones ni cambiar la configuración aquí.',
+  'Chimmy answers as your assistant commissioner: it sees what is waiting on you — open tasks, trades in your review, stat corrections, inactive teams, dues and payouts — and links you to the screen to act on. It cannot make rulings or change settings itself.':
+    'Chimmy responde como tu comisionado adjunto: ve lo que tienes pendiente — tareas abiertas, intercambios en tu revisión, correcciones de estadísticas, equipos inactivos, cuotas y pagos — y te lleva a la pantalla donde actuar. No puede tomar decisiones ni cambiar la configuración por sí mismo.',
+  'Suggested questions': 'Preguntas sugeridas',
+  'What needs my attention this week?': '¿Qué necesita mi atención esta semana?',
+  'Is anything waiting on me in trades?': '¿Hay algún intercambio esperando por mí?',
+  'Which teams look inactive?': '¿Qué equipos parecen inactivos?',
+  'Are dues and payouts settled?': '¿Están al día las cuotas y los pagos?',
+  'Act on it': 'Actuar',
   Question: 'Pregunta',
   'Asking…': 'Preguntando…',
   'Ask Chimmy': 'Preguntar a Chimmy',
@@ -478,5 +496,5 @@ export function hubCopy(english: string | null | undefined, language: string): s
 
 /** The locale dates on the hub are formatted in. */
 export function hubDateLocale(language: string): string {
-  return language === 'es' ? 'es-US' : 'en-US'
+  return coreLocale(language).usLocale
 }

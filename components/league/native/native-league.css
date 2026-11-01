@@ -32,7 +32,6 @@
 .nl-workspace .nl-rail-tile .af-rail-live-state{margin-left:0}
 .nl-rail-art{align-self:flex-start;font-weight:900;font-size:15px;background:var(--chip);color:var(--muted)}
 .nl-rail-live-dot{position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:999px;background:var(--good);box-shadow:0 0 0 2px var(--rail)}
-.nl-rail-week{color:var(--faint);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
 .nl-add{display:flex;align-items:center;justify-content:center;gap:8px;flex:none;min-height:44px;border:1px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:12px;font-weight:700}
 .nl-add svg{flex:none;width:18px;height:18px}
 .nl-rail:not([data-expanded=true]){align-items:center;padding:14px 0}
@@ -172,7 +171,7 @@
   .nl-workspace .af-setup-checklist{padding:16px}
   .nl-home-secondary{display:flex}
   .nl-bottom-nav{display:flex;justify-content:space-around;min-height:72px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface2);flex:none}
-  .nl-bottom-nav button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;min-height:48px;min-width:52px;color:var(--faint);font-size:11px}
+  .nl-bottom-nav :is(button,a){display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;min-height:48px;min-width:52px;color:var(--faint);font-size:11px;text-decoration:none}
   .nl-bottom-nav [aria-current=page]{color:var(--accent)}
   .nl-sidebar.nl-menu-open{display:block;position:fixed;top:64px;bottom:72px;left:0;width:min(300px,calc(100vw - 40px));background:var(--bg);z-index:60;border-right:1px solid var(--line2)}
   .nl-nav-group button{min-height:44px}
@@ -328,3 +327,60 @@
   .nl-league-heading[data-format=guillotine] .nl-heading-name>p:not(.nl-guillotine-line){order:2}
   .nl-league-heading[data-format=guillotine] .nl-badges{margin-top:8px}
 }
+
+/* Phone workspace: one compact section picker, with the daily actions in the bottom bar. */
+.nl-section-picker{display:none}
+.nl-workspace{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+@media(max-width:767px){
+  .nl-workspace .nl-mobile-top{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));min-height:60px;flex-shrink:0}
+  .nl-workspace .nl-content{padding:12px 14px 20px;overscroll-behavior-y:contain;scrollbar-gutter:auto}
+  .nl-workspace .nl-league-heading{gap:10px;margin-bottom:14px;padding-top:0}
+  .nl-workspace .nl-heading-avatar{width:36px;height:36px;flex-basis:36px;font-size:12px}
+  .nl-workspace .nl-heading-name h1{font-size:20px;line-height:1.25;margin:0 0 4px;overflow-wrap:anywhere}
+  .nl-workspace .nl-heading-name>p{font-size:12px;line-height:1.5}
+  .nl-workspace .nl-badges>.nl-accent{display:none}
+  .nl-workspace .nl-badges{margin-top:6px;gap:6px}
+  .nl-workspace .nl-badges .nl-chip{font-size:11px;padding:3px 6px}
+  .nl-workspace .nl-mobile-tabs{display:none}
+  .nl-section-picker{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--faint);font-size:12px}
+  .nl-section-picker select{flex:1;min-width:0;min-height:44px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2);color:var(--text);padding:0 12px;font-size:16px}
+  .nl-workspace .nl-card{border-radius:14px;padding:16px}
+  .nl-workspace .nl-actions{margin-top:14px}
+  .nl-workspace .nl-next h2{font-size:20px;line-height:1.35}
+  .nl-workspace .nl-bottom-nav{min-height:60px;padding-top:4px;padding-bottom:max(4px,env(safe-area-inset-bottom));flex-shrink:0}
+  .nl-workspace :is(button,.nl-text-link,.nl-back,.nl-nav-group>a){min-height:44px;min-width:44px;touch-action:manipulation}
+  .nl-workspace :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px}
+  .nl-workspace .nl-sidebar.nl-menu-open{top:calc(60px + env(safe-area-inset-top,0px));bottom:calc(60px + env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;border-right:1px solid var(--line2);box-shadow:12px 0 32px #0006}
+  .nl-workspace .nl-switcher{padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom));overscroll-behavior:contain}
+  .nl-workspace .nl-switcher-title{position:sticky;top:0;background:var(--surface);z-index:1}
+  .nl-workspace :is(button,a,select,input):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+}
+
+.nl-heading-image{display:block;width:100%;height:100%;border-radius:inherit;object-fit:cover}
+
+.nl-home-secondary:empty { display: none; }
+.nl-home:has(> .nl-home-secondary:empty) { grid-template-columns: minmax(0, 1fr); }
+
+/* Draft board: high contrast on phones and a real countdown when scheduled. */
+.nl-draft-feature{background:linear-gradient(125deg,#143c4b,#151b38 62%,#201c3d);border-color:rgba(78,216,224,.35)}
+.nl-draft-feature h2{font-size:24px}.nl-draft-feature p{color:#d8e8ec}
+.nl-draft-countdown{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:14px;border-radius:14px;background:rgba(2,9,22,.74)}
+.nl-draft-countdown div{text-align:center}.nl-draft-countdown strong{display:block;color:#fff;font:700 24px var(--font-jetbrains-mono,monospace)}.nl-draft-countdown span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#b9ced3}
+.nl-draft-feature .nl-actions>*{min-height:44px}.nl-draft-feature .nl-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.nl-league-heading[data-format=zombie]{position:relative;isolation:isolate;overflow:hidden;background:#071610;border:1px solid rgba(132,204,22,.4);color:#f6fff5}
+.nl-zombie-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-2;pointer-events:none}
+.nl-league-heading[data-format=zombie]::before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(3,16,11,.94),rgba(3,16,11,.65));pointer-events:none}
+.nl-zombie-chip{color:#d9f99d!important;border-color:rgba(163,230,53,.5)!important;background:rgba(54,83,20,.5)!important}
+@media(max-width:767px){.nl-league-heading[data-format=zombie]{padding:14px;border-radius:12px}.nl-draft-feature h2{font-size:21px}.nl-draft-countdown strong{font-size:20px}.nl-draft-feature .nl-actions>*{flex:1 1 42%;justify-content:center}.nl-draft-feature .nl-quick-grid{grid-template-columns:1fr}}
+
+/* Dynasty legacy artwork, with a themed overlay behind the league header. */
+/* Dynasty Era token contract. Every dynasty surface reads these as var(--dyn-*, <fallback>), so a
+   surface still renders correctly outside this workspace. Defined ONLY under the dynasty attribute. */
+.nl-workspace[data-dynasty-background=true]{--dyn-ink:#0B0F17;--dyn-vault:#121826;--dyn-rail:#1C2333;--dyn-line:#2A3345;--dyn-gold:#D4A24C;--dyn-gold-soft:#F3D79F;--dyn-teal:#2DD4BF;--dyn-ember:#F07A4A;--dyn-text:#E8ECF2;--dyn-text2:#C3CAD5;--dyn-faint:#9AA4B2}
+/* Static trophy-gold glow at the top of the page, then the existing artwork wash and artwork. The
+   league heading paints its own artwork gradient over this, so the glow sits behind it. No motion. */
+.af-core.nl-workspace[data-dynasty-background=true]{background-color:var(--bg,var(--dyn-ink,#0B0F17));background-image:radial-gradient(1200px 520px at 50% -120px,color-mix(in srgb,var(--dyn-gold,#D4A24C) 18%,transparent),transparent 70%),linear-gradient(90deg,color-mix(in srgb,var(--bg) 96%,transparent),color-mix(in srgb,var(--bg) 87%,transparent)),url('/artwork/dynasty/dynasty-league-background-v1.png');background-position:top center,center,center;background-size:100% 100%,cover,cover;background-repeat:no-repeat}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading{--text:#f8f4e9;--text2:#e6dfcf;--faint:#c6bda9;--line2:rgba(255,255,255,.28);--chip:rgba(12,16,22,.6);--chip-line:rgba(255,255,255,.2);--accent:var(--dyn-gold-soft,#F3D79F);--accent-soft:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);--accent-line:color-mix(in srgb,var(--dyn-gold,#D4A24C) 42%,transparent);--gold:var(--dyn-gold-soft,#F3D79F);color:var(--text);background-color:#10151d;background-image:linear-gradient(90deg,rgba(8,12,19,.94),rgba(8,12,19,.72) 55%,rgba(8,12,19,.52)),url('/artwork/dynasty/dynasty-league-background-v1.png');background-position:center;background-size:cover;border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 25%,transparent)}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading>.nl-button{background:rgba(8,12,19,.65)}
+/* Season clock pill — "Year N · YYYY", Archivo condensed, gold-soft on a gold wash (AA on the heading). */
+.nl-workspace[data-dynasty-background=true] .nl-dyn-clock{color:var(--dyn-gold-soft,#F3D79F);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 42%,transparent);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;letter-spacing:.06em;text-transform:uppercase}

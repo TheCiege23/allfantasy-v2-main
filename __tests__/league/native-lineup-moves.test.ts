@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import type { RosterLineupLists } from '@/lib/league/lineup-swap'
-import { resolveLineupMove, seatStartersInSlots, type LineupMoveContext } from '@/lib/league/native/lineupMoves'
+import { resolveLineupMove, resolveLineupTap, seatStartersInSlots, startersOnBye, type LineupMoveContext } from '@/lib/league/native/lineupMoves'
 import { isIrEligibleStatus } from '@/lib/roster-lineup-engine/irEligibility'
 
 const slot = (index: number, label: string, allowedPositions: string[]): ExpandedStarterSlot =>
@@ -93,6 +93,46 @@ describe('resolveLineupMove', () => {
   })
 })
 
+describe('resolveLineupMove — taxi squad', () => {
+  const base = () => lists({ starters: ['qb', 'rb', 'wr', 'te'], bench: ['rb2'], taxi: ['wr2'] })
+
+  it('bench → taxi and taxi → bench move the player between the two lists', () => {
+    const c = ctx({ lists: base(), slots: NFL, limits: { taxi: 3 } }, nflPos)
+    expect(resolveLineupMove(c, 'rb2', { kind: 'taxi' })).toEqual({ ok: true, next: lists({ starters: ['qb', 'rb', 'wr', 'te'], taxi: ['wr2', 'rb2'] }) })
+    expect(resolveLineupMove(c, 'wr2', { kind: 'bench' })).toEqual({ ok: true, next: lists({ starters: ['qb', 'rb', 'wr', 'te'], bench: ['rb2', 'wr2'] }) })
+  })
+
+  it('a taxi player cannot go straight into a starting slot', () => {
+    const r = resolveLineupMove(ctx({ lists: base(), slots: NFL }, nflPos), 'wr2', { kind: 'starter', slotIndex: 2 })
+    expect(r).toMatchObject({ ok: false, reason: 'Move him from the taxi squad to the bench first.' })
+  })
+
+  it('refuses when the league has no taxi squad, the squad is full, or the player is not eligible', () => {
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, limits: { taxi: 0 } }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'This league has no taxi squad.' })
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, limits: { taxi: 1 } }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'Your taxi squad is full.' })
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL, canTaxi: () => false }, nflPos), 'rb2', { kind: 'taxi' })).toMatchObject({ ok: false, reason: 'This player is not eligible for the taxi squad.' })
+  })
+
+  it('moving a taxi player to the taxi squad again is a no-op', () => {
+    expect(resolveLineupMove(ctx({ lists: base(), slots: NFL }, nflPos), 'wr2', { kind: 'taxi' })).toMatchObject({ ok: false, noop: true })
+  })
+})
+
+describe('startersOnBye', () => {
+  const players: Record<string, { byeWeek?: number | null; opponent?: string | null }> = {
+    a: { byeWeek: 7, opponent: null },
+    b: { byeWeek: 9, opponent: 'KC' },
+    c: { byeWeek: null, opponent: 'BYE' },
+    d: { byeWeek: null, opponent: null },
+  }
+  it('flags a starter whose bye is this week or whose opponent is BYE, and nobody else', () => {
+    expect(startersOnBye(['a', 'b', 'c', 'd', ''], (id) => players[id], 7)).toEqual(['a', 'c'])
+  })
+  it('does not guess when the week is unknown', () => {
+    expect(startersOnBye(['a', 'b'], (id) => players[id], null)).toEqual([])
+  })
+})
+
 describe('seatStartersInSlots', () => {
   it('leaves an already slot-ordered lineup untouched', () => {
     expect(seatStartersInSlots(['qb', 'rb', 'wr', 'te'], NFL, (id) => nflPos[id as keyof typeof nflPos])).toEqual(['qb', 'rb', 'wr', 'te'])
@@ -116,5 +156,45 @@ describe('isIrEligibleStatus', () => {
     expect(isIrEligibleStatus({ ...none, irAllowOut: true }, 'Out')).toBe(true)
     expect(isIrEligibleStatus(none, '')).toBe(false)
     expect(isIrEligibleStatus(none, 'healthy')).toBe(false)
+  })
+})
+
+describe('resolveLineupTap — tap a player or slot, then tap where he goes', () => {
+  const l = lists({ starters: ['qb', 'rb', 'wr', ''], bench: ['rb2', 'te'], ir: ['inj'], taxi: ['rook'] })
+  const slotTap = (slotIndex: number) => ({ kind: 'slot' as const, slotIndex })
+  const playerTap = (playerId: string) => ({ kind: 'player' as const, playerId })
+
+  it('starter then starter: the first slot\'s player moves into the second slot (a swap when it is filled)', () => {
+    expect(resolveLineupTap(l, slotTap(1), slotTap(3))).toEqual({ playerId: 'rb', target: { kind: 'starter', slotIndex: 3 } })
+    expect(resolveLineupTap(l, slotTap(1), slotTap(2))).toEqual({ playerId: 'rb', target: { kind: 'starter', slotIndex: 2 } })
+  })
+
+  it('an empty slot first pulls the second slot\'s player into it', () => {
+    expect(resolveLineupTap(l, slotTap(3), slotTap(1))).toEqual({ playerId: 'rb', target: { kind: 'starter', slotIndex: 3 } })
+  })
+
+  it('starter then bench player (or bench player then starter): the bench player comes into that slot', () => {
+    expect(resolveLineupTap(l, slotTap(1), playerTap('rb2'))).toEqual({ playerId: 'rb2', target: { kind: 'starter', slotIndex: 1 } })
+    expect(resolveLineupTap(l, playerTap('rb2'), slotTap(1))).toEqual({ playerId: 'rb2', target: { kind: 'starter', slotIndex: 1 } })
+  })
+
+  it('a player then a section, or a player in another section, moves him there', () => {
+    expect(resolveLineupTap(l, slotTap(0), { kind: 'section', section: 'bench' })).toEqual({ playerId: 'qb', target: { kind: 'bench' } })
+    expect(resolveLineupTap(l, playerTap('rook'), playerTap('rb2'))).toEqual({ playerId: 'rook', target: { kind: 'bench' } })
+    expect(resolveLineupTap(l, playerTap('te'), playerTap('rook'))).toEqual({ playerId: 'te', target: { kind: 'taxi' } })
+  })
+
+  it('taps that make no move return null', () => {
+    expect(resolveLineupTap(l, slotTap(1), slotTap(1))).toBeNull()
+    expect(resolveLineupTap(l, slotTap(3), { kind: 'section', section: 'bench' })).toBeNull()
+    expect(resolveLineupTap(l, playerTap('rb2'), playerTap('te'))).toBeNull()
+    expect(resolveLineupTap(l, { kind: 'section', section: 'ir' }, slotTap(0))).toBeNull()
+  })
+
+  it('the move it names is still decided by resolveLineupMove: a taxi player cannot jump straight into a slot', () => {
+    const c = ctx({ lists: l, slots: NFL }, { ...nflPos, rook: 'WR' })
+    const m = resolveLineupTap(l, playerTap('rook'), slotTap(2))!
+    expect(m).toEqual({ playerId: 'rook', target: { kind: 'starter', slotIndex: 2 } })
+    expect(resolveLineupMove(c, m.playerId, m.target)).toMatchObject({ ok: false, reason: expect.stringMatching(/taxi squad to the bench/) })
   })
 })

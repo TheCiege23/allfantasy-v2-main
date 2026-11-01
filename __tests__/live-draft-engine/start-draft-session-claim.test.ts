@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/draft-room', () => ({ getManagerColorBySeed: () => '#ffffff' }))
-const db = vi.hoisted(() => ({ session: vi.fn(), claim: vi.fn(), start: vi.fn(), emit: vi.fn() }))
+const db = vi.hoisted(() => ({ session: vi.fn(), claim: vi.fn(), start: vi.fn(), emit: vi.fn(), auctionInit: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftSession: { findFirst: db.session, updateMany: db.claim },
@@ -16,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueSettings: { findUnique: vi.fn(async () => ({ aiAutoPick: false, cpuAutoPick: true, playerPool: 'all', alphabeticalSort: false })) },
   },
 }))
+vi.mock('@/lib/live-draft-engine/auction/AuctionEngine', () => ({ buildInitialAuctionSessionUpdate: db.auctionInit }))
 vi.mock('@/lib/draft-archive/events', () => ({ recordArchiveEvent: vi.fn(), updateSessionWithArchive: db.start }))
 vi.mock('@/lib/league/league-roster-draft-gate', () => ({ isLeagueRosterDraftReady: vi.fn(async () => true) }))
 vi.mock('@/lib/draft-defaults/DraftRoomConfigResolver', () => ({ getDraftConfigForLeague: vi.fn(async () => ({ timer_seconds: 90 })) }))
@@ -32,6 +33,7 @@ describe('startDraftSession conditional claim', () => {
     db.session.mockResolvedValue(session)
     db.claim.mockResolvedValue({ count: 1 })
     db.start.mockResolvedValue({})
+    db.auctionInit.mockResolvedValue({ auctionBudgets: { a: 200, b: 200 }, auctionState: { nominationOrderIndex: 0 }, timerEndAt: new Date('2026-11-01') })
   })
 
   it('claims only a pre_draft session at the version it read, then starts at the claimed version', async () => {
@@ -42,6 +44,20 @@ describe('startDraftSession conditional claim', () => {
     expect(db.start).toHaveBeenCalledOnce()
     expect(db.start.mock.calls[0][1]).toMatchObject({ status: 'in_progress' })
     expect(db.start.mock.calls[0][4]).toBe(8)
+  })
+
+  it('starts an auction and initializes budgets in the same version-checked transition', async () => {
+    db.session.mockResolvedValue({ ...session, draftType: 'auction' })
+    expect(await startDraftSession('l')).toEqual({ ok: true })
+    expect(db.auctionInit).toHaveBeenCalledOnce()
+    expect(db.start.mock.calls[0][1]).toMatchObject({ status: 'in_progress', auctionBudgets: { a: 200, b: 200 }, auctionState: { nominationOrderIndex: 0 } })
+    expect(db.start.mock.calls[0][4]).toBe(8)
+  })
+
+  it('preserves the rookie-only pool when the league default is all players', async () => {
+    db.session.mockResolvedValue({ ...session, draftModeLabel: 'rookie', playerPool: 'rookies_only' })
+    expect(await startDraftSession('l')).toEqual({ ok: true })
+    expect(db.claim.mock.calls[0][0].data.playerPool).toBe('rookies_only')
   })
 
   it('does nothing when another caller claimed the session first', async () => {

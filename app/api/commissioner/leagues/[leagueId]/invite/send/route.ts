@@ -9,6 +9,7 @@ import { getLeaguePrivacySettings } from "@/lib/league-privacy"
 import { buildFantasyInviteLink, generateInviteToken, getDefaultFantasyInviteExpiry } from "@/lib/league-invite"
 import { buildEmailIdempotencyKey } from "@/lib/email/idempotency"
 import { rateLimit } from "@/lib/rate-limit"
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 
 export const dynamic = "force-dynamic"
 
@@ -31,6 +32,18 @@ function getBaseUrl(req: NextRequest): string {
   // returned to clients and emailed, and a spoofed header would point them at
   // an attacker's host. See lib/http/served-origin.ts.
   return getServedOrigin(req)
+}
+
+async function notifyRegisteredInvitee(userId: string, leagueId: string, leagueName: string, inviteUrl: string, inviteCode: string): Promise<void> {
+  await dispatchNotification({
+    userIds: [userId], category: 'commissioner_alerts', productType: 'app',
+    type: 'league_invite', title: `League invite: ${subjectSafe(leagueName)}`,
+    body: 'You have been invited to join this league.',
+    actionHref: inviteUrl, actionLabel: 'View invite', leagueId,
+    severity: 'high', skipChannels: { email: true },
+    dedupePrefix: `league-invite:${leagueId}:${inviteCode}:${userId}`,
+    smsBody: 'You have a league invitation on AllFantasy. Open the app to view it.',
+  })
 }
 
 /**
@@ -133,6 +146,8 @@ export async function POST(
           { status: 502 }
         )
       }
+      const registered = await prisma.appUser.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } })
+      if (registered) await notifyRegisteredInvitee(registered.id, league.id, leagueName, inviteUrl, String(inviteCode)).catch((e) => console.error('[invite/send] registered invite notification failed', e))
       return NextResponse.json({ ok: true, inviteUrl, sent: true, sentTo: email })
     } catch {
       return NextResponse.json(
@@ -166,6 +181,11 @@ export async function POST(
       profile?.displayName ??
       profile?.sleeperUsername ??
       null
+    const exactProfile = appUser ? null : await prisma.userProfile.findFirst({
+      where: { sleeperUsername: { equals: username, mode: 'insensitive' } }, select: { userId: true },
+    })
+    const registeredUserId = appUser?.id ?? exactProfile?.userId
+    if (registeredUserId) await notifyRegisteredInvitee(registeredUserId, league.id, leagueName, inviteUrl, String(inviteCode)).catch((e) => console.error('[invite/send] username invite notification failed', e))
     return NextResponse.json({
       ok: true,
       inviteUrl,

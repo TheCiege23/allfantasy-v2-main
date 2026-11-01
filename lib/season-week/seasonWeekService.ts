@@ -20,6 +20,7 @@ import {
 import { dailySportWeekForInstant, resolveDailySportSeasonStart } from './dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from './deriveDailySportSeasonStart'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import type {
   LeagueSeasonWeekResolution,
   ScheduleRow,
@@ -226,5 +227,6 @@ export async function resolveLastPlayoffWeek(
     weeksPerRound: league?.playoffWeeksPerRound,
     finalRoundNumber: round.roundNumber,
     championshipLength: readChampionshipLength(league?.settings),
+    seriesLengths: readPlayoffSeriesLengths(league?.settings),
   })
 }

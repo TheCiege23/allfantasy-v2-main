@@ -117,10 +117,11 @@ const PROVIDER_BUCKET: Partial<Record<LeagueDataCoverageKey, ImportCoverageKey>>
 /**
  * Which platforms any writer fills a row for. Absent means every imported platform.
  *
- * ⚠ LINEUPS ARE SLEEPER-ONLY TODAY: `ingestSleeperPlayerScores` is the one writer of
- * `LeaguePlayerWeeklyScore`, and the model's own comment says espn/yahoo "would each add
- * their own". An ESPN league with no lineups is our gap, not ESPN's — `unsupported`, never
- * `not_published`.
+ * ⚠ LINEUPS ARE SLEEPER-ONLY ON A SCHEDULE: `ingestSleeperPlayerScores` is the one scheduled writer
+ * of `LeaguePlayerWeeklyScore`. Fantrax rows exist only from a manual browser-download import
+ * (lib/import-os/collector/fantraxBrowserActuals.ts), and a league that has rows reads as available
+ * before this set is consulted. An ESPN league with no lineups is our gap, not ESPN's —
+ * `unsupported`, never `not_published` (docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md).
  */
 const WRITTEN_FOR: Partial<Record<LeagueDataCoverageKey, ReadonlySet<string>>> = {
   lineups: new Set(['sleeper']),

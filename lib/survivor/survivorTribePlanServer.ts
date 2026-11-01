@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { loadAdpBySleeperId } from '@/lib/adp/resolveAdp'
 import { rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { SURVIVOR_TRIBE_CATALOG, type SurvivorTribeSlot } from './survivorTribeIdentity'
+import { assignSurvivorTribes } from './survivorTribeProvisioning'
 import {
   readLockedTribePlanMapping,
   readStoredTribePlan,
@@ -24,9 +25,12 @@ import {
  *   - AF strength = DB-first ADP (`loadAdpBySleeperId`, the adp_data table) of each roster's players.
  *     No provider call. No rostered players with ADP → null, and Balanced by AF says so.
  *
- * Locking does NOT write tribes. It freezes the plan in league settings (`survivorTribePlan.lockedAt`)
- * and `initializeSurvivorPhase2` assigns from it after the draft — before the draft there are no
- * SurvivorPlayer roster links for SurvivorTribeMember rows to point at.
+ * Locking WRITES the tribes (owner's call, 2026-10-20: tribes exist before the draft, so the draft
+ * room can show them). `SurvivorTribeMember.rosterId` is a Roster id, which exists as soon as a seat
+ * is claimed, so the rows are written pre-draft through `assignSurvivorTribes` in its `preDraft`
+ * mode; the SurvivorPlayer rows that appear after the draft are linked to them by
+ * `prepareSurvivorDraftParticipants`, and `initializeSurvivorPhase2` keeps them (`alreadyAssigned`).
+ * The plan itself is still frozen in league settings (`survivorTribePlan.lockedAt`).
  */
 
 export { readStoredTribePlan, readLockedTribePlanMapping, type StoredTribePlan }
@@ -58,7 +62,7 @@ export async function loadTribePlanParticipants(
   return cast
     .map(r => {
       const u = userById.get(r.platformUserId)!
-      return { userId: u.id, displayName: u.displayName || u.username || 'Manager', strength: strength.get(u.id) ?? null }
+      return { userId: u.id, displayName: u.displayName || u.username || 'Manager', strength: strength.get(u.id) ?? null, rosterId: r.id }
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
 }
@@ -68,11 +72,16 @@ export function tribeNameForSlot(slots: readonly SurvivorTribeSlot[], slot: numb
   return name ? `Tribe ${name}` : `Tribe ${slot + 1}`
 }
 
-export type LockOutcome = { ok: true; plan: StoredTribePlan; announced: boolean } | { ok: false; status: 409 | 422; error: string }
+export type LockedTribeSummary = { id: string; slotIndex: number; name: string; memberCount: number }
+export type LockOutcome =
+  | { ok: true; plan: StoredTribePlan; announced: boolean; tribes: LockedTribeSummary[] }
+  | { ok: false; status: 409 | 422; error: string }
 
 /**
  * Freeze the plan. Validates against the CURRENT cast and capacities (never the client's copy of
- * them), stores it, and posts the announcement to league chat when the plan asks for it.
+ * them), writes the tribes and their members (keyed by roster), stores the plan, and posts the
+ * announcement to league chat when the plan asks for it. The tribe write comes FIRST so a refusal
+ * leaves nothing behind — the caller's transaction commits whatever ran before an early return.
  */
 export async function lockSurvivorTribePlan(args: {
   db: Prisma.TransactionClient
@@ -91,7 +100,20 @@ export async function lockSurvivorTribePlan(args: {
   const capacities = args.slots.map(s => s.managerCount)
   const invalid = validateTribePlan(args.plan.mapping, args.participants, capacities)
   if (invalid) return { ok: false, status: 422, error: invalid }
+  if (args.participants.some(p => !p.rosterId)) {
+    return { ok: false, status: 422, error: 'Every manager needs a claimed seat before tribes can lock.' }
+  }
   const stored: StoredTribePlan = { ...args.plan, lockedAt: new Date().toISOString(), lockedBy: args.actorUserId }
+  const assigned = await assignSurvivorTribes(args.leagueId, {
+    db: args.db,
+    mode: 'commissioner_manual',
+    manualMapping: stored.mapping,
+    tribeCount: capacities.length,
+    participants: args.participants.map(p => ({ userId: p.userId, rosterId: p.rosterId!, displayName: p.displayName })),
+    preDraft: true,
+    actorUserId: args.actorUserId,
+  })
+  if (!assigned.ok) return { ok: false, status: 422, error: assigned.error }
   await args.db.league.update({
     where: { id: args.leagueId },
     data: { settings: { ...args.settingsSnapshot, survivorTribePlan: stored } as Prisma.InputJsonValue },
@@ -109,5 +131,5 @@ export async function lockSurvivorTribePlan(args: {
     // Best-effort: a failed post must not undo the lock.
     announced = await args.postAnnouncement(tribeAnnouncementText(tribes)).then(() => true, () => false)
   }
-  return { ok: true, plan: stored, announced }
+  return { ok: true, plan: stored, announced, tribes: assigned.tribes }
 }

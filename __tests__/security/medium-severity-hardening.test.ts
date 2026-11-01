@@ -21,6 +21,7 @@ const m = vi.hoisted(() => ({
   getLeaguePrivacySettings: vi.fn(),
   emailsSend: vi.fn(),
   runReminders: vi.fn(),
+  resolveSurvivorAccessContext: vi.fn(),
 }))
 
 vi.mock("next-auth", () => ({ getServerSession: m.getServerSession }))
@@ -31,6 +32,7 @@ vi.mock("@/lib/commissioner/permissions", () => ({
   assertCommissioner: m.assertCommissioner,
 }))
 vi.mock("@/lib/draft/access", () => ({ canAccessLeague: m.canAccessLeague }))
+vi.mock("@/lib/survivor/survivorAccessControl", () => ({ resolveSurvivorAccessContext: m.resolveSurvivorAccessContext }))
 vi.mock("@/lib/league-privacy", () => ({ getLeaguePrivacySettings: m.getLeaguePrivacySettings }))
 vi.mock("@/lib/resend-client", () => ({
   getResendClient: () => ({ client: { emails: { send: m.emailsSend } }, fromEmail: "AllFantasy <no-reply@example.com>" }),
@@ -63,6 +65,8 @@ beforeEach(async () => {
   m.getServerSession.mockResolvedValue(null)
   m.assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
   m.isCommissioner.mockResolvedValue(false)
+  // A commissioner who does not play: full oversight. A playing one is tested explicitly below.
+  m.resolveSurvivorAccessContext.mockResolvedValue({ decisions: { canSeeHiddenIdolAssignments: true } })
   m.canAccessLeague.mockResolvedValue(true)
   m.survivorFindMany.mockResolvedValue([])
   m.draftQueueFindMany.mockResolvedValue([])
@@ -95,7 +99,7 @@ describe("league invite email", () => {
       name: '<a href="https://evil.example">Claim your prize</a>',
       settings: { inviteCode: "CODE1234", inviteExpiresAt: "2099-01-01T00:00:00Z" },
     })
-    m.emailsSend.mockResolvedValue({ error: null })
+    m.emailsSend.mockResolvedValue({ data: { id: 'email-id' }, error: null })
 
     const { POST } = await import("@/app/api/commissioner/leagues/[leagueId]/invite/send/route")
     const res = await POST(
@@ -124,12 +128,22 @@ describe("private per-member data needs the member (or the commissioner)", () =>
     expect(m.survivorFindMany).not.toHaveBeenCalled()
   })
 
-  it("the commissioner still can", async () => {
+  it("a commissioner who does not play still can", async () => {
     signedIn()
     m.isCommissioner.mockResolvedValue(true)
     const { GET } = await import("@/app/api/survivor/notifications/route")
     const res = await GET(get(`https://www.allfantasy.ai/api/survivor/notifications?leagueId=lg-1&userId=${RIVAL}`))
     expect(res.status).toBe(200)
+  })
+
+  it("a commissioner who PLAYS cannot: those rows name hidden idol holders", async () => {
+    signedIn()
+    m.isCommissioner.mockResolvedValue(true)
+    m.resolveSurvivorAccessContext.mockResolvedValue({ decisions: { canSeeHiddenIdolAssignments: false } })
+    const { GET } = await import("@/app/api/survivor/notifications/route")
+    const res = await GET(get(`https://www.allfantasy.ai/api/survivor/notifications?leagueId=lg-1&userId=${RIVAL}`))
+    expect(res.status).toBe(403)
+    expect(m.survivorFindMany).not.toHaveBeenCalled()
   })
 
   it("a member cannot read a rival's draft queue", async () => {

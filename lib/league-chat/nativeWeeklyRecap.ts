@@ -2,12 +2,15 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
+import { describeExtraMatchupReason, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 export type NativeRecapGame = {
   home: string
   away: string
   homeScore: number
   awayScore: number
+  /** An odd-team league's extra matchup (home = the leftover team): "last week's top scorer". */
+  extraReason?: string
 }
 
 const points = (value: number) => value.toFixed(1)
@@ -30,15 +33,16 @@ export function buildNativeWeeklyRecap(input: {
     '',
     '🏈 Results',
     ...games.map((game) => {
+      const tag = game.extraReason ? ` — extra matchup (${game.away}: ${game.extraReason})` : ''
       if (game.homeScore === game.awayScore) {
-        return `  ${game.home} ${points(game.homeScore)} tied ${game.away} ${points(game.awayScore)}`
+        return `  ${game.home} ${points(game.homeScore)} tied ${game.away} ${points(game.awayScore)}${tag}`
       }
       const homeWins = game.homeScore > game.awayScore
       const winner = homeWins ? game.home : game.away
       const loser = homeWins ? game.away : game.home
       const winningScore = homeWins ? game.homeScore : game.awayScore
       const losingScore = homeWins ? game.awayScore : game.homeScore
-      return `  ${winner} ${points(winningScore)} def. ${loser} ${points(losingScore)}`
+      return `  ${winner} ${points(winningScore)} def. ${loser} ${points(losingScore)}${tag}`
     }),
   ]
   if (input.leaders.length > 0) {
@@ -85,24 +89,51 @@ export async function buildNativeRecapForLeague(input: {
   if (rows.length === 0 || rows.some((row) => row.status !== 'final' || !row.awayRoster)) {
     return { ok: false, reason: 'week is not final' }
   }
+  // The table's own order (`playoffSeed`, written by updateStandings by win %), not raw wins: an
+  // odd-team league plays unequal numbers of games.
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: season.id },
     select: { teamName: true, ownerName: true, wins: true, losses: true, ties: true, pointsFor: true },
-    orderBy: [{ wins: 'desc' }, { pointsFor: 'desc' }],
+    orderBy: [{ playoffSeed: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
     take: 3,
   })
   const name = (roster: { teamName: string | null; ownerName: string } | null) =>
     roster?.teamName?.trim() || roster?.ownerName?.trim() || 'Open team'
+
+  // An odd-team league's extra matchup that week (lib/redraft/oddTeamExtraMatchupRules.ts).
+  const weekRows = await prisma.redraftMatchup.findMany({
+    where: { seasonId: season.id, week: latest.week, isMedianMatchup: false },
+    select: { week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, status: true, lineupSnapshots: true },
+  })
+  const extras = extraMatchupResults(weekRows)
+  const extraGames: NativeRecapGame[] = []
+  if (extras.length > 0) {
+    const all = await prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, teamName: true, ownerName: true } })
+    const byId = new Map(all.map((r) => [r.id, r]))
+    for (const x of extras) {
+      const record = readExtraMatchupRecord(weekRows.find((r) => !r.awayRosterId && r.homeRosterId === x.leftoverRosterId)?.lineupSnapshots)
+      extraGames.push({
+        home: name(byId.get(x.leftoverRosterId) ?? null),
+        away: name(byId.get(x.opponentRosterId) ?? null),
+        homeScore: x.leftoverScore,
+        awayScore: x.opponentScore,
+        extraReason: record ? describeExtraMatchupReason(record.reason) : 'extra matchup',
+      })
+    }
+  }
   const text = buildNativeWeeklyRecap({
     leagueName: input.leagueName,
     season: season.season,
     week: latest.week,
-    games: rows.map((row) => ({
-      home: name(row.homeRoster),
-      away: name(row.awayRoster),
-      homeScore: row.homeScore,
-      awayScore: row.awayScore,
-    })),
+    games: [
+      ...rows.map((row) => ({
+        home: name(row.homeRoster),
+        away: name(row.awayRoster),
+        homeScore: row.homeScore,
+        awayScore: row.awayScore,
+      })),
+      ...extraGames,
+    ],
     leaders: rosters.map((roster) => ({
       name: name(roster), wins: roster.wins, losses: roster.losses, ties: roster.ties,
     })),

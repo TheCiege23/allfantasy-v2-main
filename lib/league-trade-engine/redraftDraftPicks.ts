@@ -28,7 +28,7 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { resolveOverallForRoundSlot } from '@/lib/live-draft-engine/draftPickTradeInventory'
 import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
-import { supportsKeeperDeclarations } from '@/lib/league/keeper-policy'
+import { isRedraftPickLeague } from '@/lib/league/keeper-policy'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { recordArchiveEvent } from '@/lib/draft-archive/events'
 import { parseInventoryPickId } from './nativeFuturePicks'
@@ -51,18 +51,8 @@ export class CodedTradeError extends Error {
   }
 }
 
-/**
- * A league that trades only its current draft's picks. Everything dynasty-family (which keeps a
- * rookie draft and a future inventory), salary-cap, and anything with keeper declarations is not.
- */
-export function isRedraftPickLeague(league: { leagueType?: string | null; isDynasty?: boolean | null }): boolean {
-  if (league.isDynasty === true) return false
-  const type = String(league.leagueType ?? '').trim().toLowerCase()
-  if (supportsKeeperDeclarations(type)) return false
-  // Compound spellings (`c2c_dynasty`, `devy_dynasty`, `salary_cap`) carry multi-season picks too —
-  // the same substring reading the trade-settings resolver uses for its C2C and devy gates.
-  return !/dynasty|devy|c2c|keeper|salary/.test(type)
-}
+/** Lives in `lib/league/keeper-policy.ts` (no prisma) so client code can share it; re-exported for the trade engine. */
+export { isRedraftPickLeague }
 
 /** The draft is run by AllFantasy itself, so a pick traded here is the pick the room drafts with. */
 export function isNativeDraftPlatform(platform: string | null | undefined): boolean {

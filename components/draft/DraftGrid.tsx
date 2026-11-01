@@ -1,6 +1,7 @@
 import type { DraftState } from '@/lib/workers/draft-worker'
 import { DraftCell } from './DraftCell'
 import { OrphanTeamBadge } from './OrphanTeamBadge'
+import { SurvivorTribeBadge } from '@/components/league/survivor/SurvivorTribeBadge'
 
 type DraftGridProps = {
   state: DraftState
@@ -46,6 +47,7 @@ export function DraftGrid({ state, bigScreen = false }: DraftGridProps) {
                       <span className="text-sm font-semibold text-white">{team.displayName}</span>
                       {String(team.rosterId || '').startsWith('orphan-') ? <OrphanTeamBadge /> : null}
                     </div>
+                    {team.tribe ? <SurvivorTribeBadge tribe={team.tribe} className="max-w-full" /> : null}
                     {team.budgetRemaining != null ? (
                       <div className="text-[11px] text-cyan-200">${team.budgetRemaining}</div>
                     ) : null}

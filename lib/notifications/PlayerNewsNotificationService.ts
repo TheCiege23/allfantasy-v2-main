@@ -1,3 +1,10 @@
+import { planPlayerNews, markPlayerNewsTold, playerNewsDispatches, type PlayerNewsPlan, type PlayerNewsSubject } from './playerNewsGate'
+import { statusBucket } from './playerNewsStatus'
+import type { PlayerNewsRelation } from '@/lib/notification-settings/playerNewsLevel'
+import { createTeamInjuryNewsBatch } from './teamInjuryNewsBatch'
+import { resolveLineupImpacts } from './lineupImpact'
+import { lineupImpactCopy } from './lineupImpactCopy'
+import type { DispatchNotificationParams } from './NotificationDispatcher'
 /**
  * Player News Notification Service
  *
@@ -24,8 +31,9 @@ import {
 import type { RunBudget } from '@/lib/cron/runBudget'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
-import { dispatchNotification, type DispatchNotificationResult } from '@/lib/notifications/NotificationDispatcher'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { newsDeliveryKey } from '@/lib/news/newsroomFilter'
 import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import {
   playerNewsContentHash,
@@ -104,7 +112,7 @@ async function rosterRowsForBinding(
   binding: NewsPlayerBinding,
   newsName: string,
   sport: string | null | undefined,
-): Promise<Array<{ roster: { ownerId: string; leagueId: string } | null }> | null> {
+): Promise<Array<{ slotType?: string | null; roster: { ownerId: string; leagueId: string } | null }> | null> {
   if (binding.kind !== 'resolved') return []
   const sk = String(sport ?? '').trim().toUpperCase()
   const spellings = [...new Set([newsName.trim(), binding.identity.name.trim()].filter(Boolean))]
@@ -116,7 +124,7 @@ async function rosterRowsForBinding(
         droppedAt: null,
       },
       select: {
-        playerId: true, playerName: true, team: true, sport: true,
+        playerId: true, playerName: true, team: true, sport: true, slotType: true,
         roster: { select: { ownerId: true, leagueId: true } },
       },
       take: 500,
@@ -354,6 +362,37 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
  * Source-side dedupe is the `notificationDispatchedAt` stamp; recipient-side dedupe is
  * `dedupePrefix`, which collapses repeat in-app rows for the same story and user.
  */
+/** Slots that do not score — a player here is "rostered", not a starter, for the player-news level. */
+const NON_STARTER_SLOT = /^(bench|ir|taxi|devy|free_agent|pro_bench|pro_ir|college|reserve|inj|out)$/i
+
+/** What this story says about his availability: the headline first, then the start of the body. */
+function storyBucket(category: string, headline: string, body: string | null): PlayerNewsSubject['bucket'] {
+  if (category !== 'injury') return `news:${category}`
+  const head = statusBucket(headline)
+  return head !== 'other' ? head : statusBucket((body ?? '').slice(0, 300))
+}
+
+/** The player's latest recorded injury status, so news about a player already on IR can be skipped. */
+async function latestInjuryBucket(sport: string, playerName: string): Promise<ReturnType<typeof statusBucket> | null> {
+  try {
+    const row = await prisma.sportsInjury.findFirst({ where: { sport, playerName: { equals: playerName, mode: 'insensitive' } }, orderBy: { fetchedAt: 'desc' }, select: { status: true } })
+    return row?.status ? statusBucket(row.status) : null
+  } catch {
+    // Unknown is not IR: an unreadable status must not silence the story.
+    return null
+  }
+}
+
+/** Send a gated request as its instant and digest halves. True when every half was handed off. */
+async function sendGated(params: DispatchNotificationParams, plan: PlayerNewsPlan, info: Parameters<typeof playerNewsDispatches>[2], starterOf?: (id: string) => boolean): Promise<boolean> {
+  let ok = true
+  for (const p of playerNewsDispatches(params, plan, info, starterOf)) {
+    const r = await dispatchNotification(p).then(res => res.failed === 0, () => false)
+    if (!r) ok = false
+  }
+  return ok
+}
+
 export async function dispatchPendingPlayerNewsNotifications(input?: {
   limit?: number
   lookbackHours?: number
@@ -416,7 +455,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       orderBy: { publishedAt: 'desc' },
       take: limit,
       select: {
-        id: true, sport: true, playerName: true, team: true,
+        id: true, sport: true, playerName: true, team: true, publishedAt: true,
         headline: true, body: true, impact: true,
       },
     })
@@ -436,6 +475,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let retryScheduled = 0
   let ledgerUnpersisted = 0
   const stamped: string[] = []
+  const injuryBatch = createTeamInjuryNewsBatch(input?.budget)
 
   /*
    * 🛑 "CONSIDERED" AND "DELIVERED" WERE ONE STAMP. Every row looked at was stamped
@@ -455,6 +495,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
+    const deliveryKey = newsDeliveryKey(row.sport, row.headline, row.publishedAt ?? new Date())
     /*
      * ⚠ CHECKED BEFORE THE STAMP, NOT AFTER. `stamped` means "considered", and the updateMany at
      * the end writes `notificationDispatchedAt` for everything in it — so a check placed even one
@@ -542,7 +583,26 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         continue
       }
       const teamName = getTeamInfo(club)?.fullName ?? row.playerName
-      const teamSent = await dispatchNotification({
+      // The player-news gate: a team story reaches team followers through the daily digest only.
+      const teamSubject: PlayerNewsSubject = { playerKey: `team:${row.sport}:${clubAbbr}`, bucket: storyBucket(category, row.headline, row.body) }
+      const teamPlan = await planPlayerNews(cappedFans, teamSubject, () => 'team_follower')
+      repeatsSuppressed += teamPlan.suppressed.length
+      const teamInfo = { playerName: teamName, team: clubAbbr, status: teamSubject.bucket }
+      if (teamPlan.instant.length + teamPlan.digest.length === 0) {
+        await settle(row, 'all-suppressed')
+        continue
+      }
+      if(isInjury){
+        injuryBatch.add(playerNewsDispatches({userIds:cappedFans,category:'followed_teams',type:'player_injury_update',
+          title:teamName,body:row.headline,leagueId:null,severity:'high',dedupePrefix:deliveryKey,
+          meta:{team:clubAbbr,teamName,followedTeam:clubAbbr,teamNews:true,injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}, teamPlan, teamInfo),async(users,failed)=>{
+          recipients+=users.size;teamFollowerRecipients+=users.size
+          if(users.size){await recordToldAbout([...users],story,undefined,{storyOnly:true});await markPlayerNewsTold([...users],teamSubject);notified++}
+          await settle(row,failed?'dispatch-failed':users.size?'delivered':'all-suppressed')
+        })
+        continue
+      }
+      const teamSent = await sendGated({
         userIds: cappedFans,
         category: 'followed_teams',
         type: isInjury ? 'player_injury_update' : 'player_news_update',
@@ -550,17 +610,19 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { teamName, team: clubAbbr, sport: row.sport, newsCategory: category, followedTeam: clubAbbr, teamNews: true },
-      }).then(result => result.failed === 0, () => false)
+      }, teamPlan, teamInfo)
       if (!teamSent) {
         // Threw before any handoff: nobody is recorded as told, so the retry reaches the same people.
         await settle(row, 'dispatch-failed')
         continue
       }
-      recipients += cappedFans.length
-      teamFollowerRecipients += cappedFans.length
-      await recordToldAbout(cappedFans, story, undefined, { storyOnly: true })
+      const reachedFans = [...teamPlan.instant, ...teamPlan.digest]
+      recipients += reachedFans.length
+      teamFollowerRecipients += reachedFans.length
+      await recordToldAbout(reachedFans, story, undefined, { storyOnly: true })
+      await markPlayerNewsTold(reachedFans, teamSubject)
       notified++
       await settle(row, 'delivered')
       continue
@@ -662,8 +724,118 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       continue
     }
     // The daily cap is consumed only for people who would otherwise be told THIS story.
-    const teamFollowersOnly = await withinTeamFollowDailyCap(uncappedTeamFollowers)
-    teamFollowCapped += uncappedTeamFollowers.length - teamFollowersOnly.length
+    const cappedTeamFollowers = await withinTeamFollowDailyCap(uncappedTeamFollowers)
+    teamFollowCapped += uncappedTeamFollowers.length - cappedTeamFollowers.length
+
+    /*
+     * THE PLAYER-NEWS GATE (owner's call, 2026-10-22, after 59 emails in one day). Practice-report
+     * noise and news about a player already on IR go nowhere; then each person's Player news level
+     * decides push-now or the daily digest, and one shared record keeps the same player and status
+     * to one alert a day across every sender. See lib/notifications/playerNewsGate.ts.
+     */
+    const subject: PlayerNewsSubject = { playerKey: binding.identity.id, bucket: storyBucket(category, row.headline, row.body) }
+    if (subject.bucket === 'practice') {
+      await settle(row, 'policy-skipped')
+      continue
+    }
+    if (isInjury && subject.bucket !== 'active' && (await latestInjuryBucket(row.sport, binding.identity.name)) === 'ir') {
+      await settle(row, 'policy-skipped')
+      continue
+    }
+    const starterUsers = new Set(
+      rosterPlayers.filter(rp => rp.roster?.ownerId && !NON_STARTER_SLOT.test(String(rp.slotType ?? '').trim())).map(rp => rp.roster!.ownerId),
+    )
+    const followerSet = new Set(followersOnly)
+    const relationOf = (id: string): PlayerNewsRelation =>
+      starterUsers.has(id) ? 'starter' : rostered.has(id) ? 'rostered' : followerSet.has(id) ? 'player_follower' : 'team_follower'
+    const plan = await planPlayerNews([...new Set([...[...byLeague.values()].flatMap(ids => [...ids]), ...followersOnly, ...cappedTeamFollowers])], subject, relationOf)
+    repeatsSuppressed += plan.suppressed.length
+    const gone = new Set(plan.suppressed)
+    for (const [leagueId, ids] of byLeague) {
+      const kept = new Set([...ids].filter(id => !gone.has(id)))
+      if (kept.size) byLeague.set(leagueId, kept)
+      else byLeague.delete(leagueId)
+    }
+    const teamFollowersOnly = cappedTeamFollowers.filter(id => !gone.has(id))
+    const gatedFollowersOnly = followersOnly.filter(id => !gone.has(id))
+    if (byLeague.size === 0 && gatedFollowersOnly.length === 0 && teamFollowersOnly.length === 0) {
+      await settle(row, 'all-suppressed')
+      continue
+    }
+    const newsInfo = { playerName: row.playerName, team: playerTeam, position: binding.identity.position, status: subject.bucket }
+    const isStarter = (id: string) => starterUsers.has(id)
+
+    if (isInjury) {
+      /*
+       * Owner's rule (2026-10-25): a manager who rosters him hears about it by push and email ONLY
+       * when it changes a starting lineup — a starter ruled out (with the options), questionable
+       * (with the backup) or cleared, or a bench player back healthy who out-projects a starter
+       * (with the swap). Every other rostered manager gets the in-app bell only, kept out of the
+       * daily digest. Followers keep their own routing below. See ./lineupImpactCopy.ts.
+       */
+      const rosteredNow = new Set([...byLeague.values()].flatMap(ids => [...ids]))
+      const leaguesOf = new Map<string, { all: Set<string>; starting: Set<string> }>()
+      for (const rp of rosterPlayers) {
+        const uid = rp.roster?.ownerId, lid = rp.roster?.leagueId
+        if (!uid || !lid || !rosteredNow.has(uid)) continue
+        const entry = leaguesOf.get(uid) ?? { all: new Set<string>(), starting: new Set<string>() }
+        entry.all.add(lid)
+        if (!NON_STARTER_SLOT.test(String(rp.slotType ?? '').trim())) entry.starting.add(lid)
+        leaguesOf.set(uid, entry)
+      }
+      // A story classified "active" (activated, cleared, returns) is itself the recovery.
+      const prior = subject.bucket === 'active' ? 'out' as const : null
+      // Built here, sent with the team batch at the end of the run, so the scan never waits on a send.
+      const lineupRequests: DispatchNotificationParams[] = []
+      for (const [uid, entry] of leaguesOf) {
+        const impacts = await resolveLineupImpacts({ userId: uid, leagueIds: [...entry.all], startingLeagueIds: [...entry.starting], sport: row.sport,
+          sleeperId: binding.identity.sleeperId, playerName: row.playerName, team: playerTeam, bucket: statusBucket(subject.bucket), prior }).catch(() => [])
+        const copy = lineupImpactCopy(row.playerName, impacts)
+        if (!copy) continue
+        const impactLeagueIds = impacts.filter(i => i.kind !== 'none').map(i => i.leagueId)
+        lineupRequests.push({
+          userIds: [uid], leagueIds: impactLeagueIds, leagueId: impactLeagueIds[0] ?? null,
+          // Same category as before this rule, so the person's Injury alerts switch still governs it.
+          category: 'injury_alerts',
+          type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
+          title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
+          actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
+          dedupePrefix: deliveryKey + ':lineup', skipChannels: { sms: true },
+          meta: { team: playerTeam ?? 'Players without a current team', sport: row.sport, newsCategory: category, injuryHeadline: row.headline,
+            lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id,
+            playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
+        })
+        for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
+      }
+      const requests: DispatchNotificationParams[] = []
+      const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
+        severity:'high' as const, dedupePrefix:deliveryKey,
+        meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
+      // Rostered, no lineup change: the bell only, and not in the digest.
+      const bellOnly = { sms: true, email: true }
+      for(const [leagueId,userIds] of byLeague) requests.push({...base,userIds:[...userIds],leagueId,category:'injury_alerts',skipChannels:bellOnly,meta:{...base.meta,lineupBellOnly:true}})
+      if(gatedFollowersOnly.length)requests.push({...base,userIds:gatedFollowersOnly,leagueId:null,category:'followed_players',meta:{...base.meta,followed:true}})
+      if(teamFollowersOnly.length)requests.push({...base,userIds:teamFollowersOnly,leagueId:null,category:'followed_teams',meta:{...base.meta,followedTeam:teamAbbr}})
+      const gated = requests.flatMap(r => playerNewsDispatches(r, plan, newsInfo, isStarter)).map(d =>
+        d.meta?.lineupBellOnly ? { ...d, skipChannels: bellOnly, meta: { ...d.meta, playerNews: { ...(d.meta.playerNews as object), digest: false } } } : d)
+      // `delivery` is left as the gate set it: the team batch groups one headline's rows by it.
+      const outgoing = [...lineupRequests, ...gated]
+      if (!outgoing.length) { await settle(row, 'all-suppressed'); continue }
+      injuryBatch.add(outgoing,async (users,failed)=>{
+        const toldNow=[...users]
+        recipients+=users.size
+        followerRecipients+=gatedFollowersOnly.filter(id=>users.has(id)).length
+        teamFollowerRecipients+=teamFollowersOnly.filter(id=>users.has(id)).length
+        if(toldNow.length){
+          await markPlayerNewsTold(toldNow,subject)
+          await recordToldAbout(toldNow,news)
+          if(teamHeadline)await recordToldAbout(toldNow,teamHeadline,undefined,{storyOnly:true})
+          notified++
+        }
+        await settle(row,failed?'dispatch-failed':toldNow.length?'delivered':'all-suppressed')
+      })
+      continue
+    }
 
     const icon = CATEGORY_ICONS[category] ?? '📰'
     const label = CATEGORY_LABELS[category] ?? 'News'
@@ -676,10 +848,9 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      */
     const toldNow: string[] = []
     let anyDispatchFailed = false
-    const sent = (p: Promise<DispatchNotificationResult>) => p.then(result => result.failed === 0, () => false)
 
     for (const [leagueId, userIds] of byLeague) {
-      const ok = await sent(dispatchNotification({
+      const ok = await sendGated({
         userIds: [...userIds],
         category: isInjury ? 'injury_alerts' : 'league_announcements',
         type: isInjury ? 'player_injury_update' : 'player_news_update',
@@ -687,17 +858,17 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         body: row.headline.slice(0, 500),
         leagueId,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category },
-      }))
+      }, plan, newsInfo, isStarter)
       if (!ok) { anyDispatchFailed = true; continue }
       recipients += userIds.size
       toldNow.push(...userIds)
     }
 
-    if (followersOnly.length > 0) {
-      const ok = await sent(dispatchNotification({
-        userIds: followersOnly,
+    if (gatedFollowersOnly.length > 0) {
+      const ok = await sendGated({
+        userIds: gatedFollowersOnly,
         category: 'followed_players',
         type: isInjury ? 'player_injury_update' : 'player_news_update',
         title,
@@ -705,17 +876,17 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: playerTeam, sport: row.sport, newsCategory: category, followed: true },
-      }))
+      }, plan, newsInfo)
       if (ok) {
-        recipients += followersOnly.length
-        followerRecipients += followersOnly.length
-        toldNow.push(...followersOnly)
+        recipients += gatedFollowersOnly.length
+        followerRecipients += gatedFollowersOnly.length
+        toldNow.push(...gatedFollowersOnly)
       } else anyDispatchFailed = true
     }
     if (teamFollowersOnly.length > 0) {
-      const ok = await sent(dispatchNotification({
+      const ok = await sendGated({
         userIds: teamFollowersOnly,
         category: 'followed_teams',
         type: isInjury ? 'player_injury_update' : 'player_news_update',
@@ -724,9 +895,9 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         // No league: a team follow belongs to none, so no league mute applies either.
         leagueId: null,
         severity: isInjury ? 'high' : 'medium',
-        dedupePrefix: `player-news:${row.id}`,
+        dedupePrefix: deliveryKey,
         meta: { playerName: row.playerName, team: teamAbbr, sport: row.sport, newsCategory: category, followedTeam: teamAbbr },
-      }))
+      }, plan, newsInfo)
       if (ok) {
         recipients += teamFollowersOnly.length
         teamFollowerRecipients += teamFollowersOnly.length
@@ -734,6 +905,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       } else anyDispatchFailed = true
     }
     if (toldNow.length > 0) {
+      await markPlayerNewsTold(toldNow, subject)
       await recordToldAbout(toldNow, news)
       if (teamHeadline) await recordToldAbout(toldNow, teamHeadline, undefined, { storyOnly: true })
       notified++
@@ -741,6 +913,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     // Every remaining team follower can be capped out, so "nobody sent and nothing failed" is possible.
     await settle(row, anyDispatchFailed ? 'dispatch-failed' : toldNow.length > 0 ? 'delivered' : 'all-suppressed')
   }
+
+  repeatsSuppressed += await injuryBatch.flush()
 
   if (stamped.length > 0) {
     await prisma.playerNewsRecord

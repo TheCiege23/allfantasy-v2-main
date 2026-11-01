@@ -21,6 +21,7 @@ import {
   draftLeagueIds,
   getUrgencyBadges,
   lineupLeagueIds,
+  readUrgencyLeagueIds,
   recordPendingOffers,
   type UrgencyCache,
 } from '@/lib/core-app/urgencyBadges'
@@ -141,7 +142,27 @@ describe('getUrgencyBadges', () => {
       leagues: LEAGUES.slice(0, 2),
       lineupLeagues: [{ id: 'L1', emptyStarters: 0 }],
     })
-    expect(badges).toEqual({ myTeam: null, trades: null, draftHq: null, sync: null })
+    expect(badges).toEqual({ myTeam: null, trades: null, draftHq: null, sync: null, lineupLeagueIds: [], offerLeagueIds: [] })
+  })
+
+  it('names the leagues behind each count, for the league list — the same leagues the count is made of', async () => {
+    cached({
+      offers: {
+        L1: { at: ago(2 * MIN), waiting: 2 },
+        L2: { at: ago(URGENCY_TTL_MS + MIN), waiting: 1 },
+        gone: { at: ago(MIN), waiting: 1 },
+      },
+    })
+    const badges = await run({ lineupLeagues: [{ id: 'L2', hurtStarters: 1 }, { id: 'gone', emptyStarters: 1 }, { id: 'L1', emptyStarters: 0 }] })
+    expect(badges.lineupLeagueIds).toEqual(['L2'])
+    expect(badges.offerLeagueIds).toEqual(['L1'])
+    expect(badges.myTeam).toBe(badges.lineupLeagueIds!.length)
+    expect(badges.trades).toBe(badges.offerLeagueIds!.length)
+  })
+
+  it('an unknown lineup read names no leagues — null, not an empty list', async () => {
+    const badges = await run({ loadLineupLeagues: async () => null })
+    expect(badges.lineupLeagueIds).toBeNull()
   })
 })
 
@@ -204,5 +225,21 @@ describe('independent lineup and offer writes', () => {
     const result = await getUrgencyBadges({ userId: 'u1', leagues: LEAGUES,
       liveDraftLeagueIds: [], now: NOW, loadLineupLeagues: async () => null })
     expect(result.myTeam).toBe(2)
+  })
+})
+
+describe('readUrgencyLeagueIds — the badge facts per league, read only', () => {
+  it('names the fresh lineup and offer leagues and never recomputes or writes', async () => {
+    cached({
+      lineup: { at: ago(2 * MIN), leagueIds: ['L2'] },
+      offers: { L1: { at: ago(MIN), waiting: 2 }, L3: { at: ago(MIN), waiting: 0 }, L2: { at: ago(URGENCY_TTL_MS + MIN), waiting: 1 } },
+    })
+    expect(await readUrgencyLeagueIds('u1', NOW)).toEqual({ lineupLeagueIds: ['L2'], offerLeagueIds: ['L1'] })
+    expect(h.cacheUpsert).not.toHaveBeenCalled()
+  })
+
+  it('a stale lineup read is null — no flag from an old answer', async () => {
+    cached({ lineup: { at: ago(URGENCY_TTL_MS + MIN), leagueIds: ['L2'] } })
+    expect((await readUrgencyLeagueIds('u1', NOW)).lineupLeagueIds).toBeNull()
   })
 })

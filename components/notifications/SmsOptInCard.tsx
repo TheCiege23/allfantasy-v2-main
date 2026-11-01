@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
@@ -42,7 +43,9 @@ export function SmsOptInCard({ eligible }: { eligible: boolean }) {
     setShow(eligible && !snoozed(Date.now()))
   }, [eligible])
 
-  if (!show) return null
+  // One optional prompt at a time on the /core home (HomePromptSlot).
+  const turn = useHomePromptTurn('sms-opt-in', show)
+  if (!turn) return null
 
   const dismiss = () => {
     try {

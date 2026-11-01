@@ -409,7 +409,14 @@ export async function createLeagueTradeGrader(args: {
    */
   const sportPoints = createSportPointsGrader({
     sport,
-    league: { id: args.leagueId, settings: leagueRow.settings, leagueType: leagueType.type, leagueSize: leagueRow.leagueSize ?? null },
+    league: {
+      id: args.leagueId,
+      settings: leagueRow.settings,
+      leagueType: leagueType.type,
+      leagueSize: leagueRow.leagueSize ?? null,
+      season: leagueRow.season ?? null,
+      status: leagueRow.status ?? null,
+    },
   })
   /*
    * An NFL or NBA guillotine league: points over the free agent for the same lineup slot, over the weeks a team

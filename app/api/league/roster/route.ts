@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,11 +9,17 @@ import { getCachedSleeperUserId, setCachedSleeperUserId } from '@/lib/league/sle
 import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { expandLockedRedraftStarterSlots, resolveLockedRedraftLineupContract } from '@/lib/league/lineupStarterSlots'
+import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { loadCampusLineupView, type CampusLineupView } from '@/lib/c2c/campusLineupView'
+import { isDailyFormSport } from '@/lib/projections/dailySportForm'
+import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
+import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -92,6 +99,7 @@ export async function GET(req: NextRequest) {
       season: true,
       lifecycleState: true,
       leagueType: true,
+      taxiSlots: true,
       isDynasty: true,
       bestBallMode: true,
       guillotineMode: true,
@@ -141,8 +149,9 @@ export async function GET(req: NextRequest) {
       // belt-and-suspenders if the dynamic import itself fails.
     }
 
+    const coOwnerRosterId = targetUserId === sessionUserId ? await acceptedCoOwnerRosterId(leagueId, sessionUserId) : null
     const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: targetUserId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: targetUserId },
     })
 
     if (!roster) {
@@ -184,7 +193,7 @@ export async function GET(req: NextRequest) {
     }
 
     // The same resolver the lineup engine validates slot positions against (lib/league/lineupStarterSlots.ts).
-    const lockedRedraftContract = resolveLockedRedraftLineupContract({
+    const lockedRedraftLayout = resolveLockedRedraftStarterLayout({
       sport: leagueSport,
       leagueType: league.leagueType,
       isDynasty: league.isDynasty,
@@ -194,19 +203,26 @@ export async function GET(req: NextRequest) {
       keeperPhaseActive: league.keeperPhaseActive,
       settings: league.settings,
     })
-    if (lockedRedraftContract) {
-      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftContract.rosterTemplate.starterSlotOrder)
+    /*
+     * 🛑 THE LEAGUE'S OWN SAVED LAYOUT WINS (owner, 2026-10-20) — resolved in the shared module, so this
+     * screen and the lineup engine's per-slot validation (slotIndex) read the SAME list.
+     */
+    if (lockedRedraftLayout) {
+      starterSlots = expandLockedRedraftStarterSlots(lockedRedraftLayout.starterOrder)
       slotLimits = {
         starters: starterSlots.length,
-        bench: lockedRedraftContract.rosterTemplate.benchSlots,
-        ir: lockedRedraftContract.rosterTemplate.irSlots,
+        bench: lockedRedraftLayout.benchSlots,
+        ir: lockedRedraftLayout.irSlots,
         taxi: 0,
         devy: 0,
       }
-      starterAllowedPositions = lockedRedraftContract.rosterTemplate.draftablePlayerPositions
-      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
+      starterAllowedPositions = lockedRedraftLayout.starterAllowedPositions
+      rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-${lockedRedraftLayout.source}`
     }
-const leagueWeek = weekFromLeagueSettings(league.settings)
+    // The lineup engine validates taxi against `League.taxiSlots`, so a league whose roster template
+    // carries no taxi count still has a squad; report the larger of the two.
+    if (slotLimits && (league.taxiSlots ?? 0) > slotLimits.taxi) slotLimits = { ...slotLimits, taxi: league.taxiSlots ?? 0 }
+    const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({
       leagueId,
       rosterId: roster.id,
@@ -250,6 +266,23 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       unifiedRoster = []
     }
 
+    // NBA / NHL / MLB: an AF projection for this period and a position rank, both under this
+    // league's scoring, from stored game lines (lib/projections/dailySportOutlook.ts). No-op elsewhere.
+    // A daily-lineup league's period is the day the lineup screen's day picker sent (`day`), else today.
+    if (isDailyFormSport(leagueSport) && unifiedRoster.length > 0) {
+      try {
+        const pickedDay = searchParams?.get('day')
+        const outlook = await loadDailySportOutlook(prisma, {
+          league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
+          day: isDayKey(pickedDay) ? pickedDay : null,
+          players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
+        })
+        unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] daily-sport outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
     // roster tab renders no section at all; a load failure also degrades to null
@@ -275,6 +308,17 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       })
     }
 
+    // C2C campus lineup (lib/c2c/campusLineup.ts): native football C2C only, null everywhere else.
+    // A load failure degrades to null (logged) rather than blocking the roster.
+    const campus: CampusLineupView | null = await loadCampusLineupView(prisma, {
+      league: { id: league.id, platform: league.platform, sport: league.sport, leagueVariant: league.leagueVariant },
+      playerData: roster.playerData,
+      redraftRosterId: roster.redraftRosterId ?? null,
+    }).catch((e: unknown) => {
+      console.warn('[league/roster] campus lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      return null
+    })
+
     // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
     let dailyLineups: DailyLineupView | null = null
     if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
@@ -298,11 +342,30 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
         })
     }
 
+    // Dynasty taxi tenure for the lineup screen's taxi badges (lib/taxi/taxiMaxYears.ts). Native
+    // dynasty-family leagues with a taxi squad only; a load failure leaves the badges off.
+    let taxiTenure: TaxiTenureView | null = null
+    if (
+      resolveWriteAuthority(league.platform) === 'NATIVE' &&
+      isDynastyFamilyLeague(league) &&
+      (slotLimits?.taxi ?? 0) > 0 &&
+      unifiedRoster.length > 0
+    ) {
+      taxiTenure = await loadTaxiTenureView(prisma, leagueId, league.settings, unifiedRoster.map((r) => r.id)).catch((e: unknown) => {
+        console.warn('[league/roster] taxi tenure failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+        return null
+      })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      taxiTenure,
+      // Sent back with a save (`expectedLineupVersion`); see lib/roster/lineupVersion.ts.
+      lineupVersion: lineupVersionOf(roster.playerData),
       dailyLineups,
       collegeRights,
+      campus,
       roster: roster.playerData,
       unifiedRoster,
       faabRemaining: roster.faabRemaining,

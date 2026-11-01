@@ -22,7 +22,8 @@ import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity
  * own AI verdict ("clean" / "suspicious" / "likely_collusion") from a direct Anthropic call, over a
  * legacy mirror table that only redraft trades were ever copied into. Now:
  *
- *   - the trade is the REAL trade (`AfLeagueTrade` or `RedraftTradeProposal`), read by `loadTrade`;
+ *   - the trade is the REAL trade (`AfLeagueTrade`, `RedraftTradeProposal`, or an imported Sleeper
+ *     league's `ProviderTradeOffer`), read by `loadTrade`;
  *   - the values are the one grade, and the flags are the review's six checks, computed in code by
  *     `buildTradeReview` — exactly what a commissioner sees in the trade's review panel;
  *   - the commissioner's sensitivity picks which of those flags open an integrity flag
@@ -33,14 +34,18 @@ import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity
  * Nothing here decides anything. A flag asks a commissioner to look.
  */
 
-export type ScanTradeRef = { kind: "af"; tradeId: string } | { kind: "redraft"; proposalId: string }
+export type ScanTradeRef =
+  | { kind: "af"; tradeId: string }
+  | { kind: "redraft"; proposalId: string }
+  /** A completed trade in an imported Sleeper league, from the stored trade ledger (`ProviderTradeOffer`). */
+  | { kind: "provider"; provider: "sleeper"; providerTradeId: string }
 
 type TradeAsset = { name: string; position: string; estimatedValue: number }
 
 export type CollusionEvidence = {
   tradeTransactionId: string
-  team1: { rosterId: string; teamName: string }
-  team2: { rosterId: string; teamName: string }
+  team1: { rosterId: string; teamName: string; managerName?: string }
+  team2: { rosterId: string; teamName: string; managerName?: string }
   assetsTeam1Gave: TradeAsset[]
   assetsTeam2Gave: TradeAsset[]
   team1TotalValue: number
@@ -93,7 +98,8 @@ function topSeverity(checks: readonly Pick<ReviewCheck, "severity">[]): ReviewSe
 
 /** The evidence the integrity flag card renders, taken from the review and its receipt — nothing estimated. */
 export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredTradeReview, { ok: true }>): CollusionEvidence {
-  const { receipt, review, sides, sideNames, facts } = r
+  const { receipt, review, sides, sideNames, sideManagers, facts } = r
+  const manager = (i: 0 | 1) => (sideManagers?.[i] ? { managerName: sideManagers[i]! } : {})
   const positionOf = (name: string) => {
     for (const s of sides) for (const g of s.gives) if (g.kind === "player" && g.name === name) return g.position ?? "UNK"
     return "UNK"
@@ -112,8 +118,8 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
   const eliminated = (pct: number) => pct < ELIMINATED_PLAYOFF_PCT
   return {
     tradeTransactionId,
-    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0] },
-    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1] },
+    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0], ...manager(0) },
+    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1], ...manager(1) },
     // Side A gives what the receipt calls `give`; side B gives what side A gets.
     assetsTeam1Gave: lines("give"),
     assetsTeam2Gave: lines("get"),
@@ -210,13 +216,22 @@ export async function scanTradeForCollusion(
 export async function fullLeagueCollusionScan(leagueId: string, deps: Partial<CollusionScanDeps> = {}): Promise<CollusionScanResult> {
   const d = { ...defaultDeps, ...deps }
   const since = new Date(d.now().getTime() - 30 * 24 * 60 * 60 * 1000)
-  const [native, redraft] = await Promise.all([
+  const [native, redraft, imported] = await Promise.all([
     prisma.afLeagueTrade.findMany({ where: { leagueId, status: "processed", updatedAt: { gte: since } }, select: { id: true } }),
     prisma.redraftTradeProposal.findMany({ where: { leagueId, status: "accepted", updatedAt: { gte: since } }, select: { id: true } }),
+    // An imported Sleeper league's completed trades, as the trade sweep recorded them.
+    prisma.providerTradeOffer.findMany({
+      where: { leagueId, provider: "sleeper", status: "accepted", lastSeenAt: { gte: since } },
+      select: { providerTradeId: true },
+    }),
   ])
   const refs: Array<{ id: string; ref: ScanTradeRef }> = [
     ...native.map((t) => ({ id: t.id, ref: { kind: "af" as const, tradeId: t.id } })),
     ...redraft.map((t) => ({ id: t.id, ref: { kind: "redraft" as const, proposalId: t.id } })),
+    ...imported.map((t) => ({
+      id: t.providerTradeId,
+      ref: { kind: "provider" as const, provider: "sleeper" as const, providerTradeId: t.providerTradeId },
+    })),
   ]
 
   const flags: CollusionScanResult["flags"] = []

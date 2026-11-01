@@ -67,7 +67,7 @@ export interface NotificationPreferences {
   categories?: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>>
   /**
    * Quiet hours, evaluated in the user's timezone by `lib/notifications/quietHours.ts`.
-   * Suppresses push and SMS only — the in-app row is a log and still gets written.
+   * Suppresses email, push and SMS — the in-app row is a log and still gets written.
    */
   quietHours?: {
     startHour: number
@@ -85,6 +85,16 @@ export interface NotificationPreferences {
    * owner. This shape needs no migration and no backfill, because absence inherits.
    */
   leagues?: Record<string, LeagueNotificationOverride>
+  /**
+   * How much a person hears during live games — see lib/notification-settings/liveAlertLevel.ts.
+   * Absent = 'everything', which is what everyone got before the setting existed.
+   */
+  liveAlertLevel?: 'everything' | 'my_teams' | 'close_games' | 'off'
+  /**
+   * How much a person hears about players on their rosters — see lib/notification-settings/playerNewsLevel.ts.
+   * Absent = 'starters'.
+   */
+  playerNewsLevel?: 'starters' | 'roster' | 'off'
 }
 
 export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
@@ -134,7 +144,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   league_drama: "League drama / storylines",
   commissioner_alerts: "Commissioner alerts",
   system_account: "System & account alerts",
-  injury_alerts: "Player injury alerts",
+  injury_alerts: "Team injury updates",
   performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
@@ -165,7 +175,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // Real-world breaking news (2026-10-15, lib/news/breakingNewsAlerts.ts): trades, signings, firings,
   // suspensions and season-ending injuries, from trusted outlets only, for the sports you play or the
   // teams you follow. Capped per person per day at the sender.
-  breaking_news: "Breaking news — trades, signings & major injuries",
+  breaking_news: "Sports news — injuries, trades & headlines",
   // Live game moments (2026-10-15, lib/live/gameMomentAlerts.ts): close finishes, overtime, and the
   // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
   // Teams you follow get every moment under "Teams you follow — scores" instead.

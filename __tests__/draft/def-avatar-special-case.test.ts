@@ -8,7 +8,7 @@
  *     the duplicate bottom-right badge for DEF rows
  *   - call sites (SleeperPoolTable, PlayerDetailModal, DraftBoardCell) thread
  *     `position` into PlayerAvatar
- *   - DraftBoardCell skips the redundant TinyTeamLogo overlay for DEF picks
+ *   - DraftBoardCell draws no team-logo corner badge (so no duplicate logo for DEF picks)
  *   - normal players (RB/WR/QB/TE/K, IDP positions) still reject team logos
  *     as the primary avatar — the global validation is intact
  */
@@ -126,9 +126,11 @@ describe('F.1 — call sites thread `position` into PlayerAvatar', () => {
     expect(src).toMatch(/<TinyHeadshot[\s\S]*?position=\{pick\.position\}[\s\S]*?teamLogoUrl=\{teamLogoSrc\}/)
   })
 
-  it('DraftBoardCell skips the redundant TinyTeamLogo overlay for DEF picks', () => {
+  it('DraftBoardCell draws no team-logo corner badge, so DEF picks never show the logo twice', () => {
+    // The square tiles (2026-10-28) dropped the corner badge for every position: the team is
+    // printed under the name, and the badge covered the headshot's initials.
     const src = read('components/app/draft-room/DraftBoardCell.tsx')
-    expect(src).toMatch(/isDefRowForAvatar\(pick\.position\) \? null :/)
+    expect(src).not.toMatch(/<TinyTeamLogo/)
   })
 
   it('TinyHeadshot wrapper accepts position + teamLogoUrl + teamAbbr props', () => {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import Link from "next/link"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 import {
   abbreviate,
@@ -63,15 +64,24 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
   const standings = useMemo(() => {
     return view.entries
-      .slice()
-      .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0) || a.name.localeCompare(b.name))
+      .filter((entry) => !["ncaaf", "nba_cup", "nfl"].includes(sport) || entry.isComplete)
+      .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) ||
+        (b.totalScore ?? 0) - (a.totalScore ?? 0) || a.name.localeCompare(b.name))
   }, [view.entries])
 
   const viewerId = view.viewerUserId ?? null
 
   return (
     <>
-      <section className="af-pb-card" data-testid="pb-decision-rail">
+      {/*
+        * NBA Cup has no seeds to read — every Cup matchup reads "seeded level, no
+        * edge", which is true and useless. The Cup rail's group standings replace it.
+        */}
+      {/*
+        * NFL too: its reads abbreviate full club names into codes nobody uses ("BEA over PAC")
+        * and count reseeded placeholder slots as clubs ("WIN and WIN are seeded level").
+        */}
+      {sport === "nba_cup" || sport === "nfl" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
         <div className="af-pb-rail-head">Series read</div>
         {reads.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>
@@ -92,21 +102,22 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
           Basis: seeding only. These lines compare two seed numbers on a fixed slope — they are not
           a scouting model, and they do not know about rotations, injuries or form.
         </p>
-      </section>
+      </section>}
 
       <section className="af-pb-card" data-testid="pb-leaderboard">
         <div className="af-pb-rail-head">Pool standings</div>
+        {["ncaaf", "nba_cup", "nfl"].includes(sport) && <Link className="af-pb-basis" href={`/brackets/standings?sport=${sport}&season=${view.challenge.seasonYear}`}>Universal board →</Link>}
         {standings.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>No entries yet.</p>
         ) : (
           standings.map((e, i) => (
             <div className="af-pb-lb-row" key={e.id} data-you={e.userId === viewerId ? "true" : undefined}>
-              <span className="af-pb-lb-rank af-pb-mono">{i + 1}</span>
+              <span className="af-pb-lb-rank af-pb-mono">{e.rank ?? i + 1}</span>
               <span className="af-pb-lb-name">
                 {e.name}
                 {e.userId === viewerId ? " · you" : ""}
               </span>
-              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}</span>
+              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}{["ncaaf", "nba_cup", "nfl"].includes(sport) ? ` / ${e.potentialTotal ?? 0} max` : ""}</span>
             </div>
           ))
         )}

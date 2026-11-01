@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
- * The wiring of the NBA/NHL/MLB tick into `live-score-tick`: NBA on by default; an enabled sport can
+ * The wiring of the NBA/NHL/MLB tick into `live-score-tick`: all on by default; an enabled sport can
  * never take NFL scoring down with it.
  */
 
@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({ daily: vi.fn(), runner: vi.fn(), meta: null as Rec
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+vi.mock('@/lib/playoffs/nbaCupLiveTick', () => ({ refreshNbaCupLive: async () => ({ activeGames: 0 }) }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_m: unknown, fn: () => Promise<unknown>, map: (r: unknown) => { metadata: Record<string, unknown> }) => {
     const r = await fn()
@@ -61,10 +62,10 @@ describe('live-score-tick — daily-sport flag', () => {
     expect(h.meta?.dailyLive).toBeNull()
   })
 
-  it('NBA is enabled when no flag is configured', async () => {
+  it('all supported daily sports are enabled when no flag is configured', async () => {
     await GET(req())
-    expect(h.daily.mock.calls[0][0].sports).toEqual(['NBA'])
-    expect(h.meta?.dailyLiveEnabled).toEqual(['NBA'])
+    expect(h.daily.mock.calls[0][0].sports).toEqual(['NBA', 'NHL', 'MLB'])
+    expect(h.meta?.dailyLiveEnabled).toEqual(['NBA', 'NHL', 'MLB'])
   })
 
   it('flag on: runs for the enabled sports, with a budget stop, and reports the outcome', async () => {

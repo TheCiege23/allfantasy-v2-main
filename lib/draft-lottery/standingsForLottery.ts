@@ -16,7 +16,7 @@ export interface StandingsRow {
   losses: number
   ties: number
   pointsFor: number
-  /** Max PF if available (dynasty); else pointsFor. */
+  /** True Max PF when the league has it for every team (see `applyTrueMaxPf`); else points for. */
   maxPf: number
 }
 
@@ -96,7 +96,31 @@ export async function getStandingsForLottery(leagueId: string): Promise<Standing
   })
   for (const rosterId of unowned) rows.push(emptyRow(rosterId, rows.length))
 
+  await applyTrueMaxPf(leagueId, rows)
   return rows
+}
+
+/**
+ * The lottery's "max PF" weighting and tiebreak read true Max PF when the league has it for every team —
+ * the same values the live rookie order ranks by (lib/rookie-order/loadRookieOrderInput.ts: optimal
+ * lineups from native weeks, or the Sleeper freeze). Otherwise points for stays, as before: one team's
+ * Max PF beside another's points for would compare two different things. Never throws.
+ */
+async function applyTrueMaxPf(leagueId: string, rows: StandingsRow[]): Promise<void> {
+  try {
+    const { loadRookieOrderInput } = await import('@/lib/rookie-order/loadRookieOrderInput')
+    const loaded = await loadRookieOrderInput(leagueId)
+    if (!loaded) return
+    const byRoster = new Map<string, number>()
+    for (const t of loaded.input.teams) {
+      const rosterId = loaded.rosterIdForTeam.get(t.teamId)
+      if (rosterId && t.maxPf != null && Number.isFinite(t.maxPf)) byRoster.set(rosterId, t.maxPf)
+    }
+    if (byRoster.size === 0 || !rows.every((r) => byRoster.has(r.rosterId))) return
+    for (const r of rows) r.maxPf = byRoster.get(r.rosterId)!
+  } catch {
+    // Points for stays.
+  }
 }
 
 /** A roster with no team row: no standings to weigh, but it still holds a pick. */
@@ -115,49 +139,67 @@ function emptyRow(rosterId: string, index: number): StandingsRow {
 }
 
 /**
- * Apply tiebreak to a list of standings rows (mutates sort).
+ * Sort standings rows BEST-first (mutates): rank ascending, and within a tied rank the BETTER team
+ * first, so the WORSE team of a tie is always the later row.
+ *
+ * What "worse" means, from the setting names — the team that scored less is the worse finish:
+ *
+ *   lower_points_for   lower points for = worse
+ *   lower_max_pf       lower Max PF (true Max PF when the league has it, else points for) = worse
+ *   seeded_random      lower points for = worse; a points-for tie is settled by a draw on `seed`
+ *
+ * The worse team of a tie is the one that misses the playoff line, the one counted into the lottery
+ * pool on its line, and the one that picks earlier in the fallback order. Every reader takes that from
+ * this order — the position, never the rank alone (`bestFirst` / `worstOf` here, `buildFullSlotOrder`).
+ *
+ * 🛑 UNTIL 2026-10-29 A TIE READ IN TWO DIRECTIONS. This sorted the tiebreak value ASCENDING, so the
+ * lower-PF team came FIRST — the better side of a best-first list — and the playoff split
+ * (`slice(playoffTeamCount)`) put it inside the playoff line, while the pool and the fallback order,
+ * which read "placed first within a tied rank" as the worse finish, gave it the edge. Same tiebreak,
+ * opposite meaning, depending on which code read it.
+ *
+ * `seeded_random` used a comparator that called the generator on every comparison, so its result
+ * depended on the sort algorithm and the input order. Each row now draws ONE key from
+ * `seed` + its roster id: the same seed orders the same teams the same way, whatever order they arrive in.
  */
 export function applyTiebreak(
   rows: StandingsRow[],
   tiebreakMode: LotteryTiebreakMode,
   seed: string
 ): void {
-  if (tiebreakMode === 'lower_points_for') {
-    rows.sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank
-      return a.pointsFor - b.pointsFor
-    })
-    return
-  }
   if (tiebreakMode === 'lower_max_pf') {
-    rows.sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank
-      return a.maxPf - b.maxPf
-    })
+    rows.sort((a, b) => a.rank - b.rank || b.maxPf - a.maxPf)
     return
   }
   if (tiebreakMode === 'seeded_random') {
-    const rng = seededRandom(seed)
-    rows.sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank
-      if (a.pointsFor !== b.pointsFor) return a.pointsFor - b.pointsFor
-      return rng() - 0.5
-    })
+    const key = new Map(rows.map((r) => [r, tiebreakDraw(seed, r.rosterId)]))
+    // A higher draw is the worse finish, so it sorts later.
+    rows.sort((a, b) => a.rank - b.rank || b.pointsFor - a.pointsFor || key.get(a)! - key.get(b)!)
+    return
   }
+  // lower_points_for, and any value this module does not know.
+  rows.sort((a, b) => a.rank - b.rank || b.pointsFor - a.pointsFor)
 }
 
-function seededRandom(seed: string): () => number {
-  let state = 0
-  for (let i = 0; i < seed.length; i++) {
-    state = (state << 5) - state + seed.charCodeAt(i)
-    state |= 0
+/** One reproducible draw in [0, 2^32) per (seed, roster): a string hash (xmur3's mix, then its finaliser). */
+function tiebreakDraw(seed: string, rosterId: string): number {
+  const str = `${seed}\u0000${rosterId}`
+  let h = 1779033703 ^ str.length
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
+    h = (h << 13) | (h >>> 19)
   }
-  let n = 0
-  return () => {
-    n++
-    const x = Math.sin((state >>> 0) / 0xffffffff * 997 + n * 9999) * 10000
-    return x - Math.floor(x)
-  }
+  h = Math.imul(h ^ (h >>> 16), 2246822507)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/**
+ * The rows best-first, as a copy: by rank, and within a tied rank in the order given — the order
+ * `applyTiebreak` decided (better team first). Array.prototype.sort is stable.
+ */
+export function bestFirst<T extends { rank: number }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => a.rank - b.rank)
 }
 
 /**
@@ -187,18 +229,21 @@ export function selectEligibleTeams(
   if (mode === 'all_teams' || mode === 'bottom_n') {
     return worstOf(rows, lotteryTeamCount)
   }
-  return worstOf(rows.slice(Math.max(0, playoffTeamCount)), lotteryTeamCount)
+  // The playoff teams are the best `playoffTeamCount` — on a tied rank at the line, the worse team of
+  // the tie (the later row) is the one left out.
+  const playoff = new Set(bestFirst(rows).slice(0, Math.max(0, playoffTeamCount)))
+  return worstOf(rows.filter((r) => !playoff.has(r)), lotteryTeamCount)
 }
 
 /**
- * The `n` worst rows, in their input order. Worst = highest rank; within a tied rank, the row
- * `applyTiebreak` placed first counts as the worse finish — the same reading the fallback order
- * (`buildFullSlotOrder`, a stable sort by rank descending) gives a tie.
+ * The `n` worst rows, in their input order. Worst = the end of the best-first order: highest rank, and
+ * within a tied rank the row `applyTiebreak` placed LAST — the same team the playoff split leaves out
+ * and the fallback order (`buildFullSlotOrder`) seats first.
  */
 function worstOf(rows: StandingsRow[], n: number): StandingsRow[] {
   if (!(n > 0)) return []
   if (rows.length <= n) return rows.slice()
-  const worst = new Set([...rows].sort((a, b) => b.rank - a.rank).slice(0, n))
+  const worst = new Set(bestFirst(rows).slice(-n))
   return rows.filter((r) => worst.has(r))
 }
 

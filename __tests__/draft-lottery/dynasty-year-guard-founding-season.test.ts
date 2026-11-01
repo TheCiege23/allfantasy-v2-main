@@ -43,6 +43,12 @@ describe('dynasty lottery startup year', () => {
     expect(r).toMatchObject({ eligible: false, isStartupLeague: true })
   })
 
+  it('does not allow a startup-year lottery just because the startup draft finished', async () => {
+    findUnique.mockResolvedValue(league({ season: 2027, createdAt: new Date('2026-11-10T12:00:00Z'), redraftSeasons: [{ season: 2027 }], _count: { redraftDrafts: 1 } }))
+    expect(await checkDynastyLotteryEligibility('l1')).toMatchObject({ eligible: false, isStartupLeague: true })
+    expect(await checkDynastyLotteryEligibility('l1', 2028)).toMatchObject({ eligible: true, isStartupLeague: false })
+  })
+
   it('the same league in 2028 (year 2) is eligible', async () => {
     findUnique.mockResolvedValue(league({
       season: 2028,

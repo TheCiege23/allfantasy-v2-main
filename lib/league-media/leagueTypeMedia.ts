@@ -18,7 +18,12 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   redraft: {
     label: 'Redraft',
     thumbnail: '/images/league-types/redraft.png',
-    defaultLeagueImageUrl: '/images/league-types/redraft.png',
+    /*
+     * A redraft league with no logo of its own shows the robot king — the same art the commissioner
+     * hub uses for redraft (lib/core-app/commissioner/leagueArt.ts). The shield above stays the
+     * create-league card; as a league crest it read as one more "AF" letter mark (user call, 2026-10-30).
+     */
+    defaultLeagueImageUrl: '/af-robot-king.png',
     selectionVideo: '/media/create-league/concept/videos/Redraft.mp4',
     introVideo: '/media/create-league/concept/videos/Redraft.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -48,7 +53,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
     thumbnailFallback: FALLBACK_THUMBNAIL,
   },
   guillotine: {
-    label: 'Guillotine',
+    label: 'Guilly',
     thumbnail: '/league-type-guillotine.png',
     defaultLeagueImageUrl: '/league-type-guillotine.png',
     selectionVideo: '/league-type-guillotine.mp4',

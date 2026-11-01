@@ -48,6 +48,13 @@ export async function finalizeWeek(input: FinalizeWeekInput): Promise<{
   serumAwards: number
   weaponAwards: number
 }> {
+  const native = await prisma.zombieLeague.findUnique({ where: { leagueId: input.leagueId } })
+  if (native?.sport === 'NFL' && await prisma.redraftSeason.findFirst({ where: { leagueId: input.leagueId, season: input.season ?? native.season }, select: { id: true } })) {
+    const { runWeeklyResolution } = await import('./weeklyResolutionEngine')
+    const result = await runWeeklyResolution(native.id, input.week)
+    if (result.skipped || !result.resolution) throw new Error(result.reason ?? 'Native Zombie results are not ready.')
+    return { infectionCount: result.resolution.infectionCount, serumAwards: Array.isArray(result.resolution.serumAwards) ? result.resolution.serumAwards.length : 0, weaponAwards: Array.isArray(result.resolution.weaponAwards) ? result.resolution.weaponAwards.length : 0 }
+  }
   const config = await getZombieLeagueConfig(input.leagueId)
   if (!config) return { infectionCount: 0, serumAwards: 0, weaponAwards: 0 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import HomeTopNav from '@/components/navigation/HomeTopNav'
+import LanguageToggle from '@/components/i18n/LanguageToggle'
 import SeoLandingFooter from '@/components/landing/SeoLandingFooter'
 import { LandingCTAStrip } from '@/components/landing/LandingCTAStrip'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -33,12 +33,13 @@ export default function ChimmyLandingClient({ trackRecord = null }: { trackRecor
       className="min-h-screen flex flex-col mode-readable"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
-      <HomeTopNav />
-
       <article className="flex-1 px-4 py-8 sm:px-6 sm:py-12">
         <div className="mx-auto max-w-3xl">
+          <div className="mb-4 flex justify-end">
+            <LanguageToggle variant="compact" />
+          </div>
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-400/40 bg-purple-500/20">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-purple-400/40 bg-purple-500/20">
               <Bot className="h-8 w-8 text-purple-300" />
             </div>
             <div>

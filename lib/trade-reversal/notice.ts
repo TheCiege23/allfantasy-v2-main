@@ -32,12 +32,16 @@ import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { ingest, tradeEvent } from '@/lib/notification-engine'
 import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
+import { isMultiTeamTrade } from '@/lib/redraft/tradeParticipants'
 
 export type TradeReversalEngine = 'generic' | 'native'
 
 export const TRADE_REVERSED_TITLE = 'Trade reversed'
 export const TRADE_REVERSED_MESSAGE =
   'A commissioner reversed a trade. Both rosters were restored to how they were before it.'
+/** A native 3- or 4-team trade: "both rosters" would be wrong. Same rule as above: no team names, no reason. */
+export const TRADE_REVERSED_MULTI_TEAM_MESSAGE =
+  'A commissioner reversed a multi-team trade. Every roster in it was restored to how it was before the trade.'
 
 export const TRADE_REVERSED_PARTY_TITLE = 'Your trade was reversed'
 export const TRADE_REVERSED_PARTY_MESSAGE =
@@ -50,10 +54,46 @@ function isNotifiableUserId(id: string | null | undefined): id is string {
   return !value.startsWith('roster:') && !isOrphanPlatformUserId(value) && !isAiManagerPlatformUserId(value)
 }
 
-/** The app user ids of the managers on both sides of the trade, placeholders removed. */
+type NativeReversedTrade = {
+  proposerRoster: { ownerId: string | null } | null
+  receiverRoster: { ownerId: string | null } | null
+  additionalRosterIds?: string[] | null
+} | null
+
+/** The native proposal, read once and shared by the announcement and the direct notice. */
+function loadNativeReversedTrade(tradeId: string): Promise<NativeReversedTrade> {
+  // Deferred, so even a synchronous throw arrives as a rejection and cannot cost the announcement.
+  return Promise.resolve().then(
+    () =>
+      prisma.redraftTradeProposal.findUnique({
+        where: { id: tradeId },
+        select: {
+          proposerRoster: { select: { ownerId: true } },
+          receiverRoster: { select: { ownerId: true } },
+          additionalRosterIds: true,
+        },
+      }) as Promise<NativeReversedTrade>,
+  )
+}
+
+/**
+ * The owners of every team in a native trade: proposer, receiver and, for a multi-team trade, the
+ * teams in `additionalRosterIds` (a plain id list, so read separately and only when there are any).
+ */
+async function nativePartyOwnerIds(proposal: NativeReversedTrade): Promise<Array<string | null | undefined>> {
+  const extra = proposal?.additionalRosterIds?.filter(Boolean) ?? []
+  const extraOwners = extra.length
+    ? (await prisma.redraftRoster.findMany({ where: { id: { in: extra } }, select: { ownerId: true } })).map((r) => r.ownerId)
+    : []
+  return [proposal?.proposerRoster?.ownerId, proposal?.receiverRoster?.ownerId, ...extraOwners]
+}
+
+/** The app user ids of the managers of every team in the trade, placeholders removed. */
 export async function resolveTradeReversalPartyUserIds(input: {
   tradeId: string
   engine: TradeReversalEngine
+  /** The native proposal when the caller already started reading it; read here otherwise. */
+  nativeTrade?: Promise<NativeReversedTrade>
 }): Promise<string[]> {
   const ids =
     input.engine === 'generic'
@@ -66,15 +106,7 @@ export async function resolveTradeReversalPartyUserIds(input: {
             },
           })
           .then((trade) => [trade?.proposerRoster?.platformUserId, trade?.receiverRoster?.platformUserId])
-      : await prisma.redraftTradeProposal
-          .findUnique({
-            where: { id: input.tradeId },
-            select: {
-              proposerRoster: { select: { ownerId: true } },
-              receiverRoster: { select: { ownerId: true } },
-            },
-          })
-          .then((proposal) => [proposal?.proposerRoster?.ownerId, proposal?.receiverRoster?.ownerId])
+      : await (input.nativeTrade ?? loadNativeReversedTrade(input.tradeId)).then(nativePartyOwnerIds)
   return [...new Set(ids.filter(isNotifiableUserId))]
 }
 
@@ -84,6 +116,7 @@ export async function notifyTradeReversalParties(input: {
   tradeId: string
   engine: TradeReversalEngine
   actorUserId: string
+  nativeTrade?: Promise<NativeReversedTrade>
 }): Promise<string[]> {
   const parties = await resolveTradeReversalPartyUserIds(input)
   // A commissioner who reversed a trade they were part of does not need telling what they just did.
@@ -112,12 +145,18 @@ export async function publishTradeReversalNotice(input: {
 }): Promise<void> {
   // Two independent deliveries: one failing must not cost the other. The first failure still propagates,
   // because the route is where a post-commit notice failure gets logged.
+  // A native trade is read once for both. A failed read still lets the announcement go out, with the
+  // two-team copy, and the failure reaches the route through the direct notice.
+  const nativeTrade = input.engine === 'native' ? loadNativeReversedTrade(input.tradeId) : undefined
+  const multiTeam = nativeTrade
+    ? await nativeTrade.then((t) => Boolean(t && isMultiTeamTrade(t)), () => false)
+    : false
   const outcomes = await Promise.allSettled([
     publishLeagueFanoutEvent({
       leagueId: input.leagueId,
       eventType: input.engine === 'generic' ? 'af_trade_reversed' : 'redraft_trade_reversed',
       title: TRADE_REVERSED_TITLE,
-      message: TRADE_REVERSED_MESSAGE,
+      message: multiTeam ? TRADE_REVERSED_MULTI_TEAM_MESSAGE : TRADE_REVERSED_MESSAGE,
       category: 'league_announcements',
       visibility: 'all_members',
       actorUserId: input.actorUserId,
@@ -131,6 +170,7 @@ export async function publishTradeReversalNotice(input: {
       tradeId: input.tradeId,
       engine: input.engine,
       actorUserId: input.actorUserId,
+      nativeTrade,
     }),
   ])
   for (const outcome of outcomes) {

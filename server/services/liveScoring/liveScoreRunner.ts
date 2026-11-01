@@ -239,7 +239,7 @@ export async function runLiveScoringTickForSeason(
     (bestBallRead ??= prisma.league
       .findFirst({
         where: { id: season.leagueId },
-        select: { bestBallMode: true, leagueVariant: true, leagueType: true },
+        select: { bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true, settings: true },
       })
       .then((league) => leagueIsBestBall(league))
       .catch(() => false))

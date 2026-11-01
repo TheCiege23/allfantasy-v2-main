@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { keeperValueReport } from '@/lib/keeper/keeperValueReport'
 import { computeKeeperEligibility } from '@/lib/keeper/eligibilityEngine'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +46,12 @@ export async function GET(req: NextRequest) {
     .filter((r) => !r.isEligible)
     .map((r) => ({ playerId: r.playerId, reason: r.ineligibleReason }))
 
-  return NextResponse.json({ eligible, ineligible, raw: rows })
+  // Keeper value report (AF Commissioner): each candidate's market value against his cost.
+  // Best-effort — a report that cannot be built never hides the eligibility it sits beside.
+  const valueReport = await keeperValueReport(leagueId, rows.filter((r) => r.isEligible)).catch(
+    () => ({ available: false as const, reason: 'no_market_values' as const }),
+  )
+
+  return NextResponse.json({ eligible, ineligible, raw: rows, valueReport })
 }
 

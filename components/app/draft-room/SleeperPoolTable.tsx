@@ -12,9 +12,11 @@
 
 import React, { useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { AlertTriangle, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Check, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
 
 import { PlayerAvatar } from './PlayerAvatar'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { SKIN_DRAFT_BUTTON, SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import type { DraftAiOverlaySignal, PlayerEntry } from './PlayerPanel'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
@@ -41,8 +43,10 @@ import {
   sortKeyForColumn,
   type PoolSortState,
 } from './SleeperPoolSort'
-import { aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
+import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -79,32 +83,25 @@ export interface SleeperPoolTableProps {
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
   leftAtPick?: { overall: number; label: string } | null
+  /**
+   * Dynasty only: show the shared Rookie / Prospect chip (`resolveDraftRoomPlayerLabel`) beside the
+   * position. Off by default so redraft pools render exactly as before.
+   */
+  showExperienceLabel?: boolean
 }
 
 function rowKey(p: PlayerEntry): string {
   return `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
 }
 
-/** D.7 — scannable position badge with sport-position-aware colors. */
+/** D.7 — scannable position badge, filled in the board's position colour (Sleeper palette). */
 function PositionChip({ pos }: { pos: string | null }) {
   const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
-  const tone =
-    p === 'QB'
-      ? 'border-rose-400/50 bg-rose-500/16 text-rose-100'
-      : p === 'RB'
-        ? 'border-emerald-400/50 bg-emerald-500/16 text-emerald-100'
-        : p === 'WR'
-          ? 'border-cyan-400/50 bg-cyan-500/16 text-cyan-100'
-          : p === 'TE'
-            ? 'border-amber-400/50 bg-amber-500/16 text-amber-100'
-            : p === 'K'
-              ? 'border-slate-400/30 bg-slate-500/12 text-slate-300'
-              : p === 'DEF' || p === 'DST'
-                ? 'border-violet-400/40 bg-violet-500/14 text-violet-100'
-                : 'border-white/18 bg-white/[0.07] text-white/75'
+  const tint = positionTintHex(p)
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded border px-1 py-px text-[11px] font-bold uppercase leading-none ${tone}`}
+      className="inline-flex shrink-0 items-center justify-center rounded px-1 py-px text-[11px] font-bold uppercase leading-none"
+      style={tint ? { backgroundColor: tint, color: SKIN_ON_FILL } : undefined}
       title={pos ?? undefined}
     >
       {p}
@@ -160,6 +157,7 @@ interface SleeperRowProps {
   testIdBase: string
   aiOverlaySignal?: DraftAiOverlaySignal
   leftAtOverall: number | null
+  showExperienceLabel?: boolean
 }
 
 function SleeperRow(props: SleeperRowProps) {
@@ -186,7 +184,11 @@ function SleeperRow(props: SleeperRowProps) {
     testIdBase,
     aiOverlaySignal,
     leftAtOverall,
+    showExperienceLabel = false,
   } = props
+
+  const { t } = useOptionalLanguage()
+  const isProspect = p.prospectSource === 'fantrax'
 
   const normalized = useMemo(
     () =>
@@ -212,6 +214,7 @@ function SleeperRow(props: SleeperRowProps) {
 
   const adpDisplay = p.adp != null ? p.adp.toFixed(1) : '—'
   const aiAdpDisplay = p.aiAdp != null ? p.aiAdp.toFixed(1) : '—'
+  const afAdpDisplay = p.afAdp != null && Number.isFinite(Number(p.afAdp)) ? Number(p.afAdp).toFixed(1) : '—'
   const byeDisplay = p.byeWeek != null ? String(p.byeWeek) : '—'
 
   const tipFor = (columnKey: string, statLabel: string, rawValue: number | null | undefined): string =>
@@ -259,14 +262,14 @@ function SleeperRow(props: SleeperRowProps) {
               teamLogoUrl={teamLogoUrl}
               teamAbbr={p.team ?? null}
               position={p.position}
-              size={28}
+              size={40}
               testIdBase={`${testIdBase}-avatar`}
               highlighted={selected}
             />
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="flex min-w-0 items-center gap-1">
                 <span
-                  className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-tight text-white"
+                  className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-white"
                   data-testid={`${testIdBase}-name`}
                   title={nameTitle}
                 >
@@ -280,7 +283,36 @@ function SleeperRow(props: SleeperRowProps) {
               </div>
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} />
-                {p.team ? <span className="truncate text-[11px] text-white/38">{p.team}</span> : null}
+                {p.team ? (
+                  <span className="truncate text-[11px] text-white/38">{p.team}</span>
+                ) : isProspect ? (
+                  <span className="truncate text-[11px] text-white/38" data-testid={`${testIdBase}-prospect-unsigned`}>
+                    {t('draftRoom.pool.prospectUnsigned')}
+                  </span>
+                ) : null}
+                {isProspect ? (
+                  <span
+                    className="flex-shrink-0 rounded border border-sky-300/35 bg-sky-500/12 px-1 py-px text-[11px] font-semibold uppercase tracking-[0.06em] text-sky-100"
+                    title={t(String(draftSport).toUpperCase() === 'MLB' ? 'draftRoom.pool.prospectTooltipMlb' : 'draftRoom.pool.prospectTooltip')}
+                    data-testid={`${testIdBase}-prospect-badge`}
+                  >
+                    {t('draftRoom.pool.prospectBadge')}
+                  </span>
+                ) : null}
+                {/* A Fantrax prospect already wears its own chip; never stack a second label on it. */}
+                {showExperienceLabel && !isProspect ? (
+                  <DraftPlayerLabelBadge
+                    player={{
+                      isRookie: p.isRookie ?? null,
+                      yearsExp: p.yearsExp ?? null,
+                      isDevy: p.isDevy ?? null,
+                      graduatedToNFL: p.graduatedToNFL ?? null,
+                      poolType: p.poolType ?? null,
+                    }}
+                    className="flex-shrink-0 rounded px-1 py-px"
+                  />
+                ) : null}
+                {p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
@@ -289,7 +321,7 @@ function SleeperRow(props: SleeperRowProps) {
                     title={aiOverlaySignal?.reason ?? aiOverlaySignal?.strategyNote ?? undefined}
                     data-testid={`${testIdBase}-ai-badge`}
                   >
-                    <Sparkles className="h-2.5 w-2.5" />
+                    <Sparkles className="h-3.5 w-3.5" />
                     {badgeLabel}
                   </span>
                   {aiOverlaySignal?.scarcityLevel ? (
@@ -298,7 +330,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title="Positional scarcity warning"
                       data-testid={`${testIdBase}-ai-scarcity`}
                     >
-                      <TrendingUp className="h-2.5 w-2.5" />
+                      <TrendingUp className="h-3.5 w-3.5" />
                       Scarcity
                     </span>
                   ) : null}
@@ -308,7 +340,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title="Tier-drop alert"
                       data-testid={`${testIdBase}-ai-tier-drop`}
                     >
-                      <AlertTriangle className="h-2.5 w-2.5" />
+                      <AlertTriangle className="h-3.5 w-3.5" />
                       Tier drop
                     </span>
                   ) : null}
@@ -322,7 +354,7 @@ function SleeperRow(props: SleeperRowProps) {
                       title={aiOverlaySignal.boomBust === 'boom' ? 'Boom potential' : 'Bust risk'}
                       data-testid={`${testIdBase}-ai-boom-bust`}
                     >
-                      <Flame className="h-2.5 w-2.5" />
+                      <Flame className="h-3.5 w-3.5" />
                       {aiOverlaySignal.boomBust === 'boom' ? 'Boom' : 'Bust'}
                     </span>
                   ) : null}
@@ -349,8 +381,8 @@ function SleeperRow(props: SleeperRowProps) {
       case 'adp': {
         const delta =
           p.adp != null && Number.isFinite(Number(p.adp)) &&
-          p.aiAdp != null && Number.isFinite(Number(p.aiAdp))
-            ? Math.round(p.adp - p.aiAdp)
+          p.afAdp != null && Number.isFinite(Number(p.afAdp))
+            ? Math.round(p.adp - Number(p.afAdp))
             : null
         return (
           <Cell key={col.key} width={col.width} align="right">
@@ -364,7 +396,7 @@ function SleeperRow(props: SleeperRowProps) {
                 <span
                   aria-hidden
                   data-testid={`${testIdBase}-adp-delta`}
-                  title={`vs AI ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
+                  title={`vs AF ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
                   className={`text-[11px] font-medium tabular-nums leading-none ${
                     delta > 0 ? 'text-emerald-300/85' : 'text-rose-300/70'
                   }`}
@@ -404,6 +436,24 @@ function SleeperRow(props: SleeperRowProps) {
           </Cell>
         )
       }
+      case 'afAdp':
+        return (
+          <Cell key={col.key} width={col.width} align="right">
+            <span
+              data-testid={`${testIdBase}-af-adp`}
+              title={afAdpCellTitle({
+                hasValue: p.afAdp != null && Number.isFinite(Number(p.afAdp)),
+                contributions: p.afAdpContributions ?? null,
+                importedSampleSize: p.afAdpImportedSampleSize ?? null,
+                ownSampleSize: p.afAdpOwnSampleSize ?? null,
+              })}
+              className="font-semibold tabular-nums"
+              style={p.afAdp != null ? { color: AF_BLUE } : undefined}
+            >
+              {afAdpDisplay}
+            </span>
+          </Cell>
+        )
       case 'aiAdp':
         return (
           <Cell key={col.key} width={col.width} align="right">
@@ -466,13 +516,13 @@ function SleeperRow(props: SleeperRowProps) {
               }}
               aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
               data-testid={`${testIdBase}-compare`}
-              className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
                 isCompareAnchor
                   ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
-                  : 'border-white/10 bg-black/20 text-white/60 hover:border-white/22 hover:bg-white/8'
+                  : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
               }`}
             >
-              <GitCompare className="h-2.5 w-2.5" />
+              <GitCompare className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -482,20 +532,22 @@ function SleeperRow(props: SleeperRowProps) {
                 onAddToQueue()
               }}
               disabled={drafted}
-              aria-label={`Queue ${p.name}`}
+              aria-pressed={queued}
+              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
               data-testid={`${testIdBase}-queue`}
-              className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
+              data-queued={queued ? 'true' : 'false'}
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
                 drafted
-                  ? 'cursor-not-allowed border-white/8 bg-black/20 text-white/25'
+                  ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
                   : queued
-                    ? 'border-cyan-400/40 bg-cyan-500/15 text-cyan-100'
-                    : aiOverlaySignal
-                      ? 'border-cyan-300/35 bg-cyan-500/10 text-cyan-100 hover:border-cyan-300/55 hover:bg-cyan-500/18'
-                      : 'border-white/10 bg-black/20 text-white/60 hover:border-cyan-400/22 hover:bg-white/8'
+                    ? 'border-transparent bg-white text-[#14172a]'
+                    : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
               }`}
               title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
             >
-              <Plus className="h-2.5 w-2.5" />
+              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
+              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
             </button>
             {canNominate && onNominateRequest ? (
               <button
@@ -505,7 +557,7 @@ function SleeperRow(props: SleeperRowProps) {
                   onNominateRequest()
                 }}
                 data-testid={`${testIdBase}-nominate`}
-                className="draft-live-action-btn inline-flex h-[22px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[11px] font-semibold text-amber-100 hover:brightness-110"
+                className="draft-live-action-btn inline-flex h-[40px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[11px] font-semibold text-amber-100 hover:brightness-110"
               >
                 Nominate
               </button>
@@ -520,12 +572,12 @@ function SleeperRow(props: SleeperRowProps) {
                 }}
                 title={drafted ? 'Player already drafted' : !canDraft ? 'Not your turn' : 'Draft this player'}
                 data-testid={`${testIdBase}-draft`}
-                className={`draft-live-action-btn inline-flex h-[22px] items-center rounded-md border px-2 text-[11px] font-semibold transition ${
+                className={`draft-live-action-btn inline-flex h-[40px] items-center rounded-md border px-2 text-[11px] font-semibold transition ${
                   drafted
-                    ? 'cursor-not-allowed border-white/8 bg-white/[0.04] text-white/30'
+                    ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/30'
                     : !canDraft
-                      ? 'cursor-not-allowed border-white/10 bg-black/30 text-white/35'
-                      : 'border-cyan-400/45 bg-gradient-to-br from-cyan-500/22 to-violet-600/18 text-cyan-50 hover:brightness-110'
+                      ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/40'
+                      : `font-bold ${SKIN_DRAFT_BUTTON}`
                 }`}
               >
                 {drafted ? 'Drafted' : 'Draft'}
@@ -562,6 +614,14 @@ function SleeperRow(props: SleeperRowProps) {
   return (
     <div
       role="row"
+      tabIndex={0}
+      aria-label={`View ${p.name} player details`}
+      onKeyDown={event => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          if (!drafted) onSelect()
+        }
+      }}
       data-testid={testIdBase}
       data-drafted={drafted ? 'true' : 'false'}
       data-selected={selected ? 'true' : 'false'}
@@ -570,14 +630,12 @@ function SleeperRow(props: SleeperRowProps) {
         onSelect()
       }}
       style={{ height: rowHeight, minWidth }}
-      className={`flex items-stretch border-b border-white/[0.03] text-xs transition-[background-color,color,border-color] duration-150 ${
+      className={`flex items-stretch border-b border-white/[0.04] text-xs transition-[background-color,color,border-color] duration-150 ${
         drafted
-          ? 'bg-black/32 text-white/34'
+          ? 'bg-black/30 text-white/34'
           : selected
-            ? 'bg-cyan-500/11 text-white/92'
-            : rank % 2 === 0
-              ? 'bg-white/[0.015] text-white/82 hover:bg-cyan-500/[0.08] cursor-pointer'
-              : 'bg-transparent text-white/82 hover:bg-cyan-500/[0.08] cursor-pointer'
+            ? 'bg-[#2a2f45] text-white'
+            : 'bg-transparent text-white/85 hover:bg-[#1d2236] cursor-pointer'
       }`}
     >
       {layout.columns.map((col) => renderColumn(col))}
@@ -611,6 +669,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     onSortChange,
     aiOverlaySignals,
     leftAtPick = null,
+    showExperienceLabel = false,
   } = props
 
   const leftAtPickLabel = leftAtPick?.label ?? null
@@ -649,7 +708,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
       <div
         role="row"
         data-testid="sleeper-pool-table-header"
-        className="sticky top-0 z-10 flex items-center border-b border-white/[0.04] bg-[linear-gradient(180deg,#111c33_0%,#0d1628_100%)] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9fb0d6] shadow-[inset_0_-1px_0_rgba(255,255,255,0.03)]"
+        className="sticky top-0 z-10 flex items-center border-b border-white/[0.06] bg-[#0d1424] text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8b91a7]"
         style={{ height: SLEEPER_POOL_TABLE_HEADER_HEIGHT, minWidth }}
       >
         {layout.columns.map((col) => {
@@ -674,15 +733,15 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   data-testid={`sleeper-pool-table-header-${col.key}`}
                   data-sort-active={isActiveSort ? 'true' : 'false'}
                   onClick={() => onSortChange?.(col.key)}
-                  className={`inline-flex items-center gap-1 rounded px-1 py-px transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 ${
+                  className={`inline-flex items-center gap-1 rounded px-1 py-px transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                     isActiveSort
-                      ? 'text-cyan-100 underline decoration-cyan-300/55 decoration-2 underline-offset-[2px]'
-                      : 'text-white/58 hover:text-white/88'
+                      ? 'text-white'
+                      : 'text-[#8b91a7] hover:text-white'
                   }`}
                 >
-                  <span>{col.label}</span>
+                  <span style={col.key === 'afAdp' ? { color: AF_BLUE } : undefined}>{col.label}</span>
                   {indicator ? (
-                    <span aria-hidden className="text-[11px] leading-none text-cyan-300/85">
+                    <span aria-hidden className="text-[11px] leading-none text-white/70">
                       {indicator}
                     </span>
                   ) : null}
@@ -694,7 +753,12 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
           // Non-sortable column (actions, or sort handlers disabled).
           return (
             <Cell key={col.key} width={col.width} align={col.align} title={col.title}>
-              <span data-testid={`sleeper-pool-table-header-${col.key}`}>{col.label}</span>
+              <span
+                data-testid={`sleeper-pool-table-header-${col.key}`}
+                style={col.key === 'afAdp' ? { color: AF_BLUE } : undefined}
+              >
+                {col.label}
+              </span>
             </Cell>
           )
         })}
@@ -737,6 +801,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 testIdBase={`sleeper-pool-row-${idx}`}
                 aiOverlaySignal={aiOverlaySignals?.[k]}
                 leftAtOverall={leftAtOverall}
+                showExperienceLabel={showExperienceLabel}
               />
             )
           })
@@ -782,6 +847,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   testIdBase={`sleeper-pool-row-${virtualRow.index}`}
                   leftAtOverall={leftAtOverall}
                   aiOverlaySignal={aiOverlaySignals?.[k]}
+                  showExperienceLabel={showExperienceLabel}
                 />
               </div>
             )

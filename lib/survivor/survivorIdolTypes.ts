@@ -30,6 +30,9 @@ export interface SurvivorIdolTypeDef {
 
 export const SURVIVOR_IDOL_COUNT_OPTIONS = [6, 7, 8] as const
 export const SURVIVOR_IDOL_COUNT_DEFAULT = 7
+/** Pick mode (owner's call, 2026-10-20): the commissioner sets a quantity per type, 1 to 12 idols in all. */
+export const SURVIVOR_IDOL_PICK_COUNT_MIN = 1
+export const SURVIVOR_IDOL_PICK_COUNT_MAX = 12
 export const SURVIVOR_POINT_SURGE_DEFAULT_PCT = 15
 export const SURVIVOR_TRIBUTE_DEFAULT_PCT = 10
 

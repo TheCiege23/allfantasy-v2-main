@@ -22,6 +22,7 @@ const hm = vi.hoisted(() => ({
   adpDataFindMany: vi.fn(),
   listInjuryFacts: vi.fn(),
   playerSeasonStatsFindMany: vi.fn(),
+  sportsPlayerFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/injuries/injuryReadPort', async (orig) => ({
@@ -36,7 +37,7 @@ vi.mock('@/lib/prisma', () => ({
     playerAnalyticsSnapshot: { findMany: hm.playerAnalyticsFindMany },
     devyPlayer: { findMany: hm.devyPlayerFindMany },
     injuryReportRecord: { findMany: vi.fn().mockResolvedValue([]) },
-    sportsPlayer: { findMany: vi.fn().mockResolvedValue([]) },
+    sportsPlayer: { findMany: hm.sportsPlayerFindMany },
     sportsPlayerRecord: { findMany: vi.fn().mockResolvedValue([]) },
     adpDataRecord: {
       findFirst: (...args: unknown[]) => hm.adpDataFindFirst(...args),
@@ -154,6 +155,7 @@ describe('normalizeDraftPoolNameForDedupe', () => {
 describe('getResolvedDraftPoolForLeague', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hm.sportsPlayerFindMany.mockResolvedValue([])
     hm.listInjuryFacts.mockResolvedValue({ facts: [], newestFetchedAt: null, feedStale: false, coverage: { sourceAvailable: true, reason: null } })
     hm.leagueFindUnique.mockResolvedValue({
       sport: 'NFL',
@@ -279,10 +281,12 @@ describe('getResolvedDraftPoolForLeague', () => {
     hm.adpDataFindMany.mockResolvedValue([
       { playerName: 'Merge Adp Star', position: 'RB', team: 'ZZZ', source: 'espn', adp: 1.5 },
       { playerName: 'Later Adp', position: 'WR', team: 'AAA', source: 'espn', adp: 99 },
+      { playerName: 'Unverified Prior Seed', position: 'RB', team: 'OLD', source: 'espn', adp: 0.5 },
     ])
     hm.getLiveADP.mockResolvedValue([
       { name: 'Merge Adp Star', position: 'RB', team: 'ZZZ', adp: 1.5, bye: 5 },
       { name: 'Later Adp', position: 'WR', team: 'AAA', adp: 99, bye: 6 },
+      { name: 'Unverified Prior Seed', position: 'RB', team: 'OLD', adp: 0.5, bye: 6 },
     ])
     hm.getPlayerPoolForLeague.mockResolvedValue([
       {
@@ -297,6 +301,7 @@ describe('getResolvedDraftPoolForLeague', () => {
         status: null,
         age: 24,
       },
+      { full_name: 'Later Adp', position: 'WR', team_abbreviation: 'AAA', external_source_id: 'ext-later', player_id: 'legacy-later', injury_status: null, secondary_positions: [], image_url: null, status: null, age: 25 },
     ])
 
     const res = await getResolvedDraftPoolForLeague('league-unit', {
@@ -304,7 +309,8 @@ describe('getResolvedDraftPoolForLeague', () => {
       limit: 120,
     })
 
-    expect(res.entries.length).toBeGreaterThanOrEqual(2)
+    expect(res.entries).toHaveLength(2)
+    expect(res.entries.some(e => e.name === 'Unverified Prior Seed')).toBe(false)
     const mergeIdx = res.entries.findIndex((e) => e.name === 'Merge Adp Star')
     const laterIdx = res.entries.findIndex((e) => e.name === 'Later Adp')
     expect(mergeIdx).toBeGreaterThanOrEqual(0)
@@ -339,7 +345,7 @@ describe('getResolvedDraftPoolForLeague', () => {
       // RI-only, no Sleeper sibling: falls back to the internal id, never the bare number.
       row({ full_name: 'Arian Foster', position: 'RB', team_abbreviation: 'Miami Dolphins', external_source_id: '71', sleeper_id: null, player_id: 'sp-foster' }),
       // Two Sleeper ids for one name+position are two men: an RI row for that name borrows neither.
-      // The RI row comes first so it is the one kept (later same-name rows are dropped by name).
+      // The mocked pool is the verified current roster: each distinct identity must survive, and the RI row must borrow neither Sleeper id.
       row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'Pittsburgh Steelers', external_source_id: '61', sleeper_id: null, player_id: 'sp-mw-ri' }),
       row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'NYJ', external_source_id: '4068', sleeper_id: '4068', player_id: 'sp-mw1' }),
       row({ full_name: 'Mike Williams', position: 'WR', team_abbreviation: 'TB', external_source_id: '1408', sleeper_id: '1408', player_id: 'sp-mw2' }),
@@ -354,10 +360,12 @@ describe('getResolvedDraftPoolForLeague', () => {
     expect(idsOf('Joe Flacco')).toEqual(['19'])
     expect(idsOf('Marquise Goodwin')).toEqual(['1346'])
     expect(idsOf('Arian Foster')).toEqual(['sp-foster'])
-    expect(idsOf('Mike Williams')).toEqual(['sp-mw-ri'])
+    expect(idsOf('Mike Williams')).toHaveLength(3)
+    expect(idsOf('Mike Williams')).toEqual(expect.arrayContaining(['sp-mw-ri', '4068', '1408']))
     const ids = res.entries.map((e) => e.playerId)
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).not.toContain('71')
+    expect(ids).not.toContain('61')
   })
 
   it('NFL: the RI fallback is refused even when the RI row is the one enriching an ADP row', async () => {
@@ -454,7 +462,7 @@ describe('getResolvedDraftPoolForLeague', () => {
         full_name: 'Rookie Guard',
         position: 'PG',
         team_abbreviation: 'BOS',
-        external_source_id: 'nba-rookie-1',
+        external_source_id: '114',
         injury_status: null,
         secondary_positions: [],
         image_url: null,
@@ -469,7 +477,7 @@ describe('getResolvedDraftPoolForLeague', () => {
         full_name: 'Mlb Debut',
         position: 'PG',
         team_abbreviation: 'BOS',
-        external_source_id: 'mlb-1',
+        external_source_id: '115',
         injury_status: null,
         secondary_positions: [],
         image_url: null,
@@ -480,6 +488,11 @@ describe('getResolvedDraftPoolForLeague', () => {
       },
     ])
 
+    hm.draftSessionFindUnique.mockResolvedValue({ teamCount: 2, rounds: 1 })
+    hm.sportsPlayerFindMany.mockResolvedValue([
+      { name: 'Rookie Guard', source: 'rolling_insights', externalId: '114', status: 'ACT', team: 'BOS', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+      { name: 'Mlb Debut', source: 'rolling_insights', externalId: '115', status: 'ACT', team: 'BOS', fetchedAt: new Date(), expiresAt: new Date(Date.now() + 86400000) },
+    ])
     const res = await getResolvedDraftPoolForLeague('league-unit', {
       effectiveLeagueTemplate: {
         sport: 'NBA',
@@ -593,6 +606,9 @@ describe('getResolvedDraftPoolForLeague', () => {
     expect(res.rookieFilterState).toBe('partial_rookie_data')
     expect(res.entries.map((e) => e.name).sort()).toEqual(['New Guard', 'Tsdb Guard'])
     expect(res.entries.every((e) => e.rookieVerdict === 'unknown')).toBe(true)
+    expect(hm.sportsPlayerFindMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ fetchedAt: expect.anything() }),
+    }))
     expect(res.provenNonRookies).toEqual([expect.objectContaining({ name: 'Proven Vet' })])
   })
 

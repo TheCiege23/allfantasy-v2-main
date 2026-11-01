@@ -41,9 +41,21 @@ vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({
 
 import { resolveRookieDraftSlotOrderForLeague } from '@/lib/draft/resolveRookieDraftSlotOrderForLeague'
 
+// The resolver first reads the league's kind (redraft never carries an order over), then its rosters.
+let leagueKind: Record<string, unknown> | null = { isDynasty: true, leagueType: 'dynasty', leagueVariant: null }
+let rosterLookup: unknown = null
+function setRosterLookup(value: unknown) {
+  rosterLookup = value
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockResolveLive.mockResolvedValue(null)
+  leagueKind = { isDynasty: true, leagueType: 'dynasty', leagueVariant: null }
+  rosterLookup = null
+  mockLeagueFindUnique.mockImplementation(async (args: { select?: Record<string, unknown> }) =>
+    args?.select && 'isDynasty' in args.select ? leagueKind : rosterLookup,
+  )
 })
 
 describe('resolveRookieDraftSlotOrderForLeague', () => {
@@ -93,7 +105,7 @@ describe('resolveRookieDraftSlotOrderForLeague', () => {
     // UUIDs is an arbitrary pairing, so "worst team picks first" handed that pick to whoever's
     // roster id happened to sort alongside. Here the id orders deliberately disagree with
     // ownership: t1 owns r2, t2 owns r3 (through its owner), t3 owns r1.
-    mockLeagueFindUnique.mockResolvedValueOnce({
+    setRosterLookup({
       rosters: [
         { id: 'r1', platformUserId: 'u3' },
         { id: 'r2', platformUserId: 'u1' },
@@ -115,6 +127,31 @@ describe('resolveRookieDraftSlotOrderForLeague', () => {
     ])
   })
 
+  it('never seats an order in a redraft league — next season starts fresh', async () => {
+    const live = [{ slot: 1, rosterId: 'r2', displayName: 'Toilet bowl' }]
+    mockResolveLive.mockResolvedValue(live)
+    mockGetRookieDraftOrderConfig.mockResolvedValue({ mode: 'worst_to_first', enabled: true })
+
+    for (const kind of [
+      { isDynasty: false, leagueType: 'redraft', leagueVariant: null },
+      { isDynasty: false, leagueType: null, leagueVariant: 'guillotine' },
+    ]) {
+      leagueKind = kind
+      expect(await resolveRookieDraftSlotOrderForLeague('league-1')).toBeNull()
+    }
+    expect(mockResolveLive).not.toHaveBeenCalled()
+    expect(mockComputeRookieDraftOrder).not.toHaveBeenCalled()
+
+    // Keeper (by type) and dynasty (by variant) still carry the order over.
+    for (const kind of [
+      { isDynasty: false, leagueType: 'keeper', leagueVariant: null },
+      { isDynasty: false, leagueType: 'redraft', leagueVariant: 'dynasty' },
+    ]) {
+      leagueKind = kind
+      expect(await resolveRookieDraftSlotOrderForLeague('league-1')).toEqual(live)
+    }
+  })
+
   it('declines an order it cannot place completely instead of seating a LeagueTeam id', async () => {
     // A team id in slotOrder is a seat the pick authority never accepts — nobody is on the clock.
     // Returning null keeps the league's default order instead.
@@ -122,7 +159,7 @@ describe('resolveRookieDraftSlotOrderForLeague', () => {
     mockComputeRookieDraftOrder.mockResolvedValueOnce({
       slots: [{ slot: 1, teamId: 't1', teamName: 'Only Team', ownerName: 'Owner 1' }],
     })
-    mockLeagueFindUnique.mockResolvedValueOnce({
+    setRosterLookup({
       rosters: [],
       teams: [{ id: 't1', externalId: 'x', claimedByUserId: null, platformUserId: null }],
     })

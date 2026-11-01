@@ -38,6 +38,32 @@ export async function countSeatsHeldByPeople(db: Db, leagueId: string): Promise<
   return rosters.filter((r) => personIds.has(r.platformUserId)).length
 }
 
+/**
+ * The same count for many leagues in two queries, for lists (league discovery) where one
+ * query per league would be one query per card. Same rule as above — a seat counts when its
+ * roster's owner id is an `AppUser` — and the tests pin both against the same fixture.
+ * A league with no people-held seats maps to 0.
+ */
+export async function countSeatsHeldByPeopleByLeague(
+  db: Db,
+  leagueIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>(leagueIds.map((id) => [id, 0]))
+  if (leagueIds.length === 0) return out
+  const rosters = await db.roster.findMany({
+    where: { leagueId: { in: leagueIds } },
+    select: { leagueId: true, platformUserId: true },
+  })
+  const ids = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
+  if (ids.length === 0) return out
+  const people = await db.appUser.findMany({ where: { id: { in: ids } }, select: { id: true } })
+  const personIds = new Set(people.map((p) => p.id))
+  for (const r of rosters) {
+    if (personIds.has(r.platformUserId)) out.set(r.leagueId, (out.get(r.leagueId) ?? 0) + 1)
+  }
+  return out
+}
+
 export type AssignLeagueSeatResult =
   | { ok: true; rosterId: string; teamNumber: number | null; alreadyHeld: boolean }
   | {
@@ -119,7 +145,7 @@ export async function assignLeagueSeat(
       where: { id: rosterId, leagueId },
       select: { id: true, platformUserId: true, playerData: true, settings: true },
     }),
-    tx.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, displayName: true, email: true } }),
+    tx.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, displayName: true, email: true, avatarUrl: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND', message: 'Roster not found in this league.' }
   if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: 'That user does not exist.' }
@@ -162,7 +188,7 @@ export async function assignLeagueSeat(
 
   const team = await tx.leagueTeam.findFirst({
     where: { leagueId, externalId: rosterId },
-    select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true },
+    select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true, avatarUrl: true },
   })
 
   const claimed = await tx.roster.updateMany({
@@ -194,6 +220,8 @@ export async function assignLeagueSeat(
       data: {
         ownerName: name,
         teamName,
+        // The manager's face on the team: a native open team takes it; an imported team keeps its own.
+        ...(user.avatarUrl && (wasOpenTeam || !team.avatarUrl) ? { avatarUrl: user.avatarUrl } : {}),
         claimedByUserId: userId,
         isOrphan: false,
         // `getLeagueRole` trusts these flags on the claimed team, so a new holder must not
@@ -224,6 +252,7 @@ export async function assignLeagueSeat(
     const seat = {
       ownerName: name,
       teamName,
+      ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
       claimedByUserId: userId,
       platformUserId: userId,
       isOrphan: false,

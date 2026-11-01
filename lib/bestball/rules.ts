@@ -1,4 +1,5 @@
 import type { LeagueSport } from '@prisma/client'
+import { regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 export const BEST_BALL_SUPPORTED_SPORTS = [
   'NFL',
@@ -144,7 +145,7 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 15,
     recommendedBenchSize: 7,
     scoringPeriod: 'daily',
-    defaultRegularSeasonLength: 20,
+    defaultRegularSeasonLength: regularSeasonWeeksFor('NBA'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
     defaultMatchupFormat: 'cumulative',
@@ -168,7 +169,7 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 23,
     recommendedBenchSize: 10,
     scoringPeriod: 'daily',
-    defaultRegularSeasonLength: 22,
+    defaultRegularSeasonLength: regularSeasonWeeksFor('MLB'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
     defaultMatchupFormat: 'cumulative',
@@ -194,7 +195,7 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 17,
     recommendedBenchSize: 8,
     scoringPeriod: 'daily',
-    defaultRegularSeasonLength: 21,
+    defaultRegularSeasonLength: regularSeasonWeeksFor('NHL'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
     defaultMatchupFormat: 'cumulative',

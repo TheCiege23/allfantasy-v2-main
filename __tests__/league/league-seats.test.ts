@@ -13,7 +13,12 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { assignLeagueSeat, countSeatsHeldByPeople, releaseLeagueSeat } from '@/lib/league/leagueSeats'
+import {
+  assignLeagueSeat,
+  countSeatsHeldByPeople,
+  countSeatsHeldByPeopleByLeague,
+  releaseLeagueSeat,
+} from '@/lib/league/leagueSeats'
 
 type Row = Record<string, any>
 
@@ -113,6 +118,21 @@ describe('countSeatsHeldByPeople', () => {
   })
 })
 
+describe('countSeatsHeldByPeopleByLeague', () => {
+  // League discovery counted rosters, so every native league showed as Full with no Join button.
+  it('counts people per league, gives 0 to a league nobody has joined, and ignores open seats', async () => {
+    const db = nativeLeague()
+    db.league.rows.push({ id: 'M', platform: 'manual', userId: 'amy' })
+    db.roster.rows.push(
+      { id: 'm1', leagueId: 'M', platformUserId: 'amy', playerData: {}, settings: {} },
+      { id: 'm2', leagueId: 'M', platformUserId: 'ben', playerData: {}, settings: {} },
+      { id: 'm3', leagueId: 'M', platformUserId: 'open-slot-M-3', playerData: {}, settings: { openSlot: true } },
+    )
+    const counts = await countSeatsHeldByPeopleByLeague(db, ['L', 'M', 'EMPTY'])
+    expect(Object.fromEntries(counts)).toEqual({ L: 1, M: 2, EMPTY: 0 })
+  })
+})
+
 describe('assignLeagueSeat', () => {
   it('updates the reserved Survivor draft slot when a manager joins or leaves before the draft', async () => {
     const db = nativeLeague()
@@ -152,6 +172,13 @@ describe('assignLeagueSeat', () => {
     expect(db.redraftLeagueMember.rows.find((m: Row) => m.userId === 'amy')).toMatchObject({ role: 'MEMBER', teamNumber: 3 })
     expect(db.redraftRoster.rows.find((r: Row) => r.id === 'rr3')).toMatchObject({ ownerId: 'amy', ownerName: 'Amy' })
     expect(await countSeatsHeldByPeople(db, 'L')).toBe(2)
+  })
+
+  it('writes the manager avatar onto a native open team at claim', async () => {
+    const db = nativeLeague()
+    db.appUser.rows.find((u: Row) => u.id === 'amy').avatarUrl = 'https://cdn.allfantasy.ai/avatars/amy.png'
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true })
+    expect(db.leagueTeam.rows.find((t: Row) => t.id === 't3')).toMatchObject({ claimedByUserId: 'amy', avatarUrl: 'https://cdn.allfantasy.ai/avatars/amy.png' })
   })
 
   it('is safe to run after a membership row already exists (no duplicate insert)', async () => {

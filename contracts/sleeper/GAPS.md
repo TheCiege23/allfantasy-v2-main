@@ -54,3 +54,42 @@ lists `NBA: 'nba'` — but nothing has ever captured it, and no scheduled writer
 | ID | Gap | Status | Blocks | How the code copes today |
 |---|---|---|---|---|
 | `S-09` | **Does the NBA players feed carry `years_exp`, and is `0` a first-year player the way it is for NFL?** Also unknown: whether Sleeper serves any NHL or MLB players feed (the code maps only NFL and NBA). | **UNVERIFIED — no fixture** | Filling `SportsPlayer.yearsExp` for NBA rows, which the draft pool now reads for the Rookie badge (`lib/draft-room/nonNflRookieFields.ts`) | Nothing writes NBA `yearsExp`: `refreshSleeperPlayerRows` is scheduled for `NFL` only (`/api/cron/import-players`), and `SleeperPlayerSeedService` (which would write NBA) has no caller and must not get one (it deletes by source). So NBA rows are labelled only where a row already carries experience; otherwise the badge stays off, which is the honest "unknown". **To resolve:** add an `ENDPOINTS.yaml` + `scripts/probe.sh` for Sleeper, capture `players/nba` once with the fixture committed in the same change, then extend the scheduled `refreshSleeperPlayerRows` phase to `NBA` (it upserts by `sleeperId` and never deletes). |
+
+**S-09 update, 2026-10-20 (no probe).** The owner approved Sleeper `players/nba` `years_exp` as the
+NBA source ("yes [use Sleeper players/nba years_exp]"). It is still blocked, for a contract reason
+rather than a product one: **this directory has no `ENDPOINTS.yaml` and no `scripts/probe.sh`**, so
+there is no sanctioned way to capture the fixture CLAUDE.md requires before a new endpoint/sport
+combination is wired. Nothing in the repo documents the NBA shape either: `FeedPlayer`
+(`lib/sleeper/refreshSleeperPlayerRows.ts`) and `SleeperPlayerRecord` (`SleeperPlayerSeedService`)
+are typed from the NFL feed, and no test or fixture holds an NBA payload.
+
+What is needed, in one change: (1) `contracts/sleeper/ENDPOINTS.yaml` with `players/{sport}` and a
+`scripts/probe.sh` that writes `fixtures/players.nba.json` (the feed is ~5 MB for NFL; commit a
+trimmed sample of ~20 players including at least one 2026 draftee and one 10+ year veteran, plus a
+count of how many entries carry a numeric `years_exp`); (2) from that fixture, answer whether
+`years_exp` is present and whether `0` means a first-year player; (3) only then add `NBA` to the
+scheduled `refreshSleeperPlayerRows` phase in `/api/cron/import-players`.
+
+Two things the later writer must respect, read from code on `main`:
+
+- **NHL and MLB: no Sleeper path exists in code.** `SleeperSport` is `'nfl' | 'nba'`
+  (`lib/autocoach/status-sources/SleeperStatusAdapter.ts`) and `SLEEPER_ENDPOINT_SPORTS` maps only
+  `NFL` and `NBA`. Whether Sleeper serves those sports at all is not established from the network
+  and should not be.
+- **Precedence falls out of the pool, with one trap.** A known `yearsExp` already outranks the
+  stats-derived `rookieVerdict` in `getResolvedDraftPoolForLeague` (`resolveNonNflRookieFields`
+  runs first), so Sleeper wins over history without extra code. But the writer creates
+  `source = 'sleeper'` rows beside the Rolling Insights ones, and `SportPlayerPoolResolver` merges
+  duplicates with `mergeKnownYearsExp`, which returns NULL when two known values disagree. Nothing
+  writes `yearsExp` on the RI rows today, so there is nothing to disagree with — keep it that way,
+  or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
+  `sleeperId`) rather than writing a second opinion.
+
+## League settings — median game (`/league/{id}` → `settings.league_average_match`) (recorded 2026-10-29, no probe)
+
+Stored from 2026-10-29 by `SleeperLeagueMapper` as `League.settings.league_average_match`, and read by
+`lib/core-app/medianGame.ts` (Season Outlook simulation and record, public standings).
+
+| ID | Gap | Status | Blocks | How the code copes today |
+|---|---|---|---|---|
+| `S-10` | **Is `settings.league_average_match` the median-game flag, with `1` = on and `0`/absent = off?** The name is taken from code already in the repo (`lib/core-app/weeklyCapabilities.ts`, `lib/trade-value/pickSlotProjection.ts`), not from a fixture. Also unknown: whether any value other than 0/1 occurs, and whether the median game is played in playoff weeks. | **UNVERIFIED — no fixture** | Trusting the stated flag over the records | The platform's own effect is MEASURED (standingsModel.ts header, 2026-09-17: 524 of 526 teams in 40 leagues match "head-to-head + a win for the top half of the week"). `leagueHasMedianGame` prefers the stated flag and otherwise reads the records — two games a week means median — so a wrong flag reading costs only leagues where the flag is present. Playoff weeks: the outlook and the public table count the median game only in weeks they already treat as regular season. **To resolve:** capture `/league/{id}` for one median league in a committed fixture, via a Sleeper `scripts/probe.sh` (none exists yet). |

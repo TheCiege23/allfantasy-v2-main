@@ -55,7 +55,7 @@ describe('Royal: the product concept survives, and the pricing base is kept besi
   })
 })
 
-describe('Survivor All-Stars Guillotine reaches the final grounding, mechanics intact', () => {
+describe('Survivor All-Stars Guilly reaches the final grounding, mechanics intact', () => {
   /*
    * ⚠ REACHED BY `leagueType`, AND NO PRODUCER EMITS IT YET. No classifier
    * branch and no import heuristic produces `survivor_guillotine` today, so a

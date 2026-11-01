@@ -66,7 +66,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   actorUserId: string
   tiebreakerRosterId?: string
 }): Promise<FinalizeSeasonResult> {
-  const leagueScoring=await prisma.league.findUnique({where:{id:input.leagueId},select:{settings:true,leagueType:true,isDynasty:true}})
+  const leagueScoring=await prisma.league.findUnique({where:{id:input.leagueId},select:{settings:true,leagueType:true,isDynasty:true,sport:true}})
   const isRoto=(leagueScoring?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto'
   const result = isRoto ? await finalizeRotoSeason(input.seasonId,input.actorUserId,input.tiebreakerRosterId) : await finalizeNflRedraftPlayoffRuntimeSeason({
     seasonId: input.seasonId,
@@ -81,6 +81,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
 
   let offseasonEntered = false
   let offseasonSnapshotId: string | null = null
+  let archivedSeason: number | null = null
   let keeperOffseasonTriggered = false
   let keeperOffseasonCompleted = false
 
@@ -93,6 +94,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
       if (offseason.ok) {
         offseasonEntered = true
         offseasonSnapshotId = offseason.snapshotId
+        archivedSeason = typeof offseason.season === 'number' ? offseason.season : null
       } else {
         console.error('[finalize-season] enterRedraftOffseason declined', {
           leagueId: input.leagueId,
@@ -119,6 +121,11 @@ export async function finalizeSeasonAndEnterOffseason(input: {
       if (amendments.applied > 0 || amendments.failed > 0) {
         console.info('[finalize-season] constitution amendments', { leagueId: input.leagueId, ...amendments })
       }
+    }
+
+    if (offseasonEntered && archivedSeason != null) {
+      await runSeasonHistoryEngines(input.leagueId, archivedSeason, leagueScoring?.sport ?? null)
+      await publishRecap(input.leagueId, archivedSeason, !alreadyFinalized)
     }
 
     if (offseasonEntered && !alreadyFinalized) {
@@ -192,7 +199,49 @@ function describe(code: string): string {
   if (code === 'NO_BRACKET') return 'No playoff bracket exists for this season'
   if (code === 'NO_WINNER') return 'Final matchup has no winner - run advance first'
   if (code === 'NO_FINAL_ROUND') return 'No playoff rounds found'
+  if (code === 'LOWER_BRACKET_INCOMPLETE') return 'The consolation bracket or toilet bowl is not yet complete'
   return 'Final playoff round is not yet complete'
+}
+
+/**
+ * Fills the record book and runs season awards from the `SeasonResult` rows the archive just wrote.
+ *
+ * BEST-EFFORT, and each engine on its own: both only read Postgres and rewrite their own rows
+ * idempotently (record book upserts; awards replace the season's set), so a re-finalize repairs
+ * a run that failed. A failure here must never fail the finalize — the champion and archive are
+ * already committed — so it is logged and swallowed. Awaited rather than fired off, because an
+ * unawaited promise on a cron tick or serverless request is dropped when the response is sent.
+ */
+async function runSeasonHistoryEngines(leagueId: string, seasonYear: number, sport: string | null): Promise<void> {
+  const season = String(seasonYear)
+  try {
+    const { runRecordBookEngine } = await import('@/lib/record-book-engine/RecordBookEngine')
+    await runRecordBookEngine(leagueId, [season], { sport })
+  } catch (error) {
+    console.warn('[finalize-season] record book engine failed', { leagueId, season, error })
+  }
+  try {
+    const { runAwardsEngine } = await import('@/lib/awards-engine/AwardsEngine')
+    await runAwardsEngine(leagueId, season, { sport })
+  } catch (error) {
+    console.warn('[finalize-season] awards engine failed', { leagueId, season, error })
+  }
+}
+
+/**
+ * The season recap (lib/season-recap): stored with the season's history and announced to the league.
+ * After the archive and the history engines, because it reads the same rows they settle. BEST-EFFORT
+ * and awaited, like the engines above: the champion is already committed, so a failure is logged and
+ * a re-finalize repairs it — recomputing the stored recap, but notifying only on the first finalize.
+ */
+async function publishRecap(leagueId: string, seasonYear: number, notify: boolean): Promise<void> {
+  try {
+    const { publishSeasonRecap } = await import('@/lib/season-recap/seasonRecapService')
+    const out = await publishSeasonRecap(leagueId, seasonYear, { notify })
+    if (!out.ok) console.warn('[finalize-season] season recap skipped', { leagueId, season: seasonYear, reason: out.reason })
+  } catch (error) {
+    console.warn('[finalize-season] season recap failed', { leagueId, season: seasonYear, error })
+  }
 }
 
 async function promptCommissionerRating(leagueId: string): Promise<void> {

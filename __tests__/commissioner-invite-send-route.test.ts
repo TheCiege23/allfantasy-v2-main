@@ -2,12 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  session: vi.fn(), commissioner: vi.fn(), league: vi.fn(), update: vi.fn(),
+  session: vi.fn(), commissioner: vi.fn(), league: vi.fn(), update: vi.fn(), registered: vi.fn(),
   privacy: vi.fn(), rateLimit: vi.fn(), client: vi.fn(), send: vi.fn(),
 }))
 vi.mock('next-auth', () => ({ getServerSession: mocks.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: mocks.league, update: mocks.update } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: mocks.league, update: mocks.update }, appUser: { findFirst: mocks.registered } } }))
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: mocks.commissioner }))
 vi.mock('@/lib/league-privacy', () => ({ getLeaguePrivacySettings: mocks.privacy }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: mocks.rateLimit }))
@@ -28,6 +28,7 @@ beforeEach(() => {
   mocks.commissioner.mockResolvedValue(undefined)
   mocks.league.mockImplementation(async () => league)
   mocks.update.mockResolvedValue(league)
+  mocks.registered.mockResolvedValue(null)
   mocks.privacy.mockResolvedValue({ allowEmailInvite: true, allowUsernameInvite: true })
   mocks.rateLimit.mockReturnValue({ success: true })
   mocks.client.mockReturnValue({ client: { emails: { send: mocks.send } }, fromEmail: 'AllFantasy <noreply@allfantasy.ai>' })

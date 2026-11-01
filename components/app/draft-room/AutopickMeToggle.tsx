@@ -2,9 +2,12 @@
 
 import { useCallback, useRef, useState } from 'react'
 
+/** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
+export type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
+
 export type ViewerAutopickData = {
   enabled: boolean
-  mode: 'standard' | 'ai_queue'
+  mode: AutopickMode
   isProEligible: boolean
   updatedAt: string | null
 }
@@ -19,12 +22,12 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [localEnabled, setLocalEnabled] = useState(viewerAutopick?.enabled ?? false)
-  const [localMode, setLocalMode] = useState<'standard' | 'ai_queue'>(
+  const [localMode, setLocalMode] = useState<AutopickMode>(
     viewerAutopick?.mode ?? 'standard',
   )
 
   // Holds the last server-confirmed state so we can roll back on failure.
-  const committedRef = useRef<{ enabled: boolean; mode: 'standard' | 'ai_queue' }>({
+  const committedRef = useRef<{ enabled: boolean; mode: AutopickMode }>({
     enabled: viewerAutopick?.enabled ?? false,
     mode: viewerAutopick?.mode ?? 'standard',
   })
@@ -32,7 +35,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
   const isProEligible = viewerAutopick?.isProEligible ?? false
 
   const save = useCallback(
-    async (enabled: boolean, mode: 'standard' | 'ai_queue') => {
+    async (enabled: boolean, mode: AutopickMode) => {
       setSaving(true)
       setError(null)
       // Optimistic update
@@ -85,7 +88,10 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
       data-testid="autopick-me-toggle"
       className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-1"
     >
-      <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-white/70">
+      <label
+        className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-white/70"
+        title="Picks for you as soon as you are on the clock, instead of waiting for your timer to run out."
+      >
         <input
           type="checkbox"
           checked={localEnabled}
@@ -132,6 +138,27 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
           >
             AI Queue{!isProEligible ? ' (Pro)' : ''}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            aria-disabled={!isProEligible || saving}
+            data-testid="autopick-mode-draft-as-me"
+            title={isProEligible ? 'As soon as you are on the clock, your queue goes first, then Chimmy picks the way you draft.' : 'AF Pro required'}
+            onClick={() => {
+              if (!isProEligible) {
+                setError('AF Pro required to have Chimmy draft like you.')
+                return
+              }
+              void save(true, 'draft_as_me')
+            }}
+            className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
+              localMode === 'draft_as_me'
+                ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
+                : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
+            } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
+          >
+            Draft like me{!isProEligible ? ' (Pro)' : ''}
           </button>
         </>
       ) : null}

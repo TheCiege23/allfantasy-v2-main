@@ -1,5 +1,6 @@
 'use client'
 
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import type { RedraftLiveScoringClient, RedraftMatchupClient } from '@/lib/redraft/client'
 import { GamesLimitsIndicator, readGamesLimitsSummary } from './GamesLimitsIndicator'
@@ -64,11 +65,14 @@ export function MatchupView({
   liveMatchup,
   selectedRosterId,
   sport,
+  extraMatchup = null,
 }: {
   matchup: RedraftMatchupClient | null
   liveMatchup?: LiveMatchup | null
   selectedRosterId: string | null
   sport: string
+  /** An odd-team league's extra game this week (lib/redraft/oddTeamExtraMatchupRules.ts). */
+  extraMatchup?: ExtraMatchupView | null
 }) {
   // Source totals take precedence over native recalculation for an imported result.
   if (matchup?.source === 'fantrax') liveMatchup = null
@@ -106,6 +110,10 @@ export function MatchupView({
     : matchup
       ? rosterLabel(matchup, isSelectedAway ? 'home' : 'away')
       : 'Opponent'
+  // The leftover team's week is its bye row; its opponent is the extra matchup's chosen team.
+  const playsExtra = extraMatchup?.role === 'leftover'
+  const shownOpponentName = playsExtra ? extraMatchup!.teamName : opponentName
+  const shownOpponentScore = playsExtra ? extraMatchup!.theirScore : opponentScore
   const liveMissing = liveMatchup?.missingStarterPlayerIds.length ?? 0
   const finalWinner =
     liveMatchup?.complete && liveMatchup.winnerRosterId
@@ -147,10 +155,13 @@ export function MatchupView({
             <span className="text-[11px]">{matchup?.source === 'fantrax' ? 'Fantrax totals' : liveMatchup ? 'live scoring' : 'cached scoring'}</span>
           </div>
           <div className="text-center">
-            <p className="truncate text-[11px] text-white/50">{opponentName}</p>
-            <p className="text-2xl font-bold text-white">{opponentScore == null ? '—' : opponentScore.toFixed(2)}</p>
+            <p className="truncate text-[11px] text-white/50">{shownOpponentName}</p>
+            <p className="text-2xl font-bold text-white">{shownOpponentScore == null ? '—' : shownOpponentScore.toFixed(2)}</p>
           </div>
         </div>
+        {extraMatchup ? (
+          <p className="mt-3 text-[11px] text-white/60" data-testid="redraft-extra-matchup">{extraMatchup.line}</p>
+        ) : null}
 
         <GamesLimitsIndicator summary={readGamesLimitsSummary(snapshot, isSelectedAway ? 'away' : 'home')} />
 

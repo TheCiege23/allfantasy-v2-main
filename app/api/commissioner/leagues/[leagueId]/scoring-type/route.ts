@@ -36,6 +36,7 @@ function describe(settings: unknown, sport: string) {
     options: {
       modes: types.modes,
       presets: Object.entries(types.presets).map(([id, list]) => ({ id, categoryIds: list.map((c) => c.id) })),
+      rotoPresets: types.rotoPresets ? [...types.rotoPresets] : null,
       catalog: types.catalog.map(({ id, label, description, direction }) => ({ id, label, description: description ?? null, direction })),
     },
   }

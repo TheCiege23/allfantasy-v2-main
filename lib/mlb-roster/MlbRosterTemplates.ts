@@ -26,7 +26,7 @@ export const MLB_ROSTER_SLOTS: RosterSlotDef[] = [
   { key: 'RP', label: 'Relief Pitcher', shortLabel: 'RP', color: '#fb923c', category: 'offense', eligiblePositions: ['RP'], defaultCount: 2, minCount: 0, maxCount: 5 },
   { key: 'P', label: 'Pitcher (Any)', shortLabel: 'P', color: '#dc2626', category: 'flex', eligiblePositions: ['SP', 'RP', 'P'], defaultCount: 3, minCount: 0, maxCount: 15 },
   // Bench / Reserve
-  { key: 'BN', label: 'Bench', shortLabel: 'BN', color: '#4b5563', category: 'bench', eligiblePositions: [], defaultCount: 6, minCount: 0, maxCount: 20 },
+  { key: 'BN', label: 'Bench', shortLabel: 'BN', color: '#4b5563', category: 'bench', eligiblePositions: [], defaultCount: 6, minCount: 0, maxCount: 26 },
   { key: 'IL', label: 'Injured List', shortLabel: 'IL', color: '#ef4444', category: 'reserve', eligiblePositions: [], defaultCount: 2, minCount: 0, maxCount: 8 },
   { key: 'IL_PLUS', label: 'IL+ (60-day)', shortLabel: 'IL+', color: '#dc2626', category: 'reserve', eligiblePositions: [], defaultCount: 0, minCount: 0, maxCount: 5 },
   { key: 'NA', label: 'Not Active', shortLabel: 'NA', color: '#6b7280', category: 'reserve', eligiblePositions: [], defaultCount: 0, minCount: 0, maxCount: 10 },
@@ -52,10 +52,14 @@ export const MLB_ROSTER_TEMPLATES: MlbRosterTemplate[] = [
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 3, UTIL: 1, SP: 2, RP: 2, P: 3, BN: 6, IL: 2 } },
   { key: 'category', label: 'Category / Roto', leagueTypes: ['redraft'], description: 'Category-based scoring roster.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, CI: 1, MI: 1, OF: 5, UTIL: 1, SP: 3, RP: 2, P: 3, BN: 7, IL: 2, NA: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, SP: 2, RP: 1, P: 2, BN: 4 } },
+  // The same roster as Survivor's own MLB defaults (lib/league-concepts/survivorDefaults.ts), which
+  // this template replaces after creation. Pitchers are stored as plain P, never SP or RP, so SP / RP
+  // slots could never be filled: the MLB rehearsal ran every team with half its P slots and none of
+  // its SP / RP slots filled (2026-10-28).
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Survivor roster.',
-    slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 4, UTIL: 1, SP: 2, RP: 2, P: 2, BN: 6 } },
+    slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, P: 4, BN: 5 } },
   { key: 'zombie', label: 'Zombie', leagueTypes: ['zombie'], description: 'Lean zombie.',
     slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 4, UTIL: 1, SP: 2, RP: 2, P: 3, BN: 5 } },
   { key: 'tournament', label: 'Tournament', leagueTypes: ['tournament'], description: 'Tournament roster.',

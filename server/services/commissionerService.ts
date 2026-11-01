@@ -23,6 +23,7 @@ import {
   isHeadCommissioner,
 } from '@/server/services/permissionService'
 import type { LeagueLifecycleState } from '@prisma/client'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type CommissionerConfirmation = {
   confirmed?: boolean
@@ -258,6 +259,7 @@ export async function editFaabOverride(leagueId: string, userId: string, rosterI
     where: { id: rosterId },
     data: { faabRemaining: faab },
   })
+  await copyGenericFaabToRedraft(prisma, [rosterId])
   await logAction({
     leagueId,
     userId,

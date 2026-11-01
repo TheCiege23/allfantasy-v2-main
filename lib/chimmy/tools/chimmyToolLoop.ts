@@ -6,6 +6,8 @@ import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
 import { anthropicTokenUsage, recordLlmCall } from '@/lib/telemetry/llm-usage'
+import { getDeepSeekConfigFromEnv } from '@/lib/provider-config'
+import { resolveDeepSeekModel } from '@/lib/ai/providerProfiles'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -34,12 +36,18 @@ import {
  * `web_search`), which is a different feature from function calling and cannot
  * express our tools. `/api/waiver-ai/grok` already proves this path works.
  *
- * ⚠ DEEPSEEK CANNOT DO THIS AT ALL, and that is why this is not wired into the
- * shared provider registry. Its adapter flattens the whole message array into a
- * single prompt string (`toDeepSeekUserPrompt`), so there is nowhere to put an
- * assistant message carrying `tool_calls` or a `role: 'tool'` reply. Supporting
- * it means rewriting the adapter and the client, which is a larger change than
- * this loop.
+ * ⚠ DEEPSEEK THROUGH THE SAME OPENAI-SHAPED PATH AS GROK — NOT THROUGH ITS SHARED ADAPTER.
+ * That adapter flattens the whole message array into a single prompt string
+ * (`toDeepSeekUserPrompt`), so it cannot carry `tool_calls` or a `role: 'tool'`
+ * reply. DeepSeek's API itself is OpenAI-compatible and does function calling, so
+ * the loop talks to it directly with the OpenAI SDK, exactly as it does to xAI.
+ *
+ * ⚠ AND IT IS A FALLBACK CHAIN, NOT A CHOICE (2026-10-31). The loop used to pick Claude
+ * whenever an Anthropic key was PRESENT, and return null if Claude then failed — so a
+ * revoked key (`401 invalid x-api-key`, measured that day, with Grok `permission-denied`
+ * too) silently took every tool away from every answer while DeepSeek, the one provider
+ * still working, sat unused. Now each configured provider is tried in order, and the
+ * next one only when the previous could not START: see `isProviderUnavailable`.
  *
  * ⚠ NO CACHE, ON PURPOSE. `cachedFetch` keys on (messages, model, temperature)
  * for 30 minutes and has NO single-flight — concurrent misses all call the
@@ -86,7 +94,7 @@ const CLAUDE_TURN_TIMEOUT_MS = 40_000
 /** Whole-loop ceiling, so three slow turns cannot hold a request for two minutes. */
 const CLAUDE_LOOP_BUDGET_MS = 75_000
 
-export type ChimmyToolLoopProvider = 'claude' | 'grok'
+export type ChimmyToolLoopProvider = 'claude' | 'grok' | 'deepseek'
 
 export type ChimmyToolLoopResult = {
   text: string
@@ -96,6 +104,8 @@ export type ChimmyToolLoopResult = {
   turns: number
   /** Which provider answered. */
   provider?: ChimmyToolLoopProvider
+  /** Providers tried first that could not start (dead key, no credit, outage), in order. */
+  failedOver?: ChimmyToolLoopProvider[]
   /** The model id the answering provider ran. */
   model?: string
   /**
@@ -109,15 +119,51 @@ function hasXaiKey(): boolean {
   return Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
 }
 
+function hasDeepSeekKey(): boolean {
+  return getDeepSeekConfigFromEnv() !== null
+}
+
 /**
- * Claude when its key is present, Grok otherwise; null when neither can run. Read at call time,
- * never at import, so a key rotated into the environment takes effect without a rebuild.
+ * Every provider the loop may use, in the order it tries them: Claude, then Grok, then DeepSeek,
+ * each only when its key is set. `CHIMMY_TOOL_LOOP_PROVIDER=grok|deepseek` pins one — useful while
+ * the providers ahead of it have dead keys, so no request spends time on their failed calls first.
+ * Read at call time, never at import, so a key rotated into the environment takes effect without
+ * a rebuild.
  */
-export function resolveChimmyToolLoopProvider(): ChimmyToolLoopProvider | null {
+export function chimmyToolLoopProviders(): ChimmyToolLoopProvider[] {
   const pinned = process.env.CHIMMY_TOOL_LOOP_PROVIDER?.trim().toLowerCase()
-  if (pinned === 'grok') return hasXaiKey() ? 'grok' : null
-  if (hasAnthropicKey()) return 'claude'
-  return hasXaiKey() ? 'grok' : null
+  if (pinned === 'grok') return hasXaiKey() ? ['grok'] : []
+  if (pinned === 'deepseek') return hasDeepSeekKey() ? ['deepseek'] : []
+  const chain: ChimmyToolLoopProvider[] = []
+  if (hasAnthropicKey()) chain.push('claude')
+  if (hasXaiKey()) chain.push('grok')
+  if (hasDeepSeekKey()) chain.push('deepseek')
+  return chain
+}
+
+/** The provider tried first; null when none can run. */
+export function resolveChimmyToolLoopProvider(): ChimmyToolLoopProvider | null {
+  return chimmyToolLoopProviders()[0] ?? null
+}
+
+/** Returned by a provider's loop when it could not START, so the next provider may be tried. */
+const PROVIDER_UNAVAILABLE = Symbol('chimmy-tool-loop-provider-unavailable')
+type ProviderLoopOutcome = ChimmyToolLoopResult | null | typeof PROVIDER_UNAVAILABLE
+
+/**
+ * Whether a failure means "this provider cannot serve anyone right now" — a dead or revoked key
+ * (401/403), no credit (402), a rate limit (429) or an outage (5xx) — and it happened before any
+ * tool ran. Only then is the next provider tried.
+ *
+ * ⚠ NOT A TIMEOUT, AND NOT AFTER A TOOL. A timeout has no status and may be one slow answer, and
+ * trying the next provider after it would stack a second model journey onto a request already
+ * 20–40s old. After a tool has run, `propose_*` tools have already built confirm cards in the
+ * shared context; a second provider would build them again. Both fall back to the push path,
+ * exactly as before.
+ */
+export function isProviderUnavailable(status: number | undefined, toolsRun: number): boolean {
+  if (toolsRun > 0 || typeof status !== 'number') return false
+  return status === 401 || status === 402 || status === 403 || status === 429 || status >= 500
 }
 
 /**
@@ -134,6 +180,14 @@ export function chimmyToolsForClaude(): Anthropic.Tool[] {
   }))
 }
 
+function deepseekClient(): OpenAI | null {
+  // The same defence in depth as grokClient.
+  if (!isAiSpendEnabled()) return null
+  const cfg = getDeepSeekConfigFromEnv()
+  if (!cfg) return null
+  return new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl })
+}
+
 function grokClient(): OpenAI | null {
   // Defence in depth. canRunChimmyToolLoop below is the real gate, but this is
   // a provider boundary in its own right and should not depend on a caller
@@ -142,6 +196,46 @@ function grokClient(): OpenAI | null {
   const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
   if (!apiKey?.trim()) return null
   return new OpenAI({ apiKey, baseURL: XAI_BASE_URL })
+}
+
+/**
+ * Why a provider loop returned null.
+ *
+ * ⚠ EVERY null SENDS THE TURN TO THE PUSH PATH, WHICH HAS NO TOOLS AND ITS OWN PROMPT — and nothing
+ * recorded which way it went. On 2026-10-31 "Explain PPR scoring in two short sentences" and "Find me
+ * an open NBA league" were both answered by the push path (no league finder, the old five-heading
+ * shape), while the same NBA question a minute later went through the loop and searched. Whether the
+ * first two hit the deadline, a refusal or a provider error was unknowable. Provider errors already
+ * reached `reportProviderFailure`; the quiet give-ups reached nothing.
+ */
+export type ToolLoopGiveUp =
+  | 'deadline'
+  | 'refusal'
+  | 'max_tokens'
+  | 'empty_text'
+  | 'turn_ceiling'
+  | 'no_message'
+  | 'provider_error'
+  | 'providers_unavailable'
+
+/**
+ * One log line per give-up: a reason code and counters. Never the question, a key or a URL — the
+ * reason is what the owner needs, and the question is the user's.
+ */
+function logGiveUp(
+  provider: ChimmyToolLoopProvider | 'all',
+  reason: ToolLoopGiveUp,
+  detail: { turn?: number; toolsUsed?: string[]; status?: number; startedAt?: number } = {},
+): null {
+  console.warn('[chimmy-tool-loop] gave up', {
+    provider,
+    reason,
+    turn: detail.turn ?? null,
+    tools: detail.toolsUsed?.length ? detail.toolsUsed.join(',') : null,
+    status: detail.status ?? null,
+    elapsedMs: detail.startedAt ? Date.now() - detail.startedAt : null,
+  })
+  return null
 }
 
 /**
@@ -199,7 +293,16 @@ type ChimmyToolLoopArgs = {
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
   if (!canRunChimmyToolLoop(args.enabled)) return null
-  return resolveChimmyToolLoopProvider() === 'claude' ? runClaudeToolLoop(args) : runGrokToolLoop(args)
+  const failedOver: ChimmyToolLoopProvider[] = []
+  for (const provider of chimmyToolLoopProviders()) {
+    const outcome = provider === 'claude' ? await runClaudeToolLoop(args) : await runOpenAiShapedToolLoop(args, provider)
+    if (outcome === PROVIDER_UNAVAILABLE) {
+      failedOver.push(provider)
+      continue
+    }
+    return outcome && failedOver.length > 0 ? { ...outcome, failedOver } : outcome
+  }
+  return logGiveUp('all', 'providers_unavailable')
 }
 
 /**
@@ -212,7 +315,7 @@ function claudeHistory(conversation: ChimmyToolLoopArgs['conversation']): Anthro
   return turns.map((t) => ({ role: t.role, content: t.content }))
 }
 
-async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
+async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoopOutcome> {
   // Defence in depth, as for grokClient: this is a provider boundary in its own right.
   if (!isAiSpendEnabled()) return null
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
@@ -236,7 +339,8 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   ]
   const toolsUsed: string[] = []
   const evidence: string[] = []
-  const deadline = Date.now() + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
+  const startedAt = Date.now()
+  const deadline = startedAt + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
   let useFallbacks = true
 
   const call = async (final: boolean): Promise<Anthropic.Message> => {
@@ -291,7 +395,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
-      if (Date.now() >= deadline) return null
+      if (Date.now() >= deadline) return logGiveUp('claude', 'deadline', { turn, toolsUsed, startedAt })
       const final = turn === MAX_TOOL_TURNS
 
       let response: Anthropic.Message
@@ -312,7 +416,9 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
       }
 
       // A refusal or a truncated answer is not an answer: fall back to the push path.
-      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null
+      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') {
+        return logGiveUp('claude', response.stop_reason, { turn, toolsUsed, startedAt })
+      }
 
       // Keep the FULL content, thinking blocks included — they must go back unchanged.
       messages.push({ role: 'assistant', content: response.content })
@@ -324,11 +430,11 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
           .map((b) => b.text)
           .join('')
           .trim()
-        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : logGiveUp('claude', 'empty_text', { turn, toolsUsed, startedAt })
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
-      if (turn === MAX_TOOL_TURNS) return null
+      if (turn === MAX_TOOL_TURNS) return logGiveUp('claude', 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       /*
        * Sequential on purpose: `find_league_by_name` rebinds `context.leagueId`, and the league
@@ -349,14 +455,17 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
     // As for Grok: the user falls back quietly; the owner hears about billing/credential failures.
     const e = err as { status?: number; message?: string } | null
     reportProviderFailure({ provider: 'anthropic', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
-    return null
+    logGiveUp('claude', 'provider_error', { toolsUsed, status: e?.status, startedAt })
+    return isProviderUnavailable(e?.status, toolsUsed.length) ? PROVIDER_UNAVAILABLE : null
   }
 }
 
-async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
-  const client = grokClient()
+/** Grok and DeepSeek: both speak the OpenAI chat-completions shape, function calling included. */
+async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok' | 'deepseek'): Promise<ProviderLoopOutcome> {
+  const client = provider === 'grok' ? grokClient() : deepseekClient()
   if (!client) return null
-  const model = args.model?.trim() || DEFAULT_MODEL
+  // `args.model` names a Grok model when a caller passes one; DeepSeek runs its own published id.
+  const model = provider === 'grok' ? args.model?.trim() || DEFAULT_MODEL : resolveDeepSeekModel('standard')
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
@@ -366,6 +475,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
 
   const toolsUsed: string[] = []
   const evidence: string[] = []
+  const startedAt = Date.now()
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
@@ -389,7 +499,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
       // per-request helper, and the catch below already reports a provider failure.
       recordLlmCall({
         feature: 'chimmy_tool_loop',
-        provider: 'xai',
+        provider: provider === 'grok' ? 'xai' : 'deepseek',
         model: response.model || model,
         userId: args.context.userId,
         leagueId: args.context.leagueId,
@@ -399,14 +509,14 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
       })
 
       const message = response.choices?.[0]?.message
-      if (!message) return null
+      if (!message) return logGiveUp(provider, 'no_message', { turn, toolsUsed, startedAt })
 
       messages.push(message)
 
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
         const text = typeof message.content === 'string' ? message.content.trim() : ''
-        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model, evidence: evidence.join('\n\n') } : null
+        return text ? { text, toolsUsed, turns: turn, provider, model, evidence: evidence.join('\n\n') } : logGiveUp(provider, 'empty_text', { turn, toolsUsed, startedAt })
       }
 
       /*
@@ -415,7 +525,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
        * would return nothing at all after paying for every call. Bail to the
        * push path instead of burning another request.
        */
-      if (turn === MAX_TOOL_TURNS) return null
+      if (turn === MAX_TOOL_TURNS) return logGiveUp(provider, 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       for (const call of calls) {
         const fn = (call as { function?: { name?: string; arguments?: string } }).function
@@ -449,7 +559,8 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
      * The owner hears about billing/credential failures; the user still just falls back.
      */
     const e = err as { status?: number; message?: string } | null
-    reportProviderFailure({ provider: 'grok', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
-    return null
+    reportProviderFailure({ provider, status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
+    logGiveUp(provider, 'provider_error', { toolsUsed, status: e?.status, startedAt })
+    return isProviderUnavailable(e?.status, toolsUsed.length) ? PROVIDER_UNAVAILABLE : null
   }
 }

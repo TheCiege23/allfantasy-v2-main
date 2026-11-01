@@ -16,6 +16,7 @@ import { getRosterOverlayForVariant } from './LeagueVariantRegistry'
 import { getTeamMetadataForSport } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShape'
+import { getCanonicalRedraftStarterSlots, redraftTeamDefenseEnabled } from '@/lib/league-concepts/redraftDefaults'
 import {
   DAILY_REDRAFT_ROSTER_LAYOUTS,
   DAILY_REDRAFT_WAIVER_PROCESSING_DAYS,
@@ -98,6 +99,30 @@ const LEAGUE_DEFAULTS: Record<SportType, LeagueDefaults> = {
   },
 }
 
+/**
+ * NFL/NCAAF default starters are DERIVED from the redraft contract
+ * (`lib/league-concepts/redraftDefaults.ts`), never restated here: QB, RB×2, WR×2, TE, FLEX, K, DST —
+ * and no team defense for NCAAF (see `redraftTeamDefenseEnabled`). This registry and every consumer of
+ * it (RosterDefaultsRegistry, RosterTemplateService, SportRulesEngine, league/roster-defaults) speak
+ * the FLEX / DST vocabulary, so the contract's FLX / DEF keys are respelled on the way in.
+ *
+ * ffb371161 restated a cut lineup (QB, RB, WR×2, TE, DEF) here while redraftDefaults went back to the
+ * full one, and the two disagreed for four months. Deriving is what stops that recurring.
+ */
+function footballStarterSlots(sport: 'NFL' | 'NCAAF'): Record<string, number> {
+  const canonical = getCanonicalRedraftStarterSlots({ defenseEnabled: redraftTeamDefenseEnabled(sport) })
+  const out: Record<string, number> = {}
+  for (const [slot, count] of Object.entries(canonical)) {
+    out[slot === 'FLX' ? 'FLEX' : slot === 'DEF' ? 'DST' : slot] = count
+  }
+  return out
+}
+
+const FOOTBALL_FLEX_DEFINITIONS: RosterDefaults['flex_definitions'] = [
+  { slotName: 'FLEX', allowedPositions: ['RB', 'WR', 'TE'] },
+  { slotName: 'SUPERFLEX', allowedPositions: ['QB', 'RB', 'WR', 'TE'] },
+]
+
 /** A daily sport's base roster IS its redraft layout — derived, never restated. */
 function dailyRosterDefaults(sport: DailyRedraftSport): RosterDefaults {
   const layout = DAILY_REDRAFT_ROSTER_LAYOUTS[sport]
@@ -115,15 +140,12 @@ function dailyRosterDefaults(sport: DailyRedraftSport): RosterDefaults {
 const ROSTER_DEFAULTS: Record<SportType, RosterDefaults> = {
   NFL: {
     sport_type: 'NFL',
-    starter_slots: { QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 },
+    starter_slots: footballStarterSlots('NFL'),
     bench_slots: 6,
     IR_slots: 1,
     taxi_slots: 0,
     devy_slots: 0,
-    flex_definitions: [
-      { slotName: 'FLX', allowedPositions: ['RB', 'WR', 'TE'] },
-      { slotName: 'SF', allowedPositions: ['QB', 'RB', 'WR', 'TE'] },
-    ],
+    flex_definitions: FOOTBALL_FLEX_DEFINITIONS,
   },
   // NBA / MLB / NHL: the one redraft layout per sport (lib/sportConfig/dailySportRedraftRoster.ts).
   NBA: dailyRosterDefaults('NBA'),
@@ -131,15 +153,12 @@ const ROSTER_DEFAULTS: Record<SportType, RosterDefaults> = {
   NHL: dailyRosterDefaults('NHL'),
   NCAAF: {
     sport_type: 'NCAAF',
-    starter_slots: { QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 },
+    starter_slots: footballStarterSlots('NCAAF'),
     bench_slots: 8,
     IR_slots: 1,
     taxi_slots: 0,
     devy_slots: 0,
-    flex_definitions: [
-      { slotName: 'FLX', allowedPositions: ['RB', 'WR', 'TE'] },
-      { slotName: 'SF', allowedPositions: ['QB', 'RB', 'WR', 'TE'] },
-    ],
+    flex_definitions: FOOTBALL_FLEX_DEFINITIONS,
   },
   NCAAB: {
     sport_type: 'NCAAB',
@@ -216,7 +235,8 @@ const DRAFT_DEFAULTS: Record<SportType, DraftDefaults> = {
   NFL: {
     sport_type: 'NFL',
     draft_type: 'snake',
-    rounds_default: 12,
+    // Draftable default roster: starters from the redraft contract + bench (redraftDefaults fallbackRounds).
+    rounds_default: 15,
     timer_seconds_default: 90,
     pick_order_rules: 'snake',
     timer_defaults: { per_pick_seconds: 90, auto_pick_enabled: false },
@@ -287,7 +307,8 @@ const DRAFT_DEFAULTS: Record<SportType, DraftDefaults> = {
   NCAAF: {
     sport_type: 'NCAAF',
     draft_type: 'snake',
-    rounds_default: 14,
+    // Draftable default roster: starters from the redraft contract + bench (redraftDefaults fallbackRounds).
+    rounds_default: 16,
     timer_seconds_default: 90,
     pick_order_rules: 'snake',
     timer_defaults: { per_pick_seconds: 90, auto_pick_enabled: false },
@@ -478,11 +499,14 @@ const WAIVER_VARIANT_OVERRIDES: Partial<Record<SportType, Record<string, Partial
     REDRAFT: REDRAFT_FAAB_WAIVER_OVERRIDE,
     PPR: { max_claims_per_period: 12 },
     HALF_PPR: { max_claims_per_period: 12 },
+    /*
+     * Superflex is a redraft roster shape, so it takes the redraft FAAB $100 default. Creation never
+     * stores `leagueVariant: 'SUPERFLEX'` (normalizeCreateLeaguePayload strips it); this row is what
+     * the wizard preview and LeagueCreationDefaultsLoader read. Measured 2026-10-25: no production
+     * league carries that variant, so no row-less league's fallback changes.
+     */
     SUPERFLEX: {
-      waiver_type: 'rolling',
-      faab_enabled: false,
-      FAAB_budget_default: null,
-      claim_priority_behavior: 'priority_lowest_first',
+      ...REDRAFT_FAAB_WAIVER_OVERRIDE,
       free_agent_unlock_behavior: 'after_waiver_run',
       max_claims_per_period: 12,
     },
@@ -599,7 +623,7 @@ export function getRosterDefaults(sportType: SportType, formatType?: string): Ro
     const starter_slots = { ...base.starter_slots, ...(overlay ?? {}) }
     delete starter_slots.DST
     starter_slots['DL'] = 1
-    starter_slots['LB'] = 1
+    // LB comes from the overlay (LB: 2). ffb371161 set it to 1 here, silently overriding the overlay.
     starter_slots['DB'] = 1
     starter_slots['IDP_FLEX'] = 1
     const flex_definitions = [
@@ -767,6 +791,9 @@ export function getWaiverDefaults(sportType: SportType, _formatType?: string | n
   const base = WAIVER_DEFAULTS[sportType] ?? WAIVER_DEFAULTS.NFL
   const normalizedVariant = normalizeWaiverVariant(_formatType)
   const variantOverrides = WAIVER_VARIANT_OVERRIDES[sportType]?.[normalizedVariant] ?? {}
+  if (String(_formatType ?? '').trim().toLowerCase() === 'zombie') {
+    return { ...base, ...variantOverrides, sport_type: sportType, waiver_type: 'fcfs', processing_days: null, FAAB_budget_default: null, faab_enabled: false, continuous_waivers_behavior: false, free_agent_unlock_behavior: 'instant' }
+  }
   return {
     ...base,
     ...variantOverrides,

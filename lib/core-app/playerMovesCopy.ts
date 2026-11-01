@@ -1,5 +1,6 @@
 import { coreUiCopy } from './coreUiCopy'
 import type { MoveScreen, PlayerMove } from './playerMoves'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * Player Finder's recommended moves in Spanish (2026-10-04).
@@ -33,8 +34,10 @@ const SCREEN_ES: Record<MoveScreen, string> = {
  */
 const SLOT_ES: Record<string, string> = { STARTER: 'TITULAR', BENCH: 'BANCA', 'IR SLOT': 'PUESTO IR', 'NOT YOURS': 'NO ES TUYO' }
 
+const SLOT_BY_LANG: Partial<Record<'en' | 'es', Record<string, string>>> = { es: SLOT_ES }
+
 export function slotText(slot: string, language: string): string {
-  return language === 'es' ? (SLOT_ES[slot] ?? slot) : slot
+  return SLOT_BY_LANG[coreLang(language)]?.[slot] ?? slot
 }
 
 /** The move in the reader's language: Spanish rebuilt from its parts, or its English as written. */

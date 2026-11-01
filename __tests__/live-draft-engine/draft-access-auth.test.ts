@@ -28,6 +28,7 @@ const db = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+vi.mock('@/lib/team-coowners/access', () => ({ acceptedCoOwnerRosterId: vi.fn(async () => null), isAcceptedCoOwnerForRoster: vi.fn(async () => false) }))
 
 // DEV bypass disabled for all tests (production-parity).
 vi.stubEnv('NODE_ENV', 'production')

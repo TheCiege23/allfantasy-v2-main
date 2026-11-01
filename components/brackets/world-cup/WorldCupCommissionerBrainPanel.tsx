@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
+
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2, Lock, Send, Settings, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -115,7 +117,7 @@ export default function WorldCupCommissionerBrainPanel({
     setLoading(true)
     setLoadError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
+      const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
         cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
@@ -139,7 +141,7 @@ export default function WorldCupCommissionerBrainPanel({
   }, [reload])
 
   async function postCommissionerBrain(payload: Record<string, unknown>): Promise<BrainPostResult> {
-    const res = await fetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
+    const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -194,7 +196,7 @@ export default function WorldCupCommissionerBrainPanel({
   async function sendIncompleteReminder() {
     setBusy("inc-reminder")
     try {
-      const res = await fetch(
+      const res = await paidToolFetch(
         `/api/brackets/world-cup/${challengeId}/commissioner-brain/send-reminder`,
         {
           method: "POST",
@@ -220,7 +222,7 @@ export default function WorldCupCommissionerBrainPanel({
   async function sendBroadcastReminder() {
     setBusy("broadcast-reminder")
     try {
-      const res = await fetch(
+      const res = await paidToolFetch(
         `/api/brackets/world-cup/${challengeId}/commissioner-brain/send-reminder`,
         {
           method: "POST",

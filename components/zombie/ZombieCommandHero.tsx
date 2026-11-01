@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import './zombie-universe-theme.css'
 import { ZombieSceneBackground } from './ZombieSceneBackground'
 import { Biohazard, Radio } from 'lucide-react'
 import { type ReactNode } from 'react'
@@ -80,10 +81,10 @@ export function ZombieCommandHero({
   const tierLabel = formatZombieTierLabel(tier, level?.tierLabel ?? level?.name)
 
   return (
-    <section className="zombie-hero-shell border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-      {sceneThemeId ? <ZombieSceneBackground themeId={sceneThemeId} /> : null}
+    <section className={clsx("zombie-hero-shell border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]", !sceneThemeId && "zombie-league-outbreak-hero")}>
+      {sceneThemeId ? <ZombieSceneBackground themeId={sceneThemeId} /> : <div className="zombie-universe-art" aria-hidden="true" />}
       <div className="zombie-hero-fog" aria-hidden />
-      {!sceneThemeId && <div className={clsx('pointer-events-none absolute inset-0', preset.overlayClass)} aria-hidden />}
+      {!sceneThemeId && <div className={clsx('pointer-events-none absolute inset-0 opacity-20', preset.overlayClass)} aria-hidden />}
       <div className="zombie-drift-particles opacity-[0.35]" aria-hidden />
 
       <div className="relative z-[1] p-5 sm:p-6">

@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     roster: { findMany: h.rosterFindMany },
+    zombieWeeklyResolution: { findUnique: vi.fn(async () => null) },
     zombieInfectionEvent: { findMany: h.infectionFindMany, updateMany: h.infectionUpdateMany },
     zombieLeagueTeam: { updateMany: h.teamUpdateMany },
   },

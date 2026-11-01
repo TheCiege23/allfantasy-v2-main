@@ -9,7 +9,9 @@ import { getActiveRosterIdsForLeague } from './SurvivorRosterState'
 import { getSeasonPointsFromRosterPerformance } from './SurvivorVoteEngine'
 import { readSurvivorLateSeasonSettings } from './lateSeasonSettings'
 import { isFinaleVoteComplete } from './finaleReveal'
+import { juryVotingHeldForSpeeches, readSurvivorFinaleSettings, readSurvivorFinaleWindows } from './survivorFinaleSettings'
 import { afterWinnerCrowned } from './shareCards/hooks'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 export interface SurvivorFinaleVote {
   jurorRosterId: string
@@ -266,7 +268,7 @@ export async function submitJuryVote(args: {
   week: number
   source?: string | null
   command?: string | null
-}): Promise<{ ok: boolean; error?: string; state?: SurvivorFinaleState }> {
+}): Promise<{ ok: boolean; error?: string; code?: string; state?: SurvivorFinaleState }> {
   const { leagueId, jurorRosterId, finalistRosterId, week } = args
   const config = await getSurvivorConfig(leagueId)
   if (!config) {
@@ -288,6 +290,12 @@ export async function submitJuryVote(args: {
   }
   if (state.votingDeadline && Date.now() >= state.votingDeadline.getTime()) {
     return { ok: false, error: 'The jury vote has closed' }
+  }
+  // Original rule: closing speeches come before the jury votes. Only when the commissioner set a
+  // speech window; with none, voting is never held (the behaviour before speeches existed).
+  const leagueRow = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })).catch(() => null)
+  if (juryVotingHeldForSpeeches(readSurvivorFinaleSettings(leagueRow?.settings), readSurvivorFinaleWindows(leagueRow?.settings), new Date())) {
+    return { ok: false, code: 'held_for_speeches', error: 'Jury voting opens when the closing speeches close' }
   }
 
   await appendSurvivorAudit(leagueId, config.configId, 'jury_vote_submitted', {
@@ -364,13 +372,17 @@ export async function recordCrownedWinner(leagueId: string, state: SurvivorFinal
   await prisma.jurySession.upsert({ where: { leagueId }, create: { leagueId, ...session }, update: session })
   await prisma.survivorPlayer.updateMany({ where: { leagueId, userId: winnerUserId }, data: { playerState: 'survivor_winner' } })
   const channel = await prisma.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })
-  if (channel) await prisma.survivorChatMessage.create({ data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
+  if (channel) await createSurvivorChatMessage(prisma, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
     contentType: 'host_announcement', content: `The jury has spoken. ${winnerName} is the last one standing.` } })
   await writeChampionToHistory(leagueId, { winnerUserId, winnerName, winnerRosterId: state.winnerRosterId, voteCount: state.voteCount, crownedAt: session.revealedAt }).catch(error => {
     console.error('[survivor-finale] champion history write failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
   })
   // Share cards: the champion card, offered to the winner and to the league as a recap.
   afterWinnerCrowned(leagueId)
+  // The reunion: Island Chat reopens to everyone (commissioner toggle). Never holds up the crown.
+  await import('./survivorReunion').then(({ openReunionChatOnce }) => openReunionChatOnce(leagueId, winnerName)).catch((error) => {
+    console.warn('[survivor-finale] reunion chat did not open', error instanceof Error ? error.message : error)
+  })
   return { winnerUserId }
 }
 

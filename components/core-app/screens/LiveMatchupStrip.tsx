@@ -177,7 +177,9 @@ function StandingStrip({ standing: s, leagueId }: { standing: RailStanding; leag
             : 'Bottom of the league this week'
           : `${s.placesAboveCut} ${s.placesAboveCut === 1 ? 'place' : 'places'} clear of ${cutWord}`}
         {` · cut line ${s.cutLine.toFixed(1)}`}
-        {s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
+        {s.basis === 'best_ball'
+          ? s.provisional ? ' · ranked on projected best-ball finals until the last game is final' : ' · ranked on final best-ball points'
+          : s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
         {' · '}
         <Link href={`/core/standings?league=${encodeURIComponent(leagueId)}`}>See the field</Link>
       </p>

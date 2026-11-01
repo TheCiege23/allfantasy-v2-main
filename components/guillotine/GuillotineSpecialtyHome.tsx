@@ -47,6 +47,8 @@ export interface GuillotineSpecialtySummary {
   myEscapes?: { weekOrPeriod: number; margin: number }[]
   home?: GuillotineHomeExtras | null
   config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null } | null
+  /** Set when the chop line is this week's live one, by the chop's own rules (lib/guillotine/chopWatch.ts). */
+  chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
 }
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
@@ -94,12 +96,12 @@ export function GuillotineSpecialtyHome({
   )
   const myChopped = home?.chopped.find((c) => c.rosterId === summary.myRosterId) ?? null
   const headline = guillotineHeadline({ week, me: line.me, alive: line.alive, myChoppedWeek: myChopped?.week ?? null })
-  const title = leagueName?.trim() || 'Guillotine League'
+  const title = leagueName?.trim() || 'Guilly League'
   const alive = home?.aliveCount ?? line.alive
   const chips = [
     sport.toUpperCase(),
     ...(home?.season ? [String(home.season)] : []),
-    'Guillotine',
+    'Guilly',
     home ? `${home.teamCount} teams · ${alive} alive` : `${alive} alive`,
   ]
   const lineupHref = leagueHref(leagueId, { view: 'team' })
@@ -141,7 +143,7 @@ export function GuillotineSpecialtyHome({
           format="guillotine"
           bannerSrc={asset('banner.svg')}
           emblemSrc={asset('emblem.svg')}
-          emblemAlt="Guillotine league crest"
+          emblemAlt="Guilly league crest"
           chips={chips}
           title={title}
           headline={headline}
@@ -215,7 +217,7 @@ export function GuillotineSpecialtyHome({
                         </span>
                         <span className={gl.tagCell}>
                           <SpecialtyTag tone={TONE[r.tier]} style={{ width: '100%' }}>
-                            {tierLabel(r.tier)}
+                            {r.immune ? 'Immune' : tierLabel(r.tier)}
                           </SpecialtyTag>
                         </span>
                       </div>
@@ -223,6 +225,12 @@ export function GuillotineSpecialtyHome({
                   ))}
                 </ol>
               )}
+              {summary.chopWatch?.live && line.rows.length > 0 ? (
+                <p className={sp.empty} data-testid="guillotine-chop-watch-note">
+                  Live: this week&rsquo;s scores so far, run through your league&rsquo;s chop rules. Updates every few minutes.
+                  {summary.chopWatch.chopCount > 1 ? ` ${summary.chopWatch.chopCount} teams are chopped this week.` : ''}
+                </p>
+              ) : null}
               {home && home.chopped.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
                   <span className={sp.lbl} style={{ marginRight: 6 }}>Chopped</span>
@@ -287,7 +295,7 @@ export function GuillotineSpecialtyHome({
           <img className={gl.bg} src={asset('banner.svg')} alt="" aria-hidden />
           <div className={gl.veil} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={gl.emblem} src={asset('emblem.svg')} alt="Guillotine league crest" />
+          <img className={gl.emblem} src={asset('emblem.svg')} alt="Guilly league crest" />
           <div className={gl.phoneHeadText}>
             <h2 className={`${gl.big} ${gl.phoneTitle}`}>{title}</h2>
             <span className={sp.t2}>

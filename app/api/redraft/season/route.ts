@@ -6,10 +6,12 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { ensurePostDraftFinalized } from '@/lib/post-draft'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { scheduleDivisionsForRosters } from '@/lib/league/divisions/leagueDivisions'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
+import { regularSeasonCapApplies, regularSeasonLengthCapRefusal } from '@/lib/redraft/regularSeasonCap'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +110,12 @@ export async function POST(req: NextRequest) {
   const seasonYear = parsedSeason.value ?? league.season
   const totalWeeks = parsedTotalWeeks.value ?? cfg?.defaultSeasonWeeks ?? 17
   const playoffStartWeek = parsedPlayoffStartWeek.value ?? cfg?.defaultPlayoffStartWeek ?? 15
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts): the
+  // schedule below is generated through the week before the playoffs, or the whole season without them.
+  if (regularSeasonCapApplies({ leagueType: league.leagueType, sport: sportKey })) {
+    const refusal = regularSeasonLengthCapRefusal(Math.min(totalWeeks, playoffStartWeek - 1), sportKey)
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
+  }
   const medianGame = body.medianGame ?? league.medianGame ?? false
 
   const redraft = await prisma.$transaction(async (tx) => {
@@ -137,6 +145,7 @@ export async function POST(req: NextRequest) {
     }
 
     const rosters: { id: string }[] = []
+    const rosterTeam: Array<{ rosterId: string; ids: string[] }> = []
     for (const t of league.teams) {
       const ownerId = t.claimedByUserId ?? league.userId
       const r = await tx.redraftRoster.create({
@@ -150,9 +159,16 @@ export async function POST(req: NextRequest) {
         },
       })
       rosters.push({ id: r.id })
+      rosterTeam.push({ rosterId: r.id, ids: [t.id] })
     }
 
-    const slots = generateSchedule(rosters, totalWeeks, playoffStartWeek, sportKey, { medianGame })
+    // The commissioner's divisions: rivals first, and a second meeting when "rivals twice" is on.
+    const divisions = scheduleDivisionsForRosters(league.settings, league.teams, rosterTeam)
+    const slots = generateSchedule(rosters, totalWeeks, playoffStartWeek, sportKey, {
+      medianGame,
+      divisionByRoster: divisions?.byRoster ?? null,
+      divisionRivalsTwice: divisions?.rivalsTwice === true,
+    })
     for (const s of slots) {
       if (s.type === 'median') continue
       await tx.redraftMatchup.create({

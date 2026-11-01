@@ -11,11 +11,17 @@ import type {
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
 import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
+import { FinalScoreLogos } from '@/components/notifications/FinalScoreLogos'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { notificationsCenterMessages } from '@/lib/core-app/messages/notificationsCenter'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { survivorNotificationIcon } from '@/lib/core-app/survivorNotificationIcon'
+import { SurvivorNotificationGlyph } from '@/components/core-app/survivor/SurvivorNotificationGlyph'
 
 /**
  * 22c — the in-app notifications centre.
@@ -72,12 +78,13 @@ function visibleFilters(mentionsAvailable: boolean): Array<{ id: NotificationFil
 
 function timeAgo(iso: string, language = 'en'): string {
   const ms = Date.now() - new Date(iso).getTime()
+  const m = messagesFor(notificationsCenterMessages, language)
   const mins = Math.round(ms / 60_000)
-  if (mins < 1) return language === 'es' ? 'ahora mismo' : 'just now'
-  if (mins < 60) return language === 'es' ? `hace ${mins} min` : `${mins}m ago`
+  if (mins < 1) return m.justNow
+  if (mins < 60) return m.minsAgo(mins)
   const hours = Math.round(mins / 60)
-  if (hours < 24) return language === 'es' ? `hace ${hours} h` : `${hours}h ago`
-  return language === 'es' ? `hace ${Math.round(hours / 24)} d` : `${Math.round(hours / 24)}d ago`
+  if (hours < 24) return m.hoursAgo(hours)
+  return m.daysAgo(Math.round(hours / 24))
 }
 
 function Row({
@@ -91,9 +98,23 @@ function Row({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(notificationsCenterMessages)
+  /* A Survivor notice wears its island icon (by kind) and the torch accent. Display only. */
+  const svIcon = survivorNotificationIcon(row.survivorType)
   return (
-    <li className="af-nt-row" data-severity={row.severity} data-read={row.read} data-urgent={!!urgent}>
+    <li
+      className="af-nt-row"
+      data-severity={row.severity}
+      data-read={row.read}
+      data-urgent={!!urgent}
+      data-survivor={svIcon ?? undefined}
+    >
       <span className="af-nt-dot" aria-hidden />
+      {svIcon ? (
+        <span className="af-nt-sv-icon" aria-hidden="true" data-testid="survivor-notification-icon">
+          <SurvivorNotificationGlyph icon={svIcon} />
+        </span>
+      ) : null}
       <span className="af-nt-body">
         <span className="af-nt-toprow">
           <b className="af-nt-title">{copy(row.title)}</b>
@@ -103,9 +124,10 @@ function Row({
             </span>
           ) : null}
         </span>
+        <FinalScoreLogos type={row.type ?? ''} meta={row.meta} />
         {/* The specific reason. Never "you have an update". */}
         <span className="af-nt-detail">{copy(row.detail)}</span>
-        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? language === 'es' ? ` · ${row.relatedIds.length} avisos coincidentes` : ` · ${row.relatedIds.length} matching notices` : ''}</span> : null}
+        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? m.matchingNotices(row.relatedIds.length) : ''}</span> : null}
       </span>
 
       {row.action ? (
@@ -159,14 +181,15 @@ function Row({
 
 export function NotificationsCenter({ data }: NotificationsCenterProps) {
   const accountId = useClientSyncAccount()
-  const { language } = useOptionalLanguage()
-  if (data.viewerId && data.viewerId !== accountId) return <p role="status">{language === 'es' ? 'Cargando notificaciones…' : 'Loading notifications…'}</p>
+  const m = useMessages(notificationsCenterMessages)
+  if (data.viewerId && data.viewerId !== accountId) return <p role="status">{m.loading}</p>
   return <ScopedNotificationsCenter key={`${accountId ?? ''}:${data.leagueId ?? ''}`} data={data} />
 }
 
 function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(notificationsCenterMessages)
   const [filter, setFilter] = useState<NotificationFilter>('all')
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
@@ -267,7 +290,7 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
           <h1 className="af-display af-nt-title">{copy('Notifications')}</h1>
           <p className="af-nt-sub">
             {unread > 0
-              ? language === 'es' ? `${unread} pendientes${data.leagueId ? ' en esta liga' : ''}. Los avisos con plazo aparecen primero.` : `${unread} waiting${data.leagueId ? ' in this league' : ''}. The ones with a clock on them are at the top.`
+              ? m.waiting(unread, !!data.leagueId)
               : data.leagueId
                 ? copy('Nothing is waiting on you in this league.')
                 : copy('Nothing is waiting on you.')}
@@ -363,9 +386,7 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
           */}
         {data.olderNotListed > 0 ? (
           <p className="af-nt-sectionnote">
-            {language === 'es'
-              ? `Aquí se muestran los ${data.listed} avisos más recientes. ${data.olderNotListed} anteriores no aparecen; los conteos de arriba describen esta página, no todos tus avisos.`
-              : `The ${data.listed} most recent are listed here. ${data.olderNotListed} older ${data.olderNotListed === 1 ? 'notification is' : 'notifications are'} not shown, so the counts above describe this page rather than everything you have.`}
+            {m.olderNotListed(data.listed, data.olderNotListed)}
           </p>
         ) : null}
         {rest.length > 0 ? (
@@ -380,7 +401,7 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
               ? data.leagueId
                 ? copy('No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.')
                 : copy('No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.')
-              : language === 'es' ? `Nada en ${copy(FILTERS.find((f) => f.id === filter)!.label)}.` : `Nothing under ${FILTERS.find((f) => f.id === filter)!.label}.`}
+              : m.nothingUnder(copy(FILTERS.find((f) => f.id === filter)!.label))}
           </p>
         )}
       </section>

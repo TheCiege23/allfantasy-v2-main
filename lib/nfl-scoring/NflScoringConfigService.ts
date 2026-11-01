@@ -18,6 +18,10 @@ export interface LeagueNflScoringConfig {
   lastUpdatedAt: string | null
   lastUpdatedBy: string | null
   warningFlags: string[]
+  /** Set by an import carry-over (`importedNflScoring`): source rules AllFantasy cannot score yet. */
+  importNotScored?: string[]
+  /** Set by an import carry-over: rules several source rules fed with different values. */
+  importApproximated?: string[]
 }
 
 export async function getLeagueNflScoringConfig(leagueId: string): Promise<LeagueNflScoringConfig> {
@@ -41,6 +45,7 @@ export async function getLeagueNflScoringConfig(leagueId: string): Promise<Leagu
     premiumFeaturesUsed: Boolean(raw.premiumFeaturesUsed),
     lastUpdatedAt: (raw.lastUpdatedAt as string) ?? null, lastUpdatedBy: (raw.lastUpdatedBy as string) ?? null,
     warningFlags: Array.isArray(raw.warningFlags) ? raw.warningFlags as string[] : [],
+    ...(raw.source === 'IMPORTED_MAPPED' ? { importNotScored: strings(raw.importNotScored), importApproximated: strings(raw.importApproximated) } : {}),
   }
 }
 
@@ -65,4 +70,8 @@ export async function applyDefaultNflScoringOnCreate(
   // `rules` carries the wizard's own additions (TE premium) on top of the preset.
   const source: NflScoringSource = presetKey.startsWith('af_') ? 'AF_DEFAULT' : 'PLATFORM_PRESET'
   await saveLeagueNflScoringConfig(leagueId, { presetKey, rules: rules ?? buildFullNflScoringConfig(presetKey), source })
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
 }

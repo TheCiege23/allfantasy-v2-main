@@ -5,6 +5,8 @@ import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScor
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { messagesFor } from '@/lib/i18n/messages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /**
  * Every game in the league this week.
@@ -129,9 +131,7 @@ export function LeagueScoreboardPanel({
         {board.allUnplayed ? (
           <span className="af-sb-proj-flag">
             {board.unpricedReason
-              ? language === 'es'
-                ? `Aún no hay puntos ni proyecciones porque ${board.unpricedReason}`
-                : `Nothing scored yet — no projections, because ${board.unpricedReason}`
+              ? messagesFor(corePartsMessages, language).scoreboardUnpriced(board.unpricedReason)
               : copy('Nothing scored yet — these are projections, under your league’s scoring')}
           </span>
         ) : null}

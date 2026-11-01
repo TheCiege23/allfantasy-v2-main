@@ -378,8 +378,8 @@ export function SGVisualSet({
           format="survguil"
           bannerSrc={`${SG_ART}/banner.svg`}
           emblemSrc={`${SG_ART}/emblem.svg`}
-          emblemAlt="Survivor Guillotine emblem"
-          chips={[season.config.sport, 'Survivor Guillotine', `${torches.length || season.config.teamCount} managers · ${alive || season.config.teamCount} left`]}
+          emblemAlt="Survivor Guilly emblem"
+          chips={[season.config.sport, 'Survivor Guilly', `${torches.length || season.config.teamCount} managers · ${alive || season.config.teamCount} left`]}
           title="The island"
           headline={headline}
           blurb="Survivor tribes, but nobody votes. The lowest score outside the immune tribe is chopped, unless an idol passes the blade on."

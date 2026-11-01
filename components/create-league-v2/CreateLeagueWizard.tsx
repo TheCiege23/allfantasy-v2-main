@@ -1,8 +1,10 @@
 'use client'
 
+import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
+import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
@@ -28,6 +30,8 @@ import {
   isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, lockedOddTeamCounts, teamCountOptionsForPlan } from '@/lib/league/oddTeamLeagues'
 import {
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
@@ -40,6 +44,7 @@ import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
+import { SelectionCheck } from '@/components/ui/selection-check'
 import { TE_PREMIUM_POINT_OPTIONS } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
@@ -119,7 +124,7 @@ function getLeagueTypeLabel(t: (key: string) => string, leagueType: LeagueTypeId
 
 /** The "?" explanations, English fallback beside each dictionary key. */
 const HELP = {
-  formats: ['createLeague.g30.help.formats', 'Specialty formats add a twist to the season: Survivor votes managers off, Guillotine cuts the lowest score every week, Big Brother has weekly nominations, and Zombie spreads like an infection. Classic formats play a normal season. Each tile says how it plays.'],
+  formats: ['createLeague.g30.help.formats', 'Specialty formats add a twist to the season: Survivor votes managers off, Guilly cuts the lowest score every week, Big Brother has weekly nominations, and Zombie spreads like an infection. Classic formats play a normal season. Each tile says how it plays.'],
   teams: ['createLeague.g30.help.teams', 'How many managers play in the league. Some formats only allow certain sizes, so − and + step through the sizes this format allows.'],
   privacy: ['createLeague.g30.help.privacy', "Private leagues are invite-only. Public leagues can also show up in AllFantasy's league finder, where other players can find them."],
   draftType: ['createLeague.g30.help.draftType', 'Snake: the pick order reverses every round. Linear: the same order every round. Auction: managers bid a budget on players. Auto: the computer drafts for every team. Offline: draft in person, then the commissioner enters the picks.'],
@@ -155,11 +160,21 @@ function tx(t: (key: string) => string, key: string, fallback: string): string {
   return translated === key ? fallback : translated
 }
 
+/** A scoring preset's name. Presets with a `createLeague.scoringPreset.<id>` key are translated; the rest keep their English label. */
+function scoringPresetLabel(t: (key: string) => string, preset: { id: string; label: string }): string {
+  return tx(t, `createLeague.scoringPreset.${preset.id}`, preset.label)
+}
+
 function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateKey): string {
   const translated = t(`createLeague.g30.advanced.${key}`)
   return translated === `createLeague.g30.advanced.${key}`
     ? PREMIUM_ADVANCED_CREATE_LABELS[key]
     : translated
+}
+
+function chooseSurvivorTribeCount(teamCount: number, current: number): number {
+  const options = getSurvivorTribeOptions(teamCount)
+  return options.includes(current) ? current : (options[0] ?? 2)
 }
 
 export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
@@ -194,10 +209,11 @@ export function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSp
     scoringPresetId,
     teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
@@ -232,10 +248,11 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     draftType,
     teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ...(leagueType === 'survivor' ? { survivorTribeCount: getSurvivorTribeOptions(
+    ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
         ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    ).includes(state.survivorTribeCount) ? state.survivorTribeCount : 2 } : {}),
+      state.survivorTribeCount,
+    ) } : {}),
     dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
     bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
@@ -250,7 +267,10 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
 export const SPORT_DEFAULT_FORMATS: readonly LeagueTypeId[] = ['survivor', 'guillotine', 'big_brother']
 
 export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
-  return SPORT_DEFAULT_FORMATS.find((leagueType) => isSportAllowedForType(sport, leagueType)) ?? 'redraft'
+  return SPORT_DEFAULT_FORMATS.find((leagueType) =>
+    isSportAllowedForType(sport, leagueType) &&
+    // NFL Survivor is offered but not preselected: a fresh NFL create still starts on Guillotine.
+    (leagueType !== 'survivor' || isSurvivorDefaultFormatSport(sport))) ?? 'redraft'
 }
 
 /**
@@ -259,8 +279,17 @@ export function defaultLeagueTypeForSport(sport: SupportedSport): LeagueTypeId {
  * size and scoring preset are ones the format accepts — not Redraft's left in place.
  */
 export function freshCreateLeagueState(base: CreateLeagueV2State): CreateLeagueV2State {
-  const start = { ...base, leagueType: base.leagueType ?? 'redraft', leagueTypeTouched: false }
-  return { ...start, ...nextStateForLeagueType(start, defaultLeagueTypeForSport(start.sport)) }
+  const leagueType = defaultLeagueTypeForSport(base.sport)
+  // Seed the format's own default cast: the transition below keeps any size the format accepts,
+  // and Redraft's 12 is a valid Survivor cast now, so a fresh NBA Survivor would otherwise start
+  // at 12 instead of 16.
+  const start = {
+    ...base,
+    leagueType: base.leagueType ?? 'redraft',
+    leagueTypeTouched: false,
+    teamCount: getDefaultTeamCount(base.sport, leagueType, base.soccerPipeline),
+  }
+  return { ...start, ...nextStateForLeagueType(start, leagueType) }
 }
 
 /** IDP is a redraft shell with defensive players; it carries its own draft and scoring lists. */
@@ -301,6 +330,8 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   team_count_required: 'basics',
   team_count_invalid: 'basics',
   survivor_tribes_invalid: 'basics',
+  survivor_season_too_short: 'basics',
+  survivor_dues_invalid: 'basics',
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
@@ -492,7 +523,7 @@ export function CreateLeagueWizard(props: WizardProps) {
               <SportStep state={props.state} onChange={props.onChange} importCarryover={props.importCarryover} />
             ) : null}
             {activeStep === 'basics' ? (
-              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} />
+              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} hasCommissioner={isCommissioner} />
             ) : null}
             {activeStep === 'draft' ? (
               <DraftStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
@@ -695,22 +726,44 @@ export function LeagueBasicsStep({
   onChange,
   fieldErrors,
   importCarryover,
-}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'>) {
+  hasCommissioner = false,
+}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'> & { hasCommissioner?: boolean }) {
   const { t } = useLanguage()
   // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
-  const teamCountOptions = getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline)
+  // A carryover keeps the imported league's team count, which the import-flexible types accept
+  // even when their native list lacks it (lib/league-creation/importedTeamCount.ts).
+  const importedTeamCount = importCarryover ? state.teamCount : null
+  // Odd keeper sizes are an AF Commissioner option: without the plan they leave the stepper and are
+  // shown locked below instead (lib/league/oddTeamLeagues.ts). A carryover keeps its own size.
+  const teamCountOptionsFor = (leagueType: LeagueTypeId) =>
+    teamCountOptionsWithImported(
+      importCarryover
+        ? getTeamCountOptions(state.sport, leagueType, state.soccerPipeline)
+        : teamCountOptionsForPlan(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, hasCommissioner),
+      leagueType,
+      importedTeamCount,
+    )
+  const teamCountOptions = teamCountOptionsFor(getEffectiveLeagueType(state) ?? 'redraft')
+  const lockedTeamCounts = importCarryover
+    ? []
+    : lockedOddTeamCounts(getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline), getEffectiveLeagueType(state), hasCommissioner)
   const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const catalog = getClientLeagueCreateOptionsCatalog()
   const typeOptions = catalog.concepts.filter((concept) =>
     concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId) &&
-      (!importCarryover || getTeamCountOptions(state.sport, concept.id as LeagueTypeId, state.soccerPipeline).includes(state.teamCount)),
+      (!importCarryover || teamCountOptionsFor(concept.id as LeagueTypeId).includes(state.teamCount)),
   )
   const showIdp = catalog.concepts.some((concept) => concept.id === 'idp') &&
     (state.sport === 'NFL' || state.sport === 'NCAAF') &&
-    (!importCarryover || getTeamCountOptions(state.sport, 'redraft', state.soccerPipeline).includes(state.teamCount))
+    (!importCarryover || teamCountOptionsFor('redraft').includes(state.teamCount))
   const setTeamCount = (teamCount: number) => {
     const tribeOptions = getSurvivorTribeOptions(teamCount)
-    onChange({ teamCount, ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
+    // League median follows the size's parity until the commissioner sets it: an odd league leaves one
+    // team without an opponent each week, and the median game is what still gives it a result.
+    const medianFollowsSize = ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(getEffectiveLeagueType(state) ?? 'redraft') &&
+      isOddTeamCount(teamCount) !== isOddTeamCount(state.teamCount)
+    onChange({ teamCount, ...(medianFollowsSize ? { medianGame: isOddTeamCount(teamCount) } : {}),
+      ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
       ? { survivorTribeCount: tribeOptions[0] ?? 2 } : {}),
       ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}),
       ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
@@ -882,6 +935,22 @@ export function LeagueBasicsStep({
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
             {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
+          {lockedTeamCounts.length > 0 ? (
+            <span className="block text-xs text-[color:var(--text-secondary)]" data-testid="g30-team-count-locked">
+              <Lock aria-hidden="true" className="mr-1 inline h-3 w-3" />
+              {lockedTeamCounts.includes(state.teamCount)
+                ? tx(t, 'createLeague.g30.teamCount.oddLockedChosen', `A ${state.teamCount}-team keeper league is part of AF Commissioner. Choose an even size, or upgrade.`)
+                : tx(t, 'createLeague.g30.teamCount.oddLocked', `Odd sizes (${lockedTeamCounts.join(', ')}) are part of AF Commissioner.`)}{' '}
+              <a href="/pricing?plan=commissioner" className="font-bold text-violet-600 underline dark:text-violet-300" data-testid="g30-team-count-upgrade">
+                {tx(t, 'createLeague.g30.teamCount.oddUpgrade', 'Upgrade')}
+              </a>
+            </span>
+          ) : null}
+          {getEffectiveLeagueType(state) === 'guillotine' && guillotineNeedsDoubleElimination(state.teamCount) ? (
+            <span className="block text-xs text-amber-300" data-testid="g30-guilly-double-elimination-note">
+              {tx(t, 'createLeague.g30.teamCount.guillyDouble', `Over ${GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS} teams needs double-elimination weeks — add them in league settings after creating.`)}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -898,12 +967,15 @@ export function LeagueBasicsStep({
                 <button key={option.value} type="button"
                   aria-pressed={state.survivorCommissionerParticipationMode === option.value}
                   onClick={() => onChange({ survivorCommissionerParticipationMode: option.value })}
-                  className={cx('min-h-12 rounded-xl border p-3 text-left transition',
+                  className={cx('flex min-h-12 items-start gap-3 rounded-xl border p-3 text-left transition',
                     state.survivorCommissionerParticipationMode === option.value
                       ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
                   data-testid={`g30-survivor-role-${option.value}`}>
-                  <span className="block text-sm font-bold">{option.label}</span>
-                  <span className="block text-xs text-[color:var(--text-secondary)]">{option.hint}</span>
+                  <SelectionCheck selected={state.survivorCommissionerParticipationMode === option.value} className="mt-0.5" testId={`g30-survivor-role-${option.value}-check`} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">{option.label}</span>
+                    <span className="block text-xs text-[color:var(--text-secondary)]">{option.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -914,10 +986,13 @@ export function LeagueBasicsStep({
               {getSurvivorTribeOptions(state.teamCount).map((count) => (
                 <button key={count} type="button" aria-pressed={state.survivorTribeCount === count}
                   onClick={() => onChange({ survivorTribeCount: count })}
-                  className={cx('min-h-11 min-w-12 rounded-xl border px-4 text-sm font-bold',
+                  className={cx('inline-flex min-h-11 min-w-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold',
                     state.survivorTribeCount === count
                       ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
-                  data-testid={`g30-survivor-tribes-${count}`}>{count}</button>
+                  data-testid={`g30-survivor-tribes-${count}`}>
+                  <SelectionCheck selected={state.survivorTribeCount === count} size="sm" testId={`g30-survivor-tribes-${count}-check`} />
+                  {count}
+                </button>
               ))}
             </div>
           </div>
@@ -977,6 +1052,31 @@ export function LeagueBasicsStep({
         </span>
       </label>
       )}
+
+      {/* Guilly only: lineups set themselves (lib/guillotine/guillotineBestBall.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? (
+      <label
+        className={cx(
+          'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
+          state.guillotineBestBall === true
+            ? 'border-violet-500 bg-violet-600/10'
+            : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+        )}
+        data-testid="g30-guillotine-best-ball"
+      >
+        <CheckBox
+          className="mt-0.5"
+          checked={state.guillotineBestBall === true}
+          onChange={(checked) => onChange({ guillotineBestBall: checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.guillotineBestBall.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.guillotineBestBall.body')}
+          </span>
+        </span>
+      </label>
+      ) : null}
     </section>
   )
 }
@@ -1091,7 +1191,7 @@ export function DraftStep({
           >
             {scoringPresets.map((preset) => (
               <option key={preset.id} value={preset.id}>
-                {preset.label}
+                {scoringPresetLabel(t, preset)}
               </option>
             ))}
           </select>
@@ -1519,7 +1619,7 @@ export function LeaguePreviewCard({
           <PreviewRow label={t('createLeague.g30.privacy.label')} value={t(`createLeague.g30.privacy.${state.privacy}`)} />
           <PreviewRow label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} />
           <PreviewRow label={t('createLeague.g30.timezone.label')} value={timezoneLabel(state.timezone)} />
-          <PreviewRow label={t('createLeague.summary.scoring')} value={scoring?.label ?? t('createLeague.g30.empty')} />
+          <PreviewRow label={t('createLeague.summary.scoring')} value={scoring ? scoringPresetLabel(t, scoring) : t('createLeague.g30.empty')} />
           <PreviewRow label={t('createLeague.g30.preview.language')} value={language.toUpperCase()} />
           <PreviewRow label={t('createLeague.g30.preview.advanced')} value={enabledPremiumCount > 0 ? String(enabledPremiumCount) : t('createLeague.g30.preview.advancedNone')} />
         </div>

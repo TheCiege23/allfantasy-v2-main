@@ -74,7 +74,7 @@ export async function PATCH(req: Request, props: { params: Promise<{ leagueId: s
   const locked = await settingsPatchLockedResponse(params.leagueId, body as Record<string, unknown>)
   if (locked) return locked
   const { updateLeagueSettings } = await import("@/lib/commissioner-settings/CommissionerSettingsService")
-  const updated = await updateLeagueSettings(params.leagueId, body)
+  const updated = await updateLeagueSettings(params.leagueId, body, userId)
   if (!updated) return NextResponse.json({ error: "League not found" }, { status: 404 })
   return NextResponse.json(updated)
 }

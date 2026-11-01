@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   getBalance: vi.fn(),
   preview: vi.fn(),
   spend: vi.fn(),
+  prepare: vi.fn(),
 }))
 
 vi.mock('@/lib/subscription/FeatureGateService', () => ({
@@ -24,6 +25,11 @@ vi.mock('@/lib/tokens/TokenSpendService', async () => {
   }
 })
 
+vi.mock('@/lib/tokens/paidToolBilling', () => ({
+  replayPaidToolRequest: async () => null,
+  preparePaidToolCharge: h.prepare,
+}))
+
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 /**
@@ -40,6 +46,9 @@ beforeEach(() => {
   h.evaluate.mockResolvedValue(ALLOWED)
   h.getBalance.mockResolvedValue({ balance: 50 })
   h.preview.mockResolvedValue({ canSpend: true, tokenCost: 10, ruleCode: 'ai_chimmy_chat_message' })
+  h.prepare.mockImplementation(async input => input.confirmed
+    ? { ok: true, commit: () => h.spend(input) }
+    : { ok: false, response: new Response(JSON.stringify({ code: 'token_confirmation_required' }), { status: 409 }) })
   h.spend.mockResolvedValue({ id: 'ledger-1', balanceAfter: 40 })
 })
 
@@ -62,6 +71,7 @@ describe('requireFeatureEntitlement forceTokenFallback', () => {
   it('charges the plan holder once they consent', async () => {
     const out = await requireFeatureEntitlement({ ...BASE, forceTokenFallback: true, confirmTokenSpend: true })
     expect(out).toMatchObject({ ok: true, tokenSpend: { id: 'ledger-1' } })
+    expect(h.prepare).toHaveBeenCalledWith(expect.objectContaining({ confirmed: true, ruleCode: 'ai_chimmy_chat_message', preview: expect.objectContaining({ tokenCost: 10 }) }))
   })
 
   it('is ignored without allowTokenFallback — never turns an allowed plan into a locked one', async () => {

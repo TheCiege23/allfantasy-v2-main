@@ -4,6 +4,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-scout.css'
+// Redraft /core shell only (batch B4): every rule is scoped under .af-shell[data-format=redraft].
+import '@/components/core-app/af-core-redraft-trades.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -14,6 +16,9 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { ScoutData, ScoutedManager, ScoutStanding } from '@/lib/core-app/scout'
 import type { Record3, Zone } from '@/lib/core-app/standingsModel'
 import type { RailStanding } from '@/lib/core-app/railMatchups'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { messagesFor } from '@/lib/i18n/messages'
+import { scoutScreenMessages } from '@/lib/core-app/messages/scoutScreen'
 
 /**
  * Scout — the first room of the War Room.
@@ -74,9 +79,16 @@ export type ScoutProps = {
   eliminationStanding?: RailStanding | null
 }
 
-/** "Sep 21, 2025" / "21 sept 2025" — pinned to Eastern so the server paint and the client agree. */
-const DAY_EN = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
-const DAY_ES = new Intl.DateTimeFormat('es-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+/**
+ * "Sep 21, 2025" / "21 sept 2025" — pinned to Eastern so the server paint and the client agree. One
+ * formatter per locale (the catalog's `dayLocale`), built once.
+ */
+const DAY_FORMATS = new Map<string, Intl.DateTimeFormat>()
+function dayFormat(locale: string): Intl.DateTimeFormat {
+  let f = DAY_FORMATS.get(locale)
+  if (!f) DAY_FORMATS.set(locale, (f = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })))
+  return f
+}
 
 /**
  * The reader's language, for every part of this screen.
@@ -91,14 +103,15 @@ const DAY_ES = new Intl.DateTimeFormat('es-US', { month: 'short', day: 'numeric'
  */
 function useScoutCopy() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = messagesFor(scoutScreenMessages, language)
   return {
-    es,
+    language,
+    m,
     copy: (english: string) => coreUiCopy(english, language),
     day: (iso: string | null): string | null => {
       if (!iso) return null
       const d = new Date(iso)
-      return Number.isNaN(d.getTime()) ? null : (es ? DAY_ES : DAY_EN).format(d)
+      return Number.isNaN(d.getTime()) ? null : dayFormat(m.dayLocale).format(d)
     },
   }
 }
@@ -108,30 +121,18 @@ function useScoutCopy() {
  * left". Facts only, the Competitive Edge contract: nothing here says what kind of trader they are.
  */
 function EdgeLine({ m }: { m: ScoutEdgeManager }) {
-  const { es, day } = useScoutCopy()
+  const { m: msg, day } = useScoutCopy()
   const parts: string[] = []
   if (m.trades != null) {
     const last = day(m.lastTradeAt)
-    parts.push(
-      m.trades === 0
-        ? es
-          ? 'ningún intercambio completado'
-          : 'no completed trades'
-        : es
-          ? `${m.trades} ${m.trades === 1 ? 'intercambio' : 'intercambios'}${last ? ` · el último ${last}` : ''}`
-          : `${m.trades} ${m.trades === 1 ? 'trade' : 'trades'}${last ? ` · last ${last}` : ''}`,
-    )
+    parts.push(m.trades === 0 ? msg.edgeNoTrades : msg.edgeTrades(m.trades, last))
   }
   if (m.waiverClaims != null) {
-    parts.push(
-      es
-        ? `${m.waiverClaims} ${m.waiverClaims === 1 ? 'reclamo ganado' : 'reclamos ganados'}`
-        : `${m.waiverClaims} waiver ${m.waiverClaims === 1 ? 'claim' : 'claims'} won`,
-    )
+    parts.push(msg.edgeWaiverClaims(m.waiverClaims))
   }
   if (m.faabRemaining != null) {
-    const left = Math.round(m.faabRemaining).toLocaleString('en-US')
-    parts.push(es ? `le quedan $${left} de FAAB` : `$${left} FAAB left`)
+    const left = Math.round(m.faabRemaining).toLocaleString(getAppIntlLocale())
+    parts.push(msg.edgeFaabLeft(left))
   }
   if (parts.length === 0) return null
   return <p className="af-sc-edge af-num">{parts.join(' · ')}</p>
@@ -139,7 +140,7 @@ function EdgeLine({ m }: { m: ScoutEdgeManager }) {
 
 /** What the edge counts are measured over — said once, above the cards, like the standings basis. */
 function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: CoreDepthAccess | null }) {
-  const { es, copy, day } = useScoutCopy()
+  const { language, m, copy, day } = useScoutCopy()
   if (!edge.available) {
     return <p className="af-sc-edge-basis">Competitive Edge: {copy(edge.reason).replace(/\.$/, '')}.</p>
   }
@@ -152,34 +153,15 @@ function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: Co
       <strong>Competitive Edge</strong> <TopicTip topic="competitiveEdge" />
       {' · '}
       {t.available
-        ? es
-          ? `intercambios completados${span ? ` en ${span}` : ''}, leídos ${day(t.data.asOf) ?? 'hace poco'}${t.data.stale ? ' (puede estar desactualizado)' : ''}`
-          : `completed trades${span ? ` across ${span}` : ''}, read ${day(t.data.asOf) ?? 'recently'}${t.data.stale ? ' (may be out of date)' : ''}`
-        : `${es ? 'intercambios' : 'trades'}: ${copy(t.reason)}`}
+        ? m.edgeBasisTrades(span, day(t.data.asOf), t.data.stale)
+        : `${m.edgeBasisTradesLabel}: ${copy(t.reason)}`}
       {' · '}
       {w.available
-        ? es
-          ? `reclamos ganados en ${w.data.season}${w.data.stale ? ' (puede estar desactualizado)' : ''}: Sleeper solo registra los reclamos ganados`
-          : `waiver claims won in ${w.data.season}${w.data.stale ? ' (may be out of date)' : ''} — Sleeper records only winning claims`
-        : `${es ? 'agentes libres' : 'waivers'}: ${copy(w.reason)}`}
-      .{access ? <> <FreeUntilNote access={access} lang={es ? 'es' : 'en'} /></> : null}
+        ? m.edgeBasisWaivers(w.data.season, w.data.stale)
+        : `${m.edgeBasisWaiversLabel}: ${copy(w.reason)}`}
+      .{access ? <> <FreeUntilNote access={access} lang={language} /></> : null}
     </p>
   )
-}
-
-const ZONE_LABEL: Record<Zone, string> = {
-  bye: 'Bye spot',
-  playoff: 'Playoff spot',
-  bubble: 'On the bubble',
-  out: 'Outside the playoffs',
-  eliminated: 'Eliminated',
-}
-const ZONE_LABEL_ES: Record<Zone, string> = {
-  bye: 'Puesto con descanso',
-  playoff: 'Puesto de playoffs',
-  bubble: 'En el límite',
-  out: 'Fuera de los playoffs',
-  eliminated: 'Eliminado',
 }
 
 const ZONE_TONE: Record<Zone, 'good' | 'warn' | 'bad' | 'info'> = {
@@ -199,8 +181,6 @@ const ZONE_TONE: Record<Zone, 'good' | 'warn' | 'bad' | 'info'> = {
  * of the live field this week (`RailStanding.bubble`, the banner's own ordering), or safe.
  */
 type ElimStatus = 'safe' | 'bubble' | 'eliminated'
-const ELIM_LABEL: Record<ElimStatus, string> = { safe: 'Safe', bubble: 'On the bubble', eliminated: 'Eliminated' }
-const ELIM_LABEL_ES: Record<ElimStatus, string> = { safe: 'A salvo', bubble: 'En el límite', eliminated: 'Eliminado' }
 const ELIM_TONE: Record<ElimStatus, 'good' | 'warn' | 'bad'> = { safe: 'good', bubble: 'warn', eliminated: 'bad' }
 
 /**
@@ -219,34 +199,22 @@ function recordText(r: Record3): string {
 
 /** Points with one decimal, pinned to en-US so the server and any client agree on the separator. */
 function points(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return n.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 /*
  * ⚠ "ON THE PLAYOFF LINE" READ AS A CONTRADICTION beside "Outside the playoffs" on the live page: the
  * zone is where the tiebreak puts the team, games-back is the record alone, and a team level on record
  * with the last playoff spot can sit either side of it. Say what the number is — tied, behind, ahead —
- * in games, so the two lines read as two facts.
+ * in games, so the two lines read as two facts. The wording is `gamesBack` in the screen's catalog.
  */
-function gamesBackText(gb: number, es: boolean): string {
-  if (es) {
-    const juegos = (n: number) => `${n} ${n === 1 ? 'juego' : 'juegos'}`
-    if (gb > 0) return `a ${juegos(gb)} de un puesto de playoffs`
-    if (gb < 0) return `${juegos(-gb)} por encima del corte`
-    return 'empatado en récord con el último puesto de playoffs'
-  }
-  const games = (n: number) => `${n} ${n === 1 ? 'game' : 'games'}`
-  if (gb > 0) return `${games(gb)} back of a playoff spot`
-  if (gb < 0) return `${games(-gb)} clear of the cut`
-  return 'tied on record with the last playoff spot'
-}
 
 /** Last five head-to-head results as chips — the letters carry the meaning, the colour only repeats it. */
 function Form({ form }: { form: ScoutStanding['form'] }) {
-  const { es } = useScoutCopy()
+  const { m } = useScoutCopy()
   if (form.length === 0) return null
   return (
-    <span className="af-sc-form" aria-label={es ? `Últimos ${form.length}: ${form.join(' ')}` : `Last ${form.length}: ${form.join(' ')}`}>
+    <span className="af-sc-form" aria-label={m.formAria(form.length, form.join(' '))}>
       {form.map((r, i) => (
         <span key={i} className="af-sc-form-r" data-r={r} aria-hidden>
           {r}
@@ -257,23 +225,23 @@ function Form({ form }: { form: ScoutStanding['form'] }) {
 }
 
 function Facts({ s }: { s: ScoutStanding }) {
-  const { es } = useScoutCopy()
+  const { m } = useScoutCopy()
   return (
     <dl className="af-sc-facts">
       <div>
-        <dt>{es ? 'Posición' : 'Seed'}</dt>
+        <dt>{m.factSeed}</dt>
         <dd className="af-num">#{s.seed}</dd>
       </div>
       <div>
-        <dt>{es ? 'Récord' : 'Record'}</dt>
+        <dt>{m.factRecord}</dt>
         <dd className="af-num">{recordText(s.record)}</dd>
       </div>
       <div>
-        <dt>{es ? 'Puntos a favor' : 'Points for'}</dt>
+        <dt>{m.factPointsFor}</dt>
         <dd className="af-num">{points(s.pointsFor)}</dd>
       </div>
       <div>
-        <dt>{es ? 'Poder' : 'Power'}</dt>
+        <dt>{m.factPower}</dt>
         <dd className="af-num">#{s.powerRank}</dd>
       </div>
     </dl>
@@ -292,7 +260,7 @@ function ManagerCard({
   /** Set in an elimination league: the card shows Safe / On the bubble / Eliminated, never a playoff zone. */
   elimination?: { status: ElimStatus | null } | null
 }) {
-  const { es } = useScoutCopy()
+  const { m: msg } = useScoutCopy()
   const s = m.standing
   return (
     <li>
@@ -314,26 +282,20 @@ function ManagerCard({
 
           <span className="af-sc-who">
             <span className="af-sc-team">{m.teamName}</span>
-            <span className="af-sc-owner">{m.ownerName ?? (es ? 'Mánager sin nombre' : 'Manager not named')}</span>
+            <span className="af-sc-owner">{m.ownerName ?? msg.ownerUnnamed}</span>
           </span>
 
           {m.eliminated ? (
             <span className="af-sc-tag" data-sev="out">
-              {es
-                ? m.eliminated.week != null
-                  ? `FUERA · SEMANA ${m.eliminated.week}`
-                  : 'FUERA'
-                : m.eliminated.week != null
-                  ? `OUT · WEEK ${m.eliminated.week}`
-                  : 'OUT'}
+              {msg.tagOut(m.eliminated.week)}
             </span>
           ) : m.isNextOpponent ? (
             <span className="af-sc-tag" data-sev="bad">
-              {es ? 'ESTA SEMANA' : 'THIS WEEK'}
+              {msg.tagThisWeek}
             </span>
           ) : m.isYou ? (
             <span className="af-sc-tag" data-sev="info">
-              {es ? 'TÚ' : 'YOU'}
+              {msg.tagYou}
             </span>
           ) : null}
         </header>
@@ -345,33 +307,27 @@ function ManagerCard({
               {elimination ? (
                 elimination.status ? (
                   <span className="af-sc-zone" data-tone={ELIM_TONE[elimination.status]} data-elim={elimination.status}>
-                    {(es ? ELIM_LABEL_ES : ELIM_LABEL)[elimination.status]}
+                    {msg.elimLabel(elimination.status)}
                   </span>
                 ) : null
               ) : (
                 <span className="af-sc-zone" data-tone={ZONE_TONE[s.zone]}>
-                  {(es ? ZONE_LABEL_ES : ZONE_LABEL)[s.zone]}
+                  {msg.zoneLabel(s.zone)}
                 </span>
               )}
               {/* Games back is a playoff-line measure; an elimination league has no line to be back of. */}
-              {!elimination && s.gamesBack != null ? <span className="af-num">{gamesBackText(s.gamesBack, es)}</span> : null}
+              {!elimination && s.gamesBack != null ? <span className="af-num">{msg.gamesBack(s.gamesBack)}</span> : null}
               <Form form={s.form} />
             </p>
           </>
         ) : (
-          <p className="af-sc-unavailable">{es ? 'Todavía no aparece en la clasificación.' : 'Not on the standings table yet.'}</p>
+          <p className="af-sc-unavailable">{msg.notOnStandings}</p>
         )}
 
         {/* Dynasty: the dynasty War Room's own pick read, as a count — facts, never a valuation label. */}
         {m.picks ? (
           <p className="af-sc-picks af-num">
-            {m.picks.count === 0
-              ? es
-                ? 'Sin selecciones futuras'
-                : 'No future picks held'
-              : es
-                ? `${m.picks.count} ${m.picks.count === 1 ? 'selección futura' : 'selecciones futuras'} · ${m.picks.early} en rondas 1–2`
-                : `${m.picks.count} future ${m.picks.count === 1 ? 'pick' : 'picks'} · ${m.picks.early} in rounds 1–2`}
+            {m.picks.count === 0 ? msg.picksNone : msg.picksHeld(m.picks.count, m.picks.early)}
           </p>
         ) : null}
 
@@ -385,7 +341,7 @@ function ManagerCard({
               trade record to the positions in that deal — more than the counts above can say.
             */}
             <Link className="af-sc-cta" href={tradesHref}>
-              {es ? 'Armar un intercambio' : 'Build a trade'} &rarr;
+              {msg.buildTrade} &rarr;
             </Link>
           </footer>
         )}
@@ -395,7 +351,7 @@ function ManagerCard({
 }
 
 function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; matchupHref: string; tradesHref: string }) {
-  const { es } = useScoutCopy()
+  const { m } = useScoutCopy()
   const opp = data.opponent
   if (!opp) return null
   const them = data.managers.available ? data.managers.data.find((m) => m.managerId === opp.managerId) ?? null : null
@@ -405,14 +361,14 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
   return (
     <section className="af-frame af-sc-vs" aria-labelledby="af-sc-vs-h">
       <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
-        {es ? 'Esta semana' : 'This week'}
-        {data.week ? (es ? ` · semana ${data.week.week}` : ` · week ${data.week.week}`) : ''}
+        {m.thisWeek}
+        {data.week ? m.weekSuffix(data.week.week) : ''}
       </h2>
       <div className="af-sc-vs-sides">
         <div className="af-sc-vs-side" data-side="you">
-          <span className="af-sc-vs-name">{data.you?.teamName ?? (es ? 'Tú' : 'You')}</span>
+          <span className="af-sc-vs-name">{data.you?.teamName ?? m.youFallback}</span>
           <span className="af-sc-vs-meta af-num">
-            {youStanding ? `#${youStanding.seed} · ${recordText(youStanding.record)}` : es ? 'todavía no en la tabla' : 'not on the table yet'}
+            {youStanding ? `#${youStanding.seed} · ${recordText(youStanding.record)}` : m.notOnTableYet}
           </span>
         </div>
         <span className="af-sc-vs-v" aria-hidden>
@@ -421,34 +377,28 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
         <div className="af-sc-vs-side" data-side="them">
           <span className="af-sc-vs-name">{opp.teamName}</span>
           <span className="af-sc-vs-meta af-num">
-            {them?.standing ? `#${them.standing.seed} · ${recordText(them.standing.record)}` : es ? 'todavía no en la tabla' : 'not on the table yet'}
+            {them?.standing ? `#${them.standing.seed} · ${recordText(them.standing.record)}` : m.notOnTableYet}
           </span>
           {them?.standing ? <Form form={them.standing.form} /> : null}
         </div>
       </div>
       <p className="af-sc-vs-h2h">
         {h2h ? (
-          es ? (
-            <>
-              Vas <span className="af-num">{recordText(h2h)}</span> contra ellos esta temporada.
-            </>
-          ) : (
-            <>
-              You are <span className="af-num">{recordText(h2h)}</span> against them this season.
-            </>
-          )
-        ) : es ? (
-          'Todavía no te enfrentaste a ellos esta temporada.'
+          <>
+            {m.h2hBefore}
+            <span className="af-num">{recordText(h2h)}</span>
+            {m.h2hAfter}
+          </>
         ) : (
-          'You have not played them yet this season.'
+          m.h2hNone
         )}
       </p>
       <div className="af-sc-vs-links">
         <Link className="af-sc-cta af-sc-cta--primary" href={matchupHref}>
-          {es ? 'Puntuación proyectada y probabilidad de ganar' : 'Projected score & win odds'} &rarr;
+          {m.projectedLink} &rarr;
         </Link>
         <Link className="af-sc-cta" href={tradesHref}>
-          {es ? 'Armar un intercambio' : 'Build a trade'} &rarr;
+          {m.buildTrade} &rarr;
         </Link>
       </div>
     </section>
@@ -461,18 +411,16 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
  * from projections, not points.
  */
 function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData; standing: RailStanding | null; standingsHref: string }) {
-  const { es } = useScoutCopy()
+  const { m } = useScoutCopy()
   const me = data.managers.available ? data.managers.data.find((m) => m.isYou) ?? null : null
   if (me?.eliminated) {
     return (
       <section className="af-frame af-sc-vs" data-elimination="out" aria-labelledby="af-sc-vs-h">
         <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
-          {es ? 'Liga de eliminación' : 'Elimination league'}
+          {m.eliminationLeague}
         </h2>
         <p className="af-sc-vs-h2h">
-          {es
-            ? `Te eliminaron${me.eliminated.week != null ? ` en la semana ${me.eliminated.week}` : ''}. Las tarjetas de abajo son los mánagers que siguen vivos.`
-            : `You were chopped${me.eliminated.week != null ? ` in week ${me.eliminated.week}` : ''}. The cards below are the managers still alive.`}
+          {m.chopped(me.eliminated.week)}
         </p>
       </section>
     )
@@ -480,36 +428,26 @@ function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData;
   return (
     <section className="af-frame af-sc-vs" data-elimination="alive" aria-labelledby="af-sc-vs-h">
       <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
-        {es ? 'Semana de eliminación' : 'Elimination week'}
-        {data.week ? (es ? ` · semana ${data.week.week}` : ` · week ${data.week.week}`) : ''}
+        {m.eliminationWeek}
+        {data.week ? m.weekSuffix(data.week.week) : ''}
       </h2>
       {standing ? (
         <p className="af-sc-vs-h2h af-num">
-          {es ? 'Vas' : 'You are'} <strong>#{standing.rank}</strong> {es ? 'de' : 'of'} {standing.outOf}
-          {standing.overCut == null
-            ? es
-              ? ': en la línea de corte.'
-              : ' — at the cut line.'
-            : es
-              ? `: ${standing.overCut.toFixed(1)} por encima del corte.`
-              : ` — ${standing.overCut.toFixed(1)} over the cut.`}
-          {standing.basis === 'projected'
-            ? es
-              ? ' Proyectado: la mayoría de los equipos todavía no jugó.'
-              : ' Projected: most teams have not played yet.'
-            : ''}{' '}
+          {m.youAre} <strong>#{standing.rank}</strong> {m.of} {standing.outOf}
+          {standing.overCut == null ? m.atCutLine : m.overCut(standing.overCut)}
+          {standing.basis === 'projected' ? m.projectedNote : ''}{' '}
           {/* Beside the h2, not in it: the h2 names the section (aria-labelledby). */}
           <TopicTip topic="scoutEliminationStanding" />
         </p>
       ) : (
         <p className="af-sc-vs-h2h">
-          {es ? 'Todavía no se puede leer la línea de corte esta semana.' : 'The cut line is not readable yet this week.'}{' '}
+          {m.cutUnreadable}{' '}
           <TopicTip topic="scoutEliminationStanding" />
         </p>
       )}
       <div className="af-sc-vs-links">
         <Link className="af-sc-cta af-sc-cta--primary" href={standingsHref}>
-          {es ? 'Todos los equipos frente al corte' : 'Every team against the cut'} &rarr;
+          {m.everyTeamVsCut} &rarr;
         </Link>
       </div>
     </section>
@@ -518,13 +456,11 @@ function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData;
 
 /** One line on what this format changes about the screen, when it changes anything. */
 function FormatNote({ format }: { format: ScoutData['format'] }) {
-  const { es, copy } = useScoutCopy()
+  const { m, copy } = useScoutCopy()
   if (format.bestBall) {
     return (
       <p className="af-sc-format">
-        {es
-          ? 'Best ball: la plataforma alinea a tus máximos anotadores cada semana, así que no hay alineación que armar ni plan de juego para esta liga.'
-          : 'Best ball: the platform starts your highest scorers each week, so there is no lineup to set and no game plan for this league.'}
+        {m.bestBallNote}
       </p>
     )
   }
@@ -532,14 +468,14 @@ function FormatNote({ format }: { format: ScoutData['format'] }) {
     if (format.picks.state === 'missing') {
       return (
         <p className="af-sc-format">
-          {es ? 'Dinastía: no se pudieron leer las selecciones futuras de esta liga.' : 'Dynasty: future picks could not be read for this league.'}
+          {m.dynastyPicksMissing}
         </p>
       )
     }
     if (format.picks.state === 'partial' && format.picks.note) {
       return (
         <p className="af-sc-format">
-          {es ? 'Selecciones de dinastía' : 'Dynasty picks'}: {copy(format.picks.note)}
+          {m.dynastyPicksLabel}: {copy(format.picks.note)}
         </p>
       )
     }
@@ -559,21 +495,15 @@ export function Scout({
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
-  const { es, copy } = useScoutCopy()
+  const { language, m, copy } = useScoutCopy()
   return (
     <div className="af-sc">
       <header className="af-frame af-sc-head">
         <div className="af-sc-head-text">
           <h1 className="af-display af-sc-title">Scout · {data.league.name}</h1>
           <p className="af-sc-blurb">
-            {es
-              ? 'Dónde está cada mánager de esta liga y cómo viene jugando.'
-              : 'Where every manager in this league stands, and how they have played lately.'}
-            {data.week
-              ? es
-                ? ` Semana ${data.week.week} de ${data.week.seasonYear}.`
-                : ` Week ${data.week.week} of ${data.week.seasonYear}.`
-              : ''}
+            {m.blurb}
+            {data.week ? m.blurbWeek(data.week.week, data.week.seasonYear) : ''}
           </p>
         </div>
         {/*
@@ -583,7 +513,7 @@ export function Scout({
         */}
         {/* This league's plan is on this page now (step 4c); the link is to every league's. */}
         <Link className="af-sc-switch" href={gamePlanHref}>
-          {es ? 'El plan de juego de cada liga' : "Every league's game plan"} &rarr;
+          {m.everyLeaguePlan} &rarr;
         </Link>
       </header>
 
@@ -606,14 +536,14 @@ export function Scout({
         <p className="af-sc-basis" data-available={data.basis.available || undefined}>
           {data.basis.available ? (
             <>
-              {es ? 'Clasificación hasta la semana' : 'Standings through week'} <span className="af-num">{data.basis.data.throughWeek}</span>{' '}
-              {es ? 'de' : 'of'} <span className="af-num">{data.basis.data.season}</span>
-              {data.basis.data.seasonComplete ? (es ? ' (final)' : ' — final') : ''}. {copy(data.basis.data.orderBasis)}{' '}
+              {m.standingsThroughWeek} <span className="af-num">{data.basis.data.throughWeek}</span>{' '}
+              {m.of} <span className="af-num">{data.basis.data.season}</span>
+              {data.basis.data.seasonComplete ? m.seasonFinal : ''}. {copy(data.basis.data.orderBasis)}{' '}
               <TopicTip topic="scoutCardLegend" />
             </>
           ) : (
             <>
-              {es ? 'Todavía no hay clasificación' : 'No standings yet'}: {copy(data.basis.reason).replace(/\.$/, '')}.
+              {m.noStandingsYet}: {copy(data.basis.reason).replace(/\.$/, '')}.
             </>
           )}
         </p>
@@ -627,8 +557,8 @@ export function Scout({
         edgeAccess && !edgeAccess.unlocked ? (
           <CoreDepthLock
             access={edgeAccess}
-            what={es ? 'El historial de intercambios y reclamos de cada mánager' : 'Every manager’s trade and waiver record'}
-            lang={es ? 'es' : 'en'}
+            what={m.edgeLockWhat}
+            lang={language}
           />
         ) : edge ? (
           <EdgeBasis edge={edge} access={edgeAccess} />

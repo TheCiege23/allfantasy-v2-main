@@ -53,6 +53,13 @@ export type UrgencyBadges = {
   trades: number | null
   draftHq: number | null
   sync: number | null
+  /**
+   * WHICH leagues the My team and Trades counts are made of, so the league list can flag each one
+   * (a dot on the crest, "Fix lineup" / "Trade offer" on the card). Same facts, same freshness rule
+   * as the counts: null when the lineup facts are unknown, never an empty list standing in for one.
+   */
+  lineupLeagueIds?: string[] | null
+  offerLeagueIds?: string[]
 }
 
 export function lineupLeagueIds(leagues: LineupLeague[]): string[] {
@@ -133,6 +140,28 @@ export async function recordPendingOffers(
   await writeCache(userId, cache, now)
 }
 
+/**
+ * Which leagues need you, READ FROM THE BADGE CACHE ONLY — for a surface that wants the per-league
+ * flags (the /league workspace rail) without paying to recompute the lineup facts, which is the home
+ * summary's job. Same facts and the same 10-minute freshness rule as the tab badges: an unknown or
+ * stale lineup read is null, never an empty list, so a flag is never shown from an old answer.
+ */
+export async function readUrgencyLeagueIds(
+  userId: string,
+  now: Date = new Date(),
+): Promise<{ lineupLeagueIds: string[] | null; offerLeagueIds: string[] }> {
+  const [cache, lineupCache] = await Promise.all([readCache(userId), readCache(userId, LINEUP_URGENCY_KEY_PREFIX)])
+  const lineup = lineupCache.lineup && isFresh(lineupCache.lineup.at, now)
+    ? lineupCache.lineup
+    : cache.lineup && isFresh(cache.lineup.at, now)
+      ? cache.lineup
+      : null
+  const offerLeagueIds = Object.entries(cache.offers)
+    .filter(([, entry]) => entry.waiting > 0 && isFresh(entry.at, now))
+    .map(([id]) => id)
+  return { lineupLeagueIds: lineup ? lineup.leagueIds : null, offerLeagueIds }
+}
+
 export async function getUrgencyBadges(input: {
   userId: string
   /** The leagues the user plays — every count is scoped to these. */
@@ -170,13 +199,16 @@ export async function getUrgencyBadges(input: {
     }
   }
 
-  const offerCount = Object.entries(cache.offers).filter(
-    ([id, entry]) => played.has(id) && entry.waiting > 0 && isFresh(entry.at, now),
-  ).length
+  const offerLeagueIds = Object.entries(cache.offers)
+    .filter(([id, entry]) => played.has(id) && entry.waiting > 0 && isFresh(entry.at, now))
+    .map(([id]) => id)
+  const offerCount = offerLeagueIds.length
 
   return {
     /* Unknown (no fresh cache and the reload failed) is null — no badge, not a zero. */
     myTeam: lineupIds ? countOrNull(lineupIds.filter((id) => played.has(id)).length) : null,
+    lineupLeagueIds: lineupIds ? lineupIds.filter((id) => played.has(id)) : null,
+    offerLeagueIds,
     trades: countOrNull(offerCount),
     draftHq: countOrNull(draftLeagueIds(leagues, input.liveDraftLeagueIds, now).filter((id) => played.has(id)).length),
     sync: input.pausedSyncLeagueIds === null ? null : countOrNull(staleLeagueIds(

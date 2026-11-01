@@ -30,9 +30,9 @@
  *   1. `normalize*GameStats` reports the keys it could not place
  *      (`unmappedKeys`), so a wrong alias surfaces as a diagnostic instead of
  *      as a quietly-zero week.
- *   2. `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` is NOT widened by this
- *      module. Flipping that gate is a claim that a season can run to
- *      completion, and that claim needs one real captured payload first.
+ *   2. This normalizer alone does not widen `SEASON_CAPABLE_SPORTS` in
+ *      `lib/sport-scope.ts`. A season gate also needs a complete schedule,
+ *      lineup locks, a fitted bracket, and an end-to-end season run.
  *
  * Resolve G-01 by committing a fixture (the contract's own `scripts/probe.sh`,
  * during a game), then reconcile these tables against it.
@@ -300,27 +300,96 @@ const NHL_GAME_THRESHOLDS: ReadonlyArray<[bonus: string, stat: (s: Record<string
  * Each needs its own denominator from the same line, and a game without one earns nothing rather
  * than a perfect rate: save % needs a shot against, GAA needs goalie minutes (`g_toi`, stored only
  * on lines ingested since 2026-10-20), shooting % needs a shot on goal.
+ *
+ * 🛑 AND A MINIMUM SAMPLE (owner's decision 2026-10-23). One goal on one shot is 100%, a reliever
+ * stopping 3 of 3 is 1.000, and a goalie pulled after ten clean minutes is a 0.00 GAA — each a
+ * near-maximal bonus for a game that proves nothing. A game below the minimum earns 0 for that
+ * bonus; exactly at it, the bonus is earned. Fixed defaults, not panel settings: these bonuses are
+ * baked into the shared `PlayerWeeklyScore` / `PlayerDailyScore` rows (keyed by player, not league)
+ * before any league's settings are read, so a per-league minimum would need the rate scored at
+ * league time instead. The panel help text states them (`NhlScoringCategories.ts`).
  */
 const NHL_SAVE_PCT_FLOOR = 0.9 //   panel: bonus per 0.010 above .900
 const NHL_GAA_CEILING = 2.5 //      panel: bonus for a GAA below 2.50
 const NHL_SHOOTING_PCT_FLOOR = 10 // panel: bonus per point above 10%
+export const NHL_SAVE_PCT_MIN_SHOTS_AGAINST = 20
+export const NHL_GAA_MIN_GOALIE_MINUTES = 40
+export const NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL = 4
 
 function addNhlRateBonuses(stats: Record<string, number>): void {
   if (stats.g_sv !== undefined) {
     const shotsAgainst = stats.g_sa ?? stats.g_sv + (stats.g_ga ?? 0)
-    if (shotsAgainst > 0) {
+    if (shotsAgainst >= NHL_SAVE_PCT_MIN_SHOTS_AGAINST) {
       const steps = (stats.g_sv / shotsAgainst - NHL_SAVE_PCT_FLOOR) / 0.01
       if (steps > 0) stats.g_sv_pct_bonus = steps
     }
   }
-  if (stats.g_toi !== undefined && stats.g_toi > 0 && stats.g_ga !== undefined) {
+  if (stats.g_toi !== undefined && stats.g_toi >= NHL_GAA_MIN_GOALIE_MINUTES && stats.g_ga !== undefined) {
     if ((stats.g_ga * 60) / stats.g_toi < NHL_GAA_CEILING) stats.g_gaa_bonus = 1
   }
-  if (stats.sog !== undefined && stats.sog > 0) {
+  if (stats.sog !== undefined && stats.sog >= NHL_SHOOTING_PCT_MIN_SHOTS_ON_GOAL) {
     const points = ((stats.g ?? 0) / stats.sog) * 100 - NHL_SHOOTING_PCT_FLOOR
     if (points > 0) stats.sh_pct_bonus = points
   }
 }
+
+/**
+ * A goalie's shutout, derived from his own line, because the vendor's `shutouts` is 0 even for a
+ * goalie who played the whole game and allowed nothing (contracts/rolling-insights/GAPS.md; five
+ * full-game lines by 2026-10-08, Oettinger 26 of 26 among them).
+ *
+ * The NHL rule: one shutout, only to a goalie who was the ONLY goalie his team used and who allowed
+ * no goal in regulation or overtime. Shootout goals are not goals against, so both goalies of a 0-0
+ * game decided in a shootout get one. Two goalies splitting a clean game get none.
+ *
+ *   1. Sole goalie, from the ingest. `normalizedStatMapFor` counts the team's goalie lines that
+ *      actually played (`teamGoaliesUsed`) while the whole box is in hand, and records whether the
+ *      vendor called the game final. Trusted only once it is: mid-game, the starter is trivially the
+ *      only goalie used so far, and a shutout through two periods is not one.
+ *   2. Otherwise (a row ingested before that count was stored, or a game still running) a sole
+ *      goalie cannot be established, so the line must show the full game itself: at least 60:00 on
+ *      the clock (an overtime game runs longer, so 60 covers it) and no goal against. This misses
+ *      a real shutout whose clock the vendor printed short — measured: 59:50, and "0" for goalies
+ *      with 24 saves — which is the safe direction: it never awards a split or a relief outing.
+ *
+ * Either way a REGULATION loss with no goal against means the winner went into an empty net, which
+ * is not a shutout; a shootout loss stays eligible, as in the NHL.
+ */
+export function derivedNhlShutout(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
+  if (stats.g_ga !== 0) return 0
+  if ((stats.g_loss ?? 0) > 0) return 0
+  const played = (stats.g_toi ?? 0) > 0 || (stats.g_sa ?? 0) > 0 || (stats.g_sv ?? 0) > 0 ||
+    (stats.g_win ?? 0) > 0 || (stats.g_otl ?? 0) > 0
+  if (!played) return 0
+  const used = asNumber(raw.teamGoaliesUsed)
+  if (raw.gameFinal === true && used !== undefined) return used === 1 ? 1 : 0
+  return (stats.g_toi ?? 0) >= NHL_SHUTOUT_FULL_GAME_MINUTES ? 1 : 0
+}
+
+/**
+ * A goalie's WIN, derived from the box, because the vendor leaves it out: 68 of 179 regular-season
+ * 2026 games had no goalie credited with one by 2026-10-26 (31 of 43 in week 1, 35 of 46 in week 2).
+ *
+ * Credited only when all of it is in hand from the ingest (`normalizedStatMapFor`):
+ *   - the vendor called the game final (`gameFinal`);
+ *   - his team won (`teamWon`, from the box's scores, or for a tie on the board the box's own
+ *     decisions / shootout goals — `riWinningTeam`), which is absent when the box cannot say;
+ *   - he was the ONLY goalie his team used (`teamGoaliesUsed === 1`) and he played.
+ * When the winners used two goalies the win belongs to whoever was in net for the winning goal,
+ * which only play-by-play can say, so nothing is derived. A row without that context (written
+ * before it was stored, or a game still running) derives nothing either: a goalie's own line
+ * cannot show that his team won. A line the vendor already gave a loss is left alone.
+ */
+export function derivedNhlWin(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
+  if (raw.gameFinal !== true || raw.teamWon !== true) return 0
+  if (asNumber(raw.teamGoaliesUsed) !== 1) return 0
+  if ((stats.g_loss ?? 0) > 0 || (stats.g_otl ?? 0) > 0) return 0
+  const played = (stats.g_toi ?? 0) > 0 || (stats.g_sa ?? 0) > 0 || (stats.g_sv ?? 0) > 0 || (stats.g_win ?? 0) > 0
+  return played ? 1 : 0
+}
+
+/** Regulation length. The fallback in {@link derivedNhlShutout} requires the goalie's clock to reach it. */
+export const NHL_SHUTOUT_FULL_GAME_MINUTES = 60
 
 /**
  * Numeric keys every stored NHL line carries that no category scores. `player_id` is folded into
@@ -341,6 +410,15 @@ export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
   if (isRecord(raw) && raw.group === 'goalies' && isRecord(raw.stats)) {
     const minutes = asNumber(raw.stats.time_on_ice_minutes)
     if (minutes !== undefined) stats.g_toi = minutes
+  }
+
+  if (isRecord(raw) && raw.group === 'goalies') {
+    // max(vendor, derived), clamped: a vendor fix later can never make one game two wins.
+    if (derivedNhlWin(stats, raw) === 1) stats.g_win = 1
+    else if (stats.g_win !== undefined) stats.g_win = Math.min(1, Math.max(0, stats.g_win))
+    // max(vendor, derived), clamped: a vendor fix later can never make one game two shutouts.
+    if (derivedNhlShutout(stats, raw) === 1) stats.g_so = 1
+    else if (stats.g_so !== undefined) stats.g_so = Math.min(1, Math.max(0, stats.g_so))
   }
 
   if (stats.g !== undefined || stats.a !== undefined) stats.pts = (stats.g ?? 0) + (stats.a ?? 0)

@@ -74,7 +74,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
   const [filter, setFilter] = useState<'All' | SurvivorIdolCategory>('All')
   const [detailId, setDetailId] = useState<string>('immunity')
   const league = useLeagueIdolInfo(leagueId)
-  const catalog = league.types ?? BUNDLED_SURVIVOR_IDOL_TYPES
+  const catalog = league.types ?? BUNDLED_SURVIVOR_IDOL_TYPES.filter(isSurvivorIdolTypePlayable)
   const typeById = useMemo(() => new Map(catalog.map(type => [type.id, type])), [catalog])
 
   const selectedIdol = myIdols.find(idol => idol.id === selectedIdolId)
@@ -88,7 +88,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
       <header className="svv-head">
         <div>
           <h2>Idol vault</h2>
-          <p className="svv-sub">{catalog.length} idol types · {catalog.filter(isSurvivorIdolTypePlayable).length} playable now, the rest coming soon · 6 to 8 hidden per league · random or picked by the commissioner{catalog.some(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)) ? ` · ${catalog.filter(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)).map(type => type.name).join(' and ')} always in` : ''}</p>
+          <p className="svv-sub">{catalog.length} idol types in play · 6 to 8 hidden per league, or 1 to 12 when the commissioner picks{catalog.some(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)) ? ` · ${catalog.filter(type => type.alwaysIn && isSurvivorIdolTypePlayable(type)).map(type => type.name).join(' and ')} always in` : ''}{summary.idolExpiryText ? ` · ${summary.idolExpiryText}` : ''}</p>
         </div>
         {sealedCount ? <span className="svv-seal">{sealedCount} sealed in {summary.leagueName ?? 'this league'}</span> : null}
       </header>
@@ -108,7 +108,7 @@ export function SurvivorIdolsView({ leagueId, summary }: SurvivorIdolsViewProps)
                 {idol.playerImageUrl
                   ? <Image src={idol.playerImageUrl} alt={`${idol.playerName ?? 'Idol player'} headshot`} width={28} height={28} unoptimized />
                   : <span aria-hidden="true">{(idol.playerName ?? '?').slice(0, 1)}</span>}
-                <span>{idol.playerName ?? 'Player name unavailable'} · {idolDefinition(idol.powerType).when}</span>
+                <span>{idol.playerName ?? 'Player name unavailable'} · {idolDefinition(idol.powerType).when}{summary.idolExpiryText ? ` · ${summary.idolExpiryText}` : ''}</span>
               </span>
               return <li key={idol.id}>
                 {type
