@@ -13,6 +13,7 @@ import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { canSeeExileMembership, exileMembershipHidden, exileSafePlayerState } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,7 +133,9 @@ export async function GET(req: NextRequest) {
     access.isParticipatingCommissioner ||
     Boolean(settingsJson.survivor_commissioner_fair_play_limited_visibility && access.isParticipant)
 
+  const canSeeExile = canSeeExileMembership({ hidden: exileMembershipHidden(league?.settings), viewerState: me?.playerState, nonPlayingCommissioner: false })
   const payload = {
+    exileMembershipHidden: !canSeeExile,
     phase: league?.survivorPhase,
     mode: league?.survivorMode,
     visualThemeId: readSurvivorVisualThemeId((await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { engineSpecV2: true } }))?.engineSpecV2, leagueId),
@@ -142,7 +145,8 @@ export async function GET(req: NextRequest) {
     }),
     players: access.decisions.canSeeHiddenIdolAssignments ? players : players.map(p => ({
       id: p.id, userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl,
-      tribeId: p.tribeId, playerState: p.playerState, eliminatedWeek: p.eliminatedWeek,
+      // Exile secrecy: someone not on Exile sees an exiled castaway as simply eliminated.
+      tribeId: p.tribeId, playerState: exileSafePlayerState(p.playerState, canSeeExile), eliminatedWeek: p.eliminatedWeek,
       isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
       hasImmunityThisWeek: p.hasImmunityThisWeek,
     })),

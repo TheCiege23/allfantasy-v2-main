@@ -3129,6 +3129,11 @@ export function DraftRoomPageClient({
         // bye-week clusters in the focus team's drafted starters.
         byeWeek: (p as { byeWeek?: number | null }).byeWeek ?? null,
         isDevy: devyRoundsSet.has(p.round) || c2cCollegeRoundsSet.has(p.round),
+        // ⚠ No `isTaxi` on purpose: nothing in a draft knows a pick is a taxi pick. There is no
+        // taxi-rounds setting, `DraftPick` has no taxi column or metadata, and post-draft roster
+        // assignment (`buildLineupSectionsFromPicks`) always writes `taxi: []` — managers move
+        // players to taxi on the roster afterwards. So the strip's Taxi section shows its slots
+        // empty rather than guessing from rookie status.
       })),
       teamCount: session?.teamCount ?? 0,
       rounds: session?.rounds ?? 0,
@@ -3849,6 +3854,7 @@ export function DraftRoomPageClient({
         loadingMessage={poolLoadingMessage}
         poolError={poolError}
         rookieFilterState={draftPool?.rookieFilterState}
+        isDynasty={isDynasty}
         useAiAdp={draftUISettings?.aiAdpEnabled ?? false}
         aiAdpUnavailable={aiAdpUnavailable}
         aiAdpUnavailableMessage={leagueAiAdp?.message ?? null}
@@ -3927,6 +3933,7 @@ export function DraftRoomPageClient({
       poolLoadingMessage,
       poolError,
       draftPool?.rookieFilterState,
+      isDynasty,
       draftUISettings?.aiAdpEnabled,
       aiAdpUnavailable,
       leagueAiAdp?.message,

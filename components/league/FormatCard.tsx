@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { SelectionCheck } from '@/components/ui/selection-check'
 
 type FormatCardProps = {
   title: string
@@ -40,6 +41,7 @@ export function FormatCard({
       >
         <CardHeader className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
+            <SelectionCheck selected={selected} className="text-white" testId="format-card-check" />
             <CardTitle className="text-white">{title}</CardTitle>
             {badges.map((badge) => (
               <Badge key={badge} variant="outline" className="border-cyan-300/20 bg-cyan-300/10 text-[var(--badge-text-cyan)]">

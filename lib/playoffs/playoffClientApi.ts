@@ -52,8 +52,8 @@ export async function listPlayoffBracketChallengesClient(sport?: PlayoffSport): 
   return Array.isArray(payload?.challenges) ? payload.challenges : []
 }
 
-export async function getPlayoffBracketViewClient(challengeId: string): Promise<PlayoffChallengeView> {
-  const response = await fetch(`/api/brackets/playoffs/${challengeId}`, {
+export async function getPlayoffBracketViewClient(challengeId: string, entryId?: string): Promise<PlayoffChallengeView> {
+  const response = await fetch(`/api/brackets/playoffs/${challengeId}${entryId ? `?entryId=${encodeURIComponent(entryId)}` : ""}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",

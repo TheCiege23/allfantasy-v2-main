@@ -302,6 +302,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                     key={p.playerId}
                     type="button"
                     disabled={locked || deadlinePassed || Boolean(ineligible)}
+                    aria-pressed={sel}
+                    data-testid={`keeper-select-${p.playerId}`}
                     onClick={() => toggle(p.playerId)}
                     className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                       sel
@@ -309,7 +311,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                         : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15'
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    <span className="mt-0.5 text-amber-300/90">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
+                    <span className="mt-0.5 text-amber-300/90" aria-hidden="true">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[14px] font-semibold text-white">{p.playerName}</span>
                       <span className="text-[11px] text-white/45">

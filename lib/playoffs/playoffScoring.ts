@@ -43,6 +43,7 @@ const ROUND_POINTS_BY_SPORT: Partial<Record<PlayoffSport, Partial<Record<Playoff
     cfp_championship: 8,
   },
   nba_cup: {
+    cup_group_play: 1,
     cup_quarterfinals: 1,
     cup_semifinals: 2,
     cup_championship: 4,

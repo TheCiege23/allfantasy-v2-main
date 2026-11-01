@@ -34,6 +34,7 @@ import {
   RefreshCw,
   RotateCcw,
   Rows3,
+  Scale,
   Settings,
   Shield,
   ShieldCheck,
@@ -91,6 +92,7 @@ export type SettingsNavTabId =
   | 'survivor_chat'
   | 'survivor_ai'
   | 'survivor_advanced'
+  | 'survivor_governance'
   | 'zombie_setup'
   | 'zombie_whisperer'
   | 'zombie_combat'
@@ -237,6 +239,7 @@ const SURVIVOR_NAV: NavEntry[] = [
   { id: 'survivor_merge', label: 'Merge & Jury', icon: Waves },
   { id: 'survivor_chat', label: 'Chat & Permissions', icon: MessageSquare },
   { id: 'survivor_ai', label: 'League Guide', icon: Bot },
+  { id: 'survivor_governance', label: 'Rules & Conduct', icon: Scale },
   { id: 'survivor_advanced', label: 'Advanced Rules', icon: SlidersHorizontal },
 ]
 

@@ -14,6 +14,12 @@ export type ChimmyReportRow = {
   /** Councils Chimmy voted at this week. */
   voted: number
   exileTeam: string | null
+  /** Commissioner challenges Chimmy answered for this seat this week (optional; older callers omit it). */
+  challenges?: number
+  /** Side games (survivorSideGameRunner.ts): Token Pool picks, a Survivor Pool pick, auction bids. */
+  tokenPoolPicks?: number
+  poolPicked?: boolean
+  auctionBids?: number
 }
 
 type ReportLang = 'en' | 'es'
@@ -44,7 +50,7 @@ export function chimmyWeeklyReportTitle(week: number, lang: ReportLang = 'en'): 
  * says whether Chimmy voted, never for whom, and never mentions an idol (the commissioner may be a
  * player, and who holds an idol is secret).
  */
-export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en'): string {
+export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en', sideGameLine: string | null = null): string {
   const es = lang === 'es'
   const lines = rows.map((r) => {
     const parts = [STATE_LABEL[lang][r.state] ?? r.state]
@@ -54,12 +60,16 @@ export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReport
         : (r.voted === 1 ? 'voted at Tribal Council' : `voted at ${r.voted} Tribal Councils`))
     }
     if (r.exileTeam) parts.push(es ? `jugó con ${r.exileTeam} en el Exilio` : `played ${r.exileTeam} on Exile`)
+    if (r.challenges && r.challenges > 0) parts.push(es ? (r.challenges === 1 ? 'respondió un reto' : `respondió ${r.challenges} retos`) : (r.challenges === 1 ? 'answered a challenge' : `answered ${r.challenges} challenges`))
+    if (r.tokenPoolPicks) parts.push(es ? `hizo ${r.tokenPoolPicks} ${r.tokenPoolPicks === 1 ? 'elección' : 'elecciones'} en el Pozo de Fichas` : `made ${r.tokenPoolPicks} Token Pool ${r.tokenPoolPicks === 1 ? 'pick' : 'picks'}`)
+    if (r.poolPicked) parts.push(es ? 'eligió en el Pozo Survivor' : 'made its Survivor Pool pick')
+    if (r.auctionBids) parts.push(es ? `pujó ${r.auctionBids} ${r.auctionBids === 1 ? 'vez' : 'veces'} en subastas` : `placed ${r.auctionBids} auction ${r.auctionBids === 1 ? 'bid' : 'bids'}`)
     return `${r.name}: ${parts.join(', ')}.`
   })
   const intro = es
     ? `Esto es lo que hizo Chimmy por ${rows.length === 1 ? 'su equipo' : `sus ${rows.length} equipos`} en la semana ${week}.`
     : `Here is what Chimmy did for its ${rows.length === 1 ? 'team' : `${rows.length} teams`} in week ${week}.`
-  return [intro, ...lines].join('\n')
+  return [intro, ...lines, ...(sideGameLine ? [sideGameLine] : [])].join('\n')
 }
 
 /**
@@ -88,16 +98,35 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
     prisma.exileWeeklyEntry.findMany({ where: { leagueId, week, userId: { in: userIds } }, select: { userId: true, submittedLineup: true } }),
   ])
 
+  // Challenges Chimmy answered for each seat (the challenge builder's audit rows). Best-effort.
+  const answered = await import('./survivorChallengeBuilder')
+    .then(({ countChimmyChallengeAnswers }) => countChimmyChallengeAnswers(leagueId, week, chimmy.flatMap((p) => (p.redraftRosterId ? [p.redraftRosterId] : []))))
+    .catch(() => new Map<string, number>())
+  // Side games: what Chimmy played for each seat, and the league's one-line side-game summary.
+  // Best-effort: a failed read leaves the report exactly as it was.
+  const { loadSideGameReportData } = await import('./survivorSideGameService')
+  const { sideGameWeeklyReportLine } = await import('./survivorSideGameSummary')
+  const sideGames = await loadSideGameReportData(leagueId, week).catch(() => null)
   const rows: ChimmyReportRow[] = chimmy.map((p) => {
     const voted = new Set(votes.filter((v) => v.voterUserId === p.userId).map((v) => v.councilId))
     const team = readExileRoster(entries.find((e) => e.userId === p.userId)?.submittedLineup)?.team ?? null
-    return { name: p.displayName, state: p.playerState, voted: voted.size, exileTeam: team }
+    const played = sideGames?.chimmy.get(p.userId)
+    return {
+      name: p.displayName,
+      state: p.playerState,
+      voted: voted.size,
+      exileTeam: team,
+      challenges: p.redraftRosterId ? answered.get(p.redraftRosterId) ?? 0 : 0,
+      tokenPoolPicks: played?.tokenPoolPicks,
+      poolPicked: played?.poolPicked,
+      auctionBids: played?.auctionBids,
+    }
   })
   const sent = await notifySurvivorCommissionerOnce(leagueId, 'chimmy_weekly_report', {
     dedupeKey: String(week),
     week,
     title: chimmyWeeklyReportTitle(week, lang),
-    body: chimmyWeeklyReportBody(week, rows, lang),
+    body: chimmyWeeklyReportBody(week, rows, lang, sideGames ? sideGameWeeklyReportLine(sideGames.input, lang) : null),
     deepLinkPath: `/survivor/${leagueId}`,
     urgency: 'medium',
   })

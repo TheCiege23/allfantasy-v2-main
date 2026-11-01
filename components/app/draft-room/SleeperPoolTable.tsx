@@ -12,7 +12,7 @@
 
 import React, { useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { AlertTriangle, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Check, Flame, GitCompare, Plus, Sparkles, TrendingUp } from 'lucide-react'
 
 import { PlayerAvatar } from './PlayerAvatar'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
@@ -46,6 +46,7 @@ import {
 import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -82,6 +83,11 @@ export interface SleeperPoolTableProps {
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
   leftAtPick?: { overall: number; label: string } | null
+  /**
+   * Dynasty only: show the shared Rookie / Prospect chip (`resolveDraftRoomPlayerLabel`) beside the
+   * position. Off by default so redraft pools render exactly as before.
+   */
+  showExperienceLabel?: boolean
 }
 
 function rowKey(p: PlayerEntry): string {
@@ -151,6 +157,7 @@ interface SleeperRowProps {
   testIdBase: string
   aiOverlaySignal?: DraftAiOverlaySignal
   leftAtOverall: number | null
+  showExperienceLabel?: boolean
 }
 
 function SleeperRow(props: SleeperRowProps) {
@@ -177,6 +184,7 @@ function SleeperRow(props: SleeperRowProps) {
     testIdBase,
     aiOverlaySignal,
     leftAtOverall,
+    showExperienceLabel = false,
   } = props
 
   const { t } = useOptionalLanguage()
@@ -290,6 +298,19 @@ function SleeperRow(props: SleeperRowProps) {
                   >
                     {t('draftRoom.pool.prospectBadge')}
                   </span>
+                ) : null}
+                {/* A Fantrax prospect already wears its own chip; never stack a second label on it. */}
+                {showExperienceLabel && !isProspect ? (
+                  <DraftPlayerLabelBadge
+                    player={{
+                      isRookie: p.isRookie ?? null,
+                      yearsExp: p.yearsExp ?? null,
+                      isDevy: p.isDevy ?? null,
+                      graduatedToNFL: p.graduatedToNFL ?? null,
+                      poolType: p.poolType ?? null,
+                    }}
+                    className="flex-shrink-0 rounded px-1 py-px"
+                  />
                 ) : null}
               </div>
               {showAi ? (
@@ -510,8 +531,11 @@ function SleeperRow(props: SleeperRowProps) {
                 onAddToQueue()
               }}
               disabled={drafted}
-              aria-label={`Queue ${p.name}`}
+              aria-pressed={queued}
+              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
               data-testid={`${testIdBase}-queue`}
+              data-queued={queued ? 'true' : 'false'}
               className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${
                 drafted
                   ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
@@ -521,7 +545,8 @@ function SleeperRow(props: SleeperRowProps) {
               }`}
               title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
             >
-              <Plus className="h-2.5 w-2.5" />
+              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
+              {queued && !drafted ? <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-2.5 w-2.5" aria-hidden />}
             </button>
             {canNominate && onNominateRequest ? (
               <button
@@ -635,6 +660,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     onSortChange,
     aiOverlaySignals,
     leftAtPick = null,
+    showExperienceLabel = false,
   } = props
 
   const leftAtPickLabel = leftAtPick?.label ?? null
@@ -766,6 +792,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 testIdBase={`sleeper-pool-row-${idx}`}
                 aiOverlaySignal={aiOverlaySignals?.[k]}
                 leftAtOverall={leftAtOverall}
+                showExperienceLabel={showExperienceLabel}
               />
             )
           })
@@ -811,6 +838,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   testIdBase={`sleeper-pool-row-${virtualRow.index}`}
                   leftAtOverall={leftAtOverall}
                   aiOverlaySignal={aiOverlaySignals?.[k]}
+                  showExperienceLabel={showExperienceLabel}
                 />
               </div>
             )

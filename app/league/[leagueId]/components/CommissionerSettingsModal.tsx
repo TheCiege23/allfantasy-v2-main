@@ -54,6 +54,7 @@ import { SurvivorMergeJuryPanel } from './settings/survivor/SurvivorMergeJuryPan
 import { SurvivorChatPanel } from './settings/survivor/SurvivorChatPanel'
 import { SurvivorAIHostPanel } from './settings/survivor/SurvivorAIHostPanel'
 import { SurvivorAdvancedPanel } from './settings/survivor/SurvivorAdvancedPanel'
+import { SurvivorGovernancePanel } from './settings/survivor/SurvivorGovernancePanel'
 import { ZombieSetupPanel } from '@/app/zombie/components/commissioner/ZombieSetupPanel'
 import { ZombieWhispererPanel } from '@/app/zombie/components/commissioner/ZombieWhispererPanel'
 import { ZombieCombatPanel } from '@/app/zombie/components/commissioner/ZombieCombatPanel'
@@ -579,6 +580,8 @@ export function CommissionerSettingsModal({
             <SurvivorChatPanel {...survivorProps} />
           ) : activeTab === 'survivor_ai' ? (
             <SurvivorAIHostPanel {...survivorProps} initialData={initialData} debouncedSave={debouncedSave} />
+          ) : activeTab === 'survivor_governance' ? (
+            <SurvivorGovernancePanel {...survivorProps} />
           ) : activeTab === 'survivor_advanced' ? (
             <SurvivorAdvancedPanel {...survivorProps} />
           ) : activeTab === 'zombie_setup' ? (

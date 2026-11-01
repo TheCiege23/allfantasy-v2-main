@@ -221,7 +221,7 @@ async function walkDynastyHome() {
   return seen.join('\n')
 }
 const DYNASTY_HOME_EN = [
-  'Overview', '🚕 Taxi Squad', '📋 Draft Picks', '🗂 All Teams’ Picks', '📊 Standings', '📅 Schedule', 'Future Picks', 'Teams',
+  'Overview', 'Taxi Squad', 'Draft Picks', 'All Teams’ Picks', 'Standings', 'Schedule', 'Future Picks', 'Teams',
   'Dynasty league hub — manage your taxi squad, trade future picks, and track standings across the dynasty.',
   '1 yr left', '2 yrs left', '2027 Round 1', 'From Bravo', 'To another team', 'Own pick', 'Incoming', 'Traded away',
   'Team', 'PF', 'Week 1',
@@ -239,7 +239,7 @@ describe('dynasty home', () => {
     const text = await walkDynastyHome()
     expectNone(text, ['Overview', 'Taxi Squad', 'Draft Picks', 'All Teams’ Picks', 'Standings', 'Schedule', 'Future Picks',
       'Dynasty league hub', 'yr left', 'yrs left', 'Round 1', 'From Bravo', 'another team', 'Own pick', 'Incoming', 'Traded away', 'Week 1'])
-    expectAll(text, ['Resumen', '🚕 Plantel taxi', 'Picks futuros', 'Queda 1 año', 'Quedan 2 años', '2027 Ronda 1', 'De Bravo',
+    expectAll(text, ['Resumen', 'Plantel taxi', 'Picks futuros', 'Queda 1 año', 'Quedan 2 años', '2027 Ronda 1', 'De Bravo',
       'Para otro equipo', 'Pick propio', 'Recibido', 'Traspasado', 'Equipo', 'Semana 1'])
   })
 })

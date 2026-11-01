@@ -5,7 +5,7 @@
  *   dynasty rules   → PUT /api/leagues/[id]/dynasty-settings, same keys as DynastySettingsPanel sent
  * Plus the pre-draft NBA/NHL/MLB dynasty format preset control and the create-wizard picker.
  */
-import React from 'react'
+import React, { useLayoutEffect } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -18,6 +18,7 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 vi.mock('next/navigation', () => ({ useParams: () => ({ leagueId: 'L1' }) }))
 
 import { RosterComplianceSettingsPanel } from '@/app/league/[leagueId]/components/settings/RosterComplianceSettingsPanel'
+import { DynastyFormatPresetSection } from '@/app/league/[leagueId]/components/settings/DynastyFormatPresetSection'
 import { DraftStep } from '@/components/create-league-v2/CreateLeagueWizard'
 import { DEFAULT_V2_STATE, getDefaultDynastySetup, type CreateLeagueV2State } from '@/lib/create-league-v2/state'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
@@ -161,6 +162,39 @@ describe('Taxi squad section — dynasty lock & promotion rules', () => {
 
 describe('Pre-draft dynasty format preset (Roster tab)', () => {
   const formats = { sportFormats: [{ id: 'nba_dynasty_points_taxi', sport: 'NBA' }, { id: 'nba_dynasty_points_deep', sport: 'NBA' }] }
+
+  it('keeps a choice made as settings arrive, before passive effects run', async () => {
+    const saveDynasty = vi.fn(async () => ({ ok: true }))
+    function LoadingPreset({ loaded }: { loaded: boolean }) {
+      useLayoutEffect(() => {
+        if (loaded) {
+          const select = screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement
+          select.value = 'nba_dynasty_points_deep'
+          select.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      }, [loaded])
+      return <DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={loaded ? {
+        presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true },
+      } : null} />
+    }
+    const { rerender } = render(<LoadingPreset loaded={false} />)
+    rerender(<LoadingPreset loaded />)
+    expect((screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement).value).toBe('nba_dynasty_points_deep')
+    await act(async () => { fireEvent.click(screen.getByTestId('dynasty-format-preset-apply')) })
+    expect(saveDynasty).toHaveBeenCalledWith({ sportPresetId: 'nba_dynasty_points_deep' })
+  })
+
+  it('adopts a newly published current preset without retaining a stale choice', () => {
+    const saveDynasty = vi.fn(async () => ({ ok: true }))
+    const { rerender } = render(<DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={{
+      presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true },
+    }} />)
+    fireEvent.change(screen.getByTestId('dynasty-format-preset-select'), { target: { value: 'nba_dynasty_points_deep' } })
+    rerender(<DynastyFormatPresetSection canEdit saveDynasty={saveDynasty} dynasty={{
+      presets: formats, sportFormatPreset: { current: null, editable: true },
+    }} />)
+    expect((screen.getByTestId('dynasty-format-preset-select') as HTMLSelectElement).value).toBe('nba_dynasty_points_taxi')
+  })
 
   it('applies the chosen preset through PUT { sportPresetId }', async () => {
     const calls = dynastyFetch({}, { presets: formats, sportFormatPreset: { current: 'nba_dynasty_points_taxi', editable: true } })

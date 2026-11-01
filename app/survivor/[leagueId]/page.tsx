@@ -13,6 +13,7 @@ import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
 import { SurvivorIslandHero } from '@/components/survivor/SurvivorIslandHero'
 import { SurvivorStatusCard } from '@/app/survivor/components/SurvivorStatusCard'
 import { buildSurvivorStatusCard } from '@/lib/survivor/survivorStatusCard'
+import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
 
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return 'Soon'
@@ -260,6 +261,9 @@ export default function SurvivorIslandHomePage() {
           )}
         </div>
       </section>
+
+      {/* Commissioner challenges and the manager's own rewards (choose a tribemate / steal target). */}
+      {leagueId && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorChallengeBoardCard leagueId={leagueId} /> : null}
 
       {/* Host message */}
       <section className="mt-6 survivor-panel p-4">

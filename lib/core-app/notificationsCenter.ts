@@ -6,6 +6,7 @@ import { categoryFromMeta } from '@/lib/core-app/notificationMutes'
 import { handoffFor } from '@/lib/core-app/platformLinks'
 import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import { survivorNotificationKind } from '@/lib/core-app/survivorNotificationIcon'
 
 /**
  * 22c — the notifications centre, and the push suppression rule behind it.
@@ -70,6 +71,12 @@ export type NotificationRow = {
    * provider id (user decision 2026-09-14). See platformLinks.handoffFor.
    */
   handoff?: { href: string; label: string; screen: string } | null
+  /**
+   * The Survivor kind (`idol_found`, `torch_out`, …) when the stored type is `survivor:<kind>`, for
+   * the row's island icon (lib/core-app/survivorNotificationIcon.ts). Absent on every other row.
+   * Display only: the row's filter, copy and action are decided exactly as before.
+   */
+  survivorType?: string
 }
 
 export type NotificationsCenterData = {
@@ -403,6 +410,7 @@ export async function getNotificationsCenter(input: {
 
   const rest: NotificationRow[] = stored.map((n) => {
     const kind = classifyStored(n.type, n.title, n.body, n.meta)
+    const survivorType = survivorNotificationKind(n.type)
     const handoff =
       n.leagueId && n.league
         ? handoffFor(
@@ -419,6 +427,7 @@ export async function getNotificationsCenter(input: {
         : null
     return {
       ...(handoff ? { handoff: { href: handoff.href, label: handoff.label, screen: handoff.screen } } : {}),
+      ...(survivorType ? { survivorType } : {}),
       id: n.id,
       kind,
       title: n.title,
