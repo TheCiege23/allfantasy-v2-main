@@ -112,8 +112,8 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
     select: { updatedAt: true },
   }).catch(() => null) : null
   const newestPlayerUpdate = rows.reduce<Date | null>((latest, row) => !latest || row.updatedAt > latest ? row.updatedAt : latest, null)
-  const asOf = [matchupUpdated?.updatedAt, newestPlayerUpdate].filter((d): d is Date => d instanceof Date)
-    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null
+  // The board owns the team score. A newer player row must not make an older team score appear fresh.
+  const asOf = matchupUpdated?.updatedAt ?? newestPlayerUpdate
   const stamp = asOf ? `Score data last updated ${asOf.toISOString()}.` : 'No score refresh time is on file; do not call this real-time.'
   const lines = [`FANTASY MATCHUP SCOREBOARD — ${league.name} (${league.sport}), season ${season}, week ${week}.`, stamp]
   if (asOf && Date.now() - asOf.getTime() > 15 * 60_000 && !match?.live?.final) {

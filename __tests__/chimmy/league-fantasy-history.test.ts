@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({ league: vi.fn(), career: vi.fn(), roster: vi.fn(), matchups: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league },
-  redraftRoster: { findFirst: h.roster }, redraftMatchup: { findMany: h.matchups } } }))
+  redraftRoster: { findMany: h.roster }, redraftMatchup: { findMany: h.matchups } } }))
 vi.mock('@/lib/core-app/careerRecords', () => ({ loadCareerGames: h.career }))
 
 import { buildLeagueFantasyHistoryContext } from '@/lib/chimmy/leagueFantasyHistoryGrounding'
@@ -16,7 +16,7 @@ beforeEach(() => {
     { leagueId: 'L1', leagueName: 'Fantasy Hoops', season: 2023, week: 8, myScore: 90, oppScore: 93, result: 'L', oppName: 'Other' },
     { leagueId: 'L2', leagueName: 'Fantasy Hoops', season: 2024, week: 8, myScore: 150, oppScore: 10, result: 'W', oppName: 'Stranger' },
   ] })
-  h.roster.mockResolvedValue({ id: 'R1' })
+  h.roster.mockResolvedValue([{ id: 'R1' }, { id: 'R-old' }])
   h.matchups.mockResolvedValue([])
 })
 
@@ -46,6 +46,9 @@ describe('selected-league fantasy history', () => {
     expect(out).toContain('2024 week 8, categories won 6-3-0 tied: PTS 101.00 vs 97.00')
     expect(out).toContain('not fantasy points')
     expect(h.career).not.toHaveBeenCalled()
+    expect(h.matchups.mock.calls[0][0].where.OR).toEqual([
+      { homeRosterId: { in: ['R1', 'R-old'] } }, { awayRosterId: { in: ['R1', 'R-old'] } },
+    ])
   })
 
   it('does not invent a rotisserie rank from a category snapshot', async () => {

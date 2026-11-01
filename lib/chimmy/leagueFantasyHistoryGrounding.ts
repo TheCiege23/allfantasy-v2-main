@@ -7,12 +7,14 @@ import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilit
 
 async function nativeCategoryHistory(args: { leagueId: string; userId: string; leagueName: string;
   format: 'categories' | 'roto'; season: number | null; week: number | null; limit: number }): Promise<string> {
-  const roster = await prisma.redraftRoster.findFirst({ where: { leagueId: args.leagueId, ownerId: args.userId },
+  const rosters = await prisma.redraftRoster.findMany({ where: { leagueId: args.leagueId, ownerId: args.userId },
     select: { id: true } })
-  if (!roster) return `No claimed native roster is on file for you in ${args.leagueName}; historical category results cannot be attributed safely.`
+  if (!rosters.length) return `No claimed native roster is on file for you in ${args.leagueName}; historical category results cannot be attributed safely.`
+  const rosterIds = rosters.map((r) => r.id)
+  const rosterSet = new Set(rosterIds)
   const rows = await prisma.redraftMatchup.findMany({ where: {
     leagueId: args.leagueId, status: 'final',
-    OR: [{ homeRosterId: roster.id }, { awayRosterId: roster.id }],
+    OR: [{ homeRosterId: { in: rosterIds } }, { awayRosterId: { in: rosterIds } }],
     ...(args.season == null ? {} : { season: { season: args.season } }),
     ...(args.week == null ? {} : { week: args.week }),
   }, select: { week: true, homeRosterId: true, lineupSnapshots: true, season: { select: { season: true } } },
@@ -25,7 +27,7 @@ async function nativeCategoryHistory(args: { leagueId: string; userId: string; l
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
     const category = raw as Record<string, unknown>
     if (!Array.isArray(category.categories)) continue
-    const mineHome = row.homeRosterId === roster.id
+    const mineHome = rosterSet.has(row.homeRosterId)
     const parts = category.categories.flatMap((item) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return []
       const c = item as Record<string, unknown>
