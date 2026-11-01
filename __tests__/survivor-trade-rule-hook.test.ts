@@ -85,13 +85,14 @@ describe('checkSurvivorTradeRules', () => {
   it('a free-trade effect on either roster bypasses the tribe rule', async () => {
     survivorLeague({})
     h.effects.mockImplementation(async (_l: string, rosterId: string) => (rosterId === 'rb' ? [{ rewardType: 'free_trade', appliedMode: 'full' }] : []))
-    expect(await checkSurvivorTradeRules(input)).toEqual({ ok: true, bypassed: true })
+    // The trade needed the bypass (the window is closed), so whatever settles it must spend it.
+    expect(await checkSurvivorTradeRules(input)).toEqual({ ok: true, bypassed: true, bypassRequired: true, bypassSource: 'free_trade', week: 9 })
   })
 
   it('a registered bypass provider is honoured and can be removed', async () => {
     survivorLeague({})
     const remove = registerSurvivorTradeBypassProvider(async () => ({ bypass: true, source: 'test_token' }))
-    expect(await checkSurvivorTradeRules(input)).toEqual({ ok: true, bypassed: true })
+    expect(await checkSurvivorTradeRules(input)).toEqual({ ok: true, bypassed: true, bypassRequired: true, bypassSource: 'test_token', week: 9 })
     remove()
     expect(await checkSurvivorTradeRules(input)).toMatchObject({ ok: false })
   })

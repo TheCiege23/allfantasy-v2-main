@@ -48,6 +48,7 @@ import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessContr
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
 import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
@@ -420,6 +421,13 @@ export async function GET(
     })),
     jury: jury.map((j) => ({ rosterId: j.rosterId, votedOutWeek: j.votedOutWeek })),
     exileLeagueId,
+    // Exile secrecy (League.settings.survivorSideGames.hideExileMembership): screens drop "on Exile"
+    // labels for a viewer who may not know. Token balances below are already the viewer's own only.
+    exileMembershipHidden: !canSeeExileMembership({
+      hidden: exileMembershipHidden(leagueSettingsRow?.settings),
+      viewerState: myExileStatus ? 'exile' : null,
+      nonPlayingCommissioner: privacy.decisions.canSeeHiddenIdolAssignments,
+    }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null
       return {

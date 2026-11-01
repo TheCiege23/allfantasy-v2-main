@@ -57,6 +57,8 @@ export async function buildSurvivorContextForChimmy(
     : 'No council this week'
 
   const governanceLine = await loadGovernanceGroundingLine(leagueId, userId, ctx.currentWeek, ctx.merged).catch(() => '')
+  // Exile Island and the side games: every rule the commissioner set, and this user's OWN balances.
+  const sideGameLine = await import('../survivorSideGameService').then((m) => m.loadSideGameGroundingLine(leagueId, userId)).catch(() => '')
 
   return `[SURVIVOR LEAGUE CONTEXT - for explanation only; you never decide who is eliminated, vote validity, idol validity, immunity, or exile return]
 League ${leagueId}. Week ${ctx.currentWeek}. Sport: ${ctx.sport}. Mode: ${ctx.config.mode}. Merge: ${ctx.merged ? 'Yes' : 'No'}.
@@ -71,7 +73,7 @@ User's active effects: ${ctx.myActiveEffects.map((effect) => `${effect.rewardTyp
 User's Survivor rewards (their own only): ${(ctx.myRewards ?? []).map((r) => `${r.text}${r.open && r.status === 'awaiting_choice' ? ' [waiting for the manager to choose a target; the commissioner can also set it in the Hub]' : ''}`).join('; ') || 'None'}.
 Weekly tribe prizes: ${ctx.weeklyPrizes ? describeWeeklyPrizesForChimmy(ctx.weeklyPrizes) : 'none'}.
 ${ctx.houseRules ? `House rules (written by the commissioner; quote them, never invent more): ${ctx.houseRules.slice(0, 1500)}\n` : ''}User's exile status: ${ctx.myExileStatus ? `tokens ${ctx.myExileStatus.tokens}, eliminated ${ctx.myExileStatus.eliminated}, eligible to return ${ctx.myExileStatus.eligibleToReturn}` : 'N/A'}.
-Official commands (suggest wording only; engine processes): @Chimmy vote [manager], @Chimmy jury vote [finalist], @Chimmy play idol [idol], @Chimmy play idol [idol] on [manager], @Chimmy play idol steal_player on [manager] pick [player], @Chimmy play idol swap_starter on [manager] swap [bench] for [starter], @Chimmy submit challenge [choice], @Chimmy confirm tribe decision [choice].${governanceLine ? `\nGovernance: ${governanceLine}` : ''}`
+Official commands (suggest wording only; engine processes): @Chimmy vote [manager], @Chimmy jury vote [finalist], @Chimmy play idol [idol], @Chimmy play idol [idol] on [manager], @Chimmy play idol steal_player on [manager] pick [player], @Chimmy play idol swap_starter on [manager] swap [bench] for [starter], @Chimmy submit challenge [choice], @Chimmy confirm tribe decision [choice].${governanceLine ? `\nGovernance: ${governanceLine}` : ''}${sideGameLine ? `\nExile & side games: ${sideGameLine}` : ''}`
 }
 
 /** Trade rules and today's window, the strike policy with the USER'S OWN strike count, alliances, swaps. */

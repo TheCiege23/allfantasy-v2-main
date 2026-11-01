@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { SettingsSection, SettingsRow, Toggle, Input } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
+import { SurvivorSideGamesSettings } from './SurvivorSideGamesSettings'
 
 type ExileSettings = {
   exileIslandEnabled: boolean
@@ -73,6 +74,8 @@ export function SurvivorExilePanel({ leagueId, canEdit }: SurvivorSettingsPanelP
       </SettingsSection>}
       {settings && <div className="flex justify-end"><button type="button" onClick={() => void save()} disabled={!canEdit || saving || !Number.isInteger(settings.exileReturnWeek) || settings.exileReturnWeek < 2 || settings.exileReturnWeek > 51 || !Number.isInteger(settings.exileReturnTokens) || settings.exileReturnTokens < 1 || settings.exileReturnTokens > 1000} className="rounded-xl border border-[#ff3d81]/40 bg-cyan-950/40 px-5 py-2 text-sm text-[#ffd7e5] disabled:opacity-40">{saving ? 'Saving…' : 'Save Exile rules'}</button></div>}
       {message && <p role="status" className="text-sm text-amber-200">{message}</p>}
+      {/* Exile economy and the side games: token → FAAB, lineup slots, team bids, secrecy, Token Pool, shop, Survivor Pool, auctions. */}
+      <SurvivorSideGamesSettings leagueId={leagueId} canEdit={canEdit} />
       <Link href={`/survivor/${encodeURIComponent(leagueId)}/exile`} className="inline-flex text-sm text-cyan-300 hover:text-cyan-200">Open Exile dashboard →</Link>
     </div>
   )

@@ -9,11 +9,14 @@ import type { SurvivorFoundationSettings } from './survivorSettings'
 import { weeklyPrizesActive, type SurvivorWeeklyPrizeSettings } from './survivorWeeklyPrizes'
 import { SURVIVOR_GOVERNANCE_DEFAULTS, type SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import { dayTimeLabel, governanceLang } from './survivorGovernanceCopy'
+import type { SurvivorSideGameSettings } from './survivorSideGameSettings'
+import { answerSideGameRules, sideGameExileLines } from './survivorSideGameRulesAnswers'
 
 export type SurvivorRulesTopic =
   | 'voting' | 'ties' | 'idols' | 'merge' | 'exile' | 'jury' | 'immunity' | 'challenges' | 'schedule' | 'overview'
   | 'prizes' | 'house_rules'
   | 'trades' | 'strikes' | 'alliances' | 'swaps'
+  | 'token_pool' | 'survivor_pool' | 'auction' | 'token_shop'
 
 export type SurvivorRulesContext = {
   sport: string
@@ -27,6 +30,8 @@ export type SurvivorRulesContext = {
   houseRules?: string | null
   /** Trade rules, strikes, alliances and extra swaps (survivorGovernanceSettings.ts). Absent: defaults, and the rulebook leaves those sections out. */
   governance?: SurvivorGovernanceSettings | null
+  /** Exile Island and the side games (survivorSideGameSettings.ts). Absent: defaults, and the rulebook leaves them out. */
+  sideGames?: SurvivorSideGameSettings | null
   /** League.language: the prize, house-rules and governance answers follow it (English / Spanish). */
   language?: string | null
 }
@@ -39,6 +44,11 @@ const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
   ['strikes', /\b(conduct|strike (?:policy|rule|limit)s?|conduct strikes?|my strikes?|how many strikes|faltas?|conducta)\b/],
   ['alliances', /\b(alliances?|side chats?|alianzas?)\b/],
   ['swaps', /\b(swaps?|swapping|tribe shuffle|redraw|original tribes|new tribes|cambio de tribus)\b/],
+  // Side games before Exile and voting: "how does the token pool work on exile" is a Token Pool question.
+  ['token_pool', /\b(token pool|pozo de fichas|cash out|cobrar (?:la )?racha|streak pot)\b/],
+  ['survivor_pool', /\b(survivor pool|pozo survivor|revives?|resurrecci(?:o|ó)n(?:es)?)\b/],
+  ['auction', /\b(auctions?|auction week|auction cash|subastas?|pujas?|bids?|bidding)\b/],
+  ['token_shop', /\b(token shop|tienda de fichas|spend (?:my )?tokens|buy (?:an? )?advantages?|comprar ventajas?)\b/],
   ['house_rules', /\b(house rules?|screenshots?|reglas de la casa)\b/],
   // "Steal" alone stays with idols (a vote-steal idol); only the reward words are prizes.
   ['prizes', /\b(prizes?|premios?|tie[- ]?break(?:ers?)?|free trades?|steal blockers?|blockers?)\b/],
@@ -251,6 +261,11 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
     case 'alliances':
     case 'swaps':
       return governanceAnswer(topic, ctx)
+    case 'token_pool':
+    case 'survivor_pool':
+    case 'auction':
+    case 'token_shop':
+      return answerSideGameRules(topic, ctx.sideGames, ctx.language)
     case 'voting':
       return [
         '**Voting**',
@@ -289,6 +304,7 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         '• A voted-out manager goes to Exile Island and keeps playing for tokens.',
         `• At the end of week ${s.exileReturnWeek}, the Exile manager with the most tokens (and at least ${s.exileReturnTokens}) returns to the island and rebuilds through waivers.`,
         '• Token balances are private. You can see yours on the Token Pool screen; nobody sees anyone else\'s.',
+        ...sideGameExileLines(ctx.sideGames, ctx.sport, ctx.language),
       ].join('\n')
     case 'jury':
       return [
@@ -336,6 +352,16 @@ export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRul
   }
 }
 
+/** The side-game sections a rulebook carries: only those the commissioner switched on. */
+export function sideGameRulebookTopics(sideGames: SurvivorSideGameSettings | null | undefined, exileOn: boolean): SurvivorRulesTopic[] {
+  if (!sideGames) return []
+  return [
+    ...(exileOn && sideGames.tokenPoolEnabled ? ['token_pool' as const] : []),
+    ...(sideGames.tokenShopEnabled && sideGames.tokenShopItems.some((i) => i.enabled) ? ['token_shop' as const] : []),
+    ...(sideGames.survivorPoolEnabled ? ['survivor_pool' as const] : []),
+  ]
+}
+
 /** The governance sections a league's rulebook carries: conduct always, the rest when switched on. */
 export function governanceRulebookTopics(governance: SurvivorGovernanceSettings | null | undefined): SurvivorRulesTopic[] {
   if (!governance) return []
@@ -357,6 +383,7 @@ export function buildSurvivorRulebook(ctx: SurvivorRulesContext): SurvivorRulesS
   const topics: SurvivorRulesTopic[] = [...SURVIVOR_RULEBOOK_TOPICS]
   if (ctx.prizes && (weeklyPrizesActive(ctx.prizes) || ctx.prizes.tribeTieBreakPosition !== 'none')) topics.splice(topics.indexOf('challenges') + 1, 0, 'prizes')
   topics.push(...governanceRulebookTopics(ctx.governance))
+  topics.push(...sideGameRulebookTopics(ctx.sideGames, ctx.settings.exileIslandEnabled && ctx.settings.eliminationOutcome === 'exile_island'))
   if (ctx.houseRules?.trim()) topics.push('house_rules')
   return topics.map(topic => survivorRulesSection(topic, ctx))
 }

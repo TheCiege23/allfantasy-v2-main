@@ -22,6 +22,8 @@ import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import { governanceCopy, dayTimeLabel } from './survivorGovernanceCopy'
 import { judgeSurvivorTrade, type SurvivorTradeRefusalCode } from './survivorTradeRules'
 import { resolveSurvivorTradeBypass } from './survivorTradeRuleBypass'
+// Registers the free-trade-token bypass (A's reward ledger) with the registry above.
+import './survivorFreeTradeTokenBypass'
 
 export type SurvivorTradeRuleCheckInput = {
   leagueId: string
@@ -34,7 +36,16 @@ export type SurvivorTradeRuleCheckInput = {
 }
 
 export type SurvivorTradeRuleCheck =
-  | { ok: true; skipped?: 'not_survivor' | 'rules_off' | 'error'; bypassed?: boolean }
+  | {
+      ok: true
+      skipped?: 'not_survivor' | 'rules_off' | 'error'
+      bypassed?: boolean
+      /** The trade passes ONLY because of the bypass: whatever settles it must redeem `bypassSource`. */
+      bypassRequired?: boolean
+      bypassSource?: string | null
+      /** The Survivor week the check ran in (the week a token is spent in). */
+      week?: number
+    }
   | { ok: false; code: SurvivorTradeRefusalCode; message: string; status: 409 }
 
 const MERGED_PHASES = new Set(['merge', 'merging', 'post_merge', 'jury', 'finale', 'complete'])
@@ -92,18 +103,30 @@ export async function checkSurvivorTradeRules(input: SurvivorTradeRuleCheckInput
       needed: !tribalDoneThisWeek && (settings.playedLockUntilTribal || settings.withinTribeUnplayedOnly) && input.players.length > 0 && week > 0,
     })
 
-    const bypass = await resolveSurvivorTradeBypass({ leagueId: input.leagueId, week, rosterIds: rosters.map((r) => r.id) })
+    const bypass = await resolveSurvivorTradeBypass({
+      leagueId: input.leagueId,
+      week,
+      rosterIds: rosters.map((r) => r.id),
+      players: input.players.flatMap((p) => {
+        const from = rosterFor(p.fromRosterId)
+        return from ? [{ playerId: p.playerId, fromRosterId: from.id }] : []
+      }),
+    })
     const foundation = normalizeSurvivorFoundationSettings(league.settings && typeof league.settings === 'object' ? league.settings as Record<string, unknown> : {})
-    const verdict = judgeSurvivorTrade({
+    const judgeInput = {
       settings,
       clock: { tribalDay: foundation.tribalCouncilDay, tribalTime: foundation.tribalCouncilTime, now },
       merged,
       tribeByRoster,
       players: tradePlayers,
       tribalDoneThisWeek,
-      bypass: bypass.bypass,
-    })
-    if (verdict.ok) return { ok: true, bypassed: verdict.bypassed }
+    }
+    const verdict = judgeSurvivorTrade({ ...judgeInput, bypass: bypass.bypass })
+    if (verdict.ok) {
+      // A one-time bypass is spent only by a trade that could not have gone through without it.
+      const bypassRequired = verdict.bypassed && !judgeSurvivorTrade({ ...judgeInput, bypass: false }).ok
+      return { ok: true, bypassed: verdict.bypassed, bypassRequired, bypassSource: bypassRequired ? bypass.source : null, week }
+    }
     const m = governanceCopy(league.language)
     const message = verdict.code === 'SURVIVOR_TRADE_FROZEN' ? m.tradeFrozen
       : verdict.code === 'SURVIVOR_CROSS_TRIBE_BANNED' ? m.tradeCrossTribeBanned

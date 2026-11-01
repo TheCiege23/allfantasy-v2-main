@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   loadCareerDecisionInput: vi.fn(),
   loadSurvivorDecisionSignals: vi.fn(async () => [] as unknown[]),
   loadSurvivorAttentionSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorSideGameSignals: vi.fn(async () => [] as unknown[]),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -33,6 +34,10 @@ vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({
 // Survivor governance signals: the SAME format-signal argument as the reward signals, not a sixth one.
 vi.mock('@/lib/survivor/survivorDecisionSignalInput', () => ({
   loadSurvivorAttentionSignals: mocks.loadSurvivorAttentionSignals,
+}))
+// Side-game signals (pool pick due, auction closing, shop open): the same argument again.
+vi.mock('@/lib/survivor/survivorSideGameSignalInput', () => ({
+  loadSurvivorSideGameSignals: mocks.loadSurvivorSideGameSignals,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
@@ -165,6 +170,8 @@ describe('GET /api/decision-os/manager-command-center', () => {
     const governance = { id: 'survivor_trade_window:league-1:3', leagueId: 'league-1' }
     mocks.loadSurvivorDecisionSignals.mockResolvedValueOnce([reward])
     mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance, reward])
+    const sideGame = { id: 'survivor_side_game:league-1:pool_pick:3', leagueId: 'league-1' }
+    mocks.loadSurvivorSideGameSignals.mockResolvedValueOnce([sideGame])
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
     await GET()
@@ -172,7 +179,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     const call = mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)!
     expect(call).toHaveLength(5)
     // A duplicate id across sources is admitted once.
-    await expect(call[4]).resolves.toEqual([reward, governance])
+    await expect(call[4]).resolves.toEqual([reward, governance, sideGame])
 
     mocks.getServerSession.mockResolvedValueOnce({ user: { id: 'user-1' } })
     mocks.getDashboardLeagueListForUser.mockResolvedValueOnce({ leagues: [{ id: 'league-1' }], sleeperUserId: null })
@@ -180,6 +187,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.leagueSettingsCount.mockResolvedValueOnce(0)
     mocks.loadSurvivorDecisionSignals.mockRejectedValueOnce(new Error('ledger down'))
     mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance])
+    mocks.loadSurvivorSideGameSignals.mockRejectedValueOnce(new Error('side games down'))
     await GET()
     await expect(mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)![4]).resolves.toEqual([governance])
   })

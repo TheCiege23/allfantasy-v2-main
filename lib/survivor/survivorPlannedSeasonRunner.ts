@@ -89,6 +89,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       console.warn('[survivor] reward step failed', error instanceof Error ? error.message : error)
     })
   }
+  // Exile Island and the side games (survivorSideGameRunner.ts): Exile team bids, Token Pool and
+  // Survivor Pool settlement from stored finals, Auction Week, shop deliveries, the return's FAAB, and
+  // Chimmy's picks and bids for the seats it runs. Idempotent and best-effort: never holds up the island.
+  {
+    const { runSurvivorSideGameStep } = await import('./survivorSideGameRunner')
+    await runSurvivorSideGameStep(leagueId, week, now).catch(error => {
+      console.warn('[survivor] side-game step failed', error instanceof Error ? error.message : error)
+    })
+  }
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
   // like its council turn: a failure never holds up the island.
   {

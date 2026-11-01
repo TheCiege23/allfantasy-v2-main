@@ -47,6 +47,7 @@ import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -1092,6 +1093,16 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   }
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: trade.leagueId } })
+  // Survivor: a free-trade token this trade relies on is spent once the trade has executed (below).
+  // Read BEFORE the assets move, while the played-player facts still describe the trade. Survivor only.
+  const survivorBypass = league.survivorMode
+    ? await checkSurvivorTradeRules({
+      leagueId: trade.leagueId,
+      rosterIds: participantRosterIds,
+      rosterIdSpace: 'league',
+      players: trade.items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => ({ playerId: String(i.itemReference), fromRosterId: i.fromRosterId })),
+    }).catch(() => null)
+    : null
   const rosterTxGateFinalize = await assertRosterTransactionsAllowed({
     leagueId: trade.leagueId,
     league,
@@ -1230,6 +1241,9 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+  if (survivorBypass?.ok && survivorBypass.bypassRequired) {
+    await redeemSurvivorTradeBypass({ leagueId: trade.leagueId, week: survivorBypass.week ?? 0, tradeRef: `af:${trade.id}`, source: survivorBypass.bypassSource, actorUserId: input.actorUserId })
+  }
 
   // The integrity scan: the trade review, run once the trade has settled. Native trades were never
   // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.

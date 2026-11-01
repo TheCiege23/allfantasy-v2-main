@@ -25,6 +25,7 @@ import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
 import { loadSurvivorDecisionSignals } from '@/lib/survivor/survivorDecisionSignals'
 import { loadSurvivorAttentionSignals } from '@/lib/survivor/survivorDecisionSignalInput'
 import { combineSurvivorSignalSources } from '@/lib/survivor/survivorSignalSources'
+import { loadSurvivorSideGameSignals } from '@/lib/survivor/survivorSideGameSignalInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,12 +89,14 @@ export async function GET() {
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
   // Survivor leagues: ONE format-signal argument carries every Survivor signal source — the
-  // manager's own reward state (a choice to make, a free trade held, a prize won) and the governance
-  // signals (trade window closing, the viewer's strikes, a swap this week). Each source is
+  // manager's own reward state (a choice to make, a free trade held, a prize won), the governance
+  // signals (trade window closing, the viewer's strikes, a swap this week) and the side games (a pool
+  // pick due, an auction closing, the shop open, Exile claims closing). Each source is
   // started, not awaited, and reduces to [] on failure, so one source failing never hides another.
   const survivor = combineSurvivorSignalSources([
     loadSurvivorDecisionSignals({ userId, leagueIds, now }),
     loadSurvivorAttentionSignals(userId, leagueIds, now),
+    loadSurvivorSideGameSignals({ userId, leagueIds, now }),
   ])
 
   const [snapshot, draftsApproachingCount] = await Promise.all([

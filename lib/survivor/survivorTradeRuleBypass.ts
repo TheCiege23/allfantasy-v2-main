@@ -21,6 +21,8 @@ export interface SurvivorTradeBypassContext {
   week: number
   /** League `Roster` ids of every team in the trade (the id space the effect engine keys on). */
   rosterIds: string[]
+  /** The players moving, keyed on the same League `Roster` ids (a same-position token reads them). */
+  players?: Array<{ playerId: string; fromRosterId: string }>
 }
 
 export type SurvivorTradeBypassProvider = (ctx: SurvivorTradeBypassContext) => Promise<{ bypass: boolean; source?: string } | null>
@@ -44,6 +46,38 @@ export function registerSurvivorTradeBypassProvider(provider: SurvivorTradeBypas
   return () => {
     const i = providers.indexOf(provider)
     if (i >= 0) providers.splice(i, 1)
+  }
+}
+
+/**
+ * Spending a bypass. A provider whose bypass is consumed by use (a one-time token) registers a
+ * redeemer for its `source` prefix ("free_trade_token:<rosterId>"); whatever SETTLES the trade calls
+ * `redeemSurvivorTradeBypass` once the trade has executed, and only when the trade needed the bypass
+ * (`checkSurvivorTradeRules` → `bypassRequired`). Redeemers must be idempotent per `tradeRef`.
+ */
+export type SurvivorTradeBypassRedeemer = (args: { leagueId: string; week: number; tradeRef: string; source: string; actorUserId?: string | null }) => Promise<void>
+
+const redeemers = new Map<string, SurvivorTradeBypassRedeemer>()
+
+export function registerSurvivorTradeBypassRedeemer(sourcePrefix: string, redeemer: SurvivorTradeBypassRedeemer): () => void {
+  redeemers.set(sourcePrefix, redeemer)
+  return () => {
+    if (redeemers.get(sourcePrefix) === redeemer) redeemers.delete(sourcePrefix)
+  }
+}
+
+/** Never throws: an executed trade must not fail because its token could not be marked spent. */
+export async function redeemSurvivorTradeBypass(args: { leagueId: string; week: number; tradeRef: string; source: string | null | undefined; actorUserId?: string | null }): Promise<boolean> {
+  if (!args.source) return false
+  const prefix = args.source.split(':')[0]
+  const redeemer = redeemers.get(prefix)
+  if (!redeemer) return false
+  try {
+    await redeemer({ leagueId: args.leagueId, week: args.week, tradeRef: args.tradeRef, source: args.source, actorUserId: args.actorUserId ?? null })
+    return true
+  } catch (error) {
+    console.warn('[survivor-trade-rules] bypass redemption failed', { leagueId: args.leagueId, tradeRef: args.tradeRef, error: error instanceof Error ? error.message : String(error) })
+    return false
   }
 }
 

@@ -36,6 +36,7 @@ import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilCon
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
+import { SurvivorSideGamesHubPanel } from '@/components/survivor/SurvivorSideGamesHubPanel'
 import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
@@ -640,6 +641,9 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               <Link href={`${base}/exile`} className="text-emerald-300 hover:text-emerald-200">
                 Exile dashboard →
               </Link>
+              <div className="mt-4">
+                <SurvivorSideGamesHubPanel leagueId={leagueId} />
+              </div>
             </WarRoomPanel>
           )}
 

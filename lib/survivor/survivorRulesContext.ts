@@ -5,11 +5,12 @@ import type { SurvivorRulesContext } from './survivorRulesAnswers'
 import { survivorIdolConfigFallback } from './survivorIdolConfigService'
 import { readSurvivorHouseRules, readSurvivorWeeklyPrizes } from './survivorWeeklyPrizes'
 import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { readSurvivorSideGameSettings } from './survivorSideGameSettings'
 
 /** The settings, plan and live cast count the rules answers are built from. Null for an unknown league. */
 export async function loadSurvivorRulesContext(leagueId: string): Promise<SurvivorRulesContext | null> {
   const [row, activeCount, idolRow] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, survivorIdolCount: true, language: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, survivorIdolCount: true, language: true, survivorExileHarshTokenLoss: true } }),
     prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }),
     // The idol tables may not be migrated yet; the fallback covers that.
     Promise.resolve().then(() => prisma.survivorIdolConfig.findUnique({ where: { leagueId }, select: { count: true } })).catch(() => null),
@@ -26,6 +27,7 @@ export async function loadSurvivorRulesContext(leagueId: string): Promise<Surviv
     prizes: readSurvivorWeeklyPrizes(raw),
     houseRules: readSurvivorHouseRules(raw) || null,
     governance: readSurvivorGovernanceSettings(raw),
+    sideGames: readSurvivorSideGameSettings(raw, { harshTokenLoss: row.survivorExileHarshTokenLoss }),
     language: row.language ?? null,
   }
 }

@@ -6,7 +6,7 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
-import { addExilePlayer, dropExilePlayer, emptyExileRoster, readExileRoster } from './exileRosterRules'
+import { addExilePlayer, dropExilePlayer, emptyExileRoster, exileSlotConfig, readExileRoster, type ExileWeeklyRoster } from './exileRosterRules'
 import { keyPositionForSport } from './constants'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { buildWeekKickoffMap, normalizeLockTeam } from '@/lib/redraft/lineupLock'
@@ -107,10 +107,37 @@ export async function mutateExileRoster(params: { leagueId: string; userId: stri
     const entries = await db.exileWeeklyEntry.findMany({ where: { exileId: island.id, week } })
     const existing = entries.find(e => e.userId === params.userId)
     const roster = readExileRoster(existing?.submittedLineup) ?? emptyExileRoster()
+    // Bid mode (League.settings.survivorSideGames.exileClaimMode = faab_bid): teams are won by sealed
+    // bid until the commissioner's close, and first-come claims open once the bids are settled. A
+    // manager who WON a team claims from it straight away. First-come leagues skip this entirely.
+    if (params.action === 'claim' && !roster.anchorId && !roster.awardedTeam) {
+      const { readSurvivorSideGameSettings } = await import('./survivorSideGameSettings')
+      if (readSurvivorSideGameSettings(league.settings).exileClaimMode === 'faab_bid') {
+        const [{ exileBidGate, exileBidWindow }, { loadSideGameLeague }, { sideGameCopy, easternWhen }] = await Promise.all([
+          import('./survivorExileBids'), import('./survivorSideGameStore'), import('./survivorSideGameCopy'),
+        ])
+        const sg = await loadSideGameLeague(db, params.leagueId)
+        if (sg) {
+          const gate = await exileBidGate(sg, week, now)
+          const m = sideGameCopy(sg.language)
+          if (gate === 'bidding') {
+            const bidWindow = await exileBidWindow(sg, now, week)
+            throw new Error(m.exileBiddingOpen(bidWindow ? easternWhen(bidWindow.closesAt, sg.language) : ''))
+          }
+          if (gate === 'settling') throw new Error(m.exileBidsClosed)
+        }
+      }
+    }
     const taken = entries.filter(e => e.userId !== params.userId).map(e => readExileRoster(e.submittedLineup)).filter(r => r && !r.closedAt).map(r => r!.team!).filter(Boolean)
     let team = roster.team
     const player = params.action === 'claim' ? await db.player.findFirst({ where: { id: params.playerId, sport: { equals: league.sport, mode: 'insensitive' }, active: true }, select: { id: true, name: true, position: true, team: true } }) : roster.players.find(p => p.id === params.playerId)
     if (!player?.team) throw new Error('An active player with a verified team is required.')
+    // A team won in the bidding is stored under the bid's key; a daily sport's player row may spell
+    // it in full, so it is matched on the same team key every other Exile check uses.
+    if (roster.awardedTeam && !roster.anchorId && exileTeamKey(league.sport, player.team) === exileTeamKey(league.sport, roster.awardedTeam)) {
+      roster.awardedTeam = player.team.trim().toUpperCase()
+      roster.team = roster.awardedTeam
+    }
     team ??= player.team.trim().toUpperCase()
     const firstAt = (await exileFirstGames(db, league.sport, league.season, week, window.start, window.end)).get(exileTeamKey(league.sport, team))
     const first = firstAt ? { startTime: firstAt } : null
@@ -138,11 +165,11 @@ export async function getExileWaivers(leagueId: string, userId: string, search =
     if (manager?.playerState !== 'exile') throw new Error('Only exiled managers can access Exile waivers.')
     const entries = await db.exileWeeklyEntry.findMany({ where: { exileId: island.id, week } })
     const saved = readExileRoster(entries.find(e => e.userId === userId)?.submittedLineup)
-    const roster = saved && !saved.closedAt && now < window.end ? saved : emptyExileRoster()
+    const roster: ExileWeeklyRoster = saved && !saved.closedAt && now < window.end ? saved : emptyExileRoster()
     const takenTeamIds = entries.filter(e => e.userId !== userId).map(e => readExileRoster(e.submittedLineup)).filter(r => r && !r.closedAt).map(r => r!.team!).filter(Boolean)
     const anchor = keyPositionForSport(league.sport)
     const players = await db.player.findMany({ where: { sport: { equals: league.sport, mode: 'insensitive' }, active: true, team: roster.team ? { equals: roster.team, mode: 'insensitive' } : { not: null }, ...(roster.anchorId ? {} : { position: { contains: anchor.code, mode: 'insensitive' } }), ...(search ? { name: { contains: search.slice(0, 80), mode: 'insensitive' } } : {}) }, select: { id: true, name: true, position: true, team: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: 80 })
-    const slots = (await import('@/lib/redraft/rosterConfigResolver')).resolveRedraftRosterConfig(league.sport, league.settings)
+    const slots = exileSlotConfig(league.sport, league.settings)
     return { week, sport: league.sport, anchor, roster, takenTeamIds, players, slots: [...slots.starterCapacities.keys(), ...(slots.benchSlots ? ['BENCH'] : [])], endsAt: window.end.toISOString(), locked: now < window.start || Boolean(roster.lockedAt && new Date(roster.lockedAt) <= now) }
   })
 }
@@ -196,5 +223,30 @@ export async function finalizeExileRosterResults(leagueId: string, week: number)
     for (const result of results) await db.exileWeeklyEntry.update({ where: { id: result.id }, data: { weeklyScore: result.score } })
     await db.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_results_finalized', data: { source: 'closed_exile_rosters_v1', userIds: results.map(r => r.userId) }, isVisibleToPublic: false, isVisibleToCommissioner: true } })
     return true
+  })
+}
+
+/**
+ * Bid mode: reserve each Exile team WON in the sealed bidding for its winner. Idempotent — a manager
+ * who already holds a team (won earlier, or claimed) is left alone. Under the same league lock the
+ * claims take, so a reservation and a first-come claim can never both land on one team.
+ */
+export async function awardExileTeams(leagueId: string, week: number, awards: ReadonlyArray<{ userId: string; team: string }>): Promise<number> {
+  if (!awards.length) return 0
+  return withSurvivorSetupTransaction(leagueId, async db => {
+    const island = await db.exileIsland.findUnique({ where: { leagueId } })
+    if (!island) return 0
+    const entries = await db.exileWeeklyEntry.findMany({ where: { exileId: island.id, week } })
+    let written = 0
+    for (const award of awards) {
+      const existing = entries.find(e => e.userId === award.userId)
+      const roster = readExileRoster(existing?.submittedLineup)
+      if (roster?.team || roster?.closedAt) continue
+      const next: ExileWeeklyRoster = { ...emptyExileRoster(), team: award.team, awardedTeam: award.team }
+      await db.exileWeeklyEntry.upsert({ where: { exileId_userId_week: { exileId: island.id, userId: award.userId, week } }, create: { exileId: island.id, leagueId, userId: award.userId, week, submittedLineup: next as unknown as Prisma.InputJsonValue }, update: { submittedLineup: next as unknown as Prisma.InputJsonValue } })
+      await db.survivorAuditEntry.create({ data: { leagueId, week, category: 'exile', action: 'exile_team_awarded', targetUserId: award.userId, data: { team: award.team, source: 'sealed_bid' }, isVisibleToPublic: false, isVisibleToCommissioner: true } })
+      written++
+    }
+    return written
   })
 }
