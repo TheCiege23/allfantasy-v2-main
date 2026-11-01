@@ -47,6 +47,7 @@ import {
   REDRAFT_MOVES_LOCKED_MESSAGE,
   isRedraftLeagueMovesLocked,
 } from '@/lib/redraft/tradeMoveLock'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 
 export type RedraftProposalValidationSource = 'nfl_runtime' | 'league_runtime' | 'ownership_fallback' | 'league_lock'
 
@@ -69,6 +70,26 @@ type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' |
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
+): Promise<RedraftProposalValidation> {
+  const base = await validateRedraftTradeProposalCore(input, db)
+  if (!base.ok) return base
+  // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).
+  // One league read and out for every other league: lib/survivor/survivorTradeRuleHook.ts.
+  const survivor = await checkSurvivorTradeRules({
+    leagueId: input.leagueId,
+    rosterIds: [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])],
+    rosterIdSpace: 'redraft',
+    players: input.assets
+      .filter((a) => a.assetType === 'player' && a.playerId)
+      .map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
+  })
+  if (!survivor.ok) return { ok: false, code: survivor.code, message: survivor.message, source: base.source }
+  return base
+}
+
+async function validateRedraftTradeProposalCore(
+  input: RedraftProposalValidationInput,
+  db: ValidationDb,
 ): Promise<RedraftProposalValidation> {
   const runtime = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (runtime.ok) {
