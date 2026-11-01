@@ -72,6 +72,13 @@ export async function PATCH(req: Request) {
     }
   }
 
+  if (String(z.sport ?? '').toUpperCase() === 'NFL' && (
+    (body.serumReviveCount !== undefined && body.serumReviveCount !== 2) || body.autoSerumRevive === false ||
+    body.serumAwardHighScore === false || body.serumAwardOnBashMaul === false ||
+    body.serumUseBeforeLastStarter === false || body.weaponTopTwoActive === false || body.bombOneTimeOverride === false ||
+    body.weaponScoreThresholds !== undefined
+  )) return NextResponse.json({ error: 'The 2025 NFL rules require automatic two-serum revival, last-starter timing and fixed weapon bonuses.' }, { status: 400 })
+
   if (body.zombieTradeBlocked === false) {
     return NextResponse.json({ error: 'The 2025 Zombie rules prohibit Zombie trades.' }, { status: 400 })
   }
@@ -103,7 +110,7 @@ export async function PATCH(req: Request) {
   const whispererCountPatch = num('whispererCount')
   if (whispererCountPatch !== undefined &&
       (whispererCountPatch !== 1 && whispererCountPatch !== 2 ||
-       whispererCountPatch === 2 && (!['NBA', 'NHL', 'MLB'].includes(z.sport.toUpperCase()) || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
+       whispererCountPatch === 2 && (!['NBA', 'NHL', 'MLB'].includes(String(z.sport ?? '').toUpperCase()) || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
     return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
   }
   if (experienceModePatch === 'simple' && z.whispererCount === 2 && whispererCountPatch !== 1) {

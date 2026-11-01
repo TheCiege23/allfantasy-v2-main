@@ -26,14 +26,14 @@ export function useZombieDmCommand(leagueId: string) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ leagueId, message }),
+          body: JSON.stringify({ leagueId, message, commandId: crypto.randomUUID() }),
         })
 
         const payload = (await res.json().catch(() => ({}))) as ChimmyDmResponse
         if (!res.ok || !payload.ok) {
           setFeedback({
             kind: 'error',
-            text: payload.error || payload.privateMessage || 'Command failed. Try again.',
+            text: payload.privateMessage || payload.error || 'Command failed. Try again.',
           })
           return false
         }
@@ -42,6 +42,7 @@ export function useZombieDmCommand(leagueId: string) {
           kind: 'success',
           text: payload.privateMessage || 'Command sent to @Chimmy in DM.',
         })
+        window.dispatchEvent(new CustomEvent('zombie-items-updated', { detail: { leagueId } }))
         return true
       } catch {
         setFeedback({ kind: 'error', text: 'Network error while sending command.' })

@@ -32,9 +32,13 @@ export async function validatePreScoringWindow(
   if (!season) return { valid: false, reason: 'Native season is unavailable.' }
   const matchups = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week, awayRosterId: { not: null } },
-    select: { status: true, homeScore: true, awayScore: true },
+    select: { status: true, homeScore: true, awayScore: true, lineupSnapshots: true },
   })
-  if (!matchups.length || matchups.some((m) => m.status !== 'scheduled' || m.homeScore !== 0 || m.awayScore !== 0)) {
+  if (!matchups.length || matchups.some((m) => {
+    const receipt = (m.lineupSnapshots as { zombieItems?: { policy?: string; homeBaseScore?: number; awayBaseScore?: number } } | null)?.zombieItems
+    const onlyItemBonuses = receipt?.policy === 'beta_2025' && receipt.homeBaseScore === 0 && receipt.awayBaseScore === 0
+    return !['scheduled', ...(onlyItemBonuses ? ['active'] : [])].includes(m.status) || (!onlyItemBonuses && (m.homeScore !== 0 || m.awayScore !== 0))
+  })) {
     return { valid: false, reason: 'Week scoring has started or the schedule is not ready.' }
   }
   const firstLock = await trustedZombieWeekStart(z.sport, seasonYear, week)

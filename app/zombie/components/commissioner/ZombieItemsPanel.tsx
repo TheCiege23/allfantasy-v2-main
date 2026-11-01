@@ -6,12 +6,14 @@ import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tab
 type Payload = {
   league?: {
     status?: string
+    sport?: string
     config?: { serumReviveCount?: number; autoSerumRevive?: boolean } | null
   }
   viewerIsCommissioner?: boolean
 }
 
 export function ZombieItemsPanel({ leagueId, canEdit }: { leagueId: string; canEdit: boolean }) {
+  const [beta, setBeta] = useState(false)
   const [cost, setCost] = useState(2)
   const [automatic, setAutomatic] = useState(false)
   const [commissioner, setCommissioner] = useState(false)
@@ -19,7 +21,7 @@ export function ZombieItemsPanel({ leagueId, canEdit }: { leagueId: string; canE
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
-  const editable = canEdit && commissioner && !locked && !loading && !saving
+  const editable = canEdit && commissioner && !locked && !loading && !saving && !beta
 
   useEffect(() => {
     let active = true
@@ -33,8 +35,10 @@ export function ZombieItemsPanel({ leagueId, canEdit }: { leagueId: string; canE
       .then((data) => {
         if (!active) return
         setLocked(!['setup', 'registering'].includes(data.league?.status ?? ''))
-        setCost(data.league?.config?.serumReviveCount ?? 2)
-        setAutomatic(data.league?.config?.autoSerumRevive ?? false)
+        const isBeta = data.league?.sport?.toUpperCase() === 'NFL'
+        setBeta(isBeta)
+        setCost(isBeta ? 2 : data.league?.config?.serumReviveCount ?? 2)
+        setAutomatic(isBeta || (data.league?.config?.autoSerumRevive ?? false))
         setCommissioner(Boolean(data.viewerIsCommissioner))
       })
       .catch((error: unknown) => { if (active) setMessage(error instanceof Error ? error.message : 'Could not load settings.') })
@@ -65,6 +69,7 @@ export function ZombieItemsPanel({ leagueId, canEdit }: { leagueId: string; canE
 
   return (
     <div className="space-y-5 px-4 py-5 text-[13px] text-white/85 sm:px-6">
+      {beta && <p className="rounded-xl border border-teal-400/25 bg-teal-950/20 p-4 text-teal-100">2025 NFL rules: automatic revival requires two serums and cannot occur in the week of infection. Serums add +10 against Zombies; weapons equip automatically. These rules are fixed.</p>}
       <SettingsSection id="zm-serum" title="Serums">
         <SettingsRow
           label="Serums to revive"

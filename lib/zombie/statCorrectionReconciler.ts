@@ -85,6 +85,8 @@ export async function reconcileScoreOnlyCorrection(input: {
   ])
   if (newer || !weekResults || weekResults.length !== matchups.length || weekResults.some(row => !row.final)) return null
   const sealed = parseZombieSettlementSnapshot(previous.settlementSnapshot)
+  // Item loot and award bands need a complete replay, not a winnings-only patch.
+  if (sealed?.itemsPolicy === 'beta_2025') return null
   const context = beta2025ContextFromSnapshot(previous.settlementSnapshot)
   const rules = sealed ? { ...currentRules, ...sealed.rules } : currentRules
   const source = context ? BETA_2025_WINNINGS_SOURCE : 'weekly_settlement'

@@ -138,7 +138,7 @@ describe('commissioner Zombie rule persistence contract', () => {
     const { PATCH } = await import('@/app/api/zombie/settings/route')
     const response = await PATCH(patch({
       whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: 5,
-      ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+      ambushCountPerWeek: 2, serumReviveCount: sport === 'NFL' ? 2 : 3, autoSerumRevive: true,
     }))
     expect(response.status).toBe(200)
     expect(h.zombieLeagueUpdate).toHaveBeenCalledWith({
@@ -147,8 +147,8 @@ describe('commissioner Zombie rule persistence contract', () => {
     })
     expect(h.zombieLeagueConfigUpsert).toHaveBeenCalledWith({
       where: { leagueId: 'league-1' },
-      create: { leagueId: 'league-1', ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
-      update: { ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
+      create: { leagueId: 'league-1', ambushCountPerWeek: 2, serumReviveCount: sport === 'NFL' ? 2 : 3, autoSerumRevive: true },
+      update: { ambushCountPerWeek: 2, serumReviveCount: sport === 'NFL' ? 2 : 3, autoSerumRevive: true },
     })
     expect(h.generateRulesDocument).toHaveBeenCalledWith('zombie-1')
   })
@@ -177,4 +177,12 @@ it('rejects attempts to re-enable Zombie trading under the 2025 rules', async ()
   const response = await PATCH(patch({ zombieTradeBlocked: false }))
   expect(response.status).toBe(400)
   expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+})
+
+describe('fixed 2025 NFL item rules', () => {
+  it.each([{ serumReviveCount: 3 }, { autoSerumRevive: false }, { weaponTopTwoActive: false }, { bombOneTimeOverride: false }, { serumUseBeforeLastStarter: false }])('rejects incompatible rules without writes: %j', async change => {
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    expect((await PATCH(patch(change))).status).toBe(400)
+    expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+  })
 })

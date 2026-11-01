@@ -84,7 +84,8 @@ beforeEach(() => {
 })
 
 describe('Zombie weekly actions', () => {
-  it('revives with exactly the configured number of native serums', async () => {
+  it('historical non-NFL revival spends the configured number of native serums', async () => {
+    h.zombieLeagueFindUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NBA', season: 2026 })
     const findMany = vi.fn().mockResolvedValue([{ id: 's1' }, { id: 's2' }])
     const spend = vi.fn().mockResolvedValue({ count: 2 })
     const revive = vi.fn().mockResolvedValue({ count: 1 })

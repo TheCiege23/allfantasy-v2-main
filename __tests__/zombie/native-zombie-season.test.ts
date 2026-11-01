@@ -44,6 +44,15 @@ vi.mock('@/lib/zombie/ZombieOwnerStatusService', async (orig) => ({
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: m.getZombieLeagueConfig }))
 
 // Weekly resolution's collaborators — this suite pins only where the week pointer lands.
+vi.mock('@/lib/zombie/beta2025ItemService', () => ({ usesBeta2025Items: () => false, refreshItemScores: vi.fn() }))
+vi.mock('@/lib/zombie/weeklySettlementSnapshot', async orig => {
+  const actual = await orig<typeof import('@/lib/zombie/weeklySettlementSnapshot')>()
+  return { ...actual, captureZombieSettlementSnapshot: vi.fn(async (leagueId: string, id: string, _sport: string, week: number, season: number) => {
+    // This suite pins winnings and progression for pre-item-policy snapshots.
+    const snapshot = await actual.captureZombieSettlementSnapshot(leagueId, id, 'NBA', week, season)
+    return { ...snapshot, rules: { ...snapshot.rules, bashingThreshold: 60, maulingThreshold: 60 } }
+  }) }
+})
 vi.mock('@/lib/zombie/infectionEngine', () => ({ resolveWeeklyInfections: vi.fn(async () => ({ infectionsCreated: 0 })) }))
 vi.mock('@/lib/zombie/serumEngine', () => ({
   finalizePendingSerumsForWeek: vi.fn(async () => undefined),

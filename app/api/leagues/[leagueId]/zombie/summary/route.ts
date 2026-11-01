@@ -163,9 +163,9 @@ export async function GET(
      */
     const unused = myTeam?.items ?? []
     const weapons =
-      weaponRows.reduce((sum, row) => sum + row.balance, 0) + unused.filter((i) => i.itemType.startsWith('weapon')).length
+      (sport === 'NFL' && weekResults !== null ? 0 : weaponRows.reduce((sum, row) => sum + row.balance, 0)) + unused.filter((i) => i.itemType.startsWith('weapon')).length
     myResources = {
-      serums: serums + unused.filter((i) => i.itemType.includes('serum')).length,
+      serums: (sport === 'NFL' && weekResults !== null ? 0 : serums) + unused.filter((i) => i.itemType.includes('serum')).length,
       weapons,
       ambush: Math.max(ambush, myTeam?.ambushesRemaining ?? 0),
     }

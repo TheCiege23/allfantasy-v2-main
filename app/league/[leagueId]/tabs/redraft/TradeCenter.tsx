@@ -28,6 +28,7 @@ function rosterName(row: RedraftRosterRow | undefined, fallbackId: string): stri
 }
 
 function formatProposalAsset(asset: RedraftTradeProposal['assets'][number]): string {
+  if (asset.assetType === 'zombie_item') return asset.playerName ?? 'Zombie item'
   if (asset.assetType === 'player') return asset.playerName ?? 'Player'
   if (asset.assetType === 'draft_pick') {
     const season = asset.pickSeason ? `${asset.pickSeason} ` : ''

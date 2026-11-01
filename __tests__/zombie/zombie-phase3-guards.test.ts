@@ -28,6 +28,7 @@ vi.mock('@/lib/zombie/ZombieHordeSitOutEngine', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    zombieLeague: { findUnique: vi.fn(async () => ({ sport: 'NBA' })) },
     zombieTeamItem: { update: h.itemUpdate, findFirst: h.itemFindFirst },
     zombieChimmyAction: { create: vi.fn(async () => ({ id: 'x' })) },
     roster: { findFirst: vi.fn(async () => ({ id: 'R1' })) },

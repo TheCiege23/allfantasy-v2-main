@@ -143,7 +143,9 @@ export async function GET(req: NextRequest) {
       const assets = Array.isArray(p.assets) ? p.assets : []
       const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
       const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
-      const grade = assets.length === 0
+      const grade = assets.some(a => a.assetType === 'zombie_item')
+        ? { graded: false as const, reason: 'Zombie items require a rules-based review; player-only grades do not price them.', basis: null }
+        : assets.length === 0
         ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
         : await Promise.resolve()
             .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
@@ -259,7 +261,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'At least one valid asset is required' }, { status: 400 })
   }
 
-  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration'])
+  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration', 'zombie_item'])
   for (const asset of assets) {
     if (!allowedAssetTypes.has(asset.assetType!)) {
       return NextResponse.json({ error: `Invalid assetType: ${asset.assetType}` }, { status: 400 })
@@ -349,7 +351,7 @@ export async function POST(req: NextRequest) {
 
   // T2: capture the immutable deterministic value snapshot at proposal time. Best-effort — a
   // valuation issue must never block trade creation, but it is expected to succeed.
-  if (created?.id) {
+  if (created?.id && !assets.some(a => a.assetType === 'zombie_item')) {
     try {
       await captureRedraftTradeValueSnapshot({
         proposalId: created.id,

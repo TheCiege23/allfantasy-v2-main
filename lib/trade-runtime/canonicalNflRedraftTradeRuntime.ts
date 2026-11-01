@@ -756,6 +756,7 @@ export function executeNflRedraftTrade(input: {
   const now = input.now ?? new Date()
   const nowIso = now.toISOString()
   const proposal = input.state.proposals.find((row) => row.proposalId === input.proposalId)
+  if (proposal?.assets.some(a => a.metadata?.zombieItemId || (a.assetType as string) === 'zombie_item')) return { ok: false, validation: validationFailure('INVALID_ASSET', 'Zombie item trades execute through the native Trade center review workflow.'), events: [] }
   if (!proposal || proposal.status !== 'pending') {
     return {
       ok: false,

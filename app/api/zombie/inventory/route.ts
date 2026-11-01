@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     getZombieRulesForSport(z.sport),
     getZombieLeagueConfig(leagueId),
   ])
-  const rules = { ...resolvedRules, reviveThreshold: leagueConfig?.serumReviveCount ?? resolvedRules.reviveThreshold }
+  const rules = { ...resolvedRules, reviveThreshold: z.sport.toUpperCase() === 'NFL' ? 2 : leagueConfig?.serumReviveCount ?? resolvedRules.reviveThreshold }
 
   let targetUserId = session.user.id
   if (userIdParam && userIdParam !== session.user.id) {
@@ -142,8 +142,20 @@ export async function GET(req: Request) {
     }
   }
 
+  let appliedItemBonus: unknown = null
+  if (z.sport === 'NFL') {
+    const season = await prisma.redraftSeason.findFirst({ where: { leagueId, season: z.season }, select: { id: true } })
+    const nativeRoster = season && await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: targetUserId }, select: { id: true } })
+    const matchup = nativeRoster && await prisma.redraftMatchup.findFirst({ where: { seasonId: season!.id, week, OR: [{ homeRosterId: nativeRoster.id }, { awayRosterId: nativeRoster.id }] }, select: { homeRosterId: true, lineupSnapshots: true } })
+    const receipt = (matchup?.lineupSnapshots as { zombieItems?: { policy?: string; home?: unknown; away?: unknown } } | null)?.zombieItems
+    if (receipt?.policy === 'beta_2025') appliedItemBonus = matchup?.homeRosterId === nativeRoster?.id ? receipt.home : receipt.away
+  }
+
   return NextResponse.json({
     items: team?.items ?? [],
+    appliedItemBonus,
+    weekBecameZombie: team?.weekBecameZombie ?? null,
+    itemPolicy: z.sport.toUpperCase() === 'NFL' ? 'beta_2025' : 'legacy',
     teamStatus: team?.status ?? 'Survivor',
     rules,
     history,

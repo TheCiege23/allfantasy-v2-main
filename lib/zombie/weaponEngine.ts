@@ -1,3 +1,4 @@
+import { processBetaItemUse, usesBeta2025Items } from './beta2025ItemService'
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
@@ -104,6 +105,7 @@ export async function processWeaponAction(
 ): Promise<ZombieChimmyAction> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (usesBeta2025Items(z)) return prisma.zombieChimmyAction.create({ data: { leagueId, userId, week, rawMessage, actionType: 'weapon_use', isValid: true, privateResponse: 'Your strongest two ordinary weapons equip automatically. Use @Chimmy use bomb for a one-time +35 instead.' } })
   if (z.experienceMode === 'simple') throw new Error('Weapons are available in Enhanced Zombie only')
   const timing = await validatePreScoringWindow(leagueId, week, z.season)
   const lower = rawMessage.toLowerCase()
@@ -238,9 +240,11 @@ export async function processBombAction(
   userId: string,
   rawMessage: string,
   week: number,
+  requestId?: string,
 ): Promise<{ id: string }> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (usesBeta2025Items(z)) return processBetaItemUse(leagueId, userId, rawMessage, week, 'bomb', requestId)
 
   const log = await prisma.zombieChimmyAction.create({
     data: {

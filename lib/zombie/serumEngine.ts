@@ -1,9 +1,11 @@
+import { processBetaItemUse, usesBeta2025Items } from './beta2025ItemService'
+import { autoReviveBetaZombies, reviveBetaZombie } from './beta2025ItemSettlement'
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 import { loadNativeWeekResults } from '@/lib/zombie/ZombieInfectionEngine'
-import { getSerumBalance, useSerumToRevive } from '@/lib/zombie/ZombieSerumEngine'
+import { getSerumBalance, useSerumToRevive as spendSerumsToRevive } from '@/lib/zombie/ZombieSerumEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
 import { setRevived } from '@/lib/zombie/ZombieOwnerStatusService'
@@ -43,9 +45,11 @@ export async function processSerumAction(
   userId: string,
   rawMessage: string,
   week: number,
+  requestId?: string,
 ): Promise<ZombieChimmyAction> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (usesBeta2025Items(z)) return processBetaItemUse(leagueId, userId, rawMessage, week, 'serum', requestId)
 
   const timing = await validatePreScoringWindow(leagueId, week, z.season)
   const log = await prisma.zombieChimmyAction.create({
@@ -130,6 +134,10 @@ export async function processSerumAction(
 export async function processRevive(leagueId: string, userId: string, week: number): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (usesBeta2025Items(z)) {
+    if (!(await reviveBetaZombie(leagueId, userId, week))) throw new Error('Revival requires two serums and cannot occur in the week of infection.')
+    return
+  }
   const config = await getZombieLeagueConfig(leagueId)
   const cost = config?.serumReviveCount ?? 2
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
@@ -168,7 +176,7 @@ export async function processRevive(leagueId: string, userId: string, week: numb
   } else {
     const ledgerBalance = await getSerumBalance(leagueId, roster.id)
     if (ledgerBalance < cost) throw new Error(`You need ${cost} serums to revive. You have ${Math.max(available, ledgerBalance)}.`)
-    if (!(await useSerumToRevive(leagueId, roster.id, z.id))) throw new Error('Serum balance changed during revival')
+    if (!(await spendSerumsToRevive(leagueId, roster.id, z.id))) throw new Error('Serum balance changed during revival')
   }
 
   await queueAnimation(leagueId, week, 'player_revived', userId, { revive: true }).catch(() => {})
@@ -182,6 +190,8 @@ export async function processRevive(leagueId: string, userId: string, week: numb
 }
 
 export async function autoReviveEligibleZombies(leagueId: string, week: number): Promise<number> {
+  const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+  if (z && usesBeta2025Items(z)) return autoReviveBetaZombies(leagueId, week)
   const config = await getZombieLeagueConfig(leagueId)
   if (!config?.autoSerumRevive) return 0
   const teams = await prisma.zombieLeagueTeam.findMany({

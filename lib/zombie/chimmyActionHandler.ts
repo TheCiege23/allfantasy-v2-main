@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { processSerumAction, processRevive } from '@/lib/zombie/serumEngine'
 import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
-import { processWeaponAction } from '@/lib/zombie/weaponEngine'
+import { processBombAction, processWeaponAction } from '@/lib/zombie/weaponEngine'
 import { processAmbushFromChimmy } from '@/lib/zombie/ambushEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import {
@@ -121,7 +121,8 @@ async function handleQueryRules(leagueId: string): Promise<string> {
     if (!config)
       return '⚠️ Unable to load league rules. Contact your commissioner.'
 
-    const league = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true } })
+    const league = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { experienceMode: true, sport: true } })
+    if (league?.sport === 'NFL') return `2025 NFL: serums give +10 against Zombies before your last starter begins; multiple uses are allowed. Zombies automatically spend two serums to revive, never during their infection week. ${league.experienceMode === 'simple' ? 'Weapons are off.' : 'Your strongest two ordinary weapons equip automatically; a bomb gives +35 once instead.'}`
     return league?.experienceMode === 'simple'
       ? `📋 **Simple Zombie**: infection on eligible loss, automatic revival at ${config.serumReviveCount} serum(s). Weapons and ambushes are off.`
       : `📋 **Enhanced Zombie**: infection on eligible loss, revival at ${config.serumReviveCount} serum(s), and defensive weapons and ambushes before lock.`
@@ -156,6 +157,7 @@ export async function handleZombieChimmyAction(
   userId: string,
   rawMessage: string,
   week: number,
+  requestId?: string,
 ): Promise<ChimmyActionResult> {
   const intent = detectZombieChimmyIntent(rawMessage)
   const lower = rawMessage.toLowerCase()
@@ -233,6 +235,13 @@ export async function handleZombieChimmyAction(
         error: row.validationError ?? undefined,
       }
     }
+    if (intent === 'declare_bomb') {
+      const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+      if (z?.sport.toUpperCase() === 'NFL') {
+        const row = await processBombAction(leagueId, userId, rawMessage, week, requestId) as ZombieChimmyAction
+        return { ok: row.isValid, chimmyActionId: row.id, privateMessage: row.privateResponse, error: row.validationError ?? undefined }
+      }
+    }
     if (intent === 'declare_bomb' || intent === 'activate_power') {
       return {
         ok: false,
@@ -262,7 +271,7 @@ export async function handleZombieChimmyAction(
           return { ok: false, chimmyActionId: row.id, privateMessage: msg }
         }
       } else {
-        const row = (await processSerumAction(leagueId, userId, rawMessage, week)) as ZombieChimmyAction
+        const row = (await processSerumAction(leagueId, userId, rawMessage, week, requestId)) as ZombieChimmyAction
         return {
           ok: row.isValid,
           chimmyActionId: row.id,

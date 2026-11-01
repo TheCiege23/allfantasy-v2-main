@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { BetaItemControls } from '@/app/zombie/components/chimmy/BetaItemControls'
+import type { BetaItem } from '@/lib/zombie/beta2025Items'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { SerumUseCard } from '@/app/zombie/components/chimmy/SerumUseCard'
@@ -18,10 +20,21 @@ type LeagueTeam = {
 
 export default function ZombieChatHubPage() {
   const { leagueId  } = useParams<{ leagueId: string }>() ?? ({} as { leagueId: string })
+  const [refresh, setRefresh] = useState(0)
+  useEffect(() => {
+    const changed = () => setRefresh(n => n + 1)
+    window.addEventListener('zombie-items-updated', changed)
+    return () => window.removeEventListener('zombie-items-updated', changed)
+  }, [])
   const [teams, setTeams] = useState<LeagueTeam[]>([])
   const [resolution, setResolution] = useState<{ status: string } | null>(null)
   const [inv, setInv] = useState<{
-    items: { itemType: string; isUsed: boolean }[]
+    items: Array<BetaItem & { itemLabel: string }>
+    appliedItemBonus?: import('@/lib/zombie/beta2025Items').ItemBonus | null
+    itemPolicy?: string
+    week: number
+    experienceMode: string | null
+    weekBecameZombie?: number | null
     teamStatus: string
     rules: { reviveThreshold: number }
     isWhisperer: boolean
@@ -40,7 +53,7 @@ export default function ZombieChatHubPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { league?: { teams: LeagueTeam[] } } | null) => setTeams(d?.league?.teams ?? []))
       .catch(() => setTeams([]))
-  }, [leagueId])
+  }, [leagueId, refresh])
 
   useEffect(() => {
     if (!leagueId) return
@@ -48,7 +61,12 @@ export default function ZombieChatHubPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then(
         (d: {
-          items: { itemType: string; isUsed: boolean }[]
+          items: Array<BetaItem & { itemLabel: string }>
+    appliedItemBonus?: import('@/lib/zombie/beta2025Items').ItemBonus | null
+    itemPolicy?: string
+    week: number
+    experienceMode: string | null
+    weekBecameZombie?: number | null
           teamStatus: string
           rules: { reviveThreshold: number }
           resolution: { status: string } | null
@@ -65,6 +83,7 @@ export default function ZombieChatHubPage() {
           if (!d) return
           setInv({
             items: d.items,
+            appliedItemBonus: d.appliedItemBonus, itemPolicy: d.itemPolicy, week: d.week, experienceMode: d.experienceMode, weekBecameZombie: d.weekBecameZombie,
             teamStatus: d.teamStatus,
             rules: d.rules,
             isWhisperer: d.isWhisperer,
@@ -75,7 +94,7 @@ export default function ZombieChatHubPage() {
         },
       )
       .catch(() => null)
-  }, [leagueId])
+  }, [leagueId, refresh])
 
   if (!leagueId) return null
 
@@ -118,18 +137,20 @@ export default function ZombieChatHubPage() {
 
       <div className="space-y-3 rounded-xl border border-white/[0.06] bg-black/20 p-3">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--zombie-text-dim)]">Action cards</p>
+        {inv?.itemPolicy === 'beta_2025' ? <BetaItemControls leagueId={leagueId} data={inv} /> : <>
         <SerumUseCard leagueId={leagueId} serumCount={serumCount} allies={allies} />
         <BombUseCard leagueId={leagueId} hasBomb={hasBomb} isSurvivor={isSurvivor} />
+        </>}
         <AmbushConfirmationCard
           leagueId={leagueId}
           isWhisperer={inv?.isWhisperer ?? false}
           ambushesLeft={inv?.ambushesRemaining ?? 0}
         />
-        <RevivalCard
+        {isZombie && inv?.itemPolicy !== 'beta_2025' && <RevivalCard
           leagueId={leagueId}
           serumCount={serumCount}
           reviveThreshold={inv?.rules.reviveThreshold ?? 3}
-        />
+        />}
         {inv?.pendingBashingDecision ? (
           <BashingDecisionCard
             leagueId={leagueId}

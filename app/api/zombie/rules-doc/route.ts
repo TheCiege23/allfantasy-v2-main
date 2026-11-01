@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
   })
-  const doc = latest && latest.sectionSerums.includes('Serums to revive:')
+  const doc = latest && (z.sport.toUpperCase() === 'NFL' ? latest.sectionSerums.includes('2025 NFL:') : latest.sectionSerums.includes('Serums to revive:'))
     ? latest : await generateRulesDocument(z.id)
 
   if (format === 'text') {

@@ -1,3 +1,5 @@
+import { settleBetaItems } from './beta2025ItemSettlement'
+import { refreshItemScores, usesBeta2025Items, itemTransaction, lockItemLeague } from './beta2025ItemService'
 import type { ZombieWeeklyResolution } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
@@ -129,11 +131,27 @@ export async function runWeeklyResolution(
   // Capture once. A retry of an already-resolving week must never replace the original snapshot.
   let settlementSnapshot: Awaited<ReturnType<typeof captureZombieSettlementSnapshot>> | null = null
   try {
-    settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
+    if (usesBeta2025Items(z) && z.currentWeek === week && !existing?.settlementSnapshot) {
+      await refreshItemScores(z.leagueId, week)
+      if (!(await getZombieWeekReadiness(z.leagueId, week, z.season)).ready) return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
+    }
+    if (usesBeta2025Items(z) && (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))) {
+      settlementSnapshot = await itemTransaction(async tx => {
+        await lockItemLeague(tx, z.leagueId)
+        const live = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId, week } } })
+        if (live?.status === 'review_required') throw new Error('ZOMBIE_ITEMS_REVIEW_REQUIRED')
+        const snapshot = live?.settlementSnapshot as Awaited<ReturnType<typeof captureZombieSettlementSnapshot>> | null ??
+          await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport, week, z.season, tx)
+        await tx.zombieWeeklyResolution.upsert({ where: { zombieLeagueId_week: { zombieLeagueId, week } },
+          create: { zombieLeagueId, week, status: 'resolving', matchupResults: [], newZombies: [], settlementSnapshot: toPrismaJsonInput(snapshot) },
+          update: { status: 'resolving', settlementSnapshot: toPrismaJsonInput(snapshot) } })
+        return snapshot
+      })
+    } else settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
       ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport, week, z.season)
       : null
   } catch (error) {
-    if (!(error instanceof Error) || !error.message.startsWith('ZOMBIE_WINNINGS_')) throw error
+    if (!(error instanceof Error) || (!error.message.startsWith('ZOMBIE_WINNINGS_') && !error.message.startsWith('ZOMBIE_ITEMS_'))) throw error
     const held = await prisma.zombieWeeklyResolution.upsert({
       where: { zombieLeagueId_week: { zombieLeagueId, week } },
       create: { zombieLeagueId, week, status: 'review_required', matchupResults: [], newZombies: [] },
@@ -144,8 +162,8 @@ export async function runWeeklyResolution(
       data: { requiresStatCorrection: true },
     })
     if (marked.count) await notifyCommissioner(z.leagueId, 'commissioner_override_required',
-      `Week ${week} winnings policy needs review`,
-      'Winnings need review of the saved policy, roles, matchup or opening balances before the 2025 rules settle this week.',
+      `Week ${week} rules policy needs review`,
+      'Review the saved policy, roles, item score receipts and opening balances before the 2025 rules settle this week.',
       { urgency: 'critical', requiresAction: true, week }).catch(() => {})
     return { resolution: held, skipped: true, reason: 'winnings_policy_review_required' }
   }
@@ -194,13 +212,20 @@ export async function runWeeklyResolution(
 
   const infection = await resolveWeeklyInfections(zombieLeagueId, week)
 
-  await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
-  await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
+  const itemSnapshot = (settlementSnapshot ?? existing?.settlementSnapshot) as { itemsPolicy?: string } | null
+  const betaItems = itemSnapshot?.itemsPolicy === 'beta_2025'
+  if (!betaItems) {
+    await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
+    await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
+  }
   await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
   await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
-  await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
-  await awardNativeSerumsForWeek(z.leagueId, week, z.season)
-  await autoReviveEligibleZombies(z.leagueId, week)
+  if (betaItems) await settleBetaItems(zombieLeagueId, week)
+  else {
+    await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
+    await awardNativeSerumsForWeek(z.leagueId, week, z.season)
+    await autoReviveEligibleZombies(z.leagueId, week)
+  }
   // Bank the week and move what infections, maulings and bashings take. Before this existed nothing
   // wrote the winnings the sum below reads. See lib/zombie/weeklyWinningsEngine.ts.
   const winnings = await settleWeeklyWinnings({

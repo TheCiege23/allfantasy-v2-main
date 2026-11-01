@@ -69,7 +69,7 @@ function buildSections(
     infectionLossToZombie
       ? '- A Survivor who loses to a Zombie becomes a Zombie when the week settles.'
       : '- Losses to Zombies do not automatically infect under this league\'s settings.',
-    '- A Survivor who registers a serum before weekly scoring stays human if a Zombie or Whisperer beats them (the serum is spent only if it blocks infection).',
+    z.sport.toUpperCase() === 'NFL' ? '- Serums add points against Zombies; they do not block infection after a loss.' : '- A Survivor who registers a serum before weekly scoring stays human if a Zombie or Whisperer beats them (the serum is spent only if it blocks infection).',
     `- A Zombie who collects ${reviveSerums} serums can ${autoSerumRevive ? 'automatically return' : 'use @Chimmy revive to return'} as a Survivor.`,
     '- The week settles after final counted scores and the correction window.',
     '',
@@ -215,13 +215,13 @@ function buildSections(
     sectionAmbush,
     sectionBashing,
     sectionMauling,
-    sectionSerums: `Serums to revive: ${reviveSerums}. Automatic revival: ${autoSerumRevive ? 'on' : 'off'}. Weekly serum awards: ${[
+    sectionSerums: z.sport.toUpperCase() === 'NFL' ? '2025 NFL: each serum gives +10 against a Zombie only. Survivors and Whisperers may use multiple serums before their last starter begins. Every serum used is spent. Bonuses do not earn more items. Zombies automatically spend two serums to revive; revival cannot occur in the week of infection. Highest unboosted weekly score earns a serum, as does bashing a Zombie or mauling an opponent. Eligible trades may include serums.' : `Serums to revive: ${reviveSerums}. Automatic revival: ${autoSerumRevive ? 'on' : 'off'}. Weekly serum awards: ${[
       serumAwardHighScore ? 'highest score' : null,
       serumAwardOnBashMaul ? 'Bashing or Mauling winner' : null,
     ].filter(Boolean).join(', ') || 'disabled'}.`,
     sectionWeapons: z.experienceMode === 'simple'
       ? 'Weapons are off in Simple Zombie.'
-      : [
+      : z.sport.toUpperCase() === 'NFL' ? '2025 NFL unboosted score bands: 100–104.99 earns a Knife (+4); 105–109.99 an Axe (+6); 110–114.99 a Bow (+8); 115–119.99 a Gun (+10); 120+ a Bomb (+35 once). Survivors and Whisperers automatically wield their strongest two ordinary weapons against any opponent. A bomb replaces all other weapon bonuses that week and must be used before the last starter begins. Zombies may hold weapons but cannot wield them. Item bonuses do not count toward awards. An unassisted winner takes the highest eligible weapon; bashing and mauling take all held items. Eligible trades may include weapons.' : [
       `Weapons are earned automatically each week: a Knife for ${knifeScore}+ points, a Bow for ${bowScore}+,`,
       `an Axe for winning by ${weapons.axeWinMargin}+, a Gun after surviving 3 Zombie attacks, and a Bomb after 5 straight Survivor wins.`,
       'A Survivor can arm one held Knife, Bow, Axe, or Gun before weekly scoring. It blocks an eligible infection and is spent only when it does. Bomb effects remain inactive.',

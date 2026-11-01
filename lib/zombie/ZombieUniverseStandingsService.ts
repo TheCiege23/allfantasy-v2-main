@@ -18,7 +18,7 @@ export async function getUniverseStandings(universeId: string, season?: number, 
     const se = season ?? z.season
     const native = await db.redraftSeason.findUnique({ where: { leagueId_season: { leagueId: z.leagueId, season: se } } })
     const [teams, owners, results, money, resources] = await Promise.all([
-      db.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId } }),
+      db.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId }, include: { items: { where: { isUsed: false, isExpired: false }, select: { itemType: true } } } }),
       db.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } }),
       native ? db.redraftRoster.findMany({ where: { seasonId: native.id } }) : Promise.resolve([]),
       db.zombieWeeklyWinnings.findMany({ where: { leagueId: z.leagueId }, select: { rosterId: true, amount: true } }),
@@ -33,8 +33,8 @@ export async function getUniverseStandings(universeId: string, season?: number, 
         status: team.status, wins: result?.wins ?? 0, losses: result?.losses ?? 0, ties: result?.ties ?? 0,
         totalPoints: result?.pointsFor ?? 0, pointsPerWeek: [],
         winnings: money.filter(r => r.rosterId === team.rosterId).reduce((n, r) => n + r.amount, 0),
-        serums: resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'serum').reduce((n, r) => n + r.balance, 0),
-        weapons: resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'weapon').reduce((n, r) => n + r.balance, 0),
+        serums: native && z.sport === 'NFL' ? (team.items ?? []).filter(i => i.itemType.includes('serum')).length : resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'serum').reduce((n, r) => n + r.balance, 0),
+        weapons: native && z.sport === 'NFL' ? (team.items ?? []).filter(i => i.itemType.startsWith('weapon_')).length : resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'weapon').reduce((n, r) => n + r.balance, 0),
         weekKilled: team.weekBecameZombie, killedByRosterId: team.killedByRosterId,
       })
     }

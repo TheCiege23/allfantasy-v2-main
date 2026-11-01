@@ -37,3 +37,7 @@ The transaction rollback test uses a transaction double; it is not evidence of a
 6. Integrate with current main and verify the existing six branch migrations against the production schema before any full Zombie production release.
 
 This is the first rules implementation tranche. It does not certify 99% automation or a production release.
+
+## Item tranche follow-up
+
+The next serum/weapon implementation is documented in `ZOMBIE_2025_ITEMS_IMPLEMENTATION.md`. It adds native NFL item scoring, awards, loot, mandatory revival and real item trade assets. Its own verification and remaining correction/release limits apply.

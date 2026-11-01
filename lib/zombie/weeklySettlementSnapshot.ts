@@ -1,3 +1,6 @@
+import type { Prisma } from '@prisma/client'
+import { readBetaItemMatchup } from './beta2025ItemSettlement'
+import type { ItemWeekMatchup } from './beta2025Items'
 import { loadNativeWeekResults } from './ZombieInfectionEngine'
 import { beta2025ContextFromSnapshot, computeBeta2025Winnings } from './beta2025Winnings'
 import { prisma } from '@/lib/prisma'
@@ -5,6 +8,9 @@ import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 
 export type ZombieSettlementSnapshotV1 = {
   version: 1
+  itemsPolicy?: 'beta_2025'
+  itemMatchups?: ItemWeekMatchup[]
+  itemWeaponsEnabled?: boolean
   capturedAt: string
   winnings?: { policy: 'beta_2025'; openingByRoster: Record<string, number> }
   owners: Array<{ rosterId: string; userId: string | null }>
@@ -49,16 +55,17 @@ export async function captureZombieSettlementSnapshot(
   sport: string,
   week: number,
   season: number,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<ZombieSettlementSnapshotV1> {
-  const priorWinnings = await prisma.zombieWeeklyWinnings.findMany({
+  const priorWinnings = await db.zombieWeeklyWinnings.findMany({
     where: { leagueId, week: { lt: week } }, select: { rosterId: true, amount: true, source: true },
   })
   if (priorWinnings.some(row => row.source !== 'weekly_settlement_2025')) {
     throw new Error('ZOMBIE_WINNINGS_POLICY_REVIEW_REQUIRED')
   }
   const [owners, teams, items, whisperer, coWhisperers, config, rules] = await Promise.all([
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
-    prisma.zombieLeagueTeam.findMany({
+    db.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
+    db.zombieLeagueTeam.findMany({
       where: { leagueId },
       select: {
         id: true, rosterId: true, status: true, weekBecameZombie: true,
@@ -68,7 +75,7 @@ export async function captureZombieSettlementSnapshot(
         zombieAttacksSurvived: true,
       },
     }),
-    prisma.zombieTeamItem.findMany({
+    db.zombieTeamItem.findMany({
       where: { zombieLeagueId },
       select: {
         id: true, teamStatusId: true, userId: true, itemType: true, itemLabel: true,
@@ -77,7 +84,7 @@ export async function captureZombieSettlementSnapshot(
         awardKey: true,
       },
     }),
-    prisma.whispererRecord.findUnique({
+    db.whispererRecord.findUnique({
       where: { zombieLeagueId },
       select: {
         id: true, ambushesGranted: true, ambushesUsed: true, ambushesRemaining: true,
@@ -85,14 +92,14 @@ export async function captureZombieSettlementSnapshot(
         hordeSizeAtPeak: true, totalInfections: true, totalWinningsStolen: true,
       },
     }),
-    prisma.zombieCoWhisperer.findMany({
+    db.zombieCoWhisperer.findMany({
       where: { zombieLeagueId },
       select: {
         id: true, ambushesGranted: true, ambushesUsed: true, ambushesRemaining: true,
         wasDefeated: true, defeatedAtWeek: true,
       },
     }),
-    prisma.zombieLeagueConfig.findUnique({
+    db.zombieLeagueConfig.findUnique({
       where: { leagueId },
       select: {
         infectionLossToWhisperer: true, infectionLossToZombie: true,
@@ -114,7 +121,7 @@ export async function captureZombieSettlementSnapshot(
     items,
     whisperer,
     coWhisperers,
-    config,
+    config: config && sport.toUpperCase() === 'NFL' ? { ...config, serumAwardHighScore: true, serumAwardOnBashMaul: true, autoSerumRevive: true, serumReviveCount: 2 } : config,
     rules: {
       bashingThreshold: sport.toUpperCase() === 'NFL' ? 60 : rules.bashingThreshold,
       maulingThreshold: sport.toUpperCase() === 'NFL' ? 60 : rules.maulingThreshold,
@@ -123,9 +130,20 @@ export async function captureZombieSettlementSnapshot(
       weaponAmbushThreshold: rules.weaponAmbushThreshold,
     },
   }
-  const results = await loadNativeWeekResults(leagueId, week, season)
+  const results = await loadNativeWeekResults(leagueId, week, season, db)
   // Validate roles, balances, pairings and thresholds before any infection or item side effect.
   if (results) computeBeta2025Winnings(results, beta2025ContextFromSnapshot(snapshot)!, snapshot.rules)
+  if (sport.toUpperCase() === 'NFL') {
+    const z = await db.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
+    const raw = await db.redraftMatchup.findMany({ where: { leagueId, week }, select: { id: true, lineupSnapshots: true } })
+    snapshot.itemsPolicy = 'beta_2025'
+    snapshot.itemWeaponsEnabled = z?.experienceMode !== 'simple'
+    snapshot.itemMatchups = (results ?? []).flatMap(m => {
+      if (!m.final || !m.homeRosterId || !m.awayRosterId) return []
+      return [readBetaItemMatchup({ ...m, homeRosterId: m.homeRosterId, awayRosterId: m.awayRosterId, lineupSnapshots: raw.find(r => r.id === m.matchupId)?.lineupSnapshots })]
+    })
+    if (!snapshot.itemMatchups.length) throw new Error('ZOMBIE_ITEMS_MISSING_SCORE_RECEIPT')
+  }
   return snapshot
 }
 

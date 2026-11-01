@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
+import { BetaItemTradePanel } from '@/app/zombie/components/chimmy/BetaItemTradePanel'
+import { BetaItemControls } from '@/app/zombie/components/chimmy/BetaItemControls'
 import { useZombieDmCommand } from '@/app/zombie/components/chimmy/useZombieDmCommand'
 import { ZombieStatusChip, zombieChipStatus } from '@/components/zombie/ZombieStatusChip'
 
@@ -11,18 +13,24 @@ import { ZombieStatusChip, zombieChipStatus } from '@/components/zombie/ZombieSt
 
 type ItemRow = {
   id: string
+  teamStatusId: string
+  usedEffect?: string | null
   itemType: string
   itemLabel: string
   isUsed: boolean
   isExpired: boolean
   acquiredAt: string
   acquiredReason: string | null
-  activationState?: string | null
+  activationState?: string
   activatesAtWeek?: number | null
   usedAtWeek?: number | null
 }
 
 type InvPayload = {
+  appliedItemBonus?: import('@/lib/zombie/beta2025Items').ItemBonus | null
+  itemPolicy?: string
+  week: number
+  weekBecameZombie?: number | null
   items: ItemRow[]
   teamStatus: string
   rules: {
@@ -104,6 +112,11 @@ export default function ZombieArmoryPage() {
         <ZombieStatusChip status={chip} size="md" />
       </header>
 
+      {data.itemPolicy === 'beta_2025' && <>
+        <BetaItemControls leagueId={leagueId} data={data} onChange={load} />
+        {!data.isCommissionerView && <BetaItemTradePanel leagueId={leagueId} />}
+      </>}
+      {data.itemPolicy !== 'beta_2025' && <>
       {/* Serums — live */}
       <section className="rounded-2xl border border-teal-500/25 bg-teal-950/15 p-4 sm:p-5" data-testid="armory-serums">
         <div className="flex items-start gap-3">
@@ -225,6 +238,7 @@ export default function ZombieArmoryPage() {
       </section>
       )}
 
+      </>}
       {/* Ledger */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
         <h2 className="text-lg font-bold text-white">Ledger</h2>
