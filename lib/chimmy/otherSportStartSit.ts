@@ -14,12 +14,21 @@ import { checkStartedGames } from './actions/gameLocks'
 import { unavailableForLineup } from './lineupAvailability'
 import { ELIGIBILITY } from './lineupOptimizerOtherSports'
 import { weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
+import { computeCategoryValue } from '@/lib/category-scoring/CategoryMatchupResolver'
+import { loadOtherSportPeriodSchedule } from './otherSportPeriodSchedule'
+import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { aggregateNcaafWeek } from '@/lib/scoring-runtime/ncaafStatNormalization'
+import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 
 type Result = { ready: boolean; text: string }
 const missing = (text: string): Result => ({ ready: false, text })
 const MAX_GAMES = 5
 
-/** A past-game trend under this league's scoring. It is never labelled a future projection. */
+/** Current-period comparison from league-scored form and a verified game slate. */
 export async function buildOtherSportStartSit(args: {
   leagueId: string
   userId: string
@@ -29,7 +38,9 @@ export async function buildOtherSportStartSit(args: {
   const world = await resolveCanonicalWorld(args.leagueId)
   if (!world) return missing('The selected league could not be read, so no start/sit call was made.')
   const sport = String(world.league.sport).toUpperCase()
-  if (!canRunSeasonForSport(sport)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
+  // Soccer's full-season finalizer is gated, but a rostered league can still receive a
+  // bounded current-gameweek comparison when every identity, score and fixture verifies.
+  if (!canRunSeasonForSport(sport) && sport !== 'SOCCER') return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   if (sport === 'NFL') return missing('Use the NFL weekly projection engine for this comparison.')
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
@@ -54,33 +65,40 @@ export async function buildOtherSportStartSit(args: {
 
   const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
   if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
-  if (['categories', 'roto'].includes(weeklyFormat(league))) {
-    return missing('This league uses category or rotisserie scoring. A single fantasy-points average cannot rank its start/sit choices yet.')
+  const format = weeklyFormat(league)
+  const category = ['categories', 'roto'].includes(format) ? nativeCategoryScoringContext(league.settings, sport) : null
+  if (['categories', 'roto'].includes(format) && !category) {
+    return missing('The category list for this league is not verified. No fantasy-points ranking can replace its category rules.')
   }
-  const scorer = buildLeagueStatScorer(league)
-  if (!scorer) return missing(`The ${sport} scoring categories could not be resolved for this league.`)
+  const scorer = category ? null : buildLeagueStatScorer(league)
+  if (!category && !scorer) return missing(`The ${sport} scoring categories could not be resolved for this league.`)
   const now = new Date()
   const scheduleSports = sport === 'NCAAF' ? ['NCAAF', 'NCAAFB'] : sport === 'NCAAB' ? ['NCAAB', 'NCAABB'] : [sport]
-  const currentSeasonGame = await prisma.sportsGame.findFirst({
-    where: { sport: { in: scheduleSports }, season: league.season,
-      startTime: { gte: new Date(now.getTime() - 3 * 86_400_000), lte: new Date(now.getTime() + 8 * 86_400_000) } },
-    select: { id: true },
-  })
-  if (!currentSeasonGame) return missing('No current scoring-period games are verified for this league season, so an old season cannot be used for a start/sit call.')
+  const schedule = await loadOtherSportPeriodSchedule({ sport, season: league.season,
+    week: world.league.currentWeek ?? 1, teams: ids.map((id) => metadata.get(id)?.team ?? ''), now })
+  if (!schedule) return missing('No complete current scoring-period schedule is verified for this league season. An old season or partial slate cannot support a start/sit call.')
   const sportKeys = [...new Set(scheduleSports.flatMap((key) => [key, key.toLowerCase()]))]
-  const bridge = await bridgeRosterIdsToGameLogIds(prisma, sportKeys, [...ids],
-    new Map(ids.map((id) => [id, metadata.get(id)?.name ?? null])))
-  if (ids.some((id) => bridge.ambiguous.includes(id) || bridge.nameRefused.includes(id) || bridge.fantraxRefused.includes(id))) {
+  const bridge = sport === 'NCAAF'
+    ? await bridgeNcaafRosterIdsToCfbdIds(prisma as never, [...ids])
+    : await bridgeRosterIdsToGameLogIds(prisma, sportKeys, [...ids],
+      new Map(ids.map((id) => [id, metadata.get(id)?.name ?? null])))
+  if (ids.some((id) => bridge.ambiguous.includes(id) || ('nameRefused' in bridge && bridge.nameRefused.includes(id)) ||
+    ('fantraxRefused' in bridge && bridge.fantraxRefused.includes(id)) || ('unresolved' in bridge && bridge.unresolved.includes(id)))) {
     return missing('A roster player ID could not be matched uniquely to a game-log identity. No start/sit call was made.')
   }
+  const gameLogIds = 'cfbdIds' in bridge ? bridge.cfbdIds : bridge.gameLogIds
+  const daily = sport !== 'NCAAF'
+  const seasonStart = daily ? resolveDailySportSeasonStart(sport, league.season) : null
+  if (daily && !seasonStart) return missing('This sport has no verified regular-season opener, so recent game logs cannot be limited to this league season.')
   const logs = await prisma.playerGameStat.findMany({
-    where: { sportType: { in: sportKeys }, season: league.season, playerId: { in: bridge.gameLogIds } },
+    where: { sportType: { in: sportKeys }, playerId: { in: gameLogIds },
+      ...(daily ? { gameDate: { gte: new Date(seasonStart!), lte: now } } : { season: league.season }) },
     select: { playerId: true, gameId: true, providerGameId: true, normalizedStatMap: true, gameDate: true, weekOrRound: true, sportType: true, season: true },
-    orderBy: [{ weekOrRound: 'desc' }, { gameDate: 'desc' }],
-    take: 100,
+    orderBy: [{ gameDate: 'desc' }, { weekOrRound: 'desc' }],
+    take: 200,
   })
   const perPlayer = ids.map((id) => {
-    const games = new Map<string, Record<string, number>>()
+    const games = new Map<string, unknown[]>()
     const recent = logs.filter((r) => bridge.rosterIdFor(r.playerId) === id &&
       !['pre', 'post'].includes(resolveStoredSeasonType({ normalizedStatMap: r.normalizedStatMap,
         sport: r.sportType, season: r.season, gameDate: r.gameDate }) ?? '')).sort((a, b) =>
@@ -88,41 +106,75 @@ export async function buildOtherSportStartSit(args: {
     for (const row of recent) {
       const gameKey = row.providerGameId || String(row.gameId ?? '').split(':')[0]
       if (!gameKey || (!games.has(gameKey) && games.size >= MAX_GAMES)) continue
-      const stats = games.get(gameKey) ?? {}
-      const raw = row.normalizedStatMap
-      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-        for (const [key, value] of Object.entries(raw)) {
-          if (typeof value === 'number' && Number.isFinite(value)) stats[key] = (stats[key] ?? 0) + value
-        }
-      }
-      if (Object.keys(stats).length > 0) games.set(gameKey, stats)
+      games.set(gameKey, [...(games.get(gameKey) ?? []), row.normalizedStatMap])
     }
-    const totals = [...games.values()].map((stats) => scorer(stats, metadata.get(id)?.position ?? null))
+    const normalizer = daily ? getDailySportNormalizer(sport) : null
+    const canonical = [...games.values()].map((rows) => daily
+      ? normalizer ? aggregateWeeklyStats(rows, normalizer).stats : {}
+      : aggregateNcaafWeek(rows).stats).filter((stats) => Object.keys(stats).length > 0)
+    const totals = scorer ? canonical.map((stats) => scorer(stats, metadata.get(id)?.position ?? null)) : []
+    const averageStats: Record<string, number> = {}
+    for (const stats of canonical) for (const [key, value] of Object.entries(stats)) averageStats[key] = (averageStats[key] ?? 0) + value / canonical.length
     return { id, name: metadata.get(id)?.name ?? id, team: metadata.get(id)?.team ?? null,
-      injury: metadata.get(id)?.injury ?? null, games: totals.length,
+      injury: metadata.get(id)?.injury ?? null, games: canonical.length, averageStats,
       lastGame: recent.find((r) => r.gameDate)?.gameDate ?? null,
       average: totals.length ? totals.reduce((sum, n) => sum + n, 0) / totals.length : null }
   })
   const [a, b] = perPlayer
-  if (a!.average == null || b!.average == null || a!.games < 3 || b!.games < 3) {
+  if (a!.games < 3 || b!.games < 3 || (!category && (a!.average == null || b!.average == null))) {
     return missing(`Not enough current-season game logs to compare ${a!.name} and ${b!.name} under this league's scoring (need at least three games each).`)
   }
-  if (a!.average === 0 && b!.average === 0) {
+  if (!category && a!.average === 0 && b!.average === 0) {
     return missing('The stored game stats did not produce a scoring difference under this league’s rules. No start/sit edge was computed.')
   }
-  if (unavailableForLineup(a!.injury) || unavailableForLineup(b!.injury)) {
-    return missing(`${[a, b].filter((p) => unavailableForLineup(p!.injury)).map((p) => p!.name).join(' and ')} is reported unavailable; check a healthy eligible replacement.`)
+  const injuries = await resolveInjuryFacts({ sport, players: perPlayer.map((p) => ({
+    name: p!.name, position: metadata.get(p!.id)?.position ?? null, team: p!.team,
+  })) }).catch(() => null)
+  const injuryNotes: string[] = []
+  for (const p of perPlayer) {
+    const fact = injuries?.byPlayer.get(normalizeMatchName(p!.name))
+    if (fact && !fact.stale) {
+      if (unavailableForLineup(fact.status)) return missing(`${p!.name} has a current ${fact.status} injury designation (reported ${fact.reportedAt.toISOString()}); check an eligible replacement.`)
+      if (fact.status) injuryNotes.push(`${p!.name}: ${fact.status}, reported ${fact.reportedAt.toISOString()}`)
+    } else if (fact?.stale) injuryNotes.push(`${p!.name}: older injury report is stale and not used as a current designation`)
+    else if (unavailableForLineup(p!.injury)) return missing(`${p!.name} has an undated ${p!.injury} roster designation; verify it before starting them.`)
   }
+  if (!injuries) injuryNotes.push('injury store could not be read')
+  else if (!injuries.coverage.sourceAvailable) injuryNotes.push(injuries.coverage.reason ?? 'no current injury source for this sport')
+  else if (injuries.feedStale) injuryNotes.push('injury feed is stale')
+  if (injuries?.ambiguous.length) injuryNotes.push(`ambiguous injury identities: ${injuries.ambiguous.join(', ')}`)
+  const remaining = perPlayer.map((p) => schedule.byTeam.get(p!.team ?? '') ?? { count: 0, opponents: [], verified: false })
+  if (remaining.some((r) => !r.verified)) return missing('The current-period games could not be matched to both players’ teams. No schedule-adjusted start/sit call was made.')
   const locks = await checkStartedGames({ sport, season: league.season, week: world.league.currentWeek ?? 1,
     players: perPlayer.map((p) => ({ playerId: p!.id, name: p!.name, team: p!.team, gameTime: null })) })
   if (ids.some((id) => locks.started.has(id))) return missing('At least one player has already started a game in the current scoring window. Verify lineup locks before changing a starter.')
   if (ids.some((id) => locks.unverified.includes(id))) return missing('A current game could not be verified for both players, so no start/sit call was made. Check the league schedule and ask again.')
-  const diff = a!.average - b!.average
-  const lines = [`${sport} start/sit in this league, using current-season game logs scored with its own rules:`,
-    `${a!.name}: ${a!.average.toFixed(1)} fantasy points per game over ${a!.games} recent games${a!.lastGame ? ` (last recorded ${a!.lastGame.toISOString().slice(0, 10)})` : ''}.`,
-    `${b!.name}: ${b!.average.toFixed(1)} fantasy points per game over ${b!.games} recent games${b!.lastGame ? ` (last recorded ${b!.lastGame.toISOString().slice(0, 10)})` : ''}.`]
-  if (Math.abs(diff) < 1) lines.push('This is a close call on recent form; no clear start/sit edge.')
-  else lines.push(`Lean ${diff > 0 ? a!.name : b!.name} on recent league-scored form (${Math.abs(diff).toFixed(1)} points per game higher).`)
-  lines.push('This is a recent-game trend, not a projection. It does not account for how many games each player has left in this scoring period, future opponents, or a late injury. Check those before locking the lineup.')
+  const lines = [`${sport} start/sit in this league (${schedule.label}; ${schedule.source}):`]
+  lines.push(`Injury check: ${injuryNotes.length ? injuryNotes.join('; ') : 'no current designation on file for these players; that does not establish they are healthy'}.`)
+  for (const [i, p] of perPlayer.entries()) {
+    const r = remaining[i]!
+    lines.push(`${p!.name}: ${r.count} remaining verified game(s)${r.opponents.length ? ` versus ${r.opponents.join(', ')}` : ''}; ${p!.games} recent regular-season game logs, last recorded ${p!.lastGame?.toISOString().slice(0, 10) ?? 'unknown'}.`)
+  }
+  if (category) {
+    const values = category.categories.map((cat) => {
+      const scaled = perPlayer.map((p, i) => Object.fromEntries(Object.entries(p!.averageStats).map(([k, v]) => [k, v * remaining[i]!.count])))
+      const av = computeCategoryValue(scaled[0]!, cat)
+      const bv = computeCategoryValue(scaled[1]!, cat)
+      const who = av == null && bv == null ? 'unqualified' : av === bv ? 'even' :
+        av == null ? b!.name : bv == null ? a!.name : (cat.direction === 'higher' ? av > bv : av < bv) ? a!.name : b!.name
+      return `${cat.label}: ${who} (${av?.toFixed(2) ?? 'unqualified'} vs ${bv?.toFixed(2) ?? 'unqualified'})`
+    })
+    lines.push(`Estimated category contributions from recent per-game rates and remaining games: ${values.join('; ')}.`)
+    lines.push('No overall category winner is claimed: team totals, category needs, rate denominators and other players decide the matchup or rotisserie rank.')
+  } else {
+    const estimates = perPlayer.map((p, i) => p!.average! * remaining[i]!.count)
+    lines.push(`${a!.name}: ${a!.average!.toFixed(1)} league-scored points per recent game, ${estimates[0]!.toFixed(1)} schedule-adjusted baseline.`)
+    lines.push(`${b!.name}: ${b!.average!.toFixed(1)} league-scored points per recent game, ${estimates[1]!.toFixed(1)} schedule-adjusted baseline.`)
+    const diff = estimates[0]! - estimates[1]!
+    if (Math.abs(diff) < 1) lines.push('This is a close call on the current-period baseline; no clear start/sit edge.')
+    else lines.push(`Lean ${diff > 0 ? a!.name : b!.name} on the schedule-adjusted baseline (${Math.abs(diff).toFixed(1)} points higher).`)
+  }
+  lines.push('This baseline is an estimate from past games, not a certified projection. Opponents are listed but not strength-adjusted. Confirm late injuries and platform locks before changing a lineup.')
+  if (sport === 'SOCCER') lines.push('Soccer season finalization is not certified on AllFantasy; this is only a roster-and-fixture-verified gameweek comparison, not a claim that the league can complete a season.')
   return { ready: true, text: lines.join('\n') }
 }

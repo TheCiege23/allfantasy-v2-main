@@ -174,6 +174,8 @@ describe('tool specs', () => {
       'get_my_matchup',
       /* Current fantasy score in the session's selected league; read-only and membership scoped. */
       'get_live_fantasy_matchup',
+      /* Played fantasy results from the signed-in manager's claimed team across stored seasons. */
+      'get_fantasy_matchup_history',
       /*
        * League chat and the waiver wire (2026-09-25). Both SELECT-only and gated on the proven
        * league: the chat tool reads ONLY the public league channel of `LeagueChatMessage` (never a

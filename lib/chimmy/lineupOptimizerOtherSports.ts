@@ -47,6 +47,10 @@ export const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
     QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], DEF: ['DEF'], DST: ['DST', 'DEF'],
     FLEX: ['RB', 'WR', 'TE'], SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'], SUPERFLEX: ['QB', 'RB', 'WR', 'TE'],
   },
+  SOCCER: {
+    GK: ['GK', 'G'], DEF: ['DEF', 'D'], MID: ['MID', 'M'], FWD: ['FWD', 'F', 'ST'],
+    UTIL: ['DEF', 'D', 'MID', 'M', 'FWD', 'F', 'ST'], FLEX: ['DEF', 'D', 'MID', 'M', 'FWD', 'F', 'ST'],
+  },
 }
 ELIGIBILITY.NCAAB = ELIGIBILITY.NBA!
 

@@ -429,7 +429,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Soccer has per-match logs only, not verified full-season totals. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           season: { type: 'number', description: 'A year, only if the user named one (e.g. 2025). Omit for the current season.' },
         },
         required: ['player'],
@@ -446,7 +446,7 @@ export const CHIMMY_TOOL_SPECS = [
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL, NCAAB (college basketball), or SOCCER. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           week: { type: 'number', description: 'NFL / college only: a specific week, only if the user named one. Do not guess the current week. Ignored for MLB/NBA/NHL.' },
           last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
@@ -520,7 +520,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'compare_start_options',
       description:
-        "Start A or B? Compares two players on the user's roster in the selected league. NFL uses this week's league-scored projection and whole-lineup impact. NBA, NHL, MLB and college sports use recent current-season game logs rescored under this league's rules, with game-lock checks; those are past-game trends, not future projections or full-period totals. Soccer has no operational fantasy season and is refused. Use when they name two players. For a whole-lineup question use optimize_my_lineup.",
+        "Start A or B? Compares two players on the user's roster in the selected league. NFL uses this week's league-scored projection and whole-lineup impact. NBA, NHL, MLB and college sports combine current-season game logs with verified remaining games and opponents in the scoring period; points leagues receive a schedule-adjusted baseline, category and roto leagues receive category-by-category contributions without an invented overall winner. Soccer has no operational fantasy season and is refused. Use when they name two players. For a whole-lineup question use optimize_my_lineup.",
       parameters: {
         type: 'object',
         properties: {
@@ -631,6 +631,19 @@ export const CHIMMY_TOOL_SPECS = [
       description:
         "The selected league's current fantasy matchup scoreboard: your and your opponent's actual points under this league's scoring, the score refresh time, and reported starter contributions where names can be verified. Use for 'what is my score', 'am I winning right now', 'who is scoring for me', or 'live fantasy matchup'. Requires a selected league. These are actual points, not a forecast; never call missing scores zero or stale data real-time. For pregame matchup projections use get_my_matchup.",
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_fantasy_matchup_history',
+      description:
+        "Your played fantasy results in the selected league across stored seasons. Use for 'how did my team do in 2024', 'what was my fantasy score in week 8', or historical league W-L questions. Native category and roto leagues report finalized category snapshots when stored; roto rank is not inferred. Optional season, week and limit narrow the read. It does not infer unplayed 0–0 games or historical player rosters. For a real athlete's historical games use get_player_game_log instead.",
+      parameters: { type: 'object', properties: {
+        season: { type: 'integer', description: 'Optional fantasy season year.' },
+        week: { type: 'integer', description: 'Optional fantasy matchup week.' },
+        limit: { type: 'integer', description: 'Maximum results to show, 1–20. Defaults to 8.' },
+      }, required: [] },
     },
   },
 
@@ -1217,6 +1230,15 @@ export async function executeChimmyTool(
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { buildLiveFantasyMatchupContext } = await import('@/lib/chimmy/liveFantasyMatchupGrounding')
         return await buildLiveFantasyMatchupContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'get_fantasy_matchup_history': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLeagueFantasyHistoryContext } = await import('@/lib/chimmy/leagueFantasyHistoryGrounding')
+        return await buildLeagueFantasyHistoryContext({ leagueId: ctx.leagueId, userId: ctx.userId,
+          season: typeof args.season === 'number' ? args.season : null,
+          week: typeof args.week === 'number' ? args.week : null,
+          limit: typeof args.limit === 'number' ? args.limit : null })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */

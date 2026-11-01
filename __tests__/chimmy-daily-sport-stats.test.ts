@@ -182,6 +182,19 @@ function logDb(opts: { registry: unknown[]; rows: unknown[]; sportLatest?: Date;
 const OHTANI_REG = [{ id: 'pim-ohtani', canonicalName: 'Shohei Ohtani', position: 'TWP', currentTeam: 'LAD' }]
 
 describe('get_player_game_log — daily sports', () => {
+  it('SOCCER: reads stored match boxes without claiming full-season totals', async () => {
+    const { db } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: '20260922-ars-che:fielders', providerGameId: '20260922-ars-che',
+        opponent: 'Chelsea', map: { group: 'fielders', seasonType: 'regular', position: 'Forward',
+          stats: { goals: 2, assists: 1, shots_on_goal: 3, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'soccer' }, db)
+    expect(out).toContain('SOCCER per-game box-score lines')
+    expect(out).toContain('2 goals, 1 assists, 3 shots on target, 90 minutes')
+    expect(await buildPlayerSeasonStatsContext({ playerName: 'Alex Striker', sport: 'soccer' }, db))
+      .toContain('Verified soccer season totals are not stored')
+  })
   it('MLB: merges a two-way game into ONE line, pitching decision included', async () => {
     const { db } = logDb({
       registry: OHTANI_REG,

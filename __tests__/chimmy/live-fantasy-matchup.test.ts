@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({
   league: vi.fn(), board: vi.fn(), scores: vi.fn(), matchup: vi.fn(), nativePlayers: vi.fn(), sportsPlayers: vi.fn(),
+  roster: vi.fn(), season: vi.fn(), categoryMatchups: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
   weeklyMatchup: { findFirst: h.matchup }, redraftRosterPlayer: { findMany: h.nativePlayers },
   sportsPlayer: { findMany: h.sportsPlayers },
+  redraftRoster: { findFirst: h.roster }, redraftSeason: { findFirst: h.season },
+  redraftMatchup: { findMany: h.categoryMatchups },
 } }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
@@ -28,6 +31,9 @@ beforeEach(() => {
   h.matchup.mockResolvedValue({ updatedAt: new Date('2026-11-01T20:02:00Z') })
   h.sportsPlayers.mockResolvedValue([{ sleeperId: 'a', name: 'Home Star' }, { sleeperId: 'b', name: 'Away Star' }])
   h.nativePlayers.mockResolvedValue([])
+  h.roster.mockResolvedValue({ id: 'R1' })
+  h.season.mockResolvedValue({ currentWeek: 2 })
+  h.categoryMatchups.mockResolvedValue([])
 })
 
 describe('selected league live fantasy matchup', () => {
@@ -68,7 +74,30 @@ describe('selected league live fantasy matchup', () => {
   it('does not present a scalar score for a category league', async () => {
     h.league.mockResolvedValue({ id: 'L1', name: 'Hoops Categories', sport: 'NBA', platform: 'sleeper', platformLeagueId: 'P1', leagueType: 'categories', settings: {} })
     const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
-    expect(out).toMatch(/category or rotisserie/)
+    expect(out).toMatch(/category scoring/)
     expect(h.board).not.toHaveBeenCalled()
+  })
+
+  it('reports a native category snapshot without calling it real-time', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Hoops Categories', sport: 'NBA', season: 2026, platform: 'allfantasy',
+      leagueType: 'redraft', settings: { scoring_mode: 'h2h_category' } })
+    h.categoryMatchups.mockResolvedValue([{ week: 2, homeRosterId: 'R1', awayRosterId: 'R2', status: 'active',
+      lineupSnapshots: { categoryMatchup: { categories: [{ label: 'PTS', aValue: 101, bValue: 95 }] } } }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('PTS: you 101.00, opponent 95.00')
+    expect(out).toContain('refresh time is not recorded')
+    expect(out).not.toContain('your team 101')
+    expect(h.categoryMatchups.mock.calls[0][0].where).toMatchObject({ leagueId: 'L1', week: 2 })
+  })
+
+  it('labels an old native category scoring snapshot stale', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Hoops Categories', sport: 'NBA', season: 2026,
+      platform: 'allfantasy', leagueType: 'redraft', settings: { scoring_mode: 'h2h_category' } })
+    h.categoryMatchups.mockResolvedValue([{ week: 2, homeRosterId: 'R1', awayRosterId: 'R2', status: 'active',
+      lineupSnapshots: { redraftScoring: { scoredAt: '2020-01-01T00:00:00Z' },
+        categoryMatchup: { categories: [{ label: 'PTS', aValue: 101, bValue: 95 }] } } }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('computed 2020-01-01T00:00:00.000Z')
+    expect(out).toContain('Treat it as stale')
   })
 })

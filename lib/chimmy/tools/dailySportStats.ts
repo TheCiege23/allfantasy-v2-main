@@ -32,10 +32,10 @@ import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/stats
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 /** The daily sports whose season totals come from Rolling Insights `fantasy_stat_lines`. */
-export type RiSeasonSport = Exclude<DailySport, 'NCAAB'>
+export type RiSeasonSport = Exclude<DailySport, 'NCAAB' | 'SOCCER'>
 
 /**
  * ⚠ NCAAB IS A DAILY SPORT FOR GAME LOGS AND STANDINGS, BUT NOT FOR SEASON TOTALS. Its vendor
@@ -225,7 +225,7 @@ export function renderDailySeasonBlock(sport: DailySport, block: unknown): strin
   if (sport === 'MLB') return mlbSeason(b)
   if (sport === 'NBA') return nbaSeason(b)
   // NCAAB totals are summed from game logs (collegeBasketballStats.ts); a vendor block is never rendered.
-  if (sport === 'NCAAB') return []
+  if (sport === 'NCAAB' || sport === 'SOCCER') return []
   return nhlSeason(b)
 }
 
@@ -314,12 +314,27 @@ function nhlGame(group: string, s: Record<string, unknown>, payload: Record<stri
   return parts.join(', ')
 }
 
+function soccerGame(group: string, s: Record<string, unknown>): string | null {
+  if (group !== 'fielders' && group !== 'goalkeepers') return null
+  const pairs = [
+    ['goals', 'goals'], ['assists', 'assists'], ['shots_on_goal', 'shots on target'],
+    ['shots_attempted', 'shots'], ['saves', 'saves'], ['clean_sheets', 'clean sheets'],
+    ['yellow_cards', 'yellow cards'], ['red_cards', 'red cards'], ['minutes_played', 'minutes'],
+  ] as const
+  const parts = pairs.flatMap(([key, label]) => {
+    const value = num(s[key])
+    return value == null ? [] : [`${fmt(value)} ${label}`]
+  })
+  return parts.length ? `${group === 'goalkeepers' ? 'Goalkeeper' : 'Fielder'} ${parts.join(', ')}` : null
+}
+
 function renderGameGroup(sport: DailySport, row: DailyGameRow): string | null {
   const map = rec(row.map)
   const stats = rec(map.stats)
   const payload = rec(row.payload)
   const group = String(map.group ?? row.gameId.split(':')[1] ?? 'all')
   if (sport === 'MLB') return group === 'pitching' ? mlbPitchingGame(stats, payload) : mlbBattingGame(stats)
+  if (sport === 'SOCCER') return soccerGame(group, stats)
   // NCAAB's box has NBA's shape (fixtures/live.NCAABB.json); its minutes arrive as "20", not "MM:SS".
   if (sport === 'NBA' || sport === 'NCAAB') return nbaGame(stats, payload)
   return nhlGame(group, stats, payload)
@@ -415,7 +430,7 @@ export async function buildDailyGameLogContext(
   if (games.length === 0) {
     return [
       header,
-      `- No ${requestedSeason != null ? `${dailySeasonLabel(sport, requestedSeason)} ` : ''}regular-season or playoff game lines are stored for him.${preseason ? ` (${preseason} preseason line(s) are stored and deliberately not shown — preseason is not the season.)` : ''} Do NOT report zeros or give lines from memory; offer his season totals (get_player_season_stats) instead.`,
+      `- No ${requestedSeason != null ? `${dailySeasonLabel(sport, requestedSeason)} ` : ''}regular-season or playoff game lines are stored for him.${preseason ? ` (${preseason} preseason line(s) are stored and deliberately not shown — preseason is not the season.)` : ''} Do NOT report zeros or give lines from memory.${sport === 'SOCCER' ? '' : ' Offer his season totals (get_player_season_stats) instead.'}`,
     ].join('\n')
   }
 
