@@ -46,6 +46,16 @@ export type FleaflickerTeamStub = {
   }
   pointsFor?: { value?: number }
   pointsAgainst?: { value?: number }
+  roto?: {
+    overallRank?: number
+    points?: { value?: number }
+    statValues?: Array<{
+      category?: { id?: number; abbreviation?: string; nameSingular?: string }
+      value?: { value?: number }
+      rank?: number
+      rotoPoints?: { value?: number }
+    }>
+  }
   owners?: Array<{ id: number; displayName?: string }>
   initials?: string
 }

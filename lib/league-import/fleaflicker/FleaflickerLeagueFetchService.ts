@@ -13,6 +13,15 @@ import type {
 
 const API_BASE = 'https://www.fleaflicker.com/api'
 
+/** Lightweight, season-verified standings read for category and historical questions. */
+export async function fetchFleaflickerStandings(sport: FleaflickerSport, leagueId: number,
+  season: number): Promise<FleaflickerStandingsResponse> {
+  const body = await fetchJson<FleaflickerStandingsResponse>(
+    `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`)
+  if (body.season !== season) throw new FleaflickerSeasonMismatchError(season, body.season ?? null)
+  return body
+}
+
 export class FleaflickerImportLeagueNotFoundError extends Error {
   constructor(message: string) {
     super(message)

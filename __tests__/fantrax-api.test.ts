@@ -544,6 +544,25 @@ describe('getMatchupScores — the endpoint nothing called', () => {
     })
   })
 
+  it('keeps paired numeric category values without treating a display string as a total', async () => {
+    const body = JSON.stringify({ period: 2, matchups: [{
+      away: { teamId: 'a', teamName: 'Away', score: 4, gamesPlayed: 2 },
+      home: { teamId: 'b', teamName: 'Home', score: 6, gamesPlayed: 2 },
+      categories: [
+        { name: 'Passing Yards', away: { value: { value: 250, formatted: '250' } },
+          home: { value: { value: 280, formatted: '280' } } },
+        { name: 'Touchdowns', away: { value: 2 }, home: { value: 3 } },
+        { name: 'Unknown', away: { formatted: '-' }, home: { value: 4 } },
+      ],
+    }] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+    const res = await getFantraxMatchupScores('v2kzedypmm8jp61b', 2)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.matchups[0].away.categories).toEqual({ 'Passing Yards': 250, Touchdowns: 2 })
+    expect(res.data.matchups[0].home.categories).toEqual({ 'Passing Yards': 280, Touchdowns: 3 })
+  })
+
   /**
    * ⚠ OMITTING `period` ASKS FOR THE CURRENT ONE AND THE ANSWER SAYS WHICH.
    * Assuming the response is period 1 because that is what came back today
