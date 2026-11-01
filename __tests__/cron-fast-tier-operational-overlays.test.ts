@@ -23,6 +23,12 @@ describe('fast-tier operational overlays', () => {
     expect(withFastTierOperationalOverlays([])).toEqual(FAST_TIER_OPERATIONAL_OVERLAYS)
   })
 
+  it('runs NBA Cup live scores every minute and monitors its heartbeat', () => {
+    expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({ path: '/api/cron/nba-cup-live', schedule: '* * * * *' })
+    expect(PROBES['/api/cron/nba-cup-live']).toEqual({ heartbeat: 'cron-nba-cup-live' })
+    expect(readFileSync('app/api/cron/nba-cup-live/route.ts', 'utf8')).toContain('const JOB = "cron-nba-cup-live"')
+  })
+
   it('does not duplicate a route if it later becomes a native cron', () => {
     const native = {
       path: '/api/cron/fantasy-os-active-sync',
