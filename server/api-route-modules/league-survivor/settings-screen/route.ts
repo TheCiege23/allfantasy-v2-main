@@ -44,6 +44,8 @@ import {
 } from '@/lib/survivor/survivorWeeklyPrizes'
 import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/survivorRealGameChallengeLogic'
 import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { readPrizePhaseRules, SURVIVOR_PRIZE_PHASE_RULES_KEY, validatePrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { readThievesCannotStealFromEachOther, SURVIVOR_THIEVES_RULE_KEY } from '@/lib/survivor/survivorRewardModel'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
@@ -154,6 +156,9 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       realGamePrizeType: realGame.prize.type,
       realGamePrizeAmount: realGame.prize.type === 'none' ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : realGame.prize.amount,
       challengeFaabWeeklyCap: readChallengeFaabWeeklyCap(settings),
+      payInTribeWeeksAfterMerge: prizes.payInTribeWeeksAfterMerge,
+      thievesCannotStealFromEachOther: readThievesCannotStealFromEachOther(settings),
+      prizePhaseRules: readPrizePhaseRules(settings),
     },
     context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL') },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
@@ -244,13 +249,19 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('mergeNamingMode')) latePatch.mergeNamingMode = next.mergeNamingMode
     // League-rule extras that live beside the foundation settings, not in them.
     if (has('houseRules')) latePatch[SURVIVOR_HOUSE_RULES_KEY] = next.houseRules.trim()
-    if ((['winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType', 'tribeTieBreakPosition'] as const).some(has)) {
+    if ((['winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType', 'tribeTieBreakPosition', 'payInTribeWeeksAfterMerge'] as const).some(has)) {
       latePatch[SURVIVOR_WEEKLY_PRIZES_KEY] = weeklyPrizesFromForm(next)
     }
     if ((['realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount'] as const).some(has)) {
       latePatch[REAL_GAME_SETTINGS_KEY] = realGameSettingsFromForm(next, current[REAL_GAME_SETTINGS_KEY])
     }
     if (has('challengeFaabWeeklyCap')) latePatch[SURVIVOR_CHALLENGE_FAAB_CAP_KEY] = next.challengeFaabWeeklyCap
+    // Reward rules (validated by validateSettingsForm above; stored in their canonical shape).
+    if (has('thievesCannotStealFromEachOther')) latePatch[SURVIVOR_THIEVES_RULE_KEY] = next.thievesCannotStealFromEachOther
+    if (has('prizePhaseRules')) {
+      const rules = validatePrizePhaseRules(next.prizePhaseRules, 'en')
+      if (rules.ok) latePatch[SURVIVOR_PRIZE_PHASE_RULES_KEY] = rules.rules
+    }
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}

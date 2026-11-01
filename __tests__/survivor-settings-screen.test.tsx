@@ -13,6 +13,7 @@ import {
   validateSettingsForm,
   type SurvivorSettingsForm,
 } from '@/lib/survivor/survivorSettingsScreen'
+import { defaultPrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
 
 const m = vi.hoisted(() => ({
   session: { user: { id: 'commish' } } as { user?: { id?: string } } | null,
@@ -54,6 +55,7 @@ function form(over: Partial<SurvivorSettingsForm> = {}): SurvivorSettingsForm {
     coCommissionerMode: 'disabled', mergeNamingMode: 'commissioner', juryEnabled: true, tribeChatsEnabled: true, exileHarshTokenLoss: false, houseRules: '',
     winningTribeFaabPerPlayer: 0, topScorerReward: 'none', topScorerAmount: 0, topScorerPowerType: 'extra_vote', tribeTieBreakPosition: 'none',
     realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40,
+    payInTribeWeeksAfterMerge: false, thievesCannotStealFromEachOther: false, prizePhaseRules: defaultPrizePhaseRules(),
     ...over,
   }
 }
@@ -247,6 +249,27 @@ describe('weekly prizes, house rules and the newly exposed settings', () => {
     expect(bad.status).toBe(422)
     expect((await bad.json()).error).toMatch(/challenge FAAB cap/)
     expect((await POST(req({ form: { ...before, realGamePrizeType: 'faab', realGamePrizeAmount: 99 } }), params)).status).toBe(422)
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('reward rules: today’s behaviour by default, editable all season, written to their own keys; a tribe prize after the merge is refused', async () => {
+    m.draftStarted = true
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    expect(before).toMatchObject({ payInTribeWeeksAfterMerge: false, thievesCannotStealFromEachOther: false, prizePhaseRules: defaultPrizePhaseRules() })
+    const rules = { ...defaultPrizePhaseRules(), finale: ['score_bonus', 'faab_grant', 'immunity'] }
+    const res = await POST(req({ form: { ...before, payInTribeWeeksAfterMerge: true, thievesCannotStealFromEachOther: true, prizePhaseRules: rules } }), params)
+    expect(res.status).toBe(200)
+    const settings = m.tx.league.update.mock.calls[0][0].data.settings
+    expect(settings).toMatchObject({
+      survivorThievesCannotStealFromEachOther: true,
+      survivorPrizePhaseRules: { finale: ['score_bonus', 'faab_grant', 'immunity'] },
+      survivorWeeklyPrizes: { payInTribeWeeksAfterMerge: true },
+    })
+    m.tx.league.update.mockClear()
+    const bad = await POST(req({ form: { ...before, prizePhaseRules: { ...defaultPrizePhaseRules(), post_merge: ['faab_transfer'] } } }), params)
+    expect(bad.status).toBe(422)
+    expect((await bad.json()).error).toMatch(/pre-merge only/)
     expect(m.tx.league.update).not.toHaveBeenCalled()
   })
 

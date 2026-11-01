@@ -35,6 +35,8 @@ import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/Survivo
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
 import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleControls'
 import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
+import { SurvivorRewardsHubPanel } from '@/components/survivor/SurvivorRewardsHubPanel'
+import { Gift } from 'lucide-react'
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
@@ -55,6 +57,7 @@ type TabId =
   | 'tribal'
   | 'governance'
   | 'minigames'
+  | 'rewards'
   | 'exile'
   | 'jury'
   | 'settings'
@@ -71,6 +74,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
   { id: 'governance', label: 'Rules & conduct', icon: <Gavel className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
+  { id: 'rewards', label: 'Rewards', icon: <Gift className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
   { id: 'settings', label: 'Settings', icon: <Settings2 className="h-4 w-4" /> },
@@ -636,6 +640,12 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               <Link href={`${base}/challenges`} className="mt-4 inline-block text-emerald-300 hover:text-emerald-200">
                 Go to challenges →
               </Link>
+            </WarRoomPanel>
+          )}
+
+          {tab === 'rewards' && (
+            <WarRoomPanel title="Rewards" subtitle="Grant, reverse and settle pending reward choices.">
+              <SurvivorRewardsHubPanel leagueId={leagueId} />
             </WarRoomPanel>
           )}
 

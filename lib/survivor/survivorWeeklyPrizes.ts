@@ -33,6 +33,11 @@ export interface SurvivorWeeklyPrizeSettings {
   topScorerPowerType: SurvivorRewardAdvantagePower
   /** Break a tribe-total tie by the tribe's highest-scoring starter at this position. 'none' = tribe id. */
   tribeTieBreakPosition: string
+  /**
+   * Also pay the prizes in a post-merge week where tribes are actually competing (a surprise
+   * two-tribe week). Off by default: today's behaviour is "before the merge only".
+   */
+  payInTribeWeeksAfterMerge: boolean
 }
 
 export const SURVIVOR_WEEKLY_PRIZE_DEFAULTS: SurvivorWeeklyPrizeSettings = {
@@ -41,6 +46,7 @@ export const SURVIVOR_WEEKLY_PRIZE_DEFAULTS: SurvivorWeeklyPrizeSettings = {
   topScorerAmount: 0,
   topScorerPowerType: 'extra_vote',
   tribeTieBreakPosition: 'none',
+  payInTribeWeeksAfterMerge: false,
 }
 
 export const SURVIVOR_WEEKLY_PRIZE_LIMITS = { faabPerPlayer: 1000, topScorerFaab: 1000, topScorerPoints: 200 } as const
@@ -78,7 +84,18 @@ export function readSurvivorWeeklyPrizes(settings: unknown): SurvivorWeeklyPrize
     topScorerAmount: Math.max(0, num(raw.topScorerAmount, d.topScorerAmount)),
     topScorerPowerType: power,
     tribeTieBreakPosition: position === 'NONE' ? 'none' : position,
+    payInTribeWeeksAfterMerge: raw.payInTribeWeeksAfterMerge === true,
   }
+}
+
+/**
+ * The tribes that actually competed in a week, read from that week's own score rows (each row keeps
+ * the tribe its manager scored for): every distinct tribe except the merged tribe(s). Two or more
+ * means tribes were competing that week (e.g. a surprise post-merge two-tribe week).
+ */
+export function competingTribeIdsFromScores(rows: readonly { tribeId: string | null }[], mergedTribeIds: Iterable<string>): string[] {
+  const merged = new Set(mergedTribeIds)
+  return [...new Set(rows.flatMap((r) => (r.tribeId && !merged.has(r.tribeId) ? [r.tribeId] : [])))].sort()
 }
 
 /** Plain-English problems with a prize form (empty = valid). */

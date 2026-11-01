@@ -5,7 +5,7 @@ import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { chooseSurvivorRewardTarget, listSurvivorRewards, readSurvivorFaabBalance } from './survivorRewardEngine'
-import { pickChimmyStealTarget, pickChimmyTribemate } from './survivorRewardModel'
+import { isThiefThisWeek, pickChimmyStealTarget, pickChimmyTribemate, readThievesCannotStealFromEachOther } from './survivorRewardModel'
 
 /**
  * Chimmy's reward choices for the castaways it runs (same seats as its council turn,
@@ -20,7 +20,8 @@ import { pickChimmyStealTarget, pickChimmyTribemate } from './survivorRewardMode
  * Idempotent: a reward that is no longer `awaiting_choice` is skipped.
  */
 export async function runChimmyRewardChoices(leagueId: string): Promise<string[]> {
-  const pending = (await listSurvivorRewards(leagueId)).filter((r) => r.status === 'awaiting_choice')
+  const all = await listSurvivorRewards(leagueId)
+  const pending = all.filter((r) => r.status === 'awaiting_choice')
   if (!pending.length) return []
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, userId: true } })
   if (!league) return []
@@ -53,7 +54,12 @@ export async function runChimmyRewardChoices(leagueId: string): Promise<string[]
       )
     } else if (reward.spec.type === 'steal') {
       const what = reward.spec.what
-      const rivals = cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== holderRosterId && (!holder.tribeId || c.tribeId !== holder.tribeId))
+      // "Thieves cannot steal from each other" (when the commissioner turned it on): skip anyone who
+      // holds or used a steal this week — the engine would refuse them. Steals are commissioner-
+      // visible ledger rows, not secrets like blockers, so reading them is fair.
+      const thievesRule = readThievesCannotStealFromEachOther(league.settings)
+      const rivals = cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== holderRosterId && (!holder.tribeId || c.tribeId !== holder.tribeId)
+        && !(thievesRule && isThiefThisWeek(all, c.redraftRosterId, reward.applyWeek, reward.rewardId)))
       const weekScores = what === 'points'
         ? await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: reward.applyWeek, userId: { in: rivals.map((r) => r.userId) } }, select: { userId: true, finalScore: true } })
         : []
