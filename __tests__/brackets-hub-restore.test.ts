@@ -492,3 +492,20 @@ describe("brackets hub restore: route budget safety", () => {
     }
   })
 })
+
+describe("the hub's create shortcut and sports subtitle follow the live tournament", () => {
+  it("Create opens the tournament leading the hub, not a hard-coded sport", () => {
+    expect(HUB_SRC).toContain(`playoffPoolHref(HUB_CREATE_SPORT[tournaments[0].tournament])`)
+    expect(HUB_SRC).toContain(`action.key === "create" ? { ...action, href: createHref } : action`)
+    expect(HUB_SRC).toContain("{quickActions.map(({ key, href, Icon }) => (")
+    expect(HUB_SRC).not.toContain("{QUICK_ACTIONS.map(")
+  })
+
+  it("the sports subtitle names no sport as upcoming in any locale", () => {
+    for (const locale of BRACKETS_SUPPORTED_LOCALES) {
+      const subtitle = BRACKETS_TRANSLATIONS[locale]["brk.hub.sports.subtitle"]
+      expect(subtitle, locale).toBeTruthy()
+      expect(subtitle, locale).not.toMatch(/MLB|NHL|NFL|College Football/)
+    }
+  })
+})

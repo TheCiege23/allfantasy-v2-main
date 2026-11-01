@@ -249,7 +249,7 @@ const EN: BracketsDictionary = {
 
   "brk.hub.sports.title": "Sports",
   "brk.hub.sports.subtitle":
-    "MLB and NHL brackets are open now. The College Football Playoff and NFL Playoffs are up next.",
+    "Every open tournament below takes new pools. The current one is listed first.",
   "brk.hub.sports.statusLive": "Live now",
   "brk.hub.sports.statusComingSoon": "Coming soon",
   "brk.hub.sports.openCta": "Open hub",
@@ -493,7 +493,7 @@ const ES: BracketsDictionary = {
 
   "brk.hub.sports.title": "Deportes",
   "brk.hub.sports.subtitle":
-    "Los brackets de MLB y NHL ya están abiertos. A continuación: el Playoff de fútbol americano universitario y los Playoffs de la NFL.",
+    "Todos los torneos abiertos aceptan nuevos grupos. El torneo actual aparece primero.",
   "brk.hub.sports.statusLive": "En vivo",
   "brk.hub.sports.statusComingSoon": "Próximamente",
   "brk.hub.sports.openCta": "Abrir hub",
@@ -739,7 +739,7 @@ const ZH: BracketsDictionary = {
 
   "brk.hub.sports.title": "支援的賽事",
   "brk.hub.sports.subtitle":
-    "MLB 與 NHL 對戰表現已開放。接下來是大學美式足球季後賽與 NFL 季後賽。",
+    "下方所有開放中的賽事都可建立新的對戰表群組。目前進行中的賽事排在最前面。",
   "brk.hub.sports.statusLive": "進行中",
   "brk.hub.sports.statusComingSoon": "即將推出",
   "brk.hub.sports.openCta": "開啟主頁",
@@ -986,7 +986,7 @@ const FIL: BracketsDictionary = {
 
   "brk.hub.sports.title": "Mga sport",
   "brk.hub.sports.subtitle":
-    "Bukas na ang MLB at NHL brackets. Susunod ang College Football Playoff at NFL Playoffs.",
+    "Tumatanggap ng bagong pool ang bawat bukas na torneo sa ibaba. Nauuna ang kasalukuyang torneo.",
   "brk.hub.sports.statusLive": "Live na",
   "brk.hub.sports.statusComingSoon": "Malapit na",
   "brk.hub.sports.openCta": "Buksan ang hub",
@@ -1234,7 +1234,7 @@ const VI: BracketsDictionary = {
 
   "brk.hub.sports.title": "Các môn",
   "brk.hub.sports.subtitle":
-    "Bracket MLB và NHL đã mở. Tiếp theo là College Football Playoff và NFL Playoffs.",
+    "Mọi giải đấu đang mở bên dưới đều nhận nhóm mới. Giải đấu hiện tại được xếp đầu tiên.",
   "brk.hub.sports.statusLive": "Đang mở",
   "brk.hub.sports.statusComingSoon": "Sắp ra mắt",
   "brk.hub.sports.openCta": "Mở hub",
