@@ -16,7 +16,7 @@ import {
   type BracketNode,
 } from "@/lib/playoffs/playoffBracketGraph"
 import { isPlaceholderName, teamColors } from "@/lib/playoffs/playoffTeamColors"
-import { getPlayoffPickResult, roundPointsTable } from "@/lib/playoffs/playoffScoring"
+import { getPlayoffPickResult, pointsForSeries, roundPointsTable } from "@/lib/playoffs/playoffScoring"
 import { getPlayoffSeriesLockedReason } from "@/lib/playoffs/playoffLocking"
 import {
   buildProjectedPlayoffSeries,
@@ -250,6 +250,18 @@ export default function MlbBracketBoard({
   const totalSeries = view.series.length
   const pickedCount = view.picks.length
   const tiles = roundPointsTable(sport)
+  const scoringTiles = tiles.length > 0 ? (
+    <div className="af-pb-tiles" data-testid="pb-scoring-tiles">
+      {tiles.map((tile, index) => {
+        const example = view.series.find((game) => game.round === tile.round)
+        return <div className={`af-pb-tile${index === tiles.length - 1 ? " af-pb-tile--accent" : ""}`} key={tile.round}>
+          <div className="af-pb-tile-name">{roundLabel(sport, tile.round)}</div>
+          <div className="af-pb-tile-pts af-pb-mono">{tile.points} {tile.points === 1 ? "pt" : "pts"}</div>
+          <div className="af-pb-tile-meta">{example ? example.bestOf === 1 ? "Single game" : `Best of ${example.bestOf}` : ""}</div>
+        </div>
+      })}
+    </div>
+  ) : null
 
   // Seeds per half, read off the first-round and bye rows rather than invented.
   const seedsBySide = useMemo(() => {
@@ -455,9 +467,16 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
+            <div className="af-pb-cup-group-heading"><div>
+              <h2>NBA Cup scoring</h2>
+              <p>Each correct Group Play winner earns {pointsForSeries({ round: "cup_group_play" }, sport)} point. Group Play and knockout points both count toward your league and universal standings.</p>
+            </div></div>
+            {scoringTiles}
+          </section> : null}
           {rollingCup ? <section className="af-pb-card af-pb-cup-group" aria-label="NBA Cup Group Play">
             <div className="af-pb-cup-group-heading">
-              <div><h2>Group Play</h2><p>1 point per correct pick · Tap a game for Chimmy Intelligence</p></div>
+              <div><h2>Group Play</h2><p>{pointsForSeries({ round: "cup_group_play" }, sport)} point per correct winner pick · Tap a game for Chimmy Intelligence</p></div>
               <div className="af-pb-cup-filters" aria-label="Group Play filter">
                 <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "upcoming"} onClick={() => setGroupFilter("upcoming")}>Upcoming</button>
                 <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "all"} onClick={() => setGroupFilter("all")}>All games</button>
@@ -503,26 +522,8 @@ export default function MlbBracketBoard({
               })}
             </div>
 
-            {/* Scoring tiles — values come from the scorer, so they cannot drift */}
-            {tiles.length > 0 ? (
-              <div className="af-pb-tiles" data-testid="pb-scoring-tiles">
-                {tiles.map((t, i) => {
-                  const example = view.series.find((s) => s.round === t.round)
-                  return (
-                    <div
-                      className={`af-pb-tile${i === tiles.length - 1 ? " af-pb-tile--accent" : ""}`}
-                      key={t.round}
-                    >
-                      <div className="af-pb-tile-name">{roundLabel(sport, t.round)}</div>
-                      <div className="af-pb-tile-pts af-pb-mono">{t.points} pts</div>
-                      <div className="af-pb-tile-meta">
-                        {example ? example.bestOf === 1 ? "Single game" : `Best of ${example.bestOf}` : ""}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
+            {/* NBA Cup shows the shared scoring table above both competition stages. */}
+            {!rollingCup ? scoringTiles : null}
 
             {/* The tree */}
             <p className="af-pb-scroll-cue" role="note">← Scroll or swipe to see every round →</p>

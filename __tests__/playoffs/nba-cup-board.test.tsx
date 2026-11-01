@@ -20,6 +20,17 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("explains group-play scoring above both stages using the scorer's points", () => {
+    render(<MlbBracketBoard view={view()} onViewChange={() => {}} />)
+    const scoring = screen.getByRole("region", { name: "NBA Cup scoring" })
+    expect(within(scoring).getByText(/Each correct Group Play winner earns 1 point/)).toHaveTextContent("Group Play and knockout points both count toward your league and universal standings.")
+    const tiles = within(scoring).getByTestId("pb-scoring-tiles")
+    expect(Array.from(tiles.children).map((tile) => tile.textContent)).toEqual([
+      "Group Play1 ptSingle game", "Quarterfinals1 ptSingle game", "Semifinals2 ptsSingle game", "Championship4 ptsSingle game",
+    ])
+    expect(scoring.compareDocumentPosition(screen.getByRole("region", { name: "NBA Cup Group Play" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it("shows upcoming group games with logos and venue while knockout slots are pending", () => {
     render(<MlbBracketBoard view={view()} onViewChange={() => {}} />)
     const group = screen.getByRole("region", { name: "NBA Cup Group Play" })
