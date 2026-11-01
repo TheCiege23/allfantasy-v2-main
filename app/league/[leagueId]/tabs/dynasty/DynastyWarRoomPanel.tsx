@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, ArrowLeftRight, Compass, Layers, Loader2, ShieldQuestion, Sparkles } from 'lucide-react'
+import '@/components/dynasty/dynasty-era.css'
 import {
   analyzeDynastyWarRoomTrade,
   askDynastyWarRoom,
@@ -30,7 +31,8 @@ import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 import { DynastyProspectFreeAgents } from './DynastyProspectFreeAgents'
-import '@/components/dynasty/dynasty-era.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tOr } from '@/lib/i18n/tInterpolate'
 
 type Tool = 'buy-sell-hold' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
 
@@ -77,6 +79,10 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [askBusy, setAskBusy] = useState(false)
   const [answer, setAnswer] = useState<string | null>(null)
   const [askNote, setAskNote] = useState<string | null>(null)
+  const { t: tw, tInterpolate: twi } = useOptionalLanguage()
+  /** Window and call labels: translated when a key exists, otherwise the English map / raw call. */
+  const windowLabel = (w: string) => tOr(tw, `dynastyWarRoom.panel.window.${w}`, WINDOW_LABEL[w])
+  const callLabel = (call: string) => tOr(tw, `dynastyWarRoom.panel.call.${call}`, call.toUpperCase())
 
   useEffect(() => {
     let active = true
@@ -89,7 +95,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         setNeeds(res.needs)
         setError(null)
       })
-      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'Failed to load AF Legacy.'))
+      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : tw('dynastyWarRoom.panel.loadFailed')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -118,7 +124,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           if (!tradeOutgoingId && fallbackOutgoing) setTradeOutgoingId(fallbackOutgoing)
         } else if (which === 'trade-find') setTradeFinder((await findDynastyWarRoomTrades(leagueId)).tradeFinder)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Tool failed.')
+        setError(e instanceof Error ? e.message : tw('dynastyWarRoom.panel.toolFailed'))
       } finally {
         setToolBusy(false)
       }
@@ -135,13 +141,13 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
     try {
       const res = await askDynastyWarRoom(leagueId, q)
       if (res.aiUnavailable) {
-        setAskNote('AI is temporarily unavailable — showing grounded facts only.')
+        setAskNote(tw('dynastyWarRoom.panel.aiUnavailable'))
         setAnswer(null)
       } else {
         setAnswer(res.answer)
       }
     } catch (e) {
-      setAskNote(e instanceof Error ? e.message : 'Ask failed.')
+      setAskNote(e instanceof Error ? e.message : tw('dynastyWarRoom.panel.askFailed'))
     } finally {
       setAskBusy(false)
     }
@@ -153,7 +159,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         className="dyn-well dyn-era-muted flex items-center gap-2 rounded-xl p-4 text-[12px]"
         data-testid="dynasty-war-room-loading"
       >
-        <Loader2 className="h-4 w-4 animate-spin dyn-gold-icon motion-reduce:animate-none" /> Loading AF Legacy — Dynasty…
+        <Loader2 className="h-4 w-4 animate-spin dyn-gold-icon motion-reduce:animate-none" /> {tw('dynastyWarRoom.panel.loading')}
       </div>
     )
   }
@@ -163,7 +169,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90"
         data-testid="dynasty-war-room-error"
       >
-        {error ?? 'AF Legacy — Dynasty is unavailable for this league.'}
+        {error ?? tw('dynastyWarRoom.panel.unavailable')}
       </div>
     )
   }
@@ -181,7 +187,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
     >
       <div className="flex items-center gap-2">
         <Sparkles className="dyn-gold-icon h-4 w-4" aria-hidden />
-        <h2 className="text-sm font-bold text-white">AF Legacy — Dynasty</h2>
+        <h2 className="text-sm font-bold text-white">{tw('dynastyWarRoom.panel.title')}</h2>
         <span className="dyn-badge-gold rounded-full px-2 py-0.5 text-[11px] font-semibold">
           {context.sport} · {context.scoring.scoringPreset}
           {context.scoring.superflex ? ' · SF' : ''}
@@ -195,34 +201,37 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
       >
         <div>
           <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-white/40">
-            <Compass className="h-3 w-3" /> Direction
+            <Compass className="h-3 w-3" /> {tw('dynastyWarRoom.panel.direction')}
           </p>
           <p className="dyn-gold-text text-[12px] font-semibold">
-            {WINDOW_LABEL[direction?.window ?? 'unknown']}
+            {windowLabel(direction?.window ?? 'unknown')}
             {direction?.contendScore != null ? (
               <span className="text-white/40"> · {direction.contendScore}/100</span>
             ) : null}
           </p>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Age / value</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{tw('dynastyWarRoom.panel.ageValue')}</p>
           <p className="text-[11px] text-white/70">
-            {direction?.avgStarterAge != null ? `avg starter age ${direction.avgStarterAge}` : 'age n/a'}
-            {direction?.youngValueShare != null ? ` · young ${(direction.youngValueShare * 100).toFixed(0)}%` : ''}
+            {direction?.avgStarterAge != null ? twi('dynastyWarRoom.panel.avgStarterAge', { age: direction.avgStarterAge }) : tw('dynastyWarRoom.panel.ageNa')}
+            {direction?.youngValueShare != null ? ` · ${twi('dynastyWarRoom.panel.youngShare', { pct: (direction.youngValueShare * 100).toFixed(0) })}` : ''}
           </p>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{tw('dynastyWarRoom.panel.data')}</p>
           <p className="text-[11px] text-white/60">
             {/* Ranked free agents only: NHL dynasty prospects are listed in the waiver tool. */}
-            {context.freeAgents?.filter((p) => p.prospectSource !== 'fantrax').length ?? 0} FAs · val{' '}
-            {context.availability?.playerValues === 'available' ? '✓' : '—'} · age{' '}
-            {context.availability?.playerAges === 'available' ? '✓' : '—'} · picks{' '}
-            {context.availability?.futurePicks === 'available'
-              ? '✓'
-              : context.availability?.futurePicks === 'partial'
-                ? 'partial'
-                : '—'}
+            {twi('dynastyWarRoom.panel.dataLine', {
+              fas: context.freeAgents?.filter((p) => p.prospectSource !== 'fantrax').length ?? 0,
+              val: context.availability?.playerValues === 'available' ? '✓' : '—',
+              age: context.availability?.playerAges === 'available' ? '✓' : '—',
+              picks:
+                context.availability?.futurePicks === 'available'
+                  ? '✓'
+                  : context.availability?.futurePicks === 'partial'
+                    ? tw('dynastyWarRoom.panel.partial')
+                    : '—',
+            })}
           </p>
         </div>
       </div>
@@ -231,11 +240,11 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
       {needs && (
         <div className="dyn-well rounded-lg p-3">
           <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Roster needs · urgency {needs.urgencyScore}/100
+            {twi('dynastyWarRoom.panel.rosterNeeds', { score: needs.urgencyScore })}
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <div>
-              <p className="text-[11px] font-semibold text-rose-300/80">NEEDS</p>
+              <p className="text-[11px] font-semibold text-rose-300/80">{tw('dynastyWarRoom.panel.needs')}</p>
               {needs.needs.length ? (
                 needs.needs.map((n) => (
                   <p key={n.position} className="text-[11px] text-white/70">
@@ -243,11 +252,11 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
                   </p>
                 ))
               ) : (
-                <p className="text-[11px] text-white/40">None detected</p>
+                <p className="text-[11px] text-white/40">{tw('dynastyWarRoom.panel.noneDetected')}</p>
               )}
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-emerald-300/80">STRENGTHS</p>
+              <p className="text-[11px] font-semibold text-emerald-300/80">{tw('dynastyWarRoom.panel.strengths')}</p>
               {needs.strengths.length ? (
                 needs.strengths.slice(0, 4).map((s) => (
                   <p key={s} className="text-[11px] text-white/60">
@@ -259,7 +268,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-amber-300/80">TARGET POSITIONS</p>
+              <p className="text-[11px] font-semibold text-amber-300/80">{tw('dynastyWarRoom.panel.targetPositions')}</p>
               <p className="text-[11px] text-white/60">{needs.tradeTargetPositions.join(', ') || '—'}</p>
             </div>
           </div>
@@ -272,7 +281,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           className="dyn-well rounded-lg p-3"
           data-testid="dynasty-war-room-taxi-watch"
         >
-          <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Taxi watch</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{tw('dynastyWarRoom.panel.taxiWatch')}</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {taxiPlayers.map((p) => (
               <span key={p.playerId} className="rounded-md bg-white/[0.04] px-2 py-1 text-[11px] text-white/70">
@@ -289,21 +298,21 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         data-testid="dynasty-war-room-pick-capital"
       >
         <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
-          <Layers className="h-3.5 w-3.5" /> Pick capital
+          <Layers className="h-3.5 w-3.5" /> {tw('dynastyWarRoom.panel.pickCapital')}
           {picksState === 'available' && myPicks.length > 0 ? (
             <span className="ml-1 dyn-badge-gold rounded-full px-2 py-0.5 text-[11px] font-semibold">
-              {myPicks.length} picks · tier {Math.round(pickTierTotal * 10) / 10}
+              {twi('dynastyWarRoom.panel.picksTier', { count: myPicks.length, tier: Math.round(pickTierTotal * 10) / 10 })}
             </span>
           ) : null}
         </p>
         {picksState === 'missing' ? (
           <p className="mt-2 text-[11px] text-amber-200/80" data-testid="dynasty-war-room-pick-capital-limited">
-            Future pick tracking is not enabled for this league yet.
+            {tw('dynastyWarRoom.panel.picksMissing')}
           </p>
         ) : myPicks.length === 0 ? (
           picksState === 'partial' ? null : (
             <p className="mt-2 text-[11px] text-white/50" data-testid="dynasty-war-room-pick-capital-empty">
-              Pick tracking is enabled, but you have no future picks recorded yet.
+              {tw('dynastyWarRoom.panel.picksEmpty')}
             </p>
           )
         ) : (
@@ -315,28 +324,25 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
                 title={
                   pk.traded
                     ? pk.originalTeamName
-                      ? `Acquired from ${pk.originalTeamName}`
-                      : 'Acquired via trade'
-                    : 'Original pick'
+                      ? twi('dynastyWarRoom.panel.acquiredFrom', { team: pk.originalTeamName })
+                      : tw('dynastyWarRoom.panel.acquiredViaTrade')
+                    : tw('dynastyWarRoom.panel.originalPick')
                 }
               >
                 {pk.season} R{pk.round}
                 {pk.traded ? <ArrowLeftRight className="ml-1 h-3 w-3 text-amber-300/80" aria-hidden /> : null}
-                {pk.estValue != null ? <span className="text-white/40"> · tier {pk.estValue}</span> : null}
+                {pk.estValue != null ? <span className="text-white/40">{` · ${twi('dynastyWarRoom.panel.tier', { tier: pk.estValue })}`}</span> : null}
               </span>
             ))}
           </div>
         )}
         {picksState === 'partial' ? (
           <p className="mt-2 text-[11px] text-amber-200/80" data-testid="dynasty-war-room-pick-capital-partial">
-            {myPicks.length > 0
-              ? 'Only picks that changed hands are listed'
-              : 'You hold none of the picks that changed hands'}{' '}
-            — this league&apos;s rookie-draft size isn&apos;t known, so your own picks aren&apos;t shown.
+            {myPicks.length > 0 ? tw('dynastyWarRoom.panel.partialSome') : tw('dynastyWarRoom.panel.partialNone')}
           </p>
         ) : null}
         <p className="mt-1.5 text-[11px] text-white/30">
-          Tiers are structural (round + years out), not market values.
+          {tw('dynastyWarRoom.panel.tiersNote')}
         </p>
       </div>
 
@@ -352,14 +358,14 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             className="dyn-action rounded-lg px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50"
           >
             {t === 'buy-sell-hold'
-              ? 'Buy / Sell / Hold'
+              ? tw('dynastyWarRoom.panel.tool.buySellHold')
               : t === 'waivers'
-                ? 'Waivers'
+                ? tw('dynastyWarRoom.panel.tool.waivers')
                 : t === 'lineup'
-                  ? 'Lineup'
+                  ? tw('dynastyWarRoom.panel.tool.lineup')
                   : t === 'trade-analyze'
-                    ? 'Trade analyzer'
-                    : 'Trade finder'}
+                    ? tw('dynastyWarRoom.panel.tool.tradeAnalyzer')
+                    : tw('dynastyWarRoom.panel.tool.tradeFinder')}
           </button>
         ))}
       </div>
@@ -367,7 +373,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Tool output */}
       {toolBusy && (
         <p className="flex items-center gap-1.5 text-[11px] text-white/50">
-          <Loader2 className="h-3 w-3 animate-spin" /> Running…
+          <Loader2 className="h-3 w-3 animate-spin" /> {tw('dynastyWarRoom.panel.running')}
         </p>
       )}
 
@@ -377,14 +383,14 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           data-testid="dynasty-war-room-buy-sell-hold-result"
         >
           <p className="mb-1 font-semibold text-white/80">
-            Asset calls — window: {WINDOW_LABEL[buySellHold.window]}
+            {twi('dynastyWarRoom.panel.assetCalls', { window: windowLabel(buySellHold.window) })}
           </p>
           {buySellHold.pickCapitalNote ? (
             <p className="mb-1 text-sky-300/70">{buySellHold.pickCapitalNote}</p>
           ) : null}
           {buySellHold.entries.slice(0, 12).map((e) => (
             <p key={e.playerId}>
-              <span className={`font-semibold ${CALL_COLOR[e.call]}`}>{e.call.toUpperCase()}</span> {e.playerName} (
+              <span className={`font-semibold ${CALL_COLOR[e.call]}`}>{callLabel(e.call)}</span> {e.playerName} (
               {e.position}
               {e.age != null ? `, ${e.age}` : ''}) — {e.reason}
             </p>
@@ -406,10 +412,10 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         >
           {waivers.needsProviderIntegration ? (
             <p className="text-amber-200/80">
-              Free-agent add targets unavailable for this sport/season. Drop-side analysis is grounded in your roster:
+              {tw('dynastyWarRoom.panel.addsUnavailable')}
             </p>
           ) : (
-            <p className="mb-1 font-semibold text-white/80">Recommended adds</p>
+            <p className="mb-1 font-semibold text-white/80">{tw('dynastyWarRoom.panel.recommendedAdds')}</p>
           )}
           {waivers.recommendedAdds.map((a) => (
             <p key={a.playerId}>
@@ -437,7 +443,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           className="dyn-well rounded-lg p-3 text-[11px] text-white/70"
           data-testid="dynasty-war-room-lineup-result"
         >
-          <p className="mb-1 font-semibold text-white/80">Best startable (confidence: {lineup.confidence})</p>
+          <p className="mb-1 font-semibold text-white/80">{twi('dynastyWarRoom.panel.bestStartable', { confidence: lineup.confidence })}</p>
           {lineup.suggestedStarters.map((s, i) => (
             <p key={`${s.position}-${i}`}>
               <span className="text-white/40">{s.position}:</span> {s.playerName ?? '—'}{' '}
@@ -463,7 +469,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               data-testid="dynasty-war-room-trade-outgoing-select"
               className="dyn-input min-w-0 rounded-md px-2 py-1.5 text-[11px]"
             >
-              <option value="">Outgoing player</option>
+              <option value="">{tw('dynastyWarRoom.panel.outgoingPlayer')}</option>
               {(context?.teams.find((t) => t.isUserTeam)?.players ?? []).map((p) => (
                 <option key={p.playerId} value={p.playerId}>
                   {p.playerName} ({p.position})
@@ -473,7 +479,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             <input
               value={tradeIncomingIds}
               onChange={(event) => setTradeIncomingIds(event.target.value)}
-              placeholder="Incoming player ID"
+              placeholder={tw('dynastyWarRoom.panel.incomingPlayerId')}
               data-testid="dynasty-war-room-trade-incoming-input"
               className="dyn-input min-w-0 rounded-md px-2 py-1.5 text-[11px]"
             />
@@ -484,7 +490,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               data-testid="dynasty-war-room-trade-analyze-submit"
               className="dyn-action rounded-lg px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50"
             >
-              Analyze
+              {tw('dynastyWarRoom.panel.analyze')}
             </button>
           </div>
           {tradeAnalysis ? (
@@ -525,7 +531,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
           ) : (
-            <p className="mt-2 text-white/40">No trade analysis loaded.</p>
+            <p className="mt-2 text-white/40">{tw('dynastyWarRoom.panel.noTradeAnalysis')}</p>
           )}
         </div>
       )}
@@ -544,12 +550,12 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           ) : tradeFinder.targets.length ? (
             tradeFinder.targets.slice(0, 5).map((t) => (
               <p key={t.rosterId}>
-                <span className="font-semibold text-white/80">{t.teamName ?? t.rosterId}</span> (fit {t.fitScore}):{' '}
+                <span className="font-semibold text-white/80">{t.teamName ?? t.rosterId}</span> {twi('dynastyWarRoom.panel.fit', { score: t.fitScore })}{' '}
                 {t.reasons.join(' ')}
               </p>
             ))
           ) : (
-            <p className="text-white/40">No complementary trade partners found right now.</p>
+            <p className="text-white/40">{tw('dynastyWarRoom.panel.noPartners')}</p>
           )}
         </div>
       )}
@@ -566,12 +572,12 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Ask War Room */}
       <div className="dyn-well rounded-lg p-3">
         <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
-          <ShieldQuestion className="h-3.5 w-3.5" /> Ask AF Legacy
+          <ShieldQuestion className="h-3.5 w-3.5" /> {tw('dynastyWarRoom.panel.askTitle')}
         </p>
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="e.g. Should I sell my aging RB while I'm rebuilding?"
+          placeholder={tw('dynastyWarRoom.panel.askPlaceholder')}
           rows={2}
           data-testid="dynasty-war-room-ask-input"
           className="dyn-input w-full resize-none rounded-md px-2 py-1.5 text-[12px]"
@@ -583,7 +589,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           data-testid="dynasty-war-room-ask-submit"
           className="dyn-action dyn-gold-text mt-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50"
         >
-          {askBusy && <Loader2 className="h-3 w-3 animate-spin" />} Ask
+          {askBusy && <Loader2 className="h-3 w-3 animate-spin" />} {tw('dynastyWarRoom.panel.ask')}
         </button>
         {askNote && (
           <p className="mt-2 text-[11px] text-amber-200/80" data-testid="dynasty-war-room-ask-note">
