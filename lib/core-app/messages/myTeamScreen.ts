@@ -217,6 +217,11 @@ export const myTeamScreenMessages = defineMessages({
     basisCoverage: (afProjected: number, projected: number) =>
       `Your league’s total is built from ${afProjected} of ${projected} priced starters, so it reads low next to the standard one.`,
 
+    // MyTeam starters table footer and matchup card link
+    startersTotal: 'Starters total',
+    startersTotalCoverage: (priced: number, starters: number) => `${priced} of ${starters} priced for this league`,
+    goToMatchup: 'Go to matchup',
+
     // MyTeam starters note
     startersNoteNative: 'Native AllFantasy lineup. Save eligible changes in Roster decisions; server rules and locks apply.',
     startersNoteBestBall: (platform: string) => `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.`,
@@ -377,6 +382,10 @@ export const myTeamScreenMessages = defineMessages({
 
     basisCoverage: (afProjected, projected) =>
       `El total de tu liga incluye ${afProjected} de ${projected} titulares con proyección, así que puede parecer bajo frente al estándar.`,
+
+    startersTotal: 'Total de titulares',
+    startersTotalCoverage: (priced, starters) => `${priced} de ${starters} valorados para esta liga`,
+    goToMatchup: 'Ir al enfrentamiento',
 
     startersNoteNative: 'Liga nativa AllFantasy. Guarda cambios válidos en Decisiones de plantilla; se aplican las reglas y cierres del servidor.',
     startersNoteBestBall: (platform) => `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.`,
