@@ -23,8 +23,6 @@ type Props = {
   joinedLeagueId: string | null
 }
 
-const pct = (share: number) => `${Math.round(share * 100)}%`
-
 /**
  * The invite page for a Zombie league — the existing `/join?code=` route, dressed for the variant the way
  * `SurvivorJoin` dresses a Survivor league. Every number is the engine's (`getZombieRulesForSport`).
@@ -147,7 +145,7 @@ export function ZombieHowItWorks({ zombie: z }: { zombie: ZombieJoinPreview }) {
     [
       'maul',
       'Every point counts',
-      'Survivor wins earn 2, 4 or 6 winnings units by opponent. Zombies and Whisperers can take accumulated winnings. Bashings and maulings can take all the loser holds.',
+      `Survivor wins earn 2, 4 or 6 winnings units by opponent. A Survivor win by ${z.bashingMargin}+ is a bashing; a Zombie win by ${z.maulingMargin}+ is a mauling. Both take all the loser’s accumulated winnings. Zombies and Whisperers can also take winnings through ordinary wins.`,
     ],
     ['serum', 'Come back', `Collect ${z.reviveSerums} serums and a Zombie returns as a Survivor.`],
   ]

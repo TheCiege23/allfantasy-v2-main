@@ -162,7 +162,7 @@ export function DraftRightDockTabs({
         /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
            have squeezed or stranded a column as soon as a fifth tab existed. */
         style={{}}
-        className="flex shrink-0 overflow-x-auto border-b border-white/[0.05] bg-[#101a30]" 
+        className="flex shrink-0 overflow-x-auto border-b border-white/[0.05] bg-[#101a30]"
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
