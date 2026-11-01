@@ -210,6 +210,19 @@ describe('get_player_game_log — daily sports', () => {
     expect(query.text).toContain('game_date <')
     expect(query.text).not.toContain('AND season =')
   })
+
+  it('labels an older soccer year as a partial tagged-year history when its opener is unknown', async () => {
+    const { db, calls } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: 'old:fielders', season: 2024, map: { group: 'fielders',
+        seasonType: 'regular', stats: { goals: 1, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'SOCCER', season: 2024 }, db)
+    expect(out).toContain('only stored games tagged year 2024')
+    expect(out).toContain('1 goals')
+    const query = calls.find((call) => call.text.includes('FROM player_game_stats') && call.text.includes('ORDER BY game_date'))!
+    expect(query.text).toContain('AND season =')
+  })
   it('MLB: merges a two-way game into ONE line, pitching decision included', async () => {
     const { db } = logDb({
       registry: OHTANI_REG,

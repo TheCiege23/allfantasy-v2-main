@@ -391,9 +391,7 @@ export async function buildDailyGameLogContext(
   const requestedSeason = typeof args.season === 'number' && Number.isFinite(args.season) ? Math.floor(args.season) : null
   const lastN = Math.min(10, Math.max(1, typeof args.lastN === 'number' && Number.isFinite(args.lastN) ? Math.floor(args.lastN) : 5))
   const opener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason) : null
-  if (requestedSeason != null && sport !== 'MLB' && !opener) {
-    return `The ${dailySeasonLabel(sport, requestedSeason)} ${sport} season opener is not verified, so its game logs cannot be separated safely from adjacent seasons.`
-  }
+  const calendarYearSubset = requestedSeason != null && sport !== 'MLB' && !opener
   const nextOpener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason + 1) : null
   // For a future opener not yet recorded, stop before the next league season could begin.
   // This is a conservative search boundary, not a claimed schedule date.
@@ -436,14 +434,18 @@ export async function buildDailyGameLogContext(
   }
 
   const header = `${player.canonicalName} (${player.position ?? '?'}, ${player.currentTeam ?? 'FA'}) — ${sport} per-game box-score lines from Rolling Insights, newest first:`
+  const subsetNote = calendarYearSubset
+    ? `The ${dailySeasonLabel(sport, requestedSeason!)} season opener is not recorded. These are only stored games tagged year ${requestedSeason}; they may omit games from the rest of that season.` : null
   if (games.length === 0) {
     return [
       header,
+      subsetNote,
       `- No ${requestedSeason != null ? `${dailySeasonLabel(sport, requestedSeason)} ` : ''}regular-season or playoff game lines are stored for him.${preseason ? ` (${preseason} preseason line(s) are stored and deliberately not shown — preseason is not the season.)` : ''} Do NOT report zeros or give lines from memory.${sport === 'SOCCER' ? '' : ' Offer his season totals (get_player_season_stats) instead.'}`,
-    ].join('\n')
+    ].filter(Boolean).join('\n')
   }
 
   const lines: string[] = []
+  if (subsetNote) lines.push(subsetNote)
   const newest = latest(games[0].rows.map((r) => r.gameDate))
   const sportLatest = sportLatestRows[0]?.latest ?? null
   if (requestedSeason == null && newest && sportLatest && new Date(sportLatest).getTime() - newest.getTime() > 3 * 86_400_000) {
