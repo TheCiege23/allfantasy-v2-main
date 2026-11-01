@@ -229,6 +229,12 @@ describe('Disadvantages', () => {
     expect(auctionPrizeDisadvantageError({ kind: 'opponent_penalty', amount: 10, powerType: 'extra_vote', samePositionOnly: false }, [])).toMatch(/turned off/)
     expect(auctionPrizeDisadvantageError({ kind: 'opponent_penalty', amount: 10, powerType: 'extra_vote', samePositionOnly: false }, ['opponent_penalty'])).toBeNull()
     expect(auctionPrizeDisadvantageError({ kind: 'opponent_penalty', amount: 0, powerType: 'extra_vote', samePositionOnly: false }, ['opponent_penalty'])).toMatch(/1 to 500/)
+    // Forced bench: the same commissioner opt-in, and a reward-API spec that waits for the choice.
+    const bench = { kind: 'forced_bench' as const, amount: 0, powerType: 'extra_vote' as const, samePositionOnly: false }
+    expect(auctionPrizeDisadvantageError(bench, ['vote_taken'])).toMatch(/turned off/)
+    expect(auctionPrizeDisadvantageError(bench, ['forced_bench'])).toBeNull()
+    expect(prizeRewardSpec(bench, 'r1', 8)).toEqual({ type: 'forced_bench', chooserRosterId: 'r1', targetWeek: 8 })
+    expect(rewardNeedsChoice({ type: 'forced_bench', chooserRosterId: 'r1' })).toBe(true)
   })
 
   it('target opponents only (other tribes before the merge); Chimmy aims at the strongest', () => {

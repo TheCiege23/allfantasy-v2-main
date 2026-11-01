@@ -22,6 +22,7 @@ function prizeText(p: SurvivorSideGameSettings['survivorPoolPrize'], es: boolean
     case 'auction_cash': return es ? `$${p.amount} de dinero de subasta` : `$${p.amount} auction cash`
     case 'tokens': return es ? `${p.amount} fichas del Exilio` : `${p.amount} Exile tokens`
     case 'opponent_penalty': return es ? `−${p.amount} puntos para un rival que elijas` : `−${p.amount} points on an opponent you choose`
+    case 'forced_bench': return es ? 'mandar a la banca a un jugador de un rival que elijas' : 'forcing one of an opponent’s players to the bench'
     case 'vote_taken': return es ? 'quitarle el voto a un rival en su próximo Consejo Tribal' : 'taking an opponent’s vote at their next Tribal Council'
   }
 }

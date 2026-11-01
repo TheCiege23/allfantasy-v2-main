@@ -38,7 +38,7 @@ export type TokenPoolWrongPick = (typeof TOKEN_POOL_WRONG_PICK)[number]
  * A prize a side game pays. Everything but `auction_cash` and `tokens` is a reward-API spec
  * (`applySurvivorReward`); those two are side-game balances.
  */
-export const SIDE_GAME_PRIZE_KINDS = ['none', 'faab', 'score_bonus', 'advantage', 'free_trade_token', 'steal_blocker', 'auction_cash', 'tokens', 'opponent_penalty', 'vote_taken'] as const
+export const SIDE_GAME_PRIZE_KINDS = ['none', 'faab', 'score_bonus', 'advantage', 'free_trade_token', 'steal_blocker', 'auction_cash', 'tokens', 'opponent_penalty', 'vote_taken', 'forced_bench'] as const
 export type SideGamePrizeKind = (typeof SIDE_GAME_PRIZE_KINDS)[number]
 
 export interface SideGamePrize {
@@ -54,14 +54,16 @@ export interface SideGamePrize {
  * Disadvantage items: the winner (or buyer) hurts an opponent they choose, through the reward API's
  * choice flow (`chooseSurvivorRewardTarget`). `opponent_penalty`: `amount` points off the chosen
  * opponent's week. `vote_taken`: the chosen opponent's vote at their next Tribal Council does not
- * count. Each is OFF until the commissioner enables it (`disadvantagesEnabled`).
+ * count. `forced_bench`: one of the chosen opponent's players cannot start that week (Survivor-only
+ * lineup and score checks, lib/survivor/survivorForcedBench.ts). Each is OFF until the commissioner
+ * enables it (`disadvantagesEnabled`).
  */
-export const SIDE_GAME_DISADVANTAGE_KINDS = ['opponent_penalty', 'vote_taken'] as const
+export const SIDE_GAME_DISADVANTAGE_KINDS = ['opponent_penalty', 'vote_taken', 'forced_bench'] as const
 export type SideGameDisadvantageKind = (typeof SIDE_GAME_DISADVANTAGE_KINDS)[number]
 export const isDisadvantageKind = (kind: string): kind is SideGameDisadvantageKind => (SIDE_GAME_DISADVANTAGE_KINDS as readonly string[]).includes(kind)
 
 /** What the shop may sell. Each is delivered through the reward API. */
-export const TOKEN_SHOP_KINDS = ['advantage', 'free_trade_token', 'steal_blocker', 'faab', 'score_bonus', 'opponent_penalty', 'vote_taken'] as const
+export const TOKEN_SHOP_KINDS = ['advantage', 'free_trade_token', 'steal_blocker', 'faab', 'score_bonus', 'opponent_penalty', 'vote_taken', 'forced_bench'] as const
 export type TokenShopKind = (typeof TOKEN_SHOP_KINDS)[number]
 
 export interface TokenShopItem {

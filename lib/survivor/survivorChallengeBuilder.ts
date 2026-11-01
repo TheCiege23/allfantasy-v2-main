@@ -477,6 +477,7 @@ function describePayout(p: PlannedPayout, lang: ChallengeLang): string {
     case 'advantage': return es ? 'Ventaja' : 'Advantage'
     case 'opponent_penalty': return es ? `−${s.points} puntos a un rival` : `−${s.points} points on an opponent`
     case 'vote_taken': return es ? 'Quitarle el voto a un rival' : 'Take an opponent’s vote'
+    case 'forced_bench': return es ? 'Banca obligatoria para un jugador rival' : 'Force an opponent’s player to the bench'
   }
 }
 

@@ -29,6 +29,7 @@ export const SURVIVOR_REWARD_TYPES = [
   // Disadvantages the winner aims at an opponent (side-game auctions and the token shop).
   'opponent_penalty',
   'vote_taken',
+  'forced_bench',
 ] as const
 export type SurvivorRewardType = (typeof SURVIVOR_REWARD_TYPES)[number]
 
@@ -99,6 +100,13 @@ export type SurvivorRewardSpec =
    * target votes at (`applyPendingVoteTakenRewards`, run by the season runner).
    */
   | { type: 'vote_taken'; chooserRosterId: string; targetRosterId?: string | null }
+  /**
+   * A disadvantage: one of the chosen opponent's players may not start in `targetWeek` (default: the
+   * week won). `playerId` is the winner's pick; left out, it is the opponent's first starter (their top
+   * starting slot) when the choice is made. Enforced Survivor-only by the lineup saves and the Survivor
+   * score (lib/survivor/survivorForcedBench.ts).
+   */
+  | { type: 'forced_bench'; chooserRosterId: string; targetRosterId?: string | null; playerId?: string | null; targetWeek?: number | null }
 
 export interface SurvivorRewardSource {
   kind: SurvivorRewardSourceKind
@@ -247,6 +255,13 @@ export function validateSurvivorRewardSpec(spec: unknown): string | null {
       if (r.targetRosterId != null && r.targetRosterId === r.chooserRosterId) return 'Choose an opponent, not yourself.'
       if (!optWeek('targetWeek')) return 'The target week is not valid.'
       return null
+    case 'forced_bench':
+      if (!isId(r.chooserRosterId)) return 'Choose the winner.'
+      if (r.targetRosterId != null && !isId(r.targetRosterId)) return 'The opponent is not valid.'
+      if (r.targetRosterId != null && r.targetRosterId === r.chooserRosterId) return 'Choose an opponent, not yourself.'
+      if (r.playerId != null && !isId(r.playerId)) return 'The player is not valid.'
+      if (!optWeek('targetWeek')) return 'The target week is not valid.'
+      return null
     case 'vote_taken':
       if (!isId(r.chooserRosterId)) return 'Choose the winner.'
       if (r.targetRosterId != null && !isId(r.targetRosterId)) return 'The opponent is not valid.'
@@ -272,6 +287,7 @@ export function rewardHolderRosterIds(spec: SurvivorRewardSpec): string[] {
   switch (spec.type) {
     case 'tribemate_points': return [spec.chooserRosterId]
     case 'opponent_penalty':
+    case 'forced_bench':
     case 'vote_taken': return [spec.chooserRosterId]
     case 'steal': return [spec.thiefRosterId]
     case 'faab_transfer': return []
@@ -287,7 +303,7 @@ export function rewardApplyWeek(input: Pick<ApplySurvivorRewardInput, 'week' | '
 
 /** Whether a reward needs its holder's choice before it can apply. */
 export function rewardNeedsChoice(spec: SurvivorRewardSpec): boolean {
-  return (spec.type === 'tribemate_points' || spec.type === 'steal' || spec.type === 'opponent_penalty' || spec.type === 'vote_taken') && !spec.targetRosterId
+  return (spec.type === 'tribemate_points' || spec.type === 'steal' || spec.type === 'opponent_penalty' || spec.type === 'vote_taken' || spec.type === 'forced_bench') && !spec.targetRosterId
 }
 
 export interface FaabTransferPlan {
@@ -464,6 +480,7 @@ export function describeSurvivorReward(record: Pick<SurvivorRewardRecord, 'spec'
     case 'steal': line = es ? `Robo de ${s.what === 'faab' ? `$${s.amount} de FAAB` : `${fmtPts(s.amount)} puntos`}` : `A steal of ${s.what === 'faab' ? `$${s.amount} FAAB` : `${fmtPts(s.amount)} points`}`; break
     case 'advantage': line = es ? `Ventaja: ${s.powerType.replace(/_/g, ' ')}` : `Advantage: ${s.powerType.replace(/_/g, ' ')}`; break
     case 'opponent_penalty': line = es ? `Desventaja: −${fmtPts(s.points)} puntos para un rival que elijas (semana ${wk})` : `Disadvantage: −${fmtPts(s.points)} points on an opponent you choose (week ${wk})`; break
+    case 'forced_bench': line = es ? `Desventaja: un jugador de un rival que elijas no puede ser titular (semana ${wk})` : `Disadvantage: one of an opponent’s players you choose cannot start (week ${wk})`; break
     case 'vote_taken': line = es ? 'Desventaja: el voto de un rival que elijas no cuenta en su próximo Consejo Tribal' : 'Disadvantage: an opponent you choose loses their vote at their next Tribal Council'; break
   }
   return `${line}${statusSuffix}`

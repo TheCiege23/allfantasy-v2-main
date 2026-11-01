@@ -21,6 +21,9 @@ vi.mock('@/lib/prisma', () => {
     survivorPlayer: {
       findFirst: vi.fn(async ({ where }: { where: Row }) => s.players.find((p) => p.redraftRosterId === where.redraftRosterId) ?? null),
     },
+    roster: {
+      findFirst: vi.fn(async ({ where }: { where: Row }) => (where.id === 'r2' ? { playerData: { lineup_sections: { starters: [{ id: 'qb2', name: 'QB Two' }, { id: 'rb2' }], bench: [{ id: 'wr2' }] } } } : null)),
+    },
     survivorWeeklyScore: {
       findUnique: vi.fn(async ({ where }: { where: { leagueId_userId_week: Row } }) => s.scores.find((x) => x.userId === where.leagueId_userId_week.userId && x.week === where.leagueId_userId_week.week) ?? null),
       upsert: vi.fn(async ({ where, create, update }: { where: { leagueId_userId_week: Row }; create: Row; update: Row }) => {
@@ -46,6 +49,7 @@ vi.mock('@/lib/prisma', () => {
 })
 
 import { applyPendingVoteTakenRewards, applySurvivorReward, chooseSurvivorRewardTarget, listSurvivorRewards, reverseSurvivorReward, voteTakenPlayId } from '@/lib/survivor/survivorRewardEngine'
+import { activeForcedBench, firstStarterId, forcedBenchConflicts, forcedBenchMessage, forcedBenchStarterPoints } from '@/lib/survivor/survivorForcedBench'
 
 beforeEach(() => {
   s.audit = []
@@ -68,6 +72,41 @@ describe('opponent point penalty', () => {
     expect(chosen).toMatchObject({ ok: true, status: 'applied' })
     expect(s.scores.find((x) => x.userId === 'u2')).toMatchObject({ week: 6, pointPenaltyApplied: 12 })
     expect(s.scores.find((x) => x.userId === 'u1')).toBeUndefined() // nothing credited to the winner
+  })
+})
+
+describe('forced bench', () => {
+  it('waits for the choice, then benches the opponent’s first starter (written onto the spec)', async () => {
+    await applySurvivorReward({ leagueId: 'L1', idempotencyKey: 'fb1', source, week: 6, reward: { type: 'forced_bench', chooserRosterId: 'r1', targetWeek: 7 } })
+    const chosen = await chooseSurvivorRewardTarget({ leagueId: 'L1', rewardId: 'fb1', actorRosterId: 'r1', targetRosterId: 'r2' })
+    expect(chosen).toMatchObject({ ok: true, status: 'applied', note: 'forced_bench:qb2:week:7' })
+    const rec = (await listSurvivorRewards('L1')).find((r) => r.rewardId === 'fb1')!
+    expect(rec.spec).toMatchObject({ type: 'forced_bench', targetRosterId: 'r2', playerId: 'qb2' })
+    expect(activeForcedBench([rec], 'r2', 7)).toEqual(new Set(['qb2']))
+    expect(activeForcedBench([rec], 'r2', 6).size).toBe(0)
+  })
+
+  it('the winner may name the player — but only one on that opponent’s roster', async () => {
+    await applySurvivorReward({ leagueId: 'L1', idempotencyKey: 'fb2', source, week: 6, reward: { type: 'forced_bench', chooserRosterId: 'r1' } })
+    expect(await chooseSurvivorRewardTarget({ leagueId: 'L1', rewardId: 'fb2', actorRosterId: 'r1', targetRosterId: 'r2', targetPlayerId: 'nobody' })).toMatchObject({ ok: false, code: 'invalid' })
+    expect(await chooseSurvivorRewardTarget({ leagueId: 'L1', rewardId: 'fb2', actorRosterId: 'r1', targetRosterId: 'r2', targetPlayerId: 'rb2' })).toMatchObject({ ok: true, note: 'forced_bench:rb2:week:6' })
+  })
+
+  it('a reversed forced bench no longer binds', async () => {
+    await applySurvivorReward({ leagueId: 'L1', idempotencyKey: 'fb3', source, week: 6, reward: { type: 'forced_bench', chooserRosterId: 'r1', targetRosterId: 'r2' } })
+    await reverseSurvivorReward({ leagueId: 'L1', rewardId: 'fb3', actorUserId: 'host' })
+    expect(activeForcedBench(await listSurvivorRewards('L1'), 'r2', 6).size).toBe(0)
+  })
+})
+
+describe('forced bench, pure', () => {
+  it('conflicts, EN/ES messages, the scored points it takes away, and the first starter', () => {
+    expect(forcedBenchConflicts(['a', 'b', 'a'], new Set(['a']))).toEqual(['a'])
+    expect(forcedBenchMessage(['Ana'], 4, 'en')).toBe('Ana is forced to the bench by a Survivor disadvantage and cannot start in week 4.')
+    expect(forcedBenchMessage(['Ana', 'Ben'], 4, 'es')).toContain('están en la banca obligatoria')
+    expect(forcedBenchStarterPoints([{ playerId: 'a', points: 21.5, isStarter: true }, { playerId: 'a', points: 3, isStarter: false }, { playerId: 'b', points: 9, isStarter: true }], new Set(['a']))).toBe(21.5)
+    expect(firstStarterId({ starters: ['x', 'y'] })).toBe('x')
+    expect(firstStarterId({})).toBeNull()
   })
 })
 

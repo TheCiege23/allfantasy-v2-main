@@ -177,6 +177,7 @@ export function SurvivorSideGamesHubPanel({ leagueId }: { leagueId: string }) {
                 <option value="faab">{m.prizeFaab}</option><option value="score_bonus">{m.prizeScore}</option><option value="tokens">{m.prizeTokens}</option>
                 {s.disadvantagesEnabled?.includes('opponent_penalty') && <option value="opponent_penalty">{m.prizeOpponentPenalty}</option>}
                 {s.disadvantagesEnabled?.includes('vote_taken') && <option value="vote_taken">{m.prizeVoteTaken}</option>}
+                {s.disadvantagesEnabled?.includes('forced_bench') && <option value="forced_bench">{m.prizeForcedBench}</option>}
               </select>
               {it.kind === 'advantage' && <select aria-label={m.prizeAdvantage} value={it.powerType} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, powerType: e.target.value as DraftItem['powerType'] } : x)))} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs"><option value="extra_vote">extra vote</option><option value="vote_shield">vote shield</option><option value="vote_steal">vote steal</option></select>}
               {['faab', 'score_bonus', 'tokens', 'opponent_penalty'].includes(it.kind) && <input type="number" min={1} max={1000} aria-label={m.poolPrizeAmount} value={it.amount} onChange={(e) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) } : x)))} className="w-20 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs" />}

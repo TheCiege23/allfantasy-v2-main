@@ -61,10 +61,20 @@ export async function sumRedraftStartersFantasy(
   // The commissioner's week-1 window ("Thursday and Friday players will not count"): Survivor's own
   // week-1 total only, never the base league's matchup score (lib/survivor/survivorWeekOneScoring.ts).
   const weekOneStartDay = league ? survivorWeekOneStartDay(league, week) : null
-  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season, ...(weekOneStartDay ? { collectPlayerPoints: true } : {}) })
+  // A "forced bench" disadvantage (lib/survivor/survivorForcedBench.ts): that player's points from a
+  // starting slot do not count toward Survivor's score this week, even if the lineup saves let him in.
+  const benched = league?.survivorMode
+    ? await import('./survivorForcedBench').then((m) => m.loadForcedBench(season.leagueId, rosterId, week)).catch(() => new Set<string>())
+    : new Set<string>()
+  const score = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: actual.id, week, seasonYear: season.season, ...(weekOneStartDay || benched.size ? { collectPlayerPoints: true } : {}) })
   const allFinalized = score.starterCount > 0 && score.scoredStarterCount === score.starterCount && score.missingPlayerIds.length === 0 && score.allFinal
+  if (benched.size && score.playerPoints) {
+    const { forcedBenchStarterPoints } = await import('./survivorForcedBench')
+    const off = forcedBenchStarterPoints(score.playerPoints, benched)
+    if (off) score.points = Math.round((score.points - off) * 100) / 100
+  }
   if (weekOneStartDay && score.playerPoints) {
-    const excluded = await survivorWeekOneExclusion({ sport: String(league?.sport ?? 'NFL'), season: season.season, week, startDay: weekOneStartDay, redraftRosterId: actual.id, playerPoints: score.playerPoints })
+    const excluded = await survivorWeekOneExclusion({ sport: String(league?.sport ?? 'NFL'), season: season.season, week, startDay: weekOneStartDay, redraftRosterId: actual.id, playerPoints: benched.size ? score.playerPoints.filter((p) => !benched.has(p.playerId)) : score.playerPoints })
       .catch((error) => {
         console.warn('[survivor] week-1 window not applied', error instanceof Error ? error.message : error)
         return 0

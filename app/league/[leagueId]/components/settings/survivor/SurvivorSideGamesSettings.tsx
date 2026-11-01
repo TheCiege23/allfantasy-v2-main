@@ -24,6 +24,7 @@ type Loaded = { settings: SurvivorSideGameSettings; locked: SurvivorSideGameKey[
 const DISADVANTAGE_SHOP_ITEM: Record<SideGameDisadvantageKind, SurvivorSideGameSettings['tokenShopItems'][number]> = {
   opponent_penalty: { id: 'opponent_penalty', kind: 'opponent_penalty', enabled: false, cost: 4, amount: 10, powerType: 'extra_vote', samePositionOnly: false },
   vote_taken: { id: 'vote_taken', kind: 'vote_taken', enabled: false, cost: 6, amount: 0, powerType: 'extra_vote', samePositionOnly: false },
+  forced_bench: { id: 'forced_bench', kind: 'forced_bench', enabled: false, cost: 5, amount: 0, powerType: 'extra_vote', samePositionOnly: false },
 }
 
 /**
@@ -166,7 +167,7 @@ export function SurvivorSideGamesSettings({ leagueId, canEdit }: { leagueId: str
 
       <SettingsSection id="sv-side-disadvantages" title={m.disadvantagesTitle} description={m.disadvantagesHelp}>
         {SIDE_GAME_DISADVANTAGE_KINDS.map((kind) => (
-          <SettingsRow key={kind} label={kind === 'opponent_penalty' ? m.disOpponentPenalty : m.disVoteTaken} control={<Toggle checked={draft.disadvantagesEnabled.includes(kind)} disabled={off} onChange={(v) => setDraft((d) => {
+          <SettingsRow key={kind} label={kind === 'opponent_penalty' ? m.disOpponentPenalty : kind === 'forced_bench' ? m.disForcedBench : m.disVoteTaken} control={<Toggle checked={draft.disadvantagesEnabled.includes(kind)} disabled={off} onChange={(v) => setDraft((d) => {
             const enabled = v ? [...new Set([...d.disadvantagesEnabled, kind])] : d.disadvantagesEnabled.filter((k) => k !== kind)
             // Turning one on adds its shop item (not for sale until you switch it on and price it);
             // turning it off takes that item off sale, so the save is never refused for it.

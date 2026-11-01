@@ -65,7 +65,8 @@ export async function runChimmyRewardChoices(leagueId: string): Promise<string[]
         points: weekByUser.get(r.userId) ?? 0,
       })))
       target = pickChimmyStealTarget(candidates, holderRosterId, what)
-    } else if (reward.spec.type === 'opponent_penalty' || reward.spec.type === 'vote_taken') {
+    } else if (reward.spec.type === 'opponent_penalty' || reward.spec.type === 'vote_taken' || reward.spec.type === 'forced_bench') {
+      // (A forced bench then sits the chosen opponent's first starter: the engine's default.)
       // A disadvantage (side-game auction / shop): the strongest opponent by season points — before
       // the merge only managers on OTHER tribes. Nothing private is read.
       const rivals = cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== holderRosterId && (!holder.tribeId || c.tribeId !== holder.tribeId))

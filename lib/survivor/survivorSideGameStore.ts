@@ -269,6 +269,7 @@ export function prizeRewardSpec(prize: SideGamePrize, rosterId: string, targetWe
     // Disadvantages wait for the winner's choice of opponent (the reward API's choice flow).
     case 'opponent_penalty': return prize.amount > 0 ? { type: 'opponent_penalty', chooserRosterId: rosterId, points: prize.amount, targetWeek } : null
     case 'vote_taken': return { type: 'vote_taken', chooserRosterId: rosterId }
+    case 'forced_bench': return { type: 'forced_bench', chooserRosterId: rosterId, targetWeek }
     default: return null
   }
 }

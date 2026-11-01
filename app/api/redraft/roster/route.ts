@@ -10,6 +10,7 @@ import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
 import { calculateScoreFromSportConfig, isBestBallCandidateSlot } from '@/lib/redraft/scoringEngine'
 import {
   applyRedraftLineupMoves,
+  isNonStarterSlot,
   validateRedraftLineup,
   type RedraftLineupPlayer,
   type RedraftLineupValidationResult,
@@ -720,6 +721,17 @@ export async function PATCH(req: NextRequest) {
       },
       { status: 422 },
     )
+  }
+
+  // Survivor's "forced bench" disadvantage (lib/survivor/survivorForcedBench.ts): SURVIVOR LEAGUES ONLY.
+  if (leagueForLock?.survivorMode === true) {
+    const { forcedBenchSaveRefusal } = await import('@/lib/survivor/survivorForcedBench')
+    const refusal = await forcedBenchSaveRefusal({
+      leagueId: roster.leagueId, redraftRosterId: roster.id, week,
+      starterIds: applied.players.filter((p) => !isNonStarterSlot(p.slotType)).map((p) => p.playerId),
+      nameOf: (id) => currentPlayers.find((p) => p.playerId === id)?.playerName ?? null,
+    })
+    if (refusal) return NextResponse.json({ error: refusal, code: 'SURVIVOR_FORCED_BENCH' }, { status: 409 })
   }
 
   // The taxi move rules the commissioner switched on (lib/taxi/taxiMoveRules.ts), as on the lineup screen.

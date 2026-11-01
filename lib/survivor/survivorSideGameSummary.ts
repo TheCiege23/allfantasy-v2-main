@@ -70,7 +70,7 @@ export function sideGameGroundingLine(input: SideGameGroundingInput): string {
     parts.push(`Survivor Pool (castaways on the island, from week ${s.survivorPoolStartWeek}): pick one winning team a week${rule ? ` ${rule}` : ''}; a correct pick wins ${prizeText(s.survivorPoolPrize)}; a wrong pick knocks you out; ${tie}${miss}${s.survivorPoolNoReuse ? '; each team can be used once per season' : ''}; ${s.survivorPoolRevives} revives, then banned`)
   }
   parts.push(`Auctions bid in ${s.auctionCurrency === 'auction_cash' ? 'auction cash' : 'FAAB'}; highest bid wins, a tie goes to the earlier bid; sealed bids lock; a prize that cannot be delivered is refunded automatically`)
-  if (s.disadvantagesEnabled.length) parts.push(`Disadvantages on offer (the winner chooses the opponent): ${s.disadvantagesEnabled.map((k) => (k === 'opponent_penalty' ? 'a point penalty' : 'taking a vote at their next Tribal')).join(', ')}`)
+  if (s.disadvantagesEnabled.length) parts.push(`Disadvantages on offer (the winner chooses the opponent): ${s.disadvantagesEnabled.map((k) => (k === 'opponent_penalty' ? 'a point penalty' : k === 'forced_bench' ? 'forcing one of their players to the bench for a week' : 'taking a vote at their next Tribal')).join(', ')}`)
   const mine: string[] = [`tokens ${me.tokens}`]
   if (s.tokenPoolMode === 'streak' && me.pot) mine.push(`unbanked streak ${me.pot}`)
   if (me.state === 'exile' && s.tokenPoolEnabled) mine.push(`Token Pool picks this week ${me.tokenPoolPicksThisWeek}/${s.tokenPoolPicksPerWeek}`)
