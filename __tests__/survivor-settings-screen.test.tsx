@@ -122,6 +122,83 @@ describe('settings model', () => {
   })
 })
 
+describe('settings-screen API refusals follow League.language with a stable code', () => {
+  const MSG = {
+    en: {
+      unauthorized: 'Unauthorized', commissionerOnly: 'Commissioner access required', leagueNotFound: 'League not found',
+      unknownScene: 'Unknown island scene.', malformedForm: 'Send the whole settings form.',
+      settingsLocked: 'These settings locked when the draft started. Only the settings marked "Editable all season" can change during the season.',
+      chimmyBossUnavailable: "Chimmy's roster boss is only kept for leagues that already use it.",
+      playingCommissionerManualTribes: 'A playing commissioner must use system-run tribe formation.',
+      idolSaveFailed: 'Idol count out of range.',
+    },
+    es: {
+      unauthorized: 'No has iniciado sesión.', commissionerOnly: 'Solo el comisionado puede hacer esto.', leagueNotFound: 'No se encontró la liga.',
+      unknownScene: 'Escena de la isla desconocida.', malformedForm: 'Envía el formulario de ajustes completo.',
+      settingsLocked: 'Estos ajustes se bloquearon al empezar el draft. Durante la temporada solo pueden cambiar los marcados como «Editable toda la temporada».',
+      chimmyBossUnavailable: 'El jefe con la plantilla de Chimmy solo se mantiene en las ligas que ya lo usan.',
+      playingCommissionerManualTribes: 'Un comisionado que juega debe usar la formación de tribus del sistema.',
+      idolSaveFailed: 'No se pudo guardar la configuración de ídolos.',
+    },
+  } as const
+  const league = (language: string, settings = storedSettings()) => m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings, survivorSwapWeek: 5, survivorFinal3: true, language }))
+  const expectRefusal = async (res: Response, status: number, code: keyof typeof MSG.en, lang: 'en' | 'es') => {
+    expect(res.status).toBe(status)
+    expect(await res.json()).toMatchObject({ error: MSG[lang][code], code })
+  }
+
+  for (const lang of ['en', 'es'] as const) {
+    it(`[${lang}] signed out (401), not commissioner (403), no league (404)`, async () => {
+      league(lang)
+      m.session = null
+      await expectRefusal(await POST(req({ form: form() }), params), 401, 'unauthorized', lang)
+      m.session = { user: { id: 'commish' } }
+      m.access = { isLeagueMember: true, decisions: { canUpdateSettings: false } }
+      await expectRefusal(await GET(req({}), params), 403, 'commissionerOnly', lang)
+      await expectRefusal(await POST(req({ form: form() }), params), 403, 'commissionerOnly', lang)
+      m.access = null
+      await expectRefusal(await POST(req({ form: form() }), params), 404, 'leagueNotFound', lang)
+    })
+
+    it(`[${lang}] an unknown island scene and a malformed form (400)`, async () => {
+      league(lang)
+      await expectRefusal(await POST(req({ form: { ...form(), islandScene: 'moon' } }), params), 400, 'unknownScene', lang)
+      await expectRefusal(await POST(req({ form: { ...form(), tribeCount: undefined } }), params), 400, 'malformedForm', lang)
+      await expectRefusal(await POST(req({}), params), 400, 'malformedForm', lang)
+    })
+
+    it(`[${lang}] settings locked (409, keeps the locked keys)`, async () => {
+      league(lang)
+      m.draftStarted = true
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      const res = await POST(req({ form: { ...before, idolCount: 8 } }), params)
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: MSG[lang].settingsLocked, code: 'settingsLocked', locked: ['idolCount'] })
+    })
+
+    it(`[${lang}] a playing commissioner choosing manual tribes (409) and Chimmy's boss for a new league (422)`, async () => {
+      league(lang, storedSettings({ commissionerParticipationMode: 'participating_player', exileBossMode: 'median' }))
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      await expectRefusal(await POST(req({ form: { ...before, tribeFormation: 'commissioner_manual' } }), params), 409, 'playingCommissionerManualTribes', lang)
+      await expectRefusal(await POST(req({ form: { ...before, exileBossMode: 'chimmy_roster' } }), params), 422, 'chimmyBossUnavailable', lang)
+      expect(m.tx.league.update).not.toHaveBeenCalled()
+    })
+
+    it(`[${lang}] a refused idol save inside the transaction`, async () => {
+      league(lang)
+      m.idolSave.mockResolvedValue({ ok: false, status: 400, error: 'Idol count out of range.' })
+      const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+      await expectRefusal(await POST(req({ form: { ...before, idolCount: 8 } }), params), 400, 'idolSaveFailed', lang)
+    })
+  }
+
+  it('a missing league id is refused in English (there is no league to ask) with its code', async () => {
+    const res = await POST(req({ form: form() }), { params: Promise.resolve({ leagueId: '' }) })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Missing leagueId', code: 'missingLeague' })
+  })
+})
+
 describe('settings-screen API', () => {
   it('is commissioner only', async () => {
     m.access = { isLeagueMember: true, decisions: { canUpdateSettings: false } }

@@ -132,6 +132,39 @@ export const settingsErrorMessages = defineMessages({
   },
 })
 
+/**
+ * Every other refusal from the settings-screen API, keyed by a STABLE code, in the league's language.
+ * Same response shape as validation: `{ error, code }`. English strings are unchanged from before.
+ */
+export const settingsRefusalMessages = defineMessages({
+  en: {
+    unauthorized: 'Unauthorized',
+    missingLeague: 'Missing leagueId',
+    leagueNotFound: 'League not found',
+    commissionerOnly: 'Commissioner access required',
+    unknownScene: 'Unknown island scene.',
+    malformedForm: 'Send the whole settings form.',
+    settingsLocked: 'These settings locked when the draft started. Only the settings marked "Editable all season" can change during the season.',
+    chimmyBossUnavailable: "Chimmy's roster boss is only kept for leagues that already use it.",
+    playingCommissionerManualTribes: 'A playing commissioner must use system-run tribe formation.',
+    idolSaveFailed: (detail: string): string => detail || 'The idol setup could not be saved.',
+  },
+  es: {
+    unauthorized: 'No has iniciado sesión.',
+    missingLeague: 'Falta la liga.',
+    leagueNotFound: 'No se encontró la liga.',
+    commissionerOnly: 'Solo el comisionado puede hacer esto.',
+    unknownScene: 'Escena de la isla desconocida.',
+    malformedForm: 'Envía el formulario de ajustes completo.',
+    settingsLocked: 'Estos ajustes se bloquearon al empezar el draft. Durante la temporada solo pueden cambiar los marcados como «Editable toda la temporada».',
+    chimmyBossUnavailable: 'El jefe con la plantilla de Chimmy solo se mantiene en las ligas que ya lo usan.',
+    playingCommissionerManualTribes: 'Un comisionado que juega debe usar la formación de tribus del sistema.',
+    idolSaveFailed: (): string => 'No se pudo guardar la configuración de ídolos.',
+  },
+})
+
+export type SettingsRefusalCode = keyof typeof settingsRefusalMessages.en
+
 export type SettingsErrorCopy = typeof settingsErrorMessages.en
 export type SettingsErrorCode = keyof SettingsErrorCopy
 /** One validation error: a stable code and its message in the reader's language. */

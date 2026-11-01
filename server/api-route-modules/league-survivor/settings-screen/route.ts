@@ -46,7 +46,7 @@ import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/sur
 import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { readPrizePhaseRules, SURVIVOR_PRIZE_PHASE_RULES_KEY, validatePrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { readThievesCannotStealFromEachOther, SURVIVOR_THIEVES_RULE_KEY } from '@/lib/survivor/survivorRewardModel'
-import { settingsErrorMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { settingsErrorMessages, settingsRefusalMessages, type SettingsRefusalCode } from '@/lib/survivor/survivorSettingsScreenCopy'
 import { messagesFor } from '@/lib/i18n/messages'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
@@ -73,15 +73,37 @@ function rec(value: unknown): Rec {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Rec) : {}
 }
 
+type Lang = 'en' | 'es'
+const langOf = (language: unknown): Lang => (String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en')
+
+/** League.language, or English when there is no league to ask (or the read fails). */
+async function leagueLang(leagueId: string | null | undefined): Promise<Lang> {
+  if (!leagueId) return 'en'
+  try {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { language: true } })
+    return langOf((row as { language?: unknown } | null)?.language)
+  } catch {
+    return 'en'
+  }
+}
+
+/** A refusal in the league's language with its stable code: `{ error, code, ...extra }`. */
+function refuse(lang: Lang, code: SettingsRefusalCode, status: number, extra: Rec = {}, detail = ''): NextResponse {
+  const m = messagesFor(settingsRefusalMessages, lang)
+  const entry = m[code] as string | ((d: string) => string)
+  const error = typeof entry === 'function' ? entry(detail) : entry
+  return NextResponse.json({ error, code, ...extra }, { status })
+}
+
 async function authorize(ctx: Ctx) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   const { leagueId } = await ctx.params
-  if (!leagueId) return { error: NextResponse.json({ error: 'Missing leagueId' }, { status: 400 }) }
+  if (!userId) return { error: refuse(await leagueLang(leagueId), 'unauthorized', 401) }
+  if (!leagueId) return { error: refuse('en', 'missingLeague', 400) }
   const access = await resolveSurvivorAccessContext(leagueId, userId)
-  if (!access) return { error: NextResponse.json({ error: 'League not found' }, { status: 404 }) }
-  if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: NextResponse.json({ error: 'Commissioner access required' }, { status: 403 }) }
+  if (!access) return { error: refuse(await leagueLang(leagueId), 'leagueNotFound', 404) }
+  if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: refuse(await leagueLang(leagueId), 'commissionerOnly', 403) }
   return { leagueId, userId, access }
 }
 
@@ -176,7 +198,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const auth = await authorize(ctx)
   if ('error' in auth) return auth.error
   const state = await loadState(auth.leagueId, { canSeeDraw: auth.access.decisions.canSeeHiddenIdolAssignments })
-  if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  if (!state) return refuse('en', 'leagueNotFound', 404)
   return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -188,26 +210,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const body = rec(await req.json().catch(() => null))
   const sceneRaw = rec(body.form).islandScene
   if (sceneRaw !== undefined && !isSurvivorIslandScenePreference(sceneRaw)) {
-    return NextResponse.json({ error: 'Unknown island scene.' }, { status: 400 })
+    return refuse(await leagueLang(leagueId), 'unknownScene', 400)
   }
   const next = parseSettingsForm(body.form)
-  if (!next) return NextResponse.json({ error: 'Send the whole settings form.' }, { status: 400 })
+  if (!next) return refuse(await leagueLang(leagueId), 'malformedForm', 400)
 
   const state = await loadState(leagueId, viewer)
-  if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  if (!state) return refuse('en', 'leagueNotFound', 404)
+  const lang: Lang = state.language ?? 'en'
   const changed = changedSettingsKeys(state.form, next)
   if (!changed.length) return NextResponse.json({ ok: true, unchanged: true, state })
 
   const locked = lockedChanges(changed, state.locks)
-  if (locked.length) {
-    return NextResponse.json({ error: 'These settings locked when the draft started. Only the settings marked "Editable all season" can change during the season.', locked }, { status: 409 })
-  }
-  if (next.exileBossMode === 'chimmy_roster' && !state.chimmyBossAvailable) {
-    return NextResponse.json({ error: "Chimmy's roster boss is only kept for leagues that already use it." }, { status: 422 })
-  }
-  if (state.commissionerPlays && next.tribeFormation === 'commissioner_manual') {
-    return NextResponse.json({ error: 'A playing commissioner must use system-run tribe formation.' }, { status: 409 })
-  }
+  if (locked.length) return refuse(lang, 'settingsLocked', 409, { locked })
+  if (next.exileBossMode === 'chimmy_roster' && !state.chimmyBossAvailable) return refuse(lang, 'chimmyBossUnavailable', 422)
+  if (state.commissionerPlays && next.tribeFormation === 'commissioner_manual') return refuse(lang, 'playingCommissionerManualTribes', 409)
   // Validation errors in the league's language, each with a stable code (`settingsErrorMessages`).
   const detailed = settingsFormErrors(next, state.context, messagesFor(settingsErrorMessages, state.language ?? 'en'))
   if (detailed.length) {
@@ -303,7 +320,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     })
     return { ok: true as const, nextFoundation }
   })
-  if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status })
+  if (!outcome.ok) return refuse(lang, 'idolSaveFailed', outcome.status, {}, typeof outcome.error === 'string' ? outcome.error : '')
 
   const f = outcome.nextFoundation
   if (changed.some(k => ['tribeCount', 'tribeFormation', 'mergeTrigger', 'mergeWeek', 'mergeActivePlayerCount', 'selfVotesAllowed', 'exileEnabled', 'exileReturnTokens', 'idolCount', 'voteTime'].includes(k))) {
