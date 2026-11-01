@@ -93,7 +93,10 @@ export async function processBetaItemUse(leagueId: string, userId: string, rawMe
   const log = requestId
     ? await prisma.zombieChimmyAction.upsert({ where: { id: `item:${leagueId}:${userId}:${requestId}` }, create: { ...data, id: `item:${leagueId}:${userId}:${requestId}` }, update: {} })
     : await prisma.zombieChimmyAction.create({ data })
-  if (log.resolvedAt) return log
+  if (log.resolvedAt) {
+    if (log.isValid) await refreshItemScores(leagueId, log.week).catch(() => {})
+    return log
+  }
   try {
     await itemTransaction(async tx => {
       await lockItemLeague(tx, leagueId)

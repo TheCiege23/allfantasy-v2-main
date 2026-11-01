@@ -26,7 +26,9 @@ This tranche applies the approved NFL 2025 item rules to new native NFL Zombie w
 
 ## Verification
 
-Final test, lint, compiler and boundary-guard results are recorded after checking the final candidate. No error baseline or provider contract was changed.
+The final code candidate passed 607 tests across 74 files, including the full Zombie suite, affected native scoring/trade regressions and browser-hook tests covering rapid double-clicks, connection failures and HTTP 500 responses. ESLint and diff whitespace checks passed. Both the DB-first and decision-engine boundary guards passed for the complete two-commit change range.
+
+The full TypeScript compiler completed with exit 2 and 150 total diagnostics, with none in the implementation paths. This is not a passing compiler release gate. No error baseline or provider contract was changed. Final committed verification results are recorded in the delivery summary.
 
 ## Remaining work
 

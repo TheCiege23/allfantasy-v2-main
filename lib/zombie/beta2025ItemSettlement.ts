@@ -23,6 +23,8 @@ export async function reviveBetaZombie(leagueId: string, userId: string, week: n
     await lockItemLeague(tx, leagueId)
     const z = await tx.zombieLeague.findUnique({ where: { leagueId } })
     if (!z || !usesBeta2025Items(z) || z.currentWeek !== week || !['active', 'in_progress'].includes(z.status)) return false
+    const resolution = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } } })
+    if (resolution && resolution.status !== 'pending') return false
     const roster = await tx.roster.findFirst({ where: { leagueId, platformUserId: userId } })
     const team = roster && await tx.zombieLeagueTeam.findUnique({ where: { leagueId_rosterId: { leagueId, rosterId: roster.id } } })
     return team ? reviveBetaTeamInTransaction(tx, team.id, week) : false

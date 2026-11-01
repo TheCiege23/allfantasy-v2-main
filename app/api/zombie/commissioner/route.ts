@@ -142,17 +142,21 @@ export async function POST(req: Request) {
     if (!team) return NextResponse.json({ error: 'Zombie team row missing' }, { status: 400 })
 
     if (z.sport === 'NFL') {
+      const currentResolution = await prisma.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } }, select: { status: true } })
+      if (currentResolution && currentResolution.status !== 'pending') return NextResponse.json({ error: 'Complete weekly settlement or its review before granting items.' }, { status: 409 })
       const { itemTransaction, lockItemLeague, lastStarterDeadline, refreshItemScores } = await import('@/lib/zombie/beta2025ItemService')
       const { reviveBetaTeamInTransaction } = await import('@/lib/zombie/beta2025ItemSettlement')
       const { WEAPON_POINTS } = await import('@/lib/zombie/beta2025Items')
       if (!itemType.includes('serum') && !WEAPON_POINTS[itemType]) return NextResponse.json({ error: 'Choose a 2025 serum or weapon.' }, { status: 400 })
       await itemTransaction(async tx => {
         await lockItemLeague(tx, leagueId)
+        const current = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } } })
+        if (current && current.status !== 'pending') throw new Error('Weekly settlement has started; retry the grant after it completes.')
         let activatesAtWeek = z.currentWeek
         if (z.status === 'active') {
           const season = await tx.redraftSeason.findFirst({ where: { leagueId, season: z.season }, select: { id: true } })
           const rr = season && await tx.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
-          const deadline = rr && await lastStarterDeadline(tx, rr.id, z.season, z.currentWeek)
+          const deadline = rr && await lastStarterDeadline(tx, rr.id, z.season, z.currentWeek).catch(() => null)
           if (!deadline || deadline.getTime() <= Date.now()) activatesAtWeek++
         }
         await tx.zombieTeamItem.create({ data: { teamStatusId: team.id, zombieLeagueId: z.id, userId, itemType, itemLabel: itemType, acquiredReason: reason, activatesAtWeek } })
