@@ -46,6 +46,7 @@ import {
 import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -82,6 +83,11 @@ export interface SleeperPoolTableProps {
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
   leftAtPick?: { overall: number; label: string } | null
+  /**
+   * Dynasty only: show the shared Rookie / Prospect chip (`resolveDraftRoomPlayerLabel`) beside the
+   * position. Off by default so redraft pools render exactly as before.
+   */
+  showExperienceLabel?: boolean
 }
 
 function rowKey(p: PlayerEntry): string {
@@ -151,6 +157,7 @@ interface SleeperRowProps {
   testIdBase: string
   aiOverlaySignal?: DraftAiOverlaySignal
   leftAtOverall: number | null
+  showExperienceLabel?: boolean
 }
 
 function SleeperRow(props: SleeperRowProps) {
@@ -177,6 +184,7 @@ function SleeperRow(props: SleeperRowProps) {
     testIdBase,
     aiOverlaySignal,
     leftAtOverall,
+    showExperienceLabel = false,
   } = props
 
   const { t } = useOptionalLanguage()
@@ -290,6 +298,19 @@ function SleeperRow(props: SleeperRowProps) {
                   >
                     {t('draftRoom.pool.prospectBadge')}
                   </span>
+                ) : null}
+                {/* A Fantrax prospect already wears its own chip; never stack a second label on it. */}
+                {showExperienceLabel && !isProspect ? (
+                  <DraftPlayerLabelBadge
+                    player={{
+                      isRookie: p.isRookie ?? null,
+                      yearsExp: p.yearsExp ?? null,
+                      isDevy: p.isDevy ?? null,
+                      graduatedToNFL: p.graduatedToNFL ?? null,
+                      poolType: p.poolType ?? null,
+                    }}
+                    className="flex-shrink-0 rounded px-1 py-px"
+                  />
                 ) : null}
               </div>
               {showAi ? (
@@ -639,6 +660,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     onSortChange,
     aiOverlaySignals,
     leftAtPick = null,
+    showExperienceLabel = false,
   } = props
 
   const leftAtPickLabel = leftAtPick?.label ?? null
@@ -770,6 +792,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 testIdBase={`sleeper-pool-row-${idx}`}
                 aiOverlaySignal={aiOverlaySignals?.[k]}
                 leftAtOverall={leftAtOverall}
+                showExperienceLabel={showExperienceLabel}
               />
             )
           })
@@ -815,6 +838,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   testIdBase={`sleeper-pool-row-${virtualRow.index}`}
                   leftAtOverall={leftAtOverall}
                   aiOverlaySignal={aiOverlaySignals?.[k]}
+                  showExperienceLabel={showExperienceLabel}
                 />
               </div>
             )
