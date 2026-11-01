@@ -148,5 +148,7 @@ export const tradePartnerSelectMessages = defineMessages({
   es: {
     allManagers: 'Todos los mánagers',
     chooseManager: 'Elige un mánager…',
+    // A record reads the same in Spanish: wins–losses(–ties).
+    record: (w: number, l: number, t: number) => (t > 0 ? `${w}–${l}–${t}` : `${w}–${l}`),
   },
 })
