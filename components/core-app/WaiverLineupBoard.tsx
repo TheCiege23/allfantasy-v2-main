@@ -2,7 +2,7 @@
 
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
@@ -60,6 +60,9 @@ export type WaiverLineupBoardProps = {
 export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null }: WaiverLineupBoardProps) {
   const [board, setBoard] = useState<WaiverBoard | null>(null)
   const [failed, setFailed] = useState(false)
+  /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
+  const [query, setQuery] = useState('')
+  const [pos, setPos] = useState<string | null>(null)
   const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
   const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
   /*
@@ -165,14 +168,24 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           )}
         </p>
       ) : (
+        <WaiverFilteredList candidates={board.candidates} query={query} pos={pos} onQuery={setQuery} onPos={setPos}>
+          {(shown) => (
         <ul className="af-wlb-list">
-          {board.candidates.map((c) => (
+          {shown.map((c) => (
             <li
               key={c.sleeperId ?? c.playerKey ?? c.name}
               className="af-wlb-row"
               data-wlb-player={c.sleeperId ?? undefined}
               data-highlight={highlight && c.sleeperId === highlight ? 'true' : undefined}
             >
+              {/*
+                The position as a tinted badge leading the row (the redesign's table). Decorative: the
+                meta line still says the position in text — only hidden visually while the badge is
+                there (af-waivers.css), so a reader hears it once.
+              */}
+              <span className="af-wlb-pos" data-pos={posKey(c.position)} aria-hidden="true">
+                {c.position ?? '—'}
+              </span>
               <span className="af-wlb-who">
                 <span className="af-wlb-name">
                   {/*
@@ -191,8 +204,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                   />
                 </span>
                 <span className="af-wlb-meta">
-                  {c.position ?? '—'}
-                  {c.team ? ` · ${c.team}` : ''} · {m.proj}{' '}
+                  <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
+                  {c.team ? `${c.team} · ` : ''}{m.proj}{' '}
                   <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
                   {/* AllFantasy's own engine, beside the provider's figure. */}
                   {c.afProjectedPoints != null ? (
@@ -267,6 +280,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
             </li>
           ))}
         </ul>
+          )}
+        </WaiverFilteredList>
       )}
 
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
@@ -291,6 +306,112 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
  * and byes in the weeks just ahead. Three checkable facts (lib/waivers/rosterNeeds.ts) — nothing
  * here grades the roster.
  */
+/** The tint family for a position badge: the four skill positions by name, kickers, and one for the rest. */
+function posKey(position: string | null | undefined): string {
+  const p = String(position ?? '').toUpperCase()
+  if (p === 'QB' || p === 'RB' || p === 'WR' || p === 'TE' || p === 'K') return p
+  return 'OTHER'
+}
+
+type Candidate = WaiverBoard['candidates'][number]
+
+/**
+ * The full-width filter bar over the ranked adds, then the list. Exported for tests.
+ *
+ * It filters what the board already ranked — it never asks for more players, and the ranking itself is
+ * untouched. Chips are the positions actually on the list (no chip that can only ever empty it), and the
+ * bar is not drawn for a list too short to need one.
+ */
+export function WaiverFilteredList({
+  candidates,
+  query,
+  pos,
+  onQuery,
+  onPos,
+  children,
+}: {
+  candidates: Candidate[]
+  query: string
+  pos: string | null
+  onQuery: (q: string) => void
+  onPos: (p: string | null) => void
+  children: (shown: Candidate[]) => ReactNode
+}) {
+  const m = useMessages(waiverLineupBoardMessages)
+  const positions = [...new Set(candidates.map((c) => c.position).filter((p): p is string => !!p))]
+  const q = query.trim().toLowerCase()
+  const shown = candidates.filter(
+    (c) => (pos == null || c.position === pos) && (q === '' || c.name.toLowerCase().includes(q)),
+  )
+  const showBar = candidates.length >= 3
+  return (
+    <>
+      {showBar ? (
+        <div className="af-wlb-filter" role="group" aria-label={m.filterLabel} data-testid="waiver-filter-bar">
+          <input
+            type="search"
+            className="af-wlb-search"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder={m.searchPlaceholder}
+            aria-label={m.searchLabel}
+          />
+          {positions.length > 1 ? (
+            <div className="af-wlb-chips">
+              <button type="button" className="af-wlb-chip-btn" aria-pressed={pos == null} onClick={() => onPos(null)}>
+                {m.allPositions}
+              </button>
+              {positions.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="af-wlb-chip-btn"
+                  data-pos={posKey(p)}
+                  aria-pressed={pos === p}
+                  onClick={() => onPos(pos === p ? null : p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {shown.length !== candidates.length ? (
+            <span className="af-wlb-count af-num" aria-live="polite">
+              {m.showing(shown.length, candidates.length)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {shown.length > 0 ? (
+        <>
+          {/* Column heads for the wide table; every row carries its own labels, so this is decoration. */}
+          <div className="af-wlb-head" aria-hidden="true">
+            <span />
+            <span>{m.colPlayer}</span>
+            <span>{m.colGain}</span>
+            <span>{m.colOver}</span>
+          </div>
+          {children(shown)}
+        </>
+      ) : (
+        <p className="af-wlb-why" data-testid="waiver-filter-empty">
+          {m.noMatches}{' '}
+          <button
+            type="button"
+            className="af-wlb-clear"
+            onClick={() => {
+              onQuery('')
+              onPos(null)
+            }}
+          >
+            {m.clearFilter}
+          </button>
+        </p>
+      )}
+    </>
+  )
+}
+
 function RosterNeedsStrip({ needs }: { needs: RosterNeeds }) {
   const m = useMessages(waiverLineupBoardMessages)
   const byes = needs.byes.filter((b) => b.players.some((p) => p.starter))
