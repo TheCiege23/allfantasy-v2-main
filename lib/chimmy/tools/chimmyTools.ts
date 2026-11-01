@@ -520,7 +520,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'compare_start_options',
       description:
-        "Start A or B? Compares exactly two players on the user's roster: this week's projection for each under the league's scoring, and the best lineup total if each is the one started. Use when they name two players ('Chase or Nacua?'). For the whole lineup use optimize_my_lineup.",
+        "Start A or B? Compares two players on the user's roster in the selected league. NFL uses this week's league-scored projection and whole-lineup impact. NBA, NHL, MLB and college sports use recent current-season game logs rescored under this league's rules, with game-lock checks; those are past-game trends, not future projections or full-period totals. Soccer has no operational fantasy season and is refused. Use when they name two players. For a whole-lineup question use optimize_my_lineup.",
       parameters: {
         type: 'object',
         properties: {
@@ -621,6 +621,15 @@ export const CHIMMY_TOOL_SPECS = [
       name: 'get_my_matchup',
       description:
         "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a Guilly league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_live_fantasy_matchup',
+      description:
+        "The selected league's current fantasy matchup scoreboard: your and your opponent's actual points under this league's scoring, the score refresh time, and reported starter contributions where names can be verified. Use for 'what is my score', 'am I winning right now', 'who is scoring for me', or 'live fantasy matchup'. Requires a selected league. These are actual points, not a forecast; never call missing scores zero or stale data real-time. For pregame matchup projections use get_my_matchup.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -1202,6 +1211,12 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           ...(settles ? { onSettle: (run: ChimmyEliminationSettleRun) => settles.push(run) } : {}),
         })
+      }
+
+      case 'get_live_fantasy_matchup': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLiveFantasyMatchupContext } = await import('@/lib/chimmy/liveFantasyMatchupGrounding')
+        return await buildLiveFantasyMatchupContext({ leagueId: ctx.leagueId, userId: ctx.userId })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */

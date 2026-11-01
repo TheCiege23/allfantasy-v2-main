@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   waiver: vi.fn(),
   outlook: vi.fn(),
   matchup: vi.fn(),
+  liveMatchup: vi.fn(),
   tradeIdeas: vi.fn(),
 }))
 
@@ -18,6 +19,7 @@ vi.mock('@/lib/chimmy/tools/scenarioTools', () => ({
 }))
 vi.mock('@/lib/chimmy/playoffOutlookGrounding', () => ({ buildPlayoffOutlookContext: h.outlook }))
 vi.mock('@/lib/chimmy/matchupPreviewGrounding', () => ({ buildMatchupPreviewContext: h.matchup }))
+vi.mock('@/lib/chimmy/liveFantasyMatchupGrounding', () => ({ buildLiveFantasyMatchupContext: h.liveMatchup }))
 vi.mock('@/lib/chimmy/tradeFinderGrounding', async () => {
   const actual = await vi.importActual<typeof import('@/lib/chimmy/tradeFinderGrounding')>('@/lib/chimmy/tradeFinderGrounding')
   return { ...actual, buildTradeFinderContext: h.tradeIdeas }
@@ -37,7 +39,7 @@ beforeEach(() => {
   for (const fn of Object.values(h)) fn.mockResolvedValue('BLOCK')
 })
 
-const LEAGUE_GATED = ['optimize_my_lineup', 'compare_start_options', 'evaluate_trade', 'find_trade_ideas', 'evaluate_waiver_move'] as const
+const LEAGUE_GATED = ['optimize_my_lineup', 'compare_start_options', 'evaluate_trade', 'find_trade_ideas', 'evaluate_waiver_move', 'get_live_fantasy_matchup'] as const
 
 describe('league-gated analyst tools', () => {
   it.each(LEAGUE_GATED)('%s refuses with no league in scope and runs nothing', async (name) => {
@@ -56,6 +58,11 @@ describe('league-gated analyst tools', () => {
   it('passes the structured trade sides through to the evaluator', async () => {
     await executeChimmyTool('evaluate_trade', { give: ["Ja'Marr Chase"], get: ['Justin Jefferson'] }, CTX)
     expect(h.trade).toHaveBeenCalledWith({ give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], leagueId: 'L1', userId: 'u1' })
+  })
+
+  it('reads a live fantasy score only for the session league', async () => {
+    await executeChimmyTool('get_live_fantasy_matchup', { leagueId: 'SOMEONE-ELSES' }, CTX)
+    expect(h.liveMatchup).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1' })
   })
 
   it('hands the letters the engine gave to the route’s collector, and only when there is one', async () => {
@@ -147,7 +154,7 @@ describe('analyst tool specs', () => {
     const analyst = CHIMMY_TOOL_SPECS.filter((s) =>
       [...LEAGUE_GATED, 'get_playoff_outlook', 'get_my_matchup'].includes(s.function.name as never),
     )
-    expect(analyst).toHaveLength(7)
+    expect(analyst).toHaveLength(8)
     for (const spec of analyst) {
       expect(Object.keys((spec.function.parameters as { properties: object }).properties)).not.toContain('leagueId')
     }

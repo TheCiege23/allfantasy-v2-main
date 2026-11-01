@@ -26,7 +26,7 @@ import { BASELINE_BASIS, baselineAvailable, baselineFor, loadBaselineIndex, type
  */
 
 /** Slot label → positions that may fill it, per sport. Unknown labels block, as in the NFL fill. */
-const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
+export const ELIGIBILITY: Record<string, Record<string, readonly string[]>> = {
   NBA: {
     PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'],
     G: ['PG', 'SG'], F: ['SF', 'PF'], 'G/F': ['PG', 'SG', 'SF', 'PF'], 'F/C': ['SF', 'PF', 'C'],
