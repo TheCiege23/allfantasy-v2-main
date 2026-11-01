@@ -18,7 +18,8 @@ import {
   type SurvivorSettingsKey,
   type SurvivorSettingsLocks,
 } from '@/lib/survivor/survivorSettingsScreen'
-import { seasonPreviewMessages, survivorSettingsScreenMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { seasonPreviewMessages, settingsErrorMessages, survivorSettingsScreenMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { messagesFor } from '@/lib/i18n/messages'
 import { SurvivorStateCard } from './core/SurvivorStateCard'
 import { SurvivorChallengeSettingsSection, SurvivorExileExtras, SurvivorJuryExtras, SurvivorPrizesSection, SurvivorRulesSection, survivorSettingsExtrasMessages } from './SurvivorSettingsExtras'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -32,6 +33,7 @@ type ScreenState = {
   locks: SurvivorSettingsLocks
   chimmyBossAvailable: boolean
   commissionerPlays: boolean
+  language?: 'en' | 'es'
 }
 
 type NavKey = 'navTribes' | 'navTribal' | 'navIdols' | 'navExile' | 'navSwap' | 'navChallenges' | 'navSharing' | null
@@ -85,7 +87,10 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
   useEffect(() => { void load() }, [load])
 
   const changed = useMemo(() => (state && draft ? changedSettingsKeys(state.form, draft) : []), [state, draft])
-  const preview = useMemo(() => (state && draft ? buildSeasonPreview(draft, state.context, previewCopy) : null), [state, draft, previewCopy])
+  // Validation errors follow League.language (the API's `language`), like the server's 422 message.
+  const uiErrorCopy = useMessages(settingsErrorMessages)
+  const errorCopy = state?.language ? messagesFor(settingsErrorMessages, state.language) : uiErrorCopy
+  const preview = useMemo(() => (state && draft ? buildSeasonPreview(draft, state.context, previewCopy, errorCopy) : null), [state, draft, previewCopy, errorCopy])
 
   function set<K extends SurvivorSettingsKey>(key: K, value: SurvivorSettingsForm[K]) {
     setMessage(null)

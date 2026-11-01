@@ -15,6 +15,7 @@
  */
 
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS, type SurvivorRewardAdvantagePower, type SurvivorRewardSpec } from './survivorRewardModel'
+import { settingsErrorMessages, type SettingsError, type SettingsErrorCopy } from './survivorSettingsScreenCopy'
 
 export const SURVIVOR_WEEKLY_PRIZES_KEY = 'survivorWeeklyPrizes'
 export const SURVIVOR_HOUSE_RULES_KEY = 'survivorHouseRules'
@@ -100,14 +101,19 @@ export function competingTribeIdsFromScores(rows: readonly { tribeId: string | n
 
 /** Plain-English problems with a prize form (empty = valid). */
 export function validateSurvivorWeeklyPrizes(p: SurvivorWeeklyPrizeSettings, sport: string | null | undefined): string[] {
-  const errors: string[] = []
+  return survivorWeeklyPrizeErrors(p, sport).map((e) => e.message)
+}
+
+/** The same problems with stable codes, in the reader's language (`settingsErrorMessages`). */
+export function survivorWeeklyPrizeErrors(p: SurvivorWeeklyPrizeSettings, sport: string | null | undefined, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
+  const errors: SettingsError[] = []
   const L = SURVIVOR_WEEKLY_PRIZE_LIMITS
-  if (!Number.isInteger(p.winningTribeFaabPerPlayer) || p.winningTribeFaabPerPlayer < 0 || p.winningTribeFaabPerPlayer > L.faabPerPlayer) errors.push(`Winning-tribe FAAB must be a whole amount from $0 to $${L.faabPerPlayer}.`)
-  if (!(SURVIVOR_TOP_SCORER_REWARDS as readonly string[]).includes(p.topScorerReward)) errors.push('Choose a top-scorer reward.')
-  if (p.topScorerReward === 'faab' && (!Number.isInteger(p.topScorerAmount) || p.topScorerAmount < 1 || p.topScorerAmount > L.topScorerFaab)) errors.push(`The top scorer's FAAB must be a whole amount from $1 to $${L.topScorerFaab}.`)
-  if (p.topScorerReward === 'score_boost' && (!Number.isFinite(p.topScorerAmount) || p.topScorerAmount <= 0 || p.topScorerAmount > L.topScorerPoints)) errors.push(`The top scorer's points must be more than 0 and at most ${L.topScorerPoints}.`)
-  if (p.topScorerReward === 'advantage' && !(SURVIVOR_REWARD_ADVANTAGE_POWERS as readonly string[]).includes(p.topScorerPowerType)) errors.push('Choose the advantage the top scorer wins.')
-  if (p.tribeTieBreakPosition !== 'none' && !survivorTieBreakPositions(sport).includes(p.tribeTieBreakPosition)) errors.push('Choose a tie-break position for this sport.')
+  if (!Number.isInteger(p.winningTribeFaabPerPlayer) || p.winningTribeFaabPerPlayer < 0 || p.winningTribeFaabPerPlayer > L.faabPerPlayer) errors.push({ code: 'tribeFaab', message: t.tribeFaab(L.faabPerPlayer) })
+  if (!(SURVIVOR_TOP_SCORER_REWARDS as readonly string[]).includes(p.topScorerReward)) errors.push({ code: 'topReward', message: t.topReward })
+  if (p.topScorerReward === 'faab' && (!Number.isInteger(p.topScorerAmount) || p.topScorerAmount < 1 || p.topScorerAmount > L.topScorerFaab)) errors.push({ code: 'topFaab', message: t.topFaab(L.topScorerFaab) })
+  if (p.topScorerReward === 'score_boost' && (!Number.isFinite(p.topScorerAmount) || p.topScorerAmount <= 0 || p.topScorerAmount > L.topScorerPoints)) errors.push({ code: 'topPoints', message: t.topPoints(L.topScorerPoints) })
+  if (p.topScorerReward === 'advantage' && !(SURVIVOR_REWARD_ADVANTAGE_POWERS as readonly string[]).includes(p.topScorerPowerType)) errors.push({ code: 'topAdvantage', message: t.topAdvantage })
+  if (p.tribeTieBreakPosition !== 'none' && !survivorTieBreakPositions(sport).includes(p.tribeTieBreakPosition)) errors.push({ code: 'tieBreak', message: t.tieBreak })
   return errors
 }
 

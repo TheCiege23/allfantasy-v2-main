@@ -14,6 +14,9 @@ import {
   type SurvivorSettingsForm,
 } from '@/lib/survivor/survivorSettingsScreen'
 import { defaultPrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
+import { settingsFormErrors } from '@/lib/survivor/survivorSettingsScreen'
+import { settingsErrorMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { messagesFor } from '@/lib/i18n/messages'
 
 const m = vi.hoisted(() => ({
   session: { user: { id: 'commish' } } as { user?: { id?: string } } | null,
@@ -271,6 +274,50 @@ describe('weekly prizes, house rules and the newly exposed settings', () => {
     expect(bad.status).toBe(422)
     expect((await bad.json()).error).toMatch(/pre-merge only/)
     expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('validation errors follow League.language with a stable code (EN and ES)', async () => {
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true, language: 'en' }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    const en = await POST(req({ form: { ...before, topScorerReward: 'faab', topScorerAmount: 0, challengeFaabWeeklyCap: 0 } }), params)
+    expect(en.status).toBe(422)
+    expect(await en.json()).toEqual({
+      error: "The top scorer's FAAB must be a whole amount from $1 to $1000.", code: 'topFaab',
+      errors: ["The top scorer's FAAB must be a whole amount from $1 to $1000.", 'The weekly challenge FAAB cap is $1 to $1000.'], codes: ['topFaab', 'faabCap'],
+    })
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true, language: 'es' }))
+    const state = await (await GET(req({}), params)).json()
+    expect(state.language).toBe('es')
+    const es = await POST(req({ form: { ...before, topScorerReward: 'faab', topScorerAmount: 0, challengeFaabWeeklyCap: 0 } }), params)
+    expect(es.status).toBe(422)
+    expect(await es.json()).toEqual({
+      error: 'El FAAB del máximo anotador debe ser una cantidad entera de $1 a $1000.', code: 'topFaab',
+      errors: ['El FAAB del máximo anotador debe ser una cantidad entera de $1 a $1000.', 'El tope semanal de FAAB de los retos es de $1 a $1000.'], codes: ['topFaab', 'faabCap'],
+    })
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('every validator code renders in Spanish (no English left in an ES league)', () => {
+    const es = messagesFor(settingsErrorMessages, 'es')
+    const bad = form({ tribeCount: 9, idolCount: 3, voteDay: 'Someday', voteTime: 'x', exileReturnTokens: 0, exileBossMode: 'topN', exileBossTopN: 99, swapWeek: 1, houseRules: 'x'.repeat(5000), winningTribeFaabPerPlayer: -1, tribeTieBreakPosition: 'ZZ', realGamePerWeek: 3 as never, prizePhaseRules: { post_merge: ['faab_transfer'] } as never })
+    const errors = settingsFormErrors(bad, ctx, es)
+    expect(errors.map(e => e.code)).toEqual(['tribeCount', 'idolCount', 'voteDay', 'voteTime', 'exileTokens', 'bossTopN', 'swapAfterFirst', 'houseRules', 'tribeFaab', 'tieBreak', 'realPerWeek', 'phaseRules'])
+    expect(errors.find(e => e.code === 'tribeCount')!.message).toBe('Elige entre 2 y 5 tribus.')
+    expect(errors.find(e => e.code === 'houseRules')!.message).toBe('Las reglas de la casa pueden tener como máximo 4000 caracteres.')
+    expect(errors.map(e => e.message).join(' ')).not.toMatch(/Choose|Pick|must|between/)
+    // English is unchanged for existing callers.
+    expect(validateSettingsForm(bad, ctx)[0]).toBe('Choose between 2 and 5 tribes.')
+  })
+
+  it('the screen shows validation errors in the league’s language', async () => {
+    const state = { leagueName: 'Liga', form: form(), context: ctx, locks: { draftStarted: false, finalistLocked: false, tribesLocked: false }, chimmyBossAvailable: false, commissionerPlays: false, language: 'es' }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(state), { status: 200 })))
+    render(<SurvivorSettingsScreen leagueId="L1" backHref="/league/L1" />)
+    await waitFor(() => expect(screen.getByTestId('survivor-settings-screen')).toBeTruthy())
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Increase swap week' }))
+    expect(screen.getByTestId('survivor-settings-errors').textContent).toContain('El intercambio debe ser antes de la fusión.')
+    expect(screen.getByTestId('survivor-settings-errors').textContent).not.toContain('The swap must come before the merge.')
+    vi.unstubAllGlobals()
   })
 
   it('rejects an invalid prize (422) and a junk co-commissioner mode (400)', async () => {

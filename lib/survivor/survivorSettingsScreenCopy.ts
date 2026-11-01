@@ -64,6 +64,79 @@ export const seasonPreviewMessages = defineMessages({
 
 export type SeasonPreviewCopy = typeof seasonPreviewMessages.en
 
+/**
+ * Validation errors for the settings form, keyed by a STABLE error code (the key). The screen and
+ * the settings API both render them in the league's language (League.language); the API returns the
+ * code next to the message so clients never parse text. English strings are unchanged from before.
+ */
+export const settingsErrorMessages = defineMessages({
+  en: {
+    tribeCount: 'Choose between 2 and 5 tribes.',
+    tribeSlots: (detail: string): string => detail,
+    idolCount: 'Choose 6, 7 or 8 idols.',
+    voteDay: 'Pick a day for votes to close.',
+    voteTime: 'Pick a time for votes to close.',
+    exileTokens: 'Exile Island needs at least one token to return.',
+    bossFixed: 'A fixed boss score must be a number from 0 to 10000.',
+    bossTopN: 'The top-N boss averages between 1 and 20 scores.',
+    finalists: 'Choose 2 or 3 finalists.',
+    mergeAfterFirst: 'The merge must come after the first week.',
+    mergeCount: (min: number, max: number): string => `Merge with between ${min} and ${max} managers left.`,
+    mergeBeforeFinale: 'The merge must come before the finale.',
+    islandScene: 'Pick one of the island scenes, or follow the season.',
+    swapAfterFirst: 'The swap must come after the first Tribal Council.',
+    swapBeforeMerge: 'The swap must come before the merge.',
+    houseRules: (max: number): string => `House rules can be at most ${max} characters.`,
+    tribeFaab: (max: number): string => `Winning-tribe FAAB must be a whole amount from $0 to $${max}.`,
+    topReward: 'Choose a top-scorer reward.',
+    topFaab: (max: number): string => `The top scorer's FAAB must be a whole amount from $1 to $${max}.`,
+    topPoints: (max: number): string => `The top scorer's points must be more than 0 and at most ${max}.`,
+    topAdvantage: 'Choose the advantage the top scorer wins.',
+    tieBreak: 'Choose a tie-break position for this sport.',
+    realPerWeek: 'Real-game challenges run one or two a week.',
+    realPrize: 'Choose FAAB, points or no prize for real-game challenges.',
+    realFaab: (max: number): string => `A real-game FAAB prize is $1 to $${max}.`,
+    realPoints: (max: number): string => `A real-game points prize is 1 to ${max} points.`,
+    faabCap: (min: number, max: number): string => `The weekly challenge FAAB cap is $${min} to $${max}.`,
+    phaseRules: 'Prize rules per phase: tribe FAAB transfers are pre-merge only, and each phase must name known prize types.',
+  },
+  es: {
+    tribeCount: 'Elige entre 2 y 5 tribus.',
+    tribeSlots: (): string => 'Las capacidades de las tribus no encajan con los mánagers de la liga.',
+    idolCount: 'Elige 6, 7 u 8 ídolos.',
+    voteDay: 'Elige el día en que se cierran los votos.',
+    voteTime: 'Elige la hora en que se cierran los votos.',
+    exileTokens: 'La Isla del Exilio necesita al menos una ficha para volver.',
+    bossFixed: 'Una puntuación fija del jefe debe ser un número de 0 a 10000.',
+    bossTopN: 'El jefe de los N mejores promedia entre 1 y 20 puntuaciones.',
+    finalists: 'Elige 2 o 3 finalistas.',
+    mergeAfterFirst: 'La fusión debe ser después de la primera semana.',
+    mergeCount: (min: number, max: number): string => `Fusiona cuando queden entre ${min} y ${max} mánagers.`,
+    mergeBeforeFinale: 'La fusión debe ser antes de la final.',
+    islandScene: 'Elige una de las escenas de la isla, o sigue la temporada.',
+    swapAfterFirst: 'El intercambio debe ser después del primer Consejo Tribal.',
+    swapBeforeMerge: 'El intercambio debe ser antes de la fusión.',
+    houseRules: (max: number): string => `Las reglas de la casa pueden tener como máximo ${max} caracteres.`,
+    tribeFaab: (max: number): string => `El FAAB de la tribu ganadora debe ser una cantidad entera de $0 a $${max}.`,
+    topReward: 'Elige un premio para el máximo anotador.',
+    topFaab: (max: number): string => `El FAAB del máximo anotador debe ser una cantidad entera de $1 a $${max}.`,
+    topPoints: (max: number): string => `Los puntos del máximo anotador deben ser más de 0 y como máximo ${max}.`,
+    topAdvantage: 'Elige la ventaja que gana el máximo anotador.',
+    tieBreak: 'Elige una posición de desempate para este deporte.',
+    realPerWeek: 'Los retos de partidos reales son uno o dos por semana.',
+    realPrize: 'Elige FAAB, puntos o sin premio para los retos de partidos reales.',
+    realFaab: (max: number): string => `Un premio de FAAB de partido real es de $1 a $${max}.`,
+    realPoints: (max: number): string => `Un premio en puntos de partido real es de 1 a ${max} puntos.`,
+    faabCap: (min: number, max: number): string => `El tope semanal de FAAB de los retos es de $${min} a $${max}.`,
+    phaseRules: 'Reglas de premios por fase: las transferencias de FAAB entre tribus son solo antes de la fusión, y cada fase debe usar tipos de premio conocidos.',
+  },
+})
+
+export type SettingsErrorCopy = typeof settingsErrorMessages.en
+export type SettingsErrorCode = keyof SettingsErrorCopy
+/** One validation error: a stable code and its message in the reader's language. */
+export type SettingsError = { code: SettingsErrorCode; message: string }
+
 /** The screen's older sections, header, nav and preview card. */
 export const survivorSettingsScreenMessages = defineMessages({
   en: {

@@ -46,6 +46,8 @@ import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/sur
 import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { readPrizePhaseRules, SURVIVOR_PRIZE_PHASE_RULES_KEY, validatePrizePhaseRules } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { readThievesCannotStealFromEachOther, SURVIVOR_THIEVES_RULE_KEY } from '@/lib/survivor/survivorRewardModel'
+import { settingsErrorMessages } from '@/lib/survivor/survivorSettingsScreenCopy'
+import { messagesFor } from '@/lib/i18n/messages'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
@@ -53,7 +55,7 @@ import {
   lockedChanges,
   parseSettingsForm,
   readSurvivorIslandScene,
-  validateSettingsForm,
+  settingsFormErrors,
   type SurvivorSettingsContext,
   type SurvivorSettingsForm,
   type SurvivorSettingsLocks,
@@ -91,12 +93,14 @@ export interface SurvivorSettingsScreenState {
   /** Offer "Chimmy's roster" only to a league that already runs it (existing leagues keep it). */
   chimmyBossAvailable: boolean
   commissionerPlays: boolean
+  /** League.language ('en' | 'es'): validation errors follow it, on the server and on the screen. */
+  language?: 'en' | 'es'
 }
 
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true, survivorExileHarshTokenLoss: true },
+    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true, survivorExileHarshTokenLoss: true, language: true },
   })
   if (!league) return null
   const settings = rec(league.settings)
@@ -164,6 +168,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
     chimmyBossAvailable: late.exileBossMode === 'chimmy_roster',
     commissionerPlays: foundation.commissionerParticipationMode === 'participating_player',
+    language: String((league as { language?: string | null }).language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en',
   }
 }
 
@@ -203,8 +208,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (state.commissionerPlays && next.tribeFormation === 'commissioner_manual') {
     return NextResponse.json({ error: 'A playing commissioner must use system-run tribe formation.' }, { status: 409 })
   }
-  const errors = validateSettingsForm(next, state.context)
-  if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
+  // Validation errors in the league's language, each with a stable code (`settingsErrorMessages`).
+  const detailed = settingsFormErrors(next, state.context, messagesFor(settingsErrorMessages, state.language ?? 'en'))
+  if (detailed.length) {
+    return NextResponse.json({ error: detailed[0]!.message, code: detailed[0]!.code, errors: detailed.map(e => e.message), codes: detailed.map(e => e.code) }, { status: 422 })
+  }
 
   const has = (key: keyof SurvivorSettingsForm) => changed.includes(key)
   const outcome = await prisma.$transaction(async tx => {
