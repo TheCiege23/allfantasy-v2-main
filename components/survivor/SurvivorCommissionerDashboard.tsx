@@ -26,7 +26,7 @@ import {
 import { SurvivorIslandAmbient } from '@/components/survivor/SurvivorIslandAmbient'
 import {
   WarRoomHeroCard,
-  WarRoomPanel,
+  WarRoomPanel as WarRoomPanelBase,
   WarRoomStatOrb,
   WarRoomTabButton,
 } from '@/components/tournament/TournamentWarRoomPrimitives'
@@ -37,6 +37,15 @@ import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleCont
 import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
 import { SurvivorRewardsHubPanel } from '@/components/survivor/SurvivorRewardsHubPanel'
 import { Gift } from 'lucide-react'
+import { useMessages } from '@/components/i18n/useMessages'
+import { survivorHubTabMessages } from '@/components/survivor/survivorHubTabMessages'
+import type { ComponentProps } from 'react'
+
+/** Every Hub panel's title and subtitle through the EN/ES lookup (falls back to the English text). */
+function WarRoomPanel(props: ComponentProps<typeof WarRoomPanelBase>) {
+  const hub = useMessages(survivorHubTabMessages)
+  return <WarRoomPanelBase {...props} title={hub.text(props.title)} subtitle={hub.text(props.subtitle)} />
+}
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
@@ -133,6 +142,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
   // A to-do or alert link names the tab to open (?tab=tribes, ?tab=operations, ?tab=tribal).
+  const hubText = useMessages(survivorHubTabMessages)
   const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams?.get('tab'))?.id ?? 'overview')
   const tabParam = searchParams?.get('tab') ?? null
   useEffect(() => {
@@ -351,7 +361,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   active={tab === t.id}
                   onClick={() => setTab(t.id)}
                   icon={t.icon}
-                  label={t.label}
+                  label={hubText.tab(t.id, t.label)}
                   testId={`survivor-commissioner-tab-${t.id}`}
                 />
               ))}
