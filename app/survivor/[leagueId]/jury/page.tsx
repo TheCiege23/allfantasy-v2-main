@@ -21,8 +21,8 @@ export default function SurvivorJuryPage() {
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <header className="survivor-panel rounded-2xl p-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-amber-200">{m.kicker}</p>
-        <h1 className="mt-2 text-2xl font-black uppercase tracking-wide text-white">{m.title}</h1>
+        <p className="sv-eyebrow">{m.kicker}</p>
+        <h1 className="sv-h mt-2 text-2xl uppercase md:text-3xl">{m.title}</h1>
         <p className="mt-2 text-[13px] text-white/55">{m.intro}</p>
       </header>
 
@@ -37,7 +37,7 @@ export default function SurvivorJuryPage() {
       </section>
 
       <div className="mt-6 text-center">
-        <Link href={`${base}/finale`} className="text-[13px] font-semibold text-amber-200">
+        <Link href={`${base}/finale`} className="sv-link text-[13px]">
           {m.finale}
         </Link>
       </div>

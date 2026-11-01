@@ -58,9 +58,9 @@ export default function SurvivorChallengesPage() {
 
   const stateChip = useMemo(() => {
     const st = ch?.status ?? '—'
-    if (st === 'open') return { label: 'OPEN', cls: 'bg-emerald-500/20 text-emerald-200' }
+    if (st === 'open') return { label: 'OPEN', cls: 'sv-chip-torch' }
     if (st === 'locked') return { label: 'LOCKED', cls: 'bg-white/10 text-white/45' }
-    if (st === 'graded' || st === 'complete') return { label: 'COMPLETE', cls: 'bg-cyan-500/15 text-cyan-200' }
+    if (st === 'graded' || st === 'complete') return { label: 'COMPLETE', cls: 'bg-[rgba(242,196,107,0.12)] text-[#f2c46b]' }
     return { label: String(st).toUpperCase(), cls: 'bg-amber-500/15 text-amber-100' }
   }, [ch?.status])
 
@@ -74,13 +74,13 @@ export default function SurvivorChallengesPage() {
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <div
-        className="survivor-panel border-l-4 border-[var(--survivor-torch)] p-4 md:p-6"
+        className="survivor-panel rounded-2xl sv-torch-bar p-4 md:p-6"
         style={{ borderLeftColor: 'var(--survivor-torch)' }}
       >
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-torch)]">Active challenge</p>
+        <p className="sv-eyebrow">Active challenge</p>
         {ch ? (
           <>
-            <h1 className="mt-2 text-xl font-bold text-white md:text-2xl">{ch.title ?? 'Island challenge'}</h1>
+            <h1 className="sv-h mt-2 text-xl md:text-2xl">{ch.title ?? 'Island challenge'}</h1>
             <div className="mt-2 flex flex-wrap gap-2">
               <span className="rounded-full bg-white/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white/70">
                 {(ch.scope ?? 'tribe').replace(/_/g, ' ')}
@@ -94,12 +94,12 @@ export default function SurvivorChallengesPage() {
             </p>
 
             <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/25 p-4">
-              <p className="text-[11px] font-bold uppercase text-white/45">{automatic ? 'How it works' : 'Where to submit'}</p>
+              <p className="sv-kicker text-[11px]">{automatic ? 'How it works' : 'Where to submit'}</p>
               <p className="mt-1 text-[13px] text-white/80">{automatic ? 'Nothing to submit: set your best lineup. Chimmy settles it from the final scores.' : submitWhere}</p>
             </div>
 
-            <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-4">
-              <p className="text-[11px] font-bold uppercase text-orange-200/90">Reward</p>
+            <div className="mt-4 rounded-xl border border-[rgba(240,163,94,0.3)] bg-[rgba(240,163,94,0.06)] p-4">
+              <p className="sv-kicker text-[11px]">Reward</p>
               <p className="mt-1 text-[14px] text-white">
                 {ch.rewardType ? `🏆 ${ch.rewardType}` : '🏆 Immunity or league reward (commissioner configured)'}
               </p>
@@ -108,10 +108,10 @@ export default function SurvivorChallengesPage() {
 
             {end ? (
               <div className="mt-4">
-                <p className="text-[11px] font-bold uppercase text-white/40">Deadline</p>
+                <p className="sv-kicker text-[11px]">Deadline</p>
                 <time
                   dateTime={new Date(end).toISOString()}
-                  className="mt-1 block font-mono text-lg tabular-nums text-orange-200"
+                  className="mt-1 block font-mono text-lg tabular-nums text-[var(--survivor-torch)]"
                 >
                   ⏱ {remaining != null ? formatDurationMs(remaining) : '—'} remaining
                 </time>
@@ -120,7 +120,7 @@ export default function SurvivorChallengesPage() {
             ) : null}
 
             {!automatic && ch.status !== 'open' ? (
-              <p className="mt-6 text-[13px] text-amber-200/90">Submissions are closed for this challenge.</p>
+              <p className="mt-6 text-[13px] text-[#f6d3ae]">Submissions are closed for this challenge.</p>
             ) : null}
           </>
         ) : (
@@ -133,7 +133,7 @@ export default function SurvivorChallengesPage() {
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 
       <section className="mt-8">
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
+        <h2 className="sv-kicker mb-3 text-[12px]">
           Past challenges
         </h2>
         {past && past.length === 0 ? <p className="text-[13px] text-white/50">No challenge results yet.</p> : null}
@@ -150,7 +150,7 @@ export default function SurvivorChallengesPage() {
       <div className="mt-8 text-center md:hidden">
         <Link
           href={`/survivor/${leagueId}/chat`}
-          className="inline-flex min-h-[56px] w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[14px] font-semibold text-sky-200"
+          className="sv-btn min-h-[56px] w-full text-[var(--survivor-torch)]"
         >
           Open chat for submissions
         </Link>
