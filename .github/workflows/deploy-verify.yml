@@ -76,7 +76,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       # No dependencies on purpose: the script uses only global fetch. `npm ci` on this repo takes
       # minutes, has failed part-way at least three times on 2026-09-03 alone, and a monitor that
