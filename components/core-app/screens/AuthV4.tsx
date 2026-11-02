@@ -658,7 +658,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
-          <p className="af-au-sub">Free to create or connect leagues. Verify your email or phone to get started.</p>
+          <p className="af-au-sub">Free to create or connect leagues. {signupMethod === 'EMAIL' ? 'Next: verify your email, then choose how to start.' : 'Next: verify your phone, then choose how to start.'}</p>
         </div>
       </header>
 
@@ -747,7 +747,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             onChange={(e) => setSleeperHandle(e.target.value)}
           />
           <span className="af-au-hint">
-            Link it now and, once your account is verified, your Sleeper leagues import in one click.
+            {signupMethod === 'EMAIL' ? 'Link it now and, once your email is verified, your Sleeper leagues import in one click.' : 'Link it now and, once your phone is verified, your Sleeper leagues import in one click.'}
           </span>
         </label>
 
