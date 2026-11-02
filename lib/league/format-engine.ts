@@ -429,7 +429,7 @@ export function resolveLeagueFormat(options: {
   const roster = resolveFormatRosterDefaults({ sport, formatId: format.id, modifiers: scopedModifiers })
   const scoring = resolveFormatScoringDefaults({ sport, formatId: format.id, modifiers: scopedModifiers })
   const leagueDefaults = getLeagueDefaults(sport)
-  const draftDefaults = getDraftDefaults(
+  const sportDraftDefaults = getDraftDefaults(
     sport,
     scopedModifiers.includes('idp')
       ? 'IDP'
@@ -445,6 +445,9 @@ export function resolveLeagueFormat(options: {
                 ? 'SUPERFLEX'
                 : null
   )
+  const draftDefaults = sport === 'NCAAB' && format.id === 'zombie'
+    ? { ...sportDraftDefaults, rounds_default: roster.rosterSize }
+    : sportDraftDefaults
   const waiverDefaults = getWaiverDefaults(sport, format.id)
   const playoffDefaults = resolveDefaultPlayoffConfig(sport, format.id)
   const scheduleDefaults = resolveDefaultScheduleConfig(sport, format.id)

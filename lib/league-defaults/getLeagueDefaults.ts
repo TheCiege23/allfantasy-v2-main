@@ -373,7 +373,14 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const roster = resolution.roster as unknown as Record<string, unknown>
   const waiverDefaults = resolution.waiverDefaults as unknown as Record<string, unknown>
   const scheduleDefaults = resolution.scheduleDefaults as unknown as Record<string, unknown>
-  const canonicalRosterSettings = (canonicalSnapshot?.rosterSettings as Record<string, unknown> | undefined) ?? {}
+  const canonicalRosterSettings = (canonicalSnapshot?.rosterSettings as Record<string, unknown> | undefined) ??
+    (sport === 'NCAAB' && format === 'zombie' ? {
+      starter_slots: resolution.roster.starterSlots,
+      rosterSlots: Object.values(resolution.roster.starterSlots).reduce((sum, count) => sum + count, 0),
+      benchSlots: resolution.roster.benchSlots,
+      irSlots: resolution.roster.irSlots,
+      taxiSlots: resolution.roster.taxiSlots,
+    } : {})
   /** Guillotine crowns the last team standing rather than running a bracket. */
   const playoffOverrides = format === 'survivor' ? { playoffTeams: 0, playoffStartWeek: null } : format === 'guillotine' ? { playoffTeams: 1, playoffStartWeek: null } : null
   const playoffWeekBounds = derivePlayoffWeekBounds({
