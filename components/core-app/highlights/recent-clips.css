@@ -29,7 +29,7 @@
  */
 .af-recent-clips-compact{margin:20px 0 4px;padding:18px;border-color:var(--line,#283345);border-radius:18px;background:var(--surface,transparent)}
 .af-recent-clips-compact header h3{font-size:20px;font-weight:900;letter-spacing:-0.02em;line-height:1.15}
-.af-recent-clips-compact header>span{padding:3px 8px;border:1px solid var(--line,#283345);border-radius:999px;font:700 10px/1.4 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+.af-recent-clips-compact header>span{padding:3px 8px;border:1px solid var(--line,#283345);border-radius:999px;font:700 11px/1.4 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
 .af-recent-clips-compact .af-x-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px;margin-top:6px}
 .af-recent-clips-compact .af-x-card{display:flex;flex-direction:column;padding:14px;border-color:var(--line,#283345);border-radius:16px;background:var(--bg,transparent)}
 .af-recent-clips-compact .af-x-card h4{font-size:17px;font-weight:800;letter-spacing:-0.01em}

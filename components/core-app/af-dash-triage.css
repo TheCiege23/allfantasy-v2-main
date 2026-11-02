@@ -623,7 +623,7 @@
   padding: 2px 6px;
   border-radius: 6px;
   background: var(--chip);
-  font-size: 10px;
+  font-size: 11px;
 }
 .af-triage-league-platform[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); }
 .af-triage-league-platform[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); }
@@ -637,7 +637,7 @@
 .af-triage-also {
   margin-right: 2px;
   color: var(--muted);
-  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }

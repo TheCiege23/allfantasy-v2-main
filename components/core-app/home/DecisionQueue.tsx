@@ -80,9 +80,9 @@ function clockOf(issue: CoreIssue, nowMs: number): { figure: string | null; tone
  * zone, which the server does not know, so this renders after hydration and the first paint carries
  * the relative figure alone — the same rule `deadlineLabel` follows with the server's clock.
  */
-function clockWhen(deadline: Date | string, language: string): string | null {
+function clockWhen(deadline: Date | string, locale: string): string | null {
   try {
-    return new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en-US', {
+    return new Intl.DateTimeFormat(locale, {
       weekday: 'short',
       hour: 'numeric',
       minute: '2-digit',
@@ -207,7 +207,7 @@ export function DecisionQueue({
               const when = deadlineLabel(issue.deadline, nowMs)
               const text = issueText(issue, language)
               const clock = clockOf(issue, nowMs)
-              const clockAt = clock && mounted && issue.deadline ? clockWhen(issue.deadline, language) : null
+              const clockAt = clock && mounted && issue.deadline ? clockWhen(issue.deadline, t.clockLocale) : null
               const platform = issue.platform ? issue.platform.toLowerCase() : null
               return (
                 <li
