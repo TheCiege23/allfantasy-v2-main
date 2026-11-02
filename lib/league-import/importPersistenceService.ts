@@ -160,14 +160,6 @@ async function createImportRun(data: {
   }
 }
 
-/** Allows safe retry after a failed import without violating `idempotencyKey` uniqueness. */
-async function deleteFailedImportRunIfPresent(idempotencyKey: string): Promise<void> {
-  const row = await prisma.importRun.findUnique({ where: { idempotencyKey } })
-  if (row?.status === 'failed') {
-    await prisma.importRun.delete({ where: { id: row.id } })
-  }
-}
-
 export async function persistImportWithCanonicalAudit(input: {
   userId: string
   provider: ImportProvider
@@ -198,8 +190,6 @@ export async function persistImportWithCanonicalAudit(input: {
     sourceLeagueId: input.normalized.source.source_league_id,
     season: seasonYear,
   })
-
-  await deleteFailedImportRunIfPresent(idempotencyKey)
 
   const existingRun = await prisma.importRun.findUnique({ where: { idempotencyKey } })
 
