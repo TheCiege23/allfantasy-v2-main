@@ -678,7 +678,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
 
         <div role="group" aria-label="Create account with" style={{ display: 'flex', gap: 8 }}>
           <button type="button" className="af-btn af-au-method" aria-pressed={signupMethod === 'EMAIL'} onClick={() => { setSignupMethod('EMAIL'); setError(null) }}>Use email</button>
-          <button type="button" className="af-btn" aria-pressed={signupMethod === 'PHONE'} onClick={() => { setSignupMethod('PHONE'); setError(null) }}>Use phone</button>
+          <button type="button" className="af-btn af-au-method" aria-pressed={signupMethod === 'PHONE'} onClick={() => { setSignupMethod('PHONE'); setError(null) }}>Use phone</button>
         </div>
 
         {signupMethod === 'EMAIL' ? (
