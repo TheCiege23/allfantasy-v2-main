@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { track } from '@/lib/analytics/dataLayer'
 import { resolvePlanTierFromSku } from '@/lib/monetization-analytics'
@@ -88,6 +87,7 @@ export type PricingV4Props = {
   packs: PricingPack[]
   /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */
   savingsHeadline: string | null
+  signedIn?: boolean
 }
 
 type Interval = 'month' | 'year'
@@ -183,9 +183,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
 ]
 
-export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
-  const { status: sessionStatus } = useSession()
-  const signedIn = sessionStatus === 'authenticated'
+export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: PricingV4Props) {
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
@@ -284,14 +282,14 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         The wordmark is the way home, matching the auth screens.
       */}
       <nav className="af-pr-nav" aria-label="Main">
-        <Link href={sessionStatus === 'unauthenticated' ? '/' : '/core'} className="af-pr-brand">
+        <Link href={signedIn ? '/core' : '/'} className="af-pr-brand">
           <Shield />
           <span className="af-pr-wordmark">Pricing</span>
         </Link>
         <div className="af-pr-nav-right">
           {signedIn ? (
             <Link href="/core" className="af-pr-nav-cta">Back to app</Link>
-          ) : sessionStatus === 'unauthenticated' ? (
+          ) : !signedIn ? (
             <>
               <Link href="/login" className="af-pr-nav-link">Sign in</Link>
               <Link href="/signup" className="af-pr-nav-cta">Start free</Link>
@@ -370,7 +368,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           <p className="af-pr-per">free forever</p>
           {signedIn ? (
             <Link href="/core" className="af-pr-cta af-pr-cta--ghost">Go to my leagues</Link>
-          ) : sessionStatus === 'unauthenticated' ? (
+          ) : !signedIn ? (
             <Link href="/signup" className="af-pr-cta af-pr-cta--ghost">Create an account</Link>
           ) : null}
           <hr className="af-pr-rule" />
@@ -569,7 +567,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         </p>}
         {signedIn ? (
           <Link href="/core" className="af-pr-foot-cta">Back to app</Link>
-        ) : sessionStatus === 'unauthenticated' ? (
+        ) : !signedIn ? (
           <Link href="/signup" className="af-pr-foot-cta">Start free</Link>
         ) : null}
       </footer>
