@@ -28,6 +28,8 @@ import {
  */
 export class ImportRunInFlightError extends Error {}
 
+const STALE_IMPORT_RUN_MS = 60 * 60 * 1000
+
 const ENTITY_MAPPING_WRITE_BATCH_SIZE = 250
 
 async function replaceImportWarnings(input: {
@@ -215,6 +217,7 @@ export async function persistImportWithCanonicalAudit(input: {
    * by once.
    */
   const force = input.allowUpdateExisting === true
+  let completedLeagueMissing = existingRun?.status === 'completed' && !existingRun.leagueId
   if (!force && existingRun?.status === 'completed' && existingRun.leagueId) {
     const league = await prisma.league.findUnique({
       where: { id: existingRun.leagueId },
@@ -243,36 +246,59 @@ export async function persistImportWithCanonicalAudit(input: {
         runId: existingRun.id,
       }
     }
+    completedLeagueMissing = true
   }
 
   /*
-   * A forced re-run REUSES the existing audit row rather than deleting it or mutating the
-   * key. `idempotencyKey` is unique, so a fresh `create` would collide; deleting would
-   * throw away the audit trail this table exists to keep, and salting the key would leave
-   * an unbounded set of near-duplicate rows. Reusing records the latest attempt against
-   * the same logical import, which is what it is.
+   * Deleting a league clears ImportRun.leagueId through its SetNull relation but leaves
+   * the unique idempotency key behind. Reuse that completed audit row when the league is
+   * gone. A failed run can be retried, and a crashed request can strand a running row;
+   * only reclaim the latter after an hour.
+   * The conditional update is the claim: a second request must not run the same import.
    */
-  const run =
-    force && existingRun
-      ? await prisma.importRun.update({
-          where: { idempotencyKey },
-          data: {
-            status: 'running',
-            completedAt: null,
-            error: null,
-            rawPayloadHash: hashPayload(input.normalized),
-            canonicalSummary: input.canonical as object,
-          },
-        })
-      : await createImportRun({
-          userId: input.userId,
-          provider: input.provider,
-          sourceLeagueId: input.normalized.source.source_league_id,
-          season: seasonYear,
-          idempotencyKey,
-          rawPayloadHash: hashPayload(input.normalized),
-          canonicalSummary: input.canonical as object,
-        })
+  let run: Awaited<ReturnType<typeof createImportRun>>
+  if (existingRun) {
+    const staleRunning =
+      existingRun.status === 'running' &&
+      existingRun.startedAt.getTime() < Date.now() - STALE_IMPORT_RUN_MS
+    if (!((existingRun.status === 'completed' && (force || completedLeagueMissing)) ||
+      existingRun.status === 'failed' || staleRunning)) {
+      throw new ImportRunInFlightError(
+        'This import is already in progress from another request. Please wait a moment and try again.'
+      )
+    }
+    const claimed = await prisma.importRun.updateMany({
+      where: {
+        id: existingRun.id,
+        status: existingRun.status,
+        startedAt: existingRun.startedAt,
+      },
+      data: {
+        status: 'running',
+        startedAt: new Date(),
+        completedAt: null,
+        error: null,
+        rawPayloadHash: hashPayload(input.normalized),
+        canonicalSummary: input.canonical as object,
+      },
+    })
+    if (claimed.count !== 1) {
+      throw new ImportRunInFlightError(
+        'This import is already in progress from another request. Please wait a moment and try again.'
+      )
+    }
+    run = await prisma.importRun.findUniqueOrThrow({ where: { id: existingRun.id } })
+  } else {
+    run = await createImportRun({
+      userId: input.userId,
+      provider: input.provider,
+      sourceLeagueId: input.normalized.source.source_league_id,
+      season: seasonYear,
+      idempotencyKey,
+      rawPayloadHash: hashPayload(input.normalized),
+      canonicalSummary: input.canonical as object,
+    })
+  }
 
   /*
    * ⚠ OPENED AFTER THE RUN ROW IS SETTLED AND BEFORE ANY WORK, so a crash mid-import

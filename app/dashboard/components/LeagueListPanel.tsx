@@ -6,6 +6,7 @@ import { LeagueSidebarCard } from '@/components/league/LeagueSidebarCard'
 import { EmptyState } from '@/components/ui-states/EmptyState'
 import { DashboardLiveDrafts } from '@/app/dashboard/components/DashboardLiveDrafts'
 import type { UserLeague } from '../types'
+import { hasLeagueSortMetric, isLeagueSortMode, LEAGUE_SORT_OPTIONS, LEAGUE_SORT_STORAGE_KEY, sortLeagues, type LeagueSortMode } from '@/lib/league-list/sortLeagues'
 import '@/components/decide/broadcast-deck.css'
 
 const FAVORITES_KEY = 'af-league-favorites'
@@ -89,6 +90,7 @@ export function LeagueListPanel({
   const [refreshed, setRefreshed] = useState<Record<string, boolean>>({})
   const [favoriteIds, setFavoriteIds] = useState<string[]>([])
   const [orderedIds, setOrderedIds] = useState<string[]>([])
+  const [sortMode, setSortMode] = useState<LeagueSortMode>('default')
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const draggedLeagueIdRef = useRef<string | null>(null)
@@ -123,6 +125,8 @@ export function LeagueListPanel({
     const syncFromStorage = () => {
       setFavoriteIds(readStoredIds(FAVORITES_KEY))
       setOrderedIds(readStoredIds(ORDER_KEY))
+      const savedSort = window.localStorage.getItem(LEAGUE_SORT_STORAGE_KEY)
+      setSortMode(isLeagueSortMode(savedSort) ? savedSort : 'default')
     }
 
     syncFromStorage()
@@ -136,10 +140,12 @@ export function LeagueListPanel({
   }, [])
 
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds])
+  const effectiveSort = hasLeagueSortMetric(leagues, sortMode) ? sortMode : 'default'
 
   const orderedLeagues = useMemo(() => applySavedOrder(leagues, orderedIds), [leagues, orderedIds])
 
   const favoriteSortedLeagues = useMemo(() => {
+    if (effectiveSort !== 'default') return sortLeagues(orderedLeagues, effectiveSort)
     const favorites: UserLeague[] = []
     const remaining: UserLeague[] = []
 
@@ -152,7 +158,7 @@ export function LeagueListPanel({
     }
 
     return [...favorites, ...remaining]
-  }, [favoriteSet, orderedLeagues])
+  }, [effectiveSort, favoriteSet, orderedLeagues])
 
   const displayedLeagues = useMemo(() => {
     if (compact || !search.trim()) return favoriteSortedLeagues
@@ -326,6 +332,32 @@ export function LeagueListPanel({
         </div>
       ) : null}
 
+      <div className="border-b border-[#1c2153] px-3 py-2">
+        <label className="flex items-center gap-2 text-xs text-white/60">
+          <span className="shrink-0">Sort</span>
+          <select
+            value={effectiveSort}
+            onChange={(event) => {
+              const mode = event.target.value as LeagueSortMode
+              setSortMode(mode)
+              try { window.localStorage.setItem(LEAGUE_SORT_STORAGE_KEY, mode) } catch {}
+            }}
+            aria-label="Sort leagues"
+            className="min-w-0 flex-1 rounded-lg border border-[#262c6a] bg-[#12163e] px-2 py-1.5 text-xs text-white"
+          >
+            {LEAGUE_SORT_OPTIONS.map((option) => {
+              const available = hasLeagueSortMetric(leagues, option.value)
+              return (
+                <option key={option.value} value={option.value} disabled={!available}>
+                  {option.value === 'default' ? 'Favorites + manual' : option.label}
+                  {available ? '' : ' (data unavailable)'}
+                </option>
+              )
+            })}
+          </select>
+        </label>
+      </div>
+
       <div
         className={`min-h-0 min-w-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 ${
           compact ? '' : '[scrollbar-gutter:stable]'
@@ -375,9 +407,10 @@ export function LeagueListPanel({
                     isDropTarget={isDropTarget}
                     compact={compact}
                     dragHandleProps={{
-                      draggable: true,
-                      title: 'Drag to reorder',
+                      draggable: effectiveSort === 'default',
+                      title: effectiveSort === 'default' ? 'Drag to reorder' : 'Select Favorites + manual to drag',
                       onDragStart: (e) => {
+                        if (effectiveSort !== 'default') { e.preventDefault(); return }
                         draggedLeagueIdRef.current = league.id
                         setDraggingId(league.id)
                         e.dataTransfer.effectAllowed = 'move'
