@@ -26,6 +26,7 @@ import { PhoneSort, RankTable, type RankColumn, type RankRow } from '@/component
 import { PhoneFold } from '@/components/core-app/rankings/PhoneFold'
 import { TrendLine } from '@/components/core-app/rankings/TrendLine'
 import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilterBar'
+import { RankingsBoardHead, RankingsHero } from '@/components/core-app/rankings/RankingsHero'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
 import AfRankingsPage from '@/components/rankings/AfRankingsClient'
@@ -266,6 +267,12 @@ function boardColumns(g: GlobalView, data: RankingsData): RankColumn[] {
   ]
 }
 
+/** Two characters for the row's avatar chip: the handle's first two letters or digits ("gridironghost" → "GR"). */
+export function handleInitials(handle: string): string {
+  const letters = handle.replace(/[^\p{L}\p{N}]/gu, '')
+  return (letters.slice(0, 2) || '?').toUpperCase()
+}
+
 function boardRows(rows: BoardTableRow[]): RankRow[] {
   return rows.map((r) => {
     const m = moveText(r.movement)
@@ -276,6 +283,7 @@ function boardRows(rows: BoardTableRow[]): RankRow[] {
         { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
         {
           text: `@${r.handle}${r.isYou ? ' (you)' : ''}`,
+          initials: handleInitials(r.handle),
           href: r.compareHref ?? undefined,
           title: r.compareHref ? `Compare your career with @${r.handle}` : undefined,
           sub: `Lvl ${r.level} · ${r.confidence} confidence${r.updated ? ` · data ${fmtDate(r.updated)}` : ''}`,
@@ -287,7 +295,7 @@ function boardRows(rows: BoardTableRow[]): RankRow[] {
         { text: r.scoring },
         { text: r.sample },
         { text: m.text, tone: m.tone, title: m.label },
-        { text: 'Why', href: r.explainHref, title: `Explain #${r.rank} @${r.handle}` },
+        { text: 'Why', href: r.explainHref, title: `Explain #${r.rank} @${r.handle}`, button: true },
       ],
     }
   })
@@ -379,6 +387,12 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
       <ExplainPanel g={g} data={data} />
 
       <section className="af-rk-card af-rk-explainsplit-main">
+        <RankingsBoardHead
+          shown={g.rows.length}
+          population={data.population}
+          you={g.you ? { rank: g.you.rank, of: g.you.of } : null}
+          overall={g.board === 'overall'}
+        />
         <PhoneFold id="af-rk-board-controls" summary={boardControlsSummary(g, boardCols)}>
         {g.divisionFilter ? (
           <div className="af-rk-classbar" role="group" aria-label="Who is on this board" data-active={g.divisionFilter.active ? 'true' : 'false'}>
@@ -1391,28 +1405,33 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
 
   return (
     <div className="af-rk">
-      <header className="af-rk-head">
-        <div>
-          <h1 className="af-rk-title">Rankings</h1>
-          <p className="af-rk-sub">
+      <RankingsHero
+        computedLine={
+          <>
             Calculated {fmtStamp(data.computedAt)} from {data.population} ranked{' '}
             {data.population === 1 ? 'manager' : 'managers'}
-          </p>
-        </div>
-        <div className="af-rk-headact">
-          {data.shareUrl ? (
-            <span className="af-rk-share">
-              <ShareMomentButton url={data.shareUrl} filename="allfantasy-rank.png" title="My AllFantasy rank" label="Share rank card" />
-            </span>
-          ) : null}
-          <Link className="af-rk-btn" href={compareHref}>
-            Compare
-          </Link>
-          <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
-            How ranking works
-          </Link>
-        </div>
-      </header>
+          </>
+        }
+        actions={
+          <>
+            {data.shareUrl ? (
+              <span className="af-rk-share">
+                <ShareMomentButton url={data.shareUrl} filename="allfantasy-rank.png" title="My AllFantasy rank" label="Share rank card" />
+              </span>
+            ) : null}
+            <Link className="af-rk-btn" href={compareHref}>
+              Compare
+            </Link>
+            <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
+              How ranking works
+            </Link>
+          </>
+        }
+        you={data.you}
+        community={data.global?.you ? { rank: data.global.you.rank, of: data.global.you.of } : null}
+        // My portfolio carries the full level card (crest, tier, XP breakdown) in its own body.
+        showLevel={data.scope !== 'portfolio'}
+      />
 
       <ScopeTabs data={data} leagueId={leagueId} />
 
