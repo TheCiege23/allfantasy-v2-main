@@ -90,6 +90,19 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
   })
 
+  it('submits a six-league Zombie universe once and follows its commissioner hub redirect', async () => {
+    mockFetchSuccess({ universeId: 'universe-6', leagueIds: ['l1', 'l2', 'l3', 'l4', 'l5', 'l6'], homepageUrl: '/zombie/universe/universe-6' })
+    const result = await submitCreateLeagueV2(state({ leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(lastFetchBody()).toMatchObject({ concept: 'zombie', teamCount: 20, conceptSetup: { zombieLeagueCount: 6 } })
+    expect(result).toMatchObject({ ok: true, redirectTo: '/zombie/universe/universe-6' })
+  })
+
+  it('keeps an imported Zombie roster in one league even if a previous universe choice was saved', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }), 'import-source')
+    expect(lastFetchBody()).toMatchObject({ sourceLeagueId: 'import-source', conceptSetup: { zombieLeagueCount: 1 } })
+  })
+
   it('sends the selected startup auction and weighted future rookie order', async () => {
     await submitCreateLeagueV2(state({ leagueType: 'dynasty', draftType: 'auction', dynasty: { ...DEFAULT_V2_STATE.dynasty, startupDraftType: 'auction', rookieDraftOrderMethod: 'weighted_lottery' } }))
     expect(lastFetchBody()).toMatchObject({ draftType: 'auction', conceptSetup: { rookieDraftOrderMethod: 'weighted_lottery' } })

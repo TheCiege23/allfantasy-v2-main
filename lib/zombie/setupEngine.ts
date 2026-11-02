@@ -1,3 +1,5 @@
+import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateLeagueName, generateUniverseName } from '@/lib/zombie/namingEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -215,25 +217,24 @@ export async function createZombieLeague(
   config: ZombieLeagueSetupConfig,
   universeId?: string | null,
   tierId?: string | null,
+  db: Prisma.TransactionClient = prisma,
 ) {
   const sport = normalizeToSupportedSport(config.sport)
   const schedule = getZombieSeasonSchedule(sport)
-  const allowedTeamCounts = new Set([8, 10, 12, 14, 16])
-  const defaultTeamCount = allowedTeamCounts.has(schedule.defaultTeamCount)
-    ? schedule.defaultTeamCount
-    : 12
+  const allowedTeamCounts = new Set(getZombieCreationTeamCounts(sport))
+  const defaultTeamCount = ZOMBIE_DEFAULT_MANAGERS
   const resolvedTeamCount =
     typeof config.teamCount === 'number' && allowedTeamCounts.has(config.teamCount)
       ? config.teamCount
       : defaultTeamCount
-  const existing = await prisma.league.findUnique({ where: { id: config.leagueId } })
+  const existing = await db.league.findUnique({ where: { id: config.leagueId } })
   if (!existing) throw new Error('League not found — create the fantasy league first.')
 
   const { leagueId } = config
 
   if (universeId) {
     const names = (
-      await prisma.zombieLeague.findMany({
+      await db.zombieLeague.findMany({
         where: { universeId },
         select: { name: true },
       })
@@ -243,7 +244,7 @@ export async function createZombieLeague(
     const desired =
       config.name?.trim() ||
       generateLeagueName(names, config.namingMode === 'auto' ? 'A' : undefined)
-    const collision = await prisma.zombieLeague.findFirst({
+    const collision = await db.zombieLeague.findFirst({
       where: { universeId, name: desired },
     })
     if (collision) throw new Error('League name must be unique within the universe.')
@@ -255,7 +256,7 @@ export async function createZombieLeague(
     (namingMode === 'auto' || namingMode === 'hybrid'
       ? generateLeagueName(
           (
-            await prisma.zombieLeague.findMany({
+            await db.zombieLeague.findMany({
               where: universeId ? { universeId } : {},
               select: { name: true },
             })
@@ -266,7 +267,7 @@ export async function createZombieLeague(
       : 'Zombie League')
 
   const experienceMode = config.experienceMode ?? 'enhanced'
-  const row = await prisma.zombieLeague.create({
+  const row = await db.zombieLeague.create({
     data: {
       universeId: universeId ?? null,
       levelId: tierId ?? null,
@@ -274,7 +275,7 @@ export async function createZombieLeague(
       name: nm,
       slug: config.slug ?? '',
       sport,
-      season: config.season ?? new Date().getFullYear(),
+      season: config.season ?? existing.season ?? new Date().getFullYear(),
       experienceMode,
       whispererAmbushCount: experienceMode === 'simple' ? 0 : 3,
       whispererCount: experienceMode === 'simple' ? 1 : (config.whispererCount ?? 1),
@@ -294,14 +295,14 @@ export async function createZombieLeague(
     },
   })
 
-  await prisma.zombieLeagueConfig.upsert({
+  await db.zombieLeagueConfig.upsert({
     where: { leagueId },
     create: { leagueId, ...zombieExperienceDefaults(experienceMode) },
     update: zombieExperienceDefaults(experienceMode),
   })
 
   if (row.isPaid && config.buyInAmount != null) {
-    await prisma.zombiePaidConfig.create({
+    await db.zombiePaidConfig.create({
       data: {
         zombieLeagueId: row.id,
         buyInAmount: config.buyInAmount,
@@ -310,7 +311,7 @@ export async function createZombieLeague(
   }
 
   if (namingMode === 'auto' || namingMode === 'hybrid') {
-    await prisma.zombieNameRecord.create({
+    await db.zombieNameRecord.create({
       data: {
         universeId: universeId ?? null,
         leagueId: row.id,

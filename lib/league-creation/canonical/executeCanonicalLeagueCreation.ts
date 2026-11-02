@@ -3,6 +3,9 @@
  * Used by POST /api/leagues and by the legacy POST /api/league/create compatibility wrapper for manual leagues.
  */
 
+import { createZombieUniverseInTransaction } from './createZombieUniverseInTransaction'
+import { zombieCreationLeagueCount } from '@/lib/zombie/creationPolicy'
+import type { PresetEngineOutput } from './types'
 import type { LeagueSport, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEngine'
@@ -73,12 +76,32 @@ export async function executeCanonicalLeagueCreation(args: {
     }
   }
 
+  let leagueCount = 1
+  try {
+    leagueCount = engine.leagueFormatId === 'zombie' ? zombieCreationLeagueCount(body.conceptSetup) : 1
+    if (args.sourceLeagueId && leagueCount > 1) throw new Error('Imported rosters can carry into only one league at a time.')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid Zombie universe size.'
+    return { ok: false, status: 400, response: { success: false, error: message,
+      errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] } }
+  }
   let createdLeagueId = ''
   let homepageUrl = ''
+  let universeId: string | undefined
+  let children: Array<{ leagueId: string; homepageUrl: string; body: ValidatedCreateLeagueBody }> = []
 
   try {
-    const result = await prisma.$transaction(
+    const result = await prisma.$transaction<{
+      leagueId: string
+      homepageUrl: string
+      universeId?: string
+      children: Array<{ leagueId: string; homepageUrl: string; body: ValidatedCreateLeagueBody }>
+    }>(
       async (tx) => {
+        if (leagueCount > 1) {
+          const batch = await createZombieUniverseInTransaction(tx as Prisma.TransactionClient, appUserId, body, engine)
+          return { ...batch.leagues[0], universeId: batch.universeId, children: batch.leagues }
+        }
         const created = await createCanonicalLeagueInTransaction(
           tx as Prisma.TransactionClient,
           appUserId,
@@ -96,12 +119,14 @@ export async function executeCanonicalLeagueCreation(args: {
             acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
           })
         }
-        return created
+        return { ...created, universeId: undefined, children: [] }
       },
-      { maxWait: 20000, timeout: args.sourceLeagueId ? 60000 : 25000 }
+      { maxWait: 20000, timeout: leagueCount > 1 ? 90000 : args.sourceLeagueId ? 60000 : 25000 }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl
+    universeId = result.universeId
+    children = result.children
   } catch (e) {
     if (e instanceof ImportedLeagueCarryoverError) {
       return {
@@ -128,6 +153,30 @@ export async function executeCanonicalLeagueCreation(args: {
     }
   }
 
+  if (universeId) {
+    let primary: ExecuteCanonicalLeagueCreationResult | undefined
+    for (const child of children) {
+      const result = await finishCreatedLeague({ ...args, body: child.body }, engine, child.leagueId, child.homepageUrl)
+      primary ??= result
+    }
+    if (primary?.ok) {
+      primary.response.universeId = universeId
+      primary.response.leagueIds = children.map((child) => child.leagueId)
+      primary.response.homepageUrl = `/zombie/universe/${universeId}`
+      return primary
+    }
+    throw new Error('Zombie universe committed without a primary league response.')
+  }
+  return finishCreatedLeague(args, engine, createdLeagueId, homepageUrl)
+}
+
+async function finishCreatedLeague(
+  args: { appUserId: string; body: ValidatedCreateLeagueBody; sourceLeagueId?: string },
+  engine: PresetEngineOutput,
+  createdLeagueId: string,
+  homepageUrl: string,
+): Promise<ExecuteCanonicalLeagueCreationResult> {
+  const { appUserId, body } = args
   try {
     await logLeagueCreated({
       leagueId: createdLeagueId,
