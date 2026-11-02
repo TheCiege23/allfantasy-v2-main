@@ -267,6 +267,13 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           backLabel="Back to pool dashboard"
           actions={
             <>
+              {activeEntry.userId === view.viewerUserId ? <div>
+                <BracketChimmyEntryLink
+                  href={getChimmyChatHrefWithPrompt(`Review my ${bracketPromptTarget(activeEntry.name, view.challenge.name)}. Which saved picks are decided, and what do the current series results mean for my bracket?`, { source: 'playoff_bracket_entry' })}
+                  className="af-pb-btn" testId="playoff-entry-ask-chimmy-link" format="playoff"
+                >Ask Chimmy about my picks</BracketChimmyEntryLink>
+                <BracketChangeAlertToggle format="playoff" entryId={activeEntry.id} />
+              </div> : null}
               {isLiveSingleGame ? <label className="af-pb-tiebreaker">Final game combined score <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
               {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share bracket</button> : null}
               <button
