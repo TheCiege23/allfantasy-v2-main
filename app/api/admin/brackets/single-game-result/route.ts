@@ -100,5 +100,14 @@ export async function POST(request: Request) {
       seriesNumber, home, away, homeScore, awayScore, winner,
     },
   })
+  if (game.winnerTeamName !== winner) {
+    try {
+      const { emitPlayoffDecisionAlerts } = await import('@/lib/chimmy/bracketChangeAlerts')
+      await emitPlayoffDecisionAlerts({ challengeId, decisions: [{ seriesId: game.id,
+        seriesName: `${home} vs ${away}`, beforeWinner: game.winnerTeamName, winner }] })
+    } catch (error) {
+      console.warn('[single-game bracket result] change alerts unavailable', error)
+    }
+  }
   return NextResponse.json({ ok: true, winner, seriesNumber })
 }

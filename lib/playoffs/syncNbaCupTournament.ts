@@ -55,7 +55,8 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
   const failures = responses.filter((row) => row.error).map((row) => ({ date: row.date, error: row.error }))
   if (!input.apply) return { applied: false, gamesDiscovered: responses.flatMap((row) => row.games).length, failures, outcomes: [] }
 
-  return prisma.$transaction(async (tx) => {
+  const alertDecisions: Array<{ challengeId: string; seriesId: string; seriesName: string; beforeWinner: string | null; winner: string }> = []
+  const result = await prisma.$transaction(async (tx) => {
     // A duplicate cron run must not reassign slots or overwrite a newer season snapshot.
     const [lock] = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext(${nbaCupCacheKey(input.season)})) AS acquired`
     if (!lock?.acquired) return { applied: false, skipped: "sync_already_running", failures, outcomes: [] }
@@ -96,6 +97,22 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const ids = pools.map((pool) => pool.id)
     const rows = nbaCupSeriesRows(live ? games.filter((game) => changed.has(game.eventId)) : games)
     if (ids.length && rows.length) {
+      // Capture the persisted winner before this transaction writes verified finals.
+      // Newly created series have no entry pick yet, so they establish the baseline.
+      const finalRows = rows.filter((game) => game.winnerTeamName)
+      const existing = finalRows.length ? await tx.playoffBracketSeries.findMany({
+        where: { challengeId: { in: ids }, seriesNumber: { in: finalRows.map((game) => game.seriesNumber) } },
+        select: { id: true, challengeId: true, seriesNumber: true, winnerTeamName: true,
+          homeTeamName: true, awayTeamName: true },
+      }) : []
+      const finalByNumber = new Map(finalRows.map((game) => [game.seriesNumber, game]))
+      for (const series of existing) {
+        const next = finalByNumber.get(series.seriesNumber)
+        if (!next?.winnerTeamName || next.winnerTeamName === series.winnerTeamName) continue
+        alertDecisions.push({ challengeId: series.challengeId, seriesId: series.id,
+          seriesName: `${next.homeTeamName ?? series.homeTeamName} vs ${next.awayTeamName ?? series.awayTeamName}`,
+          beforeWinner: series.winnerTeamName, winner: next.winnerTeamName })
+      }
       await tx.playoffBracketSeries.createMany({ data: pools.flatMap((pool) => rows.filter((game) => game.round === "cup_group_play").map((game) => ({ ...game, challengeId: pool.id, lastSyncedAt: now }))), skipDuplicates: true })
       for (const game of rows) {
         await tx.playoffBracketSeries.updateMany({ where: { challengeId: { in: ids }, seriesNumber: game.seriesNumber }, data: { ...game, lastSyncedAt: now } })
@@ -105,4 +122,21 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     return { applied: true, gamesPublished: games.length, poolsUpdated: rows.length ? ids.length : 0, failures, outcomes: [],
       activeGames: games.filter((game) => game.status === "in_progress").length }
   }, { timeout: live ? 8000 : 55000, maxWait: live ? 1000 : 5000 })
+  if (result.applied && alertDecisions.length) {
+    try {
+      const { emitPlayoffDecisionAlerts, settleBracketAlertBatch } = await import("@/lib/chimmy/bracketChangeAlerts")
+      const byChallenge = new Map<string, typeof alertDecisions>()
+      for (const decision of alertDecisions) {
+        const decisions = byChallenge.get(decision.challengeId) ?? []
+        decisions.push(decision)
+        byChallenge.set(decision.challengeId, decisions)
+      }
+      const failed = await settleBracketAlertBatch([...byChallenge], ([challengeId, decisions]) =>
+        emitPlayoffDecisionAlerts({ challengeId, decisions }))
+      if (failed) console.warn("[NBA Cup] bracket change alerts failed", { failed })
+    } catch (error) {
+      console.warn("[NBA Cup] bracket change alerts unavailable", error)
+    }
+  }
+  return result
 }

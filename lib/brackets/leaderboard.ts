@@ -87,7 +87,7 @@ export async function rebuildLeaderboardForScope(args: {
       tournamentId,
       leagueId,
     },
-    select: { entryId: true, rank: true },
+    select: { entryId: true, rank: true, score: true },
   })
   const previousByEntry = new Map<string, number>()
   for (const row of existing) {
@@ -127,6 +127,36 @@ export async function rebuildLeaderboardForScope(args: {
   )
 
   await prisma.$transaction(ops)
+  // A rank-only rebuild can move a user, so compare both values from the last stored
+  // leaderboard row. First-time rows establish a baseline and never trigger an alert.
+  if (leagueId) {
+    try {
+      const beforeByEntry = new Map(existing.map((row) => [row.entryId, row]))
+      const changed = ranked.filter((row) => {
+        const before = beforeByEntry.get(row.entryId)
+        return before && (before.score !== row.score || before.rank !== row.rank)
+      })
+      if (changed.length) {
+        const owners = await prisma.bracketEntry.findMany({
+          where: { id: { in: changed.map((row) => row.entryId) } },
+          select: { id: true, userId: true, name: true, league: { select: { name: true } } },
+        })
+        const ownerByEntry = new Map(owners.map((row) => [row.id, row]))
+        const { emitBracketChangeAlert, settleBracketAlertBatch } = await import('@/lib/chimmy/bracketChangeAlerts')
+        const failed = await settleBracketAlertBatch(changed, (row) => {
+          const owner = ownerByEntry.get(row.entryId)
+          const before = beforeByEntry.get(row.entryId)
+          if (!owner || !before) return Promise.resolve(false)
+          return emitBracketChangeAlert({ userId: owner.userId, entryId: row.entryId,
+            entryName: owner.name, poolName: owner.league.name, format: 'tournament',
+            before: { score: before.score, rank: before.rank }, after: { score: row.score, rank: row.rank } })
+        })
+        if (failed) console.warn('[bracket leaderboard] change alerts failed', { failed })
+      }
+    } catch (error) {
+      console.warn('[bracket leaderboard] change alerts unavailable', error)
+    }
+  }
   return { updated: ranked.length }
 }
 

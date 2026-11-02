@@ -25,6 +25,10 @@ import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import MlbBracketBoard from "./MlbBracketBoard"
 import PlayoffSettingsModal from "./PlayoffSettingsModal"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
+import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
+import { BracketChangeAlertToggle } from '@/components/chimmy/BracketChangeAlertToggle'
+import { BracketChimmyEntryLink } from '@/components/chimmy/BracketChimmyEntryLink'
+import { bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -316,6 +320,14 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
             </Link>
             <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{activeEntry.name}</h1>
             <p className="mt-1 text-sm text-slate-700">{view.challenge.name} - {String(view.challenge.sport ?? "").toUpperCase()}</p>
+            {activeEntry.userId === view.viewerUserId ? <BracketChimmyEntryLink
+              href={getChimmyChatHrefWithPrompt(`Review my ${bracketPromptTarget(activeEntry.name, view.challenge.name)}. Which saved picks are decided, and what do the current series results mean for my bracket?`, { source: 'playoff_bracket_entry' })}
+              className="mt-3 inline-flex rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              testId="playoff-entry-ask-chimmy-link" format="playoff"
+            >
+              Ask Chimmy about my picks
+            </BracketChimmyEntryLink> : null}
+            {activeEntry.userId === view.viewerUserId ? <BracketChangeAlertToggle format="playoff" entryId={activeEntry.id} /> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickCount}/{totalSeries} picks</span>

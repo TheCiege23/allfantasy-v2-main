@@ -29,6 +29,7 @@ import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
+import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
 import {
@@ -3168,7 +3169,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[] }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3377,6 +3378,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       const loopSettleVerdict = lastSettle && boundLeague && lastSettle.leagueId === boundLeague.id ? eliminationSettleVerdict(lastSettle.settle) : null
       const loopVerdict = (lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null) ?? loopSettleVerdict
       const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
+      const uniqueBracketReads = [...new Map(toolContext.bracketEvidence.map((entry) => [entry.href, entry])).values()]
+      const singleBracketRead = uniqueBracketReads.length === 1 ? uniqueBracketReads[0] : null
       /* Stored like every other path's, so the history row can show the image the question came with. */
       const loopScreenshot = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
       const loopMeta = {
@@ -3420,11 +3423,14 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
           dataSources: [...loop.toolsUsed, ...(decisionOsGrounding ? ['decision_os_grounding_packet'] : [])],
+          ...(singleBracketRead ? { bracketEvidence: singleBracketRead } : {}),
           /*
            * The next questions worth asking — each one answerable by a tool, none of them sent until
            * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
            */
-          followUps: suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
+          followUps: singleBracketRead
+            ? bracketFollowUps(singleBracketRead)
+            : suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
           ...(planMeta ? { planAllowance: planMeta } : {}),
           ...(loopPlayers.length > 0 ? { players: loopPlayers } : {}),
           /*
@@ -3492,6 +3498,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   let pecrIntent = 'general'
+  let fallbackBracketEvidence: BracketEvidence | null = null
   let pecrGroundingText = ''
   /** Set inside `plan` when a described trade resolves against this league's rosters. */
   let scenarioForMeta: ReadyChimmyScenario | null = null
@@ -3546,6 +3553,21 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
 
           let legacyEnrichmentContext =
             legacyEnrichment.status === 'fulfilled' ? legacyEnrichment.value.context : ''
+
+          // The tool loop is the usual path, but its provider can fail. Keep bracket questions
+          // grounded on the fallback too, using the same owner-checked reader as the tools.
+          if (/\b(brackets?|march madness|world cup pool)\b/i.test(planInput.message)) {
+            const bracketContext = planInput.userId
+              ? await import('@/lib/chimmy/tools/bracketTool')
+                  .then(({ buildBracketEntryContext, buildMyBracketsContext, bracketSelectionFromQuestion }) =>
+                    /\bbrackets\b/i.test(planInput.message)
+                      ? buildMyBracketsContext(planInput.userId!)
+                      : buildBracketEntryContext(planInput.userId!, bracketSelectionFromQuestion(planInput.message),
+                          (evidence) => { fallbackBracketEvidence = evidence }))
+                  .catch(() => 'The signed-in user\'s bracket data could not be read. Do not invent picks, scores, ranks, or results.')
+              : 'No signed-in user was verified, so private bracket data could not be read. Ask the user to sign in.'
+            legacyEnrichmentContext = [legacyEnrichmentContext, bracketContext].filter(Boolean).join('\n\n')
+          }
 
           /*
            * Why the league trade-history block is or is not in this prompt.
@@ -4598,6 +4620,7 @@ ${describedTradeCtx}`
       recommendedTool: pecrOutput.recommendedTool,
       orchestration: chimmyOrchestrationMeta,
       dataSources: dataSources.length ? dataSources : undefined,
+      ...(fallbackBracketEvidence ? { bracketEvidence: fallbackBracketEvidence, followUps: bracketFollowUps(fallbackBracketEvidence) } : {}),
       sourceLinks: sourceReferences.length > 0 ? sourceReferences : undefined,
       staleness: {
         staleMinutes: staleness.staleMinutes,

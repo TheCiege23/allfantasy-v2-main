@@ -11,6 +11,10 @@ import Link from "next/link"
 import { requireVerifiedSession } from "@/lib/require-verified"
 import { getEntryBracketData } from "@/lib/brackets/getEntryBracketData"
 import { ArrowLeft, CheckCircle2 } from "lucide-react"
+import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
+import { BracketChangeAlertToggle } from '@/components/chimmy/BracketChangeAlertToggle'
+import { BracketChimmyEntryLink } from '@/components/chimmy/BracketChimmyEntryLink'
+import { bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
 import {
   getBracketViewState,
   getBracketProgressDisplay,
@@ -40,6 +44,7 @@ export default async function EntryBracketPage(
       lockedAt: true,
       league: {
         select: {
+          name: true,
           tournamentId: true,
           scoringRules: true,
           tournament: { select: { lockAt: true, sport: true } },
@@ -106,6 +111,13 @@ export default async function EntryBracketPage(
                   Build your {sportUI.label} challenge with live context and AI assist.
                 </span>
                 <span className="inline-flex items-center gap-2">
+                  <BracketChimmyEntryLink
+                    href={getChimmyChatHrefWithPrompt(`Review my ${bracketPromptTarget(entry.name, entry.league.name)}. Which saved picks are decided, and where do I stand in this pool?`, { source: 'bracket_entry' })}
+                    className="mode-muted underline"
+                    testId="bracket-entry-ask-chimmy-link" format="tournament"
+                  >
+                    Ask Chimmy about my picks
+                  </BracketChimmyEntryLink>
                   <Link href={leagueLeaderboardUrl} className="mode-muted underline" data-testid="bracket-entry-leaderboard-link">
                     Leaderboard
                   </Link>
@@ -118,6 +130,7 @@ export default async function EntryBracketPage(
                   </Link>
                 </span>
               </div>
+              <BracketChangeAlertToggle format="tournament" entryId={entry.id} />
             </div>
           </div>
 

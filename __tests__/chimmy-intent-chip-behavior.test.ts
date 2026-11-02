@@ -46,10 +46,17 @@ describe('getChimmyIntentChips', () => {
       'trade',
       'start_sit',
       'waiver',
+      'general',
       'injury',
       'general',
       'draft',
       'commissioner',
     ])
+  })
+
+  it('offers bracket help first when Chimmy opens from a bracket', () => {
+    const chips = getChimmyIntentChips({ leagueName: 'Alpha League', source: 'bracket_change_alert' })
+    expect(chips[0]).toMatchObject({ id: 'chip-my-brackets', category: 'general' })
+    expect(chips[0].prompt).toContain('stored pool scores or ranks')
   })
 })

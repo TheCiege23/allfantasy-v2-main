@@ -82,11 +82,19 @@ export function getChimmyIntentChipDefinitions(): ChimmyIntentChipDefinition[] {
 
 export function getChimmyIntentChips(args: {
   leagueName?: string | null
+  source?: string | null
 }): ChimmySuggestedChip[] {
-  return INTENT_CHIP_DEFINITIONS.map((chip) => ({
+  const regular = INTENT_CHIP_DEFINITIONS.map((chip) => ({
     id: chip.id,
     label: chip.label,
     category: chip.topic,
     prompt: chip.buildPrompt({ leagueName: args.leagueName }),
   }))
+  const bracket: ChimmySuggestedChip = {
+    id: 'chip-my-brackets', label: 'My brackets', category: 'general',
+    prompt: 'How are my brackets doing? Show my entries, decided picks, and any stored pool scores or ranks.',
+  }
+  return !args.leagueName || args.source?.includes('bracket')
+    ? [bracket, ...regular]
+    : [...regular.slice(0, 3), bracket, ...regular.slice(3)]
 }
