@@ -37,6 +37,23 @@ beforeEach(() => {
 })
 
 describe('current-main NHL historical integration', () => {
+  it('blocks malformed roster entries instead of silently dropping them', async () => {
+    h.rosters.mockResolvedValue([{ ...rosters[0], playerData: { players: ['f1', null] } }, ...rosters.slice(1)])
+    const rows = await loadNhlHistoricalLineups(input)
+    expect(rows?.every((row) => row.status === 'blocked')).toBe(true)
+    expect(rows?.[0]?.reason).toContain('malformed')
+    expect(h.games).not.toHaveBeenCalled()
+  })
+  it('withholds known NHL history failures without invoking the market grader', async () => {
+    h.games.mockRejectedValue(new Error('storage unavailable'))
+    const gradeProposal = vi.fn()
+    const result = await evaluateServerTradeDecision({ ...input, proposerRosterId: 'r1', receiverRosterId: 'r2',
+      season: 2026, gradeProposal })
+    expect(result.lineupBasis).toBe('historical_points_per_game')
+    expect(result.lineupCoverage?.every((row) => row.status === 'blocked')).toBe(true)
+    expect(result.participants.every((row) => row.grade === null && row.lineupPointsDelta === null)).toBe(true)
+    expect(gradeProposal).not.toHaveBeenCalled()
+  })
   it('requires every weighted stat, including a verified zero, and keeps goalie weights distinct', () => {
     expect(scoreNhlHistoricalBox({ stats: { goals: 0 } }, { goals: 4, assists: 3 }, false)).toBeNull()
     expect(scoreNhlHistoricalBox({ stats: { goals: 0, assists: 0 } }, { goals: 4, assists: 3 }, false)).toBe(0)

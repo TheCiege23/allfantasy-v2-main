@@ -24,7 +24,7 @@ sports rather than replacing it with the older local evaluator.
 
 ## Verification
 
-Seven isolated NHL scoring/context/receipt tests passed. The scoped TypeScript
+Nine focused NHL scoring/context/receipt tests passed, including malformed roster references and NHL history-read failure cases. The scoped TypeScript
 check of the NHL data, context and optimizer modules passed. The clean-branch
 rollback probe then passed on all 51 real players across three rosters, reproducing
 historical deltas -1.91, -2.11 and +2.97. Both temporary trade and snapshot were
@@ -42,3 +42,5 @@ Parent #3165 passed its required checks and merged as
 reported SUCCESS. Follow-up #3168 also merged as
 `b3eb7d6db0d30e71a3b6eea013684754a18ef113`; its web build is pending.
 This evaluator integration is not yet deployed and does not establish market grades.
+
+Release review: malformed roster references now block evaluation. Failures after NHL league identification return blocked historical evidence, preserving null grades and deltas without invoking market grading. Both regressions passed.

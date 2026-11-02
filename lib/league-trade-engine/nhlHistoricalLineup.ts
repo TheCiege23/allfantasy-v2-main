@@ -5,6 +5,7 @@ import { bestHockeyLineupAssignment, validHockeyPosition } from '@/lib/trades/ho
 import { NHL_GOALIE_STAT_KEYS, NHL_SKATER_STAT_KEYS } from '@/lib/nhl-scoring/NhlScoringPresets'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import type { TradeAssetInput } from './types'
+import type { League } from '@prisma/client'
 
 export type NhlHistoricalLineupCoverage = {
   rosterId: string; rosterPlayers: number; linkedPlayers: number; scoredPlayers: number
@@ -50,11 +51,23 @@ export function scoreNhlHistoricalBox(value: unknown, rules: Record<string, numb
 }
 
 /** NHL actuals only: these samples never become market values, forecasts or playoff evidence. */
-export async function loadNhlHistoricalLineups(input: { leagueId: string;
-  participantRosterIds: string[]; assets: TradeAssetInput[]; capturedAt: string }):
+type NhlHistoricalInput = { leagueId: string;
+  participantRosterIds: string[]; assets: TradeAssetInput[]; capturedAt: string }
+export async function loadNhlHistoricalLineups(input: NhlHistoricalInput):
   Promise<NhlHistoricalLineupCoverage[] | null> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league || league.sport !== 'NHL') return null
+  try {
+    return await loadKnownNhlLineups(input, league)
+  } catch {
+    return [...new Set(input.participantRosterIds)].map((rosterId) => ({ rosterId,
+      rosterPlayers: 0, linkedPlayers: 0, scoredPlayers: 0, missingIdentity: 0,
+      missingPosition: 0, missingScoredHistory: 0, status: 'blocked' as const,
+      reason: 'Stored NHL history is temporarily unavailable.', before: null, after: null, delta: null }))
+  }
+}
+
+async function loadKnownNhlLineups(input: NhlHistoricalInput, league: League): Promise<NhlHistoricalLineupCoverage[]> {
   const context = buildTradeLeagueContext(league, [], '')
   const participants = [...new Set(input.participantRosterIds)]
   const rosters = await prisma.roster.findMany({ where: { leagueId: league.id, id: { in: participants } },
@@ -65,6 +78,10 @@ export async function loadNhlHistoricalLineups(input: { leagueId: string;
     missingIdentity: 0, missingPosition: 0, missingScoredHistory: 0, status: 'blocked',
     reason: null, before: null, after: null, delta: null }))
   const blocked = (reason: string) => initial.map((row) => ({ ...row, reason }))
+  if (rosters.some((roster) => {
+    const raw = object(roster.playerData).players
+    return !Array.isArray(raw) || raw.some((id) => typeof id !== 'string' || !id.trim())
+  })) return blocked('Stored roster contains malformed player references.')
   const capturedAt = new Date(input.capturedAt)
   if (!Number.isFinite(capturedAt.getTime()) || participants.length < 2 || participants.length > 128 ||
     participants.length !== input.participantRosterIds.length || rosters.length !== participants.length)
