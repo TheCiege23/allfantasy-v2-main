@@ -1,5 +1,6 @@
 'use client'
 
+import { getZombieCreationProfile } from '@/lib/zombie/creationPolicy'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -105,10 +106,11 @@ function StepPanelSkeleton() {
   )
 }
 
-function ZombieTeamCountHint({ teamCount }: { teamCount: number }) {
+function ZombieTeamCountHint({ teamCount, sport }: { teamCount: number; sport: string }) {
+  const profile = getZombieCreationProfile(sport)
   return (
     <p className="mt-3 text-[11px] leading-relaxed text-white/45" data-testid="wizard-zombie-team-hint">
-      Zombie leagues support <span className="text-white/70">8, 10, 12, 14, or 16</span> teams (capped by this sport&apos;s max).
+      Zombie leagues default to 20 managers and support even sizes from <span className="text-white/70">4 to {profile.maxManagers}</span>.
       You selected <span className="text-white/70">{teamCount}</span> teams.
     </p>
   )
@@ -532,7 +534,7 @@ export function LeagueCreationWizard({
     zombieSportPresetRef.current = key
     setState((s) => ({
       ...s,
-      teamCount: clampTeamCountForSport(String(state.sport), 12, 'zombie'),
+      teamCount: clampTeamCountForSport(String(state.sport), 20, 'zombie'),
     }))
   }, [state.leagueType, state.sport])
 
@@ -1379,7 +1381,7 @@ export function LeagueCreationWizard({
                     onTeamCountChange={handleTeamCountChange}
                   />
                   {state.leagueType === 'zombie' && (
-                    <ZombieTeamCountHint teamCount={state.teamCount} />
+                    <ZombieTeamCountHint teamCount={state.teamCount} sport={String(state.sport)} />
                   )}
                 </div>
               </div>
