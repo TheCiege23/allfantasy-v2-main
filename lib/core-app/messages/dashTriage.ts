@@ -52,7 +52,7 @@ export const dashTriageMessages = defineMessages({
     setLineupLead: 'Set lineup',
     setLineupWhere: (platform: string, league: string) => ` in ${platform} · ${league}`,
     alsoIn: 'Also in',
-    openPlayerFinder: `Open ${coreUiCopy('Player Finder', 'en')}`,
+    openPlayerFinder: 'Open Player Finder',
     moreFlagged: (n: number) => `+${n} more starters flagged — full exposure audit`,
     valuesBasis: (format: string, qb: string) =>
       `Values from FantasyCalc (${format}, ${qb}, 12-team PPR). Not tuned to your league’s settings, and NFL only.`,
