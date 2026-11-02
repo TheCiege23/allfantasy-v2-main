@@ -1,9 +1,9 @@
 /*
  * Draft room redesign — the mode banner, the auction "on the block" panel and the phone clock bar.
  *
- * Every element here sits inside an `.af-core` scope (af-core.css), so light, dark and AF modes come
- * from the same tokens as /core. Colours are authored on tokens, never on Tailwind white utilities:
- * the global light-mode clamp in app/globals.css rewrites `text-white*` under `data-mode="light"`.
+ * Every element here sits inside an `.af-core` scope (af-core.css) and is authored on its tokens.
+ * Inside the room (`.af-draft-dark`) those tokens are pinned to af-core's dark values in every mode —
+ * see the block below. Outside it (the mock session board on a plain page) they follow the mode.
  * The clock bar and the current-bid figure use the scoreboard tokens (`--mu-sb-*`), which stay dark
  * in every mode — the same "keep dark" treatment the matchup scoreboard uses.
  */
@@ -32,6 +32,47 @@
 .af-dr .af-dr-num {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Inside the draft room the palette is dark in EVERY mode (Sleeper-style). The room's own Tailwind
+ * colours are kept out of the light-mode clamp by `.af-draft-dark` (app/globals.css); these pin the
+ * af-core tokens the redesign pieces read to af-core's dark values, outranking
+ * `html[data-mode='light'|'af'] .af-core` (0,2,1) with (0,3,0). Same values as the bare `.af-core`
+ * scope, so dark mode is unchanged.
+ */
+.af-draft-dark .af-core.af-dr {
+  --bg: #06070f;
+  --surface: #0d1020;
+  --surface2: #0a0c1a;
+  --line: rgba(255, 255, 255, 0.07);
+  --line2: rgba(255, 255, 255, 0.13);
+  --text: #eef0fa;
+  --text2: #c3c9e6;
+  --muted: #989fc2;
+  --faint: #7d84a8;
+  --accent: #22d3ee;
+  --accent-ink: #04050c;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-line: rgba(34, 211, 238, 0.28);
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb5b78;
+  --good-soft: rgba(52, 211, 153, 0.12);
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --bad-soft: rgba(251, 91, 120, 0.12);
+  --mu-sb-bg: #141a33;
+  --mu-sb-raise: #1c2342;
+  --mu-sb-line: rgba(255, 255, 255, 0.12);
+  --mu-sb-track: rgba(255, 255, 255, 0.16);
+  --mu-sb-text: #ffffff;
+  --mu-sb-text2: #d3d8ee;
+  --mu-sb-muted: #a7aecd;
+  --mu-sb-accent: #22d3ee;
+  --mu-sb-good: #34d399;
+  --mu-sb-bad: #fb5b78;
+  --mu-sb-warn: #fbbf24;
+  color-scheme: dark;
 }
 
 /* ── Mode banner ─────────────────────────────────────────────────────── */

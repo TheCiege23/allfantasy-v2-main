@@ -1010,7 +1010,7 @@ export function DraftTopBar({
               ? createPortal(
                 <div
                   ref={menuDropdownRef}
-                  className="fixed z-[9999] w-64 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  className="fixed z-[9999] w-64 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] af-draft-dark"
                   style={{ top: menuPos.top, right: Math.max(8, menuPos.right), maxHeight: `calc(100dvh - ${menuPos.top + 16}px - env(safe-area-inset-bottom, 0px))`, maxWidth: 'calc(100vw - 16px)' }}
                   data-testid="draft-topbar-menu"
                 >
