@@ -7,6 +7,8 @@ import {
   syncPlayoffChallengeSeries,
 } from "@/lib/playoffs/playoffSeriesSyncService"
 import { applyPlayoffSeedsToChallenges } from "@/lib/playoffs/playoffSeeding"
+import { sweepBracketExperience } from "@/lib/playoffs/bracketExperienceService"
+import type { PlayoffSport } from "@/lib/playoffs/types"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { redactSecrets } from "@/lib/security/redactSecrets"
 
@@ -42,18 +44,11 @@ const querySchema = z.object({
   windowDays: z.coerce.number().int().min(1).max(14).optional().default(7),
   dryRun: booleanLike.optional().default(false),
   /*
-   * `results` is the phase that actually advances a bracket. It rides this job
-   * rather than owning a route, per the standing no-new-routes rule, and rather
-   * than owning a second cron slot: the registry is AT its ceiling of 60.
-   *
-   * ⚠ THE COST OF SHARING THE FIRE IS CADENCE, AND IT IS A REAL LIMITATION.
-   * This job is scheduled `0 16-19 * * *` (12:00-15:00 ET), so a series that
-   * ends late at night is picked up around midday. That is a large improvement
-   * on the status quo — nothing advanced a bracket at all — but it is not
-   * good enough for a live World Series. Moving it to an evenly spread cadence
-   * is a one-line registry change once a cron slot is free.
+   * `auto` retains the four hourly provider result syncs (16:00-19:00 UTC)
+   * and runs alert-only observations on the other 15-minute fires. The
+   * registry remains at its 60-job ceiling without delaying pick reminders.
    */
-  job: z.enum(["all", "schedule", "results", "seed"]).optional().default("all"),
+  job: z.enum(["all", "schedule", "results", "seed", "alerts", "auto"]).optional().default("all"),
 })
 
 /**
@@ -194,7 +189,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
    * conditional writes), so it costs nothing on the fires where the field is
    * already filled.
    */
-  const runSeeding = input.job !== "schedule" && input.job !== "results" && !input.dryRun
+  const runSeeding = (input.job === "all" || input.job === "seed") && !input.dryRun
   const seeding = runSeeding
     ? await applyPlayoffSeedsToChallenges(challengeIds)
     : null
@@ -202,7 +197,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
     warnings.push(...seeding.warnings.map((warning) => `seed: ${warning}`))
   }
 
-  if (input.job !== "results" && input.job !== "seed") {
+  if (input.job === "all" || input.job === "schedule") {
     for (const challengeId of challengeIds) {
       const result = await refreshPlayoffScheduleMetadataForChallenge({
         challengeId,
@@ -239,7 +234,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
    * ⚠ A DRY RUN MUST NOT REACH IT. `syncPlayoffChallengeSeries` has no dryRun
    * parameter and always writes, so the guard is the caller's job.
    */
-  const runResults = input.job !== "schedule" && input.job !== "seed" && !input.dryRun
+  const runResults = (input.job === "all" || input.job === "results") && !input.dryRun
   const resultsStartedAt = Date.now()
   const resultsErrors: string[] = []
   const resultsSkippedForBudget: string[] = []
@@ -274,6 +269,39 @@ async function refreshActiveChallenges(input: RefreshInput) {
     }
   }
 
+  const bracketAlerts = { processed: 0, alerts: 0, failures: 0 }
+  if (!input.dryRun && (input.job === "all" || input.job === "results" || input.job === "alerts")) {
+    const alertWindowStart = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    const alertWindowEnd = new Date(Date.now() + ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    const active = await (prisma as any).playoffBracketChallenge.findMany({
+      where: {
+        sport: { in: ["nba", "nhl", "mlb", "ncaaf", "nba_cup", "nfl"] },
+        isTestMode: false,
+        status: { in: ["open", "locked", "live"] },
+        series: { some: { startsAt: { gte: alertWindowStart, lte: alertWindowEnd } } },
+      },
+      select: { id: true, sport: true, seasonYear: true },
+    }) as Array<{ id: string; sport: PlayoffSport; seasonYear: number }>
+    const groups = new Map<string, { sport: PlayoffSport; season: number; ids: string[] }>()
+    for (const pool of active) {
+      const key = `${pool.sport}:${pool.seasonYear}`
+      const group = groups.get(key) ?? { sport: pool.sport, season: pool.seasonYear, ids: [] }
+      group.ids.push(pool.id)
+      groups.set(key, group)
+    }
+    for (const group of groups.values()) {
+      try {
+        const result = await sweepBracketExperience(group.sport, group.season, group.ids)
+        bracketAlerts.processed += result.processed
+        bracketAlerts.alerts += result.alerts
+        bracketAlerts.failures += result.failures
+      } catch {
+        bracketAlerts.failures++
+      }
+    }
+    if (bracketAlerts.failures) warnings.push(`${bracketAlerts.failures} bracket alert observation(s) failed`)
+  }
+
   return {
     challengeIds,
     warnings,
@@ -289,6 +317,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
     winnersUpdated,
     resultsSkippedForBudget,
     resultsErrors,
+    bracketAlerts,
     seeding,
   }
 }
@@ -303,7 +332,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
   }
 
-  const input = parsed.data
+  // Keep the existing four hourly provider syncs. The same cron slot runs
+  // alert-only sweeps every 15 minutes so pick-lock reminders arrive on time.
+  const now = new Date()
+  const fullSyncDue = now.getUTCMinutes() === 0 && now.getUTCHours() >= 16 && now.getUTCHours() <= 19
+  const input: RefreshInput = parsed.data.job === "auto"
+    ? { ...parsed.data, job: fullSyncDue ? "all" : "alerts" }
+    : parsed.data
   const syncedAt = new Date().toISOString()
 
   try {
@@ -332,6 +367,7 @@ export async function GET(request: NextRequest) {
       winnersUpdated,
       resultsSkippedForBudget,
       resultsErrors,
+      bracketAlerts,
       seeding,
     } = input.dryRun
       ? await sweep()
@@ -363,6 +399,7 @@ export async function GET(request: NextRequest) {
               resultsSeriesUpdated: r.resultsSeriesUpdated,
               // The number that says a bracket actually moved.
               winnersUpdated: r.winnersUpdated,
+              bracketAlerts: r.bracketAlerts,
               // Non-zero means the 60s budget is too tight for the live field
               // and this needs a real drain cursor, not a bigger number.
               resultsSkippedForBudget: r.resultsSkippedForBudget.length,
@@ -397,6 +434,7 @@ export async function GET(request: NextRequest) {
       winnersUpdated,
       resultsSkippedForBudget,
       resultsErrors,
+      bracketAlerts,
       seeding,
       syncedAt,
     })

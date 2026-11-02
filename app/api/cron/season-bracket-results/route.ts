@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
   if (sport === "nfl") {
     // Outside January-February this returns before any provider call (nflPostseasonWindowOpen).
     const result = await syncNflPlayoffs({ season, apply: body.apply === true })
-    return NextResponse.json({ ok: result.failures.length === 0, ...result }, { status: result.failures.length ? 502 : 200 })
+    const experience = body.apply === true && result.applied
+      ? await sweepBracketExperience(sport, season).catch(() => ({ failures: 1, processed: 0, alerts: 0 }))
+      : null
+    return NextResponse.json({ ok: result.failures.length === 0 && !experience?.failures, ...result, experience }, { status: result.failures.length || experience?.failures ? 502 : 200 })
   }
   if (sport === "nba_cup") {
     const result = await syncNbaCupTournament({ season, apply: body.apply === true })

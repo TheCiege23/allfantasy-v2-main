@@ -18,6 +18,7 @@ COPY scripts/cron-scheduler.mjs scripts/cron-fast-tier-loop.mjs scripts/cron-tie
 # fast-tier route lives under one of these directories.
 COPY app/api/cron ./app/api/cron
 COPY app/api/redraft ./app/api/redraft
+COPY app/api/brackets/playoffs/cron/refresh-schedule ./app/api/brackets/playoffs/cron/refresh-schedule
 
 USER node
 CMD ["node", "scripts/cron-scheduler.mjs"]

@@ -10,12 +10,20 @@ vi.mock("@/lib/prisma",()=>{
 vi.mock("@/lib/playoffs/playoffService",()=>({getPlayoffBracketView:m.view}))
 vi.mock("@/lib/notifications/NotificationDispatcher",()=>({dispatchNotification:m.dispatch}))
 import { loadBracketExperience, saveBracketAlerts, sweepBracketExperience } from "@/lib/playoffs/bracketExperienceService"
-import { defaultBracketAlerts } from "@/lib/playoffs/bracketExperience"
+import { defaultBracketAlerts, readBracketAlerts } from "@/lib/playoffs/bracketExperience"
 const now=Date.parse("2026-11-07T01:00:00Z")
 function view():PlayoffChallengeView{return {challenge:{id:"pool",name:"Pool",ownerUserId:"me",sport:"nba_cup",seasonYear:2026,status:"open",isTestMode:false,createdAt:"",updatedAt:""},viewerUserId:"me",activeEntry:{id:"mine",name:"Mine",userId:"me",isComplete:true,finalizedAt:"2026-11-06T20:00:00Z",pickCount:1,totalScore:0,rank:2,createdAt:""},entries:[{id:"mine",name:"Mine",userId:"me",isComplete:true,finalizedAt:"2026-11-06T20:00:00Z",pickCount:1,totalScore:0,rank:2,createdAt:""}],rounds:[],series:[{...buildPlayoffTemplate({sport:"nba_cup",seasonYear:2026})[0],id:"game",round:"cup_group_play",bestOf:1,homeTeamName:"Boston Celtics",awayTeamName:"Atlanta Hawks",startsAt:"2026-11-07T00:00:00Z",status:"in_progress",lastSyncedAt:new Date(now).toISOString(),liveHomeScore:90,liveAwayScore:80}],picks:[{id:"p",entryId:"mine",seriesId:"game",pickTeamName:"Boston Celtics",createdAt:"",updatedAt:""}]}}
 beforeEach(()=>{vi.clearAllMocks();m.cache.clear();vi.useFakeTimers();vi.setSystemTime(now);m.view.mockResolvedValue(view());m.profile.mockResolvedValue({notificationPreferences:{categories:{bracket_updates:{enabled:true}},bracketCoach:{pool:{...defaultBracketAlerts,enabled:true}}},updatedAt:new Date(now)});m.picks.mockResolvedValue([{entryId:"mine",seriesId:"game",pickTeamName:"Boston Celtics"}]);m.entries.mockResolvedValue([{id:"mine",userId:"me",tiebreakerTotalScore:null}]);m.pools.mockResolvedValue([{id:"pool"}]);m.query.mockResolvedValue([{acquired:true}]);m.updateProfile.mockResolvedValue({count:1});m.dispatch.mockResolvedValue({requested:1,suppressed:0,delivered:1,failed:0});m.upsert.mockImplementation(async({where,create,update}:any)=>{const data=m.cache.has(where.cacheKey)?update.data:create.data;m.cache.set(where.cacheKey,data);return {data}})})
 afterEach(()=>vi.useRealTimers())
 describe("experience persistence and privacy",()=>{
+  it("enables bracket alerts by default while preserving an explicit opt-out",()=>{
+    expect(readBracketAlerts(null,"pool").enabled).toBe(true)
+    expect(readBracketAlerts({bracketCoach:{pool:{enabled:false}}},"pool").enabled).toBe(false)
+  })
+  it.each(["nfl","nba","nhl"] as const)("observes %s bracket pools",async(sport)=>{
+    await sweepBracketExperience(sport,2026)
+    expect(m.pools).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({sport,seasonYear:2026,isTestMode:false})}))
+  })
   it("keeps GET reads free of writes, sends, and future rival picks",async()=>{
     const result=await loadBracketExperience(view())
     expect(result.standings!.rows[0]).toMatchObject({livePoints:1})
