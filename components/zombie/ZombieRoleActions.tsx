@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Workflow = { id: string; kind: string; status: string; week: number | null; deadlineAt: string | null; canRespond: boolean; choices: string[]; offerIndex?: number }
-type Pack = { supported: boolean; owner?: boolean; canStartDraw?: boolean; canAmbush?: boolean; nominees?: Array<{ id: string; name: string; veteran?: boolean }>; workflows: Workflow[] }
+type Pack = { supported: boolean; owner?: boolean; canStartDraw?: boolean; canAmbush?: boolean; correctionHoldFromWeek?: number | null; nominees?: Array<{ id: string; name: string; veteran?: boolean }>; workflows: Workflow[] }
 type Match = { id: string; homeRosterId: string; awayRosterId: string; homeName: string; awayName: string; locked: boolean }
 type Preview = { week: number; previewHash: string; remaining: number; matches: Match[] }
 const labels: Record<string, string> = { accept: 'Accept role', decline: 'Decline', spare: 'Spare', infect: 'Turn into Zombie', replace: 'Become Whisperer', become_whisperer: 'Become Whisperer' }
@@ -86,6 +86,7 @@ export function ZombieRoleActions({ leagueId, onChanged }: { leagueId: string; o
   return <section aria-label="Zombie combat and role decisions" className="space-y-4 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/70 to-[#090c18] p-4 text-white sm:p-5">
     <header><h2 className="font-black">Combat &amp; Whisperer command</h2><p className="mt-1 text-sm text-white/65">2025 NFL rules · role choices and matchup control</p></header>
     {message && <p role="status" aria-live="polite" className="text-sm text-emerald-100">{message}</p>}
+    {pack?.correctionHoldFromWeek != null && <p role="alert" className="text-sm text-amber-200">A stat correction from Week {pack.correctionHoldFromWeek} is awaiting commissioner recovery. Combat decisions and ambushes are held.</p>}
     {pack?.canStartDraw && <div className="space-y-3"><p className="text-sm text-white/70">Fill all seats, then run an independent random draw. Veterans receive sequential 24-hour offers; if there are no veterans, every manager is eligible.</p>
       <details className="rounded-xl border border-white/10 p-3"><summary className="min-h-11 cursor-pointer text-sm">Review returning-manager eligibility</summary><p className="mb-2 text-sm text-white/65">A veteran completed at least one full prior year in this Zombie universe. Review historical or imported membership before offers begin; eligibility is then sealed.</p>
         {pack.nominees?.map(n => <label key={n.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" disabled={busy} checked={(veterans ?? pack.nominees?.filter(m => m.veteran).map(m => m.id) ?? []).includes(n.id)} onChange={e => { const selected = veterans ?? pack.nominees?.filter(m => m.veteran).map(m => m.id) ?? []; setVeterans(e.target.checked ? [...selected, n.id] : selected.filter(id => id !== n.id)) }} />{n.name}</label>)}

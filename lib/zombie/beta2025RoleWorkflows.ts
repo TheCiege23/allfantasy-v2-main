@@ -263,6 +263,7 @@ export async function respondBetaRoleWorkflow(leagueId: string, workflowId: stri
   return combatTransaction(async tx => {
     await lockItemLeague(tx, leagueId)
     const z = await tx.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
+    if (z.correctionHoldFromWeek != null) throw new Error('A stat correction is awaiting commissioner recovery. Combat decisions are held.')
     const row = await tx.zombieRoleWorkflow.findUniqueOrThrow({ where: { id: workflowId } })
     if (z.sport !== 'NFL' || row.zombieLeagueId !== z.id) throw new Error('This decision belongs to another manager or league.')
     if (row.kind === 'initial_offer') {
@@ -301,8 +302,10 @@ export async function expireBetaRoleWorkflows() {
   for (const item of due) {
     try {
       await combatTransaction(async tx => {
-        const z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: item.zombieLeagueId } })
+        let z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: item.zombieLeagueId } })
         await lockItemLeague(tx, z.leagueId)
+        z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: z.id } })
+        if (z.correctionHoldFromWeek != null) return
         const row = await tx.zombieRoleWorkflow.findUniqueOrThrow({ where: { id: item.id } })
         if (row.status !== 'pending' || !row.deadlineAt || row.deadlineAt.getTime() > Date.now()) return
         if (row.kind === 'initial_offer') {

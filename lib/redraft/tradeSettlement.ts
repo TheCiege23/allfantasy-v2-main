@@ -71,7 +71,13 @@ export async function settleRedraftTradeAssets(
 
   let playersMoved = 0
   let picksRecorded = 0
-  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true } }) : null
+  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true, zombieLeague: { select: { id: true } } } }) : null
+  if (league?.zombieLeague && input.leagueId) {
+    const { lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')
+    await lockItemLeague(tx, input.leagueId)
+    const z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: league.zombieLeague.id }, select: { correctionHoldFromWeek: true } })
+    if (z.correctionHoldFromWeek != null) throw new Error('Trades are held during reviewed Zombie stat-correction recovery.')
+  }
   const preserveNbaSurvivorOwnership = league?.sport === 'NBA' && league.survivorMode === true
 
   // Net FAAB delta per roster (positive = gains FAAB).

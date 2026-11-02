@@ -40,6 +40,7 @@ async function lockedRosters(tx: Tx, rosterIds: string[], season: number, week: 
 
 async function context(tx: Tx, leagueId: string, userId: string) {
   const z = await tx.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
+  if (z.correctionHoldFromWeek != null) throw new Error('A stat correction is awaiting commissioner recovery. Ambushes are held.')
   if (z.sport !== 'NFL' || z.experienceMode === 'simple' || !['active', 'in_progress'].includes(z.status)) throw new Error('Ambush remaps require an active Enhanced 2025 NFL league.')
   const record = await tx.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
   const roster = await tx.roster.findFirst({ where: { leagueId, platformUserId: userId } })

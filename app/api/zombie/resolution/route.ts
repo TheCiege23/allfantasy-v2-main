@@ -35,6 +35,8 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   const week = searchParams?.get('week')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  try { await requireCommissionerOnly(leagueId, session.user.id) }
+  catch (error) { if (error instanceof Response) return error; throw error }
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })

@@ -71,6 +71,7 @@ export async function POST(req: Request) {
   }
 
   if (action === 'override_status') {
+    if (z.correctionHoldFromWeek != null) return NextResponse.json({ error: 'Finish the reviewed stat correction before overriding game state.' }, { status: 409 })
     const userId = typeof body.userId === 'string' ? body.userId : null
     const newStatus = typeof body.newStatus === 'string' ? body.newStatus : null
     if (!userId || !newStatus) return NextResponse.json({ error: 'userId and newStatus required' }, { status: 400 })
@@ -154,6 +155,8 @@ export async function POST(req: Request) {
       if (!itemType.includes('serum') && !WEAPON_POINTS[itemType]) return NextResponse.json({ error: 'Choose a 2025 serum or weapon.' }, { status: 400 })
       await itemTransaction(async tx => {
         await lockItemLeague(tx, leagueId)
+        const liveLeague = await tx.zombieLeague.findUniqueOrThrow({ where: { id: z.id } })
+        if (liveLeague.correctionHoldFromWeek != null) throw new Error('A reviewed correction is holding item grants.')
         const current = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } } })
         if (current && current.status !== 'pending') throw new Error('Weekly settlement has started; retry the grant after it completes.')
         let activatesAtWeek = z.currentWeek

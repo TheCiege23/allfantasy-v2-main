@@ -27,8 +27,10 @@ export type ZombieSettlementSnapshotV1 = {
     activatesAtWeek: number | null; usedAtWeek: number | null
     usedOnUserId: string | null; usedEffect: string | null
     acquiredAtWeek: number | null; awardKey: string | null
+    acquiredReason?: string | null
   }>
   whisperer: {
+    userId?: string; displayName?: string
     id: string; ambushesGranted: number; ambushesUsed: number; ambushesRemaining: number
     wasDefeated: boolean; defeatedAtWeek: number | null; defeatedByUserId: string | null
     hordeSizeAtPeak: number; totalInfections: number; totalWinningsStolen: number
@@ -82,12 +84,14 @@ export async function captureZombieSettlementSnapshot(
         isUsed: true, isExpired: true, activationState: true, activatesAtWeek: true,
         usedAtWeek: true, usedOnUserId: true, usedEffect: true, acquiredAtWeek: true,
         awardKey: true,
+        acquiredReason: true,
       },
     }),
     db.whispererRecord.findUnique({
       where: { zombieLeagueId },
       select: {
         id: true, ambushesGranted: true, ambushesUsed: true, ambushesRemaining: true,
+        userId: true, displayName: true,
         wasDefeated: true, defeatedAtWeek: true, defeatedByUserId: true,
         hordeSizeAtPeak: true, totalInfections: true, totalWinningsStolen: true,
       },
