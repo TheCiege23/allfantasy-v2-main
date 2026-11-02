@@ -1,3 +1,4 @@
+import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -12,7 +13,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-const ZOMBIE_ALLOWED_TEAM_COUNTS = [8, 10, 12, 14, 16] as const
 
 // `single_gamma` is included so the same endpoint can produce a one-league
 // "universe" — the response surfaces primaryLeagueId and the client routes the
@@ -72,12 +72,13 @@ export async function POST(req: Request) {
   if (leagueCreatePayload.playoffEnabled === true || leagueCreatePayload.playoffsEnabled === true) {
     return NextResponse.json({ error: 'Zombie leagues cannot enable playoffs.' }, { status: 400 })
   }
-  // Team count must be one of the allowed values; default to 12 when omitted.
+  // Share the same capacity policy as the current wizard and canonical creation API.
+  const allowedTeamCounts = getZombieCreationTeamCounts(sport)
   const requestedTeamCount =
-    typeof leagueCreatePayload.leagueSize === 'number' ? leagueCreatePayload.leagueSize : 12
-  if (!(ZOMBIE_ALLOWED_TEAM_COUNTS as readonly number[]).includes(requestedTeamCount)) {
+    typeof leagueCreatePayload.leagueSize === 'number' ? leagueCreatePayload.leagueSize : ZOMBIE_DEFAULT_MANAGERS
+  if (!allowedTeamCounts.includes(requestedTeamCount)) {
     return NextResponse.json(
-      { error: `Team count must be one of ${ZOMBIE_ALLOWED_TEAM_COUNTS.join(', ')}.` },
+      { error: `Team count must be one of ${allowedTeamCounts.join(', ')}.` },
       { status: 400 },
     )
   }
@@ -130,6 +131,7 @@ export async function POST(req: Request) {
       const label = `${level.tierLabel ?? level.name} ${i + 1}`
       const merged = {
         ...leagueCreatePayload,
+        leagueSize: requestedTeamCount,
         name: `${baseName} — ${label}`,
         sport,
         settings: {
@@ -187,7 +189,7 @@ export async function POST(req: Request) {
             universeId: universe.id,
             tierId: level.id,
             name: merged.name,
-            teamCount: typeof leagueCreatePayload.leagueSize === 'number' ? leagueCreatePayload.leagueSize : 12,
+            teamCount: typeof leagueCreatePayload.leagueSize === 'number' ? leagueCreatePayload.leagueSize : ZOMBIE_DEFAULT_MANAGERS,
             isPaid: requestedIsPaid,
             paymentProvider: requestedPaymentProvider,
             buyIn: requestedBuyIn,

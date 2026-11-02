@@ -188,6 +188,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # Follow package.json's supported major; floating LTS selected Node 26.
           node-version-file: .nvmrc
 
       - name: Staging data runner contracts

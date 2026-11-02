@@ -105,6 +105,23 @@ describe('Canonical native league creation pipeline', () => {
     )
   })
 
+  it.each([
+    ['NFL', 20, 'fb_half_ppr'], ['NBA', 32, 'nba_points'], ['NHL', 32, 'nhl_points'],
+    ['MLB', 32, 'mlb_points'], ['NCAAF', 32, 'ncaaf_half_ppr'], ['NCAAB', 32, 'ncaab_points'], ['SOCCER', 40, 'soc_points'],
+  ])('accepts the expanded Zombie catalog through the actual handler: %s', async (sport, teamCount, scoringPreset) => {
+    const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
+    const res = await postCreateLeague(new Request('http://localhost/api/leagues', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concept: 'zombie', sport, teamCount, scoringPreset, draftType: 'snake',
+        leagueName: 'Zombie universe', conceptSetup: { zombieLeagueCount: 6 },
+        ...(sport === 'SOCCER' ? { soccerPipeline: 'euro' } : {}) }),
+    }))
+    expect(res.status, JSON.stringify(await res.json())).toBe(200)
+    expect(executeCanonicalLeagueCreationMock.mock.calls[0]?.[0]).toMatchObject({
+      appUserId: 'app-user-1', body: { concept: 'zombie', sport, teamCount, conceptSetup: { zombieLeagueCount: 6 } },
+    })
+  })
+
   it('rejects premium advanced settings without AF Commissioner', async () => {
     const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
     const req = new Request('http://localhost/api/leagues', {

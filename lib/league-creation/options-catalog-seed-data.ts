@@ -1,3 +1,4 @@
+import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
@@ -143,7 +144,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
      * before it can eliminate a roster. This list controls both the wizard and create API.
      */
     guillotine: ['NFL', 'NBA', 'NHL', 'MLB'],
-    zombie: ['NFL', 'NBA', 'MLB', 'NHL'],
+    zombie: [...ALL_SPORTS],
     survivor: SURVIVOR_ALLOWED_SPORTS,
     tournament: ALL_SPORTS,
     big_brother: ALL_SPORTS,
@@ -236,6 +237,9 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
+      NCAAF: ['ncaaf_half_ppr'],
+      NCAAB: ['ncaab_points'],
+      SOCCER: ['soc_points'],
     },
     survivor: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
@@ -330,12 +334,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
     // schedule adds double-chop weeks in league settings to finish a large league in time.
     guillotine: Object.fromEntries(ALL_SPORTS.map((sport) => [sport, guillotineTeamCountOptions()])),
-    zombie: {
-      NFL: [8, 10, 12, 14],
-      NBA: [8, 10, 12, 14],
-      MLB: [8, 10, 12, 14],
-      NHL: [8, 10, 12, 14],
-    },
+    zombie: Object.fromEntries(ALL_SPORTS.map(sport => [sport, getZombieCreationTeamCounts(sport)])),
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten
     // on save. New leagues are offered the 16 / 20 subset of it; read it rather than restating it.
