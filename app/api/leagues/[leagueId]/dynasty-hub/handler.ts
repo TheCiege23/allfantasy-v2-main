@@ -20,7 +20,8 @@ import { getCurrentUser } from '@/lib/get-current-user'
 import { buildDynastyWarRoomContext } from '@/lib/dynasty-war-room/dynastyWarRoomContext'
 import { prisma } from '@/lib/prisma'
 import { loadKnownYearsExp } from '@/lib/roster-lineup-engine/playerYearsExp'
-import { buildChampionRafters, leagueRunsDevy, summarizePipeline, type ChampionRafters } from '@/lib/league/dynastyHomeExtras'
+import { leagueRunsDevy, summarizePipeline } from '@/lib/league/dynastyHomeExtras'
+import { loadChampionRafters } from '@/lib/league/dynastyChampionRafters'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,39 +98,5 @@ export async function GET(
     picksState: context.availability.futurePicks,
     titles,
     pipeline,
-  })
-}
-
-/**
- * Past champions for the rafters, from the two tables that record them: `league_seasons`
- * (imported history and native rollover) and `league_championships` (native playoff runtime,
- * Guilly, Survivor). Null when neither has a champion. Best-effort: a failed read hides the rafters.
- */
-async function loadChampionRafters(leagueId: string, userId: string, currentSeason: number): Promise<ChampionRafters | null> {
-  const [seasons, championships] = await Promise.all([
-    prisma.leagueSeason
-      .findMany({
-        where: { leagueId },
-        select: {
-          season: true,
-          championName: true,
-          championTeam: { select: { platformUserId: true, claimedByUserId: true, teamName: true } },
-        },
-      })
-      .catch(() => []),
-    prisma.leagueChampionship
-      .findMany({ where: { leagueId }, select: { season: true, championUserId: true, teamName: true } })
-      .catch(() => []),
-  ])
-  return buildChampionRafters({
-    seasons: seasons.map((row) => ({
-      season: row.season,
-      championName: row.championName,
-      championTeamUserIds: row.championTeam ? [row.championTeam.platformUserId, row.championTeam.claimedByUserId] : [],
-      championTeamName: row.championTeam?.teamName ?? null,
-    })),
-    championships,
-    viewerUserId: userId,
-    currentSeason: Number.isInteger(currentSeason) ? currentSeason : null,
   })
 }
