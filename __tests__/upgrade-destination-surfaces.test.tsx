@@ -16,6 +16,7 @@ const nav = vi.hoisted(() => ({
     throw new Error(`NEXT_REDIRECT ${url}`)
   }),
 }))
+vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('next/navigation', () => ({
   useSearchParams: () => nav.search,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),

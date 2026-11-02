@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { PricingV4, type PricingPlan, type PricingPack } from "@/components/core-app/screens/PricingV4";
 import { getMonetizationCatalog } from "@/lib/monetization/catalog";
 import { getPlanPresentations, describeYearlySavings } from "@/lib/monetization/planPresentation";
 import { buildSeoMeta } from "@/lib/seo";
 import { pricingIntentRedirect } from "@/lib/monetization/upgradeDestination";
+import { authOptions } from "@/lib/auth";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -61,6 +63,7 @@ export default async function PricingPage(
   const intent = pricingIntentRedirect(searchParams);
   if (intent) redirect(intent);
 
+  const session = await getServerSession(authOptions);
   const presentations = getPlanPresentations();
 
   const plans: PricingPlan[] = presentations.map((p) => ({
@@ -92,6 +95,7 @@ export default async function PricingPage(
       plans={plans}
       packs={packs}
       savingsHeadline={describeYearlySavings(presentations)}
+      signedIn={Boolean(session?.user?.id)}
     />
   );
 }
