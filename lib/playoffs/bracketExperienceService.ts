@@ -5,7 +5,7 @@ import { getPlayoffBracketView } from "./playoffService"
 import { gameHasLocked } from "./bracketCoach"
 import { advanceScoreSnapshot, defaultBracketAlerts, entryChecklist, pendingBracketAlerts, provisionalStandings, readBracketAlerts, scoreLedger,
   type BracketAlert, type BracketAlertPreferences, type BracketExperience, type ProjectionEntry, type ScoreSnapshot } from "./bracketExperience"
-import type { PlayoffChallengeView } from "./types"
+import type { PlayoffChallengeView, PlayoffSport } from "./types"
 import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
 
 const snapshotKey = (id: string) => `bracket-experience:v1:entry:${id}`
@@ -37,7 +37,10 @@ export async function loadBracketExperience(view: PlayoffChallengeView): Promise
   return { checklist: entryChecklist(view), ledger, officialTotal: owned ? view.activeEntry!.totalScore ?? 0 : 0, explainedTotal: ledger.reduce((sum,r) => sum + r.points,0),
     history: { available: state?.version === 1, since: state?.since ?? null, events: state?.version === 1 ? state.events : [], trimmed: state?.trimmed ?? 0 },
     alerts: profile ? readBracketAlerts(profile.notificationPreferences, view.challenge.id) : { ...defaultBracketAlerts },
-    scheduledTracking: (view.challenge.sport === "nba_cup" || view.challenge.sport === "ncaaf" && process.env.BRACKET_AUTO_RESULT_SYNC_ENABLED === "true") && !view.challenge.isTestMode, standings }
+    scheduledTracking: !view.challenge.isTestMode && (
+      ["nba_cup", "nfl", "nba", "nhl"].includes(view.challenge.sport) ||
+      view.challenge.sport === "ncaaf" && process.env.BRACKET_AUTO_RESULT_SYNC_ENABLED === "true"
+    ), standings }
 }
 /** Optimistic compare-and-swap retains simultaneous changes to other settings and other pools. */
 export async function saveBracketAlerts(userId: string, challengeId: string, preferences: BracketAlertPreferences) {
@@ -105,12 +108,21 @@ async function deliverEntryAlerts(view: PlayoffChallengeView, prefs: BracketAler
   }
   return delivered
 }
-/** Existing authenticated cron calls this after results sync. No GET endpoint runs publishers or writes history. */
-export async function sweepBracketExperience(sport: "nba_cup" | "ncaaf", season: number) {
+/** Authenticated crons observe results and upcoming locks; page GETs never publish alerts or write history. */
+export async function sweepBracketExperience(sport: PlayoffSport, season: number, challengeIds?: string[]) {
+  if (challengeIds && !challengeIds.length) return { processed: 0, alerts: 0, failures: 0 }
   const cursorKey = `bracket-experience:v1:cursor:${sport}:${season}`
   const stored = await prisma.sportsDataCache.findUnique({ where: { cacheKey: cursorKey }, select: { data: true } })
   const cursor = (stored?.data as { pool?: string; entry?: string } | null) ?? {}
-  const pools = await prisma.playoffBracketChallenge.findMany({ where: { sport, seasonYear: season, isTestMode: false, ...(cursor.pool ? { id: { gte: cursor.pool } } : {}) }, orderBy: { id: "asc" }, take: 6, select: { id: true } })
+  const pools = await prisma.playoffBracketChallenge.findMany({
+    where: {
+      sport, seasonYear: season, isTestMode: false,
+      ...(challengeIds
+        ? { id: { in: challengeIds, ...(cursor.pool ? { gte: cursor.pool } : {}) } }
+        : cursor.pool ? { id: { gte: cursor.pool } } : {}),
+    },
+    orderBy: { id: "asc" }, take: 6, select: { id: true },
+  })
   let processed = 0, alerts = 0, failures = 0, last: { pool?: string; entry?: string } = {}
   for (const pool of pools) {
     if (processed >= 100) break

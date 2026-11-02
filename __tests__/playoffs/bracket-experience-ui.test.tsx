@@ -42,13 +42,23 @@ describe("complete bracket experience controls",()=>{
    expect(screen.getByText("Rank if current leaders win")).toBeInTheDocument();expect(screen.getByText(/1 live games have delayed scores/)).toBeInTheDocument()
    expect(screen.getByText("↑1")).toBeInTheDocument();expect(screen.getByText(/Live points are not awarded points/)).toBeInTheDocument()
  })
- it("saves explicit opt-in only and retains unsaved edits across feed refreshes",async()=>{
-   const fetcher=vi.fn(async()=>Response.json({alerts:{...defaultBracketAlerts,enabled:true}}));vi.stubGlobal("fetch",fetcher)
+ it("saves an explicit opt-out and retains unsaved edits across feed refreshes",async()=>{
+   const fetcher=vi.fn(async()=>Response.json({alerts:{...defaultBracketAlerts,enabled:false}}));vi.stubGlobal("fetch",fetcher)
    const node=render(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>)
    fireEvent.click(screen.getByRole("button",{name:"My game alerts"}));const toggle=screen.getByRole("checkbox",{name:"Enable alerts for this pool"})
-   expect(toggle).not.toBeChecked();fireEvent.click(toggle)
-   node.rerender(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>);expect(toggle).toBeChecked();expect(fetcher).not.toHaveBeenCalled()
+   expect(toggle).toBeChecked();fireEvent.click(toggle)
+   node.rerender(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>);expect(toggle).not.toBeChecked();expect(fetcher).not.toHaveBeenCalled()
    fireEvent.click(screen.getByRole("button",{name:"Save alert preferences"}))
+   expect(await screen.findByRole("status")).toHaveTextContent("Alert preferences saved.");expect(toggle).not.toBeChecked()
+   expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/brackets/playoffs/pool/coach/alerts",expect.objectContaining({method:"PUT",body:expect.stringContaining('"enabled":false')}))
+ })
+ it("preserves a saved opt-out and lets the manager explicitly enable alerts again",async()=>{
+   const fetcher=vi.fn(async()=>Response.json({alerts:{...defaultBracketAlerts,enabled:true}}));vi.stubGlobal("fetch",fetcher)
+   const saved=data();saved.alerts={...saved.alerts,enabled:false}
+   render(<BracketExperiencePanel experience={saved} challengeId="pool" entryId="mine"/>)
+   fireEvent.click(screen.getByRole("button",{name:"My game alerts"}));const toggle=screen.getByRole("checkbox",{name:"Enable alerts for this pool"})
+   expect(toggle).not.toBeChecked();expect(fetcher).not.toHaveBeenCalled()
+   fireEvent.click(toggle);fireEvent.click(screen.getByRole("button",{name:"Save alert preferences"}))
    expect(await screen.findByRole("status")).toHaveTextContent("Alert preferences saved.");expect(toggle).toBeChecked()
    expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/brackets/playoffs/pool/coach/alerts",expect.objectContaining({method:"PUT",body:expect.stringContaining('"enabled":true')}))
  })
@@ -57,13 +67,13 @@ describe("complete bracket experience controls",()=>{
    render(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>)
    fireEvent.click(screen.getByRole("button",{name:"My game alerts"}));fireEvent.click(screen.getByRole("checkbox",{name:"Enable alerts for this pool"}));fireEvent.click(screen.getByRole("button",{name:"Save alert preferences"}))
    expect(await screen.findByRole("status")).toHaveTextContent("Could not save")
-   expect(screen.getByRole("checkbox",{name:"Enable alerts for this pool"})).toBeChecked()
+   expect(screen.getByRole("checkbox",{name:"Enable alerts for this pool"})).not.toBeChecked()
  })
  it("renders detailed Spanish scoring, checklist, standings and preferences",()=>{
    language.value="es";render(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>)
    expect(screen.getByText("Pronóstico finalizado correcto")).toBeInTheDocument();expect(screen.getByText(/1 de 2 pronósticos disponibles guardados/)).toBeInTheDocument()
    fireEvent.click(screen.getByRole("button",{name:"Movimiento de posiciones en vivo"}));expect(screen.getByText("Posición oficial")).toBeInTheDocument()
-   fireEvent.click(screen.getByRole("button",{name:"Mis alertas de partidos"}));expect(screen.getByRole("checkbox",{name:"Activar alertas de este grupo"})).not.toBeChecked()
+   fireEvent.click(screen.getByRole("button",{name:"Mis alertas de partidos"}));expect(screen.getByRole("checkbox",{name:"Activar alertas de este grupo"})).toBeChecked()
    expect(screen.queryByText(/Saving is not finalizing/)).not.toBeInTheDocument()
  })
  it("does not display old-language analysis after a language change during generation",async()=>{

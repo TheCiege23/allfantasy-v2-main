@@ -9,6 +9,7 @@ import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingIns
 import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
 import { carryOfficialNhlGameWinningGoals } from '@/lib/nhl-scoring/officialGameWinningGoals'
+import { carryOfficialNhlGoalieStats } from '@/lib/nhl-scoring/officialGoalieGameStats'
 
 /**
  * Per-game player box lines for every sport, from Rolling Insights `/live/{date}/{SPORT}`.
@@ -623,10 +624,12 @@ export async function writeRiGameRows(opts: {
           const byKey = new Map(existing.map((row) => [`${row.playerId}:${row.gameId}`, row]))
           for (const { line, playerId, gameId } of prepared) {
             const normalized = normalizedStatMapFor(line, box)
+            const officialIdentity = { providerGameId: box.providerGameId, gameDate: box.gameDay,
+              team: line.team, opponent: line.opponent }
             const withOfficial = line.group === 'skaters' ?
-              carryOfficialNhlGameWinningGoals(byKey.get(`${playerId}:${gameId}`), normalized,
-                { providerGameId: box.providerGameId, gameDate: box.gameDay,
-                  team: line.team, opponent: line.opponent }) : normalized
+              carryOfficialNhlGameWinningGoals(byKey.get(`${playerId}:${gameId}`), normalized, officialIdentity) :
+              line.group === 'goalies' ?
+                carryOfficialNhlGoalieStats(byKey.get(`${playerId}:${gameId}`), normalized, officialIdentity) : normalized
             const data = dataFor(line, withOfficial)
             await tx.playerGameStat.upsert({
               where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },

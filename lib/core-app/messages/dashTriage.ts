@@ -44,6 +44,14 @@ export const dashTriageMessages = defineMessages({
     benchedHandled: 'benched ✓',
     moreLeagues: (n: number) => `+${n} more`,
     setLineup: (platform: string, league: string) => `Set lineup in ${platform} · ${league}`,
+    /*
+     * The per-league fix row (2026-11-01 home redesign) already names the league and its platform, so
+     * the button shows only the lead and keeps the rest for a screen reader. Lead + where === setLineup,
+     * byte for byte, so the accessible name never changed.
+     */
+    setLineupLead: 'Set lineup',
+    setLineupWhere: (platform: string, league: string) => ` in ${platform} · ${league}`,
+    alsoIn: 'Also in',
     openPlayerFinder: 'Open Player Finder',
     moreFlagged: (n: number) => `+${n} more starters flagged — full exposure audit`,
     valuesBasis: (format: string, qb: string) =>
@@ -84,6 +92,9 @@ export const dashTriageMessages = defineMessages({
     benchedHandled: 'en la banca ✓',
     moreLeagues: (n) => `+${n} más`,
     setLineup: (platform, league) => `Corregir alineación en ${platform} · ${league}`,
+    setLineupLead: 'Corregir alineación',
+    setLineupWhere: (platform, league) => ` en ${platform} · ${league}`,
+    alsoIn: 'También en',
     openPlayerFinder: `Abrir ${coreUiCopy('Player Finder', 'es')}`,
     moreFlagged: (n) => `+${n} titulares señalados más: auditoría completa de exposición`,
     valuesBasis: (format, qb) =>

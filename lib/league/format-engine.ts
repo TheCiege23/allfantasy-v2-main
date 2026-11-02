@@ -243,7 +243,7 @@ const FORMAT_REGISTRY: Record<LeagueFormatId, LeagueFormatDefinition> = {
     id: 'zombie',
     label: 'Zombie',
     description: 'Themed elimination and role-shift mechanics layered onto standard league play.',
-    /** Soccer excluded — Zombie is not offered for SOCCER in create flows. */
+    /** Zombie creation is available for all seven supported sports. */
     supportedSports: ZOMBIE_ELIGIBLE_LEAGUE_SPORTS,
     defaultRosterMode: 'redraft',
     /** Snake / auction only at create; slow-draft removed as a discrete type (use timer presets). */
