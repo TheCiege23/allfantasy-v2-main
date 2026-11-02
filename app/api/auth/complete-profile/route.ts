@@ -130,7 +130,12 @@ export async function POST(req: Request) {
     avatarPreset: profile.avatarPreset,
     profileComplete: true,
   }
-  if (profile.phone) profileUpdate.phone = profile.phone
+  if (profile.phone) {
+    profileUpdate.phone = profile.phone
+    // A different number has not passed Verify. Keep the verified status tied
+    // to the number that was actually checked, including for SMS sign-in.
+    if (profile.phone !== existingProfile?.phone) profileUpdate.phoneVerifiedAt = null
+  }
 
   await (prisma as any).userProfile.upsert({
     where: { userId },
