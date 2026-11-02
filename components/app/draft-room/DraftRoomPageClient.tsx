@@ -57,6 +57,9 @@ import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnou
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { LiveDraftStatusColumn } from '@/components/draft/live/LiveDraftStatusColumn'
+import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
 const DraftPickTradePanel = dynamic(() => import('@/components/app/draft-room/DraftPickTradePanel'), { ssr: false })
 const CommissionerControlCenterModal = dynamic(
@@ -3217,6 +3220,7 @@ export function DraftRoomPageClient({
   )
 
   const { t: tRoom } = useOptionalLanguage()
+  const draftRoomCopy = useMessages(draftRoomRedesignMessages)
   /*
    * Dynasty identity for the top bar and the pool. Dynasty rooms stay OFF the `redraft_snake`
    * variant on purpose: that variant also switches on this-season-only behaviour — redraft
@@ -4449,71 +4453,39 @@ export function DraftRoomPageClient({
 
   const mobileStickyBar =
     showMobileStickyBar ? (
-      <div className="space-y-1 px-2.5 py-1.5 text-xs" data-testid="draft-mobile-sticky-bar">
-        <div className="flex items-center justify-between gap-1.5">
-          {currentPick != null ? (
-            <span className="font-medium text-cyan-200" data-testid="draft-mobile-current-pick">
-              {currentPick.pickLabel}
-              {currentPick.overall != null && (
-                <span className="ml-1 text-white/50">#{currentPick.overall}</span>
-              )}
-            </span>
-          ) : (
-            <span className="font-medium text-cyan-200" data-testid="draft-mobile-current-pick">
-              Draft room
-            </span>
-          )}
+      <div className="af-core af-dr af-dr-clockbar" role="region" aria-label={draftRoomCopy.clockBarAria} data-testid="draft-mobile-sticky-bar">
+        <div className="af-dr-clockbar-top">
+          <span className="af-dr-clockbar-pick" data-testid="draft-mobile-current-pick">
+            {currentPick != null ? currentPick.pickLabel : draftRoomCopy.clockBarDraftRoom}
+            {currentPick?.overall != null ? <small>#{currentPick.overall}</small> : null}
+          </span>
           {/* Who is on the clock and the live timer are in the header, which never scrolls
               away on phones; this bar only adds what the header leaves out. */}
-          {presentationVariant === 'redraft_snake' &&
-          ribbonPicksUntilUser != null &&
-          ribbonPicksUntilUser > 0 &&
-          !isCurrentUserOnClock ? (
-            <span className="truncate text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
-              ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
+          {isCurrentUserOnClock ? (
+            <span className="af-dr-clockbar-status" data-on-clock="true" data-testid="draft-mobile-you-on-clock">
+              {draftRoomCopy.clockBarYouOnClock}
+            </span>
+          ) : presentationVariant === 'redraft_snake' && ribbonPicksUntilUser != null && ribbonPicksUntilUser > 0 ? (
+            <span className="af-dr-clockbar-status" data-testid="draft-mobile-picks-until-you">
+              ~{draftRoomCopy.clockBarPicksUntil(ribbonPicksUntilUser)}
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scroll-smooth" data-testid="draft-mobile-quick-actions">
-          <button
-            type="button"
-            data-testid="draft-mobile-quick-search"
-            onClick={openMobilePlayerSearch}
-            className="rounded border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] text-cyan-100 whitespace-nowrap"
-          >
-            Search
+        <div className="af-dr-clockbar-actions" data-testid="draft-mobile-quick-actions">
+          <button type="button" data-primary="true" data-testid="draft-mobile-quick-search" onClick={openMobilePlayerSearch}>
+            {draftRoomCopy.clockBarSearch}
           </button>
-          <button
-            type="button"
-            data-testid="draft-mobile-quick-queue"
-            onClick={() => setMobileTab('queue')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
-          >
-            Queue
+          <button type="button" data-testid="draft-mobile-quick-queue" onClick={() => setMobileTab('queue')}>
+            {draftRoomCopy.clockBarQueue}
           </button>
-          <button
-            type="button"
-            data-testid="draft-mobile-quick-roster"
-            onClick={() => setMobileTab('roster')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
-          >
-            Roster
+          <button type="button" data-testid="draft-mobile-quick-roster" onClick={() => setMobileTab('roster')}>
+            {draftRoomCopy.clockBarRoster}
           </button>
-          <button
-            type="button"
-            data-testid="draft-mobile-quick-chat"
-            onClick={() => setMobileTab('chat')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
-          >
-            Chat
+          <button type="button" data-testid="draft-mobile-quick-chat" onClick={() => setMobileTab('chat')}>
+            {draftRoomCopy.clockBarChat}
           </button>
-          <button
-            type="button"
-            data-testid="draft-mobile-quick-helper"
-            onClick={openChimmy}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
-          >
-            AI helper
+          <button type="button" data-testid="draft-mobile-quick-helper" onClick={openChimmy}>
+            {draftRoomCopy.clockBarHelper}
           </button>
         </div>
       </div>
@@ -5348,20 +5320,13 @@ export function DraftRoomPageClient({
               and Recent picks / Position run / Your picks vs ADP (DraftPulseStrip). Both removed at the
               user's request (2026-10-29) to match Sleeper, which shows nothing between the top bar and
               the board. The top bar already shows the pick on the clock. */}
-          {draftUISettings?.executionMode === 'offline' ? (
-            <div
-              className="w-full shrink-0 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
-              data-testid="draft-room-offline-banner"
-              role="status"
-            >
-              <p className="font-semibold uppercase tracking-[0.14em] text-amber-200">Offline draft</p>
-              <p className="mt-0.5 text-amber-100/85">
-                {isCommissioner
-                  ? 'You are logging picks from an in-person draft. Selecting a player submits on behalf of the team on the clock.'
-                  : 'This league is running an offline draft. Picks are being entered by the commissioner as they happen in person.'}
-              </p>
-            </div>
-          ) : null}
+          <DraftModeBanner
+            mode={resolveDraftRoomMode({
+              executionMode: draftUISettings?.executionMode ?? null,
+              viewerAutopickEnabled: session.viewerAutopick?.enabled ?? false,
+            })}
+            isCommissioner={isCommissioner}
+          />
           {isDraftCompleted ? (
             <div
               className="w-full shrink-0 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-center text-sm text-emerald-50 shadow-[0_8px_32px_rgba(16,185,129,0.12)]"
@@ -5489,6 +5454,8 @@ export function DraftRoomPageClient({
             bidLoading={auctionBidLoading}
             resolveLoading={auctionResolveLoading}
             rosterGateBlocksAuctionActions={draftRoomState.rosterConfigurationIncomplete}
+            rosterSize={session.rounds ?? null}
+            picks={session.picks ?? null}
           />
         ) : undefined
       }

@@ -1,0 +1,624 @@
+/*
+ * Draft room redesign — the mode banner, the auction "on the block" panel and the phone clock bar.
+ *
+ * Every element here sits inside an `.af-core` scope (af-core.css), so light, dark and AF modes come
+ * from the same tokens as /core. Colours are authored on tokens, never on Tailwind white utilities:
+ * the global light-mode clamp in app/globals.css rewrites `text-white*` under `data-mode="light"`.
+ * The clock bar and the current-bid figure use the scoreboard tokens (`--mu-sb-*`), which stay dark
+ * in every mode — the same "keep dark" treatment the matchup scoreboard uses.
+ */
+
+.af-core.af-dr {
+  color: var(--text);
+}
+
+/* Each root sets its own ground with a compound selector, so it outranks `.af-core { background }`
+   whatever order the bundler emits the two sheets in. */
+.af-core.af-dr-auction {
+  /* The shell wraps the strip in a fixed dark navy that the light-mode clamp does not reach; the
+     panel paints its own page ground so its cards sit on the right colour in every mode. */
+  background: var(--bg);
+}
+
+.af-dr .af-dr-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-dr .af-dr-num {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Mode banner ─────────────────────────────────────────────────────── */
+
+.af-core.af-dr-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  /* Opaque: the tint is layered over the card colour, because the room's own ground stays dark
+     in light mode and a translucent tint would leave light-mode text on navy. */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.af-core.af-dr-banner[data-mode='offline'] {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: linear-gradient(var(--warn-soft), var(--warn-soft)), var(--surface);
+}
+
+.af-core.af-dr-banner[data-mode='mock'] {
+  border-color: var(--line2);
+  background: var(--surface2);
+}
+
+.af-dr-banner-tag {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-dr-banner[data-mode='offline'] .af-dr-banner-tag {
+  background: var(--warn);
+  /* --surface flips with the mode: white on the dark light-mode amber, navy on the bright dark one. */
+  color: var(--surface);
+}
+
+.af-dr-banner[data-mode='mock'] .af-dr-banner-tag {
+  background: var(--text2);
+  color: var(--surface);
+}
+
+.af-dr-banner-body {
+  margin: 0;
+  min-width: 0;
+  color: var(--text2);
+}
+
+/* ── Top-bar clock progress (DraftTopBar) ────────────────────────────── */
+
+.af-dr-clock-progress {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.af-dr-clock-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  transition: width 1s linear;
+}
+
+/* ── Auction panel ───────────────────────────────────────────────────── */
+
+.af-dr-auction {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.af-dr-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.af-dr-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.af-dr-stat-value {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-dr-stat[data-tone='now'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-dr-stat[data-tone='now'] .af-dr-stat-value {
+  color: var(--accent);
+}
+
+.af-dr-order {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.af-dr-order::-webkit-scrollbar {
+  display: none;
+}
+
+.af-dr-order-chip {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.af-dr-order-chip[data-current='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-dr-order-chip[data-me='true'] {
+  border-color: var(--accent-line);
+}
+
+.af-dr-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+
+.af-dr-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.af-dr-block-clock {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.af-dr-block-clock[data-paused='true'] {
+  color: var(--muted);
+}
+
+.af-dr-block-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.af-dr-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.af-dr-avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.af-dr-player-name {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-dr-player-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-dr-bidbox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 140px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--mu-sb-bg);
+  color: var(--mu-sb-text);
+}
+
+.af-dr-bidbox .af-dr-label {
+  color: var(--mu-sb-muted);
+}
+
+.af-dr-bid {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--mu-sb-good);
+}
+
+.af-dr-bid-leader {
+  font-size: 12px;
+  color: var(--mu-sb-text2);
+}
+
+.af-dr-bids {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.af-dr-quick {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-height: 48px;
+  min-width: 92px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.af-dr-quick small {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+.af-dr-quick:disabled,
+.af-dr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.af-dr-custom {
+  display: inline-flex;
+  flex: 1 1 200px;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-dr-custom label {
+  display: inline-flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+
+.af-dr-custom input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.af-dr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.af-dr-btn[data-variant='resolve'] {
+  background: var(--good-soft);
+  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+  color: var(--good);
+}
+
+.af-dr-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-dr-waiting {
+  margin: 0;
+  padding: 8px 0;
+  font-size: 14px;
+  text-align: center;
+  color: var(--text2);
+}
+
+.af-dr-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.af-dr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  /* The strip sits above the board and does not scroll with it; a 12- or 16-team budget list
+     would push the board off the screen, so each card scrolls inside itself. */
+  max-height: 232px;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.af-dr-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.af-dr-card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-dr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.af-dr-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-dr-row-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-dr-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.af-dr-budget[data-me='true'] .af-dr-row-name {
+  color: var(--accent);
+}
+
+.af-dr-budget-nums {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 10px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.af-dr-budget-nums strong {
+  color: var(--text);
+}
+
+.af-dr-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.af-dr-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* ── Phone clock bar (snake / linear) ────────────────────────────────── */
+
+.af-core.af-dr-clockbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--mu-sb-bg);
+  color: var(--mu-sb-text);
+}
+
+.af-dr-clockbar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-dr-clockbar-pick {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mu-sb-accent);
+  white-space: nowrap;
+}
+
+.af-dr-clockbar-pick small {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--mu-sb-muted);
+}
+
+.af-dr-clockbar-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mu-sb-text2);
+}
+
+.af-dr-clockbar-status[data-on-clock='true'] {
+  color: var(--mu-sb-good);
+}
+
+.af-dr-clockbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.af-dr-clockbar-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.af-dr-clockbar-actions button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--mu-sb-line);
+  background: var(--mu-sb-raise);
+  color: var(--mu-sb-text);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.af-dr-clockbar-actions button[data-primary='true'] {
+  border-color: transparent;
+  background: var(--mu-sb-accent);
+  color: var(--mu-sb-bg);
+}
+
+@media (max-width: 760px) {
+  .af-dr-stats {
+    gap: 6px;
+  }
+
+  .af-dr-stat {
+    padding: 6px 8px;
+  }
+
+  .af-dr-stat-value {
+    font-size: 14px;
+  }
+
+  .af-dr-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-dr-bidbox {
+    flex: 1 1 100%;
+    align-items: flex-start;
+  }
+
+  .af-dr-player-name {
+    font-size: 17px;
+  }
+
+  .af-dr-quick {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .af-dr-custom {
+    flex: 1 1 100%;
+  }
+}

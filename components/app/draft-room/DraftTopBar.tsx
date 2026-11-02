@@ -27,6 +27,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import './af-draft-room.css'
 
 export type DraftTopBarProps = {
   leagueName: string
@@ -205,6 +206,15 @@ function formatPoolReadinessLabel(
   if (!poolReadiness) return null
   if (poolReadiness.ready) return withCount(t('draftRoom.topBar.poolReady'), poolReadiness.entryCount)
   return t('draftRoom.topBar.poolPreparing').replace('{{sport}}', sport)
+}
+
+/**
+ * How much of the pick clock is left, as a 0–100 width for the bar under the timer. Null when there
+ * is nothing honest to draw: an untimed draft, or no remaining time to compare against.
+ */
+export function clockProgressPercent(remainingSeconds: number | null | undefined, totalSeconds: number | null | undefined): number | null {
+  if (remainingSeconds == null || !totalSeconds || totalSeconds <= 0) return null
+  return Math.max(0, Math.min(100, Math.round((remainingSeconds / totalSeconds) * 100)))
 }
 
 /** Dynasty skin tokens, always with the fallback so the room works before the token sheet lands. */
@@ -415,6 +425,7 @@ export function DraftTopBar({
           : formatTimerRemaining(effectiveRemaining ?? 0)
 
   const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
+  const clockProgress = timerStatus === 'running' ? clockProgressPercent(effectiveRemaining, timerSeconds) : null
   const urgentLowTimer =
     timerStatus === 'running' &&
     timerEndAtIso != null &&
@@ -512,9 +523,14 @@ export function DraftTopBar({
               {t('draftRoom.topBar.timerPaused')}
             </span>
           ) : null}
+          {clockProgress != null ? (
+            <span className="af-dr-clock-progress" aria-hidden data-testid="draft-topbar-clock-progress">
+              <span style={{ width: `${clockProgress}%` }} />
+            </span>
+          ) : null}
         </>
       )
-      const pillClassName = `inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-xl font-extrabold tabular-nums sm:text-2xl shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 ${
+      const pillClassName = `relative inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-xl font-extrabold tabular-nums sm:text-2xl shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 ${
         criticalLowTimer
           ? 'animate-pulse border-rose-500/65 bg-gradient-to-br from-rose-600/35 to-rose-500/20 text-rose-50 ring-2 ring-rose-500/55 shadow-[0_0_48px_rgba(239,68,68,0.5)]'
           : urgentLowTimer
