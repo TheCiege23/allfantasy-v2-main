@@ -7,8 +7,7 @@
     "allowNavigation": [
       "allfantasy.ai",
       "www.allfantasy.ai"
-    ],
-    "errorPath": "offline.html"
+    ]
   },
   "ios": {
     "appendUserAgent": "AllFantasyiOS/1.1 AFIAP/1",
