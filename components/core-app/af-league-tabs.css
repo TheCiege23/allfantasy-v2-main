@@ -165,13 +165,13 @@
 }
 
 .af-lctx-type {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   min-height: 28px;
-  margin-left: auto;
-  padding-left: 9px;
-  border-left: 1px solid var(--line);
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
 }
 
 .af-lctx-type label,
@@ -330,10 +330,7 @@
   }
 
   .af-lctx-type {
-    flex: 0 0 auto;
-    margin-left: 0;
-    border-left: 0;
-    padding-left: 0;
+    width: 100%;
   }
 
   .af-lctx-statuses::-webkit-scrollbar { display: none; }
