@@ -220,7 +220,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         RUN_ZOMBIE_COMBAT_DB: '1'
         RUN_ZOMBIE_RECOVERY_DB: '1'
-      run: npx vitest run __tests__/zombie/beta-2025-combat.db.integration.test.ts __tests__/zombie/beta-2025-recovery.db.integration.test.ts --maxWorkers=1
+        RUN_ZOMBIE_SEASON_DB: '1'
+      run: npx vitest run __tests__/zombie/beta-2025-combat.db.integration.test.ts __tests__/zombie/beta-2025-recovery.db.integration.test.ts __tests__/zombie/season-operations.db.integration.test.ts --maxWorkers=1
     - name: Run Playwright tests (core)
       if: startsWith(matrix.lane, 'core-shard-')
       env:

@@ -7,6 +7,7 @@ import { deliverPendingAnimations } from '@/lib/zombie/animationEngine'
 import { expireBetaRoleWorkflows } from './beta2025RoleWorkflows'
 import { retryZombieCorrectionEffects } from './correctionFollowup'
 import { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
+import { expireUniverseVotes, escalateOwnerContacts } from './seasonOperations'
 
 export { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
 
@@ -31,6 +32,8 @@ export async function runZombieHousekeeping(): Promise<{
   errors: string[]
 }> {
   const errors: string[] = []
+  try { await expireUniverseVotes() } catch { errors.push('Universe vote tally pending retry') }
+  try { await escalateOwnerContacts() } catch { errors.push('Owner contact escalation pending retry') }
   const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
   try { errors.push(...await retryZombieCorrectionEffects()) }
   catch { errors.push('Correction standings/report refresh: pending retry') }
