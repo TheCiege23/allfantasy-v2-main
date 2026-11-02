@@ -243,7 +243,7 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
             <Link href="/privacy">Privacy</Link>
           </p>
           <div className="af-au-divider">
-            <span className="af-label">Or sign up with email or phone</span>
+            <span className="af-label">Or sign up with email</span>
           </div>
         </>
       ) : null}
