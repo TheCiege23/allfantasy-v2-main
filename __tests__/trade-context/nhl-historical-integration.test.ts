@@ -68,13 +68,17 @@ describe('current-main NHL historical integration', () => {
   })
   it('withholds known NHL history failures without invoking the market grader', async () => {
     h.games.mockRejectedValue(new Error('storage unavailable'))
+    h.rosters.mockResolvedValue(rosters.slice(0, 2))
     const gradeProposal = vi.fn()
-    const result = await evaluateServerTradeDecision({ ...input, proposerRosterId: 'r1', receiverRosterId: 'r2',
+    const result = await evaluateServerTradeDecision({ ...input, participantRosterIds: ['r1', 'r2'],
+      assets: [{ ...input.assets[0]! }, { ...input.assets[1]!, toRosterId: 'r1' }],
+      proposerRosterId: 'r1', receiverRosterId: 'r2',
       season: 2026, gradeProposal })
     expect(result.lineupBasis).toBe('historical_points_per_game')
     expect(result.lineupCoverage?.every((row) => row.status === 'blocked')).toBe(true)
     expect(result.participants.every((row) => row.grade === null && row.lineupPointsDelta === null)).toBe(true)
     expect(gradeProposal).not.toHaveBeenCalled()
+    expect(h.evaluate).not.toHaveBeenCalled()
   })
   it('requires every weighted stat, including a verified zero, and keeps goalie weights distinct', () => {
     expect(scoreNhlHistoricalBox({ stats: { goals: 0 } }, { goals: 4, assists: 3 }, false)).toBeNull()
