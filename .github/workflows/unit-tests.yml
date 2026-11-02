@@ -188,7 +188,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version-file: .nvmrc
 
       - name: Staging data runner contracts
         if: matrix.shard == 1

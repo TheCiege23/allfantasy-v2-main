@@ -14,7 +14,7 @@ import { ArrowLeft, CheckCircle2 } from "lucide-react"
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { BracketChangeAlertToggle } from '@/components/chimmy/BracketChangeAlertToggle'
 import { BracketChimmyEntryLink } from '@/components/chimmy/BracketChimmyEntryLink'
-import { bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
+import { bracketChatSport, bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
 import {
   getBracketViewState,
   getBracketProgressDisplay,
@@ -112,7 +112,7 @@ export default async function EntryBracketPage(
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <BracketChimmyEntryLink
-                    href={getChimmyChatHrefWithPrompt(`Review my ${bracketPromptTarget(entry.name, entry.league.name)}. Which saved picks are decided, and where do I stand in this pool?`, { source: 'bracket_entry' })}
+                    href={getChimmyChatHrefWithPrompt(`Review my ${bracketPromptTarget(entry.name, entry.league.name)}. Which saved picks are decided, and where do I stand in this pool?`, { source: 'bracket_entry', sport: bracketChatSport(entry.league.tournament.sport) })}
                     className="mode-muted underline"
                     testId="bracket-entry-ask-chimmy-link" format="tournament"
                   >

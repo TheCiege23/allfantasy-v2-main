@@ -1,3 +1,10 @@
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
+
+/** NBA Cup pools use NBA context; all other formats retain their actual sport. */
+export function bracketChatSport(sport: string) {
+  return normalizeToSupportedSport(sport.toLowerCase() === 'nba_cup' ? 'NBA' : sport)
+}
+
 /** Facts attached only after an owned bracket entry was verified and read. */
 export type BracketEvidence = {
   entryName: string

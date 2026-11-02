@@ -21,6 +21,7 @@ const MAX_ROWS = 50_000
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value)
   ? value as Record<string, unknown> : {}
 
+async function main() {
 try {
   while (scanned < MAX_ROWS) {
     const rows = await prisma.analyticsEvent.findMany({
@@ -57,3 +58,5 @@ try {
 } finally {
   await prisma.$disconnect()
 }
+}
+void main().catch(() => { console.error('Bracket adoption report failed'); process.exitCode = 1 })

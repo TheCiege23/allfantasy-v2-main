@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
-import { bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
+import { bracketChatSport, bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
 
 export type BracketAlertFormat = 'tournament' | 'world_cup' | 'playoff'
 export type BracketChangeState = {
@@ -129,6 +129,7 @@ export async function emitBracketChangeAlert(input: {
   format: BracketAlertFormat
   before: BracketChangeState
   after: BracketChangeState
+  sport?: string
   observedAt?: Date
 }): Promise<boolean> {
   const summary = bracketChangeSummary(input.before, input.after)
@@ -164,7 +165,8 @@ export async function emitBracketChangeAlert(input: {
   `
   const digest = createHash('sha256').update(JSON.stringify({ before: input.before, after: input.after })).digest('hex').slice(0, 24)
   const prompt = `What changed in my ${bracketPromptTarget(input.entryName, input.poolName)}? Change ref: ${change.changeRef}. Use that saved before-and-after result.`
-  const actionHref = getChimmyChatHrefWithPrompt(prompt, { source: 'bracket_change_alert' })
+  const sport = input.sport ?? (input.format === 'world_cup' ? 'SOCCER' : input.format === 'tournament' ? 'NCAAB' : 'NFL')
+  const actionHref = getChimmyChatHrefWithPrompt(prompt, { source: 'bracket_change_alert', sport: bracketChatSport(sport) })
   const result = await dispatchNotification({
     userIds: [input.userId], category: 'bracket_updates', productType: 'bracket',
     type: 'chimmy_bracket_change', title: 'Your bracket changed',
@@ -203,7 +205,7 @@ export async function emitPlayoffDecisionAlerts(input: { challengeId: string; de
 }> }): Promise<void> {
   if (!input.decisions.length) return
   const challenge = await prisma.playoffBracketChallenge.findUnique({
-    where: { id: input.challengeId }, select: { name: true, isTestMode: true },
+    where: { id: input.challengeId }, select: { name: true, sport: true, isTestMode: true },
   })
   if (!challenge || challenge.isTestMode) return
   const entries = await prisma.playoffBracketEntry.findMany({
@@ -218,7 +220,7 @@ export async function emitPlayoffDecisionAlerts(input: { challengeId: string; de
     const pick = entry.picks.find((row) => row.seriesId === decision.seriesId)
     return emitBracketChangeAlert({
       userId: entry.userId, entryId: entry.id, entryName: entry.name,
-      poolName: challenge.name, format: 'playoff',
+      poolName: challenge.name, format: 'playoff', sport: challenge.sport,
       before: { winnerTeamName: decision.beforeWinner, seriesName: decision.seriesName },
       after: { winnerTeamName: decision.winner, seriesName: decision.seriesName,
         pickTeamName: pick?.pickTeamName ?? null },

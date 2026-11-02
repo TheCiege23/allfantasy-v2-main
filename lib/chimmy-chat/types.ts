@@ -37,6 +37,7 @@ export type AIContextSource =
   | "bracket_entry"
   | "playoff_bracket_entry"
   | "world_cup_bracket_entry"
+  | "bracket_change_alert"
 
 export type AIChatContext = {
   prompt?: string

@@ -139,7 +139,7 @@ export async function rebuildLeaderboardForScope(args: {
       if (changed.length) {
         const owners = await prisma.bracketEntry.findMany({
           where: { id: { in: changed.map((row) => row.entryId) } },
-          select: { id: true, userId: true, name: true, league: { select: { name: true } } },
+          select: { id: true, userId: true, name: true, league: { select: { name: true, tournament: { select: { sport: true } } } } },
         })
         const ownerByEntry = new Map(owners.map((row) => [row.id, row]))
         const { emitBracketChangeAlert, settleBracketAlertBatch } = await import('@/lib/chimmy/bracketChangeAlerts')
@@ -148,7 +148,7 @@ export async function rebuildLeaderboardForScope(args: {
           const before = beforeByEntry.get(row.entryId)
           if (!owner || !before) return Promise.resolve(false)
           return emitBracketChangeAlert({ userId: owner.userId, entryId: row.entryId,
-            entryName: owner.name, poolName: owner.league.name, format: 'tournament',
+            entryName: owner.name, poolName: owner.league.name, format: 'tournament', sport: owner.league.tournament.sport,
             before: { score: before.score, rank: before.rank }, after: { score: row.score, rank: row.rank } })
         })
         if (failed) console.warn('[bracket leaderboard] change alerts failed', { failed })

@@ -21,7 +21,7 @@ import { rebuildLeaderboardForScope } from '@/lib/brackets/leaderboard'
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.entries.mockResolvedValueOnce([{ id: 'e1', leagueId: 'l1', picks: [{ points: 15 }] }])
-    .mockResolvedValueOnce([{ id: 'e1', userId: 'u1', name: 'My Entry', league: { name: 'Office' } }])
+    .mockResolvedValueOnce([{ id: 'e1', userId: 'u1', name: 'My Entry', league: { name: 'Office', tournament: { sport: 'NCAAB' } } }])
   mocks.leaderboard.mockResolvedValue([{ entryId: 'e1', rank: 1, score: 10 }])
   mocks.upsert.mockResolvedValue({ id: 'row' })
   mocks.transaction.mockResolvedValue([])
@@ -32,7 +32,7 @@ describe('tournament bracket result alerts', () => {
   it('emits the stored before score and the newly ranked score after a successful write', async () => {
     await rebuildLeaderboardForScope({ tournamentId: 't1', leagueId: 'l1' })
     expect(mocks.emit).toHaveBeenCalledWith({ userId: 'u1', entryId: 'e1', entryName: 'My Entry',
-      poolName: 'Office', format: 'tournament',
+      poolName: 'Office', format: 'tournament', sport: 'NCAAB',
       before: { score: 10, rank: 1 }, after: { score: 15, rank: 1 } })
   })
 

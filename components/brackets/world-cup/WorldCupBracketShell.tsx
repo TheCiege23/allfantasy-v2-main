@@ -2566,7 +2566,7 @@ export default function WorldCupBracketShell({
             </p>
             {showBoard && selectedEntry ? (
               <BracketChimmyEntryLink
-                href={getChimmyChatHrefWithPrompt(`Review my World Cup ${bracketPromptTarget(selectedEntry.name, view.challenge.name)}. Which picks are decided, and what do the recorded match results mean for my entry?`, { source: 'world_cup_bracket_entry' })}
+                href={getChimmyChatHrefWithPrompt(`Review my World Cup ${bracketPromptTarget(selectedEntry.name, view.challenge.name)}. Which picks are decided, and what do the recorded match results mean for my entry?`, { source: 'world_cup_bracket_entry', sport: 'SOCCER' })}
                 className="mt-1 inline-block text-[11px] font-bold text-cyan-200 underline decoration-cyan-200/40 hover:text-white"
                 testId="world-cup-entry-ask-deep-chimmy-link" format="world_cup"
               >

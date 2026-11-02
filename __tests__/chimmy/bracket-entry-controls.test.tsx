@@ -28,6 +28,7 @@ it.each(['mlb', 'ncaaf', 'nba_cup', 'nfl', 'nba', 'nhl'])('shows contextual Chim
   render(<PlayoffBracketEntryShell initialView={view(sport, true)} />)
   const link = screen.getByRole('link', { name: 'Ask Chimmy about my picks' })
   expect(link.getAttribute('href')).toContain('playoff_bracket_entry')
+  expect(new URL(link.getAttribute('href')!, 'https://qa.invalid').searchParams.get('sport')).toBe(sport === 'nba_cup' ? 'NBA' : sport.toUpperCase())
   expect(decodeURIComponent(link.getAttribute('href') ?? '').replaceAll('+', ' ')).toContain('My saved picks')
   expect(screen.getByRole('switch', { name: 'Alerts for entry' })).toBeTruthy()
 })

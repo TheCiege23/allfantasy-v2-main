@@ -28,7 +28,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 } }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: mocks.dispatch }))
 vi.mock('@/lib/ai-product-layer/UnifiedChimmyEntryResolver', () => ({
-  getChimmyChatHrefWithPrompt: (prompt: string) => `/chimmy/chat?prompt=${encodeURIComponent(prompt)}`,
+  getChimmyChatHrefWithPrompt: (prompt: string, context?: { sport?: string }) => `/chimmy/chat?prompt=${encodeURIComponent(prompt)}&sport=${context?.sport ?? ''}`,
 }))
 
 import { bracketSelectionFromQuestion, buildBracketEntryContext, buildMyBracketsContext, selectOwnedBracket } from '@/lib/chimmy/tools/bracketTool'
@@ -210,6 +210,7 @@ describe('Chimmy bracket grounding', () => {
     expect(decodeURIComponent(delivered.actionHref)).toContain(`Change ref: ${delivered.meta.changeRef}`)
     expect(delivered.body).not.toContain('42')
     expect(delivered.meta.before).toBeUndefined()
+    expect(new URL(delivered.actionHref, 'https://qa.invalid').searchParams.get('sport')).toBe('NCAAB')
   })
 
   it('saves the opt-in without overwriting the user’s other notification settings', async () => {
@@ -253,7 +254,7 @@ describe('Chimmy bracket grounding', () => {
   })
 
   it('sends a decided playoff pick only to an opted-in entry owner', async () => {
-    mocks.playoffChallenge.mockResolvedValue({ name: 'Playoff Crew', isTestMode: false })
+    mocks.playoffChallenge.mockResolvedValue({ name: 'Playoff Crew', sport: 'NCAAF', isTestMode: false })
     mocks.playoff.mockResolvedValue([{ id: 'p1', userId: 'owner-1', name: 'West Picks',
       picks: [{ seriesId: 's1', pickTeamName: 'Boston' }] }])
     mocks.profileFind.mockResolvedValue({ notificationPreferences: { chimmyBracketChanges: {
@@ -267,6 +268,7 @@ describe('Chimmy bracket grounding', () => {
     }))
     expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
       userIds: ['owner-1'], body: 'Open Chimmy to see the saved before-and-after result.',
+      actionHref: expect.stringContaining('&sport=NCAAF'),
     }))
   })
 
