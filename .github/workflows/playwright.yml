@@ -213,6 +213,13 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: node scripts/seed-e2e-tenant.mjs
+    - name: Verify 2025 Zombie combat transactions
+      if: matrix.lane == 'zombie-rehearsal'
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        RUN_ZOMBIE_COMBAT_DB: '1'
+      run: npx vitest run __tests__/zombie/beta-2025-combat.db.integration.test.ts --maxWorkers=1
     - name: Run Playwright tests (core)
       if: startsWith(matrix.lane, 'core-shard-')
       env:

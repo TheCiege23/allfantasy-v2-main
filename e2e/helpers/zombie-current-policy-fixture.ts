@@ -9,8 +9,17 @@ import { reconcileRosterRedraftLinks } from '../../lib/league-runtime/reconcileR
 import { prisma } from '../../lib/prisma'
 import { calculateScoreFromSportConfig, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from '../../lib/redraft/scoringEngine'
 import { loadWeekLineups, weekSlotType } from '../../lib/redraft/weekLineupSlots'
+import { respondBetaRoleWorkflow } from '../../lib/zombie/beta2025RoleWorkflows'
 function localOnly() {
   if (!['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL ?? '').hostname)) throw new Error('LOCAL_DISPOSABLE_DATABASE_REQUIRED')
+}
+/** Explicit fixture consent: production managers must accept their own private offer. */
+export async function acceptFixtureNflWhispererOffer(leagueId: string) {
+  localOnly()
+  const z = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
+  if (z.sport !== 'NFL') return
+  const offer = await prisma.zombieRoleWorkflow.findFirstOrThrow({ where: { zombieLeagueId: z.id, kind: 'initial_offer', status: 'pending' } })
+  await respondBetaRoleWorkflow(leagueId, offer.id, offer.actorUserId!, 'accept', (offer.state as { index: number }).index)
 }
 /** These scenarios exercise defined Survivor/Horde outcomes; the separate rules tests hold W-v-W for review. */
 export async function separateFixtureWhisperers(leagueId: string, seasonId: string, week: number) {
@@ -49,8 +58,10 @@ export async function seedFinalNflFixtureTotals(leagueId: string, seasonId: stri
   const externalId = `zombie-fixture:${leagueId}:${season}:${week}`
   const kickoff = new Date(Date.now() - 3_600_000)
   await prisma.sportsGame.upsert({
-    where: { sport_externalId_source: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture' } },
-    create: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture', homeTeam: club, awayTeam: `${club}_AWAY`, season, seasonType: 'regular', week, status: 'final', startTime: kickoff, expiresAt: new Date(Date.now() + 86_400_000) },
+    // Loopback-only synthetic fixture in the canonical stored calendar namespace.
+    // This exercises the production deadline reader without widening its source allowlist.
+    where: { sport_externalId_source: { sport: 'NFL', externalId, source: 'api_sports' } },
+    create: { sport: 'NFL', externalId, source: 'api_sports', homeTeam: club, awayTeam: `${club}_AWAY`, season, seasonType: 'regular', week, status: 'final', startTime: kickoff, expiresAt: new Date(Date.now() + 86_400_000) },
     update: {},
   })
   await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, data: { team: club } })

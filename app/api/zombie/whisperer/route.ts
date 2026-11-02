@@ -7,6 +7,7 @@ import { selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
+import { startBetaWhispererOffers } from '@/lib/zombie/beta2025RoleWorkflows'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,10 @@ export async function POST(req: Request) {
 
   if (action === 'select') {
     await requireCommissionerOnly(leagueId, userId)
+    if (z.sport === 'NFL') {
+      try { return NextResponse.json(await startBetaWhispererOffers(leagueId)) }
+      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'The draw could not be started.' }, { status: 409 }) }
+    }
     const selected = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id }, select: { id: true } })
     if (selected || !['setup', 'registering'].includes(z.status)) {
       return NextResponse.json({ error: 'Whisperer selection is locked after assignment.' }, { status: 409 })
@@ -64,7 +69,7 @@ export async function GET(req: Request) {
   if (!z?.whispererRecord) return NextResponse.json({ whisperer: null, whisperers: [] })
 
   const isComm = z.league.userId === userId
-  const records = [z.whispererRecord, ...(z.coWhisperers ?? [])]
+  const records = [z.whispererRecord, ...(z.coWhisperers ?? [])].filter(record => !record.wasDefeated)
   const visible = await Promise.all(records.map(async (record) => {
     const own = record.userId === userId
     const canSee = canViewerSeeWhisperer({
@@ -79,5 +84,5 @@ export async function GET(req: Request) {
       ? named
       : { displayName: named.displayName, ambushesRemaining: named.ambushesRemaining, wasDefeated: named.wasDefeated }
   }))
-  return NextResponse.json({ whisperer: visible[0], whisperers: visible })
+  return NextResponse.json({ whisperer: visible[0] ?? null, whisperers: visible })
 }

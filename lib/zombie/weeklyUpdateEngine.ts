@@ -73,7 +73,7 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
 ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
-  const whisperers = z.whispererRecord ? [z.whispererRecord, ...(z.coWhisperers ?? [])] : (z.coWhisperers ?? [])
+  const whisperers = (z.whispererRecord ? [z.whispererRecord, ...(z.coWhisperers ?? [])] : (z.coWhisperers ?? [])).filter(record => !record.wasDefeated)
   const hiddenIds = new Set(!z.whispererIsPublic ? whisperers.map((record) => record.userId) : [])
   const nameForUser = (userId: string) =>
     hiddenIds.has(userId) ? Promise.resolve('Hidden Whisperer') : displayNameForUser(leagueId, userId)

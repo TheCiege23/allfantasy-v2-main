@@ -4,6 +4,7 @@ import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { processExpiredBashingDecisionsForAll } from '@/lib/zombie/bashingEngine'
 import { scheduleWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
 import { deliverPendingAnimations } from '@/lib/zombie/animationEngine'
+import { expireBetaRoleWorkflows } from './beta2025RoleWorkflows'
 import { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
 
 export { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
@@ -30,6 +31,8 @@ export async function runZombieHousekeeping(): Promise<{
 }> {
   const errors: string[] = []
   const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
+  try { errors.push(...await expireBetaRoleWorkflows()) }
+  catch { errors.push('role workflow expiry: pending retry') }
   try {
     await processExpiredBashingDecisionsForAll()
   } catch (e) {

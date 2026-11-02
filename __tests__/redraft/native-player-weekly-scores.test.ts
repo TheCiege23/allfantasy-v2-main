@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
   league: { findFirst: vi.fn() },
-  redraftMatchup: { findFirst: vi.fn(), findUniqueOrThrow: vi.fn(async () => ({ lineupSnapshots: {} })), update: vi.fn() },
+  redraftMatchup: { findFirst: vi.fn(), findUniqueOrThrow: vi.fn(async () => ({ lineupSnapshots: {}, homeRosterId: 'cm1home', awayRosterId: 'cm1away' })), update: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   playerWeeklyScore: { findUnique: vi.fn() },

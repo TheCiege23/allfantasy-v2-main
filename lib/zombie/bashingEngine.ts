@@ -4,6 +4,7 @@ import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissione
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { setZombie } from '@/lib/zombie/ZombieOwnerStatusService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
+import { respondBetaRoleWorkflow } from './beta2025RoleWorkflows'
 
 async function statusForRedraftOwner(leagueId: string, ownerId: string): Promise<string> {
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: ownerId } })
@@ -148,13 +149,23 @@ export async function detectAndProcessBashings(
 
 export async function resolveBashingDecision(
   bashingEventId: string,
-  decision: 'spare' | 'infect',
+  decision: 'spare' | 'infect' | 'replace',
   decidingUserId: string,
+  expectedLeagueId?: string,
 ): Promise<void> {
   const ev = await prisma.zombieBashingEvent.findUnique({ where: { id: bashingEventId } })
   if (!ev) throw new Error('Event not found')
+  if (expectedLeagueId && ev.leagueId !== expectedLeagueId) throw new Error('Event belongs to another league')
+  const policy = await prisma.zombieLeague.findUnique({ where: { leagueId: ev.leagueId }, select: { id: true, sport: true } })
+  if (policy?.sport === 'NFL') {
+    const workflow = await prisma.zombieRoleWorkflow.findFirst({ where: { zombieLeagueId: policy.id, state: { path: ['eventId'], equals: ev.id } } })
+    if (!workflow) throw new Error('This historical combat event requires commissioner review.')
+    await respondBetaRoleWorkflow(ev.leagueId, workflow.id, decidingUserId, decision)
+    return
+  }
   if (ev.winnerUserId !== decidingUserId) throw new Error('Only winner decides')
   if (ev.decisionMade) throw new Error('Already decided')
+  if (decision === 'replace') throw new Error('This combat policy does not support replacement here.')
   if (ev.decisionDeadline && ev.decisionDeadline < new Date()) throw new Error('Decision window closed')
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId: ev.leagueId } })
@@ -188,6 +199,8 @@ export async function resolveBashingDecision(
 }
 
 export async function processExpiredBashingDecisions(leagueId: string): Promise<void> {
+  const policy = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { sport: true } })
+  if (policy?.sport === 'NFL') return // Durable 2025 workflows apply their own defaults transactionally.
   const now = new Date()
   const open = await prisma.zombieBashingEvent.findMany({
     where: {

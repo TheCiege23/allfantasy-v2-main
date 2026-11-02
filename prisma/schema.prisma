@@ -10312,11 +10312,33 @@ model ZombieLeague {
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
   coWhisperers             ZombieCoWhisperer[]
+  roleWorkflows            ZombieRoleWorkflow[]
 
   @@index([universeId])
   @@index([levelId])
   @@index([status])
   @@map("zombie_leagues")
+}
+
+model ZombieRoleWorkflow {
+  id String @id @db.VarChar(160)
+  zombieLeagueId String
+  kind String @db.VarChar(32)
+  week Int?
+  actorUserId String?
+  targetUserId String?
+  status String @default("pending") @db.VarChar(24)
+  deadlineAt DateTime?
+  state Json
+  decision String? @db.VarChar(24)
+  decidedByUserId String?
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@index([zombieLeagueId, status])
+  @@index([status, deadlineAt])
+  @@map("zombie_role_workflows")
 }
 
 model WhispererRecord {

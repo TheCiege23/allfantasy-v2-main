@@ -20,6 +20,7 @@ import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
 import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
 import { captureZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
 import { reconcileOutcomeChangingCorrection } from '@/lib/zombie/outcomeCorrectionReconciler'
+import { betaWhispererSelectionPending, settleBetaCombat } from './beta2025RoleWorkflows'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -122,6 +123,9 @@ export async function runWeeklyResolution(
    * league on — a week of the game silently erased. A stat-correction replay is of a sealed week, so it
    * still passes.
    */
+  if (z.sport === 'NFL' && await betaWhispererSelectionPending(z.id)) {
+    return { resolution: null, skipped: true, reason: 'whisperer_offer_pending' }
+  }
   const readiness = await getZombieWeekReadiness(z.leagueId, week, z.season)
   if (!readiness.ready) {
     return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
@@ -218,10 +222,13 @@ export async function runWeeklyResolution(
     await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
     await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
   }
-  await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
-  await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
-  if (betaItems) await settleBetaItems(zombieLeagueId, week)
+  if (betaItems) {
+    await settleBetaItems(zombieLeagueId, week)
+    await settleBetaCombat(zombieLeagueId, week)
+  }
   else {
+    await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
+    await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
     await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
     await awardNativeSerumsForWeek(z.leagueId, week, z.season)
     await autoReviveEligibleZombies(z.leagueId, week)
