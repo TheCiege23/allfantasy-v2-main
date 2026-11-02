@@ -106,7 +106,7 @@
 }
 .af-decisions .af-decision-clock span {
   color: var(--muted);
-  font: 700 9px/1.15 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1.15 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-align: center;
 }

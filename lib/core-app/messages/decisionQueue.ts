@@ -21,6 +21,8 @@ export const decisionQueueMessages = defineMessages({
     topUrgentLabel: (n: number) => `The ${n} most urgent`,
     now: 'NOW',
     inWhen: (when: string) => `IN ${when}`,
+    /** BCP 47 locale for the countdown block's weekday and time ("SUN 1:00 PM"). */
+    clockLocale: 'en-US',
     showFewer: 'Show fewer',
     showMore: (n: number) => `Show ${n} more`,
     acrossYourLeagues: 'Across your leagues',
@@ -40,6 +42,7 @@ export const decisionQueueMessages = defineMessages({
     topUrgentLabel: (n) => `Las ${n} más urgentes`,
     now: 'AHORA',
     inWhen: (when) => `EN ${when}`,
+    clockLocale: 'es',
     showFewer: 'Mostrar menos',
     showMore: (n) => `Mostrar ${n} más`,
     acrossYourLeagues: 'En todas tus ligas',
