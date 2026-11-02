@@ -99,6 +99,27 @@ describe("ChimmyChatShell", () => {
   })
 
   /* Zero coverage meant a crash on mount was invisible. This is the floor. */
+  it("switches saved alert prompts and can reopen an older alert without clobbering an unchanged draft", async () => {
+    const Shell = (await import("@/components/chimmy/ChimmyChatShell")).default
+    const first = 'Explain my bracket change ref first'
+    const second = 'Explain my bracket change ref second'
+    const { rerender } = render(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    const composer = screen.getByTestId('chimmy-message-input')
+    expect(composer).toHaveValue(first)
+    fireEvent.change(composer, { target: { value: 'My edited question' } })
+    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    expect(composer).toHaveValue('My edited question')
+    rerender(<Shell initialPrompt={second} clearUrlPromptAfterUse={false} />)
+    expect(composer).toHaveValue(second)
+    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    expect(composer).toHaveValue(first)
+    rerender(<Shell initialPrompt="" clearUrlPromptAfterUse={false} />)
+    fireEvent.change(composer, { target: { value: 'Another draft' } })
+    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    expect(composer).toHaveValue(first)
+    expect(sendChimmyMessageMock).not.toHaveBeenCalled()
+  })
+
   it("mounts and offers a composer", async () => {
     const composer = await renderShell()
 
