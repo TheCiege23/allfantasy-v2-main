@@ -284,7 +284,9 @@ describe('/api/brackets/playoffs/cron/refresh-schedule heartbeat contract', () =
   })
 
   it('aggregates per-challenge totals and reports warnings as a partial run', async () => {
-    prismaMock.playoffBracketChallenge.findMany.mockResolvedValue([{ id: 'C1' }, { id: 'C2' }])
+    prismaMock.playoffBracketChallenge.findMany
+      .mockResolvedValueOnce([{ id: 'C1' }, { id: 'C2' }])
+      .mockResolvedValueOnce([])
     refreshPlayoffScheduleMetadataForChallengeMock.mockResolvedValue({
       updatedSeries: 2,
       scheduleGamesSeen: 10,
