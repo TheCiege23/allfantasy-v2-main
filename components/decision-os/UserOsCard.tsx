@@ -188,7 +188,13 @@ export default function UserOsCard({ snapshot, variant = 'league', language }: U
             </span>
             <DecisionOsUpdatedStamp value={snapshot.generatedAt} includeTime language={language} />
           </div>
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-6 gap-y-3">
+          {/*
+            `basis-[22rem]`: below ~352px of room the activity block takes its own row instead of
+            sharing one with the tier chip (fixed 2026-11-02 from the live page — at 575px it was
+            squeezed into a ~200px column, its label wrapping to three lines and the figures stacking).
+            A basis rather than a viewport breakpoint, because it is the CARD's width that matters.
+          */}
+          <div className="flex min-w-0 flex-1 basis-[22rem] flex-wrap items-end gap-x-6 gap-y-3">
             <p className="w-full text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
               {es ? 'Tu actividad en AllFantasy (últimos 90 días)' : 'Your activity in AllFantasy (last 90 days)'}
             </p>

@@ -191,7 +191,7 @@ export default function MlbBracketBoard({
   )
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
-  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(groupGames) : [], [rollingCup, groupGames])
+  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(view.series) : [], [rollingCup, view.series])
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()

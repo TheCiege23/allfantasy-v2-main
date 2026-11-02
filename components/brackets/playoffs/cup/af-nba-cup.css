@@ -249,6 +249,7 @@
   color: var(--pb-text2);
 }
 .af-cup-status[data-status="won_group"],
+.af-cup-status[data-status="qualified"],
 .af-cup-status[data-status="clinched_group"],
 .af-cup-status[data-status="wild_card"] { background: var(--cup-gold); color: #241a00; }
 .af-cup-status[data-status="controls_path"] { background: var(--pb-accent); color: var(--pb-accent-ink); }

@@ -4652,3 +4652,228 @@ button.af-rail-sport:focus-visible {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * 2026-11-02 nav redesign — the section rail and the top bar.
+ *
+ * Appended LAST, each @media its own top-level block, per this file's stated convention (a block
+ * dropped inside another closes the outer query early). Token layer only.
+ *
+ * 1. Icons are back on the desktop rail. `.af-nav-glyph` was `display: none` from 1081px up, so the
+ *    widest screen was the only one that showed 24 text-only links. They return as a 28px tile that
+ *    tints with the active row, so the current page reads at a glance.
+ * 2. The active row gets the accent ring the rest of /core uses for "you are here".
+ * 3. "This league" names its league, and "More" folds Plans, Tools and Admin (AfCoreShell).
+ * 4. The top bar's theme, language, plan and admin chips moved into one account menu.
+ * ------------------------------------------------------------------------- */
+@media (min-width: 1081px) {
+  .af-core .af-nav-glyph {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .af-core .af-nav-item {
+    padding: 8px;
+    gap: 10px;
+    border-radius: 10px;
+  }
+  .af-core .af-nav-item:hover .af-nav-glyph { color: var(--text2); }
+  .af-core .af-nav-item[data-active='true'] {
+    color: var(--text);
+    background: linear-gradient(90deg, var(--accent-soft), transparent 90%);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+  }
+  .af-core .af-nav-item[data-active='true'] .af-nav-glyph {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+/* "This league · <name>" — the league the six tabs under it act on. */
+.af-core .af-nav-league {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 8px 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text2);
+  font: 700 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-nav-league-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.af-core .af-nav-league-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 1080px) {
+  /* The tablet's 104px icon nav has no room for a name; the scope switcher states it there. */
+  .af-core .af-nav-league { display: none; }
+}
+
+/* "More" — a native <details>, styled as one more row. */
+.af-core .af-nav-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.af-core .af-nav-more > summary::-webkit-details-marker { display: none; }
+.af-core .af-nav-more-caret {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 150ms ease;
+}
+.af-core .af-nav-more[open] .af-nav-more-caret { transform: rotate(90deg); }
+.af-core .af-nav-more > .af-nav-items {
+  margin-top: 2px;
+  padding-left: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-nav-more-caret { transition: none; }
+}
+
+/* A LIVE badge pulses; a number never does. */
+.af-core .af-nav-badge[data-tone='live'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.af-core .af-nav-badge[data-tone='live']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .af-core .af-nav-badge[data-tone='live']::before { animation: af-nav-live-pulse 1.6s ease-in-out infinite; }
+}
+@keyframes af-nav-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* The account menu: avatar + plan in the bar, everything about YOU behind it. */
+.af-core .af-account-menu {
+  position: relative;
+  flex: none;
+}
+.af-core .af-account-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px 0 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  list-style: none;
+  cursor: pointer;
+}
+.af-core .af-account-menu > summary::-webkit-details-marker { display: none; }
+.af-core .af-account-menu > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core .af-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--text);
+  font: 800 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.af-core .af-account-plan { color: var(--text2); }
+.af-core .af-account-caret {
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-account-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  padding: 14px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.af-core .af-account-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+.af-core .af-account-section {
+  color: var(--muted);
+  font: 800 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.af-core .af-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-core .af-account-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-account-links a,
+.af-core .af-account-links .af-admin-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 700 13px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-decoration: none;
+}
+.af-core .af-account-links a:hover,
+.af-core .af-account-links a:focus-visible {
+  background: var(--chip);
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  /* Phones already carry theme, language and plan inside the Updates menu, and the Me tab owns
+     the account — a third copy in a 390px header is the crowding this redesign removes. */
+  .af-core .af-account-menu { display: none; }
+}

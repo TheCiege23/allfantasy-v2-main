@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
-const m=vi.hoisted(()=>({cache:new Map<string,any>(),profile:vi.fn(),updateProfile:vi.fn(),view:vi.fn(),dispatch:vi.fn(),picks:vi.fn(),entries:vi.fn(),pools:vi.fn(),upsert:vi.fn(),transaction:vi.fn(),query:vi.fn()}))
+const m=vi.hoisted(()=>({cache:new Map<string,any>(),profile:vi.fn(),updateProfile:vi.fn(),view:vi.fn(),dispatch:vi.fn(),picks:vi.fn(),entries:vi.fn(),pools:vi.fn(),upsert:vi.fn(),transaction:vi.fn(),query:vi.fn(),execute:vi.fn()}))
 vi.mock("@/lib/prisma",()=>{
-  const db:any={sportsDataCache:{findUnique:vi.fn(async({where}:any)=>m.cache.has(where.cacheKey)?{data:m.cache.get(where.cacheKey)}:null),upsert:m.upsert,update:vi.fn(async({where,data}:any)=>{m.cache.set(where.cacheKey,data.data);return {}})},userProfile:{findUnique:m.profile,updateMany:m.updateProfile},playoffBracketPick:{findMany:m.picks},playoffBracketEntry:{findMany:m.entries},playoffBracketChallenge:{findMany:m.pools},$queryRaw:m.query,$transaction:m.transaction}
+  const db:any={sportsDataCache:{findUnique:vi.fn(async({where}:any)=>m.cache.has(where.cacheKey)?{data:m.cache.get(where.cacheKey)}:null),upsert:m.upsert,update:vi.fn(async({where,data}:any)=>{m.cache.set(where.cacheKey,data.data);return {}})},userProfile:{findUnique:m.profile,updateMany:m.updateProfile},playoffBracketPick:{findMany:m.picks},playoffBracketEntry:{findMany:m.entries},playoffBracketChallenge:{findMany:m.pools},$queryRaw:m.query,$executeRaw:m.execute,$transaction:m.transaction}
   m.transaction.mockImplementation(async(fn:any)=>fn(db))
   return {prisma:db}
 })
@@ -77,5 +77,31 @@ describe("experience persistence and privacy",()=>{
     m.query.mockResolvedValue([{acquired:false}]);await sweepBracketExperience("nba_cup",2026)
     expect(m.pools).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({sport:"nba_cup",seasonYear:2026,isTestMode:false})}))
     expect(m.cache.has("bracket-experience:v1:entry:mine")).toBe(false);expect(m.dispatch).not.toHaveBeenCalled()
+  })
+  it("acknowledges delivery without trying to deserialize PostgreSQL's void lock result",async()=>{
+    m.query.mockImplementation(async(strings:TemplateStringsArray)=>{
+      if(strings.join("").includes("pg_advisory_xact_lock(")) throw new Error("Failed to deserialize column of type 'void'")
+      return [{acquired:true}]
+    })
+    m.execute.mockResolvedValue(1)
+    await sweepBracketExperience("nba_cup",2026)
+    const v=view();v.series[0].status="final";v.series[0].winnerTeamName="Boston Celtics";v.activeEntry!.totalScore=1
+    vi.setSystemTime(now+1000);m.view.mockResolvedValue(v)
+    expect(await sweepBracketExperience("nba_cup",2026)).toMatchObject({processed:1,alerts:1,failures:0})
+    expect(m.cache.get("bracket-experience:v1:entry:mine").pendingAlerts).toEqual([])
+    vi.setSystemTime(now+2000)
+    expect(await sweepBracketExperience("nba_cup",2026)).toMatchObject({alerts:0,failures:0})
+    expect(m.dispatch).toHaveBeenCalledTimes(1)
+  })
+  it("retains an unacknowledged delivery for a safe retry if acquiring the lock fails",async()=>{
+    await sweepBracketExperience("nba_cup",2026)
+    const v=view();v.series[0].status="final";v.series[0].winnerTeamName="Boston Celtics"
+    vi.setSystemTime(now+1000);m.view.mockResolvedValue(v);m.execute.mockRejectedValueOnce(new Error("lock unavailable"))
+    expect(await sweepBracketExperience("nba_cup",2026)).toMatchObject({failures:1})
+    expect(m.cache.get("bracket-experience:v1:entry:mine").pendingAlerts).toHaveLength(1)
+    vi.setSystemTime(now+2000);m.execute.mockResolvedValue(1)
+    expect(await sweepBracketExperience("nba_cup",2026)).toMatchObject({failures:0})
+    expect(m.dispatch.mock.calls[0][0].dedupePrefix).toBe(m.dispatch.mock.calls[1][0].dedupePrefix)
+    expect(m.cache.get("bracket-experience:v1:entry:mine").pendingAlerts).toEqual([])
   })
 })
