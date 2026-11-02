@@ -46,6 +46,11 @@ export type FinderCopy = {
   trendAddedIn: (leagues: number) => string
   otherMatches: string
   alsoMatched: string
+  /** The position chips over the matches (MatchPositionFilter.tsx): the All chip, and the group's label. */
+  posAll: string
+  posFilterAria: (matches: number) => string
+  /** The phone sheet's close link, back to the search behind it. */
+  backToResults: string
   railFoot: string
   mainLabel: string
   sideLabel: string
