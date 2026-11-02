@@ -205,8 +205,8 @@
       "schedule": "*/1 * * * *"
     },
     {
-      "path": "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn",
-      "schedule": "0 16-19 * * *"
+      "path": "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/trade-grade-notify",
