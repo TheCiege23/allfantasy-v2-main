@@ -1,0 +1,116 @@
+/* Dynasty Era deck on /core's league Home (components/core-app/screens/DynastyHomeDeck.tsx).
+ *
+ * Two grounds on purpose:
+ *   - the ERA BAND is a night scene in every mode — the hall-of-champions art under an ink veil, gold
+ *     on ink. It is the one thing that has to read "dynasty" before anything is read at all, so it does
+ *     not follow light mode, the same call the bracket hub makes for its canvas;
+ *   - the CARDS sit on /core's own --surface and --text, so they follow light / dark / AF like every
+ *     other card on the page, and take their gold from --accent, which af-core-dynasty.css re-points to
+ *     the measured gold (dark/AF) or bronze (light).
+ *
+ * Every --dyn-* read carries its fallback, so the deck looks the same outside the shell's stamp.
+ *
+ * ⚠ 11px IS THE TYPE FLOOR (__tests__/core-app/type-floor.test.ts).
+ * ⚠ ONE TOP-LEVEL @media BLOCK PER BAND, NONE NESTED (CLAUDE.md, af-matchup.css 2026-08-30). */
+
+.af-lh-dy{display:flex;flex-direction:column;gap:14px;margin:0 0 18px;min-width:0}
+
+/* ── Era band ───────────────────────────────────────────────────────── */
+.af-lh-dy-hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);align-items:end;gap:20px 28px;min-height:212px;padding:26px 28px 22px;border-radius:18px;overflow:hidden;color:#f6f0e2;
+  background-color:var(--dyn-ink,#0B0F17);
+  background-image:linear-gradient(90deg,rgba(7,9,16,.97) 0%,rgba(7,9,16,.86) 42%,rgba(7,9,16,.45) 78%,rgba(7,9,16,.3) 100%),url('/artwork/dynasty/dynasty-hall-1600.webp');
+  background-size:cover;background-position:center,70% 40%;
+  border:1px solid color-mix(in srgb,var(--dyn-gold,#D4A24C) 38%,transparent);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--dyn-gold,#D4A24C) 30%,transparent),0 18px 40px -24px rgba(0,0,0,.7)}
+/* A gold hairline across the foot of the band, like the trim on the hall's banners. */
+.af-lh-dy-hero::after{content:'';position:absolute;left:28px;right:28px;bottom:0;height:2px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 10%,transparent))}
+
+.af-lh-dy-era{display:flex;align-items:flex-start;gap:16px;min-width:0}
+.af-lh-dy-crest{flex:none;display:inline-grid;place-items:center;width:56px;height:62px;color:var(--dyn-ink,#0B0F17);background:linear-gradient(160deg,#F3D79F,var(--dyn-gold,#D4A24C) 55%,#9A6F22);clip-path:polygon(0 0,100% 0,100% 72%,50% 100%,0 72%);box-shadow:0 6px 18px rgba(212,162,76,.35)}
+.af-lh-dy-era-text{min-width:0}
+.af-lh-dy-eyebrow{margin:0 0 4px;color:var(--dyn-gold-soft,#F3D79F);font:800 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.32em;text-transform:uppercase}
+.af-lh-dy-year{margin:0;color:#fbf5e6;font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:900;font-size:clamp(30px,3.4vw,44px);line-height:1;letter-spacing:-.01em;text-shadow:0 2px 18px rgba(0,0,0,.55)}
+.af-lh-dy-year span{color:var(--dyn-gold-soft,#F3D79F);font-stretch:100%;font-weight:700;font-size:.5em;letter-spacing:0;white-space:nowrap}
+.af-lh-dy-tagline{margin:10px 0 0;max-width:46ch;color:#d9d1bf;font-size:14px;line-height:1.45}
+
+.af-lh-dy-rafters{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0}
+.af-lh-dy-label{color:#cfc6b2;font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.18em;text-transform:uppercase}
+.af-lh-dy-pennants{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin:0;padding:0;list-style:none;max-width:420px}
+/* A hanging banner with a notched foot: gold = the viewer's title, ink-blue = anyone else's. */
+.af-lh-dy-pennant{width:58px;height:86px;box-sizing:border-box;padding-top:12px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;color:#e9edf5;background:linear-gradient(180deg,#26324a,#18213a);box-shadow:inset 0 0 0 1px rgba(243,215,159,.28);clip-path:polygon(0 0,100% 0,100% 100%,50% 84%,0 100%)}
+.af-lh-dy-pennant[data-mine=true]{color:var(--dyn-ink,#0B0F17);background:linear-gradient(180deg,#F3D79F,var(--dyn-gold,#D4A24C))}
+.af-lh-dy-pennant[data-open=true]{color:#cfc6b2;background:rgba(7,9,16,.55);box-shadow:inset 0 0 0 1px rgba(243,215,159,.5)}
+.af-lh-dy-pennant-year{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:800;font-size:15px;line-height:1}
+.af-lh-dy-pennant-name{max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.15;font-weight:600}
+.af-lh-dy-titles{display:inline-flex;align-items:center;gap:6px;color:#d9d1bf;font-size:13px;font-weight:600}
+.af-lh-dy-titles[data-mine=true]{color:var(--dyn-gold-soft,#F3D79F)}
+.af-lh-dy-titles svg{color:var(--dyn-gold,#D4A24C)}
+
+/* ── Cards ──────────────────────────────────────────────────────────── */
+.af-lh-dy-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr);gap:14px}
+.af-lh-dy-card{position:relative;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px 18px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line2);overflow:hidden}
+.af-lh-dy-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 20%,transparent))}
+.af-lh-dy-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.af-lh-dy-card-head h3{margin:0;color:var(--accent);font:800 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.16em;text-transform:uppercase}
+.af-lh-dy-card-head a{flex:none;color:var(--text2);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+.af-lh-dy-card-head a:hover{color:var(--accent)}
+.af-lh-dy-card-head a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.af-lh-dy-big{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0;color:var(--muted);font-size:13px}
+.af-lh-dy-big strong{color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:900;font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.af-lh-dy-big em{font-style:normal;color:var(--accent);font-weight:700}
+
+/* Draft capital: one row per draft, round chips; a first-rounder is filled gold. */
+.af-lh-dy-drafts{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.af-lh-dy-drafts li{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:start;gap:10px}
+.af-lh-dy-draft-year{padding-top:6px;color:var(--text2);font:700 13px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-lh-dy-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.af-lh-dy-chip{display:inline-flex;flex-direction:column;justify-content:center;min-height:28px;padding:4px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2);color:var(--text2);font:800 12px/1.15 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.03em;text-transform:uppercase;max-width:100%}
+.af-lh-dy-chip small{color:var(--muted);font:600 11px/1.2 system-ui,sans-serif;letter-spacing:0;text-transform:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+.af-lh-dy-chip[data-round="1"]{border-color:var(--dyn-gold,#D4A24C);background:var(--accent-soft);color:var(--accent)}
+
+/* Roster age: the median on a 21–33 scale; the band runs rising → prime → veteran in colour only. */
+.af-lh-dy-gauge{position:relative;height:30px;margin:2px 2px 0}
+.af-lh-dy-gauge-bar{position:absolute;left:0;right:0;top:4px;height:8px;border-radius:999px;background:linear-gradient(90deg,#2DD4BF 0%,#2DD4BF 22%,#D4A24C 45%,#D4A24C 62%,#F07A4A 85%,#F07A4A 100%);opacity:.85}
+.af-lh-dy-gauge-mark{position:absolute;top:0;width:16px;height:16px;border-radius:50%;transform:translateX(-50%);background:var(--surface);border:4px solid var(--text);box-shadow:0 1px 6px rgba(0,0,0,.35)}
+.af-lh-dy-gauge-tick{position:absolute;top:17px;transform:translateX(-50%);color:var(--faint);font:600 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace)}
+.af-lh-dy-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0}
+.af-lh-dy-stats div{display:flex;flex-direction:column-reverse;gap:2px;padding:8px 10px;border-radius:10px;background:var(--surface2)}
+.af-lh-dy-stats dt{color:var(--muted);font-size:12px;line-height:1.3}
+.af-lh-dy-stats dd{margin:0;color:var(--text);font:900 22px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-variant-numeric:tabular-nums}
+
+/* Taxi squad: one slot per allowed stash; gold = filled. */
+.af-lh-dy-slots{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.af-lh-dy-slots li{width:34px;height:44px;border-radius:8px;border:1.5px dashed var(--line2);background:transparent}
+.af-lh-dy-slots li[data-filled=true]{border:1.5px solid var(--dyn-gold,#D4A24C);background:linear-gradient(180deg,var(--accent-soft),transparent)}
+.af-lh-dy-note{margin:auto 0 0;color:var(--muted);font-size:12px;line-height:1.4}
+
+/* Young core teal, aging ember — light mode gets darker inks measured on --surface2; the era band is
+ * unchanged by design. */
+.af-lh-dy-stats dd[data-tone=young]{color:#5eead4}
+.af-lh-dy-stats dd[data-tone=aging]{color:#f6a27f}
+html[data-mode='light'] .af-lh-dy-stats dd[data-tone=young]{color:#0f766e}
+html[data-mode='light'] .af-lh-dy-stats dd[data-tone=aging]{color:#b4441a}
+
+@media (max-width:1100px){
+  /* Tablet: capital across the top, age and taxi side by side under it. */
+  .af-lh-dy-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .af-lh-dy-grid>[data-testid=dynasty-home-capital]{grid-column:1/-1}
+}
+
+@media (max-width:720px){
+  /* Phone: the band stacks (era, then rafters, left-aligned) and the veil runs top-to-bottom so the
+   * hall shows behind the pennants; the cards are one column. */
+  .af-lh-dy-hero{grid-template-columns:minmax(0,1fr);min-height:0;padding:20px 16px 18px;border-radius:14px;
+    background-image:linear-gradient(180deg,rgba(7,9,16,.95) 0%,rgba(7,9,16,.82) 55%,rgba(7,9,16,.6) 100%),url('/artwork/dynasty/dynasty-hall-900.webp');background-position:center,72% 40%}
+  .af-lh-dy-hero::after{left:16px;right:16px}
+  .af-lh-dy-crest{width:46px;height:52px}
+  .af-lh-dy-crest svg{width:22px;height:22px}
+  .af-lh-dy-tagline{font-size:13px}
+  .af-lh-dy-rafters{align-items:flex-start}
+  .af-lh-dy-pennants{justify-content:flex-start;max-width:none}
+  .af-lh-dy-pennant{width:52px;height:78px}
+  .af-lh-dy-grid{grid-template-columns:minmax(0,1fr)}
+  .af-lh-dy-card{padding:14px 14px}
+  .af-lh-dy-big strong{font-size:30px}
+}

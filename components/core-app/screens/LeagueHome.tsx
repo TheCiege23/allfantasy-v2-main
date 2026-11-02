@@ -22,6 +22,7 @@ import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
 import { RedraftHomeDeck } from './RedraftHomeDeck'
+import { DynastyHomeDeck } from './DynastyHomeDeck'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
@@ -571,7 +572,7 @@ export function LeagueHome({
   const kpis = buildHomeKpis(data)
 
   return (
-    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined}>
+    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined} data-dynasty={data.dynasty ? 'true' : undefined}>
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
         <div className="af-lh-ident">
@@ -583,8 +584,9 @@ export function LeagueHome({
               </span>
             )}
             {/* A redraft deck names the format and season in its own chip ("Redraft · 2026"); saying it twice is noise. */}
-            {league.format && !data.redraft ? <span>{league.format}</span> : null}
-            {league.season && !data.redraft ? <span className="af-num">{league.season}</span> : null}
+            {/* So does the dynasty deck's era band ("Year 5 · 2026 season"). */}
+            {league.format && !data.redraft && !data.dynasty ? <span>{league.format}</span> : null}
+            {league.season && !data.redraft && !data.dynasty ? <span className="af-num">{league.season}</span> : null}
             {/* Record, rank and the trade deadline live in the KPI row below; the header does not repeat them. */}
             {data.yourTeam.available && !kpis.record ? (
               <>
@@ -621,6 +623,9 @@ export function LeagueHome({
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
       {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+
+      {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
+      {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
 
       <HomeKpiRow data={data} tradeDeadline={tradeDeadline} />
 
