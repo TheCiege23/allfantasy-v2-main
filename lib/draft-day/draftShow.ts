@@ -136,6 +136,16 @@ export type ShowProgress = {
   nextInMs: number | null
 }
 
+/** Never expose a viewer's pick before that entry has appeared in the shared reveal. */
+export function viewerShowEntry(show: DraftShow, revealed: number, rosterId: string | null | undefined):
+  | { state: 'waiting' }
+  | { state: 'revealed'; entry: ShowEntry }
+  | null {
+  if (!rosterId || !show.entries.some((entry) => entry.rosterId === rosterId)) return null
+  const entry = show.entries.slice(0, Math.max(0, revealed)).find((row) => row.rosterId === rosterId)
+  return entry ? { state: 'revealed', entry } : { state: 'waiting' }
+}
+
 export function progress(show: DraftShow, now: number): ShowProgress {
   const step = PACE_MS[show.pace]
   const n = show.entries.length
