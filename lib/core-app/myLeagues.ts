@@ -6,6 +6,7 @@ import type { LeagueAudience } from '@/lib/league-privacy/leagueAudience'
 import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { prisma } from '@/lib/prisma'
 import { getDash34Data, type Dash34LeagueRow } from './dash34'
 import { getRailMatchups } from './railMatchups'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
@@ -78,6 +79,11 @@ export type MyLeaguesLeague = Dash34League & {
   /** Real `League.isDynasty` — drives the Dynasty chip, which the handoff counts. */
   isDynasty: boolean
   isCommissioner: boolean
+  leagueType?: string | null
+  viewerWins?: number | null
+  viewerLosses?: number | null
+  viewerTies?: number | null
+  viewerPlayoffOdds?: number | null
   /** The single most specific blocking cause, already phrased by the 34a chip builder. */
   reason: string | null
   /** Public or private for a league made here; null for a league on another platform. */
@@ -109,6 +115,10 @@ export type MyLeaguesData = {
 
 type RawRow = Dash34LeagueRow & {
   season?: number | string | null
+  viewerTeamExternalId?: string | null
+  viewerWins?: number | null
+  viewerLosses?: number | null
+  viewerTies?: number | null
   /** Set by exactly one producer — the AF Legacy board. The live/history discriminator. */
   isLegacyBoardItem?: boolean | null
 }
@@ -182,10 +192,24 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const played = rows.filter((r) => r.isLegacyBoardItem !== true)
   const legacy = rows.filter((r) => r.isLegacyBoardItem === true)
 
-  const [dash, matchups] = await Promise.all([
+  const forecastIds = [...new Set(played
+    .filter((row) => row.viewerTeamExternalId)
+    .map((row) => String(row.platformLeagueId || row.id)))]
+
+  const [dash, matchups, forecastRows] = await Promise.all([
     getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null),
     getRailMatchups(userId, played).catch(() => null),
+    forecastIds.length
+      ? prisma.seasonForecastSnapshot.findMany({
+          where: { leagueId: { in: forecastIds } },
+          distinct: ['leagueId'],
+          orderBy: [{ leagueId: 'asc' }, { season: 'desc' }, { week: 'desc' }],
+          select: { leagueId: true, season: true, teamForecasts: true },
+        }).catch(() => [])
+      : Promise.resolve([]),
   ])
+
+  const forecastByLeagueId = new Map(forecastRows.map((row) => [row.leagueId, row]))
 
   const rowById = new Map<string, RawRow>()
   for (const r of played) rowById.set(r.id, r)
@@ -199,6 +223,13 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const leagues: MyLeaguesLeague[] = ranked.map((l) => {
     const row = rowById.get(l.id)
     const matchup = matchups?.byLeague[l.id]
+    const forecast = row ? forecastByLeagueId.get(String(row.platformLeagueId || row.id)) : null
+    const teamForecast = forecast && Number(row?.season) === forecast.season && Array.isArray(forecast.teamForecasts)
+      ? forecast.teamForecasts.find((item) => item && typeof item === 'object' &&
+          String((item as { teamId?: unknown }).teamId) === row?.viewerTeamExternalId)
+      : null
+    const rawOdds = teamForecast && typeof teamForecast === 'object'
+      ? (teamForecast as { playoffProbability?: unknown }).playoffProbability : null
     return {
       ...l,
       matchupNote: matchup
@@ -207,6 +238,12 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
       tier: tierOf(l),
       isDynasty: Boolean(row?.isDynasty),
       isCommissioner: Boolean(row?.isCommissioner),
+      leagueType: row?.leagueType ?? null,
+      viewerWins: row?.viewerWins ?? null,
+      viewerLosses: row?.viewerLosses ?? null,
+      viewerTies: row?.viewerTies ?? null,
+      viewerPlayoffOdds: typeof rawOdds === 'number' && Number.isFinite(rawOdds) && rawOdds >= 0 && rawOdds <= 100
+        ? rawOdds : null,
       reason: reasonOf(l),
     }
   })

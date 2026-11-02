@@ -107,4 +107,28 @@ describe('My Leagues sport tabs', () => {
     renderList([league('a', 'NFL'), league('b', 'NFL')])
     expect(screen.queryByRole('group', { name: 'Filter by sport' })).toBeNull()
   })
+
+  it('switches from urgency tiers to a global name order only when selected', () => {
+    window.localStorage.removeItem('af-league-sort-mode')
+    renderList([
+      league('z', 'NFL', { tier: 'needs' }),
+      league('m', 'NHL', { tier: 'playing' }),
+      league('a', 'NBA', { tier: 'quiet' }),
+    ])
+    expect(cardNames()).toEqual(['League z', 'League m', 'League a'])
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort leagues' }), {
+      target: { value: 'name-asc' },
+    })
+
+    expect(cardNames()).toEqual(['League a', 'League m', 'League z'])
+    expect(window.localStorage.getItem('af-league-sort-mode')).toBe('name-asc')
+    window.localStorage.removeItem('af-league-sort-mode')
+  })
+
+  it('does not offer record sorting until real results exist', () => {
+    renderList([league('a', 'NFL')])
+    const option = screen.getByRole('option', { name: /Highest win percentage/ }) as HTMLOptionElement
+    expect(option.disabled).toBe(true)
+  })
 })
