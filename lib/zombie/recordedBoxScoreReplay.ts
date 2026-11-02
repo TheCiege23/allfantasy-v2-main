@@ -34,7 +34,7 @@ export function normalizeRecordedBox(sport: string, raw: unknown) {
   return normalizer(raw)
 }
 export function replayPositions(raw: string | null, sport: string): string[] {
-  const aliases: Record<string, string> = { GOALKEEPER: 'GKP', GK: 'GKP', DEFENDER: 'DEF', MIDFIELDER: 'MID', FORWARD: sport === 'SOCCER' ? 'FWD' : 'F', 'LEFT WING': 'LW', 'RIGHT WING': 'RW', CENTER: 'C', CENTRE: 'C', DEFENSE: 'D', GOALIE: 'G' }
+  const aliases: Record<string, string> = { GOALKEEPER: 'GKP', GK: 'GKP', DEFENDER: 'DEF', MIDFIELDER: 'MID', GUARD: 'G', FORWARD: sport === 'SOCCER' ? 'FWD' : 'F', 'LEFT WING': 'LW', 'RIGHT WING': 'RW', CENTER: 'C', CENTRE: 'C', DEFENSE: 'D', GOALIE: 'G' }
   return [...new Set(String(raw ?? '').toUpperCase().split(/[\/,;]+/).map(p => aliases[p.trim()] ?? normalizeToken(p)).filter(Boolean))]
 }
 export function replayBoxScores(sport: string, rows: readonly RecordedBox[], windows: readonly ReplayWindow[], asOf: string) {

@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { getLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { describe, expect, it } from 'vitest'
 import { replayBoxScores, replayRosterModel, replayPositions, type RecordedBox, type ReplayPlayer } from '@/lib/zombie/recordedBoxScoreReplay'
 import { resolveFormatRosterDefaults } from '@/lib/league/roster-defaults'
@@ -90,4 +93,23 @@ describe('recorded box-score replay uses authoritative per-sport scoring', () =>
     expect(data.diagnostics.exclusions.identity_unresolved_for_roster).toBe(1)
   })
 
+})
+it('creates a five-starter NCAAB Zombie roster and validates recorded guard and forward positions', () => {
+  const { rosterSettings, draftSettings } = getLeagueDefaults({ sport: 'NCAAB', format: 'zombie', draftType: 'snake', managerCount: 20 })
+  expect(rosterSettings.starter_slots).toEqual({ G: 2, F: 2, C: 1 })
+  expect(rosterSettings.totalRosterSlots).toBe(8)
+  expect(draftSettings.rounds).toBe(8)
+  const rosterConfig = resolveRedraftRosterConfig('NCAAB', { roster: rosterSettings })
+  const players = [
+    ['G', 'G'], ['SG', 'G'], ['F', 'F'], ['PF', 'F'], ['C', 'C'],
+  ].map(([position, slotType], index) => ({
+    playerId: String(index), playerName: String(index), position, slotType, sport: 'NCAAB',
+  }))
+  const args = { sport: 'NCAAB', week: 1, players, rosterConfig }
+  expect(validateRedraftLineup(args).ok).toBe(true)
+  expect(validateRedraftLineup({
+    ...args, players: [{ ...players[0], position: 'F' }, ...players.slice(1)],
+  }).ok).toBe(false)
+  expect(resolveFormatRosterDefaults({ sport: 'NBA', formatId: 'zombie' }).starterSlots)
+    .toEqual({ PG: 1, SG: 1, SF: 1, PF: 1, C: 1 })
 })
