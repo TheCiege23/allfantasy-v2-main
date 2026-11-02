@@ -62,7 +62,7 @@ export default function CupStandingsRail({ groups, series, sport, teamLogos }: C
 
   const road = selected ? (() => {
     const s = selected.status
-    const through = ["won_group", "clinched_group", "wild_card"].includes(s)
+    const through = ["won_group", "clinched_group", "wild_card", "qualified"].includes(s)
     const out = s === "eliminated"
     const seed = seeds.find((slot) => slot.team === selected.team)
     const qfRow = knockout("cup_quarterfinals").find((r) => r.homeTeamName === selected.team || r.awayTeamName === selected.team)
@@ -191,7 +191,9 @@ export default function CupStandingsRail({ groups, series, sport, teamLogos }: C
             })}
             <p className="af-cup-note">1 v 4 and 2 v 3. The higher seed hosts. Knockout picks open when the matchups are confirmed.</p>
           </>
-        ) : <p className="af-cup-note">Projections start after the first group games are final.</p>}
+        ) : <p className="af-cup-note">{groups.some((g) => g.conference === conference && g.teams.some((row) => row.status === "qualified"))
+          ? "Confirmed matchups appear in the knockout bracket."
+          : "Projections start after the first group games are final."}</p>}
       </section>
     </>
   )

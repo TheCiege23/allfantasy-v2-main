@@ -64,6 +64,17 @@ function row(home: string, away: string, opts: Partial<PlayoffSeriesView> & { hs
 
 const A = ["Atlanta Hawks", "Boston Celtics", "Charlotte Hornets", "Chicago Bulls", "Washington Wizards"]
 const B = ["Brooklyn Nets", "Miami Heat", "New York Knicks", "Orlando Magic", "Toronto Raptors"]
+const C = ["Cleveland Cavaliers", "Detroit Pistons", "Indiana Pacers", "Milwaukee Bucks", "Philadelphia 76ers"]
+
+function finalGroup(teams: string[], margin: number, runnerWinsThree = false): PlayoffSeriesView[] {
+  const games: PlayoffSeriesView[] = []
+  for (let i = 0; i < teams.length; i++) for (let j = i + 1; j < teams.length; j++) {
+    // The winner goes 4-0. Other groups' runner-up ceiling is 2 wins.
+    const homeWins = i === 0 || runnerWinsThree || !(i === 1 && j === 3)
+    games.push(row(teams[i], teams[j], { hs: homeWins ? 100 + margin : 100, as: homeWins ? 100 : 100 + margin }))
+  }
+  return games
+}
 
 describe("NBA Cup group standings", () => {
   it("recovers each group from who plays whom and ranks by record", () => {
@@ -130,24 +141,71 @@ describe("NBA Cup group standings", () => {
   })
 
   it("settles the wild card and eliminations once every group in the conference is final", () => {
-    const all: PlayoffSeriesView[] = []
-    for (const teams of [A, B]) {
-      for (let i = 0; i < teams.length; i++) for (let j = i + 1; j < teams.length; j++) {
-        all.push(row(teams[i], teams[j], { hs: 100 + (teams === B && i === 1 ? 20 : 5), as: 100 }))
-      }
-    }
+    const all = [...finalGroup(A, 5, true), ...finalGroup(B, 10), ...finalGroup(C, 15)]
     const groups = buildNbaCupGroups(all)
     expect(groups.every((g) => g.complete)).toBe(true)
-    expect(groups.map((g) => g.teams[0].status)).toEqual(["won_group", "won_group"])
+    expect(groups.map((g) => g.teams[0].status)).toEqual(["won_group", "won_group", "won_group"])
     const wild = wildCardRace(groups, "east")[0]
     const statuses = groups.flatMap((g) => g.teams.slice(1).map((t) => t.status))
     expect(statuses.filter((s) => s === "wild_card")).toHaveLength(1)
-    expect(statuses.filter((s) => s === "eliminated")).toHaveLength(7)
+    expect(statuses.filter((s) => s === "eliminated")).toHaveLength(11)
     expect(groups.flatMap((g) => g.teams).find((t) => t.status === "wild_card")?.team).toBe(wild.team)
     const seeds = projectedQuarterfinalSeeds(groups, "east")
-    expect(seeds.map((s) => s.seed)).toEqual([1, 2, 3])
+    expect(seeds.map((s) => s.seed)).toEqual([1, 2, 3, 4])
     expect(seeds.every((s) => s.confirmed)).toBe(true)
-    expect(seeds[2]).toMatchObject({ team: wild.team, how: "Wild card" })
+    expect(seeds[3]).toMatchObject({ team: wild.team, how: "Wild card" })
+  })
+
+  it("keeps a downloaded single final provisional with three group results still unknown", () => {
+    const groups = buildNbaCupGroups([row(A[0], A[1], { hs: 110, as: 105 })])
+    expect(groups[0]).toMatchObject({scheduleComplete:false,complete:false})
+    expect(groups[0].teams.every((team) => team.status === "schedule_pending" && team.remaining === 3)).toBe(true)
+    expect(groups[0].teams[0].path).toMatch(/not confirmed/)
+    expect(projectedQuarterfinalSeeds(groups,"east").every((slot) => !slot.confirmed)).toBe(true)
+  })
+
+  it("does not clinch or finish a five-team group with a missing or duplicate matchup", () => {
+    const complete = finalGroup(A,5,true)
+    for (const games of [complete.slice(0,-1), [...complete.slice(0,-1), {...complete[0],id:"duplicate"}]]) {
+      const group = buildNbaCupGroups(games)[0]
+      expect(group.scheduleComplete).toBe(false)
+      expect(group.complete).toBe(false)
+      expect(group.teams.every((team) => team.status === "schedule_pending")).toBe(true)
+    }
+  })
+
+  it("waits for all three groups before confirming a wild card or elimination", () => {
+    const groups = buildNbaCupGroups([...finalGroup(A,5,true),...finalGroup(B,10)])
+    expect(groups.every((group) => group.complete)).toBe(true)
+    expect(groups.flatMap((group) => group.teams).some((team) => ["wild_card","eliminated"].includes(team.status))).toBe(false)
+    expect(projectedQuarterfinalSeeds(groups,"east").every((slot) => !slot.confirmed)).toBe(true)
+  })
+
+  it("does not turn an unresolved wildcard record tie into an alphabetical qualifier", () => {
+    const groups = buildNbaCupGroups([...finalGroup(A,5,true),...finalGroup(B,10,true),...finalGroup(C,15,true)])
+    expect(groups.flatMap((group) => group.teams).filter((team) => team.status === "wild_card")).toEqual([])
+    expect(wildCardRace(groups,"east").every((team) => team.status === "tiebreak_pending")).toBe(true)
+    expect(projectedQuarterfinalSeeds(groups,"east").every((slot) => !slot.confirmed)).toBe(true)
+  })
+
+  it("uses an actual quarterfinal participant without projecting a replacement field", () => {
+    const groupGame = row(A[0],A[1],{hs:110,as:105})
+    const confirmed = row(A[0],B[0],{round:"cup_quarterfinals"})
+    const groups = buildNbaCupGroups([groupGame,confirmed])
+    expect(groups[0].teams.find((team) => team.team === A[0])).toMatchObject({status:"qualified",statusLabel:"Qualified"})
+    expect(groups[0].teams.find((team) => team.team === A[1])!.status).toBe("schedule_pending")
+    expect(projectedQuarterfinalSeeds(groups,"east")).toEqual([])
+  })
+  it("does not qualify an alphabetically displayed leader from a multi-team record tie", () => {
+    const games:PlayoffSeriesView[]=[]
+    for(let i=0;i<5;i++) for(let j=i+1;j<5;j++) {
+      const homeWins=(j-i)%5<=2
+      games.push(row(A[i],A[j],{hs:homeWins?110:100,as:homeWins?100:110}))
+    }
+    const groups=buildNbaCupGroups(games)
+    expect(groups[0].complete).toBe(true)
+    expect(groups[0].teams.every((team) => team.wins===2&&team.status==="tiebreak_pending")).toBe(true)
+    expect(projectedQuarterfinalSeeds(groups,"east").every((slot) => !slot.confirmed)).toBe(true)
   })
 
   it("projects nothing before a single conference game is final", () => {
