@@ -70,7 +70,8 @@ jobs:
       # No dependencies: the script uses only global fetch and git.
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Pinned literally: the sparse checkout above has no .nvmrc. Keep in step with .nvmrc.
+          node-version: '24'
       - name: Deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_DEPLOY_TOKEN }}

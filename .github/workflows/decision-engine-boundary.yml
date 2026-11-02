@@ -42,7 +42,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       # No `npm ci` on purpose. scripts/check-decision-engine-boundary.mjs imports node:fs,
       # node:path and node:child_process and nothing else, so an install would buy nothing and
