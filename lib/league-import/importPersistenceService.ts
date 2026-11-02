@@ -523,26 +523,49 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
     leagueId: input.leagueId,
   })
 
-  await deleteFailedImportRunIfPresent(idempotencyKey)
-
   const existingRun = await prisma.importRun.findUnique({ where: { idempotencyKey } })
   if (existingRun?.status === 'completed') {
     return { runId: existingRun.id }
   }
 
-  const run = await prisma.importRun.create({
-    data: {
-      userId: input.userId,
-      leagueId: input.leagueId,
-      provider: input.provider,
-      sourceLeagueId: input.normalized.source.source_league_id,
-      season: seasonYear,
-      status: 'running',
-      idempotencyKey,
-      rawPayloadHash: hashPayload(input.normalized),
-      canonicalSummary: input.canonical as object,
-    },
-  })
+  let run: Awaited<ReturnType<typeof createImportRun>>
+  if (existingRun) {
+    const staleRunning = existingRun.status === 'running' &&
+      existingRun.startedAt.getTime() < Date.now() - STALE_IMPORT_RUN_MS
+    if (existingRun.status !== 'failed' && !staleRunning) {
+      throw new ImportRunInFlightError(
+        'This import is already in progress from another request. Please wait a moment and try again.'
+      )
+    }
+    const claimed = await prisma.importRun.updateMany({
+      where: { id: existingRun.id, status: existingRun.status, startedAt: existingRun.startedAt },
+      data: {
+        status: 'running', startedAt: new Date(), completedAt: null, error: null,
+        rawPayloadHash: hashPayload(input.normalized),
+        canonicalSummary: input.canonical as object,
+      },
+    })
+    if (claimed.count !== 1) {
+      throw new ImportRunInFlightError(
+        'This import is already in progress from another request. Please wait a moment and try again.'
+      )
+    }
+    run = await prisma.importRun.findUniqueOrThrow({ where: { id: existingRun.id } })
+  } else {
+    run = await prisma.importRun.create({
+      data: {
+        userId: input.userId,
+        leagueId: input.leagueId,
+        provider: input.provider,
+        sourceLeagueId: input.normalized.source.source_league_id,
+        season: seasonYear,
+        status: 'running',
+        idempotencyKey,
+        rawPayloadHash: hashPayload(input.normalized),
+        canonicalSummary: input.canonical as object,
+      },
+    })
+  }
 
   /* Same reasoning as the fresh-import path: opened before any work, so a crash
      leaves a `running` attempt rather than no record that it happened. */

@@ -182,6 +182,27 @@ describe('import persistence batching', () => {
     expect(h.importRunCreate).not.toHaveBeenCalled()
   })
 
+  it('reuses a failed audit row when importing into an existing league', async () => {
+    h.importRunFindUnique.mockResolvedValue({
+      id: 'run-1', status: 'failed', leagueId: 'league-1', startedAt: new Date(),
+    })
+
+    await recordCanonicalImportAuditForExistingLeague({
+      userId: 'owner', leagueId: 'league-1', provider: 'fantrax',
+      normalized: {
+        source: { source_league_id: 'existing-league' },
+        league: { season: 2026 }, identity_mappings: [],
+      } as never,
+      canonical: { warnings: [], reviewRequired: false, reviewReasons: [] } as never,
+    })
+
+    expect(h.importRunUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'failed' }),
+      data: expect.objectContaining({ status: 'running' }),
+    }))
+    expect(h.importRunCreate).not.toHaveBeenCalled()
+  })
+
   it('keeps an active import locked even for force retries', async () => {
     h.importRunFindUnique.mockResolvedValue({
       id: 'run-1', status: 'running', leagueId: null, startedAt: new Date(),
