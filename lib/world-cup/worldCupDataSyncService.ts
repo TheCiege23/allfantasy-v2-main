@@ -1,6 +1,7 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
+import { dispatchNotification } from "@/lib/notifications/NotificationDispatcher"
 import { recordProviderSync } from "@/lib/provider-sync-logger"
 import { recalculateWorldCupChallenge } from "./worldCupScoringService"
 import {
@@ -1349,22 +1350,17 @@ async function notifyWorldCupInjuryAffectedPicks(input: {
   for (const entry of entries) {
     const recipients = Array.from(new Set([entry.userId, entry.challenge?.ownerUserId].filter(Boolean))) as string[]
     for (const userId of recipients) {
+      const title = `World Cup injury update: ${input.injury.playerName}`
+      const body = `${input.injury.playerName} (${teamName}) is listed as ${input.injury.status}. This may affect picks in ${entry.challenge?.name ?? "your World Cup pool"}.`
+      const sourceKeyPrefix = ["world-cup-injury", input.sourceProvider, input.injury.providerPlayerId, input.injury.status, input.reportDate.toISOString().slice(0, 10), entry.challengeId].join(":")
       const wasCreated = await createPlatformNotification({
         userId,
         productType: "bracket",
         type: "world_cup_injury_update",
-        title: `World Cup injury update: ${input.injury.playerName}`,
-        body: `${input.injury.playerName} (${teamName}) is listed as ${input.injury.status}. This may affect picks in ${entry.challenge?.name ?? "your World Cup pool"}.`,
+        title,
+        body,
         severity: "medium",
-        sourceKey: [
-          "world-cup-injury",
-          input.sourceProvider,
-          input.injury.providerPlayerId,
-          input.injury.status,
-          input.reportDate.toISOString().slice(0, 10),
-          entry.challengeId,
-          userId,
-        ].join(":"),
+        sourceKey: `${sourceKeyPrefix}:${userId}`,
         meta: {
           challengeId: entry.challengeId,
           entryId: entry.id,
@@ -1376,7 +1372,19 @@ async function notifyWorldCupInjuryAffectedPicks(input: {
           sourceProvider: input.sourceProvider,
         },
       })
-      if (wasCreated) created++
+      if (wasCreated) {
+        created++
+        try {
+          await dispatchNotification({
+            userIds: [userId], category: "bracket_updates", productType: "bracket", type: "world_cup_injury_update",
+            title, body, severity: "medium", actionHref: `/brackets/world-cup/${encodeURIComponent(entry.challengeId)}`,
+            dedupePrefix: sourceKeyPrefix, skipChannels: { inApp: true, email: true, sms: true },
+            meta: { challengeId: entry.challengeId, entryId: entry.id, playerName: input.injury.playerName },
+          })
+        } catch {
+          console.warn("[WorldCupDataSync] injury push dispatch failed")
+        }
+      }
     }
   }
 

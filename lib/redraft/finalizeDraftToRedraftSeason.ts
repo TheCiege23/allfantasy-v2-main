@@ -1,3 +1,4 @@
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
@@ -176,6 +177,7 @@ export async function ensureRedraftSeason(leagueId: string) {
       playoffTeams: true,
       playoffWeeksPerRound: true,
       leagueType: true,
+      leagueVariant: true,
       dynastyConfig: { select: { regularSeasonWeeks: true } },
       bbContestId: true,
       bestBallMode: true,
@@ -201,7 +203,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)

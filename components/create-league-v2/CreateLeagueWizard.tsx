@@ -2,6 +2,7 @@
 
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
+import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
@@ -246,7 +247,9 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     idpSelected: false,
     scoringPresetId,
     draftType,
-    teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+    teamCount: leagueType === 'zombie' && getEffectiveLeagueType(state) !== 'zombie'
+      ? getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)
+      : getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
     ...(leagueType === 'survivor' ? { survivorTribeCount: chooseSurvivorTribeCount(
       getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
@@ -998,6 +1001,10 @@ export function LeagueBasicsStep({
           </div>
           <p className="text-xs leading-5 text-[color:var(--text-secondary)]">Exile Island is on by default. Fill every cast seat with a unique manager before starting the draft.</p>
         </div>
+      ) : null}
+
+      {getEffectiveLeagueType(state) === 'zombie' ? (
+        <ZombieCreationOptions state={state} onChange={onChange} importCarryover={importCarryover} />
       ) : null}
 
       <div className="space-y-2">

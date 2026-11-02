@@ -1,3 +1,4 @@
+import { zombieCreationLeagueCount } from '@/lib/zombie/creationPolicy'
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
@@ -215,6 +216,17 @@ export function validateCreatePayload(
   }
 
   const formatId = normalized.formatId
+  if (formatId === 'zombie') {
+    try { zombieCreationLeagueCount(data.conceptSetup) } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid Zombie league count.'
+      return { ok: false, status: 400, error: message,
+        errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] }
+    }
+  } else if (data.conceptSetup?.zombieLeagueCount != null && data.conceptSetup.zombieLeagueCount !== 1) {
+    const message = 'Multiple leagues can be created together only for a Zombie universe.'
+    return { ok: false, status: 400, error: message,
+      errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] }
+  }
   if (formatId === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
     return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }

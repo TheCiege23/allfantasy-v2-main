@@ -356,12 +356,13 @@ export async function runLeagueBootstrap(
           : null
 
       await upsertZombieLeagueConfig(leagueId, { whispererSelection, universeId })
-      await createZombieLeague(
+      const attached = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } })
+      if (!attached) await createZombieLeague(
         {
           leagueId,
           name: league?.name ?? null,
           sport: String(leagueSport),
-          teamCount: typeof league?.leagueSize === 'number' ? league.leagueSize : 12,
+          teamCount: typeof league?.leagueSize === 'number' ? league.leagueSize : 20,
           isPaid: false,
           buyInAmount: null,
           whispererSelectionMode: whispererSelection,

@@ -89,15 +89,16 @@ describe("entry checklist and real-time projection",()=>{
     expect(provisionalStandings(v,entries,[{entryId:"mine",seriesId:"live",pickTeamName:"Boston Celtics"}],now).rows.find(r=>r.id==="mine")!.livePoints).toBe(0)
   })
 })
-describe("opt-in alert planning",()=>{
-  it("defaults off, keeps per-pool settings separate and normalizes malformed preferences",()=>{
-    expect(readBracketAlerts(null,"pool").enabled).toBe(false)
-    expect(readBracketAlerts({bracketCoach:{other:{enabled:true}}},"pool").enabled).toBe(false)
+describe("bracket alert planning",()=>{
+  it("defaults on, keeps per-pool opt-outs separate and normalizes malformed preferences",()=>{
+    expect(readBracketAlerts(null,"pool").enabled).toBe(true)
+    expect(readBracketAlerts({bracketCoach:{other:{enabled:false}}},"pool").enabled).toBe(true)
+    expect(readBracketAlerts({bracketCoach:{pool:{enabled:false}}},"pool").enabled).toBe(false)
     expect(readBracketAlerts({bracketCoach:{pool:{enabled:true,leadMinutes:2}}},"pool")).toMatchObject({enabled:true,leadMinutes:30,spoilerSafe:true})
   })
   it("warns about a missing future pick, expires at actual tipoff and deduplicates repeated sweeps",()=>{
     const v=view(), next=advanceScoreSnapshot(null,scoreLedger(v),2,new Date(now).toISOString()), prefs={...defaultBracketAlerts,enabled:true}
-    expect(pendingBracketAlerts(v,defaultBracketAlerts,null,next,now)).toEqual([])
+    expect(pendingBracketAlerts(v,{...defaultBracketAlerts,enabled:false},null,next,now)).toEqual([])
     const alerts=pendingBracketAlerts(v,prefs,null,next,now)
     expect(alerts).toEqual([expect.objectContaining({kind:"missing",seriesId:"future",deadline:v.series[2].startsAt})])
     next.alertKeys=alerts.map(a=>a.key)
