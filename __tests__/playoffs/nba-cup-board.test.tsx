@@ -20,6 +20,23 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("keeps incomplete group finals pending in the standings and tournament phases", () => {
+    const v=view()
+    v.series=v.series.filter((game) => game.id === "past").map((game) => ({...game,liveHomeScore:110,liveAwayScore:105}))
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    const standings=screen.getByTestId("cup-standings")
+    expect(within(standings).getAllByText("Schedule pending")).toHaveLength(2)
+    expect(within(standings).queryByText("Won group")).not.toBeInTheDocument()
+    expect(within(standings).queryByText("Wild card")).not.toBeInTheDocument()
+    expect(screen.getByRole("list",{name:"Tournament phases"}).firstElementChild).toHaveAttribute("data-state","now")
+    expect(screen.getByText(/3 group games left/)).toBeInTheDocument()
+  })
+  it("does not turn an entry's projected knockout picks into confirmed qualifiers", () => {
+    const v=view()
+    v.picks=[{id:"guess",entryId:"entry",seriesId:"s1",pickTeamName:"Boston Celtics",createdAt:"",updatedAt:""}]
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    expect(within(screen.getByTestId("cup-standings")).queryByText("Qualified")).not.toBeInTheDocument()
+  })
   it("explains group-play scoring above both stages using the scorer's points", () => {
     render(<MlbBracketBoard view={view()} onViewChange={() => {}} />)
     const scoring = screen.getByRole("region", { name: "NBA Cup scoring" })

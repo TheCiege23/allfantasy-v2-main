@@ -98,7 +98,7 @@ async function deliverEntryAlerts(view: PlayoffChallengeView, prefs: BracketAler
   if (!result.failed) {
     delivered = result.delivered
     await prisma.$transaction(async tx => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
       const row = await tx.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { data: true } })
       const current = row?.data as StoredSnapshot | null
       if (!current?.version) return
