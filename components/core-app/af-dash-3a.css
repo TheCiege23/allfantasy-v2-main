@@ -786,3 +786,70 @@
 .af-core .af3a-insights > summary span { font-size: 12px; font-weight: 400; color: var(--muted); }
 .af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 @media (max-width: 720px) { .af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 1fr); } }
+
+/*
+ * ── 2026-11-01 home redesign: My leagues as cover cards ──────────────────────
+ *
+ * Scoped to `.af3a-home-leagues` so the same list elsewhere is untouched. Appended last and top-level
+ * (CLAUDE.md on @media nesting). Each card reads its platform from `data-platform` on the link and
+ * tints a band across its top with the platform's own --p-* token, so an ESPN league is findable
+ * among sixty Sleeper ones at a glance — the letter tile alone did not do that at card size.
+ */
+.af-core .af3a-home-leagues .af3a-cardhead .af3a-label {
+  display: inline-block;
+  color: var(--text);
+  font: 900 20px/1.15 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+.af-core .af3a-home-leagues .af3a-cardhead .af3a-label::first-letter { text-transform: uppercase; }
+.af-core .af3a-home-leagues .af3a-leagues {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+.af-core .af3a-home-leagues .af3a-league {
+  --plat-bg: var(--chip);
+  position: relative;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 132px;
+  padding: 14px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.af-core .af3a-home-leagues .af3a-league::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 52px;
+  background: var(--plat-bg);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.af-core .af3a-home-leagues .af3a-league > * { position: relative; }
+.af-core .af3a-home-leagues .af3a-league[data-platform='sleeper'] { --plat-bg: var(--p-sleeper-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='espn'] { --plat-bg: var(--p-espn-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='yahoo'] { --plat-bg: var(--p-yahoo-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='fantrax'] { --plat-bg: var(--p-fantrax-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='mfl'] { --plat-bg: var(--p-mfl-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='fleaflicker'] { --plat-bg: var(--p-fleaflicker-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='manual'] { --plat-bg: var(--p-manual-bg); }
+.af-core .af3a-home-leagues .af3a-league .af3a-tile {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 2px solid var(--surface2);
+  border-radius: 14px;
+}
+.af-core .af3a-home-leagues .af3a-league-body { width: 100%; }
+.af-core .af3a-home-leagues .af3a-league-arrow {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 20px;
+}
+@media (max-width: 720px) {
+  .af-core .af3a-home-leagues .af3a-leagues { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .af-core .af3a-home-leagues .af3a-league { min-height: 120px; padding: 12px; }
+}

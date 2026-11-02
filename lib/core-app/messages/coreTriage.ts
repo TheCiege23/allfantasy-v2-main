@@ -22,6 +22,11 @@ export const coreTriageMessages = defineMessages({
     bestAddSearch: (leagueName: string) => `Find free agents in ${leagueName}`,
     bestAddNone: (leagueName: string) => `No free agent beats your lineup in ${leagueName}`,
     bestAddAdd: (name: string, detail: string, leagueName: string) => `Add ${name} (${detail}) in ${leagueName}`,
+    /* The compact button inside a per-league row: lead + inLeague === the full string above. */
+    bestAddSearchLead: 'Find free agents',
+    bestAddNoneLead: 'No free agent beats your lineup',
+    bestAddAddLead: (name: string, detail: string) => `Add ${name} (${detail})`,
+    bestAddInLeague: (leagueName: string) => ` in ${leagueName}`,
 
     // CommissionerWeeklyPlan
     weeklyPlanTaskSaved: 'Task saved in the Commissioner Hub.',
@@ -105,6 +110,10 @@ export const coreTriageMessages = defineMessages({
     bestAddSearch: (leagueName) => `Buscar agentes libres en ${leagueName}`,
     bestAddNone: (leagueName) => `Ningún agente libre mejora tu alineación en ${leagueName}`,
     bestAddAdd: (name, detail, leagueName) => `Añadir a ${name} (${detail}) en ${leagueName}`,
+    bestAddSearchLead: 'Buscar agentes libres',
+    bestAddNoneLead: 'Ningún agente libre mejora tu alineación',
+    bestAddAddLead: (name, detail) => `Añadir a ${name} (${detail})`,
+    bestAddInLeague: (leagueName) => ` en ${leagueName}`,
 
     weeklyPlanTaskSaved: 'Tarea guardada en el Centro del comisionado.',
     weeklyPlanTaskUnconfirmed: 'No se pudo confirmar la tarea. Reintenta la misma tarea o actualiza la cola.',
