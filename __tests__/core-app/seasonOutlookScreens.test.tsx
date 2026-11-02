@@ -171,6 +171,17 @@ describe('SeasonOutlookLeague', () => {
     expect(hero).not.toContain('Bye weeks')
   })
 
+  it('draws each headline odds card with its own glyph, in the board order, the bye only when the league has one', () => {
+    const { unmount } = render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
+    const icons = () =>
+      Array.from(document.querySelectorAll('.af-olk-hero .af-olk-odds')).map((el) => el.getAttribute('data-icon'))
+    expect(icons()).toEqual(['playoffs', 'bye', 'title', 'miss'])
+    expect(document.querySelectorAll('.af-olk-hero .af-olk-odds-ic svg path')).toHaveLength(4)
+    unmount()
+    render(<SeasonOutlookLeague league={league({ byeTeams: 0 })} swing={swing} basis="10,000 simulations" />)
+    expect(icons()).toEqual(['playoffs', 'title', 'miss'])
+  })
+
   it('shows the milestones first and switches tabs, keeping every tab pointed at a real panel', () => {
     render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
     expect(screen.getByRole('tabpanel').textContent).toContain('6–2')
@@ -245,6 +256,11 @@ describe('SeasonOutlook (cross-league)', () => {
     expect(text).toContain('4th hardest schedule left')
     expect(text).toContain('1 of 1 league runs were reused')
     expect(text).toContain('Old League')
+  })
+
+  it('keeps its odds tiles glyph-free: the icons belong to the league screen only', () => {
+    render(<SeasonOutlook data={slimOutlookForBoard(board)} />)
+    expect(document.querySelectorAll('.af-olk-odds-ic')).toHaveLength(0)
   })
 
   it('links each league to its own outlook', () => {
