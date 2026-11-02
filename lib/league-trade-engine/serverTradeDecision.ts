@@ -5,6 +5,7 @@ import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { loadNhlHistoricalLineups, type NhlHistoricalLineupCoverage } from './nhlHistoricalLineup'
 
 export type ServerTradeParticipantDecision = {
   rosterId: string
@@ -39,6 +40,8 @@ export type ServerTradeDecisionResult = {
    * `trade_decision_snapshots` row, in the proposal's transaction — one receipt per trade, one table.
    */
   evaluationReceipt?: TradeEvaluationReceipt | null
+  lineupBasis?: 'historical_points_per_game'
+  lineupCoverage?: NhlHistoricalLineupCoverage[]
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -119,8 +122,24 @@ export async function evaluateServerTradeDecision(input: {
   gradeProposal?: typeof proposalOneGrade
   /** Injected in tests; defaults to the engine's own dependencies. */
   engineDeps?: Partial<EvaluateTradeDeps>
+  /** Read-only stored NHL actuals; injectable for boundary tests. */
+  historicalNhl?: typeof loadNhlHistoricalLineups
 }): Promise<ServerTradeDecisionResult> {
   const capturedAt = input.capturedAt ?? new Date().toISOString()
+  const historical = await (input.historicalNhl ?? loadNhlHistoricalLineups)({ ...input, capturedAt })
+    .catch(() => null)
+  if (historical) {
+    const reason = 'Market grades withheld: historical NHL lineup evidence does not establish asset values or projections.'
+    return { modelVersion: 'nhl-historical-lineup-v1', capturedAt, scope: 'market',
+      evaluatorSupported: true, reason, lineupBasis: 'historical_points_per_game',
+      lineupCoverage: historical, participants: historical.map((row) => ({ rosterId: row.rosterId,
+        grade: null, gradeWithheld: reason, action: 'review', recommendation: row.reason ?? reason,
+        valueGiven: null, valueReceived: null, valueDelta: null, fairnessScore: null,
+        confidenceScore: 0, coverageStatus: row.status === 'verified' ? 'partial' as const : 'blocked' as const,
+        coveragePct: row.rosterPlayers ? Math.floor(100 * row.scoredPlayers / row.rosterPlayers) : 0,
+        lineupPointsBefore: row.before, lineupPointsAfter: row.after, lineupPointsDelta: row.delta,
+      })) }
+  }
   if (input.participantRosterIds.length !== 2) {
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: false,
