@@ -1,5 +1,5 @@
 {
-  "observedAt": "2026-11-02T21:05:00.159Z",
+  "observedAt": "2026-11-02T21:06:47.133Z",
   "target": "verified-production-read-only",
   "seasons": [
     2025,
@@ -166,6 +166,29 @@
           "qualification": "unverified_finality_and_historical_configuration"
         }
       ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": null,
+          "rows": 40473,
+          "firstGameDate": "2025-09-04T00:00:00.000Z",
+          "lastGameDate": "2026-01-04T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "sleeper",
+          "rows": 10611,
+          "firstGameDate": "2026-10-01T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": null,
+          "rows": 6944,
+          "firstGameDate": "2026-09-09T00:00:00.000Z",
+          "lastGameDate": "2026-09-28T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2025,
@@ -320,6 +343,15 @@
           "qualification": "unverified_finality_and_historical_configuration"
         }
       ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 4763,
+          "firstGameDate": "2026-10-03T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2026,
@@ -417,6 +449,15 @@
       },
       "omittedOtherNflCohorts": 0,
       "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 73744,
+          "firstGameDate": "2026-03-25T00:00:00.000Z",
+          "lastGameDate": "2026-10-28T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2026,
@@ -541,6 +582,15 @@
             "max": 196.5
           },
           "qualification": "unverified_finality_and_historical_configuration"
+        }
+      ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 11511,
+          "firstGameDate": "2026-09-21T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
         }
       ],
       "savedCalendars": [
@@ -704,6 +754,22 @@
           "qualification": "unverified_finality_and_historical_configuration"
         }
       ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "cfbd-weekly",
+          "rows": 46815,
+          "firstGameDate": "2026-09-24T00:00:00.000Z",
+          "lastGameDate": "2026-10-31T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": null,
+          "rows": 33638,
+          "firstGameDate": "2026-08-27T00:00:00.000Z",
+          "lastGameDate": "2026-10-03T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2026,
@@ -811,6 +877,22 @@
       },
       "omittedOtherNflCohorts": 0,
       "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": "rolling_insights_live",
+          "rows": 110640,
+          "firstGameDate": "2025-11-02T00:00:00.000Z",
+          "lastGameDate": "2026-04-06T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 18,
+          "firstGameDate": "2026-11-01T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2025,
@@ -897,6 +979,22 @@
       },
       "omittedOtherNflCohorts": 0,
       "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": "rolling_insights_live",
+          "rows": 35144,
+          "firstGameDate": "2025-08-15T00:00:00.000Z",
+          "lastGameDate": "2026-05-24T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 8063,
+          "firstGameDate": "2026-08-25T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
       "savedCalendars": [
         {
           "season": 2025,

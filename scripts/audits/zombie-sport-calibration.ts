@@ -33,6 +33,7 @@ async function main() {
       const native = await tx.redraftMatchup.findMany({ where: { season: { sport: { in: sports }, season: { in: seasons } }, isMedianMatchup: false, awayRosterId: { not: null }, status: { in: ['final', 'complete', 'completed'] } }, take: 10001,
         select: { leagueId: true, week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, lineupSnapshots: true, season: { select: { sport: true, season: true } }, league: { select: { leagueVariant: true, starters: true, leagueSize: true, scoringPresetId: true } } } })
       if (native.length > 10000) throw new Error('Native row bound exceeded')
+      const rawStatCoverage = await tx.playerGameStat.groupBy({ by: ['sportType', 'season', 'source'], where: { sportType: { in: sports }, season: { in: seasons } }, _count: true, _min: { gameDate: true }, _max: { gameDate: true } })
       const templates = await tx.zombieRulesTemplate.findMany({ select: { sport: true, bashingThreshold: true, maulingThreshold: true, weaponShieldThreshold: true, weaponAmbushThreshold: true } })
       const calendars = await tx.sportsGame.groupBy({ by: ['sport', 'season', 'source'], where: { sport: { in: sports }, season: { in: seasons }, startTime: { not: null } }, _count: true })
       const rows: Record<string, CalibrationRow[]> = Object.fromEntries(sports.map(sport => [sport, []]))
@@ -65,7 +66,7 @@ async function main() {
           omittedOtherNflCohorts: sport === 'NFL' ? [...cohorts.values()].filter(c => c.teamCount !== 20).length : 0, historicalCohorts: [...cohorts.values()].filter(c => sport !== 'NFL' || c.teamCount === 20).map(c => { const inspected = inspectCalibrationRows(c.rows); return { platform: c.platform, seasons: [...c.seasons].sort(), leagues: c.leagues.size, managerCount: c.teamCount, rosterShape: c.starters, inputRows: c.rows.length,
             uniquePairings: inspected.diagnostic.length, duplicateRows: inspected.duplicateRows, conflictingPairings: inspected.reasons.conflicting_pairing ?? 0, unknownZeroPairs: inspected.diagnostic.filter(r => r.scoreA === 0 && r.scoreB === 0).length,
             diagnosticScoreDistribution: scoreDistribution(inspected.diagnostic.flatMap(r => [r.scoreA, r.scoreB])), qualification: 'unverified_finality_and_historical_configuration' } }),
-          savedCalendars: calendars.filter(c => c.sport === sport).map(c => ({ season: c.season, source: c.source, rows: c._count })),
+          rawPlayerGameRows: rawStatCoverage.filter(r => r.sportType === sport).map(r => ({ season: r.season, source: r.source, rows: r._count, firstGameDate: r._min.gameDate, lastGameDate: r._max.gameDate })), savedCalendars: calendars.filter(c => c.sport === sport).map(c => ({ season: c.season, source: c.source, rows: c._count })),
           coverage: calibrationCoverage(rows[sport]) })
       }
       const reference = rows.NFL.filter(r => r.season === 2025)
