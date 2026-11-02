@@ -8,6 +8,7 @@ import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { createContext, Fragment, useContext, useEffect, useId, useState } from 'react'
+import { DynastyAgeKey, DynastyMarkersScope, DynastyRowMarkers } from './DynastyRosterMarkers'
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
@@ -672,6 +673,8 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             team={player.team}
             imageUrl={player.imageUrl}
           />
+          {/* Dynasty leagues only: age on the career arc and ROOKIE (DynastyRosterMarkers.tsx). */}
+          <DynastyRowMarkers sleeperId={player.sleeperId} />
           {/*
             ⚠ BESIDE THE NAME, NOT IN THE META LINE. A bye is the single most
             important fact about a player this week — it is the difference
@@ -1705,6 +1708,7 @@ export function MyTeam({ data }: MyTeamProps) {
     */
     <FantraxCollegeProjectionContext.Provider value={fantraxCollege}>
     <PlayerCardLeagueScope leagueId={data.league.id}>
+    <DynastyMarkersScope markers={data.dynastyMarkers}>
     <div className="af-mt">
       <header className="af-frame af-mt-head">
         {data.team.available ? (
@@ -2075,6 +2079,7 @@ export function MyTeam({ data }: MyTeamProps) {
           <ProjHeader />
         </header>
         <RosterKey />
+        <DynastyAgeKey />
 
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
@@ -2200,6 +2205,7 @@ export function MyTeam({ data }: MyTeamProps) {
       </div>
       </div>
     </div>
+    </DynastyMarkersScope>
     </PlayerCardLeagueScope>
     </FantraxCollegeProjectionContext.Provider>
   )

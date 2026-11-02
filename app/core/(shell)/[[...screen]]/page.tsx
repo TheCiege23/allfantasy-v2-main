@@ -1333,6 +1333,8 @@ export default async function AfCorePage({
    */
   const selectedLeagueRecord = await selectedLeagueRead
   const selectedLeaguePlatform = selectedLeagueRecord?.platform ?? selectedLeagueRow?.platform ?? null
+  /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
+  const dynastyEra = coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)
 
   // The Updates menu's "Fix lineup in <platform> ↗" for an imported league (lib/core-app/shellLineupHandoff.ts).
   const lineupHandoff =
@@ -1624,6 +1626,7 @@ export default async function AfCorePage({
         errorResetKey,
         leagueHeaderShown: showContextBar,
         selectedLeagueRecord,
+        dynastyEra,
         leagueCtx,
         homeScope,
         favoriteIds,
@@ -1667,7 +1670,7 @@ export default async function AfCorePage({
       /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
       redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
       /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
-      dynastyEra={coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)}
+      dynastyEra={dynastyEra}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1952,6 +1955,12 @@ type CoreScreenContext = {
   /** The selected league's row, read once by the shell. Null with no league or on a failed read. */
   selectedLeagueRecord: LeagueDataCoverageRecord | null
   /**
+   * A dynasty `?league=` (lib/core-app/coreShellDynasty.ts), decided once from the list row and the
+   * fresh league record — the shell's gold identity and the Trades draft-capital panel read the same
+   * answer. The record type above carries no format columns, so the screen body cannot recompute it.
+   */
+  dynastyEra: boolean
+  /**
    * The same row, plus the viewer's claimed team, for the screen's loaders — the context the shell
    * read it through, so a loader awaiting it costs no query. Null with no league selected.
    */
@@ -2016,6 +2025,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     errorResetKey,
     leagueHeaderShown,
     selectedLeagueRecord,
+    dynastyEra,
     leagueCtx,
     homeScope,
     favoriteIds,
@@ -4714,6 +4724,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
+              dynasty={dynastyEra}
               sport={tradeLeagueRow?.sport ?? null}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
               leagues={tradeStripLeagues}
