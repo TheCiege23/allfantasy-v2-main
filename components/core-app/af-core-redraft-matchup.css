@@ -67,7 +67,9 @@
 .af-core.af-shell[data-format=redraft] .af-mu-h2h {
   border: 1px solid var(--rd-accent-line);
   border-radius: 20px;
-  background: linear-gradient(90deg, var(--rd-accent-soft), var(--surface) 46%, var(--surface) 54%, var(--rd-accent-soft));
+  /* Over a solid ground: the -soft ends are translucent, and the board is dark in every theme. */
+  background-color: var(--surface);
+  background-image: linear-gradient(90deg, var(--rd-accent-soft), var(--surface) 46%, var(--surface) 54%, var(--rd-accent-soft));
   box-shadow: inset 0 4px 0 var(--rd-accent);
   padding-top: 22px;
 }
@@ -78,9 +80,30 @@
   box-shadow: inset 0 4px 0 var(--text);
 }
 .af-core.af-shell[data-format=redraft] .af-mu-score {
-  font-size: 40px;
+  /* The size is af-matchup.css's, keyed on the matchup's width; the bug only makes it heavier. */
   font-weight: 900;
   letter-spacing: -0.04em;
+}
+
+/*
+ * 🛑 THE SCOREBOARD IS DARK IN EVERY THEME (af-matchup.css), BUT LIGHT MODE'S SPORT ACCENT IS A DARK
+ * INK — #136a3a for the NFL, cut to clear 5:1 on WHITE. On the dark board it would sink. Inside the
+ * board only, light mode lifts the accent toward the board's own white; `--rd-light-base` captures the
+ * sport's value one level up so the board can derive from it without reading its own declaration.
+ */
+html[data-mode='light'] .af-core.af-shell[data-format=redraft] .af-mu {
+  --rd-light-base: var(--rd-accent);
+}
+html[data-mode='light'] .af-core.af-shell[data-format=redraft] .af-mu-h2h {
+  --rd-accent: color-mix(in srgb, var(--rd-light-base) 55%, var(--mu-sb-text));
+  --rd-accent-text: color-mix(in srgb, var(--rd-light-base) 40%, var(--mu-sb-text));
+  --rd-accent-soft: color-mix(in srgb, var(--rd-light-base) 30%, transparent);
+  --rd-accent-line: color-mix(in srgb, var(--rd-light-base) 45%, var(--mu-sb-line));
+}
+
+/* A finished starter wears the bug's small ink "F" below; the generic FINAL chip would say it twice. */
+.af-core.af-shell[data-format=redraft] .af-mu-chip[data-state='final'] {
+  display: none;
 }
 .af-core.af-shell[data-format=redraft] .af-mu-team-name {
   font-weight: 800;
@@ -143,6 +166,13 @@
 }
 .af-core.af-shell[data-format=redraft] .af-mu-board-row {
   background-color: var(--surface);
+}
+/* A slot the redesign tints by position family (af-matchup.css) keeps its tint; only an unknown label
+   wears the sport frame above. */
+.af-core.af-shell[data-format=redraft] .af-mu-slot[data-pos] {
+  border-color: transparent;
+  background: var(--mu-pos-bg);
+  color: var(--mu-pos-fg);
 }
 /* Playing now: a red edge on the player's side of the row, like a broadcast's live tick. */
 .af-core.af-shell[data-format=redraft] .af-mu-half[data-gs='live'][data-align='left'] {
@@ -324,12 +354,5 @@
 @media (max-width: 720px) {
   .af-core.af-shell[data-format=redraft] .af-live-game {
     --rdm-pad: 14px;
-  }
-}
-
-/* The matchup's own container (af-matchup.css names it `af-mu`). */
-@container af-mu (max-width: 560px) {
-  .af-core.af-shell[data-format=redraft] .af-mu-score {
-    font-size: 32px;
   }
 }

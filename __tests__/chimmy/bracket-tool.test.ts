@@ -206,8 +206,10 @@ describe('Chimmy bracket grounding', () => {
       skipChannels: { email: true, sms: true },
     }))
     const delivered = mocks.dispatch.mock.calls[0][0]
-    expect(delivered.meta.bracketChange.changeRef).toMatch(/^[0-9a-f-]{36}$/)
-    expect(decodeURIComponent(delivered.actionHref)).toContain(`Change ref: ${delivered.meta.bracketChange.changeRef}`)
+    expect(delivered.meta.changeRef).toMatch(/^[0-9a-f-]{36}$/)
+    expect(decodeURIComponent(delivered.actionHref)).toContain(`Change ref: ${delivered.meta.changeRef}`)
+    expect(delivered.body).not.toContain('42')
+    expect(delivered.meta.before).toBeUndefined()
   })
 
   it('saves the opt-in without overwriting the user’s other notification settings', async () => {
@@ -264,7 +266,7 @@ describe('Chimmy bracket grounding', () => {
       where: { challengeId: 'playoff-1', finalizedAt: { not: null } },
     }))
     expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      userIds: ['owner-1'], body: 'Boston vs Denver: Boston won; your pick Boston (correct)',
+      userIds: ['owner-1'], body: 'Open Chimmy to see the saved before-and-after result.',
     }))
   })
 

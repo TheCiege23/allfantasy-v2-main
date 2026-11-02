@@ -167,9 +167,10 @@ export async function emitBracketChangeAlert(input: {
   const actionHref = getChimmyChatHrefWithPrompt(prompt, { source: 'bracket_change_alert' })
   const result = await dispatchNotification({
     userIds: [input.userId], category: 'bracket_updates', productType: 'bracket',
-    type: 'chimmy_bracket_change', title: `Bracket update: ${input.entryName.slice(0, 80)}`,
-    body: summary.slice(0, 280), actionHref, actionLabel: 'Ask Chimmy what changed',
-    meta: { bracketChange: change, entryId: input.entryId, format: input.format, detectedAt: observedAt },
+    type: 'chimmy_bracket_change', title: 'Your bracket changed',
+    body: 'Open Chimmy to see the saved before-and-after result.', actionHref,
+    actionLabel: 'Ask Chimmy what changed',
+    meta: { changeRef: change.changeRef, entryId: input.entryId, format: input.format, detectedAt: observedAt },
     dedupePrefix: `chimmy-bracket-change:${input.format}:${input.entryId}:${digest}`,
     severity: 'low', skipChannels: { email: true, sms: true },
   })

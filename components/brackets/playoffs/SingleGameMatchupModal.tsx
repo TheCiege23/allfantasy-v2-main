@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { BracketTeamProfile, PlayoffSeriesView } from "@/lib/playoffs/types"
-import { abbreviate, roundLabel, seriesOdds } from "@/lib/playoffs/playoffBracketGraph"
+import { abbreviate, roundLabel } from "@/lib/playoffs/playoffBracketGraph"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
 import { getPlayoffPickResult, pointsForSeries } from "@/lib/playoffs/playoffScoring"
 import { TeamLogo } from "@/app/components/TeamLogo"
@@ -13,8 +13,13 @@ import { teamColors } from "@/lib/playoffs/playoffTeamColors"
 import { countdown, teamTint, tipoffLabel } from "./cup/cupFormat"
 import "./af-playoff-bracket.css"
 import "./cup/af-nba-cup.css"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
+import ChimmyMatchupAdvice from "./ChimmyMatchupAdvice"
 
 type Props = {
+  scoringExcludedReason?: "draft" | "late" | null
+  challengeId?: string
   series: PlayoffSeriesView
   sport: string
   profiles: Record<string, BracketTeamProfile>
@@ -28,16 +33,6 @@ type Props = {
   cupGroups?: CupGroup[]
   /** NBA Cup only: every Group Play game, for each team's Cup results so far. */
   cupGames?: PlayoffSeriesView[]
-}
-
-function chance(series: PlayoffSeriesView, home?: BracketTeamProfile, away?: BracketTeamProfile) {
-  const seeded = seriesOdds(series)
-  if (seeded.basis !== "unknown") return { home: seeded.home, away: seeded.away, basis: "Seed comparison" }
-  if (home?.winPercentage != null && away?.winPercentage != null) {
-    const homeChance = Math.max(20, Math.min(80, Math.round(50 + (home.winPercentage - away.winPercentage) * 0.55)))
-    return { home: homeChance, away: 100 - homeChance, basis: "Season record comparison" }
-  }
-  return null
 }
 
 /** "Hawks", "Trail Blazers", "76ers" — the short name a headline uses. */
@@ -65,7 +60,8 @@ function Silhouette({ team, logoUrl, logoSport }: { team: string; logoUrl: strin
   return <img className="af-cup-silhouette" src={url} alt="" aria-hidden="true" onError={() => setFailed(true)} />
 }
 
-export default function SingleGameMatchupModal({ series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose, cupGroups, cupGames }: Props) {
+export default function SingleGameMatchupModal({ challengeId, series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose, cupGroups, cupGames, scoringExcludedReason }: Props) {
+  const { language } = useOptionalLanguage(), companionCopy = bracketCompanionCopy(language)
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeRef.current?.focus()
@@ -80,9 +76,7 @@ export default function SingleGameMatchupModal({ series, sport, profiles, teamLo
   const logoSport = sport === "ncaaf" ? "NCAAF" : "NBA_CUP"
   const home = profiles[series.homeTeamName]
   const away = profiles[series.awayTeamName]
-  const estimate = chance(series, home, away)
   const hasTeams = cup ? isNbaCupTeam(series.homeTeamName) && isNbaCupTeam(series.awayTeamName) : isOfficialTeamName(series.homeTeamName) && isOfficialTeamName(series.awayTeamName)
-  const choice = estimate ? estimate.home >= estimate.away ? series.homeTeamName : series.awayTeamName : null
   const state = cupGameState(series)
   const detail = cupGameDetail(series)
   const canPick = hasTeams && !locked && !saving && state === "scheduled"
@@ -231,7 +225,8 @@ export default function SingleGameMatchupModal({ series, sport, profiles, teamLo
           <span className="af-cup-tag af-cup-tag--gold">+{points} pt{points === 1 ? "" : "s"}</span>
           {state === "live" ? <span className="af-cup-chip af-cup-chip--live"><span className="af-cup-dot" aria-hidden="true" />LIVE · {cupLiveClock(series)}</span> : null}
           {state === "final" ? <span className="af-cup-tag">Final</span> : null}
-          {pickResult?.status === "correct" ? <span className="af-cup-tag af-cup-tag--good">Your pick was right · +{pickResult.points}</span> : null}
+          {picked && scoringExcludedReason ? <span className="af-cup-tag">{companionCopy.reasons[scoringExcludedReason]} · 0</span> : null}
+          {!scoringExcludedReason && pickResult?.status === "correct" ? <span className="af-cup-tag af-cup-tag--good">Your pick was right · +{pickResult.points}</span> : null}
           {pickResult?.status === "wrong" ? <span className="af-cup-tag af-cup-tag--bad">Your pick missed</span> : null}
           {state === "scheduled" && locked ? <span className="af-cup-tag">Picks locked</span> : null}
         </div>
@@ -287,24 +282,13 @@ export default function SingleGameMatchupModal({ series, sport, profiles, teamLo
 
       {state !== "final" ? (
         <div className="af-cup-teams">
-          {teamCard(series.awayTeamName, "away", series.awaySeed, away, estimate?.away ?? null)}
-          {teamCard(series.homeTeamName, "home", series.homeSeed, home, estimate?.home ?? null)}
+          {teamCard(series.awayTeamName, "away", series.awaySeed, away, null)}
+          {teamCard(series.homeTeamName, "home", series.homeSeed, home, null)}
         </div>
       ) : null}
 
       {state === "scheduled" ? (
-        <section className="af-cup-chimmy">
-          <span className="af-cup-chimmy-eyebrow">Chimmy Intelligence</span>
-          <h2>A smart read before you pick</h2>
-          {estimate ? <>
-            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 14 }}><span>{series.awayTeamName} {estimate.away}%</span><span>{series.homeTeamName} {estimate.home}%</span></div>
-            <div className="af-cup-chimmy-bar" role="img" aria-label={`${series.awayTeamName} ${estimate.away} percent, ${series.homeTeamName} ${estimate.home} percent`}>
-              <span style={{ width: `${estimate.away}%` }} /><span style={{ width: `${estimate.home}%` }} />
-            </div>
-            <p>Basis: {estimate.basis}. This is a transparent comparison, not a guaranteed outcome. Verified records and point differential appear above when available.</p>
-            <button type="button" disabled={!canPick || !choice} onClick={() => choice && onPick(choice)}>Go with Chimmy&apos;s pick · {choice}</button>
-          </> : <p>No trustworthy estimate is available for this matchup yet. Pick either team after the official field is set.</p>}
-        </section>
+        <ChimmyMatchupAdvice key={series.id} challengeId={challengeId} seriesId={series.id} canPick={canPick} onPick={onPick} />
       ) : null}
 
       {cup && group ? (

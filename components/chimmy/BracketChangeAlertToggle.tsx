@@ -51,9 +51,9 @@ export function BracketChangeAlertToggle({ format, entryId }: {
     <div className="mt-2 text-xs" data-testid="bracket-change-alert-setting">
       <button type="button" role="switch" aria-checked={enabled === true} disabled={enabled == null || busy}
         onClick={toggle} className="rounded-lg border border-current/30 px-2.5 py-1.5 font-semibold disabled:opacity-50">
-        {enabled == null ? 'Loading bracket alerts…' : enabled ? 'Result alerts on' : 'Get result alerts'}
+        {enabled == null ? 'Loading Chimmy alerts…' : enabled ? 'Chimmy alerts on' : 'Get Chimmy change alerts'}
       </button>
-      <span className="ml-2 opacity-70">Opt in to score or decided-pick changes. In-app and push delivery follow your bracket notification settings.</span>
+      <span className="ml-2 opacity-70">Open an exact before-and-after explanation when your score or pick changes. If pool alerts are also on, you may get both updates.</span>
       {error ? <span role="alert" className="ml-2 text-red-400">{error}</span> : null}
     </div>
   )

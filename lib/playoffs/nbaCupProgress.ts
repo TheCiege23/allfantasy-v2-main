@@ -1,3 +1,4 @@
+import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
 import type { PlayoffSeriesView } from "./types"
 
 export type CupScorer = { name: string; points: number }
@@ -83,7 +84,8 @@ function possibilities(teams: readonly string[], games: GroupGame[]) {
 }
 
 /** Group records use completed Cup games only. NBA regular-season records never substitute. */
-export function nbaCupGroupStandings(series: GroupGame[], season: number): CupGroupStanding[] {
+export function nbaCupGroupStandings(series: GroupGame[], season: number, locale = "en"): CupGroupStanding[] {
+  const copy = bracketCompanionCopy(locale).roads
   if (season !== 2026) return []
   const groups = GROUPS_2026.map((group) => {
     const games = series.filter((game) => game.round === "cup_group_play" && group.teams.some((team) => team === cupTeamName(game.homeTeamName)) && group.teams.some((team) => team === cupTeamName(game.awayTeamName)))
@@ -113,13 +115,13 @@ export function nbaCupGroupStandings(series: GroupGame[], season: number): CupGr
     const peers = groups.filter((other) => other.conference === group.conference && other.name !== group.name)
     const wildcardClosed = team.canFinishSecond === false || peers.some((other) => other.paths && other.paths.minimumRunnerUpWins > team.maxWins)
     let status: CupTeamStanding["status"] = !group.scheduleComplete ? "Schedule pending" : team.remaining === 0 && tied ? "Tiebreak pending" : rank === 1 && team.wins > 0 ? "Group leader" : "In contention"
-    let road = `${team.remaining} group game${team.remaining === 1 ? "" : "s"} remaining; can finish with ${team.maxWins} wins. `
-    if (confirmedQuarter) { status = "Qualified"; road = "Confirmed in the quarterfinal bracket. Win the quarterfinal, semifinal and championship to win the Cup." }
-    else if (team.canWinGroup && team.canFinishSecond === false) { status = "Group winner"; road = "Group win secured on game wins. Await the confirmed quarterfinal opponent, then win three knockout games to win the Cup." }
-    else if (team.canWinGroup === false && wildcardClosed) { status = "Eliminated"; road = "Cannot reach a qualifying place on group-game wins. Group results still count for your picks." }
-    else if (!group.scheduleComplete) road += "The full group schedule is still syncing; qualification paths are pending."
-    else if (team.canWinGroup) road += "Can still reach or tie the group lead on wins; tiebreakers may decide qualification. A runner-up can compete for the conference wild card."
-    else road += "Group-winner route is closed; the runner-up wild-card route remains possible."
+    let road = copy.base(team.remaining, team.maxWins)
+    if (confirmedQuarter) { status = "Qualified"; road = copy.qualified }
+    else if (team.canWinGroup && team.canFinishSecond === false) { status = "Group winner"; road = copy.won }
+    else if (team.canWinGroup === false && wildcardClosed) { status = "Eliminated"; road = copy.eliminated }
+    else if (!group.scheduleComplete) road += copy.syncing
+    else if (team.canWinGroup) road += copy.lead
+    else road += copy.wild
     return { ...team, rank, tied, status, road }
   }).sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.team.localeCompare(b.team)) }))
 }

@@ -213,6 +213,11 @@ export type MatchupData = {
     id: string
     name: string
     platform: string
+    /**
+     * The league's sport as stored (`NFL`, `NBA`, …), so the board can read a slot label under the
+     * right sport — "C" is a centre in the NBA and a catcher in MLB. Null when the row has none.
+     */
+    sport?: string | null
     bestBall?: boolean
     /** The league crest, when the platform published one. */
     logoUrl: string | null
@@ -447,6 +452,7 @@ async function buildMatchupData(
       id: league.id,
       name: leagueDisplayName(league.name),
       platform,
+      sport,
       bestBall: league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings),
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({

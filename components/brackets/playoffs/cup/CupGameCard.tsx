@@ -1,5 +1,7 @@
 "use client"
 
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { bracketCompanionCopy } from "@/lib/brackets/bracketCompanionCopy"
 import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { TeamLogo } from "@/app/components/TeamLogo"
 import { getPlayoffPickResult, pointsForSeries } from "@/lib/playoffs/playoffScoring"
@@ -7,6 +9,7 @@ import { cupGameDetail, cupGameProgress, cupGameState, cupLiveClock, cupTeamCode
 import { countdown, timeOnly, tipoffLabel } from "./cupFormat"
 
 export type CupGameCardProps = {
+  scoringExcludedReason?: "draft" | "late" | null
   series: PlayoffSeriesView
   sport: string
   pick: string | null
@@ -27,7 +30,8 @@ export type CupGameCardProps = {
  *
  * Away is listed above home, the order a scoreboard reads.
  */
-export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel, recordOf, lockedReason, saving, onPick, onOpen }: CupGameCardProps) {
+export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel, recordOf, lockedReason, saving, onPick, onOpen, scoringExcludedReason }: CupGameCardProps) {
+  const { language } = useOptionalLanguage(), copy = bracketCompanionCopy(language)
   const state = cupGameState(series)
   const detail = cupGameDetail(series)
   const points = pointsForSeries(series, sport)
@@ -64,6 +68,11 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
         ? `Picked ${cupTeamCode(pick)} · locks at tipoff${left ? ` ${left}` : ""}`
         : `Choose your winner · locks at tipoff${left ? ` ${left}` : ""}`
     if (pick && !lockedReason) tone = "good"
+  }
+
+  if (pick && scoringExcludedReason && state !== "scheduled") {
+    result = state === "final" ? `${copy.reasons[scoringExcludedReason]} · 0` : `${result.replace(/ · \+\d+ if it holds$/, "")} · ${copy.reasons[scoringExcludedReason]}`
+    tone = undefined
   }
 
   const stage = groupLabel ? `Group Play · ${groupLabel}` : series.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || "Group Play"
