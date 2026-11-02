@@ -141,21 +141,11 @@ export async function executeCanonicalLeagueCreation(args: {
     console.error(`${LOG_PREFIX} audit_log_league_created_failed`, e)
   }
 
-  void import('@/lib/league-events/publisher')
-    .then(({ publishLeagueFanoutEvent }) =>
-      publishLeagueFanoutEvent({
-        leagueId: createdLeagueId,
-        eventType: 'league_created',
-        title: 'League created',
-        message: `${body.leagueName} is ready to set up.`,
-        category: 'league_announcements',
-        visibility: 'all_members',
-        actorUserId: appUserId,
-        meta: { sport: String(body.sport), concept: engine.leagueFormatId, presetKey: engine.presetKey },
-        dedupeKey: `league_created:${createdLeagueId}`,
-      }),
-    )
-    .catch(() => {})
+  await import('@/lib/league-events/publisher')
+    .then(({ publishLeagueCreatedNotice }) => publishLeagueCreatedNotice({
+      leagueId: createdLeagueId, actorUserId: appUserId, leagueName: body.leagueName, sport: String(body.sport),
+    }))
+    .catch((e) => console.error(`${LOG_PREFIX} league_created_notification_failed`, e))
 
   try {
     const { runPostCreateInitialization } = await import('@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator')
@@ -269,6 +259,12 @@ export async function executeCanonicalLeagueCreation(args: {
   }
 
   log('success', { leagueId: createdLeagueId, homepageUrl })
+
+  const initialDraftTime = await prisma.leagueSettings.findUnique({ where: { leagueId: createdLeagueId }, select: { draftDateUtc: true } }).catch(() => null)
+  if (initialDraftTime?.draftDateUtc) {
+    await import('@/lib/draft-notifications').then(m => m.notifyDraftTimeSet(createdLeagueId, initialDraftTime.draftDateUtc!))
+      .catch((e) => console.error(`${LOG_PREFIX} draft_time_notification_failed`, e))
+  }
 
   recordProductEvent(CREATE_LEAGUE.SERVER_SUCCESS, {
     userId: appUserId,

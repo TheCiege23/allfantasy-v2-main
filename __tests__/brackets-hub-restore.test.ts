@@ -73,8 +73,8 @@ describe("brackets hub restore: section coverage", () => {
   })
 
   it("workspace creation follows the selected tournament and keeps MLB, NHL and join destinations", () => {
-    expect(WORKSPACE_SRC).toContain('sport === "ncaaf" ? "NCAAF" : "NBA_CUP"')
-    expect(WORKSPACE_SRC).toContain("href={createHref(engineSport)}")
+    expect(WORKSPACE_SRC).toContain('{ ncaaf: "NCAAF", nba_cup: "NBA_CUP", nfl: "NFL" }')
+    expect(WORKSPACE_SRC).toContain("href={createHref(sport)}")
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=MLB&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=NHL&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/join"')
@@ -138,12 +138,13 @@ describe("brackets hub restore: section coverage", () => {
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NHL")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NCAAF")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NBA_CUP")`)
+    // NFL playoff pools are creatable (playoff engine sport "nfl"), no longer "January".
+    expect(HUB_SRC).toContain(`href: playoffPoolHref("NFL")`)
     expect(HUB_SRC).toContain(`<Link key={key} href={href}`)
     // Status labels: live / ended / a month for up-next / generic coming soon.
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusLive")`)
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusEnded")`)
     expect(HUB_SRC).toContain(`t(soonLabelKey ?? "brk.hub.sports.statusComingSoon")`)
-    expect(HUB_SRC).toContain(`soonLabelKey: "brk.hub.sports.statusJanuary"`)
   })
 
   it("AI features strip renders all 6 features", () => {
@@ -488,6 +489,23 @@ describe("brackets hub restore: route budget safety", () => {
       "app/brackets/leagues/new/page.tsx",
     ]) {
       expect(existsSync(resolve(root, page)), `${page} must exist`).toBe(true)
+    }
+  })
+})
+
+describe("the hub's create shortcut and sports subtitle follow the live tournament", () => {
+  it("Create opens the tournament leading the hub, not a hard-coded sport", () => {
+    expect(HUB_SRC).toContain(`playoffPoolHref(HUB_CREATE_SPORT[tournaments[0].tournament])`)
+    expect(HUB_SRC).toContain(`action.key === "create" ? { ...action, href: createHref } : action`)
+    expect(HUB_SRC).toContain("{quickActions.map(({ key, href, Icon }) => (")
+    expect(HUB_SRC).not.toContain("{QUICK_ACTIONS.map(")
+  })
+
+  it("the sports subtitle names no sport as upcoming in any locale", () => {
+    for (const locale of BRACKETS_SUPPORTED_LOCALES) {
+      const subtitle = BRACKETS_TRANSLATIONS[locale]["brk.hub.sports.subtitle"]
+      expect(subtitle, locale).toBeTruthy()
+      expect(subtitle, locale).not.toMatch(/MLB|NHL|NFL|College Football/)
     }
   })
 })

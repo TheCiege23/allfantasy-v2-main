@@ -105,6 +105,37 @@ describe('My team — the period chip', () => {
   })
 })
 
+describe('My team — the table footer, the alert card and the matchup link (design board MyTeam)', () => {
+  type Proj = { available: true; data: { afTotal: number | null; afProjected: number; projected: number; unprojected: number } }
+  it('the starters footer is the league-scored total, with how many starters it was built from', () => {
+    const data = myTeamFixture('NFL')
+    const proj = (data.projections as Proj).data
+    const { getByTestId } = render(<MyTeam data={data} />)
+    const total = getByTestId('my-team-starters-total')
+    expect(total.closest('#af-mt-starters')).not.toBeNull()
+    expect(total.querySelector('.af-mt-total-value')?.textContent).toBe(proj.afTotal!.toFixed(1))
+    expect(total.textContent).toContain(`${proj.afProjected} of ${proj.projected + proj.unprojected} priced for this league`)
+  })
+  it('CONTROL: no league-scored total, no footer — never the standard number under its label', () => {
+    const data = myTeamFixture('NFL')
+    ;(data.projections as Proj).data.afTotal = null
+    const { queryByTestId } = render(<MyTeam data={data} />)
+    expect(queryByTestId('my-team-starters-total')).toBeNull()
+  })
+  it('the Lineup check heading carries its alert icon, hidden from screen readers, and still reads "Lineup check"', () => {
+    const { container } = render(<MyTeam data={myTeamFixture('NFL')} />)
+    const h2 = container.querySelector('.af-mt-check > h2')
+    expect(h2?.querySelector('.af-mt-check-icon')?.getAttribute('aria-hidden')).toBe('true')
+    expect(h2?.textContent).toBe('Lineup check')
+  })
+  it('the matchup card links through to this league’s Matchup screen', () => {
+    const { container } = render(<MyTeam data={myTeamFixture('NFL')} />)
+    const go = container.querySelector('.af-mt-matchup a.af-mt-mu-go')
+    expect(go?.getAttribute('href')).toBe('/core/matchup?league=e2e-redraft-core')
+    expect(go?.textContent).toBe('Go to matchup')
+  })
+})
+
 describe('Your week — the season-race line', () => {
   it('week, your record, and your place by record (a tie said as one)', () => {
     const { getByTestId } = render(<YourWeekLeague board={weekBoardFixture('NFL')} allWeeksHref="/core/week" />)

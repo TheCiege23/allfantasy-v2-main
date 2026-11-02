@@ -4772,7 +4772,7 @@ export function DraftRoomPageClient({
         </div>
       </div>
     ) : null}
-    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
+    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} viewerRosterId={currentUserRosterId} /> : null}
     {roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session?.draftType }) ? (
       <DraftRoundOneAnnouncementOverlay
         presentationVariant={presentationVariant === 'redraft_snake' && !isDynasty ? 'redraft_snake' : 'default'}

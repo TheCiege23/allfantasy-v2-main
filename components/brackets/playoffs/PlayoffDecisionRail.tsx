@@ -64,7 +64,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
   const standings = useMemo(() => {
     return view.entries
-      .filter((entry) => !["ncaaf", "nba_cup"].includes(sport) || entry.isComplete)
+      .filter((entry) => !["ncaaf", "nba_cup", "nfl"].includes(sport) || entry.isComplete)
       .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) ||
         (b.totalScore ?? 0) - (a.totalScore ?? 0) || a.name.localeCompare(b.name))
   }, [view.entries])
@@ -77,7 +77,11 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
         * NBA Cup has no seeds to read — every Cup matchup reads "seeded level, no
         * edge", which is true and useless. The Cup rail's group standings replace it.
         */}
-      {sport === "nba_cup" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
+      {/*
+        * NFL too: its reads abbreviate full club names into codes nobody uses ("BEA over PAC")
+        * and count reseeded placeholder slots as clubs ("WIN and WIN are seeded level").
+        */}
+      {sport === "nba_cup" || sport === "nfl" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
         <div className="af-pb-rail-head">Series read</div>
         {reads.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>
@@ -102,7 +106,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
       <section className="af-pb-card" data-testid="pb-leaderboard">
         <div className="af-pb-rail-head">Pool standings</div>
-        {["ncaaf", "nba_cup"].includes(sport) && <Link className="af-pb-basis" href={`/brackets/standings?sport=${sport}&season=${view.challenge.seasonYear}`}>Universal board →</Link>}
+        {["ncaaf", "nba_cup", "nfl"].includes(sport) && <Link className="af-pb-basis" href={`/brackets/standings?sport=${sport}&season=${view.challenge.seasonYear}`}>Universal board →</Link>}
         {standings.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>No entries yet.</p>
         ) : (
@@ -113,7 +117,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
                 {e.name}
                 {e.userId === viewerId ? " · you" : ""}
               </span>
-              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}{["ncaaf", "nba_cup"].includes(sport) ? ` / ${e.potentialTotal ?? 0} max` : ""}</span>
+              <span className="af-pb-lb-pts af-pb-mono">{e.totalScore ?? 0}{["ncaaf", "nba_cup", "nfl"].includes(sport) ? ` / ${e.potentialTotal ?? 0} max` : ""}</span>
             </div>
           ))
         )}

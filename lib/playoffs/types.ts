@@ -8,8 +8,12 @@
  * CFP retains its published field and first-game lock. NBA Cup uses scheduled
  * provider ingestion for Group Play and confirmed knockout matchups, with each
  * game locking at tipoff. Both sports have their own persisted round keys.
+ *
+ * NFL is a single-game bracket like the CFP (one lock, at the first Wild Card
+ * kickoff), seeded from standings and fed by the ESPN postseason scoreboard;
+ * its divisional round reseeds (lib/playoffs/nflPlayoffs.ts).
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
 
 /** Persisted challenge summaries returned by the authenticated list endpoint. */
 export type PlayoffChallengeListItem = {
@@ -120,6 +124,11 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  // NFL playoffs — single games; the divisional round reseeds.
+  | "nfl_wild_card"
+  | "nfl_divisional"
+  | "nfl_conference"
+  | "nfl_super_bowl"
   | "cup_group_play"
   | "cup_quarterfinals"
   | "cup_semifinals"
@@ -140,7 +149,7 @@ export type PlayoffSeriesSlot = "home" | "away"
  * conferences in its draw — seeds are national — so its halves are named by
  * position: the 1/4 side (`upper`) and the 2/3 side (`lower`).
  */
-export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
+export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "afc" | "nfc" | "finals"
 
 export type BracketTeamProfile = {
   won: number | null

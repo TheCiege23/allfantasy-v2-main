@@ -4,7 +4,7 @@
 
 - Tournament pool leaderboard score and rank changes.
 - World Cup bracket score, rank, and correct or incorrect pick totals.
-- Playoff series decisions from provider sync, NBA Cup sync, published finals, and audited manual CFP or NBA Cup finals.
+- Playoff series decisions from provider sync, NBA Cup and NFL sync, published finals, and audited manual CFP or NBA Cup finals.
 - A first stored result establishes a baseline. Alert delivery starts only after a later change and an entry owner's opt-in.
 
 ## Staging check

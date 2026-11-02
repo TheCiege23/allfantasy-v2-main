@@ -9,11 +9,11 @@ export type LedgerRow = { id: string; round: string; home: string; away: string;
 export type ScoreChange = { id: string; seriesId: string; observedAt: string; kind: "settled" | "corrected" | "eligibility"; before: LedgerRow | null; after: LedgerRow; delta: number }
 export type ScoreSnapshot = { version: 1; since: string; observedAt: string; rows: LedgerRow[]; rank: number | null; events: ScoreChange[]; trimmed: number; alertKeys: string[] }
 export type BracketAlertPreferences = { enabled: boolean; missingPicks: boolean; locks: boolean; results: boolean; rankChanges: boolean; spoilerSafe: boolean; leadMinutes: number; locale: "en" | "es" }
-export const defaultBracketAlerts: BracketAlertPreferences = { enabled: false, missingPicks: true, locks: true, results: true, rankChanges: true, spoilerSafe: true, leadMinutes: 30, locale: "en" }
+export const defaultBracketAlerts: BracketAlertPreferences = { enabled: true, missingPicks: true, locks: true, results: true, rankChanges: true, spoilerSafe: true, leadMinutes: 30, locale: "en" }
 export function readBracketAlerts(raw: unknown, challengeId: string): BracketAlertPreferences {
   const stored = raw && typeof raw === "object" ? (raw as Record<string, any>).bracketCoach?.[challengeId] : null
   if (!stored || typeof stored !== "object") return { ...defaultBracketAlerts }
-  return { enabled: stored.enabled === true, missingPicks: stored.missingPicks !== false, locks: stored.locks !== false,
+  return { enabled: stored.enabled !== false, missingPicks: stored.missingPicks !== false, locks: stored.locks !== false,
     results: stored.results !== false, rankChanges: stored.rankChanges !== false, spoilerSafe: stored.spoilerSafe !== false,
     leadMinutes: [15, 30, 60].includes(stored.leadMinutes) ? stored.leadMinutes : 30, locale: stored.locale === "es" ? "es" : "en" }
 }

@@ -99,7 +99,7 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     if (ids.length && rows.length) {
       // Capture the persisted winner before this transaction writes verified finals.
       // Newly created series have no entry pick yet, so they establish the baseline.
-      const finalRows = rows.filter((game) => game.winnerTeamName)
+      const finalRows = previous?.games.length ? rows.filter((game) => game.winnerTeamName) : []
       const existing = finalRows.length ? await tx.playoffBracketSeries.findMany({
         where: { challengeId: { in: ids }, seriesNumber: { in: finalRows.map((game) => game.seriesNumber) } },
         select: { id: true, challengeId: true, seriesNumber: true, winnerTeamName: true,

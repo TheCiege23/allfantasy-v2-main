@@ -119,6 +119,60 @@
 .af-core.af-shell[data-format=redraft] :is(#af-team-alert-decision,#af-team-deadline-alert):focus{outline-color:var(--rd-accent)}
 .af-core.af-shell[data-format=redraft] .af-tw-panel{border-color:var(--line)}
 
+/* ── My team · the lineup as a table (2026-11-01, design board MyTeam.dc.html) ────────────────────── */
+
+/* Starters / Bench / IR / Taxi are each one card holding a table: a header strip, full-bleed rows and, on
+ * Starters, a footer total. `.af-frame` already clips to its radius (af-core.css), so the footer and an
+ * empty row's wash take the card's corners without a radius of their own. */
+.af-core.af-shell[data-format=redraft] .af-mt-section{padding:0;border-radius:18px}
+.af-core.af-shell[data-format=redraft] .af-mt-section-head{margin:0;padding:12px 20px 10px;border-bottom:1px solid var(--line)}
+.af-core.af-shell[data-format=redraft] .af-mt-section > :not(.af-mt-section-head):not(.af-mt-list):not(.af-mt-total){margin-left:20px;margin-right:20px}
+.af-core.af-shell[data-format=redraft] .af-mt-row{min-height:58px;padding:6px 20px;border-bottom-color:var(--line)}
+.af-core.af-shell[data-format=redraft] .af-mt-row[data-empty='true']{border-radius:0}
+.af-core.af-shell[data-format=redraft] .af-mt-row:hover{background-color:color-mix(in srgb,var(--text) 3%,transparent)}
+.af-core.af-shell[data-format=redraft] .af-mt-row[data-empty='true']:hover{background-color:var(--bad-soft)}
+/* Who he plays and when, read as the design's opponent column: the matchup in full weight, the kickoff in
+ * the mono tier. */
+.af-core.af-shell[data-format=redraft] .af-mt-player-meta .af-mt-opp{color:var(--text);font-weight:700}
+.af-core.af-shell[data-format=redraft] .af-mt-player-meta .af-mt-when{font-family:var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--muted)}
+
+/* The starters' footer: the league-scored total of the rows above it. ⚠ Unscoped HIDE first, so the
+ * default look outside the stamp stays exactly what it was. */
+.af-mt-total{display:none}
+.af-core.af-shell[data-format=redraft] .af-mt-total{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:12px;row-gap:2px;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface2)}
+.af-core.af-shell[data-format=redraft] .af-mt-total-label{font:700 13px/1.2 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);letter-spacing:.04em;text-transform:uppercase;color:var(--text)}
+.af-core.af-shell[data-format=redraft] .af-mt-total-cov{grid-row:2;font-size:12px;color:var(--muted)}
+.af-core.af-shell[data-format=redraft] .af-mt-total-value{grid-row:1 / span 2;grid-column:2;font:700 20px/1 var(--font-jetbrains-mono,ui-monospace,SFMono-Regular,Menlo,monospace);color:var(--rd-accent-text)}
+
+/* ── My team · Lineup check as the alert card ─────────────────────────────────────────────────────── */
+
+/* Something to review: the warm alert card. Nothing found: the same card in the good tone. The tags keep
+ * their own tones (af-my-team.css) — OUT and EMPTY stay red inside the amber card. ⚠ The icon's
+ * unscoped rule only HIDES it outside the stamp. */
+.af-mt-check-icon{display:none}
+.af-core.af-shell[data-format=redraft] .af-mt-check{gap:12px;padding:18px 20px;border-radius:18px;border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.af-core.af-shell[data-format=redraft] .af-mt-check[data-clear='true']{border-color:color-mix(in srgb,var(--good) 45%,transparent);background:color-mix(in srgb,var(--good) 8%,var(--surface))}
+.af-core.af-shell[data-format=redraft] .af-mt-check > h2.af-label{display:flex;align-items:center;gap:8px;margin:0;font-family:inherit;font-size:16px;font-weight:800;letter-spacing:-.01em;text-transform:none;color:var(--warn)}
+.af-core.af-shell[data-format=redraft] .af-mt-check[data-clear='true'] > h2.af-label{color:var(--good)}
+.af-core.af-shell[data-format=redraft] .af-mt-check-icon{display:inline-flex;flex:none}
+.af-core.af-shell[data-format=redraft] .af-mt-check-list{gap:6px}
+.af-core.af-shell[data-format=redraft] .af-mt-check-item{min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:14px}
+.af-core.af-shell[data-format=redraft] .af-mt-check-item:hover,
+.af-core.af-shell[data-format=redraft] .af-mt-check-item:focus-visible{border-color:var(--rd-accent-line);background:var(--surface2)}
+.af-core.af-shell[data-format=redraft] .af-mt-check-tag{border-radius:6px}
+.af-core.af-shell[data-format=redraft] .af-mt-check-fa-link{display:inline-flex;align-items:center;min-height:44px}
+/* The fix action is the card's one solid button: ink on the page colour, in every mode. */
+.af-core.af-shell[data-format=redraft] .af-mt-check-fix{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:1px solid var(--text);border-radius:10px;background:var(--text);color:var(--bg);font-weight:700}
+.af-core.af-shell[data-format=redraft] .af-mt-check-fix:hover,
+.af-core.af-shell[data-format=redraft] .af-mt-check-fix:focus-visible{background:color-mix(in srgb,var(--text) 86%,var(--bg))}
+
+/* ── My team · the matchup card's way through to Matchup ──────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] .af-mt-matchup{border-radius:18px}
+.af-core.af-shell[data-format=redraft] .af-mt-mu-go{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:700;color:var(--rd-accent-text);text-decoration:none}
+.af-core.af-shell[data-format=redraft] .af-mt-mu-go::after{content:'\2192';margin-left:6px}
+.af-core.af-shell[data-format=redraft] .af-mt-mu-go:hover,
+.af-core.af-shell[data-format=redraft] .af-mt-mu-go:focus-visible{text-decoration:underline}
+
 /* ── Your week · the week in the season race ──────────────────────────────────────────────────────── */
 
 .af-core.af-shell[data-format=redraft] .af-wl-hero:not([data-empty='true']){border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
@@ -170,6 +224,12 @@ html[data-mode='light'] .af-core.af-shell[data-format=redraft] .af-wbp-calendar{
 
 /* ── Phone (one top-level block) ──────────────────────────────────────────────────────────────────── */
 @media (max-width:720px){
+  .af-core.af-shell[data-format=redraft] .af-mt-section-head{padding:10px 12px 8px}
+  .af-core.af-shell[data-format=redraft] .af-mt-section > :not(.af-mt-section-head):not(.af-mt-list):not(.af-mt-total){margin-left:12px;margin-right:12px}
+  .af-core.af-shell[data-format=redraft] .af-mt-row{padding:6px 12px}
+  .af-core.af-shell[data-format=redraft] .af-mt-total{padding:12px}
+  .af-core.af-shell[data-format=redraft] .af-mt-check{padding:16px 14px}
+  .af-core.af-shell[data-format=redraft] .af-mt-check-fix{align-self:stretch}
   .af-core.af-shell[data-format=redraft] .af-wl-race{gap:6px}
   .af-core.af-shell[data-format=redraft] .af-wl-race-chip{min-height:28px}
 }

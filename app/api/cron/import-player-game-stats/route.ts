@@ -45,6 +45,7 @@ import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/r
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
+import { enrichOfficialNhlGameWinningGoals } from "@/lib/nhl-scoring/officialGameWinningGoalsIngest"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -180,10 +181,36 @@ async function handle(req: NextRequest) {
         perSport[s] = await ingestRollingInsightsGameLogs({
           sport: s,
           dates,
+          persistSchedule: s === "NHL",
           shouldStop: () => budget.exhausted(),
         })
       } catch (err) {
         perSport[s] = { error: String(err).slice(0, 200) }
+      }
+
+      if (s === "NHL" && !budget.exhausted()) {
+        try {
+          // Two fresh dates plus one rotating older date cover late official
+          // corrections without consuming another cron slot or full-season scan.
+          const older = recentDates(14).slice(3)
+          const bonusDates = fromDate && toDate ? dates : [
+            ...dates.slice(0, 2), older[Math.floor(Date.now() / 86_400_000) % older.length]!,
+          ]
+          const bonus = await enrichOfficialNhlGameWinningGoals({ dates: bonusDates,
+            shouldStop: () => budget.remainingMs() < 50_000 })
+          const result = perSport[s] as Record<string, unknown>
+          result.officialGameWinningGoals = bonus
+          if (bonus.errors.length) result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            ...bonus.errors.map((error) => `official game-winning goals: ${error}`),
+          ]
+        } catch (err) {
+          const result = perSport[s] as Record<string, unknown>
+          result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            `official game-winning goals: ${String(err).slice(0, 180)}`,
+          ]
+        }
       }
 
       /*
@@ -262,14 +289,19 @@ async function handle(req: NextRequest) {
      * Recorded even when every sport is deferred for budget: a deferral proves the job woke up,
      * which is the whole claim a heartbeat makes.
      */
+    const importErrors = Object.entries(perSport).flatMap(([sport, value]) => {
+      const result = value as { error?: string; errors?: string[] }
+      return [
+        ...(result.error ? [`${sport}: ${result.error}`] : []),
+        ...(result.errors ?? []).map((error) => `${sport}: ${error}`),
+      ]
+    })
     await recordSyncJobRun(
       { jobName: JOB_MULTI_SPORT, jobScope: candidates.join(","), trigger: "cron" },
       {
         rowsWritten: written,
         rowsSkipped: deferred.length,
-        errors: Object.entries(perSport)
-          .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
-          .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+        errors: importErrors,
         metadata: {
           days,
           deferredSports: deferred,
@@ -289,7 +321,7 @@ async function handle(req: NextRequest) {
     )
 
     return NextResponse.json({
-      ok: true,
+      ok: importErrors.length === 0,
       mode: "multiSport",
       provider: "rolling_insights",
       written,

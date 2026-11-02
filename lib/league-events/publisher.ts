@@ -56,6 +56,9 @@ export type PublishLeagueFanoutInput = {
   severity?: 'low' | 'medium' | 'high'
   /** Per logical event — combined with userId for PlatformNotification.sourceKey dedupe */
   dedupeKey?: string
+  /** Restrict transports while retaining each recipient's category and consent gates. */
+  skipChannels?: { email?: boolean; sms?: boolean; push?: boolean }
+  smsBody?: string
   skipActivityFeed?: boolean
   /** When true, skips persisting `LeagueEvent` (use with realtime-only hints). */
   skipLeagueEventRow?: boolean
@@ -82,6 +85,8 @@ export async function publishLeagueFanoutEvent(input: PublishLeagueFanoutInput):
     actionLabel,
     severity = 'medium',
     dedupeKey,
+    skipChannels,
+    smsBody,
     skipActivityFeed,
     skipLeagueEventRow,
     skipNotifications,
@@ -153,6 +158,8 @@ export async function publishLeagueFanoutEvent(input: PublishLeagueFanoutInput):
           leagueId,
           meta: mergedMeta,
           severity,
+          skipChannels,
+          smsBody,
           ...(baseDedupe ? { dedupePrefix: baseDedupe } : {}),
         })
       } catch (e) {
@@ -166,5 +173,22 @@ export async function publishLeagueFanoutEvent(input: PublishLeagueFanoutInput):
     eventType: String(eventType),
     actorUserId: actorUserId ?? null,
     meta: mergedMeta,
+  })
+}
+
+/** A new league is an operational event for its commissioner and any members already attached. */
+export async function publishLeagueCreatedNotice(input: { leagueId: string; actorUserId: string; leagueName: string; sport: string }): Promise<void> {
+  await publishLeagueFanoutEvent({
+    leagueId: input.leagueId,
+    eventType: 'league_created',
+    title: 'League created',
+    message: `${input.leagueName} is ready to set up.`,
+    category: 'commissioner_alerts',
+    visibility: 'all_members',
+    actorUserId: input.actorUserId,
+    meta: { sport: input.sport },
+    dedupeKey: `league_created:${input.leagueId}`,
+    skipChannels: { email: true },
+    smsBody: 'Your AllFantasy league is ready. Open the app to set it up.',
   })
 }

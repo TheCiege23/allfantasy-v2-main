@@ -664,12 +664,18 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
   // A forfeited pick at the very top of the board is skipped before anyone is put on the clock for it
   // (./forfeitedPickSkips.ts); every later one is skipped as picks are made.
   if (started.ok) {
+    await import('@/lib/draft-notifications')
+      .then(m => m.notifyDraftLifecycle(leagueId, 'draft_started'))
+      .catch((err) => console.error('[draft] start notification failed', err))
     await import('./forfeitedPickSkips')
       .then(async ({ skipForfeitedPicksOnClock }) => {
         const { submitPick } = await import('./PickSubmissionService')
         return skipForfeitedPicksOnClock(leagueId, submitPick)
       })
       .catch((err) => console.error('[draft] forfeited pick skip at start failed', err))
+    await import('@/lib/draft-notifications')
+      .then(m => m.notifyOnTheClockAfterPick(leagueId))
+      .catch((err) => console.error('[draft] first pick notification failed', err))
   }
   return started
 }
@@ -796,7 +802,10 @@ async function startClaimedSession(
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {
   const tournamentResult = await controlSeasonDraft(leagueId, 'pause', pausedByUserId)
-  if (tournamentResult !== null) return tournamentResult
+  if (tournamentResult !== null) {
+    if (tournamentResult) await import('@/lib/draft-notifications').then(m => m.notifyDraftPaused(leagueId)).catch(err => console.error('[draft] pause notification failed', err))
+    return tournamentResult
+  }
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'in_progress') return false
@@ -819,12 +828,16 @@ export async function pauseDraftSession(leagueId: string, pausedByUserId?: strin
     logStructured('warn', 'draft_session_service', 'control_lock_contended', { leagueId, action: 'pause' })
     return false
   }
+  if (lockResult.value) await import('@/lib/draft-notifications').then(m => m.notifyDraftPaused(leagueId)).catch(err => console.error('[draft] pause notification failed', err))
   return lockResult.value
 }
 
 export async function resumeDraftSession(leagueId: string): Promise<boolean> {
   const tournamentResult = await controlSeasonDraft(leagueId, 'resume')
-  if (tournamentResult !== null) return tournamentResult
+  if (tournamentResult !== null) {
+    if (tournamentResult) await import('@/lib/draft-notifications').then(m => m.notifyDraftResumed(leagueId)).catch(err => console.error('[draft] resume notification failed', err))
+    return tournamentResult
+  }
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'paused') return false
@@ -873,6 +886,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
     logStructured('warn', 'draft_session_service', 'control_lock_contended', { leagueId, action: 'resume' })
     return false
   }
+  if (lockResult.value) await import('@/lib/draft-notifications').then(m => m.notifyDraftResumed(leagueId)).catch(err => console.error('[draft] resume notification failed', err))
   return lockResult.value
 }
 
@@ -1194,8 +1208,12 @@ export async function swapDraftManagers(
 }
 
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
+  const beforeCompletion = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true } })
   const seasonCompleted = await completeSeasonDraft(leagueId)
-  if (seasonCompleted !== null) return seasonCompleted
+  if (seasonCompleted !== null) {
+    if (seasonCompleted && beforeCompletion?.status !== 'completed') await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', beforeCompletion?.id)).catch(err => console.error('[draft] completion notification failed', err))
+    return seasonCompleted
+  }
   const outcome = await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session) return { ok: false as const, transitioned: false as const, lifecycle: null }
@@ -1269,6 +1287,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
   }
 
   if (outcome.transitioned) {
+    await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', outcome.sessionId)).catch(err => console.error('[draft] completion notification failed', err))
     // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
     // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
     // still emitted from the Redraft path for the season-specific payload.

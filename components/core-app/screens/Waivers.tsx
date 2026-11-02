@@ -74,7 +74,7 @@ function Tile({
   label: string
   state: SectionState<unknown>
   /** `track`, 0–1: a share of a known total, drawn as a bar only in the redraft identity (see below). */
-  render?: (d: never) => { value: string; sub?: string; track?: number | null }
+  render?: (d: never) => { value: string; of?: string; sub?: string; track?: number | null }
   sub?: string
   /** A "?" beside the label (lib/core-app/helpTopics.ts). */
   help?: HelpTopicId
@@ -95,10 +95,14 @@ function Tile({
       </div>
     )
   }
-  const out: { value: string; sub?: string; track?: number | null } = render ? render(state.data as never) : { value: String(state.data), sub }
+  const out: { value: string; of?: string; sub?: string; track?: number | null } = render ? render(state.data as never) : { value: String(state.data), sub }
   return (
     <div className="af-wv-tile" data-tile={tile}>
-      <div className="af-wv-tile-value af-num">{out.value}</div>
+      <div className="af-wv-tile-value af-num">
+        {out.value}
+        {/* "/ $100" — the denominator, only when it is a real figure (the FAAB tile's league budget). */}
+        {out.of ? <span className="af-wv-tile-of"> {out.of}</span> : null}
+      </div>
       <div className="af-label">
         {copy(label)}
         {help ? <> <TopicTip topic={help} /></> : null}
@@ -180,6 +184,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 }
                 return {
                   value: `$${b.faabRemaining}`,
+                  of: faabTrack(b.faabRemaining, faabBudget) != null ? `/ $${faabBudget}` : undefined,
                   sub:
                     b.rankByBudget != null
                       ? m.budgetRank(b.rankByBudget, b.rostersWithBudget)
@@ -192,6 +197,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             <Tile
               label="Waiver priority"
               help="waiverPriority"
+              tile="priority"
               state={data.waiverPriority}
               render={(d: never) => {
                 const w = d as unknown as { priority: number; leagueRosters: number }
@@ -199,8 +205,38 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               }}
             />
 
+            {/*
+              The next run as a KPI beside the money it spends (the redesign's strip). The same instant
+              the sticky line above counts down, so on a phone — where that line is always on screen —
+              this tile is hidden (af-waivers.css) rather than said twice. A schedule we have not read is
+              the loader's own sentence, never a guessed day.
+            */}
+            {schedule && data.processTime.available ? (
+              <div className="af-wv-tile" data-tile="next-run" data-testid="waiver-next-run-tile">
+                <div className="af-wv-tile-value">{copy(data.processTime.data.dayLabel)}</div>
+                <div className="af-label">{copy('Next waiver run')}</div>
+                <div className="af-wv-tile-sub">
+                  <WaiverRunClock schedule={schedule} compact />
+                </div>
+              </div>
+            ) : (
+              <Tile label="Next waiver run" tile="next-run" state={data.processTime} />
+            )}
+
+            <Tile
+              label="Claims queued"
+              help="claimsQueued"
+              tile="claims"
+              state={data.claimsQueued}
+              render={(d: never) => {
+                const c = d as unknown as { count: number }
+                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
+              }}
+            />
+
             <Tile
               label="Players held"
+              tile="held"
               state={data.rosterLoad}
               render={(d: never) => {
                 const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
@@ -208,16 +244,6 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                   value: String(r.playersHeld),
                   sub: m.rosterLoad(r.starters, r.bench, r.reserve),
                 }
-              }}
-            />
-
-            <Tile
-              label="Claims queued"
-              help="claimsQueued"
-              state={data.claimsQueued}
-              render={(d: never) => {
-                const c = d as unknown as { count: number }
-                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
               }}
             />
           </div>

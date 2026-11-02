@@ -73,7 +73,7 @@ export default function SingleGameMatchupModal({ challengeId, series, sport, pro
   }, [onClose])
 
   const cup = sport === "nba_cup"
-  const logoSport = sport === "ncaaf" ? "NCAAF" : "NBA_CUP"
+  const logoSport = sport === "ncaaf" ? "NCAAF" : sport === "nfl" ? "NFL" : "NBA_CUP"
   const home = profiles[series.homeTeamName]
   const away = profiles[series.awayTeamName]
   const hasTeams = cup ? isNbaCupTeam(series.homeTeamName) && isNbaCupTeam(series.awayTeamName) : isOfficialTeamName(series.homeTeamName) && isOfficialTeamName(series.awayTeamName)
@@ -119,7 +119,7 @@ export default function SingleGameMatchupModal({ challengeId, series, sport, pro
   const teamCard = (name: string, side: "home" | "away", seed: number, profile: BracketTeamProfile | undefined, probability: number | null) => {
     const row = rowOf(name)
     const results = cupResults.get(name) ?? []
-    const official = isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST)\d+$/i.test(name)
+    const official = isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(name)
     return (
       <section className="af-cup-team" style={tintStyle(name, side)} data-picked={picked === name ? "true" : undefined} aria-label={name}>
         {official ? <Silhouette team={name} logoUrl={teamLogos[name] ?? null} logoSport={logoSport} /> : null}

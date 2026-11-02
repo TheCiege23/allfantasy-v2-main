@@ -79,9 +79,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const entries = Array.isArray(view?.entries) ? view.entries : []
   const series = Array.isArray(view?.series) ? view.series : []
   const totalSeries = series.length
-  const singleGameSport = ["ncaaf", "nba_cup"].includes(String(safeChallenge.sport ?? "").toLowerCase())
+  const singleGameSport = ["ncaaf", "nba_cup", "nfl"].includes(String(safeChallenge.sport ?? "").toLowerCase())
+  const nflPool = String(safeChallenge.sport ?? "").toLowerCase() === "nfl"
   const hasTemplateSeries = singleGameSport
-    ? !safeChallenge.isTestMode && series.some((item) => !item.startsAt || /^(?:CFP|EAST|WEST)\d+$/i.test(item.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(item.awayTeamName))
+    ? !safeChallenge.isTestMode && series.some((item) => (!item.startsAt && (!nflPool || item.round === "nfl_wild_card")) || /^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(item.homeTeamName) || /^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(item.awayTeamName))
     : series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
       (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const myEntries = entries.filter((entry) => entry.userId === view?.viewerUserId)
@@ -287,7 +288,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             <div className="af-pd-banner">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
               <span data-testid="playoff-template-warning">{singleGameSport
-                ? rollingCup ? copy.cupTemplate : copy.singleTemplate
+                ? rollingCup ? copy.cupTemplate : nflPool ? copy.nflTemplate : copy.singleTemplate
                 : copy.seriesTemplate}</span>
             </div>
           ) : null}

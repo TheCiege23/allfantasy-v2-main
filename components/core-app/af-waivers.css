@@ -482,20 +482,26 @@
 .af-core .af-wv-area-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .af-core .af-wv-area-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 
+/*
+ * 2026-11 redesign: the tiles are a KPI STRIP across the whole page, above both columns — they were a
+ * 2×2 block in the right-hand column, which pushed the first add below a column of reference cards.
+ */
 @container af-wv (min-width: 900px) {
   .af-core .af-wv-layout {
     grid-template-columns: minmax(0, 1fr) 300px;
-    grid-template-areas: 'main tiles' 'main side';
-    grid-template-rows: auto 1fr;
+    grid-template-areas: 'tiles tiles' 'main side';
     column-gap: 16px;
   }
-  /* Four tiles in a 300px column: two by two, not four full-width rows. */
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
+  /* Five figures in one row. */
+  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 24px; }
 }
-/* A tablet-width page: the four tiles in one row, not three and an orphan. */
+/* A tablet-width page: three over two, on a six-column grid so the second row fills the width too. */
 @container af-wv (min-width: 600px) and (max-width: 899px) {
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tile { grid-column: span 2; }
+  .af-core .af-wv-area-tiles .af-wv-tile:nth-child(n + 4) { grid-column: span 3; }
+  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
 }
 @container af-wv (min-width: 1180px) {
   .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -631,3 +637,138 @@
   outline-offset: -2px;
   border-radius: 8px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   2026-11 redesign (Waivers.dc.html): KPI strip, filter bar, table rows.
+   Tokens only — af-core.css carries light, dark and AF for every one used here.
+   Own top-level blocks, so nothing is carried into another band.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* "$64 / $100": the league budget beside what is left, quieter than the figure itself. */
+.af-core .af-wv-tile-of { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+.af-core .af-wv-tile[data-tile='next-run'] .af-wv-tile-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
+/* The budget bar for every league now, not only the redraft stamp: a share of two real figures. */
+.af-core .af-wv-track { display: block; height: 6px; margin-top: 9px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.af-core .af-wv-track-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+
+/* The phone already shows the next run in the sticky line above; the tile would say it twice. */
+@container af-wv (max-width: 599px) {
+  .af-core .af-wv-tile[data-tile='next-run'] { display: none; }
+}
+
+/* ── The filter bar: search + position chips, the width of the card ── */
+.af-core .af-wlb-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2, var(--surface));
+}
+.af-core .af-wlb-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line2, var(--line));
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.af-core .af-wlb-search::placeholder { color: var(--faint); }
+.af-core .af-wlb-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.af-core .af-wlb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-core .af-wlb-chip-btn {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.af-core .af-wlb-chip-btn[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent-line, var(--accent)); color: var(--text); }
+.af-core .af-wlb-chip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-core .af-wlb-count { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+.af-core .af-wlb-clear {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── Rows as a table: a position badge, the player, the gain, who he replaces ── */
+.af-core .af-wlb-head,
+.af-core .af-wlb-row { grid-template-columns: 40px minmax(0, 1fr) auto minmax(0, 32%); }
+.af-core .af-wlb-head {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-core .af-wlb-head > span:nth-child(3) { text-align: right; }
+.af-core .af-wlb-head > span:nth-child(4) { text-align: right; }
+.af-core .af-wlb-head + .af-wlb-list { margin-top: 0; }
+.af-core .af-wlb-row { align-items: center; padding: 9px 0; }
+.af-core .af-wlb-pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  background: var(--mu-pos-flex-bg);
+  color: var(--mu-pos-flex-fg);
+}
+.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chip-btn[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
+.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chip-btn[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
+.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chip-btn[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
+.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chip-btn[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
+.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chip-btn[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
+/* The badge says the position; the meta line keeps it in text for a screen reader, not on screen. */
+.af-core .af-wlb-meta-pos {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.af-core .af-wlb-gain { text-align: right; font-size: 15px; }
+
+@media (max-width: 720px) {
+  /* Phone: no column heads; the badge and the player share the first line, the rest wraps below. */
+  .af-core .af-wlb-head { display: none; }
+  .af-core .af-wlb-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .af-core .af-wlb-over { grid-column: 2 / -1; text-align: left; }
+  .af-core .af-wlb-chip-btn,
+  .af-core .af-wlb-search { min-height: 44px; }
+  .af-core .af-wlb-count { margin-left: 0; }
+}
+
+@media (pointer: coarse) {
+  .af-core .af-wlb-chip-btn,
+  .af-core .af-wlb-search { min-height: 44px; }
+}
+

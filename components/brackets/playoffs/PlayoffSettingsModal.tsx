@@ -63,7 +63,7 @@ export default function PlayoffSettingsModal({
 
   const lockRule = view.challenge.lockRule ?? view.challenge.config?.lockRule ?? "series start"
   const sport = String(view.challenge.sport ?? "").toLowerCase()
-  const singleGameSport = sport === "ncaaf" || sport === "nba_cup"
+  const singleGameSport = sport === "ncaaf" || sport === "nba_cup" || sport === "nfl"
 
   return (
     <div
@@ -118,6 +118,8 @@ export default function PlayoffSettingsModal({
               ? "An admin publishes the committee’s 12-team field and game times before picks open."
               : sport === "nba_cup"
                 ? "An admin publishes the eight knockout qualifiers and game times after group play is final."
+                : sport === "nfl"
+                  ? "Seeds 1–7 in each conference are filled from the final regular-season standings, and game times from the NFL schedule. The divisional round reseeds: the 1 seed plays the lowest seed left."
                 : "Seeds 1–6 in each league are filled from live standings once the regular season is over. Until then the bracket shows seed slots (AL1…NL6) rather than clubs."}
           </p>
           {canAdmin && onResync ? (

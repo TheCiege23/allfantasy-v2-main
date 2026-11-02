@@ -13,7 +13,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const en = {
   allBrackets: "All brackets",
   refresh: "Refresh",
-  sportName: { nba: "NBA Playoffs", nhl: "NHL Playoffs", mlb: "MLB Postseason", ncaaf: "College Football Playoff", nba_cup: "NBA Cup" } as Record<string, string>,
+  sportName: { nba: "NBA Playoffs", nhl: "NHL Playoffs", mlb: "MLB Postseason", ncaaf: "College Football Playoff", nba_cup: "NBA Cup", nfl: "NFL Playoffs" } as Record<string, string>,
   poolSeason: (sport: string, year: number) => `${sport} pool · ${year}`,
   brackets: (n: number) => plural(n, "bracket", "brackets"),
   participants: (n: number) => plural(n, "participant", "participants"),
@@ -23,6 +23,7 @@ const en = {
   testMode: "Test mode",
   cupTemplate: "NBA Cup teams and game times update automatically. Pick remaining group games now; knockout matchups open as qualifiers are confirmed. Games already started earn no late points.",
   singleTemplate: "Official teams and game times must be published by an admin before picks open.",
+  nflTemplate: "NFL playoff teams are set from the final regular-season standings, and Wild Card times from the NFL schedule. Picks open when both are in, and the bracket locks at the first Wild Card kickoff.",
   seriesTemplate: "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks.",
   yourBracket: "Your bracket",
   poolDetails: "Pool Details",
@@ -67,7 +68,7 @@ type Copy = typeof en
 const es: Copy = {
   allBrackets: "Todos los cuadros",
   refresh: "Actualizar",
-  sportName: { nba: "Playoffs de la NBA", nhl: "Playoffs de la NHL", mlb: "Postemporada de la MLB", ncaaf: "Playoff de fútbol universitario", nba_cup: "NBA Cup" },
+  sportName: { nba: "Playoffs de la NBA", nhl: "Playoffs de la NHL", mlb: "Postemporada de la MLB", ncaaf: "Playoff de fútbol universitario", nba_cup: "NBA Cup", nfl: "Playoffs de la NFL" },
   poolSeason: (sport, year) => `Liga de ${sport} · ${year}`,
   brackets: (n) => plural(n, "cuadro", "cuadros"),
   participants: (n) => plural(n, "participante", "participantes"),
@@ -77,6 +78,7 @@ const es: Copy = {
   testMode: "Modo de prueba",
   cupTemplate: "Los equipos y horarios de la NBA Cup se actualizan solos. Elige ya los partidos de grupos restantes; las eliminatorias abren cuando se confirman los clasificados. Los partidos ya iniciados no suman puntos tardíos.",
   singleTemplate: "Un administrador debe publicar los equipos y horarios oficiales antes de abrir las selecciones.",
+  nflTemplate: "Los equipos de playoffs de la NFL salen de la clasificación final de la temporada regular, y los horarios de comodines del calendario de la NFL. Las selecciones abren cuando estén ambos, y el cuadro cierra con la primera patada inicial de comodines.",
   seriesTemplate: "Se muestran equipos de plantilla hasta que se sincronicen las series. La sincronización de equipos y horarios no importa ganadores. La de resultados puntúa las selecciones finalizadas.",
   yourBracket: "Tu cuadro",
   poolDetails: "Detalles de la liga",

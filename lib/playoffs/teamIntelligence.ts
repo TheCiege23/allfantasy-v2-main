@@ -43,8 +43,8 @@ export async function loadBracketTeamProfiles(
   seasonYear: number,
   names: string[],
 ): Promise<Record<string, BracketTeamProfile>> {
-  if (sport !== "ncaaf" && sport !== "nba_cup") return {}
-  const cacheSport = sport === "nba_cup" ? "NBA" : "NCAAF"
+  if (sport !== "ncaaf" && sport !== "nba_cup" && sport !== "nfl") return {}
+  const cacheSport = sport === "nba_cup" ? "NBA" : sport === "nfl" ? "NFL" : "NCAAF"
   const rows = await prisma.sportsDataCache.findMany({
     where: { cacheKey: { startsWith: `${cacheSport}:standings:${seasonYear}:` } },
     select: { data: true },

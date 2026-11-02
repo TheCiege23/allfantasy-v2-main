@@ -35,6 +35,13 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: async (run: (tx: unknown) => Promise<unknown>) => run({
+      $executeRaw: vi.fn(async () => 0),
+      playerGameStat: {
+        findMany: async () => [],
+        upsert: (...a: unknown[]) => h.upsert(...a),
+      },
+    }),
     sportsGame: { findMany: (...a: unknown[]) => h.sportsGameFindMany(...a), upsert: vi.fn(async () => ({})) },
     sportsDataCache: {
       findUnique: async ({ where }: { where: { cacheKey: string } }) => {

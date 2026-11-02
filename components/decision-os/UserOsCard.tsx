@@ -159,6 +159,85 @@ export default function UserOsCard({ snapshot, variant = 'league', language }: U
     { label: 'Draft picks', value: activitySummary.draftEventCount },
   ].filter((chip) => !isSelfView || chip.value > 0)
 
+  if (isSelfView) {
+    /*
+     * The /core home's strip (2026-11-01 home redesign). The boxed layout below gave one count — often
+     * a single "12" — a full-width panel of its own and the trend another, so the card was mostly
+     * frame. Same facts, same test ids, one row: tier and freshness, then the counts as figures, then
+     * the trend as a word with its arrow. The trend's "unavailable" states read as a sentence here;
+     * the reason codes stay on the league and commissioner views, where they were asked for.
+     */
+    const trend = snapshot.leagueTrend
+    const TrendIcon = trend.available
+      ? trend.direction === 'increasing' ? ArrowUp : trend.direction === 'decreasing' ? ArrowDown : ArrowRight
+      : null
+    return (
+      <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label={yourTeam}>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              data-testid="user-os-participation-tier"
+              className="inline-flex items-center gap-1.5 rounded-full border border-subtle bg-surface-muted px-2.5 py-1 text-[11px] font-bold text-primary"
+            >
+              {teamHealth.isInactive ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-status-warning" aria-hidden />
+              ) : (
+                <ShieldCheck className="h-3.5 w-3.5 text-status-success" aria-hidden />
+              )}
+              {tierLabel}
+            </span>
+            <DecisionOsUpdatedStamp value={snapshot.generatedAt} includeTime language={language} />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-6 gap-y-3">
+            <p className="w-full text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+              {es ? 'Tu actividad en AllFantasy (últimos 90 días)' : 'Your activity in AllFantasy (last 90 days)'}
+            </p>
+            {statChips.length > 0 ? (
+              statChips.map((chip) => (
+                <div key={chip.label} className="min-w-0">
+                  <p className="font-mono text-2xl font-black leading-none text-primary">{chip.value}</p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                    {es ? (STAT_LABEL_ES[chip.label] ?? chip.label) : chip.label}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm leading-6 text-muted" data-testid="user-os-activity-none">
+                {es ? 'Todavía no hay actividad registrada en esta liga.' : 'No activity recorded for this league yet.'}
+              </p>
+            )}
+            <div className="min-w-0 sm:ml-auto">
+              {trend.available && TrendIcon ? (
+                <div className="flex items-center gap-2" data-testid="user-os-trend-available">
+                  <TrendIcon className="h-4 w-4 shrink-0 text-brand-primary" aria-hidden />
+                  <p className="text-sm font-bold text-primary">
+                    {es ? (TREND_DIRECTION_ES[trend.direction] ?? trend.direction) : trend.direction}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs leading-5 text-muted" data-testid="user-os-trend-unavailable">
+                  {/* The TrendPanel's own sentences, without the English reason-code prefix. */}
+                  {trend.available
+                    ? null
+                    : trend.reason === 'no_snapshots'
+                      ? es
+                        ? 'Todavía no se ha capturado ninguna instantánea de actividad de esta liga.'
+                        : 'No activity snapshots have been captured yet for this league.'
+                      : es
+                        ? 'Solo hay una captura hasta ahora: la tendencia necesita al menos dos para comparar.'
+                        : 'Only one snapshot captured so far — trend needs at least two to compare.'}
+                </p>
+              )}
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                {es ? 'Tendencia de actividad de la liga' : 'League activity trend'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label={yourTeam}>
       <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">

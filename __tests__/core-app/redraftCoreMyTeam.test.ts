@@ -168,16 +168,16 @@ describe('af-core-redraft-myteam.css — gated on the shell stamp', () => {
     .map((s) => s.trim())
     .filter(Boolean)
   /** The two rules that HIDE the new elements outside the stamp — the only unscoped ones allowed. */
-  const HIDE_ONLY = ['.af-mt-period', '.af-wl-race']
+  const HIDE_ONLY = ['.af-mt-period', '.af-wl-race', '.af-mt-total', '.af-mt-check-icon']
 
   it('finds the rules at all (a renamed file would otherwise pass trivially)', () => {
     expect(selectors.length).toBeGreaterThan(40)
   })
-  it('every selector is under .af-core.af-shell[data-format=redraft], except the two hide-only rules', () => {
+  it('every selector is under .af-core.af-shell[data-format=redraft], except the hide-only rules', () => {
     const unscoped = selectors.filter((s) => !s.includes('.af-core.af-shell[data-format=redraft]') && !HIDE_ONLY.includes(s))
     expect(unscoped).toEqual([])
   })
-  it('the two unscoped rules only hide', () => {
+  it('the unscoped rules only hide', () => {
     for (const sel of HIDE_ONLY) {
       const body = css.match(new RegExp(`(^|\\})\\s*${sel.replace('.', '\\.')}\\s*\\{([^}]*)\\}`))?.[2]?.trim()
       expect(body).toBe('display:none')

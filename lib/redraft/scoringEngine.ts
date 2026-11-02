@@ -822,7 +822,13 @@ export async function scoreRosterForWeek(args: {
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
-  return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  if (useDevyEngine || bestBall) return result
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, platform: true, leagueVariant: true } })
+  if (!league || !isNativePlatform(league.platform) || String(league.sport ?? '').toUpperCase() !== 'NBA' || !['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) return result
+  const campus = await loadCampusPoints(league, { season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
+  if (!campus || !('window' in campus)) return result
+  return { ...result, points: Math.round((result.points + campus.home.points) * 100) / 100, missingPlayerIds: [...result.missingPlayerIds, 'campus-evidence-pending'], allFinal: false }
 }
 
 /**
@@ -934,7 +940,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   let zombieItems: import('@/lib/zombie/beta2025Items').ItemScoreReceipt | null = null
   const zombieScoring = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform) && scoringLeague && isZombieLeagueLike(scoringLeague)
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
+  // The current college basketball feed does not establish whether a missing line is a bye,
+  // an incomplete box score, or an unpublished postseason game. Keep the score provisional.
+  const campusPending = Boolean(campus && 'window' in campus)
   const isComplete =
+    !campusPending &&
     missingPlayerIds.length === 0 &&
     home.starterCount > 0 &&
     away.starterCount > 0 &&
@@ -988,6 +998,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           redraftScoring: {
             scoredAt: new Date().toISOString(),
             isComplete,
+            ...(campusPending ? { campusPending: true } : {}),
             ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
             ...(campus ? { campus } : {}),
             home,
@@ -1160,8 +1171,9 @@ async function updateByeRowScore(row: {
     ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
+  const campusPending = Boolean(campus && 'window' in campus)
   const isComplete =
-    home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+    !campusPending && home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
   await prisma.redraftMatchup.update({
     where: { id: m.id },
     data: {
@@ -1172,6 +1184,7 @@ async function updateByeRowScore(row: {
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(campusPending ? { campusPending: true } : {}),
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,

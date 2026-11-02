@@ -13,6 +13,7 @@
 #   ./probe.sh roster <SPORT> <espn_team_id>
 #   ./probe.sh fantasy-league MLB <league_id> <season>
 #   ./probe.sh summary NFL <espn_event_id>
+#   ./probe.sh scoreboard <NBA|NFL> <YYYYMMDD[-YYYYMMDD]>
 #
 # Examples:
 #   ./probe.sh teams  NCAAB
@@ -43,7 +44,8 @@ case "$SPORT" in
     ;;
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
   NFL)
-    if [[ "$ENDPOINT" != "summary" ]]; then echo "NFL currently supports only summary capture" >&2; exit 2; fi
+    # scoreboard: the postseason rounds behind NFL playoff bracket pools (lib/playoffs/nflPlayoffs.ts).
+    if [[ "$ENDPOINT" != "summary" && "$ENDPOINT" != "scoreboard" ]]; then echo "NFL currently supports only summary and scoreboard capture" >&2; exit 2; fi
     SPORT_PATH="football/nfl"
     ;;
   MLB)
@@ -60,7 +62,7 @@ esac
 
 case "$ENDPOINT" in
   scoreboard)
-    if ! [[ "$TEAM_ID" =~ ^[0-9]{8}(-[0-9]{8})?$ ]]; then echo "usage: probe.sh scoreboard NBA <YYYYMMDD[-YYYYMMDD]>" >&2; exit 2; fi
+    if ! [[ "$TEAM_ID" =~ ^[0-9]{8}(-[0-9]{8})?$ ]]; then echo "usage: probe.sh scoreboard <NBA|NFL> <YYYYMMDD[-YYYYMMDD]>" >&2; exit 2; fi
     PATH_SEG="/${SPORT_PATH}/scoreboard"
     QS="dates=${TEAM_ID}&limit=1000"
     NAME="scoreboard.${SPORT}.${TEAM_ID}"

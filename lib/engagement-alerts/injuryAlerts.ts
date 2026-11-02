@@ -160,7 +160,7 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         severity: changes.some(c => isUnavailableStatus(c.status)) ? 'high' : 'medium',
         dedupePrefix: sourceKey,
         // A lineup alert is push + email now; anything else is the bell only. Neither is in the daily digest.
-        skipChannels: impact ? { sms: true } : { sms: true, email: true, push: true },
+        skipChannels: impact ? { sms: true } : { sms: true, email: true },
         meta: { sport, team: batch.team, playerCount: changes.length, eventKey: digest, pushTag: sourceKey,
           ...(impact ? { lineupImpact: impact.kind } : {}),
           playerNews: { playerName: changes.map(c => c.playerName).join(', '), team: batch.team, status: changes.map(c => c.status).join(', '), starter: batch.starter, delivery: impact ? 'instant' : 'bell', digest: false } },

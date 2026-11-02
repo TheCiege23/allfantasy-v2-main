@@ -1074,7 +1074,8 @@
   position: relative;
   padding: 3px 12px;
   border-bottom: 0;
-  border-top: 2px solid var(--good);
+  /* Dashed, like the bye line below it (2026-11 redesign): a line between rows, not a row border. */
+  border-top: 2px dashed var(--good);
   background: var(--surface);
   font-size: 11px;
   font-weight: 800;
@@ -2069,3 +2070,80 @@
 @media (max-width: 640px) {
   .af-stb-cardodds .af-stb-oddsbar { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   2026-11 redesign (Standings.dc.html): Diff and AF columns, the playoff
+   picture. Tokens only, so light, dark and AF all follow af-core.css.
+   ══════════════════════════════════════════════════════════════════════ */
+.af-stb-diff[data-tone='good'] { color: var(--good); }
+.af-stb-diff[data-tone='bad'] { color: var(--bad); }
+.af-stb-afrank { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-weight: 800; }
+
+.af-stb-picture { display: grid; gap: 14px; margin-top: 4px; }
+.af-stb-field { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.af-stb-fieldcol { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.af-stb-seedlist,
+.af-stb-racelist { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.af-stb-seedcard,
+.af-stb-racerow {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-stb-seedcard[data-bye='true'] { border-color: var(--tier-blue, var(--line2)); }
+.af-stb-seedcard[data-you='true'],
+.af-stb-racerow[data-you='true'] { background: var(--accent-soft); border-color: var(--accent-line); }
+.af-stb-seedcard > .af-stb-zone { grid-column: 2 / -1; justify-self: start; }
+.af-stb-seedno {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+.af-stb-seedname,
+.af-stb-racename {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-stb-racename { white-space: normal; }
+.af-stb-racemeta { display: block; margin-top: 2px; }
+.af-stb-seedname .af-stb-you,
+.af-stb-racename .af-stb-you { margin-left: 6px; vertical-align: 1px; }
+.af-stb-seedrec,
+.af-stb-racemeta { font-size: 12px; font-weight: 600; color: var(--muted); }
+.af-stb-race {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2, var(--surface));
+}
+.af-stb-racehead { margin: 4px 0 0; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.af-stb-racerow[data-role='holding'] { border-left: 3px solid var(--good); }
+.af-stb-racerow[data-role='chasing'] { border-left: 3px dashed var(--line2); }
+.af-stb-raceodds .af-stb-odds { gap: 8px; }
+
+@media (max-width: 720px) {
+  .af-stb-field { grid-template-columns: minmax(0, 1fr); }
+  .af-stb-raceodds .af-stb-oddsbar { display: none; }
+}
+

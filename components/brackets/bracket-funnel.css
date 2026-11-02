@@ -40,6 +40,15 @@ a.af-fn-game:hover { border-color: #70ecc0; background: #1b4241; }
 .af-fn-trophy { align-self: center; width: 34px; height: 34px; color: #ffd98a; }
 .af-fn-game[data-side="final"] { border-color: #70ecc0; }
 
+/* Seven-column funnels (three rounds a side): tighter gutters, same 11px floor. */
+.af-fn-tree[data-dense="true"] { gap: 0 14px; }
+.af-fn-tree[data-dense="true"] .af-fn-game[data-side="left"]::after,
+.af-fn-tree[data-dense="true"] .af-fn-game[data-side="right"]::after { width: 14px; }
+.af-fn-tree[data-dense="true"] .af-fn-game[data-side="left"]::after { right: -15px; }
+.af-fn-tree[data-dense="true"] .af-fn-game[data-side="right"]::after { left: -15px; }
+.af-fn-tree[data-dense="true"] .af-fn-col-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+.af-fn-tree[data-dense="true"] .af-fn-col[data-side="right"] .af-fn-col-head { align-items: flex-end; }
+
 @media (max-width: 640px) {
   .af-fn { padding: 14px 15px 4px; }
 }

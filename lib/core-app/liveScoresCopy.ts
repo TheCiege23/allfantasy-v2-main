@@ -125,6 +125,14 @@ const ES: Record<string, string> = {
     'Cambia a Todos los partidos para ver el resto de la jornada.',
   'Nothing is scheduled in this window.': 'No hay nada programado en este horario.',
 
+  // The "now" strip, the games strip and the matchup card (LiveNowStrip, LiveMatchupStrip)
+  'Right now': 'Ahora mismo',
+  'Live now': 'En vivo ahora',
+  'Your matchup': 'Tu enfrentamiento',
+  LIVE: 'EN VIVO',
+  'No games are live right now.': 'No hay partidos en vivo ahora mismo.',
+  'Show every game': 'Ver todos los partidos',
+
   // Lock warning
   'Lineup decision closing': 'Se cierra una decisión de alineación',
   'under a minute': 'menos de un minuto',

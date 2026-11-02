@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildShow, describeEntry, HOLD_MS, INTRO_MS, isShowCurrent, PACE_MS, progress, readShow } from '@/lib/draft-day/draftShow'
+import { buildShow, describeEntry, HOLD_MS, INTRO_MS, isShowCurrent, PACE_MS, progress, readShow, viewerShowEntry } from '@/lib/draft-day/draftShow'
 
 const order = [
   { slot: 1, rosterId: 'r1', displayName: 'Ace' },
@@ -63,6 +63,14 @@ describe('progress — one timeline everyone reads from the server clock', () =>
   it('closes itself after the hold', () => {
     expect(at(INTRO_MS + 3 * step + HOLD_MS - 1).over).toBe(false)
     expect(at(INTRO_MS + 3 * step + HOLD_MS).over).toBe(true)
+  })
+  it('only exposes the viewer’s pick after its place in the shared reveal', () => {
+    expect(viewerShowEntry(show, 1, 'r1')).toEqual({ state: 'waiting' })
+    expect(viewerShowEntry(show, 3, 'r1')).toEqual({ state: 'waiting' })
+    expect(viewerShowEntry(show, 4, 'r1')).toMatchObject({ state: 'revealed', entry: { slot: 1, rosterId: 'r1' } })
+    expect(viewerShowEntry(show, 1, 'r4')).toMatchObject({ state: 'revealed', entry: { slot: 4, rosterId: 'r4' } })
+    expect(viewerShowEntry(show, 1, 'spectator')).toBeNull()
+    expect(viewerShowEntry(show, 1, null)).toBeNull()
   })
   it('round-trips through storage and goes stale when the order changes', () => {
     const stored = readShow({ draft_day_show: JSON.parse(JSON.stringify(show)) })

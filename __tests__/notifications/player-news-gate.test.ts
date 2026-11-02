@@ -42,6 +42,16 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
 vi.mock('@/lib/news/player-news-category', () => ({ classifyPlayerNewsCategory: h.classify }))
 vi.mock('@/lib/follows/playerFollows', () => ({ listFollowerIdsForPlayerIdentity: h.followers }))
+vi.mock('@/lib/notifications/lineupImpact', () => ({ resolveLineupImpacts: async (args: { leagueIds: string[]; startingLeagueIds: string[] }) =>
+  args.leagueIds.map((leagueId) => ({ leagueId, leagueName: 'League', kind: args.startingLeagueIds.includes(leagueId) ? 'starter_out' : 'none', startName: null, benchName: null, delta: null, freeAgent: null, fixHref: null })) }))
+vi.mock('@/lib/notifications/newsPlayerBinding', () => ({
+  resolveNewsPlayerBinding: async () => ({ kind: 'resolved', identity: { id: 'pim-gibbs', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET', currentTeam: 'DET', sleeperId: '9221' }, candidates: [], via: 'unique_name', teamRoutable: false }),
+  rosterRowIsBoundPlayer: () => true,
+  currentTeamForBinding: async () => 'DET',
+  teamNewsSubject: () => null,
+}))
+vi.mock('@/lib/follows/teamFollows', () => ({ listFollowerIdsForTeam: async () => [] }))
+vi.mock('@/lib/follows/teamFollowAlerts', () => ({ resolveNewsTeam: async () => null, withinTeamFollowDailyCap: async (ids: string[]) => ids }))
 
 import { dispatchPendingPlayerNewsNotifications } from '@/lib/notifications/PlayerNewsNotificationService'
 import { statusBucket, isMeaningfulStatusChange } from '@/lib/notifications/playerNewsStatus'
@@ -92,11 +102,10 @@ describe('what a story says (idea 3)', () => {
 describe('the Player news level (idea 5)', () => {
   it('routes by level and relation', () => {
     const r = (level: 'starters' | 'roster' | 'off', rel: 'starter' | 'rostered' | 'player_follower' | 'team_follower', instantWorthy = true) => routePlayerNews(level, rel, { instantWorthy })
-    expect([r('starters', 'starter'), r('starters', 'rostered'), r('starters', 'player_follower'), r('starters', 'team_follower')]).toEqual(['instant', 'digest', 'instant', 'digest'])
-    expect([r('roster', 'starter'), r('roster', 'rostered'), r('roster', 'team_follower')]).toEqual(['instant', 'instant', 'digest'])
+    expect([r('starters', 'starter'), r('starters', 'rostered'), r('starters', 'player_follower'), r('starters', 'team_follower')]).toEqual(['instant', 'instant', 'instant', 'instant'])
+    expect([r('roster', 'starter'), r('roster', 'rostered'), r('roster', 'team_follower')]).toEqual(['instant', 'instant', 'instant'])
     expect(r('off', 'starter')).toBe('drop')
-    // A story with no clear status is never worth a push.
-    expect(r('roster', 'starter', false)).toBe('digest')
+    expect(r('roster', 'starter', false)).toBe('instant')
   })
   it('defaults to Starters only, and survives load, change detection and reset', () => {
     expect(readPlayerNewsLevel(null)).toBe('starters')
@@ -114,29 +123,29 @@ describe('the Player news level (idea 5)', () => {
 })
 
 describe('the gate', () => {
-  it('splits people into push-now, digest and already-told — never an email', async () => {
+  it('pushes relevant news now while honoring the off level and already-told ledger', async () => {
     const now = new Date('2026-10-22T15:00:00Z')
     const subject = { playerKey: 'pim-gibbs', bucket: 'out' as const }
     const plan = await planPlayerNews(['s', 'b', 'told', 'off'], subject, (id) => (id === 's' ? 'starter' : 'rostered'), {
       now, readLevels: async () => new Map([['off', 'off' as const]]), readTold: async () => new Set([toldKey('told', subject, now)]),
     })
-    expect(plan).toEqual({ instant: ['s'], digest: ['b'], suppressed: ['told', 'off'] })
+    expect(plan).toEqual({ instant: ['s', 'b'], digest: [], suppressed: ['told', 'off'] })
     const out = playerNewsDispatches({ userIds: ['s', 'b'], category: 'injury_alerts', type: 'x', title: 't' }, plan, { playerName: 'Gibbs' }, (id) => id === 's')
-    expect(out.map((o) => [o.userIds, o.skipChannels])).toEqual([[['s'], { sms: true, email: true }], [['b'], { sms: true, email: true, push: true }]])
+    expect(out.map((o) => [o.userIds, o.skipChannels])).toEqual([[['s'], { sms: true, email: true }], [['b'], { sms: true, email: true }]])
     expect(out[0]!.meta?.playerNews).toMatchObject({ delivery: 'instant', starter: true })
   })
 })
 
 describe('the news feed sender, end to end', () => {
-  it('a starter ruled out gets push + email with the lineup options; a bench player hurt is the bell only', async () => {
+  it('a starter ruled out gets lineup options and a bench injury gets push plus bell', async () => {
     h.rosterFind.mockResolvedValue([rostered('starter', 'L1', 'RB'), rostered('bench', 'L2', 'bench')])
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('starter')).toEqual(['instant'])
-    expect(delivery('bench')).toEqual(['digest'])
+    expect(delivery('bench')).toEqual(['instant'])
     const starter = calls().find((c) => c.userIds.includes('starter'))!
     expect(starter.skipChannels).toEqual({ sms: true })
     expect(starter.title).toBe('🚨 Jahmyr Gibbs is OUT — your lineup options')
-    expect(calls().find((c) => c.userIds.includes('bench'))!.skipChannels).toEqual({ sms: true, email: true, push: true })
+    expect(calls().find((c) => c.userIds.includes('bench'))!.skipChannels).toEqual({ sms: true, email: true })
     for (const c of calls()) expect((c.meta?.playerNews as { digest?: boolean }).digest).toBe(false)
   })
   it('idea 2: the same player and status the same day is one alert, even from a second story', async () => {
@@ -158,7 +167,7 @@ describe('the news feed sender, end to end', () => {
     await dispatchPendingPlayerNewsNotifications()
     expect(calls()).toHaveLength(0)
   })
-  it('"Off" hears nothing; a bench injury is the bell only even on "My whole roster"', async () => {
+  it('"Off" hears nothing; rostered bench injuries reach push and bell', async () => {
     h.rosterFind.mockResolvedValue([rostered('quiet', 'L1', 'RB'), rostered('all', 'L2', 'bench')])
     h.profiles.mockResolvedValue([
       { userId: 'quiet', notificationPreferences: { playerNewsLevel: 'off' } },
@@ -167,7 +176,6 @@ describe('the news feed sender, end to end', () => {
     await dispatchPendingPlayerNewsNotifications()
     expect(delivery('quiet')).toEqual([])
     expect(delivery('all')).toEqual(['instant'])
-    // …but it is still the bell only: no push, no email, not in the digest.
-    expect(calls().find((c) => c.userIds.includes('all'))!.skipChannels).toEqual({ sms: true, email: true, push: true })
+    expect(calls().find((c) => c.userIds.includes('all'))!.skipChannels).toEqual({ sms: true, email: true })
   })
 })

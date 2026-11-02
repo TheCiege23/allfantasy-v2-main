@@ -527,6 +527,9 @@ export async function POST(req: Request) {
         source: 'sleeper_import_league_create',
       });
 
+      await import('@/lib/league-events/publisher').then(({ publishLeagueCreatedNotice }) => publishLeagueCreatedNotice({
+        leagueId: persisted.league.id, actorUserId: verifiedAuth.userId, leagueName: persisted.league.name, sport: persisted.league.sport,
+      })).catch((e) => console.error('[league/create] imported creation notification failed', e))
       return NextResponse.json({
         league: persisted.league,
         historicalBackfill: persisted.historicalBackfill,
@@ -1471,6 +1474,9 @@ export async function POST(req: Request) {
       source: 'legacy_native_league_create',
     });
 
+    await import('@/lib/league-events/publisher').then(({ publishLeagueCreatedNotice }) => publishLeagueCreatedNotice({
+      leagueId: league.id, actorUserId: userId, leagueName: league.name, sport: league.sport,
+    })).catch((e) => console.error('[league/create] creation notification failed', e))
     return NextResponse.json({
       success: true,
       league: { id: league.id, name: league.name, sport: league.sport },

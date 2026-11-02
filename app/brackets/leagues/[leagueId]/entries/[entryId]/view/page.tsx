@@ -30,7 +30,7 @@ export default async function SharedPlayoffEntryPage(props: {
     challenge: { id: string; name: string; sport: string; seasonYear: number; ownerUserId: string; config: unknown }
   } | null
 
-  if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup"].includes(entry.challenge.sport)) {
+  if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup", "nfl"].includes(entry.challenge.sport)) {
     return <main className="mx-auto max-w-3xl p-8"><h1 className="text-2xl font-bold">Bracket not found</h1></main>
   }
 

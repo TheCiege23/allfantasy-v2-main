@@ -8,6 +8,7 @@ import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFiel
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
+import { carryOfficialNhlGameWinningGoals } from '@/lib/nhl-scoring/officialGameWinningGoals'
 
 /**
  * Per-game player box lines for every sport, from Rolling Insights `/live/{date}/{SPORT}`.
@@ -449,6 +450,7 @@ export async function ingestRollingInsightsGameLogs(opts: {
   now?: Date
   /** Checked BETWEEN dates so a bounded run makes progress instead of hitting the edge. */
   shouldStop?: () => boolean
+  persistSchedule?: boolean
 }): Promise<GameLogIngestResult> {
   const sport = opts.sport.trim().toUpperCase()
   const vendorCode = getRollingInsightsSportCode(sport)
@@ -515,7 +517,8 @@ export async function ingestRollingInsightsGameLogs(opts: {
       }
       result.datesFetched += 1
 
-      await writeRiGameRows({ sport, rows, identityByRiId, now, confidence, fallbackSeason, result })
+      await writeRiGameRows({ sport, rows, identityByRiId, now, confidence, fallbackSeason, result,
+        persistSchedule: opts.persistSchedule })
     }
   }
 
@@ -575,6 +578,7 @@ export async function writeRiGameRows(opts: {
         } catch { result.errors.push('LIVE_GAME_STATE_WRITE_FAILED') }
       }
     }
+    const prepared: Array<{ line: RiBoxLine; playerId: string; gameId: string }> = []
     for (const line of box.lines) {
       const playerId = identityByRiId.get(line.providerPlayerId)
       if (!playerId) {
@@ -587,23 +591,60 @@ export async function writeRiGameRows(opts: {
       // write overwrite the first.
       const gameId = line.group === 'all' ? box.providerGameId : `${box.providerGameId}:${line.group}`
       if (opts.shouldWriteLine && !opts.shouldWriteLine({ playerId, gameId }, line)) continue
+      prepared.push({ line, playerId, gameId })
+    }
 
-      const data = {
-        providerPlayerId: line.providerPlayerId,
-        providerGameId: box.providerGameId,
-        season: box.season ?? fallbackSeason,
-        weekOrRound: box.weekOrRound,
-        statPayload: toPrismaJsonInput(line.raw),
-        normalizedStatMap: toPrismaJsonInput(normalizedStatMapFor(line, box)),
-        source: SOURCE,
-        confidence,
-        team: line.team,
-        opponent: line.opponent,
-        // The DAY, not the instant: `game_date` is a DATE, and the instant's UTC date is
-        // tomorrow for every US night game (easternGameDay.ts has the measured damage).
-        gameDate: box.gameDay,
-        fetchedAt: now,
+    const dataFor = (line: RiBoxLine, normalized: Record<string, unknown>) => ({
+      providerPlayerId: line.providerPlayerId,
+      providerGameId: box.providerGameId,
+      season: box.season ?? fallbackSeason,
+      weekOrRound: box.weekOrRound,
+      statPayload: toPrismaJsonInput(line.raw),
+      normalizedStatMap: toPrismaJsonInput(normalized),
+      source: SOURCE,
+      confidence,
+      team: line.team,
+      opponent: line.opponent,
+      gameDate: box.gameDay,
+      fetchedAt: now,
+    })
+
+    if (sport === 'NHL') {
+      if (!prepared.length) continue
+      try {
+        await prisma.$transaction(async (tx) => {
+          // The official reconciler takes the same game lock. A refresh either
+          // sees and retains its verified bonus or finishes before enrichment.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`NHL:${box.providerGameId}`}, 0))`
+          const existing = await tx.playerGameStat.findMany({ where: { sportType: 'NHL',
+            gameId: { in: [...new Set(prepared.map((row) => row.gameId))] } },
+          select: { playerId: true, gameId: true, providerGameId: true,
+            gameDate: true, team: true, opponent: true, normalizedStatMap: true } })
+          const byKey = new Map(existing.map((row) => [`${row.playerId}:${row.gameId}`, row]))
+          for (const { line, playerId, gameId } of prepared) {
+            const normalized = normalizedStatMapFor(line, box)
+            const withOfficial = line.group === 'skaters' ?
+              carryOfficialNhlGameWinningGoals(byKey.get(`${playerId}:${gameId}`), normalized,
+                { providerGameId: box.providerGameId, gameDate: box.gameDay,
+                  team: line.team, opponent: line.opponent }) : normalized
+            const data = dataFor(line, withOfficial)
+            await tx.playerGameStat.upsert({
+              where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
+              update: data, create: { playerId, sportType: sport, gameId, ...data },
+            })
+          }
+        }, { timeout: 30_000 })
+        result.written += prepared.length
+      } catch (e) {
+        if (result.errors.length < 10) result.errors.push(
+          `NHL game ${box.providerGameId}: ${e instanceof Error ? e.message : String(e)}`,
+        )
       }
+      continue
+    }
+
+    for (const { line, playerId, gameId } of prepared) {
+      const data = dataFor(line, normalizedStatMapFor(line, box))
 
       try {
         await prisma.playerGameStat.upsert({
