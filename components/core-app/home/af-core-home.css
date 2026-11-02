@@ -58,6 +58,95 @@
 .af3a-bad .af-decision-when { color: var(--bad); }
 .af-decisions .af3a-row-title a { color: var(--text); text-decoration: none; }
 .af-decisions .af3a-row-title a:hover { color: var(--accent); }
+/*
+ * ── Urgent rows: countdown block + platform tile (2026-11-01 home redesign) ──
+ *
+ * ⚠ `.af3a-bad` IS ALSO A TEXT COLOUR. af-dash-3a.css declares `.af3a-bad { color: var(--bad) }`
+ * for its score numbers, and the urgent row carries the same class as its severity marker — so every
+ * title on a `bad` row inherited it and rendered pink, three of four rows on a normal Sunday, which
+ * left nothing on the list reading as MORE urgent. Severity now lives in the countdown block and the
+ * title is plain text. The selectors carry three classes because af-dash-3a.css's
+ * `.af3a-urgent.af3a-bad` border rule is two, and stylesheet order on /core is not something to rely on.
+ */
+.af-decisions .af3a-urgent.af-decision {
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  color: var(--text);
+  transition: border-color 0.15s ease;
+}
+.af-decisions .af3a-urgent.af-decision:hover { border-color: var(--accent-line); }
+/* Only a hole that is costing points right now glows; everything else is calm. */
+.af-decisions .af3a-urgent.af-decision[data-tone='now'] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad-soft), 0 14px 36px -20px var(--bad);
+}
+.af-decisions .af-decision h3 { color: var(--text); }
+
+.af-decisions .af-decision-clock {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 84px;
+  height: auto;
+  min-height: 56px;
+  padding: 6px 4px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text2);
+}
+.af-decisions .af-decision-clock b {
+  font: 800 18px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+.af-decisions .af-decision-clock span {
+  color: var(--muted);
+  font: 700 9px/1.15 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+.af-decisions [data-tone='now'] .af-decision-clock,
+.af-decisions [data-tone='soon'] .af-decision-clock {
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-decisions [data-tone='days'] .af-decision-clock {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+}
+.af-decisions [data-tone='event'] .af-decision-clock {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* Platform tile — the same --p-* marks every league tile on /core uses. */
+.af-decisions .af-decision-plat {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 800 12px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+.af-decision-plat[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); }
+.af-decision-plat[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); }
+.af-decision-plat[data-platform='yahoo'] { background: var(--p-yahoo-bg); color: var(--p-yahoo-fg); }
+.af-decision-plat[data-platform='fantrax'] { background: var(--p-fantrax-bg); color: var(--p-fantrax-fg); }
+.af-decision-plat[data-platform='mfl'] { background: var(--p-mfl-bg); color: var(--p-mfl-fg); }
+.af-decision-plat[data-platform='fleaflicker'] { background: var(--p-fleaflicker-bg); color: var(--p-fleaflicker-fg); }
+.af-decision-plat[data-platform='manual'],
+.af-decision-plat[data-platform='allfantasy'] { background: var(--p-manual-bg); color: var(--p-manual-fg); }
+
 .af-decisions-toggle {
   display: inline-flex;
   align-items: center;
@@ -130,6 +219,35 @@
     flex: 1 1 100%;
     min-height: 44px;
   }
+  /*
+   * The redesigned row on a phone: countdown and platform share the top line as small pills, then the
+   * decision, then a full-width button. Explicit columns so a row with no platform tile cannot pull
+   * the body up beside the clock.
+   */
+  .af-decisions .af3a-urgent.af-decision {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .af-decisions .af-decision-clock {
+    flex-direction: row;
+    justify-self: start;
+    width: auto;
+    min-height: 28px;
+    padding: 4px 10px;
+    gap: 8px;
+  }
+  .af-decisions .af-decision-clock b { font-size: 13px; }
+  .af-decisions .af-decision-plat {
+    justify-self: end;
+    width: auto;
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+  .af-decisions .af-decision .af3a-urgent-body,
+  .af-decisions .af-decision .af3a-btn { grid-column: 1 / -1; }
   .af-decisions .af-decision-meta {
     display: -webkit-box;
     -webkit-box-orient: vertical;

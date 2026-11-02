@@ -50,6 +50,51 @@ function deadlineLabel(deadline: Date | string | null, nowMs: number): string | 
   return `${Math.floor(hrs / 24)}D`
 }
 
+/**
+ * The countdown block that leads each urgent row (2026-11-01 home redesign). The colour IS the
+ * countdown, not the category: past or inside a day is urgent, inside three days is this week, later
+ * is quiet — and an `info` row (a draft) keeps the accent whatever its date, because it is an event to
+ * prepare for rather than a hole to fill. `figure` null means "now", which the caller says in the
+ * reader's language.
+ */
+type ClockTone = 'now' | 'soon' | 'days' | 'later' | 'event'
+
+const DAY_MS = 86_400_000
+
+function clockOf(issue: CoreIssue, nowMs: number): { figure: string | null; tone: ClockTone } | null {
+  if (!issue.deadline) return null
+  const ms = new Date(issue.deadline).getTime() - nowMs
+  if (Number.isNaN(ms)) return null
+  const tone: ClockTone =
+    issue.severity === 'info' ? 'event' : ms <= 0 ? 'now' : ms < DAY_MS ? 'soon' : ms < 3 * DAY_MS ? 'days' : 'later'
+  if (ms <= 0) return { figure: null, tone }
+  const mins = Math.floor(ms / 60000)
+  if (mins < 60) return { figure: `${mins}M`, tone }
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return { figure: `${hrs}H`, tone }
+  return { figure: `${Math.floor(hrs / 24)}D`, tone }
+}
+
+/**
+ * "SUN 1:00 PM" under the countdown. ⚠ CLIENT ONLY: a weekday and a clock time are the reader's time
+ * zone, which the server does not know, so this renders after hydration and the first paint carries
+ * the relative figure alone — the same rule `deadlineLabel` follows with the server's clock.
+ */
+function clockWhen(deadline: Date | string, language: string): string | null {
+  try {
+    return new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en-US', {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+      .format(new Date(deadline))
+      .replace(/\./g, '')
+      .toUpperCase()
+  } catch {
+    return null
+  }
+}
+
 function ActionLink({
   action,
   label,
@@ -101,7 +146,9 @@ export function DecisionQueue({
   noLeagues?: boolean
 }) {
   const [nowMs, setNowMs] = useState(() => Date.parse(nowIso))
+  const [mounted, setMounted] = useState(false)
   useEffect(() => {
+    setMounted(true)
     setNowMs(Date.now())
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000)
     return () => window.clearInterval(timer)
@@ -159,11 +206,32 @@ export function DecisionQueue({
             {top.map((issue) => {
               const when = deadlineLabel(issue.deadline, nowMs)
               const text = issueText(issue, language)
+              const clock = clockOf(issue, nowMs)
+              const clockAt = clock && mounted && issue.deadline ? clockWhen(issue.deadline, language) : null
+              const platform = issue.platform ? issue.platform.toLowerCase() : null
               return (
-                <li key={issue.id} className={`af3a-urgent af-decision ${SEV_CLASS[issue.severity]}`}>
-                  <span className="af3a-glyph" aria-hidden="true">
-                    {issue.glyph}
-                  </span>
+                <li
+                  key={issue.id}
+                  className={`af3a-urgent af-decision ${SEV_CLASS[issue.severity]}`}
+                  data-tone={clock?.tone ?? (issue.severity === 'info' ? 'event' : issue.severity === 'bad' ? 'soon' : 'later')}
+                >
+                  {clock ? (
+                    /* The meta line still says "IN 3D" for a screen reader; this is its visual form. */
+                    <span className="af-decision-clock" aria-hidden="true">
+                      <b>{clock.figure ?? t.now}</b>
+                      {clockAt ? <span>{clockAt}</span> : null}
+                    </span>
+                  ) : (
+                    <span className="af3a-glyph af-decision-clock" aria-hidden="true">
+                      {issue.glyph}
+                    </span>
+                  )}
+                  {platform ? (
+                    /* The meta line names the platform in words; the tile is for scanning a list. */
+                    <span className="af-decision-plat" data-platform={platform} aria-hidden="true">
+                      {platform.slice(0, 2).toUpperCase()}
+                    </span>
+                  ) : null}
                   <div className="af3a-urgent-body">
                     <h3>
                       {text.title}
@@ -175,7 +243,8 @@ export function DecisionQueue({
                       {/* The trailing space: on a phone the chip runs inline and read "IN 6DSleeper ›". */}
                       {when ? (
                         <>
-                          <b className="af3a-mono af-decision-when">
+                          {/* Visually carried by the countdown block; still read aloud here. */}
+                          <b className={`af3a-mono af-decision-when${clock ? ' af-sr-only' : ''}`}>
                             {when === 'now' ? t.now : t.inWhen(when)}
                           </b>{' '}
                         </>
