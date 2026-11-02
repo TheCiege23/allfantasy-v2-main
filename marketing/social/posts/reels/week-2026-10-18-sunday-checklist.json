@@ -1,0 +1,71 @@
+{
+  "name": "week-2026-10-18-sunday-checklist",
+  "slot": "Sun Oct 18 · 10 AM",
+  "accent": "#3BC4FF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "5 checks\n[before kickoff.]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.6,
+      "out": 4.0,
+      "text": "Final [injury] statuses",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🩺"
+    },
+    {
+      "in": 4.0,
+      "out": 5.4,
+      "text": "Byes in [every] league",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🛌"
+    },
+    {
+      "in": 5.4,
+      "out": 6.8,
+      "text": "Today: [add] or [claim]?",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "⏱️"
+    },
+    {
+      "in": 6.8,
+      "out": 8.2,
+      "text": "Flex the [late] game",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🌙"
+    },
+    {
+      "in": 8.2,
+      "out": 9.6,
+      "text": "Starters set [everywhere]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "✅"
+    }
+  ],
+  "end": {
+    "in": 9.8,
+    "line": "Every league.\n[One board.]"
+  },
+  "caption": {
+    "instagram": "5 checks before kickoff 🏈\n\n🩺 Final injury statuses\n🛌 Byes in every league\n⏱️ Add day or claim day?\n🌙 Flex the late game\n✅ Starters set everywhere\n\nAllFantasy puts every league on one board, most urgent first. Free, link in bio.\n\n#fantasyfootball #nflsunday #startem #allfantasy",
+    "tiktok": "5 checks before kickoff 🏈 Do these now. Which one do you always forget? 👇\n\n#fantasyfootball #nflsunday #fantasyfootballtok #allfantasy",
+    "youtube": "5 fantasy football checks before kickoff. Every league on one board at allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "5 checks before kickoff 🏈 Injury statuses, byes, waivers, flex the late game, starters set everywhere. Every league on one board: https://allfantasy.ai"
+  }
+}

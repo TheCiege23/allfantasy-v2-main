@@ -1,0 +1,53 @@
+{
+  "name": "campaign-gameday-texts-4",
+  "slot": "Fri 10/23 · reel",
+  "accent": "#3BC4FF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "RB out.\n[No RB on the bench.]",
+      "size": "h1",
+      "pop": true,
+      "top": 120
+    },
+    {
+      "in": 2.6,
+      "out": 4.8,
+      "text": "Slide your flex RB\n[into the RB spot]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🔁"
+    },
+    {
+      "in": 5.0,
+      "out": 7.2,
+      "text": "Start your best\n[WR or TE at flex]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📈"
+    },
+    {
+      "in": 7.4,
+      "out": 9.4,
+      "text": "Bench empty?\n[Grab a free agent.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "➕"
+    }
+  ],
+  "end": {
+    "in": 9.6,
+    "line": "We check\n[your flex too.]"
+  },
+  "caption": {
+    "instagram": "No healthy RB on your bench? You might still have a move. 🔁\n\nAllFantasy's swap tips check your flex spots: slide your flex RB into the open RB slot, then fill the flex with your best WR or TE. If the bench is empty, it points you to a free agent.\n\nLink in bio.\n\n#fantasyfootball #fantasyfootballadvice #startsit #waiverwire #allfantasy",
+    "tiktok": "RB out, no RB on the bench? Move your flex RB over, start a WR at flex 🔁 Link in bio.\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+    "youtube": "RB out, no RB on the bench? Move your flex RB over, start a WR at flex 🔁 allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "RB ruled out and no healthy RB on your bench? AllFantasy's swap tips look at your flex spots too: slide your flex RB into the RB slot and fill the flex with your best WR or TE. If your bench is empty, it points you to a free agent. https://allfantasy.ai"
+  }
+}
