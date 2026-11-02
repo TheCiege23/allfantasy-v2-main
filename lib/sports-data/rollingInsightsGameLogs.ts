@@ -546,6 +546,8 @@ export async function writeRiGameRows(opts: {
   result: Pick<GameLogIngestResult, 'games' | 'lines' | 'written' | 'unresolved' | 'unrecognizedSeasonTypes' | 'errors'>
   persistSchedule?: boolean
   shouldWriteLine?: (key: { playerId: string; gameId: string }, line: RiBoxLine) => boolean
+  /** Historical backfills can fill gaps without replacing a concurrent live refresh. NHL only. */
+  insertOnly?: boolean
 }): Promise<void> {
   const { sport, rows, now, result, identityByRiId } = opts
   const confidence = opts.confidence ?? FIELD_CONFIDENCE[getRollingInsightsSportCode(sport)] ?? 0.1
@@ -613,6 +615,7 @@ export async function writeRiGameRows(opts: {
     if (sport === 'NHL') {
       if (!prepared.length) continue
       try {
+        let written = 0
         await prisma.$transaction(async (tx) => {
           // The official reconciler takes the same game lock. A refresh either
           // sees and retains its verified bonus or finishes before enrichment.
@@ -623,6 +626,7 @@ export async function writeRiGameRows(opts: {
             gameDate: true, team: true, opponent: true, normalizedStatMap: true } })
           const byKey = new Map(existing.map((row) => [`${row.playerId}:${row.gameId}`, row]))
           for (const { line, playerId, gameId } of prepared) {
+            if (opts.insertOnly && byKey.has(`${playerId}:${gameId}`)) continue
             const normalized = normalizedStatMapFor(line, box)
             const officialIdentity = { providerGameId: box.providerGameId, gameDate: box.gameDay,
               team: line.team, opponent: line.opponent }
@@ -635,9 +639,10 @@ export async function writeRiGameRows(opts: {
               where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
               update: data, create: { playerId, sportType: sport, gameId, ...data },
             })
+            written++
           }
         }, { timeout: 30_000 })
-        result.written += prepared.length
+        result.written += written
       } catch (e) {
         if (result.errors.length < 10) result.errors.push(
           `NHL game ${box.providerGameId}: ${e instanceof Error ? e.message : String(e)}`,
