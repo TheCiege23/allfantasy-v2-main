@@ -1208,6 +1208,7 @@ export function Dash3ALeagues({
                   <Link
                     key={l.id}
                     data-exile={island ? 'true' : undefined}
+                    data-platform={(l.platform ?? '').toLowerCase() || undefined}
                     aria-label={island ? l.name : undefined}
                     className="af3a-league"
                     /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
