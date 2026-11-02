@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { ZombieCorrectionRecovery } from '@/components/zombie/ZombieCorrectionRecovery'
 
 type ResolutionRow = {
   id: string
@@ -75,6 +76,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
 
   return (
     <div className="px-6 py-5 text-[13px] text-white/85">
+      {canEdit && league.sport === 'NFL' && <ZombieCorrectionRecovery leagueId={leagueId} />}
       {/* Status overview */}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatusCard

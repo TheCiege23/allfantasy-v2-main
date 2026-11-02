@@ -53,7 +53,7 @@ describe('zombie trade block', () => {
     })
     expect(db.zombieLeagueTeam.findMany).toHaveBeenCalledWith({
       where: { leagueId: 'L1', rosterId: { in: ['a', 'b'] } },
-      select: { status: true },
+      select: { status: true, zombieLeague: { select: { correctionHoldFromWeek: true } } },
     })
   })
 
@@ -61,6 +61,11 @@ describe('zombie trade block', () => {
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Whisperer' }])
     await expect(assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a','b'], userId: 'u', kind: 'trade' }))
       .resolves.toEqual({ ok: true })
+  })
+  it('holds Survivor and Whisperer trades while an earlier correction is reviewed', async () => {
+    db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor', zombieLeague: { correctionHoldFromWeek: 2 } }])
+    await expect(assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }))
+      .resolves.toMatchObject({ ok: false, error: 'Trades are held during reviewed stat-correction recovery.' })
   })
 
   it('lets two Humans trade', async () => {

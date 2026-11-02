@@ -10258,6 +10258,8 @@ model ZombieLeague {
   commissionerId           String?
   currentTeamCount         Int                      @default(0)
   currentWeek              Int                      @default(0)
+  correctionHoldFromWeek   Int?
+  latestCorrectionReviewId String?
   draftScheduledAt         DateTime?
   isPaid                   Boolean                  @default(false)
   isSingleLeague           Boolean                  @default(false)
@@ -10313,11 +10315,33 @@ model ZombieLeague {
   whispererRecord          WhispererRecord?
   coWhisperers             ZombieCoWhisperer[]
   roleWorkflows            ZombieRoleWorkflow[]
+  correctionReviews        ZombieCorrectionReview[]
 
   @@index([universeId])
   @@index([levelId])
   @@index([status])
   @@map("zombie_leagues")
+}
+
+model ZombieCorrectionReview {
+  id                 String       @id @default(uuid())
+  zombieLeagueId     String
+  fromWeek           Int
+  sourceHash         String       @db.VarChar(64)
+  status             String       @default("ready") @db.VarChar(24)
+  source             Json
+  plan               Json
+  requestedByUserId  String
+  approvedByUserId   String?
+  reason             String?
+  appliedAt          DateTime?
+  effectsPending     Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  league             ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@unique([zombieLeagueId, fromWeek, sourceHash], map: "zombie_correction_source_key")
+  @@index([effectsPending, updatedAt])
+  @@map("zombie_correction_reviews")
 }
 
 model ZombieRoleWorkflow {

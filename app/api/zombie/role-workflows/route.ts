@@ -27,11 +27,11 @@ export async function GET(req: Request) {
     await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }) : []
   const names = rosters.length ? await prisma.zombieLeagueTeam.findMany({ where: { leagueId }, select: { rosterId: true, fantasyTeamName: true, displayName: true, isVeteran: true } }) : []
   return NextResponse.json({ supported: true, owner, nominees: rosters.map(r => ({ id: r.platformUserId, name: names.find(t => t.rosterId === r.id)?.fantasyTeamName || names.find(t => t.rosterId === r.id)?.displayName || 'Manager', veteran: names.find(t => t.rosterId === r.id)?.isVeteran ?? false })),
-    canStartDraw,
-    canAmbush: ['active', 'in_progress'].includes(z.status) && z.experienceMode !== 'simple' && !z.whispererRecord?.wasDefeated && z.whispererRecord?.userId === session.user.id && z.whispererRecord.ambushesRemaining > 0,
+    canStartDraw, correctionHoldFromWeek: z.correctionHoldFromWeek,
+    canAmbush: z.correctionHoldFromWeek == null && ['active', 'in_progress'].includes(z.status) && z.experienceMode !== 'simple' && !z.whispererRecord?.wasDefeated && z.whispererRecord?.userId === session.user.id && z.whispererRecord.ambushesRemaining > 0,
     workflows: rows.map(row => ({ id: row.id, kind: row.kind, status: row.status, week: row.week, deadlineAt: row.deadlineAt,
       offerIndex: row.kind === 'initial_offer' && row.actorUserId === session.user!.id ? (row.state as { index?: number }).index : undefined,
-      canRespond: row.actorUserId === session.user!.id && row.status === 'pending',
+      canRespond: z.correctionHoldFromWeek == null && row.actorUserId === session.user!.id && row.status === 'pending',
       // No candidate order, target ID, inventory or hidden Whisperer identity goes to another manager.
       choices: row.kind === 'initial_offer' ? ['accept', 'decline'] : row.kind === 'survivor_bash' ? ['spare', 'infect'] :
         row.kind === 'whisperer_bash' ? ['spare', 'replace'] : ['decline', 'become_whisperer'] })) })
