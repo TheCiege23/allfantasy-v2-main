@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getZombieCreationProfile, getZombieCreationTeamCounts, zombieCreationLeagueCount } from '@/lib/zombie/creationPolicy'
 import { getDefaultTeamCount, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { getZombieTeamCountOptionsForSport } from '@/lib/league-creation-wizard/sport-team-limits'
 import { getZombieSeasonSchedule, getCurrentPhase } from '@/lib/zombie/zombieSeasonSchedule'
@@ -16,6 +17,7 @@ const profiles: Array<[SupportedSport, number, number, string]> = [
 describe('Zombie manager capacity and season planning', () => {
   it.each(profiles)('%s defaults to 20 and accepts every size shown by either wizard', (sport, periods, suggested, scoringPreset) => {
     const counts = getZombieCreationTeamCounts(sport)
+    expect(findScoringPresetRule(scoringPreset)?.matches({ leagueType: 'zombie', sport, idpSelected: false })).toBe(true)
     expect(getDefaultTeamCount(sport, 'zombie')).toBe(20)
     expect(getTeamCountOptions(sport, 'zombie')).toEqual(counts)
     expect(getZombieTeamCountOptionsForSport(sport)).toEqual(counts)
