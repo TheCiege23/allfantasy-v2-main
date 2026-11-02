@@ -4,11 +4,15 @@ import { Prisma, PrismaClient } from '@prisma/client'
 const STAGING_PROJECT = 'b3cd0239-9cb1-4c22-9d76-533d91d26f36'
 if (process.env.CHIMMY_STAGING_PROJECT_ID !== STAGING_PROJECT) throw new Error('Explicit bracket staging target required')
 const db = new PrismaClient()
-const poolId = 'chimmy-release-3164-pool'
-const entryId = 'chimmy-release-3164-entry'
-const silentEntryId = 'chimmy-release-3164-silent'
+const run = process.argv[3] ?? 'base'
+if (!/^[a-z0-9-]{1,24}$/.test(run)) throw new Error('Invalid QA run label')
+const suffix = run === 'base' ? '' : `-${run}`
+const poolId = `chimmy-release-3164-pool${suffix}`
+const entryId = `chimmy-release-3164-entry${suffix}`
+const silentEntryId = `chimmy-release-3164-silent${suffix}`
 const userId = 'bracket-qa-admin'
-const marker = 'Chimmy release 3164 QA'
+const marker = `Chimmy release 3164 QA${suffix}`
+const entryName = `Chimmy replay QA${suffix}`
 const command = process.argv[2] ?? 'inspect'
 
 async function main() {
@@ -29,7 +33,7 @@ try {
         config: { qaRelease: '3164', lockRule: 'series_start', firstGameStartsAt: started.toISOString() } } })
       for (const id of [entryId, silentEntryId]) {
         await tx.playoffBracketEntry.create({ data: { id, challengeId: poolId, userId,
-          name: id === entryId ? 'Chimmy replay QA' : 'Chimmy silent QA', finalizedAt: started, tiebreakerTotalScore: 48 } })
+          name: id === entryId ? entryName : `Chimmy silent QA${suffix}`, finalizedAt: started, tiebreakerTotalScore: 48 } })
       }
       for (const [index, game] of games.entries()) {
         const id = `${poolId}-game-${index + 1}`
@@ -50,7 +54,7 @@ try {
   const silentNotifications = await db.platformNotification.count({ where: { userId, type: 'chimmy_bracket_change', meta: { path: ['entryId'], equals: silentEntryId } } })
   const games = await db.playoffBracketSeries.findMany({ where: { challengeId: poolId }, orderBy: { seriesNumber: 'asc' },
     select: { seriesNumber: true, homeTeamName: true, awayTeamName: true, winnerTeamName: true, status: true } })
-  console.log(JSON.stringify({ poolId, entryId, silentEntryId, games, history: history?.[`playoff:${entryId}`] ?? [], notifications, silentNotifications }, null, 2))
+  console.log(JSON.stringify({ poolId, poolName: marker, entryId, entryName, silentEntryId, games, history: history?.[`playoff:${entryId}`] ?? [], notifications, silentNotifications }, null, 2))
 } finally { await db.$disconnect() }
 }
 void main().catch(() => { console.error('Staging fixture operation failed'); process.exitCode = 1 })
