@@ -404,11 +404,11 @@ export default function ChimmyChatShell({
   const chimmyFeatureFlags = useMemo(() => getChimmyFeatureFlags(), [])
 
   useEffect(() => {
-    if (!chimmyFeatureFlags.aiKpiEvents || requestContext.source !== 'bracket_change_alert') return
+    if (!chimmyFeatureFlags.aiKpiEvents || requestContext.source !== 'bracket_change_alert' || !initialPrompt.trim()) return
     void trackChimmyAIEvent({ event_name: 'bracket_alert_open', surface: 'chimmy_chat',
       action: 'bracket_alert_open', timestamp: new Date().toISOString(),
       metadata: { source: requestContext.source } })
-  }, [chimmyFeatureFlags.aiKpiEvents, requestContext.source])
+  }, [chimmyFeatureFlags.aiKpiEvents, requestContext.source, initialPrompt])
 
   useEffect(() => {
     if (!chimmyFeatureFlags.assistantModes) return

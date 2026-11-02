@@ -101,23 +101,27 @@ describe("ChimmyChatShell", () => {
   /* Zero coverage meant a crash on mount was invisible. This is the floor. */
   it("switches saved alert prompts and can reopen an older alert without clobbering an unchanged draft", async () => {
     const Shell = (await import("@/components/chimmy/ChimmyChatShell")).default
+    const { trackChimmyAIEvent } = await import('@/lib/chimmy-chat/analytics-events-client')
+    const opened = () => vi.mocked(trackChimmyAIEvent).mock.calls.filter(([event]) => event.event_name === 'bracket_alert_open').length
+    const promptView = (prompt: string) => <Shell initialPrompt={prompt} clearUrlPromptAfterUse={false} source="bracket_change_alert" />
     const first = 'Explain my bracket change ref first'
     const second = 'Explain my bracket change ref second'
-    const { rerender } = render(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    const { rerender } = render(promptView(first))
     const composer = screen.getByTestId('chimmy-message-input')
     expect(composer).toHaveValue(first)
     fireEvent.change(composer, { target: { value: 'My edited question' } })
-    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    rerender(promptView(first))
     expect(composer).toHaveValue('My edited question')
-    rerender(<Shell initialPrompt={second} clearUrlPromptAfterUse={false} />)
+    rerender(promptView(second))
     expect(composer).toHaveValue(second)
-    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    rerender(promptView(first))
     expect(composer).toHaveValue(first)
-    rerender(<Shell initialPrompt="" clearUrlPromptAfterUse={false} />)
+    rerender(promptView(''))
     fireEvent.change(composer, { target: { value: 'Another draft' } })
-    rerender(<Shell initialPrompt={first} clearUrlPromptAfterUse={false} />)
+    rerender(promptView(first))
     expect(composer).toHaveValue(first)
     expect(sendChimmyMessageMock).not.toHaveBeenCalled()
+    expect(opened()).toBe(4)
   })
 
   it("mounts and offers a composer", async () => {
