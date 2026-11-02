@@ -44,3 +44,5 @@ reported SUCCESS. Follow-up #3168 also merged as
 This evaluator integration is not yet deployed and does not establish market grades.
 
 Release review: malformed roster references now block evaluation. Failures after NHL league identification return blocked historical evidence, preserving null grades and deltas without invoking market grading. Both regressions passed.
+
+Two-team NHL compatibility review: current main already has a supported points-over-replacement grader. The integration now preserves that grader's letter and values for two-team trades and adds historical lineups independently, including when canonical lineup evidence is absent. Multi-team trades still receive historical evidence without invented market values. All 11 NHL contracts and all 11 existing market/snapshot regressions passed (22 tests).

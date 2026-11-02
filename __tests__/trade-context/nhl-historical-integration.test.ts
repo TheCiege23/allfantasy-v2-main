@@ -1,16 +1,17 @@
 /** @vitest-environment node */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const h = vi.hoisted(() => ({ league: vi.fn(), rosters: vi.fn(), identities: vi.fn(), games: vi.fn(), finals: vi.fn() }))
+const h = vi.hoisted(() => ({ league: vi.fn(), rosters: vi.fn(), identities: vi.fn(), games: vi.fn(), finals: vi.fn(), evaluate: vi.fn(), names: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league }, roster: { findMany: h.rosters },
   playerIdentityMap: { findMany: h.identities }, playerGameStat: { findMany: h.games }, sportsGame: { findMany: h.finals } } }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: vi.fn() }))
-vi.mock('@/lib/decision-os/trade/evaluateTrade', () => ({ evaluateTrade: vi.fn() }))
-vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({ createLeagueTradeGrader: vi.fn(), gradeDeal: vi.fn(), loadNativePlayerNames: vi.fn() }))
+vi.mock('@/lib/decision-os/trade/evaluateTrade', () => ({ evaluateTrade: h.evaluate }))
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({ createLeagueTradeGrader: vi.fn(), gradeDeal: vi.fn(), loadNativePlayerNames: h.names }))
 vi.mock('@/lib/trade-intel/viewerLeagueRoster', () => ({ resolveViewerLeagueRoster: vi.fn() }))
 import { loadNhlHistoricalLineups, scoreNhlHistoricalBox } from '@/lib/league-trade-engine/nhlHistoricalLineup'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
 import { buildTradeDecisionSnapshot } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
 const league = { id: 'league', sport: 'NHL', platform: 'fantrax', platformLeagueId: 'source',
   season: 2026, leagueSize: 160, scoring: 'points', starters: ['FLEX_CW'], leagueType: 'redraft',
@@ -28,6 +29,7 @@ const games = () => [1, 2, 3].flatMap((i) => Array.from({ length: 5 }, (_, n) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
+  h.names.mockResolvedValue(() => null)
   h.league.mockResolvedValue({ ...league, settings: { ...league.settings, fantrax_settings: sourceSettings } })
   h.rosters.mockResolvedValue(rosters)
   h.identities.mockResolvedValue([1, 2, 3].map((i) => ({ id: `p${i}`, fantraxId: `f${i}`,
@@ -37,6 +39,26 @@ beforeEach(() => {
 })
 
 describe('current-main NHL historical integration', () => {
+  it.each([true, false])('preserves the supported two-team NHL grade with canonical evidence %s', async (canonical) => {
+    h.rosters.mockResolvedValue(rosters.slice(0, 2))
+    const grade = (giveValue: number, getValue: number) => gradeTrade({ giveValue, getValue,
+      giveMarket: giveValue, getMarket: getValue, unpriced: 0, giveCount: 1, getCount: 1,
+      basis: 'NHL league points over replacement', scoringApplied: true, needApplied: false,
+      needGap: null, lines: [], moves: [] })
+    h.evaluate.mockResolvedValue({ grade: grade(5000, 6000), partnerGrade: grade(6000, 5000),
+      canonical: canonical ? { participants: ['r1', 'r2'].map((rosterId) => ({ rosterId,
+        action: 'review', recommendation: '', coverageStatus: 'complete', coveragePct: 100,
+        fairnessScore: 80, confidenceScore: 90,
+        rosterImpact: { startingPointsBefore: 100, startingPointsAfter: 104, startingPointsDelta: 4 } })) } : null })
+    const result = await evaluateServerTradeDecision({ ...input, participantRosterIds: ['r1', 'r2'],
+      assets: [{ ...input.assets[0]! }, { ...input.assets[1]!, toRosterId: 'r1' }],
+      proposerRosterId: 'r1', receiverRosterId: 'r2', season: 2026 })
+    expect(h.evaluate).toHaveBeenCalledOnce()
+    expect(result.participants[0]).toMatchObject({ grade: 'B', valueGiven: 5000, valueReceived: 6000,
+      lineupPointsDelta: 1 })
+    expect(result.participants[1]).toMatchObject({ grade: 'D', lineupPointsDelta: -1 })
+    expect(result.lineupBasis).toBe('historical_points_per_game')
+  })
   it('blocks malformed roster entries instead of silently dropping them', async () => {
     h.rosters.mockResolvedValue([{ ...rosters[0], playerData: { players: ['f1', null] } }, ...rosters.slice(1)])
     const rows = await loadNhlHistoricalLineups(input)
