@@ -114,10 +114,11 @@ type QuickAction = {
 }
 
 /*
- * None of these lead into the World Cup any more. "Create" preselects MLB
- * because /brackets/leagues/new with no sport defaults to NCAAB — March
- * Madness, months away. "Continue My Bracket" is dropped: it pointed at the
- * World Cup, and there is no cross-sport "my brackets" page to send it to.
+ * None of these lead into the World Cup any more. "Create" is a placeholder
+ * here: the page swaps in the tournament leading the hub, because
+ * /brackets/leagues/new with no sport defaults to NCAAB — March Madness,
+ * months away. "Continue My Bracket" is dropped: it pointed at the World Cup,
+ * and there is no cross-sport "my brackets" page to send it to.
  */
 const QUICK_ACTIONS: QuickAction[] = [
   { key: "create", href: playoffPoolHref("MLB"), Icon: Plus },
@@ -144,6 +145,7 @@ const AF_WORDMARK_SRC = "/brand/allfantasy-wordmark-transparent.png"
 
 /** The grid's card for each hub tournament, so the grid leads with the same one the hub does. */
 const HUB_CARD_KEY: Record<HubTournament, SportCard["key"]> = { nba_cup: "nbaCup", ncaaf: "collegeFootball", nfl: "nflPlayoffs" }
+const HUB_CREATE_SPORT: Record<HubTournament, "NBA_CUP" | "NCAAF" | "NFL"> = { nba_cup: "NBA_CUP", ncaaf: "NCAAF", nfl: "NFL" }
 
 export default async function BracketsHomePage() {
   const { language } = await resolveServerRenderPreferences()
@@ -153,6 +155,8 @@ export default async function BracketsHomePage() {
   const tournaments = orderHubTournaments(new Date())
   const hubRank = new Map(tournaments.map((item, index) => [HUB_CARD_KEY[item.tournament], index]))
   const sportCards = [...SPORT_CARDS].sort((a, b) => (hubRank.get(a.key) ?? 99) - (hubRank.get(b.key) ?? 99))
+  const createHref = playoffPoolHref(HUB_CREATE_SPORT[tournaments[0].tournament])
+  const quickActions = QUICK_ACTIONS.map((action) => (action.key === "create" ? { ...action, href: createHref } : action))
 
   return (
     // Scoped colors preserve the approved dark canvas in light, dark and AF modes.
@@ -202,7 +206,7 @@ export default async function BracketsHomePage() {
             {t("brk.hub.quickActions.title")}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {QUICK_ACTIONS.map(({ key, href, Icon }) => (
+            {quickActions.map(({ key, href, Icon }) => (
               <Link
                 key={key}
                 href={href}
