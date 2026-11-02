@@ -243,7 +243,7 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
             <Link href="/privacy">Privacy</Link>
           </p>
           <div className="af-au-divider">
-            <span className="af-label">Or sign up with email</span>
+            <span className="af-label">Or sign up with email or phone</span>
           </div>
         </>
       ) : null}
@@ -262,7 +262,7 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
     e.preventDefault()
     setError(null)
     if (!login.trim() || !password) {
-      setError('Enter your email and password.')
+      setError('Enter your email, username or phone and password.')
       return
     }
     setLoading(true)
