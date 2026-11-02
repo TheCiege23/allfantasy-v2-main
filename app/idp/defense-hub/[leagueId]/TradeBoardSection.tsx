@@ -32,9 +32,9 @@ function Dash() {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+    <h2 className="af-dh-label af-dfh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
       {children}
-    </div>
+    </h2>
   )
 }
 

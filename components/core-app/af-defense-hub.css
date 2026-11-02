@@ -1,0 +1,179 @@
+/*
+ * AF Core — Defense Hub, the 2026-11 redesign (board: DefenseHub).
+ *
+ * Presentation only: a header with the page's three counts, the coverage note as a shield-led bar,
+ * and each section under a real heading. Every class here is `af-dfh-*` because `.af-dh` already
+ * belongs to Draft HQ (af-draft-hq.css), and both stylesheets can be on one page.
+ *
+ * The client renders inside the /core shell AND standalone at /idp/defense-hub/[leagueId], so these
+ * rules key on `.af-core` (on the client's own root) rather than on the shell. Prefixed `.af-core`
+ * to outrank the Tailwind utilities the markup still carries (one class each).
+ */
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-core .af-dfh-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+.af-core .af-dfh-head-text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+.af-core .af-dfh-eyebrow {
+  margin: 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-core .af-dfh-title {
+  margin: 6px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.af-core .af-dfh-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+.af-core .af-dfh-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 112px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-core .af-dfh-stat-l {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-core .af-dfh-stat-v {
+  margin: 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ── The coverage note ───────────────────────────────────────────────── */
+
+.af-core .af-dfh-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  line-height: 1.45;
+}
+.af-core .af-dfh-note-ic {
+  flex: none;
+}
+.af-core .af-dfh-note[data-full='true'] .af-dfh-note-ic {
+  color: var(--good);
+}
+.af-core .af-dfh-note[data-full='false'] .af-dfh-note-ic {
+  color: var(--warn);
+}
+.af-core .af-dfh-note-k {
+  margin-right: 0;
+}
+.af-core .af-dfh-note-t {
+  flex: 1 1 260px;
+  min-width: 0;
+  color: var(--text);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-core .af-dfh-label {
+  margin: 0 0 12px;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--text);
+}
+.af-core .af-dfh-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 12px;
+}
+.af-core .af-dfh-section-head .af-dfh-label {
+  margin-bottom: 0;
+}
+.af-core .af-dfh-section-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Cards: the board's 16px radius and a little more air. */
+.af-core .af-dfh-section .af-dh-card {
+  border-radius: 16px;
+}
+.af-core .af-dfh-table {
+  border-radius: 18px;
+}
+.af-core .af-dfh-table thead tr {
+  background: var(--surface2);
+}
+.af-core .af-dfh-table thead th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.af-core .af-dfh-table tbody td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.af-core .af-dfh-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+@media (max-width: 640px) {
+  .af-core .af-dfh-title {
+    font-size: 26px;
+  }
+  .af-core .af-dfh-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+  .af-core .af-dfh-stat {
+    min-width: 0;
+    padding: 10px 12px;
+  }
+  .af-core .af-dfh-stat-v {
+    font-size: 20px;
+  }
+  .af-core .af-dfh-label {
+    font-size: 16px;
+  }
+}

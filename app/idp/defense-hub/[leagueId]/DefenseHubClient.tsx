@@ -24,10 +24,14 @@ import '@/components/core-app/af-core.css'
  * no style of their own.
  */
 import '@/components/core-app/af-core-redraft-myteam.css'
+/* The 2026-11 redesign (board: DefenseHub). Its own `af-dfh-*` prefix, because `.af-dh` is also Draft HQ's. */
+import '@/components/core-app/af-defense-hub.css'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defenseHubMessages } from '@/lib/core-app/messages/defenseHub'
 
 /**
  * Defense Hub — rostered defenders, what they are projected for under THIS league's scoring,
@@ -113,10 +117,41 @@ function Blocked({ state, leagueId }: { state: DefenseHubState; leagueId: string
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-  <div className="af-dh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+  <h2 className="af-dh-label af-dfh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
     {children}
-  </div>
+  </h2>
 )
+
+/** The shield the board puts on the coverage note. */
+const Shield = () => (
+  <svg className="af-dfh-note-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
+  </svg>
+)
+
+/**
+ * The header's three figures. Every one is a count the payload already carries, so the header can
+ * never disagree with the coverage note under it.
+ */
+function HeadStats({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
+  const projected = data.defenders.filter((d) => !d.reason).length
+  const stats = [
+    { key: 'rostered', label: m.statRostered, value: String(data.defenders.length) },
+    { key: 'projected', label: m.statProjected, value: `${projected}/${data.defenders.length}` },
+    { key: 'priced', label: m.statPriced, value: String(data.coverage.projected) },
+  ]
+  return (
+    <dl className="af-dfh-stats">
+      {stats.map((s) => (
+        <div key={s.key} className="af-dfh-stat" data-stat={s.key}>
+          <dt className="af-dfh-stat-l">{s.label}</dt>
+          <dd className="af-dfh-stat-v">{s.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 const Dash = () => <span className="text-[var(--faint)]">—</span>
 
@@ -134,6 +169,7 @@ export function DefenseHubClient({
    */
   embedded?: boolean
 }) {
+  const m = useMessages(defenseHubMessages)
   const [data, setData] = useState<DefenseHubPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -180,32 +216,31 @@ export function DefenseHubClient({
       }
     >
       <div className="mx-auto max-w-[1200px]">
-        <header className="mb-6">
-          {!embedded ? (
-            <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
-              <Link href={`/league/${leagueId}`} className="hover:text-[var(--accent)]">
-                ← League
-              </Link>
-            </div>
-          ) : null}
-          <h1 className="af-dh-title mt-2 text-[24px] font-black tracking-[-0.03em]">Defense Hub</h1>
-          <p className="mt-1.5 max-w-[520px] text-[13px] leading-relaxed text-[var(--muted)]">
-            If a number can’t be traced to a real stat line, it doesn’t render — this page shows
-            an absence, never a guess.
-          </p>
+        <header className="af-dfh-head mb-6">
+          <div className="af-dfh-head-text">
+            {!embedded ? (
+              <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                <Link href={`/league/${leagueId}`} className="hover:text-[var(--accent)]">
+                  {m.backToLeague}
+                </Link>
+              </div>
+            ) : null}
+            <p className="af-dfh-eyebrow">{m.eyebrow}</p>
+            <h1 className="af-dh-title af-dfh-title mt-2 text-[24px] font-black tracking-[-0.03em]">{m.title}</h1>
+            <p className="af-dfh-lede mt-1.5 max-w-[520px] text-[13px] leading-relaxed text-[var(--muted)]">{m.lede}</p>
+          </div>
+          {data && data.state === 'ok' ? <HeadStats data={data} /> : null}
         </header>
 
         {error && (
           <div className="rounded-[13px] border border-[color-mix(in_srgb,var(--bad)_30%,transparent)] bg-[var(--bad-soft)] px-4 py-3.5 text-[13px] text-[var(--text)]">
-            {error === 'not-a-member'
-              ? 'You don’t have access to this league.'
-              : 'We couldn’t load this page. Nothing is shown rather than something wrong.'}
+            {error === 'not-a-member' ? m.notMember : m.loadFailed}
           </div>
         )}
 
         {!data && !error && (
           <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 font-mono text-[11px] text-[var(--faint)]">
-            Loading…
+            {m.loading}
           </div>
         )}
 
@@ -249,11 +284,12 @@ export function DefenseHubClient({
  * a comparison the data cannot support — see lib/kicker-values/leagueKickerValue.ts.
  */
 function Kickers({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   if (!data.kickerValue || data.kickers.length === 0) return null
 
   return (
     <section>
-      <Label>Your kickers</Label>
+      <Label>{m.yourKickers}</Label>
       <div className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
         <div className="flex items-baseline gap-2.5">
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
@@ -280,6 +316,7 @@ function Kickers({ data }: { data: DefenseHubPayload }) {
 }
 
 function CoverageBanner({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   const { defenders, projected } = data.coverage
   // Amber the moment anything is missing: a green banner over a partial board is the lie.
   const full = projected >= data.defenders.length && data.defenders.every((d) => !d.reason)
@@ -287,22 +324,24 @@ function CoverageBanner({ data }: { data: DefenseHubPayload }) {
 
   return (
     <div
+      role="note"
       data-full={full ? 'true' : 'false'}
-      className={`af-dh-coverage rounded-[13px] border px-4 py-3.5 text-[13px] ${
+      className={`af-dh-coverage af-dfh-note rounded-[13px] border px-4 py-3.5 text-[13px] ${
         full
           ? 'border-[color-mix(in_srgb,var(--good)_30%,transparent)] bg-[var(--good-soft)]'
           : 'border-[color-mix(in_srgb,var(--warn)_30%,transparent)] bg-[var(--warn-soft)]'
       }`}
     >
+      <Shield />
       <span
-        className={`mr-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] ${
+        className={`af-dfh-note-k mr-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] ${
           full ? 'text-[var(--good)]' : 'text-[var(--warn)]'
         }`}
       >
-        Coverage
+        {m.coverage}
       </span>
-      {data.defenders.filter((d) => !d.reason).length} of {data.defenders.length} rostered
-      defenders projected
+      <span className="af-dfh-note-t">
+      {m.coverageLine(data.defenders.filter((d) => !d.reason).length, data.defenders.length)}
       {/*
         Stated as the evidence, not as a target week. The projector resolves its week from the
         newest game on file rather than from a clock — correct, because the ingest stalls over
@@ -310,27 +349,32 @@ function CoverageBanner({ data }: { data: DefenseHubPayload }) {
         renders a week that does not exist ("2025 week 19"). What the reader needs is which
         games the number was built from.
       */}
-      {week ? ` from games through ${week.season} week ${week.week - 1}` : ''} · {projected} of{' '}
-      {defenders} defenders priced league-wide.
+      {week ? m.coverageFrom(week.season, week.week - 1) : ''}
+      {m.coveragePriced(projected, defenders)}
+      </span>
     </div>
   )
 }
 
 function DefenderTable({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   return (
-    <section>
-      <Label>Your rostered defenders</Label>
-      <div className="af-dh-card af-dh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
+    <section className="af-dfh-section" data-section="defenders">
+      <div className="af-dfh-section-head">
+        <Label>{m.yourDefenders}</Label>
+        <p className="af-dfh-section-sub">{m.yourDefendersSub}</p>
+      </div>
+      <div className="af-dh-card af-dh-table af-dfh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[680px] text-left">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
-              <th className="px-4 py-3">Player</th>
-              <th className="px-2 py-3">Pos</th>
-              <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">Proj ↓</th>
-              <th className="px-2 py-3 text-right">Last wk</th>
-              <th className="px-2 py-3 text-right">VORP</th>
-              <th className="px-2 py-3 text-right">Pos rank</th>
-              <th className="px-4 py-3 text-right">Value</th>
+              <th className="px-4 py-3">{m.colPlayer}</th>
+              <th className="px-2 py-3">{m.colPos}</th>
+              <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">{m.colProj}</th>
+              <th className="px-2 py-3 text-right">{m.colLastWeek}</th>
+              <th className="px-2 py-3 text-right">{m.colVorp}</th>
+              <th className="px-2 py-3 text-right">{m.colPosRank}</th>
+              <th className="px-4 py-3 text-right">{m.colValue}</th>
             </tr>
           </thead>
           <tbody>
@@ -411,7 +455,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                           title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
                         >
                           {d.value.toLocaleString()}
-                          <span className="ml-1 text-[11px]">floor</span>
+                          <span className="ml-1 text-[11px]">{m.floor}</span>
                         </span>
                       ) : (
                         d.value.toLocaleString()
@@ -434,9 +478,10 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
 }
 
 function SnapShare({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   return (
-    <section>
-      <Label>Snap share</Label>
+    <section className="af-dfh-section" data-section="snaps">
+      <Label>{m.snapShare}</Label>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {data.snaps.map((s) => (
           <div
@@ -476,9 +521,10 @@ function SnapShare({ data }: { data: DefenseHubPayload }) {
 }
 
 function RoleCards({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   return (
-    <section>
-      <Label>What they actually do</Label>
+    <section className="af-dfh-section" data-section="roles">
+      <Label>{m.roles}</Label>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {data.roles.map((r) => (
           <div
@@ -520,11 +566,12 @@ function RoleCards({ data }: { data: DefenseHubPayload }) {
 }
 
 function Tendencies({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   if (data.tendencies.length === 0) return null
 
   return (
-    <section>
-      <Label>How their defence has been played</Label>
+    <section className="af-dfh-section" data-section="tendencies">
+      <Label>{m.tendencies}</Label>
       <div className="flex flex-col gap-3">
         {data.tendencies.map(({ team, tendency: t }) => (
           <div key={team} className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4">
