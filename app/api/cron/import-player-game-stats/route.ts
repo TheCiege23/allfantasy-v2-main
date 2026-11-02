@@ -46,6 +46,7 @@ import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/proj
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
 import { enrichOfficialNhlGameWinningGoals } from "@/lib/nhl-scoring/officialGameWinningGoalsIngest"
+import { enrichOfficialNhlGoalieGameStats } from "@/lib/nhl-scoring/officialGoalieGameStatsIngest"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -204,11 +205,20 @@ async function handle(req: NextRequest) {
             ...((result.errors as string[] | undefined) ?? []),
             ...bonus.errors.map((error) => `official game-winning goals: ${error}`),
           ]
+          if (budget.remainingMs() >= 50_000) {
+            const goalie = await enrichOfficialNhlGoalieGameStats({ dates: bonusDates,
+              shouldStop: () => budget.remainingMs() < 45_000 })
+            result.officialGoalieGameStats = goalie
+            if (goalie.errors.length) result.errors = [
+              ...((result.errors as string[] | undefined) ?? []),
+              ...goalie.errors.map((error) => `official goalie game stats: ${error}`),
+            ]
+          }
         } catch (err) {
           const result = perSport[s] as Record<string, unknown>
           result.errors = [
             ...((result.errors as string[] | undefined) ?? []),
-            `official game-winning goals: ${String(err).slice(0, 180)}`,
+            `official NHL enrichment: ${String(err).slice(0, 180)}`,
           ]
         }
       }

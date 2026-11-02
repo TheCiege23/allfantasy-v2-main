@@ -85,23 +85,23 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
     INDIVIDUAL_TURNOVERS: ['to'],
   },
   HOCKEY_SKATING: {
-    INDIVIDUAL_GOALS: ['g'],
-    INDIVIDUAL_ASSISTS: ['a'],
-    INDIVIDUAL_SHOTS_ON_GOAL: ['sog'],
-    INDIVIDUAL_POWER_PLAY_POINTS: ['ppp'],
-    INDIVIDUAL_SHORT_HANDED_GOALS: ['shg'],
+    INDIVIDUAL_GOALS: ['goals'],
+    INDIVIDUAL_ASSISTS: ['assists'],
+    INDIVIDUAL_SHOTS_ON_GOAL: ['shots_on_goal'],
+    INDIVIDUAL_POWER_PLAY_POINTS: ['power_play_points'],
+    INDIVIDUAL_SHORT_HANDED_GOALS: ['short_handed_goals'],
     INDIVIDUAL_HITS: ['hits'],
-    INDIVIDUAL_BLOCKS: ['blks'],
-    INDIVIDUAL_PENALTY_MINUTES: ['pim'],
+    INDIVIDUAL_BLOCKS: ['blocked_shots'],
+    INDIVIDUAL_PENALTY_MINUTES: ['penalty_minutes'],
   },
   HOCKEY_GOALIE: {
-    INDIVIDUAL_GOALIE_WINS: ['g_win'],
-    INDIVIDUAL_SAVES: ['g_sv'],
-    INDIVIDUAL_GOALS_AGAINST: ['g_ga'],
-    INDIVIDUAL_SHUTOUTS: ['g_so'],
-    /* A goalie's assists and penalty minutes are the skater stats; the engine keeps one rule each. */
-    INDIVIDUAL_ASSISTS: ['a'],
-    INDIVIDUAL_PENALTY_MINUTES: ['pim'],
+    INDIVIDUAL_GOALIE_WINS: ['goalie_wins'],
+    INDIVIDUAL_SAVES: ['saves'],
+    INDIVIDUAL_GOALS_AGAINST: ['goals_against'],
+    INDIVIDUAL_SHUTOUTS: ['shutouts'],
+    INDIVIDUAL_GOALS: ['goalie_goals'],
+    INDIVIDUAL_ASSISTS: ['goalie_assists'],
+    INDIVIDUAL_PENALTY_MINUTES: ['goalie_penalty_minutes'],
   },
   FOOTBALL_OFFENSE: {
     INDIVIDUAL_FUMBLES_LOST: ['fum_lost'],
@@ -211,8 +211,7 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
       continue
     }
     for (const key of keys) {
-      /* Two source categories feeding one rule (a goalie's and a skater's penalty minutes) keep
-         the first value; a disagreement is reported rather than silently averaged. */
+      /* Two source categories feeding one rule keep the first value; a disagreement is reported. */
       const existing = rules.find((r) => r.stat_key === key)
       if (existing) {
         if (existing.points_value !== round(points)) {
