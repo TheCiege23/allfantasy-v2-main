@@ -479,3 +479,198 @@
   font-weight: 600;
   color: var(--af-accent, #7c5cff);
 }
+
+/*
+ * ── 2026-11-01 home redesign: player cards with one fix row per league ──────────────
+ *
+ * Appended LAST and top-level on purpose — a rule dropped inside an earlier @media block closes it
+ * early (CLAUDE.md, af-matchup.css). Token layer only; no bare colour, so light mode holds.
+ *
+ * What changed visually, and why:
+ * - The section title is a real heading. It was an 11px mono label, the quietest text on a card
+ *   that is often the most urgent thing on the page.
+ * - Each player is a card, and the inset left bar is gone: the solid OUT pill already says it.
+ * - Every league where he STARTS is one row — league, the swap advice, then that league's own
+ *   buttons. They used to be a separate stacked column (seven buttons for one player), the tallest
+ *   block on the home, with each button repeating the league name its chip already showed.
+ */
+.af-triage .af-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.af-triage {
+  padding: 18px 18px 14px;
+  border-radius: 20px;
+}
+.af-triage-head {
+  align-items: center;
+  margin-bottom: 4px;
+}
+.af-triage-title {
+  font: 900 20px/1.15 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+
+.af-triage-row,
+.af-triage-row:first-child {
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+}
+.af-triage-row[data-tone='bad'] {
+  box-shadow: none;
+  padding-left: 14px;
+}
+.af-triage-row .af-triage-avatar {
+  width: 48px;
+  height: 48px;
+}
+.af-triage-row .af-triage-name {
+  font-size: 16px;
+  font-weight: 800;
+}
+.af-triage-row .af-triage-status[data-tone='bad'] {
+  background: var(--bad);
+  color: var(--bg);
+}
+/* The rank reads as a tag, not a sentence fragment. */
+.af-triage-row .af-triage-value {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.af-triage-fixes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-triage-fix {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.af-triage-fix-league {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-triage-fix-league:hover .af-triage-fix-name { text-decoration: underline; }
+.af-triage-fix-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-triage-fix .af-triage-slot {
+  flex: none;
+  margin-left: 0;
+}
+.af-triage-fix-advice {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.af-triage-fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* Two classes: af-core.css colours links as `.af-core a` (0,1,1). */
+.af-triage-fix-actions .af-triage-cta {
+  align-self: auto;
+  min-height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+.af-triage-fix-actions .af-triage-cta--fix {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+.af-triage-fix-actions .af-triage-cta--fix:hover {
+  background: color-mix(in srgb, var(--accent) 85%, var(--text));
+}
+
+/* Platform marks on the league tags — the same --p-* tokens every league tile on /core uses. */
+.af-triage-league-platform[data-platform] {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 10px;
+}
+.af-triage-league-platform[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); }
+.af-triage-league-platform[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); }
+.af-triage-league-platform[data-platform='yahoo'] { background: var(--p-yahoo-bg); color: var(--p-yahoo-fg); }
+.af-triage-league-platform[data-platform='fantrax'] { background: var(--p-fantrax-bg); color: var(--p-fantrax-fg); }
+.af-triage-league-platform[data-platform='mfl'] { background: var(--p-mfl-bg); color: var(--p-mfl-fg); }
+.af-triage-league-platform[data-platform='fleaflicker'] { background: var(--p-fleaflicker-bg); color: var(--p-fleaflicker-fg); }
+
+/* Leagues that need nothing from you stay chips, under a quiet label. */
+.af-triage-row .af-triage-leagues { margin-top: 10px; align-items: center; }
+.af-triage-also {
+  margin-right: 2px;
+  color: var(--muted);
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.af-triage-row .af-triage-actions {
+  margin-top: 10px;
+  max-width: none;
+}
+
+/* Tablet: the advice drops under the league so the buttons keep their width. */
+@media (max-width: 960px) {
+  .af-triage-fix { grid-template-columns: minmax(0, 1fr) auto; }
+  .af-triage-fix-advice {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+  .af-triage-fix-advice:empty { display: none; }
+}
+
+/* Phone: one column per fix row, full-width 44px buttons (the authed-phone contract). */
+@media (max-width: 640px) {
+  .af-triage { padding: 14px 12px 10px; }
+  .af-triage-row,
+  .af-triage-row:first-child { padding: 12px; }
+  .af-triage-fix {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+  }
+  .af-triage-fix-advice { grid-row: auto; }
+  .af-triage-fix-actions { justify-content: stretch; }
+  .af-triage-fix-actions .af-triage-cta {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 44px;
+    white-space: normal;
+  }
+}

@@ -56,6 +56,18 @@ export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: bool
   return m.bestAddAdd(add.name, detail, leagueName)
 }
 
+/**
+ * The same words without the league, for a button that already sits in that league's row. Paired
+ * with `bestAddInLeague` it rebuilds `bestAddCtaText` exactly — see the compact render below.
+ */
+export function bestAddLeadText(add: BestAdd | null, es: boolean): string {
+  const m = messagesFor(coreTriageMessages, langFromFlag(es))
+  if (!add) return m.bestAddSearchLead
+  if (add.kind === 'none') return m.bestAddNoneLead
+  const pts = `+${add.gain.toFixed(1)} pts`
+  return m.bestAddAddLead(add.name, add.position ? `${add.position}, ${pts}` : pts)
+}
+
 /** The Waivers deep link: that league, the player highlighted, priced with the injured starter at zero. */
 export function bestAddHref(baseHref: string, add: BestAdd | null, injuredId: string | null): string {
   if (!add || add.kind !== 'add' || !add.sleeperId) return baseHref
@@ -75,6 +87,7 @@ export function TriageFreeAgentCta({
   injuredId,
   auto,
   es,
+  compact = false,
 }: {
   leagueId: string
   leagueName: string
@@ -85,6 +98,8 @@ export function TriageFreeAgentCta({
   /** One of the capped few that may ask (see BEST_ADD_AUTO_LIMIT). */
   auto: boolean
   es: boolean
+  /** Inside a row that already names the league: show the lead, keep the league for screen readers. */
+  compact?: boolean
 }) {
   const key = `${leagueId}|${injuredId ?? ''}`
   const hit = cache.get(key)
@@ -121,7 +136,14 @@ export function TriageFreeAgentCta({
       href={bestAddHref(baseHref, add, injuredId)}
       onClick={() => sendProductAnalyticsBeacon('product.triage.free_agent_clicked', { kind: add?.kind ?? 'search' })}
     >
-      {bestAddCtaText(add, leagueName, es)}
+      {compact ? (
+        <>
+          {bestAddLeadText(add, es)}
+          <span className="af-sr-only">{messagesFor(coreTriageMessages, langFromFlag(es)).bestAddInLeague(leagueName)}</span>
+        </>
+      ) : (
+        bestAddCtaText(add, leagueName, es)
+      )}
     </Link>
   )
 }
