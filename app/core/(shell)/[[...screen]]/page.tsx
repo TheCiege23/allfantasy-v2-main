@@ -24,6 +24,7 @@ import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
+import { coreShellDynasty } from '@/lib/core-app/coreShellDynasty'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -1664,6 +1665,8 @@ export default async function AfCorePage({
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
       /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
       redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
+      /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
+      dynastyEra={coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
