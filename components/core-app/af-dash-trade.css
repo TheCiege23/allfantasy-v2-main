@@ -408,3 +408,67 @@
   display: inline-block;
   line-height: 44px;
 }
+
+/*
+ * ── 2026-11-01 home redesign: the grade duel ───────────────────────────────────
+ *
+ * Appended last and top-level (CLAUDE.md, af-matchup.css). Token layer only.
+ *
+ * ⚠ THE TWO GRADES SAT AT OPPOSITE EDGES OF THE CARD. `.af-trade-mgr` took `flex: 1`, which pushed
+ * each side's letter to the far right of its column — on a wide home the B and the D were ~900px
+ * apart, and the one comparison the card exists for needed a head turn. The name now shrinks to
+ * its content and the letter sits beside it, larger, as the thing you read first.
+ */
+.af-trade-card {
+  border-radius: 18px;
+  padding: 6px 14px 12px;
+}
+.af-trade-sides {
+  border-radius: 14px;
+}
+.af-trade-side {
+  padding: 14px 14px 12px;
+}
+/* Clear of the ⇄ disc, which straddles the divider. */
+.af-trade-sides[data-count='2'] .af-trade-side + .af-trade-side {
+  padding-left: 24px;
+}
+.af-trade-mgr {
+  flex: 0 1 auto;
+  font-size: 13.5px;
+}
+.af-trade-grade {
+  order: -1;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font: 900 20px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-trade-manager .af-trade-avatar { order: 0; }
+.af-trade-manager { gap: 10px; }
+.af-trade-sides[data-count='2'] .af-trade-swap {
+  top: 22px;
+  left: -14px;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  border-color: var(--accent-line);
+}
+/* The verdict reads as the card's conclusion, not a footnote. */
+.af-trade-verdict {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.af-trade-verdict-word { font-size: 13px; }
+@media (max-width: 640px) {
+  .af-trade-side { padding: 12px 10px; }
+  .af-trade-grade {
+    min-width: 34px;
+    height: 34px;
+    font-size: 17px;
+  }
+}

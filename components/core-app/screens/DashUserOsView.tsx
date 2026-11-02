@@ -27,14 +27,31 @@ export function DashUserOsView({
   const m = messagesFor(coreWidgetsMessages, language)
   return (
     <section className="af-core" aria-label={m.userOsAria} style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-        <h2 className="af-display" style={{ margin: 0, fontSize: 15, letterSpacing: '-0.02em' }}>
+      {/* 2026-11-01 home redesign: a section heading and a real button, matching the cards around it. */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+        <h2 className="af-display" style={{ margin: 0, fontSize: 20, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
           {m.userOsYourTeam}
           {leagueName ? ` · ${leagueName}` : ''}
         </h2>
         {/* Explains the card's tier chip (Elite … Inactive). UserOsCard is shared with other surfaces, so the tip lives here. */}
         <TopicTip topic="participationTier" />
-        <Link href={`/league/${leagueId}?view=decide`} style={{ fontSize: 12, color: 'var(--muted)' }}>
+        <Link
+          href={`/league/${leagueId}?view=decide`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: 44,
+            marginLeft: 'auto',
+            padding: '0 14px',
+            borderRadius: 10,
+            border: '1px solid var(--accent-line)',
+            background: 'var(--accent-soft)',
+            color: 'var(--accent)',
+            fontSize: 13,
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
           {m.userOsOpenDecide}
         </Link>
       </div>

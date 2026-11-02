@@ -19,3 +19,25 @@
 .af-recent-clips-compact .af-x-caption{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 @media(max-width:720px){.af-x-grid{grid-template-columns:1fr}.af-recent-clips{padding:12px}}
 
+/*
+ * 2026-11-01 home redesign — the compact feed on the /core home ("Around your leagues").
+ * Appended last and top-level (CLAUDE.md on @media nesting). It was forced to one column, so two posts
+ * filled the full width of the card as text blocks. Now: a real section heading, cards side by side
+ * where there is room, league tags as chips, and the consent-to-load button kept exactly as it was —
+ * loading a post still shares browser data with X only when the reader asks.
+ * The fallbacks keep the original colours for any surface without the af-core tokens.
+ */
+.af-recent-clips-compact{margin:20px 0 4px;padding:18px;border-color:var(--line,#283345);border-radius:18px;background:var(--surface,transparent)}
+.af-recent-clips-compact header h3{font-size:20px;font-weight:900;letter-spacing:-0.02em;line-height:1.15}
+.af-recent-clips-compact header>span{padding:3px 8px;border:1px solid var(--line,#283345);border-radius:999px;font:700 10px/1.4 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+.af-recent-clips-compact .af-x-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px;margin-top:6px}
+.af-recent-clips-compact .af-x-card{display:flex;flex-direction:column;padding:14px;border-color:var(--line,#283345);border-radius:16px;background:var(--bg,transparent)}
+.af-recent-clips-compact .af-x-card h4{font-size:17px;font-weight:800;letter-spacing:-0.01em}
+.af-recent-clips-compact .af-x-badges>*{border-color:var(--accent-line,#39465b);border-radius:999px;padding:3px 9px;font-weight:700;text-decoration:none}
+.af-recent-clips-compact .af-x-badges>span{border-color:var(--line,#39465b);color:var(--muted,#9baac3)}
+.af-recent-clips-compact .af-x-badges a{min-height:28px;display:inline-flex;align-items:center;color:var(--accent,#6fe1f4)}
+.af-recent-clips-compact .af-x-embed{margin-top:auto}
+.af-recent-clips-compact .af-x-embed>button{min-height:44px;border-radius:12px;font-weight:700}
+.af-recent-clips-compact .af-x-embed>button:hover{border-color:var(--accent,#22d3ee)}
+@media(max-width:720px){.af-recent-clips-compact .af-x-grid{grid-template-columns:1fr}.af-recent-clips-compact{padding:14px}}
+
