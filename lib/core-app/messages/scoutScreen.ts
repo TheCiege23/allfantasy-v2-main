@@ -1,5 +1,6 @@
 import { defineMessages } from '@/lib/i18n/messages'
 import type { Zone } from '@/lib/core-app/standingsModel'
+import type { RoomGridColumn } from '@/lib/core-app/scoutRoomGrid'
 
 /**
  * Scout, the first room of the War Room (components/core-app/screens/Scout.tsx): the manager cards,
@@ -103,6 +104,29 @@ export const scoutScreenMessages = defineMessages({
     seasonFinal: ' — final',
     noStandingsYet: 'No standings yet',
     edgeLockWhat: 'Every manager’s trade and waiver record',
+    eyebrow: 'War Room',
+
+    // RoomGrid
+    roomGridTitle: 'The room at a glance',
+    roomGridSub: (outOf: number) => `Each team's rank in this league, column by column. 1st of ${outOf} is best.`,
+    roomGridTeam: 'Team',
+    roomGridColumn: (c: RoomGridColumn): string =>
+      ({ seed: 'Seed', power: 'Power', pointsFor: 'Points for', form: 'Last 5' })[c],
+    roomGridColumnLong: (c: RoomGridColumn): string =>
+      ({ seed: 'the standings', power: 'power rank', pointsFor: 'points for', form: 'wins in the last five' })[c],
+    roomGridStronger: 'Stronger',
+    roomGridWeaker: 'Weaker',
+    roomGridLegendAria: 'Shading: darker is a better rank',
+    ordinal: (n: number): string => {
+      const tens = n % 100
+      if (tens >= 11 && tens <= 13) return `${n}th`
+      return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`
+    },
+    roomGridOf: (outOf: number) => `of ${outOf}`,
+    roomGridCellAria: (team: string, ordinal: string, outOf: number, column: string) =>
+      `${team}: ${ordinal} of ${outOf} in ${column}`,
+    yourStrongest: 'Your strongest',
+    yourWeakest: 'Your weakest',
     // The "Sep 21, 2025" day format's locale
     dayLocale: 'en-US',
   },
@@ -197,6 +221,23 @@ export const scoutScreenMessages = defineMessages({
     seasonFinal: ' (final)',
     noStandingsYet: 'Todavía no hay clasificación',
     edgeLockWhat: 'El historial de intercambios y reclamos de cada mánager',
+    eyebrow: 'Sala de estrategia',
+
+    // RoomGrid
+    roomGridTitle: 'La liga de un vistazo',
+    roomGridSub: (outOf) => `El puesto de cada equipo en esta liga, columna por columna. El 1.º de ${outOf} es el mejor.`,
+    roomGridTeam: 'Equipo',
+    roomGridColumn: (c) => ({ seed: 'Posición', power: 'Poder', pointsFor: 'Puntos a favor', form: 'Últimos 5' })[c],
+    roomGridColumnLong: (c) =>
+      ({ seed: 'la clasificación', power: 'el ranking de poder', pointsFor: 'puntos a favor', form: 'victorias en los últimos cinco' })[c],
+    roomGridStronger: 'Más fuerte',
+    roomGridWeaker: 'Más débil',
+    roomGridLegendAria: 'Sombreado: más oscuro es un mejor puesto',
+    ordinal: (n) => `${n}.º`,
+    roomGridOf: (outOf) => `de ${outOf}`,
+    roomGridCellAria: (team, ordinal, outOf, column) => `${team}: ${ordinal} de ${outOf} en ${column}`,
+    yourStrongest: 'Tu punto más fuerte',
+    yourWeakest: 'Tu punto más débil',
     dayLocale: 'es-US',
   },
 })

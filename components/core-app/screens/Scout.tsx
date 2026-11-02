@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import '@/components/core-app/af-scout.css'
 // Redraft /core shell only (batch B4): every rule is scoped under .af-shell[data-format=redraft].
 import '@/components/core-app/af-core-redraft-trades.css'
+import '@/components/core-app/af-scout-room.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -19,6 +20,7 @@ import type { RailStanding } from '@/lib/core-app/railMatchups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { scoutScreenMessages } from '@/lib/core-app/messages/scoutScreen'
+import { buildRoomGrid, type RoomGrid as RoomGridModel, type RoomGridCell } from '@/lib/core-app/scoutRoomGrid'
 
 /**
  * Scout — the first room of the War Room.
@@ -454,6 +456,93 @@ function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData;
   )
 }
 
+/**
+ * The room at a glance: every live team's rank in this league, column by column, shaded stronger to
+ * weaker (lib/core-app/scoutRoomGrid.ts). The number in each cell carries the reading; the shade only
+ * repeats it, so the grid reads the same without colour.
+ */
+function RoomGrid({ grid }: { grid: RoomGridModel }) {
+  const { m } = useScoutCopy()
+  const tiers = [1, 2, 3, 4, 5] as const
+  return (
+    <section className="af-frame af-sc-room" aria-labelledby="af-sc-room-h">
+      <header className="af-sc-room-head">
+        <div>
+          <h2 className="af-sc-room-title" id="af-sc-room-h">
+            {m.roomGridTitle}
+          </h2>
+          <p className="af-sc-room-sub">{m.roomGridSub(grid.outOf)}</p>
+        </div>
+        <div className="af-sc-room-legend" aria-label={m.roomGridLegendAria}>
+          <span>{m.roomGridStronger}</span>
+          {tiers.map((t) => (
+            <span key={t} className="af-sc-room-swatch" data-tier={t} aria-hidden />
+          ))}
+          <span>{m.roomGridWeaker}</span>
+        </div>
+      </header>
+      <div className="af-sc-room-body">
+        <div className="af-sc-room-scroll">
+          <table className="af-sc-room-table">
+            <thead>
+              <tr>
+                <th scope="col" className="af-sc-room-team-h">
+                  {m.roomGridTeam}
+                </th>
+                {grid.columns.map((c) => (
+                  <th key={c} scope="col">
+                    {m.roomGridColumn(c)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grid.rows.map((row) => (
+                <tr key={row.managerId} data-you={row.isYou || undefined} data-opponent={row.isNextOpponent || undefined}>
+                  <th scope="row" className="af-sc-room-team">
+                    <span className="af-sc-room-name">{row.teamName}</span>
+                    {row.isYou ? <span className="af-sc-room-you">{m.tagYou}</span> : null}
+                  </th>
+                  {row.cells.map((cell) => (
+                    <td
+                      key={cell.column}
+                      className="af-sc-room-cell af-num"
+                      data-tier={cell.tier}
+                      title={m.roomGridCellAria(row.teamName, m.ordinal(cell.rank), grid.outOf, m.roomGridColumnLong(cell.column))}
+                    >
+                      {cell.rank}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {grid.you ? (
+          <div className="af-sc-room-tiles">
+            <RoomTile label={m.yourStrongest} cell={grid.you.strongest} outOf={grid.outOf} tone="good" />
+            <RoomTile label={m.yourWeakest} cell={grid.you.weakest} outOf={grid.outOf} tone="bad" />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function RoomTile({ label, cell, outOf, tone }: { label: string; cell: RoomGridCell; outOf: number; tone: 'good' | 'bad' }) {
+  const { m } = useScoutCopy()
+  return (
+    <div className="af-sc-room-tile" data-tone={tone}>
+      <span className="af-sc-room-tile-label">{label}</span>
+      <span className="af-sc-room-tile-value">
+        <span className="af-sc-room-tile-rank af-num">{m.ordinal(cell.rank)}</span>
+        <span className="af-sc-room-tile-of af-num">{m.roomGridOf(outOf)}</span>
+      </span>
+      <span className="af-sc-room-tile-note">{m.roomGridColumn(cell.column)}</span>
+    </div>
+  )
+}
+
 /** One line on what this format changes about the screen, when it changes anything. */
 function FormatNote({ format }: { format: ScoutData['format'] }) {
   const { m, copy } = useScoutCopy()
@@ -496,10 +585,12 @@ export function Scout({
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
   const { language, m, copy } = useScoutCopy()
+  const roomGrid = data.managers.available ? buildRoomGrid(data.managers.data) : null
   return (
     <div className="af-sc">
       <header className="af-frame af-sc-head">
         <div className="af-sc-head-text">
+          <p className="af-sc-eyebrow">{m.eyebrow}</p>
           <h1 className="af-display af-sc-title">Scout · {data.league.name}</h1>
           <p className="af-sc-blurb">
             {m.blurb}
@@ -524,6 +615,8 @@ export function Scout({
       )}
 
       <FormatNote format={data.format} />
+
+      {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
 
       {leaguePlan}
 
