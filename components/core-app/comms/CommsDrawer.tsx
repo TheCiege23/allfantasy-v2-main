@@ -3,7 +3,7 @@
 import ThreadPanel from './ThreadPanel'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
-import { Eye, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
+import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
@@ -261,8 +261,14 @@ function LeaguePanel({
         <>
           <span className="af-cm-scope-label">League</span>
           <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
-          <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
-            @chimmy — ask Chimmy about this league
+          {/* A chip beside Search chat, not a full-width dashed row: the room is for the conversation. */}
+          <button
+            type="button"
+            className="af-cm-summon"
+            onClick={() => setAskChimmy(true)}
+            aria-label="Ask Chimmy about this league"
+          >
+            <Sparkles size={13} aria-hidden /> Ask Chimmy
           </button>
         </>
       }
@@ -377,6 +383,9 @@ function DiscordPanel({
           never used Discord got no idea what the tab is for.
         */}
         <div className="af-cm-empty af-cm-empty--grow">
+          <span className="af-cm-empty-icon" data-kind="discord" aria-hidden="true">
+            <Hash size={28} />
+          </span>
           <p className="af-cm-empty-t">Give your league its own Discord</p>
           <p className="af-cm-empty-b">
             A private server for your league&apos;s trash talk, voice chats and draft nights, run by your
@@ -399,8 +408,6 @@ function DiscordPanel({
         <span className="af-cm-scope-label">League</span>
         <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
       </div>
-
-      <div className="af-cm-privacy">{DISCORD_PRIVACY}</div>
 
       <div className="af-cm-empty af-cm-empty--grow">
         {loading ? (
@@ -481,6 +488,12 @@ function DiscordPanel({
             </>
           )
         )}
+      </div>
+
+      {/* Contract 5, as fine print under the content rather than a box above it (2026-11-01). */}
+      <div className="af-cm-privacy af-cm-privacy-foot">
+        <Lock size={12} aria-hidden />
+        {DISCORD_PRIVACY}
       </div>
     </div>
   )
@@ -682,18 +695,39 @@ export function CommsDrawer({
         aria-modal={mode === 'overlay' ? true : undefined}
         aria-label={coreUiCopy('Communications', language)}
       >
+        {/*
+          2026-11-01 redesign (owner: "when I open it, it looks crowded … as simple as Sleeper or
+          Discord"). A short title with the audience line under it instead of a row of its own, and
+          Notification settings as a bell beside Close instead of a footer on every tab. Both pieces of
+          copy are unchanged; only where they sit moved.
+        */}
         <header className="af-cm-head">
           <div className="af-cm-headtop">
             <span className="af-cm-brand">
-              <MessagesSquare size={15} aria-hidden />
-              <h2 className="af-cm-title">{coreUiCopy('Communications', language)}</h2>
+              <h2 className="af-cm-title">{coreUiCopy('Chat', language)}</h2>
+              {/*
+                Who can see what you type here. The tabs' whole distinction — so it says so, rather than
+                leaving "Just you" floating under the tabs with nothing to say what it answers.
+              */}
+              <p className="af-cm-audience">
+                <Eye size={12} aria-hidden />
+                <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
+              </p>
             </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
               {scopeName ?? m.commsDrawerGlobal}
             </span>
+            <Link
+              href="/settings?tab=notifications"
+              className="af-cm-headbtn"
+              aria-label={coreUiCopy('Notification settings', language)}
+              title={coreUiCopy('Notification settings', language)}
+            >
+              <Bell size={18} aria-hidden />
+            </Link>
             <button type="button" className="af-cm-close" onClick={onClose} aria-label={coreUiCopy('Close', language)}>
-              <X size={16} aria-hidden />
+              <X size={18} aria-hidden />
             </button>
           </div>
 
@@ -725,6 +759,7 @@ export function CommsDrawer({
                   aria-selected={tab === t.id}
                   tabIndex={tab === t.id ? 0 : -1}
                   className="af-cm-tab"
+                  data-tab={t.id}
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
                   title={coreUiCopy(t.audience, language)}
@@ -735,15 +770,6 @@ export function CommsDrawer({
               )
             })}
           </nav>
-
-          {/*
-            Who can see what you type here. The tabs' whole distinction — so it says so, rather than
-            leaving "Just you" floating under the tabs with nothing to say what it answers.
-          */}
-          <p className="af-cm-audience">
-            <Eye size={12} aria-hidden />
-            <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
-          </p>
         </header>
 
         {tab === 'league' ? (
@@ -786,10 +812,8 @@ export function CommsDrawer({
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}
 
+        {/* Notification settings moved to the header's bell (2026-11-01); only the fine print is left here. */}
         <footer className="af-cm-foot">
-          <Link href="/settings?tab=notifications" className="af-cm-footlink">
-            {coreUiCopy('Notification settings', language)}
-          </Link>
           {/*
             V10: this said "Read-only · AllFantasy never writes to your platform" inside a chat you type
             into. What is true is narrower, and it is the part that matters: we never change your

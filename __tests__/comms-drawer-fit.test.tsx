@@ -40,9 +40,16 @@ describe('the drawer stylesheet', () => {
     expect(css.lastIndexOf('@container af-cm (max-width: 520px)')).toBeGreaterThan(-1)
   })
 
-  it('lays the five tabs out as five equal columns, and stacks icon over label when compact', () => {
+  /*
+   * 2026-11-01 redesign (owner: "it looks crowded … as simple as Sleeper or Discord"): the icon-over-
+   * label pills this used to pin became one row of labels with an underline on the open tab. The
+   * earlier compact rule is still in the file, overridden by the redesign layer, so pin THAT layer.
+   */
+  it('lays the five tabs out as five equal columns of labels, the open one underlined', () => {
     expect(css).toMatch(/^\.af-cm-tabs \{ display: grid; grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}$/m)
-    expect(compact).toMatch(/^\s+\.af-cm-tab \{ flex-direction: column;/m)
+    expect(compact).toMatch(/^\.af-cm \.af-cm-tab \{\s+flex-direction: row;/m)
+    expect(compact).toMatch(/^\.af-cm \.af-cm-tab\[data-on='true'\] \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent\)/m)
+    expect(compact).toMatch(/^\.af-cm \.af-cm-tab > svg \{ display: none; \}$/m)
   })
 
   it('gives the composer no resize grip and a send button that is not stretched', () => {

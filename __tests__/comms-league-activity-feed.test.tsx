@@ -84,6 +84,22 @@ describe('LeagueActivityFeed', () => {
     expect(await screen.findByText('League not identified')).toBeTruthy()
   })
 
+  /*
+   * An injury row is cross-league by design ("— on 4 of your rosters"), so it never has a league;
+   * "League not identified" on every one of them read as a bug (owner screenshot, 2026-11-01).
+   */
+  it('labels a cross-roster injury row "Your rosters", not "League not identified"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({ status: 'ok', items: [item({ type: 'injury', leagueName: null, leagueId: null })] }),
+    )
+
+    render(<LeagueActivityFeed />)
+
+    expect(await screen.findByText('Your rosters')).toBeTruthy()
+    expect(screen.queryByText('League not identified')).toBeNull()
+  })
+
   it('offers a way through when the item deep-links', async () => {
     vi.stubGlobal('fetch', mockFetch({ status: 'ok', items: [item({ href: '/league/lg1/trades' })] }))
 
