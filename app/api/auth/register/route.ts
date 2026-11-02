@@ -429,8 +429,8 @@ export async function POST(req: Request) {
         if (check.status !== "approved") {
           return NextResponse.json({ error: "Invalid phone verification code." }, { status: 400 })
         }
-      } catch (phoneVerifyError) {
-        console.error("[register] phone verification check failed:", phoneVerifyError)
+      } catch {
+        // Twilio errors may include the destination; do not log phone numbers or codes.
         return NextResponse.json({ error: "Phone verification failed." }, { status: 400 })
       }
     }
