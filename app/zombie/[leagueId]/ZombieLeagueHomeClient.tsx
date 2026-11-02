@@ -36,6 +36,7 @@ import { zombieRoleAccentClasses } from '@/lib/zombie/zombie-visual-system'
 import { ZombieIntroModal } from '@/components/zombie/ZombieIntroModal'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { ZombieRoleActions } from '@/components/zombie/ZombieRoleActions'
+import { ZombieSeasonOperations } from '@/components/zombie/ZombieSeasonOperations'
 
 const LEAGUE_SAFE_URL = 'https://www.leaguesafe.com'
 
@@ -331,6 +332,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
       >
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 lg:px-6">
         <ZombieRoleActions leagueId={leagueId} onChanged={() => setRoleRefresh(n => n + 1)} />
+        <ZombieSeasonOperations leagueId={leagueId} />
         <ZombieCommandHero
           leagueName={z.name}
           logoUrl={z.logoUrl}

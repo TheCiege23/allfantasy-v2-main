@@ -15,6 +15,7 @@ import { ZombieInfectionNight } from '@/components/league/specialty/zombie/Zombi
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
 import { daysUntilResolution } from '@/lib/zombie/zombieHomeView'
 import { ZombieRoleActions } from './ZombieRoleActions'
+import { ZombieSeasonOperations } from './ZombieSeasonOperations'
 
 /*
  * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
@@ -224,6 +225,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         }
       />
       <ZombieRoleActions leagueId={leagueId} onChanged={() => { void load() }} />
+      <ZombieSeasonOperations leagueId={leagueId} />
       <nav className="flex flex-wrap gap-2" aria-label="Zombie league">
         {[
           ['Matchups', `${hub}/matchups`],

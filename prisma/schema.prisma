@@ -10323,6 +10323,20 @@ model ZombieLeague {
   @@map("zombie_leagues")
 }
 
+/// Versioned Zombie season reviews, ownership history, ballots and acceptance evidence.
+model ZombieOperationsRecord {
+  id String @id @db.VarChar(180)
+  scope String @db.VarChar(100)
+  season Int
+  kind String @db.VarChar(32)
+  payload Json
+  actorUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([scope, season, kind])
+  @@map("zombie_operations_records")
+}
+
 model ZombieCorrectionReview {
   id                 String       @id @default(uuid())
   zombieLeagueId     String
