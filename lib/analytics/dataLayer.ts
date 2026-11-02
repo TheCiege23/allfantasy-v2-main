@@ -35,7 +35,7 @@ declare global {
   }
 }
 
-export type SignupMethod = 'email' | 'google' | 'apple'
+export type SignupMethod = 'email' | 'phone' | 'google' | 'apple'
 
 /**
  * ⚠ WIDENED FROM THE SPEC'S `sleeper | espn | yahoo`, AND DERIVED RATHER THAN
