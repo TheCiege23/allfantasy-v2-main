@@ -86,3 +86,30 @@ describe("text-code sign-in start", () => {
     expect(h.lookup).not.toHaveBeenCalled()
   })
 })
+
+describe("phone signup code send", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.TWILIO_VERIFY_SERVICE_SID = "service_sid"
+    h.limit.mockResolvedValue({ success: true, count: 1 })
+    h.send.mockResolvedValue({ sid: "verification_sid" })
+  })
+
+  it("sends through Verify after spending all shared SMS budgets", async () => {
+    const { POST } = await import("@/app/api/auth/phone/signup/start/route")
+    const res = await POST(request("+15551234567"))
+    expect(res.status).toBe(200)
+    expect(h.limit).toHaveBeenCalledTimes(3)
+    expect(h.send).toHaveBeenCalledWith({ to: "+15551234567", channel: "sms" })
+  })
+
+  it("does not send after any shared budget is exhausted", async () => {
+    h.limit.mockResolvedValueOnce({ success: true, count: 1 })
+      .mockResolvedValueOnce({ success: false, count: 11 })
+      .mockResolvedValueOnce({ success: true, count: 1 })
+    const { POST } = await import("@/app/api/auth/phone/signup/start/route")
+    const res = await POST(request("+15551234567"))
+    expect(res.status).toBe(429)
+    expect(h.send).not.toHaveBeenCalled()
+  })
+})
