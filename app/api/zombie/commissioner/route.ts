@@ -81,6 +81,10 @@ export async function POST(req: Request) {
     const prev = await prisma.zombieLeagueTeam.findUnique({
       where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     })
+    if (!['Survivor', 'Zombie', 'Whisperer', 'Revived', 'Eliminated'].includes(newStatus)) return NextResponse.json({ error: 'Unknown team status' }, { status: 400 })
+    if (z.sport === 'NFL' && (newStatus === 'Whisperer' || prev?.status === 'Whisperer')) {
+      return NextResponse.json({ error: 'Use the reviewed 2025 offer or combat workflow to change the Whisperer. A status-only override cannot transfer the role or its ambushes.' }, { status: 409 })
+    }
     await prisma.zombieLeagueTeam.update({
       where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
       data: { status: newStatus },

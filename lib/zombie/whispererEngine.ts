@@ -49,6 +49,11 @@ export async function selectWhisperer(
   })
 
   const leagueId = z.leagueId
+  if (z.sport === 'NFL' && !preserveOtherWhisperers) {
+    const { startBetaWhispererOffers } = await import('./beta2025RoleWorkflows')
+    const result = await startBetaWhispererOffers(leagueId)
+    return { whispererRecordId: 'workflowId' in result ? result.workflowId! : '', rosterId: '' }
+  }
   const allTeams = await prisma.zombieLeagueTeam.findMany({ where: { leagueId } })
   if (allTeams.length === 0) throw new Error('No zombie team rows — run assignTeams / roster sync first.')
   /*
@@ -199,6 +204,7 @@ export async function applyAmbush(
 
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
   if (!z) return { ok: false, reason: 'League not found' }
+  if (z.sport === 'NFL') return { ok: false, reason: 'Use the verified matchup remap in the Zombie tab. Nothing was spent.' }
 
   const left = (rec.ambushesRemaining ?? 0) - 1
   await prisma.whispererRecord.update({
@@ -240,6 +246,8 @@ export async function handleWhispererDefeat(
   week: number,
   defeatedWhispererUserId?: string,
 ): Promise<void> {
+  const policyLeague = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId }, select: { sport: true } })
+  if (policyLeague?.sport === 'NFL') throw new Error('2025 NFL succession must resolve through its sealed combat workflow.')
   if (defeatedWhispererUserId) {
     const co = await prisma.zombieCoWhisperer.findUnique({
       where: { zombieLeagueId_userId: { zombieLeagueId, userId: defeatedWhispererUserId } },
@@ -395,6 +403,7 @@ export async function activateWhispererPower(
 ): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (z.sport === 'NFL') throw new Error('Extra powers are not part of the approved 2025 policy. Nothing was spent.')
   const rec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
   if (!rec || rec.userId !== userId) throw new Error('Not the Whisperer')
 

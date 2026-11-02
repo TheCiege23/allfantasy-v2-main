@@ -5,6 +5,7 @@ import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
 import { processBombAction, processWeaponAction } from '@/lib/zombie/weaponEngine'
 import { processAmbushFromChimmy } from '@/lib/zombie/ambushEngine'
+import { respondBetaRoleWorkflow } from './beta2025RoleWorkflows'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import {
   applyZombieHordeSitOutToChallenges,
@@ -163,6 +164,20 @@ export async function handleZombieChimmyAction(
   const lower = rawMessage.toLowerCase()
 
   try {
+    const roleCommand = rawMessage.match(/^\s*@chimmy\s+(bashing|mauling|whisperer)\s+(spare|infect|replace|accept|decline)(?:\s+(\S+))?\s*$/i)
+    if (roleCommand) {
+      const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+      if (z?.sport !== 'NFL') return { ok: false, error: 'unsupported_policy', privateMessage: 'Use this league’s existing combat controls.' }
+      const kind = roleCommand[1].toLowerCase()
+      const decision = roleCommand[2].toLowerCase()
+      const rows = await prisma.zombieRoleWorkflow.findMany({ where: { zombieLeagueId: z.id, actorUserId: userId,
+        status: 'pending', ...(roleCommand[3] ? { id: roleCommand[3] } : {}),
+        kind: { in: kind === 'bashing' ? ['survivor_bash', 'whisperer_bash'] : kind === 'mauling' ? ['whisperer_maul'] : ['initial_offer'] } } })
+      if (rows.length !== 1) return { ok: false, error: 'choose_event', privateMessage: 'Open the Zombie tab and choose the exact pending decision.' }
+      await respondBetaRoleWorkflow(leagueId, rows[0].id, userId, kind === 'mauling' && decision === 'accept' ? 'become_whisperer' : decision,
+        (rows[0].state as { index?: number }).index)
+      return { ok: true, privateMessage: 'Decision saved. Your league state has been updated.' }
+    }
     if (intent === 'horde_sit_out_nominate') {
       const nomination = await nominateZombieHordeSitOut({
         leagueId,
@@ -220,7 +235,7 @@ export async function handleZombieChimmyAction(
     }
 
     if (intent === 'trigger_ambush') {
-      const row = await processAmbushFromChimmy(leagueId, userId, rawMessage, week)
+      const row = await processAmbushFromChimmy(leagueId, userId, rawMessage, week, requestId)
       return {
         ok: row.isValid, chimmyActionId: row.id,
         publicMessage: row.publicResponse, privateMessage: row.privateResponse,

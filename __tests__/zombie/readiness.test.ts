@@ -29,6 +29,10 @@ describe('settlement readiness',()=>{
 
 
 describe('Whisperer readiness', () => {
+ it('waits for offers and treats a defeated vacant seat as a valid 2025 outcome', () => {
+  expect(whispererReadiness(0, 1, true, 'offers')).toMatchObject({status:'waiting',detail:expect.stringContaining('24-hour')})
+  expect(whispererReadiness(0, 1, true, 'defeated')).toMatchObject({status:'ready',detail:expect.stringContaining('vacant')})
+ })
  it('waits for the draft before expecting activation to select Whisperers', () => {
   expect(whispererReadiness(0, 2, false).status).toBe('waiting')
  })

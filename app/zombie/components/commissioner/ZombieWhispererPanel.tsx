@@ -34,6 +34,7 @@ export function ZombieWhispererPanel({
   const [weeklyCap, setWeeklyCap] = useState(1)
   const [whispererCount, setWhispererCount] = useState(1)
   const [allowsTwo, setAllowsTwo] = useState(false)
+  const [betaNFL, setBetaNFL] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -49,10 +50,12 @@ export function ZombieWhispererPanel({
         const league = data.league
         if (!league) throw new Error('Zombie league not found.')
         const mode = league.config?.whispererSelection ?? league.whispererSelectionMode
-        setSelection(mode === 'veteran_priority' ? 'veteran_priority' : 'random')
+        const nfl = league.sport?.toUpperCase() === 'NFL'
+        setBetaNFL(nfl)
+        setSelection(nfl || mode === 'veteran_priority' ? 'veteran_priority' : 'random')
         setLocked(Boolean(league.whispererRecord) || !['setup', 'registering'].includes(league.status ?? ''))
         setCommissioner(Boolean(data.viewerIsCommissioner))
-        setAmbushCount(typeof league.whispererAmbushCount === 'number' ? league.whispererAmbushCount : 3)
+        setAmbushCount(nfl ? 2 : typeof league.whispererAmbushCount === 'number' ? league.whispererAmbushCount : 3)
         setWeeklyCap(typeof league.config?.ambushCountPerWeek === 'number' ? league.config.ambushCountPerWeek : 1)
         setWhispererCount(league.whispererCount === 2 ? 2 : 1)
         setAllowsTwo(league.experienceMode !== 'simple' && ['NBA', 'NHL', 'MLB'].includes((league.sport ?? '').toUpperCase()))
@@ -77,7 +80,7 @@ export function ZombieWhispererPanel({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ leagueId, whispererSelectionMode: selection, whispererCount, whispererAmbushCount: ambushCount, ambushCountPerWeek: weeklyCap }),
+        body: JSON.stringify(betaNFL ? { leagueId, whispererSelectionMode: 'veteran_priority', whispererAmbushCount: 2 } : { leagueId, whispererSelectionMode: selection, whispererCount, whispererAmbushCount: ambushCount, ambushCountPerWeek: weeklyCap }),
       })
       const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) throw new Error(result.error ?? 'Could not save Whisperer settings.')
@@ -94,19 +97,19 @@ export function ZombieWhispererPanel({
       <SettingsSection id="zm-whisperer" title="Whisperer selection">
         <SettingsRow
           label="Selection mode"
-          description={locked
+          description={betaNFL ? 'Independent random order, veteran-first 24-hour offers. Start or respond from the Zombie tab.' : locked
             ? 'Locked after the draft assigns the Whisperer.'
             : 'Choose how the Whisperer is picked when the draft completes.'}
           control={
-            <Select aria-label="Selection mode" value={selection} onChange={setSelection} disabled={!editable} className="min-h-[44px]">
+            <Select aria-label="Selection mode" value={selection} onChange={setSelection} disabled={!editable || betaNFL} className="min-h-[44px]">
               <option value="random">Random</option>
               <option value="veteran_priority">Veteran priority</option>
             </Select>
           }
         />
         {allowsTwo && <SettingsRow label="Whisperer seats" description="Each Whisperer has a separate ambush balance." control={<Select aria-label="Whisperer seats" value={String(whispererCount)} onChange={(value) => setWhispererCount(Number(value))} disabled={!editable} className="min-h-[44px]"><option value="1">One</option><option value="2">Two</option></Select>} />}
-        <SettingsRow label="Season ambushes" description="Total ambushes granted when the Whisperer is chosen." control={<input aria-label="Season ambushes" type="number" min={0} max={20} value={ambushCount} onChange={(event) => setAmbushCount(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
-        <SettingsRow label="Per-week cap" description="Maximum matchup swaps in one week." control={<input aria-label="Per-week cap" type="number" min={0} max={5} value={weeklyCap} onChange={(event) => setWeeklyCap(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
+        <SettingsRow label="Season ambushes" description={betaNFL ? '2025 policy: two complete remaps per season; successors inherit the remaining balance.' : 'Total ambushes granted when the Whisperer is chosen.'} control={<input aria-label="Season ambushes" type="number" min={0} max={20} value={ambushCount} onChange={(event) => setAmbushCount(Number(event.target.value))} disabled={!editable || betaNFL} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
+        {!betaNFL && <SettingsRow label="Per-week cap" description="Maximum matchup swaps in one week." control={<input aria-label="Per-week cap" type="number" min={0} max={5} value={weeklyCap} onChange={(event) => setWeeklyCap(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />}
       </SettingsSection>
 
       <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -117,7 +120,7 @@ export function ZombieWhispererPanel({
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
         <p className="font-semibold text-amber-200">Matchup ambush</p>
         <p className="mt-1 text-white/65">
-          Each Whisperer has {ambushCount} season ambushes and may use {weeklyCap} per week. Before scoring starts, use @Chimmy ambush swap followed by an exact Survivor team name to change two matchups.
+          {betaNFL ? 'Use the Zombie tab to preview and confirm a full matchup remap. Only teams whose starters have not begun playing can move. Unchanged locked matchups remain intact. Combat and succession choices close Wednesday at 9 p.m. Eastern.' : `Each Whisperer has ${ambushCount} season ambushes and may use ${weeklyCap} per week. Before scoring starts, use @Chimmy ambush swap followed by an exact Survivor team name to change two matchups.`}
         </p>
       </div>
 

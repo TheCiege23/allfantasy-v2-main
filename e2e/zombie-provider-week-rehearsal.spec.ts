@@ -1,4 +1,4 @@
-import { separateFixtureWhisperers } from './helpers/zombie-current-policy-fixture'
+import { separateFixtureWhisperers, acceptFixtureNflWhispererOffer } from './helpers/zombie-current-policy-fixture'
 /** Replay recorded game lines through the real scoring/finalizer/Zombie services on CI's disposable database.
  * Player names, IDs, lines and complete week slates are recorded facts. Fixture ownership,
  * one-player lineups and the pre-existing Horde member are controlled test setup.
@@ -136,6 +136,7 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       } })
       const activated = await ensureZombieSeasonActivated({ leagueId, redraftSeasonId: season.id })
       expect(activated.ok).toBe(true)
+      await acceptFixtureNflWhispererOffer(leagueId)
       const z = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(await prisma.zombieCoWhisperer.count({ where: { zombieLeagueId: z.id } })).toBe(whisperers - 1)
       await separateFixtureWhisperers(leagueId, season.id, 1)

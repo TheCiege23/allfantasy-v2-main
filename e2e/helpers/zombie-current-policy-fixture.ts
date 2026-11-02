@@ -9,8 +9,17 @@ import { reconcileRosterRedraftLinks } from '../../lib/league-runtime/reconcileR
 import { prisma } from '../../lib/prisma'
 import { calculateScoreFromSportConfig, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from '../../lib/redraft/scoringEngine'
 import { loadWeekLineups, weekSlotType } from '../../lib/redraft/weekLineupSlots'
+import { respondBetaRoleWorkflow } from '../../lib/zombie/beta2025RoleWorkflows'
 function localOnly() {
   if (!['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL ?? '').hostname)) throw new Error('LOCAL_DISPOSABLE_DATABASE_REQUIRED')
+}
+/** Explicit fixture consent: production managers must accept their own private offer. */
+export async function acceptFixtureNflWhispererOffer(leagueId: string) {
+  localOnly()
+  const z = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
+  if (z.sport !== 'NFL') return
+  const offer = await prisma.zombieRoleWorkflow.findFirstOrThrow({ where: { zombieLeagueId: z.id, kind: 'initial_offer', status: 'pending' } })
+  await respondBetaRoleWorkflow(leagueId, offer.id, offer.actorUserId!, 'accept', (offer.state as { index: number }).index)
 }
 /** These scenarios exercise defined Survivor/Horde outcomes; the separate rules tests hold W-v-W for review. */
 export async function separateFixtureWhisperers(leagueId: string, seasonId: string, week: number) {

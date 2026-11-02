@@ -175,7 +175,10 @@ function buildSections(
     `${z.whispererCount === 2 ? 'Two teams are' : 'One team is'} secretly (or publicly) designated as ${z.whispererCount === 2 ? 'Whisperers' : 'the Whisperer'} at the start of the season.`,
     infectionLossToWhisperer ? 'The Whisperer infects Survivors it beats when the week settles, and leads the Horde.' : 'The Whisperer leads the Horde; automatic infection on its wins is disabled.',
     'Survivors and Whisperers may trade; Zombies cannot.',
-    `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
+    z.sport === 'NFL' ? 'Independent randomized veteran-first offers; 24 hours per offer. If there are no veterans, all managers are eligible. Exhausted offers require commissioner review.' : `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
+    ...(z.sport === 'NFL' ? ['Two seasonal ambushes may remap all unlocked matchups. A team locks when any starter begins playing; unchanged locked matchups stay intact.',
+      'Bashing choices close Wednesday at 9 p.m. Eastern: spare/infect a Survivor or spare/replace the Whisperer. Replacement inherits the remaining seasonal ambushes.',
+      'A Zombie mauling the Whisperer must revive with two serums before choosing the role. Declining or missing the Wednesday 9 p.m. Eastern deadline leaves no replacement Whisperer.'] : []),
   ].join('\n')
 
   const sectionSurvivor = [
