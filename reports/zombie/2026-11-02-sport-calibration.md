@@ -6,7 +6,7 @@ The owner selected **matching the approved 2025 NFL frequency** for the other si
 
 A guarded production read-only audit of 2025/2026 found two imported 20-manager NFL leagues with four FLEX slots and one Superflex. Restricting that cohort to 2025 produced **360 distinct matchups over 18 periods**. Six had a margin of at least 60: **1.67%**. Mean margin was 20.67, median 17.29, and the 90th percentile 43.10. There were no ties.
 
-This is a descriptive raw-total benchmark, not a measured bashing/mauling rate: winner roles and item inventories are absent, and imported totals may contain external adjustments. Weapon award rates cannot be inferred without verified base player points. The current default NFL roster is a different shape; this five-starter historical cohort must not silently become a universal reference for every roster or manager count.
+This is a descriptive raw-total benchmark, not a measured bashing/mauling rate: winner roles and item inventories are absent, and imported totals may contain external adjustments. Weapon award rates cannot be inferred without verified base player points. The canonical creation default is also four FLEX plus one Superflex (five starters), matching this historical roster shape. The rules-document roster description is stale; this cohort still must not silently become a universal reference for other scoring recipes or manager counts.
 
 The existing NBA 128/211 calibration comments target old NFL 30/50-margin frequencies (52%/29%). The approved NFL preset is now 60/60. Reusing the old NBA frequency target would not implement the owner's decision.
 
@@ -62,3 +62,6 @@ Calendar checks must use the selected season, competition and scoring windows. F
 ## Validation and release state
 
 Sixteen focused analysis tests and 36 adjacent policy regressions pass, covering sample rejection, legitimate zeros, mirrored/conflicting pairs, season isolation, configuration separation, deterministic ties, the 60-point reference, missing base points and item-boost exclusion. Lint passed. A strict scoped TypeScript check passed for the analyzer, runner, sport configurations and tests. The generated JSON report is the actual anonymized production read-only result, not a fixture. No production gameplay rules, calendar settings, acceptance records or drafts were changed.
+## Recorded replay follow-up
+
+The recorded box-score replay has now run for all seven sports. See [the replay results](2026-11-02-recorded-box-score-replay.md) for actual counts, modeled-roster outcomes and demonstrated blockers. This checkpoint remains the earlier historical audit, not the replay result.

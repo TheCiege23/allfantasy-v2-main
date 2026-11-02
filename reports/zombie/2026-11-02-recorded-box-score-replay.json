@@ -1,0 +1,3458 @@
+{
+  "observedAt": "2026-11-02T21:43:15.508Z",
+  "target": "verified-production-read-only",
+  "replayType": "recorded-box-scores-with-modeled-training-only-rosters",
+  "referenceMarginRate": {
+    "crossings": 6,
+    "matchups": 360,
+    "rate": 0.016666666666666666,
+    "kind": "descriptive-imported-NFL-2025-raw-margin-reference"
+  },
+  "sports": [
+    {
+      "sport": "NFL",
+      "season": 2025,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "espn_draft_history_v1: stored scheduled period bounds",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2025-09-04",
+          "end": "2025-09-09"
+        },
+        {
+          "period": 2,
+          "start": "2025-09-11",
+          "end": "2025-09-16"
+        },
+        {
+          "period": 3,
+          "start": "2025-09-18",
+          "end": "2025-09-23"
+        },
+        {
+          "period": 4,
+          "start": "2025-09-25",
+          "end": "2025-09-30"
+        },
+        {
+          "period": 5,
+          "start": "2025-10-02",
+          "end": "2025-10-07"
+        },
+        {
+          "period": 6,
+          "start": "2025-10-09",
+          "end": "2025-10-14"
+        },
+        {
+          "period": 7,
+          "start": "2025-10-16",
+          "end": "2025-10-21"
+        },
+        {
+          "period": 8,
+          "start": "2025-10-23",
+          "end": "2025-10-28"
+        },
+        {
+          "period": 9,
+          "start": "2025-10-30",
+          "end": "2025-11-04"
+        },
+        {
+          "period": 10,
+          "start": "2025-11-06",
+          "end": "2025-11-11"
+        },
+        {
+          "period": 11,
+          "start": "2025-11-13",
+          "end": "2025-11-18"
+        },
+        {
+          "period": 12,
+          "start": "2025-11-20",
+          "end": "2025-11-25"
+        },
+        {
+          "period": 13,
+          "start": "2025-11-27",
+          "end": "2025-12-02"
+        },
+        {
+          "period": 14,
+          "start": "2025-12-04",
+          "end": "2025-12-09"
+        },
+        {
+          "period": 15,
+          "start": "2025-12-11",
+          "end": "2025-12-16"
+        },
+        {
+          "period": 16,
+          "start": "2025-12-18",
+          "end": "2025-12-23"
+        },
+        {
+          "period": 17,
+          "start": "2025-12-25",
+          "end": "2025-12-30"
+        },
+        {
+          "period": 18,
+          "start": "2026-01-03",
+          "end": "2026-01-05"
+        }
+      ],
+      "expectedRegularScheduleGames": 272,
+      "sources": [
+        "legacy_source_unrecorded"
+      ],
+      "unresolvedIdentityRows": 881,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "16d5226bf425fe7e3714346755bc5d6b4419cddc5197154ad6829b8fda36b26c",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "pass_yds": 0.04,
+          "pass_td": 4,
+          "pass_int": -1,
+          "pass_300_bonus": 0,
+          "pass_400_bonus": 0,
+          "rush_yds": 0.1,
+          "rush_td": 6,
+          "rush_100_bonus": 0,
+          "rec": 0.5,
+          "rec_yds": 0.1,
+          "rec_td": 6,
+          "rec_100_bonus": 0,
+          "two_pt": 2,
+          "fum_lost": -2,
+          "fumble_td": 6,
+          "fg_0_39": 3,
+          "fg_40_49": 4,
+          "fg_50_plus": 5,
+          "fg_miss": 0,
+          "xp_made": 1,
+          "def_sack": 1,
+          "def_int": 2,
+          "def_fr": 2,
+          "def_safety": 2,
+          "def_blk_kick": 2,
+          "def_td": 6,
+          "def_st_td": 6,
+          "def_kr_yd": 0,
+          "def_pr_yd": 0,
+          "def_pa_0": 10,
+          "def_pa_1_6": 7,
+          "def_pa_7_13": 4,
+          "def_pa_14_20": 1,
+          "def_pa_21_27": 0,
+          "def_pa_28_34": -1,
+          "def_pa_35_plus": -4,
+          "def_ya_0_99": 0,
+          "def_ya_100_199": 0,
+          "def_ya_200_299": 0,
+          "def_ya_300_349": 0,
+          "def_ya_350_399": 0,
+          "def_ya_400_449": 0,
+          "def_ya_450_plus": 0,
+          "pass_fd": 0,
+          "pass_cmp": 0,
+          "pass_inc": 0,
+          "pass_att": 0,
+          "pass_sack": 0,
+          "pass_int_td": 0,
+          "pass_cmp_40p": 0,
+          "pass_td_40p": 0,
+          "pass_td_50p": 0,
+          "bonus_pass_cmp_25": 0,
+          "bonus_fd_qb": 0,
+          "rush_fd": 0,
+          "rush_att": 0,
+          "rush_40p": 0,
+          "rush_td_40p": 0,
+          "rush_td_50p": 0,
+          "bonus_rush_yd_200": 0,
+          "bonus_rush_att_20": 0,
+          "bonus_rush_rec_yd_100": 0,
+          "bonus_rush_rec_yd_200": 0,
+          "bonus_fd_rb": 0,
+          "rec_fd": 0,
+          "rec_tgt": 0,
+          "rec_40p": 0,
+          "rec_td_40p": 0,
+          "rec_td_50p": 0,
+          "rec_0_4": 0,
+          "rec_5_9": 0,
+          "rec_10_19": 0,
+          "rec_20_29": 0,
+          "rec_30_39": 0,
+          "bonus_rec_yd_200": 0,
+          "bonus_rec_rb": 0,
+          "bonus_rec_wr": 0,
+          "bonus_fd_wr": 0,
+          "bonus_fd_te": 0,
+          "fum": 0,
+          "xpmiss": -1,
+          "st_td": 0,
+          "st_ff": 0,
+          "st_fum_rec": 0,
+          "kr_yd": 0,
+          "pr_yd": 0,
+          "st_tkl_solo": 0,
+          "kr_td": 0,
+          "pr_td": 0,
+          "bonus_rush_td_qb": 0,
+          "fgm": 0,
+          "fgm_yds": 0,
+          "fgm_yds_over_30": 0,
+          "def_st_ff": 0,
+          "def_st_fum_rec": 0,
+          "def_st_tkl_solo": 0,
+          "def_ff": 0,
+          "def_tkl_loss": 0,
+          "def_qb_hit": 0,
+          "def_tkl": 0,
+          "def_tkl_solo": 0,
+          "def_tkl_ast": 0,
+          "def_sack_yd": 0,
+          "def_int_ret_yd": 0,
+          "def_fum_ret_yd": 0,
+          "def_fg_ret_yd": 0,
+          "def_blk_kick_ret_yd": 0,
+          "def_pass_def": 0,
+          "def_forced_punts": 0,
+          "def_3_and_out": 0,
+          "def_4_and_stop": 0,
+          "def_2pt": 2,
+          "def_points_allowed": 0,
+          "def_yds_allowed": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "FLEX": 4,
+          "SUPERFLEX": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "FLEX",
+            "allowedPositions": [
+              "RB",
+              "WR",
+              "TE"
+            ]
+          },
+          {
+            "slotName": "SUPERFLEX",
+            "allowedPositions": [
+              "QB",
+              "RB",
+              "WR",
+              "TE"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 40473,
+        "normalizedRegularRows": 16902,
+        "scoredPlayerGames": {
+          "count": 16902,
+          "mean": 2.7037403857531648,
+          "median": 0,
+          "p25": 0,
+          "p75": 2.2,
+          "p90": 10.595999999999986,
+          "min": -3.4000000000000004,
+          "max": 49.900000000000006
+        },
+        "playersInCompletedPeriods": 1769,
+        "enabledScoringKeysNeverObserved": [
+          "def_sack",
+          "def_int",
+          "def_fr",
+          "def_safety",
+          "def_blk_kick",
+          "def_td",
+          "def_st_td",
+          "def_pa_0",
+          "def_pa_1_6",
+          "def_pa_7_13",
+          "def_pa_14_20",
+          "def_pa_28_34",
+          "def_pa_35_plus",
+          "xpmiss",
+          "def_2pt"
+        ],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 18,
+        "observedPeriods": 18,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "unmapped_stat_line": 23571,
+          "identity_unresolved_for_roster": 637
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 160,
+          "availableSeatRate": 0.94875,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 320,
+            "mean": 54.82593749999999,
+            "median": 53,
+            "p25": 41.005,
+            "p75": 66.465,
+            "p90": 80.26400000000001,
+            "min": 12.5,
+            "max": 118.2
+          },
+          "marginDistribution": {
+            "count": 159,
+            "mean": 19.568930817610056,
+            "median": 15.299999999999997,
+            "p25": 6.98,
+            "p75": 28.390000000000004,
+            "p90": 43.03600000000002,
+            "min": 0.03999999999999915,
+            "max": 78.34
+          },
+          "currentBashCrossingRate": 0.018867924528301886,
+          "currentMaulCrossingRate": 0.018867924528301886,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 60.34,
+            "rate": 0.012578616352201259,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.004088050314465408
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.3522012578616352,
+            "bomb35CouldFlip": 0.8427672955974843
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 160,
+          "availableSeatRate": 0.951875,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 320,
+            "mean": 54.81724999999998,
+            "median": 53,
+            "p25": 42.03,
+            "p75": 65.975,
+            "p90": 80.932,
+            "min": 6.6,
+            "max": 125.6
+          },
+          "marginDistribution": {
+            "count": 160,
+            "mean": 18.437749999999998,
+            "median": 14.740000000000002,
+            "p25": 6.914999999999998,
+            "p75": 27.134999999999998,
+            "p90": 40.660000000000004,
+            "min": 0.37999999999999545,
+            "max": 78.34
+          },
+          "currentBashCrossingRate": 0.00625,
+          "currentMaulCrossingRate": 0.00625,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 51.02,
+            "rate": 0.01875,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.002083333333333333
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.375,
+            "bomb35CouldFlip": 0.85
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 160,
+          "availableSeatRate": 0.95125,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 320,
+            "mean": 54.83256249999998,
+            "median": 52.76,
+            "p25": 42.285,
+            "p75": 65.905,
+            "p90": 78.56600000000002,
+            "min": 6.6,
+            "max": 128.1
+          },
+          "marginDistribution": {
+            "count": 160,
+            "mean": 18.169624999999993,
+            "median": 14.45,
+            "p25": 6.179999999999998,
+            "p75": 25.939999999999998,
+            "p90": 38.18,
+            "min": 0.01999999999999602,
+            "max": 78.34
+          },
+          "currentBashCrossingRate": 0.01875,
+          "currentMaulCrossingRate": 0.01875,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 62.74,
+            "rate": 0.01875,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.002083333333333333
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.35625,
+            "bomb35CouldFlip": 0.88125
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 32,
+          "availableSeatRate": 0.859375,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 64,
+            "mean": 68.2971875,
+            "median": 69.45,
+            "p25": 51.394999999999996,
+            "p75": 81.935,
+            "p90": 101.004,
+            "min": 14.18,
+            "max": 113
+          },
+          "marginDistribution": {
+            "count": 32,
+            "mean": 29.078124999999996,
+            "median": 28.919999999999995,
+            "p25": 17.079999999999995,
+            "p75": 40.51499999999999,
+            "p90": 46.408,
+            "min": 0.240000000000002,
+            "max": 57.64000000000001
+          },
+          "currentBashCrossingRate": 0,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 57.64,
+            "rate": 0.03125,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.014583333333333334
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.09375,
+            "bomb35CouldFlip": 0.625
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 32,
+          "availableSeatRate": 0.859375,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 64,
+            "mean": 68.29718749999999,
+            "median": 69.07,
+            "p25": 53.135,
+            "p75": 82.01,
+            "p90": 101.004,
+            "min": 15.38,
+            "max": 116.8
+          },
+          "marginDistribution": {
+            "count": 32,
+            "mean": 26.134375000000002,
+            "median": 25.300000000000004,
+            "p25": 14.065000000000001,
+            "p75": 38.190000000000005,
+            "p90": 46.57599999999999,
+            "min": 0.240000000000002,
+            "max": 52.88000000000001
+          },
+          "currentBashCrossingRate": 0,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 52.88,
+            "rate": 0.03125,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.014583333333333334
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.1875,
+            "bomb35CouldFlip": 0.65625
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 1112,
+          "testedPeriods": 16,
+          "matchups": 32,
+          "availableSeatRate": 0.859375,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 64,
+            "mean": 68.29718749999999,
+            "median": 69.07,
+            "p25": 53.135,
+            "p75": 82.01,
+            "p90": 101.004,
+            "min": 15.38,
+            "max": 116.8
+          },
+          "marginDistribution": {
+            "count": 32,
+            "mean": 26.134375000000002,
+            "median": 25.300000000000004,
+            "p25": 14.065000000000001,
+            "p75": 38.190000000000005,
+            "p90": 46.57599999999999,
+            "min": 0.240000000000002,
+            "max": 52.88000000000001
+          },
+          "currentBashCrossingRate": 0,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 52.88,
+            "rate": 0.03125,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.014583333333333334
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.1875,
+            "bomb35CouldFlip": 0.65625
+          },
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 60,
+        "mauling": 60
+      }
+    },
+    {
+      "sport": "NBA",
+      "season": 2026,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "production daily-sport/date-gameweek resolver",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2026-10-20",
+          "end": "2026-10-27"
+        },
+        {
+          "period": 2,
+          "start": "2026-10-27",
+          "end": "2026-11-03"
+        },
+        {
+          "period": 3,
+          "start": "2026-11-03",
+          "end": "2026-11-10"
+        },
+        {
+          "period": 4,
+          "start": "2026-11-10",
+          "end": "2026-11-17"
+        },
+        {
+          "period": 5,
+          "start": "2026-11-17",
+          "end": "2026-11-24"
+        },
+        {
+          "period": 6,
+          "start": "2026-11-24",
+          "end": "2026-12-01"
+        },
+        {
+          "period": 7,
+          "start": "2026-12-01",
+          "end": "2026-12-08"
+        },
+        {
+          "period": 8,
+          "start": "2026-12-08",
+          "end": "2026-12-15"
+        },
+        {
+          "period": 9,
+          "start": "2026-12-15",
+          "end": "2026-12-22"
+        },
+        {
+          "period": 10,
+          "start": "2026-12-22",
+          "end": "2026-12-29"
+        },
+        {
+          "period": 11,
+          "start": "2026-12-29",
+          "end": "2027-01-05"
+        },
+        {
+          "period": 12,
+          "start": "2027-01-05",
+          "end": "2027-01-12"
+        },
+        {
+          "period": 13,
+          "start": "2027-01-12",
+          "end": "2027-01-19"
+        },
+        {
+          "period": 14,
+          "start": "2027-01-19",
+          "end": "2027-01-26"
+        },
+        {
+          "period": 15,
+          "start": "2027-01-26",
+          "end": "2027-02-02"
+        },
+        {
+          "period": 16,
+          "start": "2027-02-02",
+          "end": "2027-02-09"
+        },
+        {
+          "period": 17,
+          "start": "2027-02-09",
+          "end": "2027-02-16"
+        },
+        {
+          "period": 18,
+          "start": "2027-02-16",
+          "end": "2027-02-23"
+        },
+        {
+          "period": 19,
+          "start": "2027-02-23",
+          "end": "2027-03-02"
+        },
+        {
+          "period": 20,
+          "start": "2027-03-02",
+          "end": "2027-03-09"
+        },
+        {
+          "period": 21,
+          "start": "2027-03-09",
+          "end": "2027-03-16"
+        },
+        {
+          "period": 22,
+          "start": "2027-03-16",
+          "end": "2027-03-23"
+        },
+        {
+          "period": 23,
+          "start": "2027-03-23",
+          "end": "2027-03-30"
+        },
+        {
+          "period": 24,
+          "start": "2027-03-30",
+          "end": "2027-04-06"
+        },
+        {
+          "period": 25,
+          "start": "2027-04-06",
+          "end": "2027-04-13"
+        }
+      ],
+      "expectedRegularScheduleGames": null,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "ccd2f0f702a9e19b219bef2de5d239705989599f8182944515f45089573070d5",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "pts": 0.5,
+          "reb": 1,
+          "ast": 1,
+          "stl": 2,
+          "blk": 2,
+          "to": -1,
+          "threes": 0.5,
+          "fgm": 0,
+          "ftm": 0,
+          "fga": 0,
+          "fta": 0,
+          "dbl_dbl": 1,
+          "trpl_dbl": 2
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "PG": 1,
+          "SG": 1,
+          "SF": 1,
+          "PF": 1,
+          "C": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 4763,
+        "normalizedRegularRows": 2733,
+        "scoredPlayerGames": {
+          "count": 2733,
+          "mean": 9.875777533845591,
+          "median": 8,
+          "p25": 0,
+          "p75": 16.5,
+          "p90": 24,
+          "min": -2,
+          "max": 53.5
+        },
+        "playersInCompletedPeriods": 514,
+        "enabledScoringKeysNeverObserved": [],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 1,
+        "observedPeriods": 1,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "excluded_pre": 2030,
+          "position_changed_or_conflicting": 22,
+          "outside_verified_completed_period": 1096
+        },
+        "unmappedStatKeys": [
+          {
+            "key": "fouls",
+            "rows": 2733
+          },
+          {
+            "key": "player_id",
+            "rows": 2733
+          },
+          {
+            "key": "two_points_made",
+            "rows": 2733
+          },
+          {
+            "key": "defensive_rebounds",
+            "rows": 2733
+          },
+          {
+            "key": "offensive_rebounds",
+            "rows": 2733
+          },
+          {
+            "key": "two_point_percentage",
+            "rows": 2733
+          },
+          {
+            "key": "two_points_attempted",
+            "rows": 2733
+          },
+          {
+            "key": "three_points_attempted",
+            "rows": 2733
+          },
+          {
+            "key": "minutes",
+            "rows": 652
+          }
+        ]
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 128,
+        "mauling": 211
+      }
+    },
+    {
+      "sport": "NHL",
+      "season": 2026,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "production daily-sport/date-gameweek resolver",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2026-09-29",
+          "end": "2026-10-06"
+        },
+        {
+          "period": 2,
+          "start": "2026-10-06",
+          "end": "2026-10-13"
+        },
+        {
+          "period": 3,
+          "start": "2026-10-13",
+          "end": "2026-10-20"
+        },
+        {
+          "period": 4,
+          "start": "2026-10-20",
+          "end": "2026-10-27"
+        },
+        {
+          "period": 5,
+          "start": "2026-10-27",
+          "end": "2026-11-03"
+        },
+        {
+          "period": 6,
+          "start": "2026-11-03",
+          "end": "2026-11-10"
+        },
+        {
+          "period": 7,
+          "start": "2026-11-10",
+          "end": "2026-11-17"
+        },
+        {
+          "period": 8,
+          "start": "2026-11-17",
+          "end": "2026-11-24"
+        },
+        {
+          "period": 9,
+          "start": "2026-11-24",
+          "end": "2026-12-01"
+        },
+        {
+          "period": 10,
+          "start": "2026-12-01",
+          "end": "2026-12-08"
+        },
+        {
+          "period": 11,
+          "start": "2026-12-08",
+          "end": "2026-12-15"
+        },
+        {
+          "period": 12,
+          "start": "2026-12-15",
+          "end": "2026-12-22"
+        },
+        {
+          "period": 13,
+          "start": "2026-12-22",
+          "end": "2026-12-29"
+        },
+        {
+          "period": 14,
+          "start": "2026-12-29",
+          "end": "2027-01-05"
+        },
+        {
+          "period": 15,
+          "start": "2027-01-05",
+          "end": "2027-01-12"
+        },
+        {
+          "period": 16,
+          "start": "2027-01-12",
+          "end": "2027-01-19"
+        },
+        {
+          "period": 17,
+          "start": "2027-01-19",
+          "end": "2027-01-26"
+        },
+        {
+          "period": 18,
+          "start": "2027-01-26",
+          "end": "2027-02-02"
+        },
+        {
+          "period": 19,
+          "start": "2027-02-02",
+          "end": "2027-02-09"
+        },
+        {
+          "period": 20,
+          "start": "2027-02-09",
+          "end": "2027-02-16"
+        },
+        {
+          "period": 21,
+          "start": "2027-02-16",
+          "end": "2027-02-23"
+        },
+        {
+          "period": 22,
+          "start": "2027-02-23",
+          "end": "2027-03-02"
+        },
+        {
+          "period": 23,
+          "start": "2027-03-02",
+          "end": "2027-03-09"
+        },
+        {
+          "period": 24,
+          "start": "2027-03-09",
+          "end": "2027-03-16"
+        },
+        {
+          "period": 25,
+          "start": "2027-03-16",
+          "end": "2027-03-23"
+        },
+        {
+          "period": 26,
+          "start": "2027-03-23",
+          "end": "2027-03-30"
+        },
+        {
+          "period": 27,
+          "start": "2027-03-30",
+          "end": "2027-04-06"
+        },
+        {
+          "period": 28,
+          "start": "2027-04-06",
+          "end": "2027-04-13"
+        }
+      ],
+      "expectedRegularScheduleGames": null,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "e86b3fcc7b3bde93bdb0dd232c584da8833085ad02d2a2848c7af4b88b16b453",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "g": 3,
+          "a": 2,
+          "plusminus": 1,
+          "sog": 0.5,
+          "ppp": 0.5,
+          "shp": 1,
+          "blks": 0.5,
+          "hits": 0.3,
+          "pim": -0.25,
+          "g_win": 3,
+          "g_sv": 0.2,
+          "g_so": 2,
+          "g_ga": -1,
+          "pts": 0,
+          "ppg": 0,
+          "ppa": 0,
+          "shg": 0,
+          "sha": 0,
+          "fow": 0,
+          "fol": 0,
+          "tk": 0,
+          "gv": 0,
+          "so_g": 0,
+          "hat_trick": 0,
+          "three_ast_game": 0,
+          "five_pt_game": 0,
+          "multi_g_game": 0,
+          "multi_a_game": 0,
+          "ten_sog_game": 0,
+          "five_hit_game": 0,
+          "five_blk_game": 0,
+          "g_loss": 0,
+          "g_otl": 0,
+          "g_sa": 0,
+          "g_40sv_game": 0,
+          "g_50sv_game": 0,
+          "g_toi": 0,
+          "g_sv_pct_bonus": 0,
+          "g_gaa_bonus": 0,
+          "sh_pct_bonus": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "F": 2,
+          "D": 2,
+          "UTIL": 1,
+          "G": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "F",
+            "allowedPositions": [
+              "LW",
+              "RW",
+              "C"
+            ]
+          },
+          {
+            "slotName": "UTIL",
+            "allowedPositions": [
+              "LW",
+              "RW",
+              "C",
+              "D"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 11511,
+        "normalizedRegularRows": 9822,
+        "scoredPlayerGames": {
+          "count": 9822,
+          "mean": 2.3516086336794597,
+          "median": 1.5,
+          "p25": 0,
+          "p75": 3.9,
+          "p90": 6.5,
+          "min": -5.6,
+          "max": 20.3
+        },
+        "playersInCompletedPeriods": 810,
+        "enabledScoringKeysNeverObserved": [],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 4,
+        "observedPeriods": 4,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "excluded_pre": 1689,
+          "outside_verified_completed_period": 2106
+        },
+        "unmappedStatKeys": [
+          {
+            "key": "time_on_ice",
+            "rows": 744
+          }
+        ]
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 20,
+          "availableSeatRate": 0.48988095238095236,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 40,
+            "mean": 72.53375,
+            "median": 71.92500000000001,
+            "p25": 59.025,
+            "p75": 86.8625,
+            "p90": 93.97,
+            "min": 26,
+            "max": 113
+          },
+          "marginDistribution": {
+            "count": 20,
+            "mean": 20.2425,
+            "median": 13.550000000000008,
+            "p25": 7.049999999999999,
+            "p75": 29.675000000000004,
+            "p90": 42.41000000000002,
+            "min": 2.799999999999997,
+            "max": 53.800000000000004
+          },
+          "currentBashCrossingRate": 0.7,
+          "currentMaulCrossingRate": 0.5,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.35,
+            "bomb35CouldFlip": 0.8
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 20,
+          "availableSeatRate": 0.4928571428571429,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 40,
+            "mean": 72.77625000000002,
+            "median": 76.15,
+            "p25": 58.0875,
+            "p75": 85.825,
+            "p90": 95.41000000000001,
+            "min": 34.9,
+            "max": 103.8
+          },
+          "marginDistribution": {
+            "count": 20,
+            "mean": 18.607499999999998,
+            "median": 17.250000000000004,
+            "p25": 8.049999999999997,
+            "p75": 24.962500000000002,
+            "p90": 36.280000000000015,
+            "min": 0.8999999999999915,
+            "max": 52.3
+          },
+          "currentBashCrossingRate": 0.75,
+          "currentMaulCrossingRate": 0.55,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.4,
+            "bomb35CouldFlip": 0.85
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 20,
+          "availableSeatRate": 0.49107142857142855,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 40,
+            "mean": 72.37625,
+            "median": 71.30000000000001,
+            "p25": 58.5,
+            "p75": 85.5375,
+            "p90": 95.01,
+            "min": 40.4,
+            "max": 113
+          },
+          "marginDistribution": {
+            "count": 20,
+            "mean": 19.6475,
+            "median": 19.450000000000003,
+            "p25": 10.912500000000003,
+            "p75": 26.575,
+            "p90": 31.460000000000008,
+            "min": 0.8999999999999915,
+            "max": 52.3
+          },
+          "currentBashCrossingRate": 0.75,
+          "currentMaulCrossingRate": 0.7,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.25,
+            "bomb35CouldFlip": 0.9
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 4,
+          "availableSeatRate": 0.48214285714285715,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 8,
+            "mean": 95.55,
+            "median": 95.2,
+            "p25": 85.175,
+            "p75": 105.1,
+            "p90": 120.7,
+            "min": 67.4,
+            "max": 123.5
+          },
+          "marginDistribution": {
+            "count": 4,
+            "mean": 17.849999999999994,
+            "median": 15.149999999999991,
+            "p25": 6.974999999999991,
+            "p75": 26.024999999999995,
+            "p90": 31.29,
+            "min": 6.299999999999997,
+            "max": 34.8
+          },
+          "currentBashCrossingRate": 0.5,
+          "currentMaulCrossingRate": 0.5,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.5,
+            "bomb35CouldFlip": 1
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 4,
+          "availableSeatRate": 0.48214285714285715,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 8,
+            "mean": 95.55,
+            "median": 95.2,
+            "p25": 85.175,
+            "p75": 105.1,
+            "p90": 120.7,
+            "min": 67.4,
+            "max": 123.5
+          },
+          "marginDistribution": {
+            "count": 4,
+            "mean": 17.849999999999994,
+            "median": 15.149999999999991,
+            "p25": 6.974999999999991,
+            "p75": 26.024999999999995,
+            "p90": 31.29,
+            "min": 6.299999999999997,
+            "max": 34.8
+          },
+          "currentBashCrossingRate": 0.5,
+          "currentMaulCrossingRate": 0.5,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.5,
+            "bomb35CouldFlip": 1
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 764,
+          "testedPeriods": 2,
+          "matchups": 4,
+          "availableSeatRate": 0.48214285714285715,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 8,
+            "mean": 95.55,
+            "median": 95.2,
+            "p25": 85.175,
+            "p75": 105.1,
+            "p90": 120.7,
+            "min": 67.4,
+            "max": 123.5
+          },
+          "marginDistribution": {
+            "count": 4,
+            "mean": 17.849999999999994,
+            "median": 15.149999999999991,
+            "p25": 6.974999999999991,
+            "p75": 26.024999999999995,
+            "p90": 31.29,
+            "min": 6.299999999999997,
+            "max": 34.8
+          },
+          "currentBashCrossingRate": 0.5,
+          "currentMaulCrossingRate": 0.5,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.5,
+            "bomb35CouldFlip": 1
+          },
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 8,
+        "mauling": 14
+      }
+    },
+    {
+      "sport": "MLB",
+      "season": 2026,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "production daily-sport/date-gameweek resolver",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2026-03-25",
+          "end": "2026-04-01"
+        },
+        {
+          "period": 2,
+          "start": "2026-04-01",
+          "end": "2026-04-08"
+        },
+        {
+          "period": 3,
+          "start": "2026-04-08",
+          "end": "2026-04-15"
+        },
+        {
+          "period": 4,
+          "start": "2026-04-15",
+          "end": "2026-04-22"
+        },
+        {
+          "period": 5,
+          "start": "2026-04-22",
+          "end": "2026-04-29"
+        },
+        {
+          "period": 6,
+          "start": "2026-04-29",
+          "end": "2026-05-06"
+        },
+        {
+          "period": 7,
+          "start": "2026-05-06",
+          "end": "2026-05-13"
+        },
+        {
+          "period": 8,
+          "start": "2026-05-13",
+          "end": "2026-05-20"
+        },
+        {
+          "period": 9,
+          "start": "2026-05-20",
+          "end": "2026-05-27"
+        },
+        {
+          "period": 10,
+          "start": "2026-05-27",
+          "end": "2026-06-03"
+        },
+        {
+          "period": 11,
+          "start": "2026-06-03",
+          "end": "2026-06-10"
+        },
+        {
+          "period": 12,
+          "start": "2026-06-10",
+          "end": "2026-06-17"
+        },
+        {
+          "period": 13,
+          "start": "2026-06-17",
+          "end": "2026-06-24"
+        },
+        {
+          "period": 14,
+          "start": "2026-06-24",
+          "end": "2026-07-01"
+        },
+        {
+          "period": 15,
+          "start": "2026-07-01",
+          "end": "2026-07-08"
+        },
+        {
+          "period": 16,
+          "start": "2026-07-08",
+          "end": "2026-07-15"
+        },
+        {
+          "period": 17,
+          "start": "2026-07-15",
+          "end": "2026-07-22"
+        },
+        {
+          "period": 18,
+          "start": "2026-07-22",
+          "end": "2026-07-29"
+        },
+        {
+          "period": 19,
+          "start": "2026-07-29",
+          "end": "2026-08-05"
+        },
+        {
+          "period": 20,
+          "start": "2026-08-05",
+          "end": "2026-08-12"
+        },
+        {
+          "period": 21,
+          "start": "2026-08-12",
+          "end": "2026-08-19"
+        },
+        {
+          "period": 22,
+          "start": "2026-08-19",
+          "end": "2026-08-26"
+        },
+        {
+          "period": 23,
+          "start": "2026-08-26",
+          "end": "2026-09-02"
+        },
+        {
+          "period": 24,
+          "start": "2026-09-02",
+          "end": "2026-09-09"
+        },
+        {
+          "period": 25,
+          "start": "2026-09-09",
+          "end": "2026-09-16"
+        },
+        {
+          "period": 26,
+          "start": "2026-09-16",
+          "end": "2026-09-23"
+        },
+        {
+          "period": 27,
+          "start": "2026-09-23",
+          "end": "2026-09-30"
+        }
+      ],
+      "expectedRegularScheduleGames": 2459,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 67547,
+      "recordedInputSha256": "c7061f1bab90e37e9e641a22b71b175689f3a9ce7200dd09fe77276e80d03b38",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "r": 1,
+          "hr": 4,
+          "rbi": 1,
+          "sb": 2,
+          "avg": 0,
+          "tb": 0,
+          "bb": 1,
+          "w": 5,
+          "sv": 5,
+          "so": 1,
+          "era": -1,
+          "ip": 3,
+          "qs": 3,
+          "l": -5,
+          "er": -2,
+          "single": 1,
+          "double": 2,
+          "triple": 3,
+          "bat_so": -1,
+          "hbp": 1,
+          "ibb": 0,
+          "cs": -1,
+          "hld": 3,
+          "bs": -2,
+          "outs": 0,
+          "p_h": -1,
+          "p_r": 0,
+          "p_bb": -1,
+          "p_hbp": -1,
+          "p_hr": 0,
+          "wp": 0,
+          "bk": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "C": 1,
+          "OF": 2,
+          "UTIL": 2
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "UTIL",
+            "allowedPositions": [
+              "C",
+              "1B",
+              "2B",
+              "3B",
+              "SS",
+              "OF",
+              "DH"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 73744,
+        "normalizedRegularRows": 72384,
+        "scoredPlayerGames": {
+          "count": 72384,
+          "mean": 2.490757625994695,
+          "median": 1,
+          "p25": 0,
+          "p75": 4,
+          "p90": 8,
+          "min": -33,
+          "max": 49
+        },
+        "playersInCompletedPeriods": 1465,
+        "enabledScoringKeysNeverObserved": [
+          "era"
+        ],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 27,
+        "observedPeriods": 27,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "position_changed_or_conflicting": 23916,
+          "unmapped_stat_line": 54,
+          "excluded_post": 1306
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 250,
+          "availableSeatRate": 0.7510285714285714,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 500,
+            "mean": 58.03,
+            "median": 56,
+            "p25": 43,
+            "p75": 72,
+            "p90": 86,
+            "min": 9,
+            "max": 151
+          },
+          "marginDistribution": {
+            "count": 248,
+            "mean": 23.27016129032258,
+            "median": 21,
+            "p25": 10,
+            "p75": 32,
+            "p90": 45.30000000000001,
+            "min": 1,
+            "max": 113
+          },
+          "currentBashCrossingRate": 0.14112903225806453,
+          "currentMaulCrossingRate": 0.028225806451612902,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 71,
+            "rate": 0.016129032258064516,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.0005376344086021508
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.23387096774193547,
+            "bomb35CouldFlip": 0.782258064516129
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 250,
+          "availableSeatRate": 0.7473142857142857,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 500,
+            "mean": 58.688,
+            "median": 58,
+            "p25": 44,
+            "p75": 71,
+            "p90": 86,
+            "min": 3,
+            "max": 129
+          },
+          "marginDistribution": {
+            "count": 247,
+            "mean": 22.153846153846153,
+            "median": 19,
+            "p25": 8.5,
+            "p75": 32,
+            "p90": 44,
+            "min": 1,
+            "max": 84
+          },
+          "currentBashCrossingRate": 0.145748987854251,
+          "currentMaulCrossingRate": 0.03643724696356275,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 69,
+            "rate": 0.016194331983805668,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.00047233468286099825
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.27125506072874495,
+            "bomb35CouldFlip": 0.7894736842105263
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 250,
+          "availableSeatRate": 0.7426285714285714,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 500,
+            "mean": 57.892,
+            "median": 58,
+            "p25": 43,
+            "p75": 71,
+            "p90": 86,
+            "min": 5,
+            "max": 122
+          },
+          "marginDistribution": {
+            "count": 246,
+            "mean": 23.43089430894309,
+            "median": 21,
+            "p25": 10,
+            "p75": 32,
+            "p90": 47.5,
+            "min": 1,
+            "max": 96
+          },
+          "currentBashCrossingRate": 0.15447154471544716,
+          "currentMaulCrossingRate": 0.012195121951219513,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 69,
+            "rate": 0.012195121951219513,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.004471544715447154
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.23577235772357724,
+            "bomb35CouldFlip": 0.7723577235772358
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 50,
+          "availableSeatRate": 0.8277142857142857,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 100,
+            "mean": 73.12,
+            "median": 73,
+            "p25": 55.5,
+            "p75": 87.25,
+            "p90": 108,
+            "min": 22,
+            "max": 142
+          },
+          "marginDistribution": {
+            "count": 49,
+            "mean": 24.857142857142858,
+            "median": 24,
+            "p25": 10,
+            "p75": 36,
+            "p90": 49.2,
+            "min": 1,
+            "max": 65
+          },
+          "currentBashCrossingRate": 0.22448979591836735,
+          "currentMaulCrossingRate": 0.02040816326530612,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 65,
+            "rate": 0.02040816326530612,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.0037414965986394544
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.24489795918367346,
+            "bomb35CouldFlip": 0.7346938775510204
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 50,
+          "availableSeatRate": 0.8145714285714286,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 100,
+            "mean": 72.06,
+            "median": 72.5,
+            "p25": 52,
+            "p75": 87,
+            "p90": 104.10000000000001,
+            "min": 22,
+            "max": 147
+          },
+          "marginDistribution": {
+            "count": 49,
+            "mean": 24.3265306122449,
+            "median": 21,
+            "p25": 11,
+            "p75": 34,
+            "p90": 46.2,
+            "min": 1,
+            "max": 70
+          },
+          "currentBashCrossingRate": 0.20408163265306123,
+          "currentMaulCrossingRate": 0.02040816326530612,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 70,
+            "rate": 0.02040816326530612,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.0037414965986394544
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.22448979591836735,
+            "bomb35CouldFlip": 0.7551020408163265
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 833,
+          "testedPeriods": 25,
+          "matchups": 50,
+          "availableSeatRate": 0.8331428571428572,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 100,
+            "mean": 73.33,
+            "median": 76,
+            "p25": 53.75,
+            "p75": 90.25,
+            "p90": 107.20000000000002,
+            "min": 21,
+            "max": 145
+          },
+          "marginDistribution": {
+            "count": 49,
+            "mean": 24.26530612244898,
+            "median": 18,
+            "p25": 9,
+            "p75": 38,
+            "p90": 51.80000000000001,
+            "min": 2,
+            "max": 74
+          },
+          "currentBashCrossingRate": 0.24489795918367346,
+          "currentMaulCrossingRate": 0.02040816326530612,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 74,
+            "rate": 0.02040816326530612,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.0037414965986394544
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.2857142857142857,
+            "bomb35CouldFlip": 0.7142857142857143
+          },
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 40,
+        "mauling": 65
+      }
+    },
+    {
+      "sport": "NCAAF",
+      "season": 2026,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "cfbd: stored scheduled period bounds",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2026-08-27",
+          "end": "2026-09-08"
+        },
+        {
+          "period": 2,
+          "start": "2026-09-10",
+          "end": "2026-09-13"
+        },
+        {
+          "period": 3,
+          "start": "2026-09-17",
+          "end": "2026-09-20"
+        },
+        {
+          "period": 4,
+          "start": "2026-09-24",
+          "end": "2026-09-27"
+        },
+        {
+          "period": 5,
+          "start": "2026-10-01",
+          "end": "2026-10-04"
+        },
+        {
+          "period": 6,
+          "start": "2026-10-06",
+          "end": "2026-10-11"
+        },
+        {
+          "period": 7,
+          "start": "2026-10-11",
+          "end": "2026-10-18"
+        },
+        {
+          "period": 8,
+          "start": "2026-10-20",
+          "end": "2026-10-25"
+        },
+        {
+          "period": 9,
+          "start": "2026-10-27",
+          "end": "2026-11-01"
+        },
+        {
+          "period": 10,
+          "start": "2026-11-03",
+          "end": "2026-11-08"
+        },
+        {
+          "period": 11,
+          "start": "2026-11-10",
+          "end": "2026-11-15"
+        },
+        {
+          "period": 12,
+          "start": "2026-11-17",
+          "end": "2026-11-22"
+        },
+        {
+          "period": 13,
+          "start": "2026-11-24",
+          "end": "2026-11-29"
+        },
+        {
+          "period": 15,
+          "start": "2026-12-12",
+          "end": "2026-12-13"
+        }
+      ],
+      "expectedRegularScheduleGames": 3681,
+      "sources": [
+        "legacy_source_unrecorded",
+        "cfbd-weekly"
+      ],
+      "unresolvedIdentityRows": 43257,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "6414caea98dc0c0cc715f2725edb983c7120638a9294a089e90b361971d21d1a",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "pass_yds": 0.04,
+          "pass_td": 4,
+          "pass_int": -2,
+          "rush_yds": 0.1,
+          "rush_td": 6,
+          "rec": 0.5,
+          "rec_yds": 0.1,
+          "rec_td": 6,
+          "kr_td": 6,
+          "pr_td": 6,
+          "fumble_td": 6,
+          "pass_2pt": 2,
+          "rush_2pt": 2,
+          "rec_2pt": 2,
+          "two_pt": 2,
+          "fg_made": 3,
+          "fg_miss": 0,
+          "xp_miss": -1,
+          "xp_made": 1,
+          "fum_lost": -2,
+          "def_td": 6,
+          "def_int": 2,
+          "def_fr": 2,
+          "def_sack": 1,
+          "te_premium": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "FLEX": 4,
+          "SUPERFLEX": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "FLEX",
+            "allowedPositions": [
+              "RB",
+              "WR",
+              "TE"
+            ]
+          },
+          {
+            "slotName": "SUPERFLEX",
+            "allowedPositions": [
+              "QB",
+              "RB",
+              "WR",
+              "TE"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 80453,
+        "normalizedRegularRows": 78303,
+        "scoredPlayerGames": {
+          "count": 78303,
+          "mean": 2.4761860975952272,
+          "median": 0,
+          "p25": 0,
+          "p75": 2,
+          "p90": 9,
+          "min": -7.36,
+          "max": 58.7
+        },
+        "playersInCompletedPeriods": 7535,
+        "enabledScoringKeysNeverObserved": [
+          "fumble_td",
+          "two_pt",
+          "def_td",
+          "def_int",
+          "def_fr",
+          "def_sack"
+        ],
+        "missingPositionPlayers": 1,
+        "completedCalendarPeriods": 9,
+        "observedPeriods": 9,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "unmapped_stat_line": 2150,
+          "identity_unresolved_for_roster": 41185
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 70,
+          "availableSeatRate": 0.7685714285714286,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 140,
+            "mean": 59.845285714285716,
+            "median": 58.92,
+            "p25": 44.34,
+            "p75": 74.595,
+            "p90": 88.072,
+            "min": 4.24,
+            "max": 134.72
+          },
+          "marginDistribution": {
+            "count": 70,
+            "mean": 25.492285714285714,
+            "median": 23.759999999999998,
+            "p25": 12.284999999999998,
+            "p75": 34.565,
+            "p90": 46.90200000000001,
+            "min": 0.3399999999999963,
+            "max": 73.88
+          },
+          "currentBashCrossingRate": 0.22857142857142856,
+          "currentMaulCrossingRate": 0.04285714285714286,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 73.88,
+            "rate": 0.014285714285714285,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.002380952380952381
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.2,
+            "bomb35CouldFlip": 0.7714285714285715
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 70,
+          "availableSeatRate": 0.77,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 140,
+            "mean": 60.01542857142857,
+            "median": 60.07,
+            "p25": 45.785,
+            "p75": 72.095,
+            "p90": 87.456,
+            "min": 8.2,
+            "max": 136.52
+          },
+          "marginDistribution": {
+            "count": 70,
+            "mean": 22.488571428571426,
+            "median": 20.180000000000003,
+            "p25": 9.019999999999998,
+            "p75": 34.315,
+            "p90": 43.978,
+            "min": 0.960000000000008,
+            "max": 73.88
+          },
+          "currentBashCrossingRate": 0.21428571428571427,
+          "currentMaulCrossingRate": 0.04285714285714286,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 73.88,
+            "rate": 0.014285714285714285,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.002380952380952381
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.2857142857142857,
+            "bomb35CouldFlip": 0.7857142857142857
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 70,
+          "availableSeatRate": 0.77,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 140,
+            "mean": 60.01542857142857,
+            "median": 60.07,
+            "p25": 46.589999999999996,
+            "p75": 70.82000000000001,
+            "p90": 87.37000000000002,
+            "min": 6.5,
+            "max": 140.82
+          },
+          "marginDistribution": {
+            "count": 70,
+            "mean": 22.15714285714286,
+            "median": 19.38000000000001,
+            "p25": 10.114999999999998,
+            "p75": 30.589999999999996,
+            "p90": 43.666000000000004,
+            "min": 0.5600000000000023,
+            "max": 73.88
+          },
+          "currentBashCrossingRate": 0.18571428571428572,
+          "currentMaulCrossingRate": 0.04285714285714286,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 73.88,
+            "rate": 0.014285714285714285,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.002380952380952381
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.24285714285714285,
+            "bomb35CouldFlip": 0.8142857142857143
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 14,
+          "availableSeatRate": 0.8571428571428571,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 28,
+            "mean": 76.84071428571428,
+            "median": 76.99000000000001,
+            "p25": 57.71,
+            "p75": 96.735,
+            "p90": 100.91400000000002,
+            "min": 19.3,
+            "max": 140.8
+          },
+          "marginDistribution": {
+            "count": 14,
+            "mean": 29.258571428571432,
+            "median": 23.41,
+            "p25": 5.835000000000006,
+            "p75": 48.31,
+            "p90": 64.47800000000002,
+            "min": 0.29999999999999716,
+            "max": 78.56
+          },
+          "currentBashCrossingRate": 0.35714285714285715,
+          "currentMaulCrossingRate": 0.14285714285714285,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 78.57,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.35714285714285715,
+            "bomb35CouldFlip": 0.6428571428571429
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 14,
+          "availableSeatRate": 0.85,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 28,
+            "mean": 74.64857142857144,
+            "median": 73.22999999999999,
+            "p25": 57.71,
+            "p75": 85.795,
+            "p90": 105.912,
+            "min": 28.9,
+            "max": 140.8
+          },
+          "marginDistribution": {
+            "count": 14,
+            "mean": 31.531428571428567,
+            "median": 28.89,
+            "p25": 19.574999999999996,
+            "p75": 48.31,
+            "p90": 54.04800000000001,
+            "min": 0.14000000000000057,
+            "max": 68.84
+          },
+          "currentBashCrossingRate": 0.35714285714285715,
+          "currentMaulCrossingRate": 0.07142857142857142,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 68.85,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.14285714285714285,
+            "bomb35CouldFlip": 0.6428571428571429
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 6294,
+          "testedPeriods": 7,
+          "matchups": 14,
+          "availableSeatRate": 0.8571428571428571,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 28,
+            "mean": 76.84071428571428,
+            "median": 76.99000000000001,
+            "p25": 57.71,
+            "p75": 96.735,
+            "p90": 100.91400000000002,
+            "min": 19.3,
+            "max": 140.8
+          },
+          "marginDistribution": {
+            "count": 14,
+            "mean": 29.258571428571432,
+            "median": 23.41,
+            "p25": 5.835000000000006,
+            "p75": 48.31,
+            "p90": 64.47800000000002,
+            "min": 0.29999999999999716,
+            "max": 78.56
+          },
+          "currentBashCrossingRate": 0.35714285714285715,
+          "currentMaulCrossingRate": 0.14285714285714285,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 78.57,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.35714285714285715,
+            "bomb35CouldFlip": 0.6428571428571429
+          },
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 35,
+        "mauling": 55
+      }
+    },
+    {
+      "sport": "NCAAB",
+      "season": 2025,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "Replay-only NCAA published 2025-11-03 opener",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2025-11-03",
+          "end": "2025-11-10"
+        },
+        {
+          "period": 2,
+          "start": "2025-11-10",
+          "end": "2025-11-17"
+        },
+        {
+          "period": 3,
+          "start": "2025-11-17",
+          "end": "2025-11-24"
+        },
+        {
+          "period": 4,
+          "start": "2025-11-24",
+          "end": "2025-12-01"
+        },
+        {
+          "period": 5,
+          "start": "2025-12-01",
+          "end": "2025-12-08"
+        },
+        {
+          "period": 6,
+          "start": "2025-12-08",
+          "end": "2025-12-15"
+        },
+        {
+          "period": 7,
+          "start": "2025-12-15",
+          "end": "2025-12-22"
+        },
+        {
+          "period": 8,
+          "start": "2025-12-22",
+          "end": "2025-12-29"
+        },
+        {
+          "period": 9,
+          "start": "2025-12-29",
+          "end": "2026-01-05"
+        },
+        {
+          "period": 10,
+          "start": "2026-01-05",
+          "end": "2026-01-12"
+        },
+        {
+          "period": 11,
+          "start": "2026-01-12",
+          "end": "2026-01-19"
+        },
+        {
+          "period": 12,
+          "start": "2026-01-19",
+          "end": "2026-01-26"
+        },
+        {
+          "period": 13,
+          "start": "2026-01-26",
+          "end": "2026-02-02"
+        },
+        {
+          "period": 14,
+          "start": "2026-02-02",
+          "end": "2026-02-09"
+        },
+        {
+          "period": 15,
+          "start": "2026-02-09",
+          "end": "2026-02-16"
+        },
+        {
+          "period": 16,
+          "start": "2026-02-16",
+          "end": "2026-02-23"
+        },
+        {
+          "period": 17,
+          "start": "2026-02-23",
+          "end": "2026-03-02"
+        },
+        {
+          "period": 18,
+          "start": "2026-03-02",
+          "end": "2026-03-09"
+        }
+      ],
+      "expectedRegularScheduleGames": null,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "27b6f6a7be2ca8722fef61ae00cb2dd2b0803e87c150146db6d32a36e665eb89",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "pts": 0.5,
+          "reb": 1,
+          "ast": 1,
+          "stl": 2,
+          "blk": 2,
+          "to": -1,
+          "threes": 0.5
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "PG": 1,
+          "SG": 1,
+          "SF": 1,
+          "PF": 1,
+          "C": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 110640,
+        "normalizedRegularRows": 103433,
+        "scoredPlayerGames": {
+          "count": 103433,
+          "mean": 10.93195595216227,
+          "median": 10,
+          "p25": 4,
+          "p75": 16.5,
+          "p90": 22,
+          "min": -34,
+          "max": 96.5
+        },
+        "playersInCompletedPeriods": 4882,
+        "enabledScoringKeysNeverObserved": [],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 18,
+        "observedPeriods": 18,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "outside_verified_completed_period": 37,
+          "excluded_post": 7207
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 62,
+          "shortfallBySlot": {
+            "PG": 9,
+            "SG": 18,
+            "SF": 18,
+            "PF": 17
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 20,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 62,
+          "shortfallBySlot": {
+            "PG": 9,
+            "SG": 18,
+            "SF": 18,
+            "PF": 17
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 20,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 62,
+          "shortfallBySlot": {
+            "PG": 9,
+            "SG": 18,
+            "SF": 18,
+            "PF": 17
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 20,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 5,
+          "shortfallBySlot": {
+            "SG": 2,
+            "SF": 2,
+            "PF": 1
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 4,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 5,
+          "shortfallBySlot": {
+            "SG": 2,
+            "SF": 2,
+            "PF": 1
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 4,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "roster_pool_or_position_shortfall",
+          "shortfall": 5,
+          "shortfallBySlot": {
+            "SG": 2,
+            "SF": 2,
+            "PF": 1
+          },
+          "trainedEligibleBySlot": {
+            "PG": 11,
+            "SG": 2,
+            "SF": 2,
+            "PF": 3,
+            "C": 245
+          },
+          "trainedPlayers": 4337,
+          "managers": 4,
+          "testedPeriods": 0,
+          "matchups": 0,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 40,
+        "mauling": 65
+      }
+    },
+    {
+      "sport": "SOCCER",
+      "season": 2025,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "production daily-sport/date-gameweek resolver",
+      "calendarWindows": [],
+      "expectedRegularScheduleGames": null,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 0,
+      "recordedInputSha256": "d900d8a12e4529d5c0c9de7160be24cf18fc750952273d2dab6784a2bf0c6ba9",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "goals": 6,
+          "assists": 3,
+          "clean_sheet_def": 4,
+          "clean_sheet_gk": 4,
+          "saves": 0.5,
+          "yellow_card": -1,
+          "red_card": -3,
+          "own_goal": -2,
+          "pen_miss": -2,
+          "pen_save": 5,
+          "shots_on_target": 0.5,
+          "shots": 0.2,
+          "minutes_played": 0.02,
+          "appearance": 0,
+          "gk_goals_against": -1,
+          "fouls_committed": 0,
+          "fouls_drawn": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "GKP": 1,
+          "DEF": 4,
+          "MID": 4,
+          "FWD": 2,
+          "UTIL": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "UTIL",
+            "allowedPositions": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 35144,
+        "normalizedRegularRows": 35144,
+        "scoredPlayerGames": {
+          "count": 35144,
+          "mean": 2.703802640564583,
+          "median": 1.96,
+          "p25": 0.9,
+          "p75": 3.12,
+          "p90": 6.58,
+          "min": -3.2,
+          "max": 24.9
+        },
+        "playersInCompletedPeriods": 0,
+        "enabledScoringKeysNeverObserved": [
+          "own_goal"
+        ],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 0,
+        "observedPeriods": 0,
+        "unobservedCompletedPeriods": [],
+        "exclusions": {
+          "outside_verified_completed_period": 35144
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 20,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "insufficient_completed_periods",
+          "testedPeriods": 0,
+          "matchups": 0,
+          "managers": 4,
+          "scoreDistribution": null,
+          "marginDistribution": null,
+          "currentBashCrossingRate": null,
+          "currentMaulCrossingRate": null,
+          "rawMarginFrequencyCandidate": null,
+          "counterfactualItemStress": null,
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 25,
+        "mauling": 40
+      }
+    },
+    {
+      "sport": "SOCCER",
+      "season": 2026,
+      "asOf": "2026-11-02T21:42:32.788Z",
+      "calendarSource": "production daily-sport/date-gameweek resolver",
+      "calendarWindows": [
+        {
+          "period": 1,
+          "start": "2026-08-14",
+          "end": "2026-08-21"
+        },
+        {
+          "period": 2,
+          "start": "2026-08-21",
+          "end": "2026-08-28"
+        },
+        {
+          "period": 3,
+          "start": "2026-08-28",
+          "end": "2026-09-04"
+        },
+        {
+          "period": 4,
+          "start": "2026-09-04",
+          "end": "2026-09-11"
+        },
+        {
+          "period": 5,
+          "start": "2026-09-11",
+          "end": "2026-09-18"
+        },
+        {
+          "period": 6,
+          "start": "2026-09-18",
+          "end": "2026-09-25"
+        },
+        {
+          "period": 7,
+          "start": "2026-10-09",
+          "end": "2026-10-16"
+        },
+        {
+          "period": 8,
+          "start": "2026-10-16",
+          "end": "2026-10-23"
+        },
+        {
+          "period": 9,
+          "start": "2026-10-23",
+          "end": "2026-10-30"
+        },
+        {
+          "period": 10,
+          "start": "2026-10-30",
+          "end": "2026-11-06"
+        },
+        {
+          "period": 11,
+          "start": "2026-11-06",
+          "end": "2026-11-13"
+        },
+        {
+          "period": 12,
+          "start": "2026-11-20",
+          "end": "2026-11-27"
+        },
+        {
+          "period": 13,
+          "start": "2026-11-27",
+          "end": "2026-12-04"
+        },
+        {
+          "period": 14,
+          "start": "2026-12-04",
+          "end": "2026-12-11"
+        },
+        {
+          "period": 15,
+          "start": "2026-12-11",
+          "end": "2026-12-18"
+        },
+        {
+          "period": 16,
+          "start": "2026-12-18",
+          "end": "2026-12-25"
+        },
+        {
+          "period": 17,
+          "start": "2026-12-25",
+          "end": "2027-01-01"
+        },
+        {
+          "period": 18,
+          "start": "2027-01-01",
+          "end": "2027-01-08"
+        },
+        {
+          "period": 19,
+          "start": "2027-01-08",
+          "end": "2027-01-15"
+        },
+        {
+          "period": 20,
+          "start": "2027-01-15",
+          "end": "2027-01-22"
+        },
+        {
+          "period": 21,
+          "start": "2027-01-22",
+          "end": "2027-01-29"
+        },
+        {
+          "period": 22,
+          "start": "2027-01-29",
+          "end": "2027-02-05"
+        },
+        {
+          "period": 23,
+          "start": "2027-02-05",
+          "end": "2027-02-12"
+        },
+        {
+          "period": 24,
+          "start": "2027-02-12",
+          "end": "2027-02-19"
+        },
+        {
+          "period": 25,
+          "start": "2027-02-19",
+          "end": "2027-02-26"
+        },
+        {
+          "period": 26,
+          "start": "2027-02-26",
+          "end": "2027-03-05"
+        },
+        {
+          "period": 27,
+          "start": "2027-03-05",
+          "end": "2027-03-12"
+        },
+        {
+          "period": 28,
+          "start": "2027-03-12",
+          "end": "2027-03-19"
+        },
+        {
+          "period": 29,
+          "start": "2027-03-19",
+          "end": "2027-03-26"
+        },
+        {
+          "period": 30,
+          "start": "2027-04-02",
+          "end": "2027-04-09"
+        },
+        {
+          "period": 31,
+          "start": "2027-04-09",
+          "end": "2027-04-16"
+        },
+        {
+          "period": 32,
+          "start": "2027-04-16",
+          "end": "2027-04-23"
+        },
+        {
+          "period": 33,
+          "start": "2027-04-23",
+          "end": "2027-04-30"
+        },
+        {
+          "period": 34,
+          "start": "2027-04-30",
+          "end": "2027-05-07"
+        },
+        {
+          "period": 35,
+          "start": "2027-05-07",
+          "end": "2027-05-14"
+        },
+        {
+          "period": 36,
+          "start": "2027-05-14",
+          "end": "2027-05-21"
+        },
+        {
+          "period": 37,
+          "start": "2027-05-21",
+          "end": "2027-05-28"
+        },
+        {
+          "period": 38,
+          "start": "2027-05-28",
+          "end": "2027-06-04"
+        }
+      ],
+      "expectedRegularScheduleGames": 1236,
+      "sources": [
+        "rolling_insights_live"
+      ],
+      "unresolvedIdentityRows": 0,
+      "scheduleRecoveredLabels": 4159,
+      "recordedInputSha256": "c0bb2e1803a50f5dc8ee7a281ffcc49fa0b959f4dea652da38834ad655135f92",
+      "scoring": {
+        "label": "AF default; half-PPR football; untouched NHL gated-key behavior",
+        "weights": {
+          "goals": 6,
+          "assists": 3,
+          "clean_sheet_def": 4,
+          "clean_sheet_gk": 4,
+          "saves": 0.5,
+          "yellow_card": -1,
+          "red_card": -3,
+          "own_goal": -2,
+          "pen_miss": -2,
+          "pen_save": 5,
+          "shots_on_target": 0.5,
+          "shots": 0.2,
+          "minutes_played": 0.02,
+          "appearance": 0,
+          "gk_goals_against": -1,
+          "fouls_committed": 0,
+          "fouls_drawn": 0
+        }
+      },
+      "roster": {
+        "starterSlots": {
+          "GKP": 1,
+          "DEF": 4,
+          "MID": 4,
+          "FWD": 2,
+          "UTIL": 1
+        },
+        "bench": 3,
+        "flexDefinitions": [
+          {
+            "slotName": "UTIL",
+            "allowedPositions": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          }
+        ],
+        "authority": "resolveFormatRosterDefaults(zombie)"
+      },
+      "diagnostics": {
+        "inputRows": 8063,
+        "normalizedRegularRows": 8063,
+        "scoredPlayerGames": {
+          "count": 8063,
+          "mean": 2.6550316259456714,
+          "median": 1.88,
+          "p25": 0.8200000000000001,
+          "p75": 2.9,
+          "p90": 6.9,
+          "min": -3.54,
+          "max": 26.12
+        },
+        "playersInCompletedPeriods": 1376,
+        "enabledScoringKeysNeverObserved": [
+          "own_goal"
+        ],
+        "missingPositionPlayers": 0,
+        "completedCalendarPeriods": 9,
+        "observedPeriods": 8,
+        "unobservedCompletedPeriods": [
+          1
+        ],
+        "exclusions": {
+          "position_changed_or_conflicting": 36,
+          "outside_verified_completed_period": 782
+        },
+        "unmappedStatKeys": []
+      },
+      "models": [
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 60,
+          "availableSeatRate": 0.16200396825396826,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 120,
+            "mean": 46.94500000000003,
+            "median": 46.26,
+            "p25": 35.97,
+            "p75": 57.035000000000004,
+            "p90": 65.77000000000001,
+            "min": 16.38,
+            "max": 88.16
+          },
+          "marginDistribution": {
+            "count": 60,
+            "mean": 14.039333333333332,
+            "median": 11.370000000000001,
+            "p25": 6.635,
+            "p75": 19.540000000000006,
+            "p90": 26.378000000000004,
+            "min": 0.14000000000000057,
+            "max": 48.239999999999995
+          },
+          "currentBashCrossingRate": 0.15,
+          "currentMaulCrossingRate": 0.03333333333333333,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 48.25,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.45,
+            "bomb35CouldFlip": 0.95
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 60,
+          "availableSeatRate": 0.1619047619047619,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 120,
+            "mean": 46.93866666666666,
+            "median": 46.03,
+            "p25": 37.334999999999994,
+            "p75": 54.87,
+            "p90": 67.034,
+            "min": 14.68,
+            "max": 90.8
+          },
+          "marginDistribution": {
+            "count": 60,
+            "mean": 14.172666666666663,
+            "median": 10.68,
+            "p25": 5.98,
+            "p75": 21.450000000000003,
+            "p90": 29.548000000000005,
+            "min": 0.1599999999999966,
+            "max": 52.519999999999996
+          },
+          "currentBashCrossingRate": 0.18333333333333332,
+          "currentMaulCrossingRate": 0.016666666666666666,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 52.53,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.43333333333333335,
+            "bomb35CouldFlip": 0.95
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 20,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 60,
+          "availableSeatRate": 0.16240079365079366,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 120,
+            "mean": 47.068333333333364,
+            "median": 46.370000000000005,
+            "p25": 37.54,
+            "p75": 55.81,
+            "p90": 65.682,
+            "min": 16.38,
+            "max": 90.8
+          },
+          "marginDistribution": {
+            "count": 60,
+            "mean": 14.378666666666664,
+            "median": 11.290000000000003,
+            "p25": 6.190000000000001,
+            "p75": 22.120000000000005,
+            "p90": 27.55800000000001,
+            "min": 0.0799999999999983,
+            "max": 48.58
+          },
+          "currentBashCrossingRate": 0.15,
+          "currentMaulCrossingRate": 0.03333333333333333,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 48.58,
+            "rate": 0.016666666666666666,
+            "target": 0.016666666666666666,
+            "absoluteError": 0
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.4,
+            "bomb35CouldFlip": 0.9333333333333333
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 1,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 12,
+          "availableSeatRate": 0.17311507936507936,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 24,
+            "mean": 68.60916666666667,
+            "median": 68.69,
+            "p25": 53.295,
+            "p75": 84.41,
+            "p90": 94.34199999999998,
+            "min": 34.12,
+            "max": 127.06
+          },
+          "marginDistribution": {
+            "count": 12,
+            "mean": 17.07833333333333,
+            "median": 17.289999999999996,
+            "p25": 6.614999999999998,
+            "p75": 24.614999999999995,
+            "p90": 33.594,
+            "min": 1.9799999999999969,
+            "max": 34.6
+          },
+          "currentBashCrossingRate": 0.25,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 34.61,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.4166666666666667,
+            "bomb35CouldFlip": 1
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 7,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 12,
+          "availableSeatRate": 0.17311507936507936,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 24,
+            "mean": 68.60916666666667,
+            "median": 69.41,
+            "p25": 51.41,
+            "p75": 84.91499999999999,
+            "p90": 94.354,
+            "min": 34.3,
+            "max": 127.06
+          },
+          "marginDistribution": {
+            "count": 12,
+            "mean": 15.561666666666667,
+            "median": 15.530000000000001,
+            "p25": 8.805000000000003,
+            "p75": 20.59999999999999,
+            "p90": 26.984,
+            "min": 1.5600000000000023,
+            "max": 30.700000000000003
+          },
+          "currentBashCrossingRate": 0.25,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 30.71,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.3333333333333333,
+            "bomb35CouldFlip": 1
+          },
+          "acceptedCalibration": false
+        },
+        {
+          "seed": 23,
+          "status": "modeled_rosters_replayed",
+          "managers": 4,
+          "trainedPlayers": 968,
+          "testedPeriods": 6,
+          "matchups": 12,
+          "availableSeatRate": 0.17311507936507936,
+          "diagnosticsOnly": true,
+          "limitation": "Training-only rankings; appearances are known retrospectively. Missing boxes are not proven DNPs. Modeled rosters and dependent observations cannot certify real leagues.",
+          "scoreDistribution": {
+            "count": 24,
+            "mean": 68.60916666666667,
+            "median": 69.41,
+            "p25": 50.455,
+            "p75": 84.91499999999999,
+            "p90": 95.83,
+            "min": 34.16,
+            "max": 127.06
+          },
+          "marginDistribution": {
+            "count": 12,
+            "mean": 16.488333333333333,
+            "median": 16.6,
+            "p25": 8.235000000000005,
+            "p75": 24.119999999999997,
+            "p90": 26.022,
+            "min": 0.5600000000000023,
+            "max": 37.28
+          },
+          "currentBashCrossingRate": 0.25,
+          "currentMaulCrossingRate": 0,
+          "rawMarginFrequencyCandidate": {
+            "threshold": 37.29,
+            "rate": 0,
+            "target": 0.016666666666666666,
+            "absoluteError": 0.016666666666666666
+          },
+          "counterfactualItemStress": {
+            "label": "Hypothetical NFL-sized bonuses, not non-NFL rules",
+            "serum10CouldFlip": 0.3333333333333333,
+            "bomb35CouldFlip": 0.9166666666666666
+          },
+          "acceptedCalibration": false
+        }
+      ],
+      "acceptedCalibration": false,
+      "productionChanges": false,
+      "currentMarginThresholds": {
+        "bashing": 25,
+        "mauling": 40
+      }
+    }
+  ],
+  "limitations": [
+    "No provider requests, production writes, real draft starts or acceptance records.",
+    "Modeled rosters and retrospective appearance knowledge are diagnostic, not manager behavior.",
+    "Rankings use two earlier completed periods only; later player positions may still reflect current identity records.",
+    "Scores and windows are replayed; full provider/game/lineup completeness is not inferred.",
+    "No real role/item inventory history is available: item shocks are counterfactual sensitivity only.",
+    "Seeds are tie-break scenarios, not independent leagues or confidence samples.",
+    "Non-NFL gameplay thresholds remain unchanged."
+  ]
+}
