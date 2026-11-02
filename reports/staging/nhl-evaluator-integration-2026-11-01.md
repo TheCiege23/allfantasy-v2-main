@@ -25,14 +25,18 @@ sports rather than replacing it with the older local evaluator.
 ## Verification
 
 Seven isolated NHL scoring/context/receipt tests passed. The scoped TypeScript
-check of the NHL data, context and optimizer modules passed. Broader existing
-grader regressions and the clean-branch real-roster rollback probe were launched
-separately on the memory-constrained shared machine; their final results must be
-recorded before this integration is treated as release-ready.
+check of the NHL data, context and optimizer modules passed. The clean-branch
+rollback probe then passed on all 51 real players across three rosters, reproducing
+historical deltas -1.91, -2.11 and +2.97. Both temporary trade and snapshot were
+confirmed absent after rollback. Projection, outcome and contextual-grade flags
+remained false, with market letters null.
 
-The previous branch's real three-roster receipt covered 51/51 linked and scored
-players with historical deltas -1.91, -2.11 and +2.97. That is prior evidence, not
-a claimed result from this new implementation.
+An attempted dynamic import optimization caused existing grader regression
+timeouts. The original market-module loading order was restored; its regression
+rerun must pass before this integration is marked ready. Shared-machine memory
+pressure also delayed test startup, so no broad pass is inferred from the
+successful focused checks.
 
-Parent releases #3165 and #3168 are still gated by CI. This integration must stay
+Parent #3165's full unit suite passed after the Node 24 correction. Browser CI
+and the follow-up #3168 gates remain pending. This integration must stay
 separate from a claim that the public evaluator is deployed or fully graded.

@@ -1,8 +1,10 @@
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
-import type { EvaluateTradeDeps, TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
+import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
+import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import { loadNhlHistoricalLineups, type NhlHistoricalLineupCoverage } from './nhlHistoricalLineup'
 
 export type ServerTradeParticipantDecision = {
@@ -86,8 +88,6 @@ export async function proposalOneGrade(input: {
   /** Names the caller already loaded, so the same items are not queried twice. */
   nameForId?: (id: string) => string | null
 }): Promise<TradeGradeView> {
-  const [{ createLeagueTradeGrader, gradeDeal, loadNativePlayerNames }, { resolveViewerLeagueRoster }] =
-    await Promise.all([import('@/lib/decision-os/trade/leagueTradeGrader'), import('@/lib/trade-intel/viewerLeagueRoster')])
   const items = nativeItems(input.assets)
   const [grader, nameForId, viewer] = await Promise.all([
     createLeagueTradeGrader({ leagueId: input.leagueId, userId: input.proposedByUserId ?? null }).catch(() => null),
@@ -147,9 +147,6 @@ export async function evaluateServerTradeDecision(input: {
       participants: [],
     }
   }
-  const [{ evaluateTrade }, { loadNativePlayerNames }] = await Promise.all([
-    import('@/lib/decision-os/trade/evaluateTrade'), import('@/lib/decision-os/trade/leagueTradeGrader'),
-  ])
   const items = nativeItems(input.assets)
   const nameForId = await loadNativePlayerNames(items).catch(() => (): string | null => null)
   /*
