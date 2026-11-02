@@ -1,3 +1,5 @@
+import { getZombieCreationProfile } from '@/lib/zombie/creationPolicy'
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
@@ -15,8 +17,11 @@ export function resolveCreatedSeasonWeeks(league: {
   playoffWeeksPerRound?: number | null
   /** With `sport`: a redraft or keeper league's regular season is capped at 24 weeks (regularSeasonCap.ts). */
   leagueType?: string | null
+  leagueVariant?: string | null
+  format?: string | null
   sport?: unknown
 }, sportDefaultWeeks: number): number {
+  if (isZombieLeagueLike(league)) return getZombieCreationProfile(String(league.sport ?? 'NFL')).scoringPeriods
   const survivorPlan = readSurvivorFullSeasonPlan(league.settings)
   if (survivorPlan) return survivorPlan.endWeek
   // A divisions-tournament conference league plays through the tournament's championship week.

@@ -1,3 +1,4 @@
+import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -15,10 +16,6 @@ import { loadNativeSeasonRecords } from '@/lib/zombie/ZombieInfectionEngine'
 import { isZombieExperienceMode } from '@/lib/zombie/zombieExperience'
 
 export const dynamic = 'force-dynamic'
-
-/** Zombie leagues are limited to these team counts at create time. */
-const ZOMBIE_ALLOWED_TEAM_COUNTS = [8, 10, 12, 14, 16] as const
-type ZombieAllowedTeamCount = (typeof ZOMBIE_ALLOWED_TEAM_COUNTS)[number]
 
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -47,7 +44,7 @@ export async function POST(req: Request) {
   }
 
   const sportRaw = typeof body.sport === 'string' ? body.sport : 'NFL'
-  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase()) || !['NFL', 'NBA', 'NHL', 'MLB'].includes(sportRaw.toUpperCase())) {
+  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase())) {
     return NextResponse.json({ error: `Zombie leagues do not support sport "${sportRaw}".` }, { status: 400 })
   }
   const sport = normalizeToSupportedSport(sportRaw)
@@ -63,14 +60,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
   }
 
+  const allowedTeamCounts = getZombieCreationTeamCounts(sport)
   const teamCountRaw = typeof body.teamCount === 'number' ? body.teamCount : null
-  if (teamCountRaw == null || !(ZOMBIE_ALLOWED_TEAM_COUNTS as readonly number[]).includes(teamCountRaw)) {
+  if (teamCountRaw == null || !allowedTeamCounts.includes(teamCountRaw)) {
     return NextResponse.json(
-      { error: `teamCount must be one of ${ZOMBIE_ALLOWED_TEAM_COUNTS.join(', ')}` },
+      { error: `teamCount must be one of ${allowedTeamCounts.join(', ')}` },
       { status: 400 },
     )
   }
-  const teamCount = teamCountRaw as ZombieAllowedTeamCount
+  const teamCount = teamCountRaw
 
   // Snake-only — auction (and any other non-snake) is not supported by the
   // weekly resolution engine. Reject early instead of silently coercing so

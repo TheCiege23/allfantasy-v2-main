@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_V2_STATE } from '@/lib/create-league-v2/state'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key }), useOptionalLanguage: () => ({ language: 'en' }) }))
 vi.mock('@/components/create-league-v2/CreateLeagueVideoTile', () => ({ CreateLeagueVideoTile: ({ testId, onSelect }: { testId: string; onSelect: () => void }) => <button data-testid={testId} onClick={onSelect}>Select</button> }))
 import { LeagueBasicsStep } from '@/components/create-league-v2/CreateLeagueWizard'
 
@@ -53,5 +53,32 @@ describe('simple creation team choices agree with the server', () => {
     expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
     fireEvent.click(screen.getByTestId('g30-league-type-redraft'))
     expect(onChange.mock.calls[0][0].teamCount).toBe(32)
+  })
+})
+
+
+describe('Zombie universe controls', () => {
+  it('applies 20 when entering Zombie, preserves a chosen size and offers six shared leagues', () => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
+    const view = render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.click(screen.getByTestId('g30-league-type-zombie'))
+    const next = { ...state, ...onChange.mock.calls.at(-1)![0] }
+    expect(next.teamCount).toBe(20)
+    view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('min', '4')
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '20')
+    fireEvent.change(screen.getByTestId('g30-zombie-league-count'), { target: { value: '6' } })
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ zombieLeagueCount: 6 })
+    view.rerender(<LeagueBasicsStep state={{ ...next, teamCount: 4, zombieLeagueCount: 6 }} onChange={onChange} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-zombie-universe')).toHaveTextContent('24 roster seats in total')
+    fireEvent.click(screen.getByTestId('g30-league-type-zombie'))
+    expect(onChange.mock.calls.at(-1)![0].teamCount).toBe(4)
+  })
+  it('shows imported rosters as a single league and disables batching', () => {
+    render(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }}
+      onChange={vi.fn()} importCarryover fieldErrors={null} />)
+    expect(screen.getByTestId('g30-zombie-league-count')).toBeDisabled()
+    expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
   })
 })

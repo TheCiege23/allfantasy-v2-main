@@ -1,3 +1,4 @@
+import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 /**
  * Create League v2 — rules engine.
  *
@@ -146,6 +147,7 @@ export function getTeamCountOptions(
   leagueType: LeagueTypeId,
   soccerPipeline?: 'mls' | 'euro' | null
 ): number[] {
+  if (leagueType === 'zombie') return getZombieCreationTeamCounts(sport)
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.teamCountOptionsByConceptSport?.[leagueType]?.[sport]
   if (Array.isArray(seeded) && seeded.length > 0) {
@@ -178,6 +180,7 @@ export function getDefaultTeamCount(
   soccerPipeline?: 'mls' | 'euro' | null
 ): number {
   const opts = getTeamCountOptions(sport, leagueType, soccerPipeline)
+  if (leagueType === 'zombie') return ZOMBIE_DEFAULT_MANAGERS
   if (opts.length === 0) return 12
   // Survivor starts at 16 managers (four tribes of four) when offered, else its smallest cast.
   if (leagueType === 'survivor') return opts.includes(16) ? 16 : opts[0]!

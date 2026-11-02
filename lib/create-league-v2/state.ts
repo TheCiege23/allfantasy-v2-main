@@ -153,6 +153,7 @@ export interface CreateLeagueV2State {
   /** Stable id from `lib/league-creation-preset/scoring-presets` */
   scoringPresetId: string
   teamCount: number
+  zombieLeagueCount?: number
   /** Tournament-only: total managers across all feeder leagues. Must be one of TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED on the server. */
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
@@ -355,6 +356,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   soccerPipeline: null,
   scoringPresetId: '',
   teamCount: 12,
+  zombieLeagueCount: 1,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
