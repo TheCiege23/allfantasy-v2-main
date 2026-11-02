@@ -264,7 +264,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       console.log(`${sport} native Zombie: draft, ${whisperers} Whisperer(s), week ${week}, infection, report, idempotency passed`)
     }
   } finally {
-    await prisma.sportsGame.deleteMany({ where: { source: 'zombie_synthetic_fixture', OR: leagueIds.map(id => ({ externalId: { startsWith: `zombie-fixture:${id}:` } })) } })
+    await prisma.sportsGame.deleteMany({ where: { source: { in: ['zombie_synthetic_fixture', 'api_sports'] }, OR: leagueIds.map(id => ({ externalId: { startsWith: `zombie-fixture:${id}:` } })) } })
     await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { startsWith: marker + '-NFL-' } } })
     await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     for (const leagueId of leagueIds) await prisma.automationLock.deleteMany({ where: { lockKey: `draft:${leagueId}:pick` } })

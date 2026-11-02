@@ -58,8 +58,10 @@ export async function seedFinalNflFixtureTotals(leagueId: string, seasonId: stri
   const externalId = `zombie-fixture:${leagueId}:${season}:${week}`
   const kickoff = new Date(Date.now() - 3_600_000)
   await prisma.sportsGame.upsert({
-    where: { sport_externalId_source: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture' } },
-    create: { sport: 'NFL', externalId, source: 'zombie_synthetic_fixture', homeTeam: club, awayTeam: `${club}_AWAY`, season, seasonType: 'regular', week, status: 'final', startTime: kickoff, expiresAt: new Date(Date.now() + 86_400_000) },
+    // Loopback-only synthetic fixture in the canonical stored calendar namespace.
+    // This exercises the production deadline reader without widening its source allowlist.
+    where: { sport_externalId_source: { sport: 'NFL', externalId, source: 'api_sports' } },
+    create: { sport: 'NFL', externalId, source: 'api_sports', homeTeam: club, awayTeam: `${club}_AWAY`, season, seasonType: 'regular', week, status: 'final', startTime: kickoff, expiresAt: new Date(Date.now() + 86_400_000) },
     update: {},
   })
   await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, data: { team: club } })
