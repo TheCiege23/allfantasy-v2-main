@@ -4,6 +4,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { isPhoneOnlyAccountEmail } from "@/lib/auth/phoneOnlyAccountEmail"
 
 const normalizePhone = normalizePhoneE164
 
@@ -21,7 +22,7 @@ export function isPhoneLoginCandidate(input: string): boolean {
  */
 export async function resolveLoginToUser(login: string): Promise<{
   id: string
-  email: string
+  email: string | null
   passwordHash: string | null
   displayName: string | null
   username: string
@@ -50,7 +51,7 @@ export async function resolveLoginToUser(login: string): Promise<{
         avatarUrl: true,
       },
     })
-    return user
+    return user ? { ...user, email: isPhoneOnlyAccountEmail(user.email) ? null : user.email } : null
   }
 
   const user = await prisma.appUser.findFirst({
@@ -69,5 +70,5 @@ export async function resolveLoginToUser(login: string): Promise<{
       avatarUrl: true,
     },
   })
-  return user
+  return user ? { ...user, email: isPhoneOnlyAccountEmail(user.email) ? null : user.email } : null
 }
