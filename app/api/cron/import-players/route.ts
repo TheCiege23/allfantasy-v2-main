@@ -358,19 +358,23 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const deadlineAt = Date.now() + allowanceMs
           const teamMap = await syncEspnNcaabTeamMapIfDue()
           const rosters = teamMap.skipped === 'blocked' ? null : await syncEspnNcaabRosters({ deadlineAt })
-          return { teamMap, rosters }
+          const pool = rosters && !rosters.blocked && deadlineAt - Date.now() > 3_000
+            ? await (await import('@/lib/devy/ncaabRosterPool')).materializeNcaabRosterPool(prisma, { now: new Date(), deadlineAt: deadlineAt - 2_000 }).catch((err: unknown) => ({ created: 0, updated: 0, error: err instanceof Error ? err.message.slice(0, 160) : 'college pool update failed' }))
+            : null
+          return { teamMap, rosters, pool }
         },
         (r) =>
           'skipped' in r
             ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
             : {
-                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0),
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0) + (r.pool?.created ?? 0) + (r.pool?.updated ?? 0),
                 warnings: [
                   ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
                   ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
                   ...(r.rosters && (r.rosters.rosterSnapshotsRejected ?? 0) > 0 ? [`${r.rosters.rosterSnapshotsRejected} roster snapshots rejected`] : []),
+                  ...(r.pool && 'error' in r.pool ? [`college pool: ${r.pool.error}`] : []),
                 ],
-                metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
+                metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters, pool: r.pool },
               },
       ).catch((err: unknown) => ({
         error: err instanceof Error ? err.message.slice(0, 160) : 'espn ncaab pass failed',

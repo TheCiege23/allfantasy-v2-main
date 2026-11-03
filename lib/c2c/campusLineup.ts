@@ -105,7 +105,7 @@ export function campusSeats(slots: C2CLineupSlots | null | undefined): string[] 
 }
 
 function canFill(seat: string, position: string | null | undefined, sport: CampusSport): boolean {
-  const pos = String(position ?? '').toUpperCase()
+  const pos = String(position ?? '').trim().toUpperCase()
   const table = sport === 'basketball' ? BASKETBALL_SLOT_POSITIONS : FOOTBALL_SLOT_POSITIONS
   return (table[seat] ?? [seat]).includes(pos)
 }
