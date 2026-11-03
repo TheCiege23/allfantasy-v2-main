@@ -1591,7 +1591,8 @@ export function LeagueShell({
             discordConnected={discordConnected}
             commissionerLeagues={commissionerLeagues}
             zombieChimmyPrefill={zombieChimmyPrefill}
-            initialOpenChat={initialOpenChat}
+            initialOpenChat={defaultOpenChat}
+              chatMessageId={searchParams?.get('message')}
           />
         ) : null}
         <NativeLeagueWorkspace
