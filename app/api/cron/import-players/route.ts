@@ -161,11 +161,12 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     }
 
     if (sleeperRowsOnly) {
-      if (intelOnly || sports?.length !== 1 || sports[0] !== 'NFL') {
-        return NextResponse.json({ ok: false, error: 'sleeperRows requires sport=NFL and cannot combine with intel.' }, { status: 400 })
+      const sport = sports?.length === 1 ? sports[0] : undefined
+      if (intelOnly || (sport !== 'NFL' && sport !== 'NBA')) {
+        return NextResponse.json({ ok: false, error: 'sleeperRows requires a single sport (NFL or NBA) and cannot combine with intel.' }, { status: 400 })
       }
       const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
-      const result = await refreshSleeperPlayerRows({ sport: 'NFL', limit: 1500, isExhausted: () => budget.exhausted() })
+      const result = await refreshSleeperPlayerRows({ sport, limit: sport === 'NBA' ? 600 : 1500, isExhausted: () => budget.exhausted() })
       return NextResponse.json({ ok: !result.feedUnavailable, sleeperRows: result, durationMs: Date.now() - startedAt })
     }
     if (intelOnly) {
@@ -797,6 +798,24 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
      * A phase, not the job: bounded per run, stalest first, and dropped whole when
      * the budget is gone.
      */
+    let sleeperNbaRows: unknown = { skipped: true }
+    if (!dryRun && (!sports || sports.includes('NBA'))) {
+      if (budget.exhausted()) {
+        deferredPhases.push('sleeperNbaRows')
+      } else {
+        try {
+          const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+          sleeperNbaRows = await refreshSleeperPlayerRows({
+            sport: 'NBA',
+            limit: 600,
+            isExhausted: () => budget.exhausted(),
+          })
+        } catch (error) {
+          sleeperNbaRows = { error: error instanceof Error ? error.message.slice(0, 160) : 'Sleeper NBA refresh failed' }
+        }
+      }
+    }
+
     let sleeperRows: unknown = { skipped: true }
     if (!dryRun && wantsNfl && budget.exhausted()) {
       deferredPhases.push('sleeperRows')
@@ -981,6 +1000,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntelSources,
       devyIntel,
       sleeperRows,
+      sleeperNbaRows,
       canonicalBirthdays,
       espnIdentities,
       identityBridge,
