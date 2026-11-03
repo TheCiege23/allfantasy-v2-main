@@ -52,7 +52,11 @@ function isStructural(code: number): boolean {
   return false
 }
 
-export function sanitizeUntrusted(raw: unknown, maxLength = MAX_UNTRUSTED_LEN): string {
+export function sanitizeUntrusted(raw: unknown): string {
+  return sanitizeUntrustedExcerpt(raw, MAX_UNTRUSTED_LEN)
+}
+
+export function sanitizeUntrustedExcerpt(raw: unknown, maxLength: number): string {
   if (raw === null || raw === undefined) return '(none)'
   if (typeof raw === 'number') return Number.isFinite(raw) ? String(raw) : '(invalid number)'
   if (typeof raw === 'boolean') return String(raw)

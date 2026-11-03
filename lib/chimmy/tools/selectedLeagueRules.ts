@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { parseSections } from '@/lib/constitution/constitutionBuilder'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
-import { sanitizeUntrusted } from '@/lib/chimmy/sanitizeUntrusted'
+import { sanitizeUntrusted, sanitizeUntrustedExcerpt } from '@/lib/chimmy/sanitizeUntrusted'
 
 /** Membership is checked before reading any published text. */
 export async function buildSelectedLeagueRules(leagueId: string, userId: string): Promise<string> {
@@ -29,7 +29,7 @@ export async function buildSelectedLeagueRules(leagueId: string, userId: string)
     ...(published && sections && validVersion
       ? [
           'Published constitution for season ' + season + ' (' + published.createdAt.toISOString() + '). Cite section titles. Excerpts can be truncated.',
-          ...sections.map(({ title, body }) => JSON.stringify({ title: sanitizeUntrusted(title), body: sanitizeUntrusted(body, 600) })),
+          ...sections.map(({ title, body }) => JSON.stringify({ title: sanitizeUntrusted(title), body: sanitizeUntrustedExcerpt(body, 600) })),
         ]
       : [published === null ? 'No published constitution was found for this season.' : 'The published constitution could not be verified.']),
   ].join('\n')
