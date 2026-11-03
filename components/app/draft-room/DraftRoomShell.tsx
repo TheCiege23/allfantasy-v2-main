@@ -249,7 +249,7 @@ export function DraftRoomShell({
     <div
       data-board-size={boardSize}
       data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
-      className={`draft-touch-room ${surfaceClass}`}
+      className={`draft-touch-room af-draft-dark ${surfaceClass}`}
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="draft-room-shell"
       data-dynasty-skin={surfaceVariant === 'dynasty' ? 'true' : undefined}

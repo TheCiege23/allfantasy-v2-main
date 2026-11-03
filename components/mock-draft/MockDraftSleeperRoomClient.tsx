@@ -1361,7 +1361,7 @@ export default function MockDraftSleeperRoomClient({
 
   function renderLeagueGate() {
     return (
-      <div className="min-h-screen bg-[#070b16] text-white">
+      <div className="af-draft-dark min-h-screen bg-[#070b16] text-white">
         <div className="border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
             <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-300">League Mock</div>
@@ -1584,7 +1584,7 @@ export default function MockDraftSleeperRoomClient({
 
   function renderOpenSetup() {
     return (
-      <div className="min-h-screen bg-[#070b16] text-white">
+      <div className="af-draft-dark min-h-screen bg-[#070b16] text-white">
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
           <div className="mb-6 flex items-center gap-3">
             <button
@@ -1706,7 +1706,7 @@ export default function MockDraftSleeperRoomClient({
 
   function renderEntry() {
     return (
-      <div className="min-h-screen bg-[#070b16] px-4 py-10 text-white sm:px-6">
+      <div className="af-draft-dark min-h-screen bg-[#070b16] px-4 py-10 text-white sm:px-6">
         <div className="mx-auto max-w-5xl">
           <div className="rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.15),transparent_42%),#0a1124] p-6 sm:p-8">
             <div className="max-w-2xl">
@@ -2071,7 +2071,7 @@ export default function MockDraftSleeperRoomClient({
        * (DraftMobileTray, shared with the live room) can sit over an always-visible board. Desktop
        * keeps the scrolling page it always had.
        */
-      <div className="min-h-screen bg-[#0a0a18] text-white max-lg:flex max-lg:h-[100dvh] max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden">
+      <div className="af-draft-dark min-h-screen bg-[#0a0a18] text-white max-lg:flex max-lg:h-[100dvh] max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden">
         <div className="shrink-0 border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-center gap-3">
@@ -2326,7 +2326,7 @@ export default function MockDraftSleeperRoomClient({
       ? `${window.location.origin}/mock-draft/share/${shareId}`
       : null
     return (
-      <div className="min-h-screen bg-[#070b16] px-4 py-10 text-white sm:px-6">
+      <div className="af-draft-dark min-h-screen bg-[#070b16] px-4 py-10 text-white sm:px-6">
         <div className="mx-auto max-w-4xl rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.14),transparent_40%),#0a1124] p-6 sm:p-8">
           <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Mock Draft Complete</div>
           <h1 className="mt-4 text-3xl font-black">
