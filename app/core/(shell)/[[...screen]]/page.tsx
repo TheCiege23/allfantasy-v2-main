@@ -24,6 +24,7 @@ import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
+import { coreShellDynasty } from '@/lib/core-app/coreShellDynasty'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -37,7 +38,9 @@ import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNav
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
-import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
+import { SURVIVOR_BANNER_TABS, leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
+import { SurvivorIslandBanner } from '@/components/core-app/survivor/SurvivorIslandBanner'
+import { SurvivorIslandControl } from '@/components/core-app/survivor/SurvivorIslandControl'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -81,6 +84,7 @@ import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
@@ -958,6 +962,8 @@ export default async function AfCorePage({
         isDynasty: tradeLeagueRow.isDynasty,
       })
     : null
+  /* A Survivor league dresses the shell as the island and opens its screens with the island banner. */
+  const leagueTheme = leagueThemeForTypeKey(tradeLeagueTypeKey)
   const tradeStripLeagues = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
@@ -1658,8 +1664,10 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
-      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
-      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
+      /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
+      /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
+      dynastyEra={coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1670,7 +1678,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
-      leagueTheme={leagueThemeForTypeKey(tradeLeagueTypeKey)}
+      leagueTheme={leagueTheme}
       lineupHandoff={lineupHandoff}
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
@@ -2014,6 +2022,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     hiddenHomeSections,
     hiddenLeagueSections,
   } = ctx
+  /* A Survivor league opens Camp, Tribe standings and Immunity challenge with the island banner. */
+  const survivorBanner = (variant: 'full' | 'compact') =>
+    leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
+      <SurvivorIslandBanner leagueId={selectedLeagueId} leagueName={tradeLeagueRow?.name ?? ''} variant={variant} />
+    ) : null
+  /* …and its Commissioner screen (Island control) with league health and the weekly to-do. */
+  const survivorControl =
+    leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
+      <>
+        {survivorBanner('compact')}
+        <SurvivorIslandControl leagueId={selectedLeagueId} />
+      </>
+    ) : null
   /*
    * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
    * as app/layout.tsx does for <html lang> — no session or profile read, so every screen can afford
@@ -2380,7 +2401,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const finderScope = resolveLeagueScope(playedLeagues.map((l) => l.id), finderSavedPicks)
   const finderLeagueIds = finderScope.leagueIds
 
-  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
+  const playerSport = normalizeFinderSport(sp.sport)
+  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
    * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
@@ -3660,6 +3682,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         }).catch(() => null)
       : null
 
+  // A native commissioner starts with the league's actual settings editors.
+  // The existing activity workspace remains reachable from that page.
+  if (commissionerHub?.allowed && commissionerHub.league.native && sp.workspace !== 'activity') {
+    redirect(`/league/${encodeURIComponent(commissionerHub.league.id)}?view=commissioner`)
+  }
+
   /*
    * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
    * only, and only once the hub's own gate has admitted the viewer (`commissionerHub` is null
@@ -4458,6 +4486,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         />
       ) : null}
 
+      {/* The island banner over every other league tab of a Survivor league (survivorTheme.ts). */}
+      {SURVIVOR_BANNER_TABS.has(activeKey) && segment !== 'bracket' && segment !== 'hubs' && segment !== 'discord' ? survivorBanner('compact') : null}
+
       {segment === 'bracket' ? (
         bracket ? (
           <BracketChallenge data={bracket} />
@@ -4487,6 +4518,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : leagueHome ? (
         <>
+        {segment === 'schedule' || segment === 'moves' ? null : survivorBanner('full')}
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           hiddenSections={hiddenLeagueSections}
@@ -4621,6 +4653,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'matchup' ? (
         matchup ? (
           <>
+            {survivorBanner('compact')}
             {chimmyMovesCard}
             <Matchup data={matchup} />
           </>
@@ -5018,6 +5051,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'players' ? (
         <PlayerFinder
           query={playerQuery}
+          sport={playerSport}
           matches={playerMatches}
           detail={playerDetail}
           leagueCount={finderScope.count}
@@ -5108,7 +5142,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
+          <>
+          {survivorControl}
           <CommissionerHub data={commissionerHub} lineups={hubLineups} language={hubLanguage} />
+          </>
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.
@@ -5148,6 +5185,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
+          <>
+          {survivorBanner('compact')}
           <Standings
             data={standings}
             freshness={standingsFreshness}
@@ -5165,6 +5204,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 : null
             }
           />
+          </>
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

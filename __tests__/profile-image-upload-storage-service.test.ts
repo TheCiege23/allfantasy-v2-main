@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+const uploadThing = vi.hoisted(() => ({ uploadFiles: vi.fn() }))
+vi.mock("uploadthing/server", () => ({
+  UTApi: class { uploadFiles = uploadThing.uploadFiles },
+  UTFile: class { constructor(_parts: unknown[], _name: string, _options: unknown) {} },
+}))
 import {
   ALLOWED_PROFILE_IMAGE_TYPES,
   parseAvatarDataUrl,
+  persistProfileImageBytes,
 } from "@/lib/avatar/ProfileImageUploadStorageService"
 
 describe("ProfileImageUploadStorageService", () => {
@@ -30,5 +37,31 @@ describe("ProfileImageUploadStorageService", () => {
       "image/gif",
       "image/webp",
     ])
+  })
+
+  it("uploads through UploadThing when Blob storage is absent", async () => {
+    const priorBlob = process.env.BLOB_READ_WRITE_TOKEN
+    const priorFallback = process.env.BLOB1_READ_WRITE_TOKEN
+    const priorUploadThing = process.env.UPLOADTHING_TOKEN
+    try {
+      delete process.env.BLOB_READ_WRITE_TOKEN
+      delete process.env.BLOB1_READ_WRITE_TOKEN
+      process.env.UPLOADTHING_TOKEN = "configured-token"
+      uploadThing.uploadFiles.mockResolvedValue({ data: { url: "https://ufs.sh/f/avatar.png" }, error: null })
+
+      const result = await persistProfileImageBytes({
+        bytes: new Uint8Array([1, 2, 3]), mimeType: "image/png", originalFilename: "avatar.png",
+      })
+
+      expect(result.url).toBe("https://ufs.sh/f/avatar.png")
+      expect(uploadThing.uploadFiles).toHaveBeenCalledOnce()
+    } finally {
+      if (priorBlob === undefined) delete process.env.BLOB_READ_WRITE_TOKEN
+      else process.env.BLOB_READ_WRITE_TOKEN = priorBlob
+      if (priorFallback === undefined) delete process.env.BLOB1_READ_WRITE_TOKEN
+      else process.env.BLOB1_READ_WRITE_TOKEN = priorFallback
+      if (priorUploadThing === undefined) delete process.env.UPLOADTHING_TOKEN
+      else process.env.UPLOADTHING_TOKEN = priorUploadThing
+    }
   })
 })

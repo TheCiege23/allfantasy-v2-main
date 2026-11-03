@@ -8,6 +8,8 @@
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
@@ -126,6 +128,8 @@ export async function finalizeRedraftTrade(
       eventType: 'trade_failed',
       actorUserId: decidedByUserId,
     })
+  const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true } })
+  const pirateLeague = league != null && isPirateLeague(league)
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
   // Multi-team: every team in the trade, for the roster evidence, the integrity scan and settlement.
@@ -177,6 +181,9 @@ export async function finalizeRedraftTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      if (pirateLeague) await assertPirateTradeAllowed(proposal.leagueId, (proposal.assets ?? []).map((asset) => ({
+        fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+      })), tx)
       // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
       //
       // The only cap check used to be the one above, run before this transaction existed. Anything
@@ -220,6 +227,7 @@ export async function finalizeRedraftTrade(
       }
       const settlement = await settleRedraftTradeAssets(tx, {
         leagueId: proposal.leagueId,
+        tradeId: proposal.id,
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         ...(multiTeam ? { additionalRosterIds: participantRosterIds.slice(2) } : {}),
@@ -260,6 +268,7 @@ export async function finalizeRedraftTrade(
           playersMoved: settlement.playersMoved,
           faabTransferred: settlement.faabTransferred,
           picksRecorded: settlement.picksRecorded,
+          ...(proposal.assets.some(a => a.assetType === 'zombie_item') ? { zombieItems: proposal.assets.filter(a => a.assetType === 'zombie_item').map(a => ({ fromRosterId: a.fromRosterId, toRosterId: a.toRosterId, metadata: a.metadata })) } : {}),
         },
         sourceTransactionIds: capTransfer.transactionIds,
         beforeState,
@@ -379,6 +388,10 @@ export async function finalizeRedraftTrade(
         },
   )
 
+  if (proposal.assets.some(a => a.assetType === 'zombie_item')) {
+    const z = await prisma.zombieLeague.findUnique({ where: { leagueId: proposal.leagueId }, select: { currentWeek: true } })
+    if (z) await (await import('@/lib/zombie/beta2025ItemService')).refreshItemScores(proposal.leagueId, z.currentWeek).catch(() => {})
+  }
   /*
    * 🛑 A MULTI-TEAM TRADE HAS NO DM CARD, SO THE STATUS ABOVE IS A NO-OP FOR IT AND NOBODY WAS TOLD IT
    * WENT THROUGH. Every team hears it here, with every team named and what each one got.

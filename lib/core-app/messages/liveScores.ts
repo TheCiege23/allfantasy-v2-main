@@ -56,6 +56,13 @@ export const liveScoresMessages = defineMessages({
     lockBenched: (n: number) => `${n} benched`,
     lockStarting: (n: number) => `${n} starting`,
     lockLeagues: (n: number) => `${n} leagues`,
+    // LiveNowStrip (the "now" strip and the games strip, design board LiveScores)
+    nowCounts: (live: number, final: number, upcoming: number) => `${live} live · ${final} final · ${upcoming} upcoming`,
+    nowStarters: (n: number) => `${n} of your ${plural(n, 'starters is', 'starters are')} playing`,
+    slateGamesHead: (sport: string) => `${sport} games`,
+    chipYours: (n: number) => `${n} ${plural(n, 'starter', 'starters')}`,
+    chipYoursNames: (names: string) => `Your starters in this game: ${names}`,
+    winChance: (pct: number) => `${pct}% to win`,
     // liveScoresCopy's exact-match table entry, and the label localisers
     exact: (english: string, _translation: string | undefined): string => english,
     starterStageDetail: (english: string, _impact: StageImpact): string => english,
@@ -96,6 +103,12 @@ export const liveScoresMessages = defineMessages({
     lockBenched: (n) => `${n} en la banca`,
     lockStarting: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
     lockLeagues: (n) => `${n} ligas`,
+    nowCounts: (live, final, upcoming) => `${live} en vivo · ${final} ${plural(final, 'finalizado', 'finalizados')} · ${upcoming} por jugar`,
+    nowStarters: (n) => `${n} ${plural(n, 'titular tuyo está jugando', 'titulares tuyos están jugando')}`,
+    slateGamesHead: (sport) => `Partidos de ${sport}`,
+    chipYours: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
+    chipYoursNames: (names) => `Tus titulares en este partido: ${names}`,
+    winChance: (pct) => `${pct}% de ganar`,
     exact: (english, translation) => translation ?? english,
     starterStageDetail: (_english, impact) => {
       const parts: string[] = []

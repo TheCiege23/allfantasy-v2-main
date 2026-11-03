@@ -29,6 +29,8 @@ vi.mock('@/lib/core-app/commissioner/reports', () => ({
 vi.mock('@/components/core-app/commissioner/HubReports', () => ({
   OperationalCharts: () => null,
   ChartsFallback: () => null,
+  HealthBreakdown: () => null,
+  HealthBreakdownStatic: () => null,
   RecentChanges: () => null,
   RecentChangesFallback: () => null,
   AuditTimeline: () => null,
@@ -223,6 +225,13 @@ function hub(over: Partial<CommissionerHubData> = {}): CommissionerHubData {
 }
 
 describe('the Commissioner Hub follows en → es → en', () => {
+  it('shows recorded lottery order and odds in the commissioner archive', () => {
+    const data = hub({ history: { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: '', draftNote: '', lotteries: [{ id: 'draw', at: '2026-04-01T12:00:00Z', season: 2027, slots: [{ slot: 1, team: 'Alpha', odds: 42.5 }] }] } })
+    render(<CommissionerHub data={data} language="es" />)
+    expect(screen.getByText('Historial de la lotería ponderada')).toBeTruthy()
+    expect(screen.getByText(/Alpha/).textContent).toContain(`${(42.5).toLocaleString('es-US')}% probabilidad de la primera selección`)
+    expect(screen.getByText(/Alpha/).textContent).toContain('Selección 1')
+  })
   it('the server screen through its language prop, the islands through the provider', () => {
     const view = (language: 'en' | 'es') => {
       h.language = language

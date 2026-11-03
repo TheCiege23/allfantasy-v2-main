@@ -18,6 +18,7 @@ import type {
   DraftListItem,
 } from '@/lib/draft-intel/sleeperDraftIntelService'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import './broadcast-deck.css'
 
 type ListResponse =
@@ -66,7 +67,7 @@ function Headshot({
         height: size,
         borderRadius: '50%',
         objectFit: 'cover',
-        background: '#1c2153',
+        background: 'var(--bdx-border-soft)',
         flex: 'none',
       }}
       onError={() => setSrc(fallback && src !== fallback ? fallback : null)}
@@ -174,6 +175,7 @@ export function DraftIntelHome({
     return () => clearInterval(t)
   }, [lastFetched])
 
+  const rd = useRedraftDeck(league)
   const drafts = list && list.linked ? list.drafts ?? [] : []
   const activeRuns = useMemo(() => (intel ? intel.runs.filter((r) => r.active) : []), [intel])
 
@@ -243,14 +245,16 @@ export function DraftIntelHome({
   )
 
   return (
-    <div className="bdx" data-testid="draft-intel-home">
+    <div className="bdx" data-testid="draft-intel-home" {...rdDeckAttrs(rd)}>
       {/* ── Header ── */}
       <div className="bdx-kick">
         <h2 className="bdx-disp">Live draft intel</h2>
         <span className="bdx-sub">
           {intel?.draft.status === 'drafting'
             ? `polling every ${POLL_MS / 1000}s${agoText ? ` · updated ${agoText}` : ''}`
-            : 'structural read from the live Sleeper feed'}
+            : rd
+              ? 'for drafts held in Sleeper rooms'
+              : 'structural read from the live Sleeper feed'}
         </span>
         {selectedDraftId ? (
           <button
@@ -270,6 +274,21 @@ export function DraftIntelHome({
           <div className="bdx-skel" />
           <div className="bdx-skel" style={{ marginTop: 12 }} />
         </>
+      ) : rd && drafts.length === 0 ? (
+        /* Redraft: an AllFantasy league drafts in its own room, which this Sleeper cockpit cannot
+           read — so it points at the room instead of asking for a Sleeper link it does not need. */
+        <div className="bdx-empty rdk-deck-empty" data-testid="redraft-intel-empty">
+          <div className="t">This league drafts on AllFantasy</div>
+          <div className="m">
+            Live Intel reads draft rooms on Sleeper. Your {rd.sportLabel} draft — the board, the order and
+            every pick — is in Draft HQ.
+          </div>
+          {leagueId ? (
+            <a className="bdx-btn pri rdk-deck-cta" href={`/league/${encodeURIComponent(leagueId)}?view=draft`}>
+              Open Draft HQ →
+            </a>
+          ) : null}
+        </div>
       ) : list && !list.linked ? (
         <div className="bdx-empty">
           <div className="t">No linked Sleeper account</div>

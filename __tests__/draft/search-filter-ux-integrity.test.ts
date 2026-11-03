@@ -141,7 +141,9 @@ describe('Slice 4 — interaction integrity contracts', () => {
     expect(playerPanelSrc).toContain("const [searchQuery, setSearchQuery] = useState('')")
     expect(playerPanelSrc).toContain("const [positionFilter, setPositionFilter] = useState('All')")
     expect(playerPanelSrc).toContain("const [teamFilter, setTeamFilter] = useState('All')")
-    expect(playerPanelSrc).toContain('const [rookiesOnly, setRookiesOnly] = useState(false)')
+    // Off by default; only a dynasty rookie draft opens with it on (`defaultRookiesOnly`).
+    expect(playerPanelSrc).toContain('const [rookiesOnly, setRookiesOnly] = useState(defaultRookiesOnly)')
+    expect(playerPanelSrc).toContain('defaultRookiesOnly = false,')
     expect(playerPanelSrc).toContain('const [hideDrafted, setHideDrafted] = useState(true)')
 
     expect(playerPanelSrc.includes('setSession(')).toBe(false)

@@ -55,6 +55,8 @@ export interface EspnImportScheduleWeek {
     teamId2: string | null
     points1?: number
     points2?: number
+    categories1?: Record<string, number>
+    categories2?: Record<string, number>
   }>
 }
 

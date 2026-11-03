@@ -75,7 +75,7 @@ describe('redraft CSS reaches the /core shell', () => {
     // Anchored to a line start: a comment naming the prop cannot satisfy it (CLAUDE.md, the
     // source-inspection test that matched its own explanatory comment).
     const page = read('app/core/(shell)/[[...screen]]/page.tsx')
-    expect(page).toMatch(/^\s*redraftSport=\{coreShellRedraftSport\(selectedLeagueRow, selectedLeaguePlatform\)\}\s*$/m)
+    expect(page).toMatch(/^\s*redraftSport=\{coreShellRedraftSport\(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord\)\}\s*$/m)
   })
 
   it('AfCoreShell loads the foundation tokens, then the shell batch file', () => {

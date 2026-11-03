@@ -45,4 +45,7 @@ export function kickoffText(text: string | null | undefined, language: string): 
     // A weekly NBA / NHL / MLB row's game line (lib/core-app/myTeamDailySport.ts `dailyGameContext`).
     .replace(/^(\d+) games? this week$/, (_, n: string) => `${n} ${n === '1' ? 'partido' : 'partidos'} esta semana`)
     .replace(/^no games this week$/, 'sin partidos esta semana')
+    // A daily-lineup row's game line when the day's opponent is not known.
+    .replace(/^no game today$/, 'sin partido hoy')
+    .replace(/^game today$/, 'juega hoy')
 }

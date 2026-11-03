@@ -11,6 +11,7 @@ import { nbaTeamKey } from '@/lib/roster-lineup-engine/lineupLockService'
 import { readLineupLockSettings } from '@/lib/redraft/lineupLock'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { loadForcedBench } from './survivorForcedBench'
 
 type GameOption = { gameKey: string; startAt: string; opponent: string; homeTeam: string | null; awayTeam: string | null }
 type PlayerOption = { playerId: string; playerName: string; position: string; team: string | null; games: GameOption[]; selectedGameKey: string | null; countingGameKey: string | null; canChange: boolean }
@@ -113,7 +114,11 @@ async function scoreNbaSurvivorRoster(input: { leagueId: string; legacyRosterId:
   const week = await loadRosterWeek(input.leagueId, input.legacyRosterId, input.week, new Date(), true)
   if (!week || week.league.season !== input.season || week.games.length === 0) return { pts: 0, allFinalized: false }
   const lineups = await loadWeekLineups(prisma, { redraftRosterIds: [week.roster.redraftRosterId!], season: input.season, week: input.week })
-  const starters = week.players.filter(player => isScoringStarterSlot(weekSlotType({ ...player, rosterId: week.roster.redraftRosterId! }, lineups)))
+  // A Survivor "forced bench" (lib/survivor/survivorForcedBench.ts): that player scores nothing for
+  // Survivor this week even from a starting slot. Survivor's own total only (this whole module is
+  // Survivor's NBA scoring); the base league's matchup score never reads it.
+  const benched = await loadForcedBench(input.leagueId, input.legacyRosterId, input.week).catch(() => new Set<string>())
+  const starters = week.players.filter(player => isScoringStarterSlot(weekSlotType({ ...player, rosterId: week.roster.redraftRosterId! }, lineups)) && !benched.has(player.playerId))
   if (!starters.length) return { pts: 0, allFinalized: false }
   let points = 0
   let allFinalized = true

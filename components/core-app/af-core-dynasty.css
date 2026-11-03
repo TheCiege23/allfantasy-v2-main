@@ -1,0 +1,62 @@
+/* Dynasty Era identity on the /core shell (2026-11-01).
+ *
+ * AfCoreShell stamps `data-dynasty-background="true"` on its root for a dynasty `?league=`, native or
+ * imported (lib/core-app/coreShellDynasty.ts) — the attribute the /league/[id] workspace already uses
+ * (components/league/native/native-league.css). This file does for /core what that block does for the
+ * workspace: defines the `--dyn-*` token contract (gold on ink) and re-points /core's own accent names,
+ * so the nav's active item, the phone tab bar, primary buttons, focus rings, tabs and links all turn
+ * gold with no per-screen edit — the same mechanism the redraft identity uses
+ * (components/league/native/redraft-identity.css).
+ *
+ * ⚠ CONTRAST, MEASURED (__tests__/core-app/core-shell-dynasty-css.test.ts reads these values):
+ *   dark / AF   --dyn-accent-text #E8C07A on every /core ground (--bg, --surface, --surface2, dark and
+ *               AF) 10.8–11.7:1, and 8.3:1 on its own 16% gold tint; --dyn-ink on the gold fill 8.3:1.
+ *   light       #7A5310 on --surface/--surface2/--bg 6.8/6.1/6.3:1, and ≥5.2:1 on its 10% tint; white
+ *               on it as a fill 6.8:1.
+ * The vivid gold (#D4A24C) is a FILL and a line colour only — never text on a light ground.
+ *
+ * ⚠ SPECIFICITY IS THE MODE SWITCH. /core's palettes are `.af-core` (0,1,0) and
+ * `html[data-mode=x] .af-core` (0,2,1). The dark block below is (0,3,0) and so beats the dark palette
+ * AND the AF/legacy palettes (both dark grounds); light gets its own block at (0,4,1).
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md, af-matchup.css). */
+
+.af-core.af-shell[data-dynasty-background=true]{
+  --dyn-ink:#0B0F17;--dyn-vault:#121826;--dyn-rail:#1C2333;--dyn-line:#2A3345;
+  --dyn-gold:#D4A24C;--dyn-gold-soft:#F3D79F;--dyn-teal:#2DD4BF;--dyn-ember:#F07A4A;
+  --dyn-text:#E8ECF2;--dyn-text2:#C3CAD5;--dyn-faint:#9AA4B2;
+  --dyn-accent-text:#E8C07A;--dyn-accent-ink:#0B0F17;
+  --dyn-accent-soft:rgba(212,162,76,.16);--dyn-accent-line:rgba(212,162,76,.42);--dyn-glow:rgba(212,162,76,.12);
+  --dyn-art:url('/artwork/dynasty/dynasty-hall-1600.webp');
+  --dyn-art-veil:rgba(6,7,15,.9);
+  --accent:var(--dyn-accent-text);--accent-ink:var(--dyn-accent-ink);--accent-soft:var(--dyn-accent-soft);--accent-line:var(--dyn-accent-line);
+  --hero:radial-gradient(760px 420px at 18% 10%,var(--dyn-glow),transparent 68%);
+  /* The art sits under a heavy veil and only across the first viewport: the shell is as tall as its
+   * page, and `cover` over the whole document would blow the hall up to a few smears. Below it the
+   * ground is plain --bg, which is what the contrast figures above are measured on. */
+  background-image:var(--hero),linear-gradient(var(--dyn-art-veil),var(--dyn-art-veil)),var(--dyn-art);
+  background-size:auto,100% 100vh,auto 100vh;background-size:auto,100% 100dvh,auto 100dvh;
+  background-position:0 0,center top,center top;background-repeat:no-repeat
+}
+
+html[data-mode='light'] .af-core.af-shell[data-dynasty-background=true]{
+  --dyn-accent-text:#7A5310;--dyn-accent-ink:#ffffff;
+  --dyn-accent-soft:rgba(122,83,16,.1);--dyn-accent-line:rgba(122,83,16,.34);--dyn-glow:rgba(212,162,76,.14);
+  /* The hall is a night scene; on a light page it reads as a grey smudge, so light mode drops it and
+   * keeps the warm wash. */
+  background-image:var(--hero)
+}
+
+/* Chrome that does not read an accent token today: the top bar's divider, the league switcher's frame,
+ * and a gold rule down the nav column — so every screen of a dynasty league is named by colour. */
+.af-core.af-shell[data-dynasty-background=true] .af-topbar{border-bottom-color:var(--dyn-accent-line)}
+.af-core.af-shell[data-dynasty-background=true] .af-scope-btn{border-color:var(--dyn-accent-line)}
+.af-core.af-shell[data-dynasty-background=true] .af-nav{border-right-color:var(--dyn-accent-line)}
+
+@media (max-width:720px){
+  /* Phone: the nav column is a top strip (af-core-shell.css), so its rule moves to the bottom edge;
+   * the tab bar takes a gold line on its top edge. The smaller art file is enough at this width. */
+  .af-core.af-shell[data-dynasty-background=true]{--dyn-art:url('/artwork/dynasty/dynasty-hall-900.webp')}
+  .af-core.af-shell[data-dynasty-background=true] .af-nav{border-bottom-color:var(--dyn-accent-line)}
+  .af-core.af-shell[data-dynasty-background=true] .af-tabbar{border-top-color:var(--dyn-accent-line)}
+}

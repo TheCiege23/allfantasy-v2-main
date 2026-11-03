@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { alternateTheSportsDbImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 
 export type LazyDraftImageProps = {
   src: string
@@ -32,8 +33,8 @@ export function LazyDraftImage({
   testId,
 }: LazyDraftImageProps) {
   const [inView, setInView] = useState(false)
-  const [errored, setErrored] = useState(false)
-  const ref = useRef<HTMLImageElement | null>(null)
+  const [failure, setFailure] = useState<{ source: string; alternateFailed: boolean } | null>(null)
+  const ref = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     if (!lazy || typeof IntersectionObserver === 'undefined') {
@@ -53,10 +54,18 @@ export function LazyDraftImage({
     return () => observer.disconnect()
   }, [lazy, rootMargin])
 
-  const shouldLoad = inView && src && !errored
+  const alternate = alternateTheSportsDbImageUrl(src)
+  const primaryFailed = failure?.source === src
+  const activeSrc = primaryFailed && alternate ? alternate : src
+  const exhausted = primaryFailed && (!alternate || failure?.alternateFailed)
+  const shouldLoad = inView && src && !exhausted
 
   const handleError = () => {
-    setErrored(true)
+    if (!primaryFailed && alternate) {
+      setFailure({ source: src, alternateFailed: false })
+      return
+    }
+    setFailure({ source: src, alternateFailed: true })
     onError?.()
   }
 
@@ -74,7 +83,8 @@ export function LazyDraftImage({
         />
       ) : (
         <img
-          src={src}
+          key={activeSrc}
+          src={activeSrc}
           alt={alt}
           width={width}
           height={height}

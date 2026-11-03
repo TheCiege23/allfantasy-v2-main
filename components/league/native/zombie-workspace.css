@@ -1,0 +1,69 @@
+/* Zombie atmosphere stays scoped to the league workspace. Scenes are decorative; content and controls retain their own surfaces. */
+.nl-workspace[data-format=zombie] .nl-tab-content {
+  --z-scene: url('/zombie/bg/quarantine-zone.svg');
+  --z-glow: rgba(120,190,73,.16);
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  border: 1px solid rgba(148,200,116,.17);
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(180deg,rgba(4,15,13,.85),rgba(4,10,15,.96) 520px), var(--z-scene) center top / 100% auto no-repeat, #070e10;
+}
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=draft] { --z-scene:url('/zombie/workspace/draft-stadium.webp'); --z-glow:rgba(208,142,53,.2) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=league_chat] { --z-scene:url('/zombie/workspace/chat-city.webp'); --z-glow:rgba(56,180,153,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=settings] { --z-scene:url('/zombie/workspace/commissioner-bunker.webp'); --z-glow:rgba(89,173,133,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=commissioner] { --z-scene:url('/zombie/bg/abandoned-hospital.svg'); --z-glow:rgba(116,184,145,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=war_room] { --z-scene:url('/zombie/workspace/war-room.webp'); --z-glow:rgba(170,183,64,.2) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=decide] { --z-scene:url('/zombie/workspace/decision-lab.webp'); --z-glow:rgba(75,205,164,.2) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=zombie] { --z-scene:url('/zombie/universe-outbreak.webp'); --z-glow:rgba(152,198,44,.2) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=roster] { --z-scene:url('/zombie/workspace/roster-locker.webp'); --z-glow:rgba(95,168,88,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=matchups] { --z-scene:url('/zombie/workspace/matchup-field.webp'); --z-glow:rgba(223,119,75,.2) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=waivers] { --z-scene:url('/zombie/workspace/waivers-depot.webp'); --z-glow:rgba(82,177,181,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=trades] { --z-scene:url('/zombie/workspace/trades-exchange.webp'); --z-glow:rgba(214,162,80,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=standings] { --z-scene:url('/zombie/workspace/standings-trophies.webp'); --z-glow:rgba(190,177,89,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=scores] { --z-scene:url('/zombie/workspace/scores-broadcast.webp'); --z-glow:rgba(231,107,76,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=schedule] { --z-scene:url('/zombie/workspace/schedule-road.webp'); --z-glow:rgba(207,147,77,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=draft_intel] { --z-scene:url('/zombie/bg/plague-laboratory.svg'); --z-glow:rgba(67,193,177,.19) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=players] { --z-scene:url('/zombie/workspace/players-scout.webp'); --z-glow:rgba(100,195,149,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=legacy] { --z-scene:url('/zombie/workspace/legacy-archive.webp'); --z-glow:rgba(171,153,99,.18) }
+.nl-workspace[data-format=zombie] .nl-tab-content[data-view=native_home] { --z-scene:url('/zombie/workspace/home-safehaven.webp'); --z-glow:rgba(153,201,60,.2) }
+.nl-workspace[data-format=zombie] .nl-zombie-scene { position:relative; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:6px; min-height:164px; padding:24px 28px; overflow:hidden; color:#f2fff5; border-bottom:1px solid rgba(158,221,123,.23); background:linear-gradient(90deg,rgba(4,15,12,.96) 2%,rgba(5,19,15,.79) 48%,rgba(5,18,14,.32)), radial-gradient(ellipse at 85% 30%,var(--z-glow),transparent 55%), var(--z-scene) center 48% / cover no-repeat }
+.nl-workspace[data-format=zombie] .nl-zombie-scene-kicker { color:#b9f08d; font:800 11px/1.4 var(--font-jetbrains-mono,monospace); text-transform:uppercase; letter-spacing:.16em }
+.nl-workspace[data-format=zombie] .nl-zombie-scene strong { font-size:clamp(22px,3vw,34px); letter-spacing:-.035em; line-height:1.12; text-wrap:balance }
+.nl-workspace[data-format=zombie] .nl-zombie-scene-detail { color:#d3e7d6; font-size:13px; line-height:1.5; max-width:44ch }
+.nl-workspace[data-format=zombie] [data-testid=league-command-center-surface] { background:transparent }
+.nl-workspace[data-format=zombie] .af-league-draft-card { border-color:rgba(177,224,105,.32); background:linear-gradient(115deg,rgba(9,28,22,.97),rgba(12,27,25,.92) 58%,rgba(42,36,17,.86)); box-shadow:0 18px 60px rgba(0,0,0,.35) }
+.nl-workspace[data-format=zombie] .af-league-draft-glow { opacity:.4 }
+.nl-workspace[data-format=zombie] .af-league-draft-card .af-league-eyebrow { color:#b8eb85 }
+.nl-workspace[data-format=zombie] .af-league-draft-fill { border-color:rgba(177,224,105,.3); background:rgba(25,58,35,.7) }
+.nl-workspace[data-format=zombie] .af-league-draft-fill p:first-child { color:#c6eaa5 }
+.nl-workspace[data-format=zombie] .af-league-draft-actions a, .nl-workspace[data-format=zombie] .af-league-draft-actions button { min-height:44px }
+.nl-workspace[data-format=zombie] .af-league-draft-actions a:first-child { background:#b5e65f; border-color:#b5e65f; color:#14220d }
+.nl-zombie-draft-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:16px }
+.nl-zombie-draft-links button { display:flex; align-items:center; justify-content:space-between; min-height:48px; padding:12px 14px; text-align:left; border:1px solid rgba(188,222,166,.22); border-radius:12px; background:rgba(6,17,15,.75); color:#dcecd8; font-size:13px; font-weight:700 }
+.nl-zombie-draft-links button:hover { border-color:#b5e65f; background:rgba(39,76,41,.5) }
+/* Decision OS uses its own palette; align the variables within Zombie leagues only. */
+.nl-workspace[data-format=zombie] .bdx { --bdx-ground:#091511; --bdx-panel:#10231c; --bdx-panel-deep:#091b16; --bdx-border:#31513c; --bdx-border-soft:#203c2d; --bdx-ink:#f0fff0; --bdx-ink-mid:#d2e8d4; --bdx-ink-dim:#b3d0b8; --bdx-ink-faint:#9bbb9f; --bdx-ink-ghost:#8eae94; --bdx-grad:linear-gradient(90deg,#b6e867,#3dcc9b); background:linear-gradient(145deg,rgba(7,25,19,.96),rgba(8,17,17,.97)); border:1px solid rgba(151,210,127,.2) }
+.nl-workspace[data-format=zombie] .bdx .bdx-disp { font-style:normal; letter-spacing:.01em }
+.nl-workspace[data-format=zombie] .lsh-root { background:transparent }
+/* Image belongs inside the message area; the composer and message bubbles remain solid and legible. */
+.nl-workspace[data-format=zombie] [data-testid=league-chat-conversation] .af-cm-thread { background:linear-gradient(rgba(4,15,15,.79),rgba(4,15,15,.88)),url('/zombie/workspace/chat-city.webp') center center / cover no-repeat; background-color:#081513 }
+.nl-workspace[data-format=zombie] [data-testid=league-chat-panel] { border-color:rgba(147,202,143,.32)!important; box-shadow:0 18px 50px rgba(0,0,0,.25) }
+@media(max-width:767px) {
+  .nl-workspace[data-format=zombie] .nl-tab-content { border-radius:14px; background-size:auto,auto 520px }
+  .nl-workspace[data-format=zombie] .nl-zombie-scene { min-height:132px; padding:18px; background-position:center,right,center }
+  .nl-workspace[data-format=zombie] .nl-zombie-scene strong { font-size:23px }
+  .nl-zombie-draft-links { grid-template-columns:1fr }
+}
+@media(prefers-reduced-motion:reduce) { .nl-workspace[data-format=zombie] .nl-tab-content * { scroll-behavior:auto } }
+.nl-workspace[data-format=zombie] .bdx :is(.bdx-btn.pri,.bdx-chip.grad) { color:#102013 }
+.nl-workspace[data-format=zombie] .bdx .bdx-stand tr.me td { background:#193626 }
+.nl-workspace[data-format=zombie] .lsh-list { border-color:rgba(150,204,141,.25); background:rgba(10,26,20,.94) }
+.nl-workspace[data-format=zombie] [data-testid=war-room-ai-panel] { background:rgba(7,23,18,.94); border-color:rgba(153,216,134,.25); box-shadow:0 16px 48px rgba(0,0,0,.22) }
+
+/* Position badges use the outbreak crest while preserving each actual roster label. */
+.nl-workspace[data-format=zombie] .nls-lrow .nls-pos { border-color:rgba(180,230,139,.35); background:linear-gradient(145deg,rgba(26,64,42,.95),rgba(7,22,18,.96)); color:#dcfac4; border-radius:9px; box-shadow:inset 0 0 12px rgba(133,190,70,.1); }
+.nl-workspace[data-format=zombie] .nls-lrow .nls-pos::before { content:''; width:14px; height:14px; margin-right:2px; background:url('/zombie/art/status-zombie.svg') center / contain no-repeat; }
+.nl-workspace[data-format=zombie] .nls-lrow .nls-pos { display:inline-flex; align-items:center; justify-content:center; gap:2px; }
+.nl-workspace[data-format=zombie] .nls-lrow { background:linear-gradient(90deg,rgba(17,39,27,.36),transparent 65%); }

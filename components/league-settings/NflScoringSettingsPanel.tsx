@@ -215,6 +215,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
       if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId, scoringLabel: data.config?.presetLabel } }))
       setDefaultStaged(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)

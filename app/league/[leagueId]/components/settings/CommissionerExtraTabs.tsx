@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { PickTermsPanel } from '@/components/league-settings/PickTermsPanel'
 import { SettingsLockPanel } from '@/components/league-settings/home/SettingsLockPanel'
@@ -84,7 +85,7 @@ function formatDate(iso: string | null, lang: TabsLang): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString(getIntlLocale(lang), { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function ImportSyncTab({
@@ -121,7 +122,7 @@ export function ImportSyncTab({
         <p className="text-white/50">{tabsCopy('importNote', lang, { platform: label })}</p>
         <Link
           href="/core/sync"
-          className="mt-2 inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-100 hover:bg-cyan-500/20"
+          className="mt-2 inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-[var(--badge-text-cyan)] hover:bg-cyan-500/20"
         >
           {tabsCopy('openSync', lang)}
         </Link>
@@ -184,7 +185,7 @@ export function AppearanceTab({ leagueId, logoUrl, canEdit }: { leagueId: string
                   type="button"
                   disabled={busy}
                   onClick={() => input.current?.click()}
-                  className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+                  className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-[var(--badge-text-cyan)] hover:bg-cyan-500/20 disabled:opacity-50"
                 >
                   {tabsCopy(current ? 'logoReplace' : 'logoUpload', lang)}
                 </button>
@@ -310,7 +311,7 @@ export function DraftPicksTab({ leagueId, nativeDynasty, canEdit }: { leagueId: 
               data-testid="pick-years-save"
               disabled={busy || saved == null || years === saved}
               onClick={() => void save()}
-              className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+              className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-[var(--badge-text-cyan)] hover:bg-cyan-500/20 disabled:opacity-50"
             >
               {tabsCopy('pickYearsSave', lang)}
             </button>

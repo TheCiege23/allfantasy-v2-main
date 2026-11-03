@@ -55,3 +55,12 @@ export function themeSectionHeading(id: string, heading: string | null, theme: L
   if (theme !== 'survivor' || heading === null) return heading
   return SURVIVOR_SECTION_HEADINGS[id] ?? heading
 }
+
+/**
+ * The league tabs that open with the compact island banner in a Survivor league, besides the three
+ * that place it themselves (Camp in full; Tribe standings, Immunity challenge and Island control
+ * compact). Each is still the same screen underneath.
+ */
+export const SURVIVOR_BANNER_TABS: ReadonlySet<string> = new Set([
+  'my-team', 'war-room', 'waivers', 'trades', 'players', 'draft-hq', 'week', 'live', 'season-outlook', 'notifications',
+])

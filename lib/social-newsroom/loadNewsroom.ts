@@ -5,6 +5,8 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { getTeamIndex, isTeamFollowSport, listTeamsForSport } from '@/lib/follows/teamFollows'
 import { resolveTeam } from '@/lib/follows/teamResolver'
 import { getTeamLogoUrl } from '@/lib/players/teamLogos'
+import { isClickbait } from '@/lib/news/newsroomFilter'
+export { isClickbait } from '@/lib/news/newsroomFilter'
 import {
   breakingStoryKey,
   classifyBreakingHeadline,
@@ -71,14 +73,6 @@ export type NewsroomHighlight = {
 
 const STORY_WINDOW_MS = 36 * 60 * 60 * 1000
 const HIGHLIGHT_WINDOW_MS = 4 * 24 * 60 * 60 * 1000
-
-/** Bait and filler — dropped from the newsroom even when the outlet is trusted. */
-const CLICKBAIT =
-  /\?\s*$|\b(you won'?t believe|shocking|insane|must[- ]see|odds|betting|bets?|parlays?|picks?|predictions?|best bets|fantasy|mock draft|power rankings|rankings|ranked|quiz|sponsored|promo code|deal of the day|how to watch|live stream|streaming|tv channel)\b/i
-
-export function isClickbait(title: string): boolean {
-  return CLICKBAIT.test(title)
-}
 
 /** YouTube thumbnail for a watch/short/youtu.be URL — the video's own poster, served by YouTube. */
 export function youtubeThumbnail(url: string): string | null {

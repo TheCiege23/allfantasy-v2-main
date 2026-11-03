@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({ daily: vi.fn(), runner: vi.fn(), meta: null as Rec
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+vi.mock('@/lib/playoffs/nbaCupLiveTick', () => ({ refreshNbaCupLive: async () => ({ activeGames: 0 }) }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_m: unknown, fn: () => Promise<unknown>, map: (r: unknown) => { metadata: Record<string, unknown> }) => {
     const r = await fn()

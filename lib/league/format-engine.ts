@@ -24,6 +24,7 @@ export type LeagueFormatId =
   | 'zombie'
   | 'salary_cap'
   | 'big_brother'
+  | 'pirate'
 
 export type LeagueDraftTypeId =
   | 'snake'
@@ -169,6 +170,23 @@ const FORMAT_REGISTRY: Record<LeagueFormatId, LeagueFormatDefinition> = {
       importReviewEnabled: false,
     },
   },
+  pirate: {
+    id: 'pirate',
+    label: 'Pirate League',
+    description: 'Win a head-to-head matchup and claim one unprotected player from your opponent.',
+    supportedSports: ['NFL', 'NBA', 'MLB', 'NHL'],
+    defaultRosterMode: 'redraft',
+    draftTypes: [...DRAFT_TYPES_BY_LEAGUE_FORMAT.pirate] as LeagueDraftTypeId[],
+    defaultModifiers: [],
+    supportedModifiers: ['superflex', 'te_premium'],
+    capabilities: {
+      deterministicFeatures: ['weekly_protections', 'matchup_claims', 'automatic_roster_transfer'],
+      aiOptionalFeatures: ['claim_advice', 'weekly_recap'],
+      weeklyAutomation: true,
+      introVideoEnabled: true,
+      importReviewEnabled: false,
+    },
+  },
   survivor: {
     id: 'survivor',
     label: 'Survivor',
@@ -243,7 +261,7 @@ const FORMAT_REGISTRY: Record<LeagueFormatId, LeagueFormatDefinition> = {
     id: 'zombie',
     label: 'Zombie',
     description: 'Themed elimination and role-shift mechanics layered onto standard league play.',
-    /** Soccer excluded — Zombie is not offered for SOCCER in create flows. */
+    /** Zombie creation is available for all seven supported sports. */
     supportedSports: ZOMBIE_ELIGIBLE_LEAGUE_SPORTS,
     defaultRosterMode: 'redraft',
     /** Snake / auction only at create; slow-draft removed as a discrete type (use timer presets). */

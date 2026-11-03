@@ -371,7 +371,7 @@ describe('Commissioner review mode — advice, never an action', () => {
   it.each([
     ['the native decision route', 'app/api/leagues/[leagueId]/trades/[tradeId]/commissioner/route.ts', /reviewId:\s*reviewIdFrom\(body\.reviewId\)/],
     ['a native reject', 'lib/league-trade-engine/tradeService.ts', /reason: 'commissioner_reject',\s*metadata: auditMetadata,/],
-    ['a native approve', 'lib/league-trade-engine/tradeService.ts', /finalizeAfLeagueTradeProcessing\(\{ tradeId: trade\.id, actorUserId: input\.userId, auditMetadata \}\)/],
+    ['a native approve', 'lib/league-trade-engine/tradeService.ts', /finalizeAfLeagueTradeProcessing\(\{ tradeId: trade\.id, actorUserId: input\.userId, auditMetadata, commissionerApproved: true \}\)/],
     ['a redraft approve', 'app/api/redraft/trade-votes/route.ts', /noteCommissionerReview\(proposal\.id, \{ commissionerDecision: 'approve', reviewId: reviewIdFrom\(body\.reviewId\) \}\)/],
     ['a redraft veto (votes route)', 'app/api/redraft/trade-votes/route.ts', /upsertDecision\(proposal\.id, 'vetoed', userId, body\.reason, \{ commissionerDecision: 'veto', reviewId: reviewIdFrom\(body\.reviewId\) \}\)/],
     ['a redraft veto (veto route)', 'app/api/redraft/trades/veto/route.ts', /snapshot: \{ reviewId \}/],

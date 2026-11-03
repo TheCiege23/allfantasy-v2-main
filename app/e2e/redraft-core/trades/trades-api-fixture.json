@@ -1,0 +1,57 @@
+{
+  "_comment": "Harness fixture for scripts/redraft-core-trades-capture.mjs: the bodies it answers the Trade Center's client-side reads with (page.route). Not real data, never served by a route handler.",
+  "rosters": {
+    "rosters": [
+      {
+        "rosterId": "1", "platformUserId": "e2e-viewer", "teamExternalId": "1", "ownerName": "Ciege Squad", "avatarUrl": null,
+        "wins": 6, "losses": 2, "ties": 0, "faabRemaining": 64, "canReceiveProposal": true, "picks": [],
+        "players": [
+          { "id": "4034", "name": "Christian McCaffrey", "position": "RB", "team": "SF", "imageUrl": null, "byeWeek": 14, "injuryStatus": null, "value": 8420, "stock": "flat", "stockDelta": null },
+          { "id": "5848", "name": "Tee Higgins", "position": "WR", "team": "CIN", "imageUrl": null, "byeWeek": 10, "injuryStatus": null, "value": 4310, "stock": "up", "stockDelta": 3 },
+          { "id": "4984", "name": "Josh Allen", "position": "QB", "team": "BUF", "imageUrl": null, "byeWeek": 7, "injuryStatus": null, "value": 7980, "stock": "flat", "stockDelta": null },
+          { "id": "7553", "name": "Kyle Pitts", "position": "TE", "team": "ATL", "imageUrl": null, "byeWeek": 5, "injuryStatus": "Q", "value": 2950, "stock": "down", "stockDelta": -4 }
+        ]
+      },
+      {
+        "rosterId": "4", "platformUserId": "u4", "teamExternalId": "4", "ownerName": "Gridiron Ghosts", "avatarUrl": null,
+        "wins": 7, "losses": 1, "ties": 0, "faabRemaining": 31, "canReceiveProposal": true, "picks": [],
+        "players": [
+          { "id": "6813", "name": "Jonathan Taylor", "position": "RB", "team": "IND", "imageUrl": null, "byeWeek": 11, "injuryStatus": null, "value": 6120, "stock": "up", "stockDelta": 5 },
+          { "id": "5859", "name": "A.J. Brown", "position": "WR", "team": "PHI", "imageUrl": null, "byeWeek": 9, "injuryStatus": null, "value": 5790, "stock": "flat", "stockDelta": null },
+          { "id": "6904", "name": "Jalen Hurts", "position": "QB", "team": "PHI", "imageUrl": null, "byeWeek": 9, "injuryStatus": null, "value": 7010, "stock": "flat", "stockDelta": null }
+        ]
+      }
+    ],
+    "viewerRosterId": "1",
+    "viewerTeamRosterId": "1",
+    "pickCoverage": "none"
+  },
+  "panel": {
+    "activeTrades": [],
+    "historyTrades": [],
+    "pending": { "scanned": true, "reason": null, "platform": "yahoo", "leagueUrl": null, "weeksUnanswered": 0, "weeksRequested": 3, "weeksAnswered": 3 },
+    "pendingOffers": [
+      {
+        "provider": "yahoo", "transactionId": "po-1", "direction": "incoming", "partnerName": "Gridiron Ghosts", "proposedAt": "2026-10-30T18:00:00Z",
+        "give": [{ "playerId": "5848", "name": "Tee Higgins", "position": "WR", "team": "CIN", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }],
+        "get": [{ "playerId": "6813", "name": "Jonathan Taylor", "position": "RB", "team": "IND", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }],
+        "leagueGrade": { "graded": true, "letter": "A", "partnerLetter": "C", "percentDiff": 42, "label": "Great deal", "sideAdvantage": "give", "action": "accept", "recommendation": "Take it — you come out ahead on league value.", "giveValue": 4310, "getValue": 6120, "giveMarket": 4310, "getMarket": 6120, "basis": "Redraft · 12 teams · Half PPR", "scoringApplied": true, "needApplied": false, "needGap": null, "lines": [], "moves": [] }
+      },
+      {
+        "provider": "yahoo", "transactionId": "po-2", "direction": "outgoing", "partnerName": "Hardwood Heroes", "proposedAt": "2026-10-29T18:00:00Z",
+        "give": [
+          { "playerId": "7553", "name": "Kyle Pitts", "position": "TE", "team": "ATL", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null },
+          { "playerId": "5848", "name": "Tee Higgins", "position": "WR", "team": "CIN", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }
+        ],
+        "get": [{ "playerId": "9493", "name": "Puka Nacua", "position": "WR", "team": "LAR", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }],
+        "leagueGrade": { "graded": true, "letter": "D", "partnerLetter": "B", "percentDiff": -44, "label": "Overpay", "sideAdvantage": "get", "action": "decline", "recommendation": "Ask for more before you send this.", "giveValue": 7260, "getValue": 4100, "giveMarket": 7260, "getMarket": 4100, "basis": "Redraft · 12 teams · Half PPR", "scoringApplied": true, "needApplied": false, "needGap": null, "lines": [], "moves": [] }
+      },
+      {
+        "provider": "yahoo", "transactionId": "po-3", "direction": "incoming", "partnerName": "Blue Line Bandits", "proposedAt": "2026-10-28T18:00:00Z",
+        "give": [{ "playerId": "4984", "name": "Josh Allen", "position": "QB", "team": "BUF", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }],
+        "get": [{ "playerId": "6904", "name": "Jalen Hurts", "position": "QB", "team": "PHI", "isPick": false, "pickYear": null, "pickRound": null, "faabAmount": null }],
+        "leagueGrade": { "graded": false, "reason": "One asset in this offer could not be priced on this league’s chart.", "basis": null }
+      }
+    ]
+  }
+}

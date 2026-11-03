@@ -56,8 +56,8 @@ test.describe('@zombie focused league shell + Chimmy DM + commissioner', () => {
 
     await page.getByTestId('zombie-nav-commissioner').click()
     await expect(page.getByRole('dialog', { name: /Commissioner settings/i })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('button', { name: '🧟 Zombie Setup' })).toBeVisible()
-    await page.getByRole('button', { name: '🧟 Zombie Setup' }).click()
+    await expect(page.getByRole('button', { name: 'Zombie Setup' })).toBeVisible()
+    await page.getByRole('button', { name: 'Zombie Setup' }).click()
     await expect(page.getByRole('heading', { name: 'League structure' })).toBeVisible({ timeout: 15_000 })
   })
 })

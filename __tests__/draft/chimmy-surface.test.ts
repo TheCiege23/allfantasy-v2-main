@@ -21,10 +21,16 @@ describe('currentChimmySurface', () => {
 
   function stubWidth(width: number) {
     vi.stubGlobal('matchMedia', (query: string) => {
+      if (query.includes('pointer: coarse')) return { matches: false } as MediaQueryList
       const min = Number(/min-width:\s*(\d+)px/.exec(query)?.[1] ?? 0)
       return { matches: width >= min } as MediaQueryList
     })
   }
+
+  it('keeps Chimmy in the visible phone tray after landscape rotation', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('pointer: coarse') }) as MediaQueryList)
+    expect(currentChimmySurface()).toBe('mobile_tray')
+  })
 
   it('measures with media queries, as the CSS does', () => {
     stubWidth(390)

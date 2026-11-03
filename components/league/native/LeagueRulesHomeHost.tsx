@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { BookOpen, X } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { enEsLanguage } from '@/lib/i18n/bilingual'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { renderChangeLine, renderRuleText } from '@/lib/league-rules-explainer/render'
 import type { ChangeGroup } from '@/lib/league-rules-explainer/types'
 import type { RulesExplainerView } from '@/lib/league-rules-explainer/view'
@@ -29,7 +31,7 @@ function formatChangeDate(iso: string, lang: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   try {
-    return new Intl.DateTimeFormat(lang === 'es' ? 'es-ES' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+    return new Intl.DateTimeFormat(getIntlLocale(lang), { dateStyle: 'medium', timeStyle: 'short' }).format(d)
   } catch {
     return d.toISOString()
   }
@@ -53,7 +55,7 @@ export function LeagueRulesHomeHost({
 }) {
   // The app's i18n (`t` from LanguageProviderClient); English outside a provider.
   const { t, language } = useOptionalLanguage()
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = enEsLanguage(language)
   const [view, setView] = useState<RulesExplainerView | null>(null)
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)

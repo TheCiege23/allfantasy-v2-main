@@ -11,6 +11,7 @@ import type {
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
 import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
+import { FinalScoreLogos } from '@/components/notifications/FinalScoreLogos'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
@@ -19,6 +20,8 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { messagesFor } from '@/lib/i18n/messages'
 import { notificationsCenterMessages } from '@/lib/core-app/messages/notificationsCenter'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { survivorNotificationIcon } from '@/lib/core-app/survivorNotificationIcon'
+import { SurvivorNotificationGlyph } from '@/components/core-app/survivor/SurvivorNotificationGlyph'
 
 /**
  * 22c — the in-app notifications centre.
@@ -96,9 +99,22 @@ function Row({
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(notificationsCenterMessages)
+  /* A Survivor notice wears its island icon (by kind) and the torch accent. Display only. */
+  const svIcon = survivorNotificationIcon(row.survivorType)
   return (
-    <li className="af-nt-row" data-severity={row.severity} data-read={row.read} data-urgent={!!urgent}>
+    <li
+      className="af-nt-row"
+      data-severity={row.severity}
+      data-read={row.read}
+      data-urgent={!!urgent}
+      data-survivor={svIcon ?? undefined}
+    >
       <span className="af-nt-dot" aria-hidden />
+      {svIcon ? (
+        <span className="af-nt-sv-icon" aria-hidden="true" data-testid="survivor-notification-icon">
+          <SurvivorNotificationGlyph icon={svIcon} />
+        </span>
+      ) : null}
       <span className="af-nt-body">
         <span className="af-nt-toprow">
           <b className="af-nt-title">{copy(row.title)}</b>
@@ -108,6 +124,7 @@ function Row({
             </span>
           ) : null}
         </span>
+        <FinalScoreLogos type={row.type ?? ''} meta={row.meta} />
         {/* The specific reason. Never "you have an update". */}
         <span className="af-nt-detail">{copy(row.detail)}</span>
         {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? m.matchingNotices(row.relatedIds.length) : ''}</span> : null}

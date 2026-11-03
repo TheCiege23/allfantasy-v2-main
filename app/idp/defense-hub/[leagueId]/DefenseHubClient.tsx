@@ -17,6 +17,13 @@ import { TradeBoardSection } from './TradeBoardSection'
  * concatenated ahead of it. Same rule ImportV4 and LiveScores already follow.
  */
 import '@/components/core-app/af-core.css'
+/*
+ * The redraft /core batch (B2). Its rules apply only under the shell's redraft stamp
+ * (`.af-core.af-shell[data-format=redraft]`), so the standalone route — which has no shell — and every
+ * non-redraft league render exactly as before. The `af-dh-*` classes below are hooks for it and carry
+ * no style of their own.
+ */
+import '@/components/core-app/af-core-redraft-myteam.css'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
@@ -106,7 +113,7 @@ function Blocked({ state, leagueId }: { state: DefenseHubState; leagueId: string
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-  <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+  <div className="af-dh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
     {children}
   </div>
 )
@@ -181,7 +188,7 @@ export function DefenseHubClient({
               </Link>
             </div>
           ) : null}
-          <h1 className="mt-2 text-[24px] font-black tracking-[-0.03em]">Defense Hub</h1>
+          <h1 className="af-dh-title mt-2 text-[24px] font-black tracking-[-0.03em]">Defense Hub</h1>
           <p className="mt-1.5 max-w-[520px] text-[13px] leading-relaxed text-[var(--muted)]">
             If a number can’t be traced to a real stat line, it doesn’t render — this page shows
             an absence, never a guess.
@@ -247,7 +254,7 @@ function Kickers({ data }: { data: DefenseHubPayload }) {
   return (
     <section>
       <Label>Your kickers</Label>
-      <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
+      <div className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
         <div className="flex items-baseline gap-2.5">
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
             {data.kickerValue.value?.toLocaleString()}
@@ -280,7 +287,8 @@ function CoverageBanner({ data }: { data: DefenseHubPayload }) {
 
   return (
     <div
-      className={`rounded-[13px] border px-4 py-3.5 text-[13px] ${
+      data-full={full ? 'true' : 'false'}
+      className={`af-dh-coverage rounded-[13px] border px-4 py-3.5 text-[13px] ${
         full
           ? 'border-[color-mix(in_srgb,var(--good)_30%,transparent)] bg-[var(--good-soft)]'
           : 'border-[color-mix(in_srgb,var(--warn)_30%,transparent)] bg-[var(--warn-soft)]'
@@ -312,13 +320,13 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
   return (
     <section>
       <Label>Your rostered defenders</Label>
-      <div className="overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
+      <div className="af-dh-card af-dh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[680px] text-left">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">Player</th>
               <th className="px-2 py-3">Pos</th>
-              <th className="px-2 py-3 text-right text-[var(--accent)]">Proj ↓</th>
+              <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">Proj ↓</th>
               <th className="px-2 py-3 text-right">Last wk</th>
               <th className="px-2 py-3 text-right">VORP</th>
               <th className="px-2 py-3 text-right">Pos rank</th>
@@ -338,9 +346,16 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                 {!d.reason && (
                   <>
                     <td className="px-2 py-3 font-mono text-[11px] text-[var(--text2)]">
-                      {d.position ?? <Dash />}
+                      {d.position ? (
+                        /* A hook for the redraft chip; the IDP group (DL/LB/DB) is the job, whatever the spelling. */
+                        <span className="af-dh-pos" data-dh-group={(d.positionGroup ?? d.position).toUpperCase()}>
+                          {d.position}
+                        </span>
+                      ) : (
+                        <Dash />
+                      )}
                     </td>
-                    <td className="px-2 py-3 text-right font-mono text-[14px] font-extrabold text-[var(--good)]">
+                    <td className="af-dh-proj px-2 py-3 text-right font-mono text-[14px] font-extrabold text-[var(--good)]">
                       {d.projection != null ? d.projection.toFixed(1) : <Dash />}
                     </td>
                     {/*
@@ -426,7 +441,7 @@ function SnapShare({ data }: { data: DefenseHubPayload }) {
         {data.snaps.map((s) => (
           <div
             key={s.sleeperId}
-            className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
+            className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
           >
             <div className="text-[13px] font-extrabold">{s.name}</div>
             <div className="mt-1.5 font-mono text-[26px] font-extrabold leading-none">
@@ -468,7 +483,7 @@ function RoleCards({ data }: { data: DefenseHubPayload }) {
         {data.roles.map((r) => (
           <div
             key={r.sleeperId}
-            className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
+            className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
           >
             <div className="mb-2.5 text-[13px] font-extrabold">{r.name}</div>
             <div className="flex flex-col gap-2">
@@ -512,7 +527,7 @@ function Tendencies({ data }: { data: DefenseHubPayload }) {
       <Label>How their defence has been played</Label>
       <div className="flex flex-col gap-3">
         {data.tendencies.map(({ team, tendency: t }) => (
-          <div key={team} className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div key={team} className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4">
             <div className="mb-3 flex items-baseline gap-2">
               <span className="text-[13px] font-extrabold">{team} defence</span>
               {/* The season is not decoration — coordinators change between years. */}

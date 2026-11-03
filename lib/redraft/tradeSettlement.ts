@@ -56,6 +56,7 @@ export async function settleRedraftTradeAssets(
   tx: TradeSettlementTx,
   input: {
     leagueId?: string
+    tradeId?: string
     proposerRosterId: string
     receiverRosterId: string
     /** Multi-team trades: the teams beyond proposer and receiver (lib/redraft/tradeParticipants.ts). */
@@ -70,7 +71,13 @@ export async function settleRedraftTradeAssets(
 
   let playersMoved = 0
   let picksRecorded = 0
-  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true } }) : null
+  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true, zombieLeague: { select: { id: true } } } }) : null
+  if (league?.zombieLeague && input.leagueId) {
+    const { lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')
+    await lockItemLeague(tx, input.leagueId)
+    const z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: league.zombieLeague.id }, select: { correctionHoldFromWeek: true } })
+    if (z.correctionHoldFromWeek != null) throw new Error('Trades are held during reviewed Zombie stat-correction recovery.')
+  }
   const preserveNbaSurvivorOwnership = league?.sport === 'NBA' && league.survivorMode === true
 
   // Net FAAB delta per roster (positive = gains FAAB).
@@ -80,6 +87,13 @@ export async function settleRedraftTradeAssets(
     ...additionalRosterIds.map((id): [string, number] => [id, 0]),
   ])
 
+  const itemAssets = assets.filter(a => a.assetType === 'zombie_item')
+  if (itemAssets.length) {
+    if (!input.leagueId || !input.tradeId) throw new Error('Zombie item settlement requires a league and trade id.')
+    await (await import('@/lib/zombie/beta2025ItemTrades')).settleBetaTradeItems(tx, {
+      leagueId: input.leagueId, tradeId: input.tradeId, rosterIds: [proposerRosterId, receiverRosterId], assets: itemAssets,
+    })
+  }
   for (const asset of assets) {
     const fromRosterId = asset.fromRosterId
     const toRosterId = asset.toRosterId
@@ -87,6 +101,7 @@ export async function settleRedraftTradeAssets(
       throw new Error('Trade asset has invalid roster direction')
     }
 
+    if (asset.assetType === 'zombie_item') continue // moved atomically above
     if (asset.assetType === 'player') {
       if (!asset.playerId) throw new Error('Player asset missing playerId')
       const moved = preserveNbaSurvivorOwnership

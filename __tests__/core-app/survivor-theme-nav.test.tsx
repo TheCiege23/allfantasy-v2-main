@@ -111,6 +111,7 @@ describe('survivorTheme', () => {
 
   it('is chosen on the server from the selected league', () => {
     const page = readFileSync(resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
-    expect(page).toContain('leagueTheme={leagueThemeForTypeKey(tradeLeagueTypeKey)}')
+    expect(page).toContain('const leagueTheme = leagueThemeForTypeKey(tradeLeagueTypeKey)')
+    expect(page).toContain('leagueTheme={leagueTheme}')
   })
 })

@@ -57,12 +57,12 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
+  { id: 'roster', label: 'Roster' },
+  { id: 'chat', label: 'Chat' },
   { id: 'intel', label: 'Intel' },
   { id: 'chimmy', label: 'Chimmy' },
-  { id: 'roster', label: 'Roster' },
   { id: 'war_room', label: 'AF Legacy' },
   { id: 'activity', label: 'Activity' },
-  { id: 'chat', label: 'Chat' },
 ]
 
 export function DraftRightDockTabs({
@@ -159,9 +159,10 @@ export function DraftRightDockTabs({
         role="tablist"
         aria-label="Draft right dock tabs"
         data-testid={`${testIdBase}-tablist`}
-        /* Labels keep their width inside a narrow dock; the tab row scrolls independently. */
-        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(max-content, 1fr))` }}
-        className="grid min-w-0 shrink-0 overflow-x-auto overscroll-x-contain border-b border-white/[0.06] bg-[#0d1424] [scrollbar-width:thin]"
+        /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
+           have squeezed or stranded a column as soon as a fifth tab existed. */
+        style={{}}
+        className="flex shrink-0 overflow-x-auto border-b border-white/[0.05] bg-[#101a30]"
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -179,15 +180,13 @@ export function DraftRightDockTabs({
               onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })}
               onKeyDown={(event) => {
                 const index = tabs.findIndex((entry) => entry.id === tab.id)
-                const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
-                  : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
-                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
+                const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
                 if (next < 0) return
                 event.preventDefault()
                 onSelect(tabs[next]!.id)
                 event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
               }}
-              className={`relative flex min-h-[36px] items-center justify-center gap-1 whitespace-nowrap px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
+              className={`relative flex min-h-[44px] min-w-[80px] flex-1 shrink-0 items-center justify-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                 isActive
                   ? 'text-white'
                   : 'text-[#8b91a7] hover:bg-[#1d2236] hover:text-white'

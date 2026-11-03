@@ -211,6 +211,10 @@ export const FAST_TIER_OPERATIONAL_OVERLAYS = Object.freeze([
   // cron-budget-check ceiling (60/60), and this fast-tier overlay is the slot-free way to run a
   // two-minute job. A live "close game, 2:00 left" alert is worthless five minutes late.
   Object.freeze({ path: '/api/cron/sports-alerts', schedule: '*/2 * * * *' }),
+  // NBA Cup live scores (2026-11-01). The 15-minute bracket-results service publishes schedules
+  // and finals; a live score needs the minute heartbeat. The route reads the stored schedule first
+  // and calls ESPN only while a Cup game is in its live window.
+  Object.freeze({ path: '/api/cron/nba-cup-live', schedule: '* * * * *' }),
 ])
 
 export function withFastTierOperationalOverlays(crons) {

@@ -132,6 +132,13 @@ describe('native trade reversal readiness', () => {
     expect(await evaluateNativeTradeReversalReadiness(db as never, 'p-1')).toEqual({ ok: true, blockers: [], drift: [] })
   })
 
+  it('holds item-containing trades for complete commissioner reconciliation instead of reversing players alone', async () => {
+    db.tradeExecutionSnapshot.findUnique.mockResolvedValueOnce({ id: 'snap', tradeSource: 'redraft_native', assetSummary: { zombieItems: [{ id: 'serum' }] }, afterState: AFTER })
+    const { evaluateNativeTradeReversalReadiness } = await load()
+    expect(await evaluateNativeTradeReversalReadiness(db as never, 'p-1')).toMatchObject({ ok: false, blockers: ['ZOMBIE_ITEMS_REQUIRE_REVIEW'] })
+    expect(db.redraftTradeProposal.updateMany).not.toHaveBeenCalled()
+  })
+
   it('🛑 refuses when roster membership changed after the trade', async () => {
     serveRosters({
       rosters: [

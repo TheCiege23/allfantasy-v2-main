@@ -45,9 +45,14 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   cfp_quarterfinals: "Quarterfinals",
   cfp_semifinals: "Semifinals",
   cfp_championship: "National Championship",
+  cup_group_play: "NBA Cup Group Play",
   cup_quarterfinals: "NBA Cup Quarterfinals",
   cup_semifinals: "NBA Cup Semifinals",
   cup_championship: "NBA Cup Championship",
+  nfl_wild_card: "Wild Card",
+  nfl_divisional: "Divisional Round",
+  nfl_conference: "Conference Championship",
+  nfl_super_bowl: "Super Bowl",
 }
 
 /**

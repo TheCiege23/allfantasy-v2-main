@@ -130,6 +130,17 @@
     radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.12), transparent 70%);
   --chimmy: linear-gradient(160deg, #141c3a, #0d1020 58%);
   --shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+  /*
+   * Categorical chart series (Commissioner Hub activity charts): waiver claims, trades,
+   * free-agent adds, a fourth spare. The dataviz reference palette's dark steps, validated on
+   * this surface (#0d1020) and AF's (#170f2b): lightness band, chroma floor, CVD ΔE 8.4 worst
+   * adjacent, every slot ≥ 3:1 against the surface. AF mode inherits these. Text is never drawn
+   * in them — a swatch carries the colour, the label stays in --text.
+   */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
 
   /* Platform marks — a connected league is always identifiable by colour. */
   --p-sleeper-bg: #1f2a4d;
@@ -162,6 +173,39 @@
   --tier-blue: #4d9be0;
   --tier-blue-fg: #7fb7e8;
   --tier-blue-soft: rgba(24, 95, 165, 0.22);
+
+  /*
+   * The matchup scoreboard (`.af-mu-h2h`, af-matchup.css) is a dark broadcast card in EVERY theme —
+   * the redesign's one fixed-ground surface. Its own ladder, so a light page's ink never lands on it.
+   * af-matchup.css maps these onto the ordinary tokens inside the card; it never names a colour.
+   */
+  --mu-sb-bg: #141a33;
+  --mu-sb-raise: #1c2342;
+  --mu-sb-line: rgba(255, 255, 255, 0.12);
+  --mu-sb-track: rgba(255, 255, 255, 0.16);
+  --mu-sb-text: #ffffff;
+  --mu-sb-text2: #d3d8ee;
+  --mu-sb-muted: #a7aecd;
+  --mu-sb-accent: #22d3ee;
+  --mu-sb-good: #34d399;
+  --mu-sb-bad: #fb5b78;
+  --mu-sb-warn: #fbbf24;
+  --mu-sb-live-bg: rgba(251, 91, 120, 0.2);
+  --mu-sb-live-fg: #ffb3c4;
+
+  /* Slot chips on the head-to-head board, one tint per position family (dark ground). */
+  --mu-pos-qb-bg: rgba(244, 114, 182, 0.18);
+  --mu-pos-qb-fg: #f9a8d4;
+  --mu-pos-rb-bg: rgba(52, 211, 153, 0.16);
+  --mu-pos-rb-fg: #6ee7b7;
+  --mu-pos-wr-bg: rgba(96, 165, 250, 0.18);
+  --mu-pos-wr-fg: #93c5fd;
+  --mu-pos-te-bg: rgba(251, 146, 60, 0.18);
+  --mu-pos-te-fg: #fdba74;
+  --mu-pos-flex-bg: rgba(167, 139, 250, 0.18);
+  --mu-pos-flex-fg: #c4b5fd;
+  --mu-pos-k-bg: rgba(148, 163, 184, 0.18);
+  --mu-pos-k-fg: #cbd5e1;
 
   background: var(--bg);
   color: var(--text);
@@ -258,6 +302,15 @@ html[data-mode='light'] .af-core {
     radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.09), transparent 70%);
   --chimmy: linear-gradient(160deg, #e8f6fb, #ffffff 58%);
   --shadow: 0 30px 80px -50px rgba(11, 16, 32, 0.4);
+  /*
+   * The light steps of the same four hues, validated on #ffffff: CVD ΔE 9.1 worst adjacent.
+   * Slots 3 and 4 sit under 3:1 against white, so every chart that uses them also carries the
+   * numbers in a legend or a table view.
+   */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
   --p-sleeper-bg: #dbe8fb;
   --p-sleeper-fg: #17518f;
   --p-espn-bg: #fbdcdc;
@@ -280,6 +333,35 @@ html[data-mode='light'] .af-core {
   --tier-blue: #1c6fb8;
   --tier-blue-fg: #17518f;
   --tier-blue-soft: rgba(24, 95, 165, 0.1);
+
+  /* The scoreboard stays dark on a light page — see the base block. */
+  --mu-sb-bg: #11181c;
+  --mu-sb-raise: #1b2429;
+  --mu-sb-line: rgba(255, 255, 255, 0.12);
+  --mu-sb-track: #3c474d;
+  --mu-sb-text: #ffffff;
+  --mu-sb-text2: #d3dadc;
+  --mu-sb-muted: #a9b4b8;
+  --mu-sb-accent: #4fb8c4;
+  --mu-sb-good: #4ade80;
+  --mu-sb-bad: #fb7a93;
+  --mu-sb-warn: #fcc54a;
+  --mu-sb-live-bg: #3a1626;
+  --mu-sb-live-fg: #f7a8c4;
+
+  /* Slot chips — light ground: pale tint, dark ink (each ink ≥ 5:1 on its tint). */
+  --mu-pos-qb-bg: #fde4ee;
+  --mu-pos-qb-fg: #9d174d;
+  --mu-pos-rb-bg: #dcf5ea;
+  --mu-pos-rb-fg: #065f46;
+  --mu-pos-wr-bg: #e1ecfd;
+  --mu-pos-wr-fg: #1e40af;
+  --mu-pos-te-bg: #feebd8;
+  --mu-pos-te-fg: #8a4204;
+  --mu-pos-flex-bg: #ece6fd;
+  --mu-pos-flex-fg: #5b21b6;
+  --mu-pos-k-bg: #eceff3;
+  --mu-pos-k-fg: #334155;
 }
 
 /*
@@ -359,6 +441,21 @@ html[data-mode='af'] .af-core {
   --tier-blue: #8f8bf0;
   --tier-blue-fg: #b9b3ff;
   --tier-blue-soft: rgba(143, 139, 240, 0.2);
+
+  /* The scoreboard on the AF ground: a lifted violet-black, the AF accent. */
+  --mu-sb-bg: #1d1336;
+  --mu-sb-raise: #271a47;
+  --mu-sb-line: rgba(167, 139, 250, 0.22);
+  --mu-sb-track: rgba(167, 139, 250, 0.24);
+  --mu-sb-text: #ffffff;
+  --mu-sb-text2: #e2d9fb;
+  --mu-sb-muted: #b3a8d6;
+  --mu-sb-accent: #a78bfa;
+  --mu-sb-good: #5eead4;
+  --mu-sb-bad: #fb7185;
+  --mu-sb-warn: #fbbf24;
+  --mu-sb-live-bg: rgba(251, 113, 133, 0.2);
+  --mu-sb-live-fg: #fecdd3;
 }
 
 /*

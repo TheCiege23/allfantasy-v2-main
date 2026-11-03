@@ -56,6 +56,7 @@ function fbPreset(
       !ctx.idpSelected &&
       [
         'redraft',
+        'pirate',
         'dynasty',
         'keeper',
         'best_ball',
@@ -111,6 +112,7 @@ function ncaafPreset(
         'tournament',
         'devy',
         'c2c',
+        'zombie',
         'salary_cap',
         'big_brother',
       ].includes(ctx.leagueType),

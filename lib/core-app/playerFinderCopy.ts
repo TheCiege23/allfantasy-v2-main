@@ -74,6 +74,9 @@ export type FinderCopy = {
   afTitle: string
   afLeagueBody: string
   afStandardBody: string
+  afBaselineLabel: string
+  afBaselineBody: string
+  perGameSeason: (season: number) => string
   thisLeagueScoring: string
   standardScoring: string
   posRank: string

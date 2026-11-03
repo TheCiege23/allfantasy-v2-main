@@ -28,7 +28,8 @@ vi.mock('@/lib/prisma', () => {
         },
       },
     )
-  return { prisma: new Proxy({}, { get: (_t, prop: string) => model(prop) }) }
+  const db = new Proxy({}, { get: (_t, prop: string) => prop === '$queryRaw' ? async () => [] : prop === '$transaction' ? async (callback: (tx: unknown) => Promise<unknown>) => callback(db) : model(prop) })
+  return { prisma: db }
 })
 
 const m = vi.hoisted(() => ({
@@ -43,11 +44,27 @@ vi.mock('@/lib/zombie/ZombieOwnerStatusService', async (orig) => ({
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: m.getZombieLeagueConfig }))
 
 // Weekly resolution's collaborators — this suite pins only where the week pointer lands.
+vi.mock('@/lib/zombie/beta2025ItemService', () => ({ usesBeta2025Items: () => false, refreshItemScores: vi.fn() }))
+vi.mock('@/lib/zombie/weeklySettlementSnapshot', async orig => {
+  const actual = await orig<typeof import('@/lib/zombie/weeklySettlementSnapshot')>()
+  return { ...actual, captureZombieSettlementSnapshot: vi.fn(async (leagueId: string, id: string, _sport: string, week: number, season: number) => {
+    // This suite pins winnings and progression for pre-item-policy snapshots.
+    const snapshot = await actual.captureZombieSettlementSnapshot(leagueId, id, 'NBA', week, season)
+    return { ...snapshot, rules: { ...snapshot.rules, bashingThreshold: 60, maulingThreshold: 60 } }
+  }) }
+})
 vi.mock('@/lib/zombie/infectionEngine', () => ({ resolveWeeklyInfections: vi.fn(async () => ({ infectionsCreated: 0 })) }))
-vi.mock('@/lib/zombie/serumEngine', () => ({ finalizePendingSerumsForWeek: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/serumEngine', () => ({
+  finalizePendingSerumsForWeek: vi.fn(async () => undefined),
+  autoReviveEligibleZombies: vi.fn(async () => undefined),
+  awardNativeSerumsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/bashingEngine', () => ({ detectAndProcessBashings: vi.fn(async () => []) }))
 vi.mock('@/lib/zombie/maulingEngine', () => ({ detectAndProcessMaulings: vi.fn(async () => []) }))
-vi.mock('@/lib/zombie/weaponEngine', () => ({ checkAndAwardWeapons: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/weaponEngine', () => ({
+  checkAndAwardWeapons: vi.fn(async () => undefined),
+  finalizePendingWeaponsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/weeklyUpdateEngine', () => ({ tryPostWeeklyUpdateAfterResolution: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/universeStatEngine', () => ({ syncUniverseStats: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/commissionerNotificationService', () => ({ notifyCommissioner: vi.fn(async () => undefined), notifyZombiePlayer: vi.fn(async () => undefined) }))
@@ -63,7 +80,7 @@ import { ensureZombieSeasonActivated } from '@/lib/zombie/activateNativeZombieLe
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getNativeMatchupOutcomes } from '@/lib/zombie/ZombieInfectionEngine'
 import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
-import { selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectSecondWhisperer, selectWhisperer } from '@/lib/zombie/whispererEngine'
 
 const argsOf = (key: string) => calls.filter((c) => c.key === key).map((c) => c.args as Record<string, any>)
 
@@ -88,7 +105,7 @@ describe('ensureZombieSeasonActivated', () => {
     expect(r).toEqual({ ok: true, activated: true, whispererPicked: true, zombieLeagueId: 'z1' })
     expect(m.ensureLeagueTeamRows).toHaveBeenCalledWith('L1', 'z1')
     expect(withWhisperer).toHaveBeenCalledWith('z1', 'random')
-    expect(argsOf('zombieLeague.updateMany')[0]).toEqual({
+    expect(argsOf('zombieLeague.updateMany')[0]).toMatchObject({
       where: { id: 'z1', status: { in: ['setup', 'registering'] } },
       data: { status: 'active', season: 2026, totalWeeks: 17, currentWeek: 1 },
     })
@@ -103,7 +120,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
     expect(argsOf('redraftMatchup.findFirst')[0]).toMatchObject({ where: { seasonId: 's1', awayRosterId: { not: null } } })
     spy.mockRestore()
   })
@@ -119,7 +136,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
     spy.mockRestore()
   })
 
@@ -158,7 +175,7 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
   /** A zombie league whose resolving week has every matchup final, scheduled through `lastScheduledWeek`. */
   function arrange(currentWeek: number, totalWeeks = 17, lastScheduledWeek = totalWeeks) {
     overrides.set('zombieLeague.findUnique', async () => ({
-      id: 'z1', leagueId: 'L1', season: 2026, currentWeek, totalWeeks, universeId: null, league: {},
+      id: 'z1', leagueId: 'L1', sport: 'NFL', season: 2026, currentWeek, totalWeeks, universeId: null, league: {},
     }))
     overrides.set('redraftSeason.findFirst', async () => ({ id: 's1' }))
     overrides.set('redraftMatchup.findMany', async () => [
@@ -167,6 +184,30 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     overrides.set('redraftMatchup.findFirst', async () => ({ week: lastScheduledWeek }))
   }
   const leagueUpdate = () => argsOf('zombieLeague.update').at(-1)!
+
+  for (const sport of ['NFL', 'NBA', 'NHL', 'MLB']) {
+    it(`resolves a final native ${sport} week and advances independently`, async () => {
+      arrange(3)
+      overrides.set('zombieLeague.findUnique', async () => ({
+        id: 'z1', leagueId: 'L1', sport, season: 2026, currentWeek: 3,
+        totalWeeks: sport === 'NFL' ? 17 : 23, universeId: null, league: {},
+      }))
+      const result = await runWeeklyResolution('z1', 3)
+      expect(result.resolution).toBeTruthy()
+      expect(argsOf('zombieWeeklyResolution.update').at(-1)?.data.status).toBe('complete')
+      expect(leagueUpdate().data.currentWeek).toBe(4)
+    })
+  }
+
+  it('holds a league with an old-policy winnings ledger before weekly side effects', async () => {
+    arrange(3)
+    overrides.set('zombieWeeklyWinnings.findMany', async () => [{ rosterId: 'a', amount: 100, source: 'weekly_settlement' }])
+    const result = await runWeeklyResolution('z1', 3)
+    expect(result).toMatchObject({ skipped: true, reason: 'winnings_policy_review_required' })
+    expect(argsOf('zombieWeeklyResolution.upsert')[0].create).toMatchObject({ status: 'review_required' })
+    expect(argsOf('zombieLeague.update')).toEqual([])
+    expect(argsOf('zombieWeeklyWinnings.upsert')).toEqual([])
+  })
 
   it('points the league at the week after the one it resolved', async () => {
     arrange(3)
@@ -226,7 +267,7 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
    * 🛑 Weekly winnings were never written for a native league. A resolved week now banks each team's
    * score in the ledger — here an NBA 1,000 v 850 win, a bashing (150 ≥ 128), moves 25% of the loser's week.
    */
-  it('a resolved week banks winnings in the ledger', async () => {
+  it('a resolved week records the 2025 award and cumulative loot rather than fantasy scores', async () => {
     overrides.set('zombieLeague.findUnique', async () => ({
       id: 'z1', leagueId: 'L1', season: 2026, sport: 'NBA', currentWeek: 5, totalWeeks: 19, universeId: null, league: {},
     }))
@@ -240,10 +281,20 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
       { id: 'R2', platformUserId: 'u2', redraftRosterId: 'r2' },
     ])
 
+    let savedSnapshot: unknown
+    overrides.set('zombieLeagueTeam.findMany', async () => [
+      { id: 't1', rosterId: 'R1', status: 'Survivor' }, { id: 't2', rosterId: 'R2', status: 'Survivor' },
+    ])
+    overrides.set('zombieWeeklyWinnings.findMany', async () => [{ rosterId: 'R2', amount: 10, source: 'weekly_settlement_2025' }])
+    overrides.set('zombieWeeklyResolution.upsert', async (args: any) => {
+      savedSnapshot = args.create.settlementSnapshot
+      return { id: 'resolution', settlementSnapshot: savedSnapshot }
+    })
+    overrides.set('zombieWeeklyResolution.findUnique', async () => savedSnapshot ? { settlementSnapshot: savedSnapshot } : null)
     await runWeeklyResolution('z1', 5)
 
     const ledger = argsOf('zombieWeeklyWinnings.upsert').map((a) => [a.create.rosterId, a.create.amount])
-    expect(ledger).toEqual([['R1', 1212.5], ['R2', 637.5]])
+    expect(ledger).toEqual([['R1', 12], ['R2', -10]])
   })
 })
 
@@ -316,6 +367,33 @@ describe('checkAllMatchupsComplete — odd-sized leagues', () => {
       { awayRosterId: null, status: 'scheduled' },
     ])
     expect(await checkAllMatchupsComplete('L1', 3, 2026)).toBe(true)
+  })
+})
+
+describe('two independent Whisperers', () => {
+  it('chooses a distinct managed Survivor for the second NBA seat', async () => {
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', sport: 'NBA', whispererCount: 2,
+      experienceMode: 'enhanced', whispererAmbushCount: 3, whispererIsPublic: false,
+    }))
+    overrides.set('whispererRecord.findUnique', async () => ({ userId: 'primary' }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [
+      { rosterId: 'R-primary', status: 'Whisperer' },
+      { rosterId: 'R-second', status: 'Survivor', isVeteran: false },
+      { rosterId: 'R-open', status: 'Survivor', isVeteran: false },
+    ])
+    overrides.set('roster.findMany', async () => [
+      { id: 'R-primary', platformUserId: 'primary' },
+      { id: 'R-second', platformUserId: 'second' },
+      { id: 'R-open', platformUserId: 'open-slot-L1-3' },
+    ])
+    overrides.set('zombieCoWhisperer.create', async () => ({ id: 'co-1' }))
+    const chosen = await selectSecondWhisperer('z1', 'random')
+    expect(chosen).toEqual({ whispererRecordId: 'co-1', rosterId: 'R-second' })
+    expect(argsOf('zombieCoWhisperer.create')[0].data).toMatchObject({
+      zombieLeagueId: 'z1', userId: 'second', ambushesRemaining: 3,
+    })
+    expect(argsOf('zombieLeagueTeam.update')[0].data).toMatchObject({ status: 'Whisperer', isWhisperer: true })
   })
 })
 

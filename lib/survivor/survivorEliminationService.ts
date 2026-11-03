@@ -31,7 +31,61 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
     if (!league || !isNativePlatform(league.platform)) return { ok: false, status: 409, code: 'not_native', error: 'Roster elimination is available only for leagues hosted on AllFantasy.' }
     // The torch goes out only after the last ballot has been read; until then nobody is named anywhere.
     if (!isCouncilReadComplete(council, league.survivorRevealMode)) return { ok: false, status: 409, code: 'read_in_progress', error: 'The votes are still being read.' }
-    const settings = normalizeSurvivorFoundationSettings(league.settings && typeof league.settings === 'object' ? league.settings as Record<string, unknown> : {})
+    return eliminateCastawayInTransaction(tx, {
+      leagueId, userId, week: council.week, phase: council.phase, settingsJson: league.settings,
+      relatedEntityId: councilId, relatedEntityType: 'council', actorUserId,
+      notice: { title: 'The tribe has spoken', body: `Week ${council.week}: a manager was voted out at Tribal Council.`, deepLinkPath: `/survivor/${leagueId}/tribal` },
+    })
+  }, { timeout: 30_000, maxWait: 10_000 })
+  if (result.ok && !result.alreadyResolved) {
+    await afterEliminationCommitted(leagueId, result)
+    const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId }, select: { week: true, phase: true } })
+    if (council?.phase === 'pre_merge') {
+      await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, council.week).catch(() => {
+        console.warn('[Survivor] Tribe redraw recommendation could not be queued.')
+      })
+    }
+  }
+  return result
+}
+
+/** The legacy tribe-chat membership rows drop the roster too, after the elimination commits. */
+async function afterEliminationCommitted(leagueId: string, result: Extract<EliminationOutcome, { ok: true }>): Promise<void> {
+  // The thread guard no longer reads them (survivorTribeChatAccess.ts), but SurvivorTribalCouncilService still does.
+  if (result.eliminatedRosterId) {
+    await removeRosterFromTribeChat(leagueId, result.eliminatedRosterId).catch(() => {
+      console.warn('[Survivor] Legacy tribe-chat membership could not be updated after elimination.')
+    })
+  }
+}
+
+export interface EliminateCastawayInput {
+  leagueId: string
+  userId: string
+  week: number
+  /** The phase the elimination happens in (the council's, or the game's for a finale step). */
+  phase: string
+  settingsJson: unknown
+  /** What eliminated them: the council id, or a final-jury-step key. Also the rerun gate. */
+  relatedEntityId: string
+  relatedEntityType: 'council' | 'final_jury_step'
+  actorUserId?: string | null
+  /** The spoiler-safe push/email notice. */
+  notice: { title: string; body: string; deepLinkPath: string }
+}
+
+/**
+ * One castaway leaves the game, inside the caller's transaction (which must already hold the
+ * `survivor-setup:<leagueId>` advisory lock): the league's elimination outcome (roster released to
+ * waivers, or Exile Island when it is on), cast state, the jury after the merge, chat membership and
+ * audit. Shared by Tribal Council (resolveElimination) and the final jury step, so both follow the
+ * same rules. Idempotent on `relatedEntityId`: a second call reports `alreadyResolved`.
+ */
+export async function eliminateCastawayInTransaction(tx: Prisma.TransactionClient, input: EliminateCastawayInput): Promise<EliminationOutcome> {
+    const { leagueId, userId, actorUserId } = input
+    const councilId = input.relatedEntityId
+    const council = { week: input.week, phase: input.phase }
+    const settings = normalizeSurvivorFoundationSettings(input.settingsJson && typeof input.settingsJson === 'object' ? input.settingsJson as Record<string, unknown> : {})
     let outcome = settings.exileIslandEnabled ? 'exile_island' as const : 'removed_to_waivers' as const
     const previous = await tx.survivorAuditEntry.findFirst({ where: { leagueId, action: 'player_eliminated', relatedEntityId: councilId }, select: { id: true, data: true } })
     const previousData = previous?.data as Record<string, unknown> | null
@@ -95,7 +149,7 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
       update: { activePlayerCount: active, exilePlayerCount: exiled, activeCouncilId: null, needsTribalLock: false, tribalCompleteAt: now } })
     if (resumeRelease && previous) await tx.survivorAuditEntry.update({ where: { id: previous.id }, data: { data: { ...previousData, pendingRelease: false, releasedPlayerCount } as Prisma.InputJsonValue } })
     await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'elimination', action: resumeRelease ? 'elimination_release_recovered' : 'player_eliminated', actorUserId: actorUserId ?? null, targetUserId: userId,
-      relatedEntityId: councilId, relatedEntityType: 'council', data: { outcome, newState, removedFromChats, releasedPlayerCount, pendingRelease: false, pendingExile: false }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
+      relatedEntityId: councilId, relatedEntityType: input.relatedEntityType, data: { outcome, newState, removedFromChats, releasedPlayerCount, pendingRelease: false, pendingExile: false }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     if (outcome === 'exile_island') {
       let channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'exile', isArchived: false }, select: { id: true, memberUserIds: true } })
       if (!channel) channel = await tx.survivorChatChannel.create({ data: { leagueId, channelType: 'exile', name: 'Exile Island', memberUserIds: [userId] }, select: { id: true, memberUserIds: true } })
@@ -110,24 +164,12 @@ export async function resolveElimination(leagueId: string, councilId: string, ac
         relatedEntityId: roster.id, relatedEntityType: 'roster', data: { returnWeek: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }
     // Push and email stay spoiler-safe; the Torch Ceremony in league chat carries the name.
-    if (!resumeRelease) await tx.survivorNotification.create({ data: { leagueId, type: 'elimination', recipientRole: 'all', title: 'The tribe has spoken',
-      body: `Week ${council.week}: a manager was voted out at Tribal Council.`, deepLinkPath: `/survivor/${leagueId}/tribal`, urgency: 'high', isSpoilerSafe: false, scheduledFor: now, status: 'pending' } })
+    if (!resumeRelease) await tx.survivorNotification.create({ data: { leagueId, type: 'elimination', recipientRole: 'all', title: input.notice.title,
+      body: input.notice.body, deepLinkPath: input.notice.deepLinkPath, urgency: 'high', isSpoilerSafe: false, scheduledFor: now, status: 'pending' } })
     return { ok: true, alreadyResolved: false, outcome, eliminatedUserId: userId, eliminatedRosterId: roster.id, removedFromChats, pendingRelease: false, pendingExile: false, releasedPlayerCount }
-  }, { timeout: 30_000, maxWait: 10_000 })
-  if (result.ok && !result.alreadyResolved) {
-    // The legacy tribe-chat membership rows drop the roster too. The thread guard no longer reads
-    // them (survivorTribeChatAccess.ts), but SurvivorTribalCouncilService still does.
-    if (result.eliminatedRosterId) {
-      await removeRosterFromTribeChat(leagueId, result.eliminatedRosterId).catch(() => {
-        console.warn('[Survivor] Legacy tribe-chat membership could not be updated after elimination.')
-      })
-    }
-    const council = await prisma.survivorTribalCouncil.findFirst({ where: { id: councilId, leagueId }, select: { week: true, phase: true } })
-    if (council?.phase === 'pre_merge') {
-      await maybeTriggerSurvivorTribeShuffleRecommendation(leagueId, council.week).catch(() => {
-        console.warn('[Survivor] Tribe redraw recommendation could not be queued.')
-      })
-    }
-  }
-  return result
+}
+
+/** After a transaction that called eliminateCastawayInTransaction commits (the final jury step). */
+export async function afterCastawayEliminated(leagueId: string, result: EliminationOutcome): Promise<void> {
+  if (result.ok && !result.alreadyResolved) await afterEliminationCommitted(leagueId, result)
 }

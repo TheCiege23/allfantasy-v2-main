@@ -20,7 +20,7 @@ describe("NBA Cup knockout bracket", () => {
     expect(rows.map((row) => row.roundIndex)).toEqual([1, 1, 1, 1, 2, 2, 3])
     expect(rows.every((row) => row.bestOf === 1)).toBe(true)
     expect(getPlayoffRoundOrder("nba_cup")).toEqual([
-      "cup_quarterfinals", "cup_semifinals", "cup_championship",
+      "cup_group_play", "cup_quarterfinals", "cup_semifinals", "cup_championship",
     ])
   })
 

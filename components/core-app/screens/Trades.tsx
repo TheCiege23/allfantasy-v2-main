@@ -16,6 +16,8 @@ import { tradesScreenMessages } from '@/lib/core-app/messages/tradesScreen'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { RedraftTradeDeadlineBar } from '@/components/core-app/RedraftTradeDeadlineBar'
+import { redraftGradeTone } from '@/lib/core-app/redraftCoreTrades'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -90,7 +92,7 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         {side(copy('You send'), offer.give)}
         {side(copy('You get'), offer.get)}
       </div>
-      <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded}>
+      <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded} data-rd-tone={offer.evaluation.graded ? redraftGradeTone(offer.evaluation.letter) ?? undefined : undefined}>
         {/* THE grade — the same letter this deal gets in the Trade Center and on the league page. */}
         {offer.evaluation.graded ? (
           <>
@@ -305,7 +307,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 })}
               </span>
               {graded && letter ? (
-                <div className="af-tr-leaguegrade" data-letter={letter}>
+                <div className="af-tr-leaguegrade" data-letter={letter} data-rd-tone={redraftGradeTone(letter) ?? undefined}>
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
                     {m.leagueGradeLine(
@@ -323,7 +325,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 shown; a 'Realized' letter stays, because points actually scored are a different fact.
               */}
               {side.gradeBasis && !(graded && side.gradeBasis === 'Market') ? (
-                <div className="af-tr-grade" data-ungradable={!side.grade}>
+                <div className="af-tr-grade" data-ungradable={!side.grade} data-rd-tone={redraftGradeTone(side.grade) ?? undefined}>
                   <span className="af-tr-grade-badge af-num">{side.grade ?? '—'}</span>
                   <span className="af-tr-grade-why">{copy(side.gradeBasis)} · {copy(side.gradeNote ?? '')}</span>
                 </div>
@@ -392,30 +394,42 @@ export function Trades({ data, hidePending = false }: TradesProps) {
       ) : null}
 
       {/* ── Deadline ────────────────────────────────────────────────── */}
-      <div className="af-tr-deadline">
-        <span className="af-label">{copy('Trade deadline')}</span>
-        {data.deadline.available ? (
-          data.deadline.data.none ? (
-            /*
-              The platform's sentinel for "trades stay open" (99, or any week past
-              the end of the regular season). Rendering it literally would print
-              "Week 99" on a screen people plan around.
-            */
-            <span className="af-tr-deadline-value">{copy('No deadline — trades stay open all season')}</span>
-          ) : (
-            <span className="af-tr-deadline-value">
-              {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
-              {data.deadline.data.regularSeasonLength != null ? (
-                <span className="af-tr-deadline-why">
-                  {m.regularSeason(data.deadline.data.regularSeasonLength)}
+      {/*
+        Inside a redraft /core shell the deadline is a bar (batch B4, RedraftTradeDeadlineBar). Under the
+        Trade Center (`hidePending`) that bar is already at the top of the page, so this row steps aside
+        rather than stating the deadline twice. Every other league renders the row exactly as before.
+      */}
+      <RedraftTradeDeadlineBar
+        countdown={data.deadlineCountdown}
+        snapshot={data.deadline}
+        omit={hidePending}
+        fallback={
+          <div className="af-tr-deadline">
+            <span className="af-label">{copy('Trade deadline')}</span>
+            {data.deadline.available ? (
+              data.deadline.data.none ? (
+                /*
+                  The platform's sentinel for "trades stay open" (99, or any week past
+                  the end of the regular season). Rendering it literally would print
+                  "Week 99" on a screen people plan around.
+                */
+                <span className="af-tr-deadline-value">{copy('No deadline — trades stay open all season')}</span>
+              ) : (
+                <span className="af-tr-deadline-value">
+                  {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
+                  {data.deadline.data.regularSeasonLength != null ? (
+                    <span className="af-tr-deadline-why">
+                      {m.regularSeason(data.deadline.data.regularSeasonLength)}
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
-            </span>
-          )
-        ) : (
-          <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
-        )}
-      </div>
+              )
+            ) : (
+              <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
+            )}
+          </div>
+        }
+      />
 
       {/* ── Conditional and protected picks: every pick carrying terms (lib/league-trade-engine/pickTerms.ts) ── */}
       <PickTermsCard leagueId={data.league.id} />
@@ -473,7 +487,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                   prevent, and it would be reintroduced here in one line of JSX.
                 */}
                 {g.letter ? (
-                  <span className="af-tr-graderow-letter" data-grade={g.letter}>
+                  <span className="af-tr-graderow-letter" data-grade={g.letter} data-rd-tone={redraftGradeTone(g.letter) ?? undefined}>
                     {g.letter}
                   </span>
                 ) : (

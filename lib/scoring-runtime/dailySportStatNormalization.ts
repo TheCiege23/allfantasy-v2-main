@@ -30,9 +30,9 @@
  *   1. `normalize*GameStats` reports the keys it could not place
  *      (`unmappedKeys`), so a wrong alias surfaces as a diagnostic instead of
  *      as a quietly-zero week.
- *   2. `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` is NOT widened by this
- *      module. Flipping that gate is a claim that a season can run to
- *      completion, and that claim needs one real captured payload first.
+ *   2. This normalizer alone does not widen `SEASON_CAPABLE_SPORTS` in
+ *      `lib/sport-scope.ts`. A season gate also needs a complete schedule,
+ *      lineup locks, a fitted bracket, and an end-to-end season run.
  *
  * Resolve G-01 by committing a fixture (the contract's own `scripts/probe.sh`,
  * during a game), then reconcile these tables against it.

@@ -82,6 +82,7 @@ export interface ZombieSummary {
     axeMargin: number
     /** Serums a Zombie needs to revive (`serumEngine`'s check). */
     reviveSerums: number
+    winningsPolicy?: 'beta_2025' | 'legacy_score'
     bashShare: number
     maulShare: number
   }

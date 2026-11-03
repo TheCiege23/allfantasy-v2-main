@@ -1,4 +1,5 @@
 import Link from "next/link"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -30,7 +31,7 @@ export default async function SharedPlayoffEntryPage(props: {
     challenge: { id: string; name: string; sport: string; seasonYear: number; ownerUserId: string; config: unknown }
   } | null
 
-  if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup"].includes(entry.challenge.sport)) {
+  if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup", "nfl"].includes(entry.challenge.sport)) {
     return <main className="mx-auto max-w-3xl p-8"><h1 className="text-2xl font-bold">Bracket not found</h1></main>
   }
 
@@ -71,12 +72,18 @@ export default async function SharedPlayoffEntryPage(props: {
   const projected = buildProjectedPlayoffSeries(series, visiblePicks)
   const hidden = rawPicks.length - visiblePicks.length
 
-  return <main className="min-h-screen bg-slate-950 px-4 py-8 text-white">
+  return <>
+    <BracketQuickNav leagueId={leagueId} />
+    <main className="min-h-screen bg-slate-950 px-4 py-8 text-white">
     <div className="mx-auto max-w-7xl">
       <Link className="text-sm text-teal-300 underline" href={`/brackets/leagues/${leagueId}`}>Back to league</Link>
       <p className="mt-6 text-xs font-bold uppercase tracking-widest text-teal-300">Shared bracket · Read only</p>
       <h1 className="mt-2 text-3xl font-black">{entry.name}</h1>
       <p className="mt-2 text-slate-300">{entry.challenge.name}</p>
+      <div className="mt-5 rounded-xl border border-teal-700/50 bg-teal-950/40 p-4">
+        <p className="text-sm text-teal-100">You're viewing someone else's bracket. To make your own picks, open the league and create or continue your bracket.</p>
+        <Link className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-teal-300 px-4 py-2 font-bold text-slate-950" href={`/brackets/leagues/${encodeURIComponent(leagueId)}`}>Go to league to make your picks</Link>
+      </div>
       <p className="my-5 rounded-xl border border-teal-700/50 bg-teal-950/40 p-4 text-sm text-teal-100">
         {hidden > 0 ? `${hidden} picks are hidden until their games begin.` : "All saved picks have been revealed."}
       </p>
@@ -89,5 +96,6 @@ export default async function SharedPlayoffEntryPage(props: {
         showPickResults
       />
     </div>
-  </main>
+    </main>
+  </>
 }

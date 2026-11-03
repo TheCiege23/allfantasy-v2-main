@@ -142,6 +142,13 @@ export function buildLegacyManualCanonicalCreatePayload(input: LegacyManualCanon
       : 'America/New_York'
 
   const conceptSetup: Record<string, unknown> = {}
+  if (ltRaw === 'pirate') {
+    conceptSetup.pirate = {
+      protectionLimit: Math.max(1, Math.min(10, Math.floor(Number(sw.pirate_protection_limit) || 3))),
+      claimHours: Math.max(1, Math.min(72, Math.floor(Number(sw.pirate_claim_hours) || 24))),
+      playoffClaims: sw.pirate_playoff_claims === true,
+    }
+  }
   if (ltRaw === 'survivor') {
     if (sw.survivorTribeSlots !== undefined) conceptSetup.survivorTribeSlots = sw.survivorTribeSlots
     const tribe = sw.survivor_suggested_tribe_count

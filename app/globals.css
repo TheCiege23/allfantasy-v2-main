@@ -1056,8 +1056,33 @@ h1, h2, h3 {
   letter-spacing: -0.01em;
 }
 
-input, textarea, select, button {
+/* 🛑 CHECKBOXES AND RADIOS ARE EXCLUDED HERE ON PURPOSE. `@tailwindcss/forms` draws them with
+   `appearance: none`, fills a CHECKED box with `currentColor` and paints a WHITE tick on top. This
+   rule used to reach them too, and `input` (0,0,1) beats the plugin's `input:where([type=checkbox])`
+   (also 0,0,1) by coming later — so a ticked box took the page's text colour. On dark UI that is
+   near-white: a white fill under a white tick, i.e. no visible tick at all (measured 2026-10-31,
+   fill rgb(255,255,255) on a checked settings box). `:where()` keeps this rule at 0,0,1 so any
+   `text-*` utility on another input still overrides it exactly as before. */
+input:where(:not([type='checkbox'], [type='radio'])), textarea, select, button {
   color: inherit;
+}
+
+/* The fill of a ticked box / selected radio, app-wide: violet-600, the same colour the CheckBox
+   primitive (components/ui/checkbox.tsx) draws, so the white tick is ~5.7:1 in both themes.
+   Kept at 0,0,1 via `:where()` so a deliberate `text-cyan-500`-style utility (the plugin's own
+   documented way to colour a box) still wins, and `bg-*` utilities keep styling the UNCHECKED
+   box — the plugin's `:checked` rule outranks them for the checked fill either way. */
+input:where([type='checkbox'], [type='radio']) {
+  color: #7c3aed;
+}
+
+/* A box that names an `accent-*` colour was written for the NATIVE control — `accent-color` does
+   nothing once the plugin sets `appearance: none`. Give those boxes their native rendering back,
+   so the author's colour shows and the browser picks a contrasting tick itself. Matched on a
+   class TOKEN that starts with `accent-` (not any class containing it, such as
+   `border-[var(--accent-cyan)]`); variant-prefixed forms (`checked:accent-…`) are matched too. */
+input:where([type='checkbox'], [type='radio']):where([class^='accent-'], [class*=' accent-'], [class*=':accent-']) {
+  appearance: auto;
 }
 
 @media (max-width: 640px) {

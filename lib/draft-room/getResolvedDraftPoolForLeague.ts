@@ -1,3 +1,9 @@
+import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
+import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
+import { nflDraftSeasonLine } from './nflDraftSeasonLine'
+import { observedAdpSeason } from './observedAdpSeason'
+import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
+import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
  * Use from API route, DraftWorker, autopick fallback, and tests.
@@ -62,6 +68,8 @@ import {
 import { normalizeDraftPoolInjuryStatus } from '@/lib/draft-room/injury-status-normalization'
 import { compareDraftEntriesByStableRank, resolvePreferredAdp } from '@/lib/draft-room/adp-ordering'
 import { dbFirstMode } from '@/lib/db-first-mode'
+import { DraftPoolMergeIndex } from './DraftPoolMergeIndex'
+import { draftPoolBuildKey, shareDraftPoolBuild } from './shareDraftPoolBuild'
 import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnostics } from '@/lib/draft-room/position-aware-projection-fallback'
 import {
   loadSportsPlayerRecordMapsForDraftPool,
@@ -138,6 +146,7 @@ export type DraftPoolRawRow = {
   imageUrl?: string | null
   age?: number | null
   fantasyPointsPerGame?: number | null
+  statSeason?: string | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
   seasonStatLine?: DraftSeasonStatLine | null
@@ -411,6 +420,7 @@ function adpLookupKeyLoose(name: string, position: string): string {
 }
 
 type AveragedAdpRow = {
+  canonicalPlayerIds?: string[]
   name: string
   position: string
   team: string | null
@@ -461,19 +471,41 @@ async function loadLatestAveragedAdpRowsForScorings(
   season?: number,
   allowLiveImport = true,
 ): Promise<AveragedAdpRow[]> {
+  // The importer records current market observations. Forward-season drafts read that
+  // current board; historical drafts retain their own year and the seven-day freshness gate.
+  const marketSeason = observedAdpSeason(season)
   const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
     ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
     : ADP_IMPORT_SOURCES_EXCLUDED
   const observedSince = season != null ? new Date(Date.now() - 7 * 86400000) : null
+  // FFC can re-serve the same September draft sample in October. Inspect its stored
+  // observation date, not adp_data's former ingestion timestamp. No provider I/O here.
+  let ffcScope: { OR: Array<{ source: { not: string } } | { source: string; scoring: { in: string[] } }> } | undefined
+  if (sport === 'NFL' && season != null) {
+    const formats = format === 'dynasty'
+      ? [['dynasty', 'standard']]
+      : [['standard', 'standard'], ['ppr', 'ppr'], ['half-ppr', 'halfPPR'], ['2qb', '2qb']]
+    const keys = formats.map(([name]) => 'ffc-adp-' + name + '-12-' + marketSeason)
+    const caches = await prisma.sportsDataCache.findMany({
+      where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true },
+    }).catch(() => [])
+    const fresh = formats.filter(([name]) => {
+      const cached = caches.find(c => c.cacheKey === 'ffc-adp-' + name + '-12-' + marketSeason)
+      const data = cached?.data as { meta?: unknown } | null
+      return ffcObservationIsFresh(data?.meta)
+    }).map(([, scoring]) => scoring)
+    ffcScope = { OR: [{ source: { not: 'ffc' } }, { source: 'ffc', scoring: { in: fresh } }] }
+  }
   const findLatest = () =>
     prisma.adpDataRecord.findFirst({
       where: {
         sport,
         format,
-        ...(season != null ? { season } : {}),
+        ...(marketSeason != null ? { season: marketSeason } : {}),
         ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
         scoring,
         source: { notIn: sourceExclusions },
+        ...(ffcScope ? { AND: [ffcScope] } : {}),
       },
       orderBy: [{ season: 'desc' }, { week: 'desc' }, { createdAt: 'desc' }],
       select: { season: true, week: true },
@@ -507,8 +539,10 @@ async function loadLatestAveragedAdpRowsForScorings(
       week: latest.week,
       ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
       source: { notIn: sourceExclusions },
+        ...(ffcScope ? { AND: [ffcScope] } : {}),
     },
     select: {
+      playerId: true,
       playerName: true,
       position: true,
       team: true,
@@ -518,7 +552,7 @@ async function loadLatestAveragedAdpRowsForScorings(
     take: 30000,
   })
 
-  const perPlayerSource = new Map<string, { name: string; position: string; team: string | null; perSource: Map<string, number[]> }>()
+  const perPlayerSource = new Map<string, { name: string; position: string; team: string | null; canonicalPlayerIds: Set<string>; perSource: Map<string, number[]> }>()
   for (const row of rows) {
     const name = String(row.playerName ?? '').trim()
     const position = String(row.position ?? '').trim().toUpperCase()
@@ -530,10 +564,12 @@ async function loadLatestAveragedAdpRowsForScorings(
         name,
         position,
         team,
+        canonicalPlayerIds: new Set<string>(),
         perSource: new Map<string, number[]>(),
       })
     }
     const bucket = perPlayerSource.get(key)!
+    if (observedAdpCanonicalId(sport, String(row.playerId ?? ''))) bucket.canonicalPlayerIds.add(row.playerId)
     const sourceKey = String(row.source ?? '').trim().toLowerCase() || 'unknown'
     const sourceValues = bucket.perSource.get(sourceKey) ?? []
     sourceValues.push(Number(row.adp))
@@ -551,6 +587,7 @@ async function loadLatestAveragedAdpRowsForScorings(
     if (!sourceMeans.length) continue
     const avg = sourceMeans.reduce((acc, v) => acc + v, 0) / sourceMeans.length
     out.push({
+      ...(item.canonicalPlayerIds.size ? { canonicalPlayerIds: [...item.canonicalPlayerIds] } : {}),
       name: item.name,
       position: item.position,
       team: item.team,
@@ -656,35 +693,29 @@ export function mergeDbPoolIntoRawList(
   seenNames: Set<string>,
   idFor: PoolRowIdFor = externalSourceIdAsIs,
 ): void {
-  const byName = new Map<string, number[]>()
-  const indexRow = (idx: number) => {
-    const key = normalizeDraftPoolNameForDedupe(rawRowName(rawList[idx]!))
-    const bucket = byName.get(key)
-    if (bucket) bucket.push(idx)
-    else byName.set(key, [idx])
+  const perfMerge = perfStart(`5b. indexed pool merge (raw=${rawList.length}, pool=${poolRows.length})`)
+  const identityOf = (row: DraftPoolRawRow) => {
+    const name = rawRowName(row)
+    return {
+      name: normalizeDraftPoolNameForDedupe(name),
+      looseName: normalizeLooseName(name),
+      position: normalizeKeyPart(row.position ?? row.pos ?? ''),
+      team: normalizeKeyPart(row.team ?? row.teamAbbr ?? ''),
+    }
   }
-  for (let i = 0; i < rawList.length; i += 1) indexRow(i)
-
+  const index = new DraftPoolMergeIndex()
+  rawList.forEach((row, ordinal) => index.upsert(ordinal, identityOf(row)))
   for (const p of poolRows) {
     const norm = normalizeDraftPoolNameForDedupe(p.full_name ?? '')
+    const looseNorm = normalizeLooseName(p.full_name ?? '')
     const poolPos = normalizeKeyPart(p.position ?? '')
     const poolTeam = normalizeKeyPart(p.team_abbreviation ?? '')
     if (!norm) continue
 
-    let existingIdx = -1
-    for (const idx of byName.get(norm) ?? []) {
-      const r = rawList[idx]!
-      const rowPos = normalizeKeyPart(r.position ?? r.pos ?? '')
-      const rowTeam = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
-      const posMatch = !poolPos || !rowPos || poolPos === rowPos
-      const teamMatch = !poolTeam || !rowTeam || poolTeam === rowTeam
-      if (posMatch && teamMatch) {
-        existingIdx = idx
-        break
-      }
-    }
+    const existingIdx = index.find({ name: norm, looseName: looseNorm, position: poolPos, team: poolTeam })
     if (existingIdx >= 0) {
-      enrichRawRowFromDbPool(rawList[existingIdx]!, p, idFor)
+      enrichRawRowFromDbPool(rawList[existingIdx], p, idFor)
+      index.upsert(existingIdx, identityOf(rawList[existingIdx]))
       seenNames.add(norm)
       continue
     }
@@ -706,8 +737,9 @@ export function mergeDbPoolIntoRawList(
       age: p.age ?? null,
       ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
     })
-    indexRow(rawList.length - 1)
+    index.upsert(rawList.length - 1, identityOf(rawList[rawList.length - 1]))
   }
+  perfMerge()
 }
 
 function hasHttpHeadshot(url: string | null | undefined): boolean {
@@ -1087,9 +1119,20 @@ function perfStart(label: string): () => void {
 /**
  * Builds the same normalized draft pool as GET `/api/leagues/[leagueId]/draft/pool`.
  */
-export async function getResolvedDraftPoolForLeague(
+export function getResolvedDraftPoolForLeague(
   leagueId: string,
   options: GetResolvedDraftPoolOptions = {},
+): Promise<GetResolvedDraftPoolResult> {
+  const normalizedOptions = { ...options, limit: options.limit ?? 300, poolType: options.poolType ?? null }
+  return shareDraftPoolBuild(
+    draftPoolBuildKey(leagueId, normalizedOptions),
+    () => buildResolvedDraftPoolForLeague(leagueId, normalizedOptions),
+  )
+}
+
+async function buildResolvedDraftPoolForLeague(
+  leagueId: string,
+  options: GetResolvedDraftPoolOptions,
 ): Promise<GetResolvedDraftPoolResult> {
   const _coldBuildStartMs = Date.now()
   const perfTotal = perfStart(`TOTAL leagueId=${leagueId.slice(0, 8)}`)
@@ -1157,8 +1200,7 @@ export async function getResolvedDraftPoolForLeague(
   const limit = Math.min(Math.max(Number(rawLimit) || DEFAULT_LIMIT, 1), 500)
   let poolType = options.poolType ?? null
   const perfDevyC2C = perfStart('3. isDevyLeague + isC2CLeague')
-  const isDevyDynasty = await isDevyLeague(leagueId)
-  const isC2C = await isC2CLeague(leagueId)
+  const [isDevyDynasty, isC2C] = await Promise.all([isDevyLeague(leagueId), isC2CLeague(leagueId)])
   perfDevyC2C()
   const rawDevyConfig = draftSession?.devyConfig as { enabled?: boolean; devyRounds?: number[] } | null
   const rawC2cConfig = draftSession?.c2cConfig as { enabled?: boolean; collegeRounds?: number[] } | null
@@ -1168,11 +1210,15 @@ export async function getResolvedDraftPoolForLeague(
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
-  const verifyCurrentNbaRoster = shouldVerifyCurrentNbaRoster({
+  // Ordinary pro redraft uses the current roster reconciliation below. Survivor keeps its cast guard.
+  const verifyCurrentNbaRoster = String(league?.leagueVariant ?? '').toLowerCase() === 'survivor' && shouldVerifyCurrentNbaRoster({
     sport, variant: league?.leagueVariant,
     isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
     isDevy: isDevyDynasty, isC2C, mergeCollegePool,
   })
+  const currentRosterOnly = ['NFL', 'NBA', 'NHL', 'MLB'].includes(String(sport)) &&
+      !league?.isDynasty && !String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY') &&
+      !String(league?.leagueVariant ?? '').toLowerCase().includes('dynasty') && !isDevyDynasty && !isC2C && !mergeCollegePool
   const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)
   const useMixedPoolTypeMarkers = mergeCollegePool || c2cEnabled || devyEnabled
   const adpFormat: 'redraft' | 'dynasty' =
@@ -1181,10 +1227,17 @@ export async function getResolvedDraftPoolForLeague(
       : 'redraft'
   const perfAdpRows = perfStart('4. loadLatestAveragedAdpRowsFromDb')
   const twoQuarterbacks = sport === 'NFL' ? await leagueStartsTwoQuarterbacks(leagueId) : false
-  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined).catch(
+  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined, { allowLiveImport: false }).catch(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()
+  const canonicalAdpIds = [...new Set(averagedAdpRows.flatMap(row => (row.canonicalPlayerIds ?? [])
+    .flatMap(value => { const id = observedAdpCanonicalId(sport, value); return id ? [id] : [] })))]
+  const adpIdentities = canonicalAdpIds.length ? await prisma.playerIdentityMap.findMany({
+    where: { sport, id: { in: canonicalAdpIds } },
+    select: { id: true, sport: true, canonicalName: true, rollingInsightsId: true },
+  }).catch(() => []) : []
+  const observedAdpByRiId = buildObservedAdpIdentityIndex(sport, averagedAdpRows, adpIdentities)
   const averagedAdpStrict = new Map<string, number>()
   const averagedAdpLoose = new Map<string, number>()
   for (const row of averagedAdpRows) {
@@ -1238,6 +1291,7 @@ export async function getResolvedDraftPoolForLeague(
   const perfPlayerPool = perfStart(`5. getPlayerPoolForLeague (limit=${poolFetchLimit})`)
   const poolRows: SportPoolRow[] = await getPlayerPoolForLeague(leagueId, sport, {
     limit: poolFetchLimit,
+    currentRosterOnly,
   }).catch(() => [] as SportPoolRow[])
   perfPlayerPool()
   const poolByStrictKey = new Map<string, (typeof poolRows)[number]>()
@@ -1676,6 +1730,16 @@ export async function getResolvedDraftPoolForLeague(
     )
   }
 
+  if (currentRosterOnly) {
+    const idFor = sport === 'NFL' ? nflPoolRowIdResolver(poolRows) : externalSourceIdAsIs
+    const currentPlayers = poolRows.filter(row => !eligiblePositions?.size || draftPoolRowMatchesEligiblePositions(row.position, eligiblePositions))
+      .map(row => ({
+        name: row.full_name, position: row.position, team: row.team_abbreviation ?? null,
+        playerId: (idFor(row) ?? row.player_id)!, imageUrl: row.image_url ?? null,
+        age: row.age ?? null, injuryStatus: row.injury_status ?? null, status: row.status ?? null,
+      }))
+    rawListFiltered = reconcileCurrentDraftSeeds(rawListFiltered, currentPlayers)
+  }
   let nbaSurvivorRoster: NbaRosterEligibility | null = null
   if (verifyCurrentNbaRoster) {
     const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
@@ -2061,12 +2125,10 @@ export async function getResolvedDraftPoolForLeague(
   let nflRookieLookup: NflRookieLookup | null = null
   let nflRookieFetchSource: NflRookieFetchSource | null = null
   if (sport === 'NFL') {
-    // DB-FIRST NOTE: loadNflRookieLookup calls the Sleeper /players/nfl endpoint
-    // (24h in-process memory cache). A future hardening pass should back this
-    // with a DB-persisted SleeperPlayersCache table so no cold-start API call
-    // is made from the pool read path. Failures degrade silently to hasData=false.
-    const perfRookie = perfStart('11. loadNflRookieLookup (Sleeper API â 24h cache)')
-    const rookieBundle = await loadNflRookieLookup().catch(() => null)
+    // A draft read never waits for a provider. Ingestion/audit callers may still refresh
+    // the compact map; missing or expired experience remains unknown here.
+    const perfRookie = perfStart('11. loadNflRookieLookup (stored metadata only)')
+    const rookieBundle = await loadNflRookieLookup({ allowLive: false }).catch(() => null)
     nflRookieLookup = rookieBundle?.lookup ?? null
     nflRookieFetchSource = rookieBundle?.fetchSource ?? null
     perfRookie()
@@ -2087,6 +2149,13 @@ export async function getResolvedDraftPoolForLeague(
     mismatchCollector,
   )
   perfSprMaps()
+  const nflStatScorer = sport === 'NFL' && league
+    ? (await import('@/lib/redraft/scoringEngine')).buildLeagueStatScorer(league)
+    : null
+  const storedSeasonStats = await loadStoredDraftSeasonStats(String(sport),
+    poolRows.flatMap((row) => { const id = rollingInsightsIdOfPoolRow(row); return id ? [id] : [] }),
+    Number.isInteger(league?.season) ? Number(league?.season) : new Date().getUTCFullYear(),
+  )
 
   /*
    * MLB / NHL projections. `AFProjectionSnapshot` is written daily for both (compute-projections),
@@ -2111,6 +2180,7 @@ export async function getResolvedDraftPoolForLeague(
     perfAfProj()
   }
 
+  const perfEnrichRows = perfStart('12. per-player enrichment')
   const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
@@ -2233,6 +2303,7 @@ export async function getResolvedDraftPoolForLeague(
       team,
       sprPoolRecordId,
     )
+    const storedSeason = storedSeasonStats.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')
     const sprAug = sprLookup.augment
     const sprMeta = sprLookup.meta
 
@@ -2327,8 +2398,13 @@ export async function getResolvedDraftPoolForLeague(
           })
         : null
 
+    const observedNfl = sport === 'NFL' ? nflDraftSeasonLine(
+      effectiveRiSlice,
+      idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats : undefined,
+      position, Number(nflStatsSeason), nflStatScorer,
+    ) : null
     const nflDraftProjectionSplits =
-      sport === 'NFL'
+      observedNfl?.splits ?? (sport === 'NFL'
         ? (buildNflDraftProjectionSplits({
             position,
             statsJson: idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats ?? null : null,
@@ -2341,7 +2417,7 @@ export async function getResolvedDraftPoolForLeague(
             projectedPointsPerGame:
               resolvedAnalytics?.fantasyPointsPerGame ?? analytics?.fantasyPointsPerGame ?? null,
           }) ?? emptyNflDraftProjectionSplits())
-        : null
+        : null)
 
     /** E.1.5: real headshot lookup from the backfilled SportsPlayer cache, keyed by
      * (normalizedName | normalizedPosition). Wins over synth/data-URI/team-logo URLs that the
@@ -2380,6 +2456,7 @@ export async function getResolvedDraftPoolForLeague(
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??
+      observedAdpForPlayer(observedAdpByRiId, rollingInsightsIdOfPoolRow(poolMatch), name ?? '') ??
       null
     const resolvedAdp =
       resolvePreferredAdp(row.adp ?? null, averagedAdpHit) ??
@@ -2559,13 +2636,15 @@ export async function getResolvedDraftPoolForLeague(
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
       fantasyPointsPerGame:
+        observedNfl?.fantasyPointsPerGame ??
         resolvedAnalytics?.fantasyPointsPerGame ??
         analytics?.fantasyPointsPerGame ??
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
-      nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
-      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
+      nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : null,
+      statSeason: observedNfl?.season ?? storedSeason?.statSeason ?? null,
+      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
       afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
@@ -2681,6 +2760,7 @@ export async function getResolvedDraftPoolForLeague(
       ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
     } as unknown as RawRow
   })
+  perfEnrichRows()
 
   /**
    * One batched write for every mismatch seen above. Previously this path issued one un-awaited
@@ -2730,8 +2810,10 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
+  const perfNormalizeRows = perfStart('13. deduplicate + normalize player assets')
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
   let entries: NormalizedDraftEntry[] = await cooperativeMap(dedupedEnrichedList, (row) => ({ ...normalizePlayer(row, sport), draftIdProvenance: row.draftIdProvenance }))
+  perfNormalizeRows()
   if (nbaSurvivorRoster) {
     const activeRoster = nbaSurvivorRoster
     entries = entries.filter((entry) =>
@@ -2788,12 +2870,14 @@ export async function getResolvedDraftPoolForLeague(
     return team !== null && String(team).trim() !== '' && String(team).trim().toUpperCase() !== 'FA'
   })
 
+  const perfProjectionFallbacks = perfStart('14. stored position projection fallbacks')
   const { entries: entriesWithProjectionFallbacks, diagnostics: projectionDiagnostics } =
     await applyPositionAwareProjectionFallbacks({
       sport,
       entries,
     })
   entries = entriesWithProjectionFallbacks
+  perfProjectionFallbacks()
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.

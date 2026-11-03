@@ -131,6 +131,14 @@ describe('campus points in the matchup score', () => {
     const data = db.redraftMatchup.update.mock.calls[0]![0].data
     expect(data.homeScore).toBe(Math.round((data.awayScore + 31.25) * 100) / 100)
     expect(data.lineupSnapshots.redraftScoring.campus).toEqual(hoops)
+    expect(data.status).toBe('final')
+  })
+
+  it('does not hold an NBA league with no campus lineup', async () => {
+    nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 0, missingPlayerIds: [], allFinal: true }, away: { points: 0, missingPlayerIds: [], allFinal: true } })
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    await updateMatchupScores('m1')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data.status).toBe('final')
   })
 
   it('a bye team’s median score counts its campus starters', async () => {

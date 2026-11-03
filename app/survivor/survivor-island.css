@@ -1,0 +1,246 @@
+/*
+ * The island look for the standalone Survivor pages (app/survivor/[leagueId]/*), matching the /core
+ * Survivor screens (components/core-app/af-survivor-theme.css) so the whole Survivor experience reads
+ * as one product.
+ *
+ * Imported once by SurvivorAppShell and scoped to its root (`.sv-island`), so nothing leaks into the
+ * rest of the app. It works in three layers:
+ *   1. it re-points the `--survivor-*` tokens the pages already use (globals.css) at the island palette;
+ *   2. it warms the plain-white text and hairline utilities the pages (and the shared Survivor
+ *      components rendered inside them) are written in, with a readable floor for the faintest steps;
+ *   3. it adds a few island classes: Cinzel headings, torch buttons, the scene banner, the nav.
+ *
+ * These pages have always been dark-only (hard-coded white text on dark panels, no light-mode
+ * variant), so the shell paints its own island background and stays dark in the app's light mode
+ * rather than putting light text on a light page.
+ */
+
+.sv-island {
+  --survivor-bg: #07080d;
+  --survivor-panel: #0f1118;
+  --survivor-panel-2: #0b0d13;
+  --survivor-border: rgba(255, 236, 214, 0.08);
+  --survivor-border-strong: rgba(255, 236, 214, 0.14);
+  --survivor-torch: #f0a35e;
+  --survivor-gold: #e8c98e;
+  --survivor-immune: #f2c46b;
+  --survivor-tribal: #e0563b;
+  --survivor-jury: #d9a441;
+  --survivor-text-dim: #a8a196;
+  --survivor-text-medium: #d6cfc3;
+  --survivor-text-bright: #f1ece4;
+  --sv-accent-soft: rgba(240, 163, 94, 0.13);
+  --sv-accent-line: rgba(240, 163, 94, 0.34);
+  --sv-serif: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  --sv-scene: url('/survivor/scenes/tribal.svg');
+
+  color: var(--survivor-text-bright);
+  background-color: var(--survivor-bg);
+  /* The scene sits behind the top of the page and fades into the page colour before content gets busy. */
+  background-image:
+    linear-gradient(180deg, rgba(7, 8, 13, 0.25) 0, rgba(7, 8, 13, 0.78) 260px, #07080d 440px),
+    var(--sv-scene);
+  background-size: 100% 100%, max(100%, 1280px) auto;
+  background-position: 0 0, center top;
+  background-repeat: no-repeat;
+  overflow-x: clip;
+}
+@media (max-width: 720px) {
+  .sv-island { background-size: 100% 100%, auto 300px; }
+}
+
+/* ── 1. Panels ── */
+/* Background only: the border comes from globals.css's `.survivor-panel` (now warm, via the token
+   above) so a page's own `border-l-4` torch bar still shows. */
+.sv-island .survivor-panel {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--survivor-torch) 4%, var(--survivor-panel)), var(--survivor-panel) 60%);
+}
+
+/* ── 2. Warm text and hairlines (Tailwind 3 utilities, re-pointed inside the island only) ── */
+.sv-island .text-white { color: #f1ece4; }
+.sv-island .text-white\/90 { color: rgb(241 236 228 / 0.94); }
+.sv-island .text-white\/85,
+.sv-island .text-white\/80 { color: rgb(241 236 228 / 0.88); }
+.sv-island .text-white\/75,
+.sv-island .text-white\/70 { color: rgb(241 236 228 / 0.82); }
+.sv-island .text-white\/65,
+.sv-island .text-white\/60 { color: rgb(241 236 228 / 0.74); }
+.sv-island .text-white\/55 { color: rgb(241 236 228 / 0.68); }
+.sv-island .text-white\/50 { color: rgb(241 236 228 / 0.64); }
+/* The faintest steps get a floor: below ~0.55 warm text on these panels drops under 4.5:1. */
+.sv-island .text-white\/45,
+.sv-island .text-white\/40 { color: rgb(241 236 228 / 0.6); }
+.sv-island .text-white\/35,
+.sv-island .text-white\/30,
+.sv-island .text-white\/25 { color: rgb(241 236 228 / 0.56); }
+
+.sv-island .border-white\/5,
+.sv-island .border-white\/\[0\.06\] { border-color: rgba(255, 236, 214, 0.08); }
+.sv-island .border-white\/\[0\.08\] { border-color: rgba(255, 236, 214, 0.1); }
+.sv-island .border-white\/10 { border-color: rgba(255, 236, 214, 0.14); }
+.sv-island .border-white\/15 { border-color: rgba(255, 236, 214, 0.18); }
+.sv-island .border-white\/20 { border-color: rgba(255, 236, 214, 0.22); }
+
+/* ── 3. Island classes ── */
+
+/* Section and page headings: carved gold Cinzel. */
+.sv-island .sv-h {
+  font-family: var(--sv-serif);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--survivor-gold);
+}
+/* The small uppercase label over a section. */
+.sv-island .sv-kicker {
+  font-family: var(--sv-serif);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--survivor-gold);
+}
+.sv-island .sv-eyebrow {
+  font: 600 11px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--survivor-torch);
+}
+.sv-island .sv-link { color: var(--survivor-torch); font-weight: 600; text-decoration: none; }
+.sv-island .sv-link:hover { text-decoration: underline; }
+
+.sv-island .sv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  color: #f1ece4;
+  border: 1px solid rgba(255, 236, 214, 0.18);
+  background: rgba(14, 16, 24, 0.82);
+}
+.sv-island .sv-btn:hover { border-color: rgba(240, 163, 94, 0.55); }
+.sv-island .sv-btn:focus-visible { outline: 2px solid var(--survivor-torch); outline-offset: 2px; }
+.sv-island .sv-btn:disabled { opacity: 0.45; }
+.sv-island .sv-btn-primary { background: var(--survivor-torch); border-color: transparent; color: #1a0f05; }
+.sv-island .sv-btn-primary:hover { background: #f4b47a; }
+
+/* A selected pill (chat channels) and a torch-tinted chip. */
+.sv-island .sv-pill-on { background: var(--sv-accent-soft); color: #f6d3ae; box-shadow: inset 0 0 0 1px var(--sv-accent-line); }
+.sv-island .sv-chip-torch { background: var(--sv-accent-soft); color: #f6d3ae; border: 1px solid var(--sv-accent-line); }
+
+/* Chimmy's private lane: the warm host gradient the /core island uses for Chimmy (`--chimmy`). */
+.sv-island .sv-chimmy-card {
+  background: linear-gradient(160deg, #241a12, var(--survivor-panel) 58%);
+  border-color: var(--sv-accent-line);
+}
+
+/* The torch bar down the left of a featured panel (outranks `.survivor-panel`'s border shorthand). */
+.sv-island .sv-torch-bar { border-left: 4px solid var(--survivor-torch); }
+
+.sv-island .sv-score { color: var(--survivor-torch); }
+.sv-island .sv-immune { color: var(--survivor-immune); }
+
+/* ── Shell chrome: a carved-wood top bar and rail, torch-lit active tab ── */
+.sv-island .sv-topbar,
+.sv-island .sv-rail,
+.sv-island .sv-bottom-nav,
+.sv-island .sv-status-dock {
+  border-color: var(--survivor-border);
+  background: color-mix(in srgb, #0a0b10 86%, transparent);
+  backdrop-filter: blur(8px);
+}
+.sv-island .sv-topbar-league {
+  font-family: var(--sv-serif);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--survivor-gold);
+}
+.sv-island .sv-nav-item[data-active='true'] {
+  background: linear-gradient(90deg, var(--sv-accent-soft), transparent 90%);
+  box-shadow: inset 3px 0 0 var(--survivor-torch);
+  color: #f1ece4;
+}
+.sv-island .sv-nav-item[data-active='true'] .sv-nav-glyph { text-shadow: 0 0 10px var(--sv-accent-line); }
+.sv-island .sv-bottom-item[data-active='true'] {
+  background: var(--sv-accent-soft);
+  color: #f6d3ae;
+  box-shadow: inset 0 -2px 0 var(--survivor-torch);
+}
+.sv-island .sv-sheet { background: var(--survivor-panel); border-color: var(--survivor-border-strong); }
+
+/* ── The scene banner on the hub (same art and gradient as components/core-app/survivor/SurvivorIslandBanner) ── */
+.sv-island .sv-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--survivor-border-strong);
+  background-color: #05060a;
+  background-size: cover;
+  background-position: 62% 60%;
+  color: #f1ece4;
+}
+.sv-island .sv-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 6, 10, 0.92) 0%, rgba(5, 6, 10, 0.7) 36%, rgba(5, 6, 10, 0.12) 66%, rgba(5, 6, 10, 0) 82%),
+    linear-gradient(180deg, rgba(5, 6, 10, 0) 58%, rgba(5, 6, 10, 0.8) 100%);
+}
+.sv-island .sv-banner-in {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+  padding: 30px 32px;
+  min-height: 300px;
+}
+.sv-island .sv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.sv-island .sv-chips span {
+  padding: 3px 10px; border-radius: 8px; font-size: 12.5px; color: #e4ddd2; text-transform: capitalize;
+  border: 1px solid rgba(255, 236, 214, 0.16); background: rgba(10, 12, 18, 0.6);
+}
+.sv-island .sv-banner-league {
+  margin: 0;
+  font: 900 40px/1.06 var(--sv-serif);
+  letter-spacing: 0.03em;
+  color: var(--survivor-torch);
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
+}
+.sv-island .sv-banner[data-scene='finale'] .sv-banner-league { color: #f2c46b; }
+.sv-island .sv-banner[data-scene='merge'] .sv-banner-league { color: #e9b04f; }
+.sv-island .sv-banner-headline { margin: 10px 0 0; font-weight: 700; font-size: 18px; line-height: 1.3; color: #f1e3cf; }
+.sv-island .sv-banner-desc { margin: 6px 0 0; max-width: 600px; color: #c3bdb2; font-size: 14.5px; line-height: 1.5; }
+.sv-island .sv-banner-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.sv-island .sv-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: sv-island-flick 1.3s ease-in-out infinite alternate; }
+.sv-island .sv-flame-2 { animation-duration: 1.7s; animation-delay: -0.4s; }
+@keyframes sv-island-flick {
+  0% { transform: scale(1, 1); }
+  40% { transform: scale(0.94, 1.06) skewX(2deg); }
+  100% { transform: scale(1.03, 0.96) skewX(-2deg); }
+}
+
+@media (max-width: 720px) {
+  .sv-island .sv-banner { background-position: 66% 60%; }
+  .sv-island .sv-banner-in { grid-template-columns: minmax(0, 1fr); padding: 20px 18px; gap: 14px; min-height: 0; }
+  .sv-island .sv-emblem { display: none; }
+  .sv-island .sv-banner-league { font-size: 28px; }
+  .sv-island .sv-banner-headline { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-island .sv-flame,
+  .sv-island .tribal-dot-pulse,
+  .sv-island .torch-pulse,
+  .sv-island .exile-chat-fog { animation: none; }
+  .sv-island * { scroll-behavior: auto; }
+}

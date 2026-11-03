@@ -6,6 +6,9 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { TAXI_LOCK_BEHAVIOR_COPY, TAXI_SECTION_COPY, dynastyFormatLang } from '@/lib/i18n/dynasty-format-copy'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import type { DynastySettingsSnapshot } from './useDynastySettingsSnapshot'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { TAXI_SECTION_ANCHOR } from './SettingsNav'
+import { TaxiLockWarning, TaxiRulesExplainer, useTaxiHeld } from './TaxiRulesExplainer'
 import { SettingsSectionLabel, SettingsToggleRow, controlClassSm } from './settings-ui'
 
 /**
@@ -28,6 +31,10 @@ import { SettingsSectionLabel, SettingsToggleRow, controlClassSm } from './setti
  * NHL / MLB have no prospect pool (`lib/league-creation/prospectStashPolicy.ts`): the slot count can
  * only stay or go down (PATCH refuses an increase), and a league with no taxi sees a note instead of
  * the controls.
+ *
+ * Dynasty leagues only (`usesDynastyBackground`): a "What this changes" panel saying what the current
+ * values mean, and — for a commissioner of a dynasty league on AllFantasy — a warning when the slot
+ * count is below what a team holds today (counts from the taxi-steals view; ./TaxiRulesExplainer).
  */
 export function TaxiSquadSettingsSection({
   initialData,
@@ -35,12 +42,15 @@ export function TaxiSquadSettingsSection({
   debouncedSave,
   dynasty,
   saveDynasty,
+  leagueId,
 }: {
   initialData: CommissionerSettingsFormData
   canEdit: boolean
   debouncedSave: (partial: Record<string, unknown>) => void
   dynasty: DynastySettingsSnapshot | null
   saveDynasty: (body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
+  /** For the over-the-limit warning's roster counts; without it the warning is not shown. */
+  leagueId?: string | null
 }) {
   const { language } = useLanguage()
   const lang = dynastyFormatLang(language)
@@ -76,6 +86,10 @@ export function TaxiSquadSettingsSection({
 
   const lockOptions = dynasty?.constants?.taxiLockBehaviorOptions ?? []
 
+  // Dynasty only: non-dynasty leagues render exactly what they did before.
+  const isDynastyLeague = usesDynastyBackground(initialData)
+  const taxiHeld = useTaxiHeld(leagueId, isDynastyLeague && canEdit)
+
   // NHL / MLB: the saved count is the ceiling, so the choice can only keep or lower it.
   const taxiAllowed = sportSupportsProspectStash(initialData.sport)
   const savedTaxiSlots = Math.max(0, initialData.taxiSlots ?? 0)
@@ -96,6 +110,7 @@ export function TaxiSquadSettingsSection({
       <section
         className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4"
         data-testid="taxi-squad-settings-section"
+        id={isDynastyLeague ? TAXI_SECTION_ANCHOR : undefined}
       >
         {header}
         {unavailableNote}
@@ -107,6 +122,7 @@ export function TaxiSquadSettingsSection({
     <section
       className="space-y-6 rounded-2xl border border-white/10 bg-white/[0.025] p-4"
       data-testid="taxi-squad-settings-section"
+      id={isDynastyLeague ? TAXI_SECTION_ANCHOR : undefined}
     >
       {header}
       {unavailableNote}
@@ -130,6 +146,7 @@ export function TaxiSquadSettingsSection({
             </option>
           ))}
         </select>
+        {isDynastyLeague ? <TaxiLockWarning held={taxiHeld} slots={taxiSlots} className="mt-3" /> : null}
       </div>
 
       <SettingsToggleRow
@@ -163,6 +180,10 @@ export function TaxiSquadSettingsSection({
           ))}
         </select>
       </div>
+
+      {isDynastyLeague ? (
+        <TaxiRulesExplainer slots={taxiSlots} yearsLimit={taxiYears} allowNonRookies={taxiNonRookies} />
+      ) : null}
 
       {rules ? (
         <div className="space-y-4 border-t border-white/[0.06] pt-4" data-testid="taxi-dynasty-rules">

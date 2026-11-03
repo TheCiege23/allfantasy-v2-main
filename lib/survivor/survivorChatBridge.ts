@@ -104,6 +104,15 @@ export async function mirrorSurvivorChatMessageToLeagueChat(
   const cardImage = cardData?.type === 'share_card' && typeof cardData.momentId === 'string'
     ? `/api/share/survivor/${encodeURIComponent(cardData.momentId)}?f=post`
     : null
+  /*
+   * A castaway line (lib/survivor/chimmyCastawayChat.ts: Chimmy speaking for a seat it runs) is the
+   * one host row that is explicitly NOT a system message, and its `senderName` is the castaway. The
+   * read path swaps every Chimmy row's author to "Chimmy", so without this the league-chat card
+   * could not say whose seat is talking. Display only; server-owned like the rest of `survivorChat`.
+   */
+  const castawayName = host && row.isSystemMessage === false && typeof row.senderName === 'string' && row.senderName.trim()
+    ? row.senderName.trim().slice(0, 60)
+    : null
   const metadata: Record<string, unknown> = {
     ...(host ? { chimmy: true } : {}),
     ...(cardImage ? { attachments: [{ type: 'image', url: cardImage, mimeType: 'image/png' }] } : {}),
@@ -112,6 +121,7 @@ export async function mirrorSurvivorChatMessageToLeagueChat(
       channelId: row.channelId,
       channelType,
       contentType: row.contentType ?? 'text',
+      ...(castawayName ? { castawayName } : {}),
       ...(cardData ? { cardData } : {}),
       ...(row.isPinned ? { pinned: true } : {}),
     },

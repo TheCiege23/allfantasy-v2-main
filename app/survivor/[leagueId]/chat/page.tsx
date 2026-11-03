@@ -33,7 +33,7 @@ export default function SurvivorChatPage() {
   const visible = tabs.filter((t) => t.show)
 
   const shellClass = (id: TabId) => {
-    if (id === 'tribe') return 'border-l-4 border-sky-500/60 bg-black/20'
+    if (id === 'tribe') return 'border-l-4 border-l-[color:var(--survivor-torch)] bg-black/20'
     if (id === 'chimmy') return 'border-l-4 border-violet-500/50 bg-violet-950/20'
     if (id === 'exile') return 'exile-chat-fog border-l-4 border-violet-400/40 bg-[#0a0612]'
     if (id === 'jury') return 'border-l-4 border-amber-500/50 bg-amber-950/15'
@@ -54,7 +54,7 @@ export default function SurvivorChatPage() {
             aria-label={`${t.label} chat`}
             className={clsx(
               'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wide',
-              tab === t.id ? 'bg-sky-500/20 text-sky-100' : 'bg-white/[0.04] text-white/50',
+              tab === t.id ? 'sv-pill-on' : 'bg-white/[0.04] text-white/50 hover:text-white/80',
             )}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -72,13 +72,13 @@ export default function SurvivorChatPage() {
       <div className={clsx('mt-3 flex-1 rounded-2xl border border-white/[0.06] p-4', shellClass(tab))}>
         {tab === 'league' && (
           <>
-            <p className="text-[11px] font-bold uppercase text-white/45">League feed</p>
+            <p className="sv-kicker text-[11px]">League feed</p>
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border-l-4 border-[var(--survivor-torch)] bg-white/[0.04] p-3">
                 <div className="flex gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--survivor-torch)]/30 text-sm">🔥</div>
                   <div>
-                    <p className="text-[11px] font-bold text-[var(--survivor-torch)]">The Host</p>
+                    <p className="sv-kicker text-[11px]">The Host</p>
                     <p className="text-[13px] text-white/75">Ceremony copy lands here — merges, swaps, and tribal stakes.</p>
                   </div>
                 </div>
@@ -92,7 +92,7 @@ export default function SurvivorChatPage() {
 
         {tab === 'tribe' && (
           <>
-            <p className="flex items-center gap-2 text-[11px] font-bold uppercase text-sky-200/80">
+            <p className="sv-kicker flex items-center gap-2 text-[11px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {tribeMark ? <img src={tribeMark} alt="" width={32} height={32} className="h-8 w-8 rounded-full" /> : null}
               {tribeMark ? `Private · ${tribeName}` : `🔒 Private · ${tribeName}`}
@@ -150,14 +150,14 @@ export default function SurvivorChatPage() {
         <div className="mt-4 flex gap-2">
           <input
             disabled={ctx.playerState === 'eliminated'}
-            className="min-h-[48px] flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-[13px] text-white disabled:opacity-40"
+            className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-[13px] text-white placeholder:text-white/40 focus:border-[rgba(240,163,94,0.55)] focus:outline-none disabled:opacity-40"
             placeholder={ctx.playerState === 'eliminated' ? 'Read-only after torch snuff' : 'Message…'}
             aria-label="Chat message"
           />
           <button
             type="button"
             disabled={ctx.playerState === 'eliminated'}
-            className="min-h-[48px] rounded-xl bg-sky-600/50 px-4 text-[13px] font-semibold text-white disabled:opacity-40"
+            className="sv-btn sv-btn-primary min-h-[48px] px-4 text-[13px]"
           >
             Send
           </button>

@@ -105,6 +105,12 @@ export async function runStartSitScenarioTool(args: {
   if (!scenario) {
     return `Neither ${players.join(' nor ')} could be matched to their roster as a start/sit choice. Ask them to check the names; do not rank the two.`
   }
+  if (scenario.status === 'unresolved' &&
+    (scenario.reason === 'sport_not_supported' || scenario.reason === 'roster_ids_unreadable')) {
+    const { buildOtherSportStartSit } = await import('@/lib/chimmy/otherSportStartSit')
+    const result = await buildOtherSportStartSit({ players, leagueId: args.leagueId, userId: args.userId })
+    return result.text
+  }
   /*
    * Only a pick is a call. `startPlayerId` is set only when the scenario is contested — "both are in
    * your best lineup" or "neither is" picks nobody, and a receipt for it would grade advice that was

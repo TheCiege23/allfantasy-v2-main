@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
@@ -17,6 +17,7 @@ import {
   PermissionsTab,
 } from './settings/CommissionerExtraTabs'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
@@ -53,6 +54,7 @@ import { SurvivorMergeJuryPanel } from './settings/survivor/SurvivorMergeJuryPan
 import { SurvivorChatPanel } from './settings/survivor/SurvivorChatPanel'
 import { SurvivorAIHostPanel } from './settings/survivor/SurvivorAIHostPanel'
 import { SurvivorAdvancedPanel } from './settings/survivor/SurvivorAdvancedPanel'
+import { SurvivorGovernancePanel } from './settings/survivor/SurvivorGovernancePanel'
 import { ZombieSetupPanel } from '@/app/zombie/components/commissioner/ZombieSetupPanel'
 import { ZombieWhispererPanel } from '@/app/zombie/components/commissioner/ZombieWhispererPanel'
 import { ZombieCombatPanel } from '@/app/zombie/components/commissioner/ZombieCombatPanel'
@@ -60,6 +62,9 @@ import { ZombieItemsPanel } from '@/app/zombie/components/commissioner/ZombieIte
 import { ZombiePaidPanel } from '@/app/zombie/components/commissioner/ZombiePaidPanel'
 import { ZombieUniversePanel } from '@/app/zombie/components/commissioner/ZombieUniversePanel'
 import { ZombieUpdatesPanel } from '@/app/zombie/components/commissioner/ZombieUpdatesPanel'
+import { ZombieAutomationPanel } from '@/app/zombie/components/commissioner/ZombieAutomationPanel'
+import { ZombieOverridePanel } from '@/app/zombie/components/commissioner/ZombieOverridePanel'
+import { ZombieAuditLogPanel } from '@/app/zombie/components/commissioner/ZombieAuditLogPanel'
 import { ZombieAIPanel } from '@/app/zombie/components/commissioner/ZombieAIPanel'
 import { ZombieAnimationsPanel } from '@/app/zombie/components/commissioner/ZombieAnimationsPanel'
 import { ZombieAdvancedPanel } from '@/app/zombie/components/commissioner/ZombieAdvancedPanel'
@@ -131,6 +136,7 @@ export function CommissionerSettingsModal({
   onClose: () => void
 }) {
   const [activeTab, setActiveTab] = useState<SettingsNavTabId>('league')
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [payload, setPayload] = useState<ApiGet | null>(null)
@@ -185,7 +191,10 @@ export function CommissionerSettingsModal({
   useEffect(() => {
     if (!isOpen || !leagueId) return
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
-      .then((r) => setZombieMode(r.ok))
+      .then((r) => {
+        setZombieMode(r.ok)
+        if (r.ok) setActiveTab((current) => current === 'league' ? 'zombie_setup' : current)
+      })
       .catch(() => setZombieMode(false))
   }, [isOpen, leagueId])
 
@@ -309,6 +318,16 @@ export function CommissionerSettingsModal({
 
   useEffect(() => {
     if (!isOpen) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      if (opener?.isConnected) opener.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -354,6 +373,7 @@ export function CommissionerSettingsModal({
           onClick={onClose}
           className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.06] text-[15px] text-white/55 transition-colors hover:bg-white/[0.12] hover:text-white md:right-4 md:top-4"
           aria-label="Close settings"
+          ref={closeButtonRef}
         >
           ✕
         </button>
@@ -370,6 +390,7 @@ export function CommissionerSettingsModal({
           showC2cTabs={c2cMode}
           showNativeDevyTab={nativeDevy}
           showNativeC2cTab={nativeC2c}
+          dynasty={usesDynastyBackground(leagueRow as Parameters<typeof usesDynastyBackground>[0])}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
@@ -577,22 +598,30 @@ export function CommissionerSettingsModal({
             <SurvivorChatPanel {...survivorProps} />
           ) : activeTab === 'survivor_ai' ? (
             <SurvivorAIHostPanel {...survivorProps} initialData={initialData} debouncedSave={debouncedSave} />
+          ) : activeTab === 'survivor_governance' ? (
+            <SurvivorGovernancePanel {...survivorProps} />
           ) : activeTab === 'survivor_advanced' ? (
             <SurvivorAdvancedPanel {...survivorProps} />
           ) : activeTab === 'zombie_setup' ? (
             <ZombieSetupPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_whisperer' ? (
-            <ZombieWhispererPanel canEdit={canEdit} />
+            <ZombieWhispererPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_combat' ? (
-            <ZombieCombatPanel canEdit={canEdit} />
+            <ZombieCombatPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_items' ? (
-            <ZombieItemsPanel canEdit={canEdit} />
+            <ZombieItemsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_paid' ? (
             <ZombiePaidPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_universe' ? (
-            <ZombieUniversePanel canEdit={canEdit} />
+            <ZombieUniversePanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_updates' ? (
             <ZombieUpdatesPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_automation' ? (
+            <ZombieAutomationPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_overrides' ? (
+            <ZombieOverridePanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_audit' ? (
+            <ZombieAuditLogPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_animations' ? (
             <ZombieAnimationsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_advanced' ? (

@@ -3,6 +3,8 @@ import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { isTribeHex, readTribeSlots, tribeCatalogIdFor, tribeCrestUrl, SURVIVOR_TRIBE_CATALOG } from './survivorTribeIdentity'
 
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { loadCastawayExperienceFlags } from './survivorExperienceService'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -136,7 +138,14 @@ export async function assignSurvivorTribes(
   // Legacy leagues without explicit slot choices retain balanced assignments.
   const configured = snapshot.survivorTribeSlots != null || (snapshot.survivorFoundationSettings as Record<string, unknown> | undefined)?.survivorTribeSlots != null
   const participants = opts.participants ?? await loadActiveParticipants(leagueId, db)
+  // Rooks vs Vets (lib/survivor/survivorGovernanceSettings.ts): a random draw that splits new and
+  // returning castaways into separate tribes. Only the random formation splits.
+  const governance = readSurvivorGovernanceSettings(snapshot)
+  const experience = (opts.mode ?? 'random') === 'random' && governance.tribeSplit === 'rooks_vs_vets'
+    ? await loadCastawayExperienceFlags(leagueId, participants.map((p) => p.userId), governance.experienceOverrides, db, { crossLeague: governance.experienceCrossLeague })
+    : null
   const assignment = computeTribeAssignment({
+    experience,
     participants,
     tribeCount,
     capacities: configured ? slots.map(slot => slot.managerCount) : null,

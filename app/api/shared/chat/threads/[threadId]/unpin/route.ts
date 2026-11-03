@@ -4,6 +4,7 @@ import { deletePinMessage } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
 import { resolveLeagueAccess } from "@/lib/league-access"
 import { prisma } from "@/lib/prisma"
+import { leagueChatModerator } from "@/lib/commissioner/broadcastAccess"
 
 /**
  * POST /api/shared/chat/threads/[threadId]/unpin
@@ -45,6 +46,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
      */
     const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    // The same rule as pinning, for the same reason: whoever may not pin may not clear the board either.
+    if (!(await leagueChatModerator(leagueId, user.appUserId))) {
+      return NextResponse.json({ error: "Only the commissioner and co-commissioners can unpin in league chat." }, { status: 403 })
+    }
 
     const result = await (prisma as any).leagueChatMessage.deleteMany({
       where: { id: pinMessageId, leagueId, type: "pin" },

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { FinalScoreLogos } from "./FinalScoreLogos"
 import {
   Bell,
   Check,
@@ -200,6 +201,7 @@ export function NotificationPanelView({
                               <p className="text-[11px] font-medium" style={{ color: "var(--text)" }}>
                                 {n.title}
                               </p>
+                              <FinalScoreLogos type={n.type} meta={n.meta} />
                               {n.body && (
                                 <p className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--muted2)" }}>
                                   {n.body}

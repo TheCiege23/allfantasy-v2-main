@@ -280,6 +280,7 @@ export async function readLeagueTradeRows(leagueId: string) {
       .findMany({
         where: { leagueId },
         select: {
+          id: true,
           externalId: true,
           platformUserId: true,
           claimedByUserId: true,
@@ -295,7 +296,7 @@ export async function readLeagueTradeRows(leagueId: string) {
     prisma.roster
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true, sport: true } } },
+        select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true, sport: true } } },
       })
       /*
        * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your

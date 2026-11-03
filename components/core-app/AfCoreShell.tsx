@@ -90,6 +90,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 import '@/components/league/native/redraft-identity.css'
 import '@/components/core-app/af-core-redraft.css'
+import '@/components/core-app/af-core-dynasty.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
@@ -338,6 +339,13 @@ export type AfCoreShellProps = {
    */
   redraftSport?: RedraftSportTheme | null
   /**
+   * The Dynasty Era identity for a dynasty `?league=`, native or imported (lib/core-app/coreShellDynasty.ts).
+   * Stamped on the root as `data-dynasty-background="true"` — the attribute the /league/[id] workspace
+   * already uses — which components/core-app/af-core-dynasty.css reads to re-point /core's accent tokens
+   * to gold and lay the dynasty art. Ignored when a redraft sport or a league theme is set.
+   */
+  dynastyEra?: boolean
+  /**
    * Where the open imported league's lineup is changed (lib/core-app/shellLineupHandoff.ts): the
    * platform's verified lineup screen, else its league page, else null. The Updates menu turns its
    * "make lineup changes on your league's platform" line into this button when present.
@@ -574,6 +582,15 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
 ]
 
 
+/**
+ * A count badge's text, capped at 99+ (2026-11-02 nav redesign). "1735" beside Notifications was
+ * the loudest thing in the rail — louder than a LIVE draft — and four digits say nothing a reader
+ * acts on that "99+" does not. The phone inbox badge already capped this way; the rail now agrees.
+ */
+function navCountText(n: number): string {
+  return n > 99 ? '99+' : String(n)
+}
+
 /** The nav items as the selected league shows them: a Survivor league renames and hides some. */
 function navItems(props: AfCoreShellProps): NavItem[] {
   return themeNavItems(baseNavItems(props), props.leagueTheme)
@@ -793,8 +810,8 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * ⚠ WHAT WENT WITH IT: the per-league RE-SYNC BUTTON. `/api/league/sync` and
      * `/api/league/sleeper-sync` still exist and still work — nothing in the UI
      * calls them now, and sleeper-sync has no caller at all. If re-sync wants a
-     * home again, the 'sync' entry below is it: /core/sync already owns "is THIS
-     * league current".
+     * home again, /core/sync already owns "is THIS league current" — reached from
+     * in-page links, not the rail (see the note where its rail entry used to be).
      */
     { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
     /*
@@ -876,7 +893,7 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
             href: props.selectedLeagueId
               ? `/core/commissioner?league=${encodeURIComponent(props.selectedLeagueId)}`
               : '/core/commissioner',
-            badge: { text: String(props.commissionerCount), tone: 'count' as const },
+            badge: { text: navCountText(props.commissionerCount), tone: 'count' as const },
           },
         ]
       : []),
@@ -893,23 +910,15 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
       // is an invented notification, the same rule ChimmyFab follows.
       badge:
         props.notificationCount && props.notificationCount > 0
-          ? { text: String(props.notificationCount), tone: 'count' }
+          ? { text: navCountText(props.notificationCount), tone: 'count' }
           : undefined,
     },
     /*
-     * League-scoped only. Without a league this is the account-wide connections
-     * page's job, and the nav sends you there rather than to an empty shell.
+     * ⚠ NO 'sync' ENTRY, FOR ANY LEAGUE — removed 2026-10-31 at the owner's request.
+     * /core/sync still renders and is still linked from My team's "re-sync" note and
+     * the commissioner hub's "Re-sync this league"; only the rail entry went. The
+     * `urgencyBadges.sync` count it used to show now has no reader here.
      */
-    {
-      key: 'sync',
-      label: 'Sync',
-      glyph: '↻',
-      href: props.selectedLeagueId
-        ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/leagues',
-      /* Leagues whose data has gone stale, by the issues queue's own rule (isStaleLeague). */
-      badge: urgencyBadge(props.urgencyBadges?.sync),
-    },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
     // Full page outside /core, like My Leagues and League Sync above. The rail's
     // bottom profile tile was the only way there — a single-letter tile nobody
@@ -960,14 +969,13 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'manage',
     heading: 'Manage',
-    /*
-     * 'sync' is THIS league's freshness. The account-wide 'league-sync' page it
-     * used to sit beside is retired — see the rail note above — so this is now
-     * the only sync entry, and it answers a per-league question only.
-     */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
+    /* No sync entry: both the account-wide page and the per-league rail item are gone. */
+    keys: ['commissioner', 'notifications', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
   },
 ]
+
+/** Manage entries folded under "More" in the rail; only when at least two of them are present. */
+const NAV_MORE_KEYS = new Set<CoreNavKey>(['plans', 'tools', 'admin'])
 
 function navSections(props: AfCoreShellProps): NavSection[] {
   const items = navItems(props)
@@ -1873,6 +1881,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       className="af-core af-shell"
       data-format={props.redraftSport ? 'redraft' : undefined}
       data-sport={props.redraftSport ?? undefined}
+      data-dynasty-background={props.dynastyEra && !props.redraftSport && !props.leagueTheme ? 'true' : undefined}
       data-league-theme={props.leagueTheme ?? undefined}
       data-league-first={props.leagueFirst ? 'true' : undefined}
       data-nav-pending={navPending ? 'true' : undefined}
@@ -2341,8 +2350,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-hidden because it is repeated as the list's accessible name —
               announcing it twice is worse than not styling it at all.
             */}
-            <ul className="af-nav-items" aria-label={section.heading ? copy(section.heading) : copy('Primary')}>
-              {section.items.map((item) => (
+            {section.id === 'league' && selectedLeagueName ? (
+              /*
+                Which league "This league" means (2026-11-02 nav redesign). The heading said "This
+                league" and never named one, so the six tabs under it read as generic until you
+                looked across at the rail's highlighted tile. Text, not a control: the rail and the
+                scope switcher are where the league changes.
+              */
+              <div className="af-nav-league" title={selectedLeagueName}>
+                <span className="af-nav-league-dot" aria-hidden />
+                <span className="af-nav-league-name">{selectedLeagueName}</span>
+              </div>
+            ) : null}
+            {(() => {
+              const renderItem = (item: NavItem) => (
                 <li key={item.key}>
                   <Link
                     href={item.href}
@@ -2363,8 +2384,35 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     ) : null}
                   </Link>
                 </li>
-              ))}
-            </ul>
+              )
+              /*
+                ⚠ "MORE" FOLDS THE RARELY-VISITED MANAGE ENTRIES (2026-11-02 nav redesign). Twenty-plus
+                entries ran the rail past the fold; Plans, Tools and Admin are monthly visits, not weekly.
+                Folding hides nothing: a <details> keeps them one click away and in the document, and it
+                opens itself when one of them is the current page, so the active entry is never hidden.
+              */
+              const folded = section.id === 'manage' ? section.items.filter((i) => NAV_MORE_KEYS.has(i.key)) : []
+              const shown = folded.length > 1 ? section.items.filter((i) => !NAV_MORE_KEYS.has(i.key)) : section.items
+              return (
+                <ul className="af-nav-items" aria-label={section.heading ? copy(section.heading) : copy('Primary')}>
+                  {shown.map(renderItem)}
+                  {folded.length > 1 ? (
+                    <li>
+                      <details className="af-nav-more" open={folded.some((i) => i.key === active) || undefined}>
+                        <summary className="af-nav-item">
+                          <span className="af-nav-glyph" aria-hidden>
+                            <CoreNavIcon navKey="more" size={16} />
+                          </span>
+                          <span className="af-nav-label">{copy('More')}</span>
+                          <span className="af-nav-more-caret" aria-hidden>▸</span>
+                        </summary>
+                        <ul className="af-nav-items">{folded.map(renderItem)}</ul>
+                      </details>
+                    </li>
+                  ) : null}
+                </ul>
+              )
+            })()}
           </div>
         ))}
 
@@ -2512,16 +2560,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <TopSearch leagues={searchLeagues} />
 
           <div className="af-topbar-right">
-            {props.isAdmin ? (
-              <Link
-                className="af-admin-shortcut"
-                href="/admin"
-                aria-label={msg.adminAria}
-              >
-                <span aria-hidden>⬢</span>
-                {copy('Admin')}
-              </Link>
-            ) : null}
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
             <details className="af-data-menu">
@@ -2586,33 +2624,62 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             </details>
 
-            {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
-            <ModeToggle className="af-mode-chip af-topbar-chip" />
-            {/* Language beside it, so switching never means leaving /core for /settings. */}
-            <CoreLanguageChip className="af-mode-chip af-topbar-chip" />
-
             {/*
-              The COMPACT form, and only where the visible panel is not already
-              on screen. Home renders the full-width panel below, and two live
-              "Sync now" controls on one screen is the kind of duplication that
-              makes people wonder whether they do different things.
+              ⚠ ONE ACCOUNT MENU, NOT FIVE PEER CHIPS (2026-11-02 nav redesign). The top bar carried
+              Admin, the week, Updates, theme, language and the plan as six same-weight pills, so the
+              chrome competed with the work and nothing read as primary. Theme, language, plan and the
+              admin shortcut are settings about YOU, so they live behind your avatar; the week and
+              Updates stay out because they are about the leagues on screen. Every control is the same
+              component it was (ModeToggle, CoreLanguageChip, HelpDot) — only where it sits changed.
+              The phone header already folds theme and language into the Updates menu; this is the
+              desktop's version of the same decision.
             */}
-
-            {plan ? (
-              <span className="af-plan">
-                <span className="af-plan-name af-label">{plan.name}</span>
-                {plan.tokensLeft != null ? (
-                  <>
-                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
-                    <span className="af-label">{msg.tokensLeft}</span>
-                  </>
-                ) : null}
-                <HelpDot
-                  title={msg.planTokens}
-                  body={msg.planTokensBody}
-                />
-              </span>
-            ) : null}
+            <details className="af-account-menu">
+              <summary aria-label={msg.profileTitle}>
+                <span className="af-account-avatar" aria-hidden>
+                  <RailMark
+                    src={props.profile?.imageUrl}
+                    letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
+                  />
+                </span>
+                {plan ? <span className="af-account-plan af-label">{plan.name}</span> : null}
+                <span className="af-account-caret" aria-hidden>▾</span>
+              </summary>
+              <div className="af-account-panel">
+                <div className="af-account-head">
+                  <strong>{props.profile?.name?.trim() || msg.yourAccount}</strong>
+                  {plan ? (
+                    <span className="af-plan">
+                      <span className="af-plan-name af-label">{plan.name}</span>
+                      {plan.tokensLeft != null ? (
+                        <>
+                          <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
+                          <span className="af-label">{msg.tokensLeft}</span>
+                        </>
+                      ) : null}
+                      <HelpDot title={msg.planTokens} body={msg.planTokensBody} />
+                    </span>
+                  ) : null}
+                </div>
+                <strong className="af-account-section">{copy('Display')}</strong>
+                <div className="af-account-row">
+                  {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
+                  <ModeToggle className="af-mode-chip af-topbar-chip" />
+                  {/* Language beside it, so switching never means leaving /core for /settings. */}
+                  <CoreLanguageChip className="af-mode-chip af-topbar-chip" />
+                </div>
+                <nav className="af-account-links" aria-label={msg.yourAccount}>
+                  {props.isAdmin ? (
+                    <Link className="af-admin-shortcut" href="/admin" aria-label={msg.adminAria}>
+                      <span aria-hidden>⬢</span>
+                      {copy('Admin')}
+                    </Link>
+                  ) : null}
+                  <Link href="/pricing">{copy('Plans & tokens')}</Link>
+                  <Link href="/settings">{msg.profileAndSettings}</Link>
+                </nav>
+              </div>
+            </details>
           </div>
         </header>
 

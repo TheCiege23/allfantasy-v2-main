@@ -161,6 +161,12 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
       /*
+       * Sleeper's `settings.type` itself (0 redraft, 1 keeper, 2 dynasty), stored raw. `isDynasty` and
+       * `is_keeper` above are both `false` when the type is ABSENT, so neither can say "redraft"; this
+       * can. Read by lib/league-media/redraftIdentity.ts (`isImportedRedraftLeague`) and nothing else.
+       */
+      sleeper_league_type: toIntOrUndef(type),
+      /*
        * Sleeper's weekly median game (1 = every week is also a game against the league median).
        * Dropped at import until 2026-10-29, so Season Outlook and the public standings ignored it;
        * `lib/core-app/medianGame.ts` reads it, and falls back to the platform records for leagues

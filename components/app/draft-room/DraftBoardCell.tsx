@@ -10,6 +10,7 @@ import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type DraftBoardCellPick = {
   overall: number
@@ -166,6 +167,7 @@ function DraftBoardCellInner({
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
   const rs = presentationVariant === 'redraft_snake'
+  const { tInterpolate, t } = useOptionalLanguage()
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
 
   const normalized = React.useMemo(() => {
@@ -211,6 +213,12 @@ function DraftBoardCellInner({
 
   const ownerLabel = pick.tradedPickMeta?.newOwnerName ?? pick.displayName ?? null
   const showTradeChip = Boolean(isEmpty && ownerLabel && pick.tradedPickMeta?.newOwnerName)
+  /**
+   * Provenance survives the pick: a made pick on a traded slot keeps a small "via X" marker (X = the
+   * slot's original owner). It sits on the first-name line so the tile keeps its height and its
+   * position colour; the trade tint only ever colours EMPTY cells.
+   */
+  const viaOwner = !isEmpty ? pick.tradedPickMeta?.previousOwnerName?.trim() || null : null
   const compactLabel = compactPickLabel(pick.pickLabel)
 
   const ariaLabel = isEmpty
@@ -278,8 +286,8 @@ function DraftBoardCellInner({
             onTradeFromCell()
           }}
           data-testid={`draft-board-cell-trade-${pick.overall}`}
-          title="Offer pick trade"
-          aria-label="Offer pick trade for this slot"
+          title={t('draftRoom.board.offerPickTrade')}
+          aria-label={t('draftRoom.board.offerPickTradeAria')}
           className="absolute bottom-0.5 right-0.5 z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
           <ArrowLeftRight className="h-3 w-3" />
@@ -344,16 +352,31 @@ function DraftBoardCellInner({
           {pick.tradedPickMeta?.previousOwnerName ? (
             <span
               className="max-w-[70px] shrink-0 truncate text-[11px] text-white/45"
-              title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
+              title={tInterpolate('draftRoom.board.originally', { owner: pick.tradedPickMeta.previousOwnerName })}
             >
-              from {pick.tradedPickMeta.previousOwnerName}
+              {tInterpolate('draftRoom.board.fromOwner', { owner: pick.tradedPickMeta.previousOwnerName })}
             </span>
           ) : null}
         </div>
       ) : (
         <div className={`mt-auto flex min-w-0 items-end gap-1 ${onFill ? 'text-[#14172a]' : 'text-white'}`}>
           <div className="min-w-0 flex-1 leading-none">
-            {firstName ? (
+            {viaOwner ? (
+              <span className="flex min-w-0 items-center gap-1 pr-7 text-[11px] leading-[12px]">
+                {firstName ? (
+                  <span className="min-w-0 shrink-[4] truncate font-medium opacity-80" title={pick.playerName ?? undefined}>
+                    {firstName}{' '}
+                  </span>
+                ) : null}
+                <span
+                  className={`min-w-0 max-w-[64px] truncate rounded-[3px] px-0.5 font-semibold ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
+                  title={tInterpolate('draftRoom.board.originally', { owner: viaOwner })}
+                  data-testid={`draft-board-cell-via-${pick.overall}`}
+                >
+                  {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
+                </span>{' '}
+              </span>
+            ) : firstName ? (
               <span className="block truncate pr-7 text-[11px] font-medium leading-[12px] opacity-80" title={pick.playerName ?? undefined}>
                 {firstName}
                 {/* The two name lines are separate blocks; keep a space so the tile's text (and a

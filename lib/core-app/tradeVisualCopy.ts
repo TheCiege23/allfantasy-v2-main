@@ -2,6 +2,20 @@ import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
 export const tradeVisualSpanish: Record<string,string> = {
+  // The calculator trade builder (2026-10-31).
+  "Search your players, picks or FAAB":"Busca tus jugadores, selecciones o FAAB",
+  "Search their players or picks":"Busca sus jugadores o selecciones",
+  "Grade with AF":"Calificar con AF",
+  "Grade again":"Calificar de nuevo",
+  "Grading…":"Calificando…",
+  "Even trade":"Intercambio equilibrado",
+  "Leans your way":"Favorece a tu equipo",
+  "You're paying more":"Estás pagando más",
+  "Trade ideas":"Ideas de intercambio",
+  "Who has what you need":"Quién tiene lo que necesitas",
+  "Offers, drafts and alerts":"Ofertas, borradores y alertas",
+  "waiting on you":"esperan tu respuesta",
+  "Inbox, saved drafts, screenshot import":"Bandeja, borradores guardados, importar captura",
   "Account history could not be verified. Retry when connected.":"No se pudo verificar el historial de la cuenta. Reintenta cuando tengas conexión.",
   "The saved comparison could not be verified. Retry when connected.":"No se pudo verificar la comparación guardada. Reintenta cuando tengas conexión.",
   "The removal could not be verified. Retry when connected.":"No se pudo verificar la eliminación. Reintenta cuando tengas conexión.",

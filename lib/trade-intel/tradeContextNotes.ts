@@ -38,14 +38,10 @@ import {
   guillotineHorizon,
 } from './guillotine'
 import {
-  BOMB_POINTS,
-  serumStackingNote,
   serumValue,
   tradeWindow,
   vetoRiskNote,
-  weaponSurplus,
-  WEAPON_POINTS,
-  type WeaponTier,
+  zombieInventoryNotes,
 } from './zombie'
 import {
   impossiblePickWarning,
@@ -574,10 +570,15 @@ async function zombieNotesFor(
   if (teams.length >= 2) {
     const norm = (t: { status: string }) => (t.status ?? '').toLowerCase()
     const survivors = teams.filter((t) => norm(t) === 'survivor').length
-    const whispererActive = teams.some((t) => norm(t) === 'whisperer')
-    const zombies = teams.length - survivors - (whispererActive ? 1 : 0)
+    const zombies = teams.filter((t) => norm(t) === 'zombie').length
 
-    const window = tradeWindow({ survivors, whispererActive, teamCount: teams.length })
+    const config = await prisma.zombieLeagueConfig.findUnique({
+      where: { leagueId }, select: { zombieTradeBlocked: true },
+    }).catch(() => null)
+    const window = tradeWindow({
+      survivors, zombies, whisperers: teams.filter(t => norm(t) === 'whisperer').length, teamCount: teams.length,
+      zombieTradeBlocked: config?.zombieTradeBlocked ?? false,
+    })
     if (window) notes.push(window.basis)
 
     const serum = serumValue({ zombieCount: zombies, teamCount: teams.length })
@@ -591,40 +592,14 @@ async function zombieNotesFor(
    * on every chart: beyond your top two they pay you exactly nothing and pay
    * somebody holding fewer their full face value every week.
    */
-  const items = await prisma.zombieTeamItem
-    .findMany({
-      where: { userId, isUsed: false, isExpired: false },
-      select: { itemType: true, itemLabel: true },
-      take: 100,
-    })
-    .catch((): Array<{ itemType: string; itemLabel: string | null }> => [])
-
-  if (items.length > 0) {
-    /*
-     * Classified from type and label together, tolerantly: the item vocabulary
-     * is not one we control, and a weapon we fail to recognise must not be
-     * silently counted as a serum (or vice versa) — they cap differently, which
-     * is the whole point of the notes below.
-     */
-    const held: number[] = []
-    let serums = 0
-    for (const it of items) {
-      const tag = `${it.itemType ?? ''} ${it.itemLabel ?? ''}`.toLowerCase()
-      if (tag.includes('serum')) {
-        serums += 1
-        continue
-      }
-      const tier = (Object.keys(WEAPON_POINTS) as WeaponTier[]).find((k) => tag.includes(k))
-      if (tier) held.push(WEAPON_POINTS[tier])
-      else if (tag.includes('bomb')) held.push(BOMB_POINTS)
-    }
-
-    const surplus = weaponSurplus({ held, weeksRemaining: 0 })
-    if (surplus.basis) notes.push(surplus.basis)
-
-    const stacking = serumStackingNote({ held: serums })
-    if (stacking) notes.push(stacking)
-  }
+  const zombieLeague = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } }).catch(() => null)
+  const items = zombieLeague
+    ? await prisma.zombieTeamItem.findMany({
+        where: { zombieLeagueId: zombieLeague.id, userId, isUsed: false, isExpired: false },
+        select: { itemType: true, itemLabel: true }, take: 100,
+      }).catch((): Array<{ itemType: string; itemLabel: string | null }> => [])
+    : []
+  notes.push(...zombieInventoryNotes(items))
 
   /*
    * The veto warning is procedural rather than a fairness opinion: a manager

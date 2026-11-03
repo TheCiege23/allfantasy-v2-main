@@ -572,7 +572,7 @@ export async function POST(req: NextRequest) {
   })
 
   /*
-   * "New message in your league chat" — bell/push/email/text for members who turned the League chat
+   * "New message in your league chat" — bell and push for members who turned the League chat
    * messages category on (it is OFF by default on every channel). Fire-and-forget, after the save.
    * A Big Brother side room is narrower than the league, so only its main room is announced.
    */
@@ -604,8 +604,9 @@ export async function POST(req: NextRequest) {
         title: '@all in league chat',
         body: `${senderName} mentioned everyone in the league chat.`,
         severity: 'low',
-        actionHref: `/league/${encodeURIComponent(leagueId)}`,
+        actionHref: `/league/${encodeURIComponent(leagueId)}?openChat=league&message=${encodeURIComponent(created.id)}`,
         actionLabel: 'Open chat',
+        skipChannels: { email: true, sms: true },
         meta: { leagueId, messageId: created.id },
         dedupePrefix: `at_all:${created.id}`,
       })

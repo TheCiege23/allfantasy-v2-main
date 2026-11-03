@@ -43,9 +43,17 @@ const ROUND_POINTS_BY_SPORT: Partial<Record<PlayoffSport, Partial<Record<Playoff
     cfp_championship: 8,
   },
   nba_cup: {
+    cup_group_play: 1,
     cup_quarterfinals: 1,
     cup_semifinals: 2,
     cup_championship: 4,
+  },
+  // Same doubling as the CFP: a Super Bowl pick is worth eight Wild Card picks.
+  nfl: {
+    nfl_wild_card: 1,
+    nfl_divisional: 2,
+    nfl_conference: 4,
+    nfl_super_bowl: 8,
   },
   mlb: {
     wild_card: 5,

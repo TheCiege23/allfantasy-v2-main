@@ -22,7 +22,7 @@ export function JuryVotingCard({
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.08] p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200">⚖️ Jury vote</p>
+      <p className="sv-kicker text-[11px]">⚖️ Jury vote</p>
       <p className="mt-1 text-[13px] text-white/80">Cast your vote for the season winner.</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {finalists.map((f) => (
@@ -31,7 +31,7 @@ export function JuryVotingCard({
             type="button"
             onClick={() => setSel(f.id)}
             className={`min-h-[56px] rounded-xl border px-2 text-[13px] font-semibold ${
-              sel === f.id ? 'border-amber-400 bg-amber-500/20 text-white' : 'border-white/10 bg-black/30 text-white/80'
+              sel === f.id ? 'border-[#e8c98e] bg-[rgba(232,201,142,0.14)] text-white' : 'border-white/10 bg-black/30 text-white/80'
             }`}
           >
             {f.name}
@@ -41,7 +41,7 @@ export function JuryVotingCard({
       <button
         type="button"
         disabled={!sel}
-        className="mt-3 w-full min-h-[48px] rounded-lg bg-amber-500 text-[13px] font-bold text-black disabled:opacity-40"
+        className="mt-3 w-full min-h-[48px] rounded-lg bg-[var(--survivor-torch,#f0a35e)] text-[13px] font-bold text-[#1a0f05] disabled:opacity-40"
         onClick={() => {
           if (sel) onConfirm?.(sel)
           setDone(true)

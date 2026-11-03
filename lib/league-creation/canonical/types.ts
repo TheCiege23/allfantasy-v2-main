@@ -86,6 +86,9 @@ export interface CreateLeagueSuccessResponse {
     presetKey: string
   }
   homepageUrl?: string
+  /** Present when multiple Zombie leagues were committed together. */
+  universeId?: string
+  leagueIds?: string[]
   /** Non-fatal preset warnings (e.g. odd team count). */
   warnings?: ValidationIssue[]
   metaEvent?: MetaEventPayload

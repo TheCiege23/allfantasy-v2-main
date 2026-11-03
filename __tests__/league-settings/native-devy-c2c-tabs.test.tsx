@@ -19,12 +19,12 @@ const nav = (over: Record<string, boolean> = {}) =>
 describe('the native Devy / C2C tabs', () => {
   it('show only for a league that has the native config', () => {
     const { unmount } = nav()
-    expect(screen.queryByText('🎓 Devy Settings')).toBeNull()
-    expect(screen.queryByText('🏆 C2C Settings')).toBeNull()
+    expect(screen.queryByText('Devy Settings')).toBeNull()
+    expect(screen.queryByText('C2C Settings')).toBeNull()
     unmount()
     nav({ showNativeDevyTab: true, showNativeC2cTab: true })
-    expect(screen.getByText('🎓 Devy Settings')).toBeTruthy()
-    expect(screen.getByText('🏆 C2C Settings')).toBeTruthy()
+    expect(screen.getByText('Devy Settings')).toBeTruthy()
+    expect(screen.getByText('C2C Settings')).toBeTruthy()
   })
 
   it('are not legacy tabs, so the legacy guards never send them back to League', () => {

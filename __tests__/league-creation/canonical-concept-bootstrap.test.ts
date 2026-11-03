@@ -24,12 +24,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const leagueFindUnique = vi.fn()
 const upsertZombieLeagueConfig = vi.fn()
 const createZombieLeague = vi.fn()
+const findZombieLeague = vi.fn().mockResolvedValue(null)
 const upsertBigBrotherConfig = vi.fn()
 const runBigBrotherLeagueBootstrap = vi.fn()
 const upsertSurvivorConfig = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { league: { findUnique: (...a: unknown[]) => leagueFindUnique(...a) } },
+  prisma: { league: { findUnique: (...a: unknown[]) => leagueFindUnique(...a) }, zombieLeague: { findUnique: (...args: unknown[]) => findZombieLeague(...args) } },
 }))
 
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({
@@ -109,9 +110,17 @@ function mockLeague(leagueType: string, conceptSetup: Record<string, unknown> = 
   })
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); findZombieLeague.mockResolvedValue(null) })
 
 describe('zombie', () => {
+  it('preserves a Zombie row already attached by the atomic universe transaction', async () => {
+    mockLeague('zombie', { zombie_universe_id: 'universe-6', zombie_level_id: 'beta-level' })
+    findZombieLeague.mockResolvedValue({ id: 'attached-zombie' })
+    await runLeagueBootstrap('lg1', 'NFL')
+    expect(upsertZombieLeagueConfig).toHaveBeenCalledWith('lg1', { whispererSelection: 'random', universeId: 'universe-6' })
+    expect(createZombieLeague).not.toHaveBeenCalled()
+  })
+
   it('writes the config and creates the ZombieLeague row', async () => {
     mockLeague('zombie')
     await runLeagueBootstrap('lg1', 'NFL')

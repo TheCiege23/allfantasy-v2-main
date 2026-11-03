@@ -617,7 +617,9 @@ export async function fetchEspnScoreboard(
         odds: comp.odds?.[0]?.details ?? null,
         overUnder: comp.odds?.[0]?.overUnder ?? null,
         week: event.week?.number ?? null,
-        season: event.season.year,
+        // ESPN labels winter leagues by their ending year; native redraft and RI
+        // key the same season by its starting year (2026-27 => 2026).
+        season: ['NBA', 'NHL'].includes(sport) ? event.season.year - 1 : event.season.year,
         topPerformer: pickTopPerformer(comp.leaders),
         leaders: pickGameLeaders(comp.leaders as EspnLeaderCategory[] | undefined),
         // Raw ESPN abbreviations on purpose: `possessionText` is written in
@@ -1055,6 +1057,9 @@ async function syncLiveScoresToDb(sport: LiveSport, scores: LiveScoreRow[], sour
         update: {
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
+          ...(['NBA', 'NHL'].includes(sport) && source === 'espn_live' ? {
+            raw: { homeTeamFull: score.homeTeamFull, awayTeamFull: score.awayTeamFull },
+          } : {}),
           homeScore,
           awayScore,
           status: statusForDb,
@@ -1070,6 +1075,9 @@ async function syncLiveScoresToDb(sport: LiveSport, scores: LiveScoreRow[], sour
           externalId: score.gameId,
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
+          ...(['NBA', 'NHL'].includes(sport) && source === 'espn_live' ? {
+            raw: { homeTeamFull: score.homeTeamFull, awayTeamFull: score.awayTeamFull },
+          } : {}),
           homeScore,
           awayScore,
           status: statusForDb,

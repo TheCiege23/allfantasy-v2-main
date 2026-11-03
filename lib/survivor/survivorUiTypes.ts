@@ -93,6 +93,8 @@ export type SurvivorSeasonPayload = {
   exileStatus?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   /** League setting: voted-out managers go to Exile Island. */
   exileEnabled?: boolean
+  /** Exile secrecy is on AND this viewer may not know who is on Exile (they see "eliminated"). */
+  exileMembershipHidden?: boolean
   juryStatus?: unknown
   userState?: SurvivorSeasonPlayer | null
   weeklyScores?: Array<{ userId: string; finalScore: number; tribeId: string | null; countedTowardTribeTotal: boolean; isFinalized: boolean }>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { EpisodeCard } from '@/app/survivor/components/EpisodeCard'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import type { SurvivorEpisode } from '@/lib/survivor/survivorEpisode'
 
 /** The season so far, one episode per week, from the recaps the island has already posted. */
@@ -35,8 +36,8 @@ export default function SurvivorEpisodesPage() {
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10" data-testid="survivor-episodes-page">
       <section className="survivor-panel rounded-2xl p-5">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">Season timeline</p>
-        <h1 className="mt-1 text-xl font-bold text-white">{ctx.leagueName}</h1>
+        <p className="sv-eyebrow">Season timeline</p>
+        <h1 className="sv-h mt-1 text-xl md:text-2xl">{ctx.leagueName}</h1>
         <p className="mt-2 text-[13px] text-white/55">
           {episodes ? `${episodes.length} episode${episodes.length === 1 ? '' : 's'} so far` : 'Loading the season…'}
         </p>
@@ -51,13 +52,13 @@ export default function SurvivorEpisodesPage() {
 
       {revealed && revealed.length ? (
         <section className="survivor-panel mt-6 rounded-2xl p-5" data-testid="confessional-reveal">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200">The confessional reveal</p>
-          <h2 className="mt-1 text-lg font-bold text-white">What everyone was really thinking</h2>
+          <p className="sv-eyebrow">The confessional reveal</p>
+          <h2 className="sv-h mt-1 text-lg">What everyone was really thinking</h2>
           <ul className="mt-3 space-y-2">
             {revealed.map(row => (
               <li key={row.id} className="rounded-lg border border-white/10 bg-black/25 p-3 text-[13px] text-white/80">
-                <span className="font-semibold text-amber-100">{row.author}</span>
-                <time className="ml-2 text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleDateString()}</time>
+                <span className="font-semibold text-[#f6d3ae]">{row.author}</span>
+                <time className="ml-2 text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleDateString(getAppIntlLocale())}</time>
                 <p className="mt-1">“{row.text}”</p>
               </li>
             ))}

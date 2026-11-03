@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const db = vi.hoisted(() => ({ findCoOwner: vi.fn(), findRoster: vi.fn(), findTeam: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { teamCoOwner: { findUnique: db.findCoOwner }, roster: { findFirst: db.findRoster }, leagueTeam: { findFirst: db.findTeam } } }))
+const db = vi.hoisted(() => ({ findCoOwner: vi.fn(), findRoster: vi.fn(), findTeam: vi.fn(), zombie: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { teamCoOwner: { findUnique: db.findCoOwner }, roster: { findFirst: db.findRoster }, leagueTeam: { findFirst: db.findTeam }, zombieLeague: { findUnique: db.zombie } } }))
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster, isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 
-beforeEach(() => { vi.clearAllMocks(); db.findCoOwner.mockResolvedValue(null); db.findRoster.mockResolvedValue(null); db.findTeam.mockResolvedValue(null) })
+beforeEach(() => { vi.clearAllMocks(); db.findCoOwner.mockResolvedValue(null); db.findRoster.mockResolvedValue(null); db.findTeam.mockResolvedValue(null); db.zombie.mockResolvedValue(null) })
 describe('team co-owner roster access', () => {
+  it('revokes accepted Zombie co-manager access once the draft has activated the season', async () => {
+    db.findCoOwner.mockResolvedValue({ rosterId: 'r1', acceptedAt: new Date(), rosterOwnerKey: 'owner', claimedOwnerId: null, roster: { leagueId: 'l1', platformUserId: 'owner' } })
+    db.zombie.mockResolvedValue({ status: 'active' })
+    expect(await acceptedCoOwnerRosterId('l1', 'u1')).toBeNull()
+    db.zombie.mockResolvedValue({ status: 'setup' })
+    expect(await acceptedCoOwnerRosterId('l1', 'u1')).toBe('r1')
+  })
   it('fails closed if the additive table has not been deployed', async () => {
     db.findCoOwner.mockRejectedValueOnce({ code: 'P2021' })
     expect(await acceptedCoOwnerRosterId('l1', 'u1')).toBeNull()

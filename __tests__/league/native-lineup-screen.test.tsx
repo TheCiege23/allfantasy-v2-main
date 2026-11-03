@@ -333,7 +333,6 @@ describe('NativeLineupScreen', () => {
     expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb2', 'rb3'])
   })
 })
-
 describe('NativeLineupScreen — tap to swap', () => {
   const routes = (r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)])) => ({
     '/api/league/roster': r,

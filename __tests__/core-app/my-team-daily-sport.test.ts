@@ -91,8 +91,39 @@ describe('applyDailySportToLineup', () => {
   it('a failed outlook leaves the rows exactly as they were', async () => {
     h.outlook.mockRejectedValue(new Error('db down'))
     const m = new Map([['fx1', row('fx1', 'NJ')]])
-    await applyDailySportToLineup(m, LEAGUE)
+    expect(await applyDailySportToLineup(m, LEAGUE)).toBeNull()
     expect(m.get('fx1')).toMatchObject({ afProjectedPoints: null, gameContext: null })
+    expect(m.get('fx1')!.noGamePeriod).toBeUndefined()
+  })
+
+  // Redraft /core batch B2: the off-day / idle-week badge and the period chip read these.
+  it('returns the period it priced, and marks a team with no game in it — weekly → "week"', async () => {
+    h.outlook.mockResolvedValue(weekly({ fx1: { projectedPoints: 11.5, periodGames: 3 }, fx2: { projectedPoints: 6, periodGames: 0 }, fx3: { projectedPoints: 4, periodGames: null } }))
+    const m = new Map([['fx1', row('fx1', 'NJ')], ['fx2', row('fx2', 'NYR')], ['fx3', row('fx3', 'SEA')]])
+    expect(await applyDailySportToLineup(m, LEAGUE)).toEqual({ kind: 'week', day: null, week: 4 })
+    expect(m.get('fx1')!.noGamePeriod).toBeUndefined()
+    expect(m.get('fx2')!.noGamePeriod).toBe('week')
+    // An unknown slate (periodGames null) is NOT an idle week.
+    expect(m.get('fx3')!.noGamePeriod).toBeUndefined()
+  })
+
+  it('daily lineup: no game today is an off day, said as today rather than "this week"', async () => {
+    const daily = weekly({ a: { projectedPoints: 20, periodGames: 0 }, b: { projectedPoints: 30, periodGames: 1 } })
+    daily.period = { kind: 'day', season: 2026, week: 4, day: '2026-10-30' } as never
+    ;(daily.byKey.get('b') as Record<string, unknown>).opponent = 'NYK'
+    ;(daily.byKey.get('b') as Record<string, unknown>).homeAway = 'home'
+    ;(daily.byKey.get('a') as Record<string, unknown>).opponent = null
+    h.outlook.mockResolvedValue(daily)
+    const m = new Map([['a', row('a', 'BOS', { sport: 'NBA' })], ['b', row('b', 'DEN', { sport: 'NBA' })]])
+    expect(await applyDailySportToLineup(m, { ...LEAGUE, sport: 'NBA' })).toEqual({ kind: 'day', day: '2026-10-30', week: 4 })
+    expect(m.get('a')).toMatchObject({ noGamePeriod: 'day', gameContext: 'no game today' })
+    expect(m.get('b')).toMatchObject({ gameContext: 'DEN vs NYK' })
+    expect(m.get('b')!.noGamePeriod).toBeUndefined()
+  })
+
+  it('CONTROL: NFL returns no period', async () => {
+    const m = new Map([['a', row('a', 'KC', { sport: 'NFL' })]])
+    expect(await applyDailySportToLineup(m, { ...LEAGUE, sport: 'NFL', platform: 'sleeper' })).toBeNull()
   })
 })
 
@@ -110,5 +141,14 @@ describe('dailyGameContext', () => {
 
   it('unknown slate stays null rather than a guessed zero', () => {
     expect(dailyGameContext('BOS', { periodGames: null })).toBeNull()
+  })
+
+  it('a DAY period counts one day: "no game today", not "no games this week"', () => {
+    expect(dailyGameContext('BOS', { opponent: null, periodGames: 0 }, 'day')).toBe('no game today')
+    expect(dailyGameContext('BOS', { opponent: null, periodGames: 1 }, 'day')).toBe('game today')
+    expect(dailyGameContext('BOS', { periodGames: 0 }, 'week')).toBe('no games this week')
+    expect(dailyGameContext('BOS', { periodGames: null }, 'day')).toBeNull()
+    expect(kickoffText('no game today', 'es')).toBe('sin partido hoy')
+    expect(kickoffText('game today', 'es')).toBe('juega hoy')
   })
 })

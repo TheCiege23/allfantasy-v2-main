@@ -36,7 +36,8 @@ const en = translations.en
 const es = translations.es
 const tEn = (k: string) => en[k] ?? k
 const tEs = (k: string) => es[k] ?? k
-const read = (f: string) => fs.readFileSync(path.join(process.cwd(), f), 'utf8')
+// Source-shape checks should work with both Windows and Linux checkout line endings.
+const read = (f: string) => fs.readFileSync(path.join(process.cwd(), f), 'utf8').replace(/\r\n/g, '\n')
 
 /** Spanish that is really Spanish: no raw key, no «waiver», no «traspaso». */
 function expectSpanish(text: string, english?: string) {

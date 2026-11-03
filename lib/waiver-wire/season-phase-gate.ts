@@ -3,9 +3,7 @@
  * answers it for one team or for a whole waiver run. Used by the add/drop route, `createClaim`, the
  * processor and the settings GET.
  *
- * FAILS OPEN to the regular-season policy on a failed read: before this file no phase rule existed,
- * so an unreadable phase keeps exactly the behaviour every league had (the lifecycle gate still
- * closes a redraft or keeper league's offseason on its own).
+ * If the phase or draft cannot be read, roster moves stay locked until the policy is available.
  */
 import { prisma } from '@/lib/prisma'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
@@ -45,7 +43,7 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
     const [league, row, latest, completed] = await Promise.all([
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { lifecycleState: true, leagueType: true, isDynasty: true },
+        select: { lifecycleState: true, status: true, leagueType: true, isDynasty: true },
       }),
       prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } }),
       prisma.redraftSeason.findFirst({
@@ -56,9 +54,11 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
       prisma.redraftSeason.count({ where: { leagueId, status: 'complete' } }),
     ])
     if (!league) return REGULAR
+    const beforeDraft = ['setup', 'pre_draft', 'draft', 'drafting', 'in_progress'].includes(String(league.lifecycleState || league.status || 'setup').toLowerCase())
+    const draft = beforeDraft ? await prisma.draftSession.findFirst({ where: { leagueId, sessionKind: 'live' }, orderBy: { createdAt: 'desc' }, select: { status: true } }) : null
     const config = parseWaiverEngineConfig(row?.waiverEngineConfig ?? null)
     return {
-      phase: resolveWaiverSeasonPhase({
+      phase: beforeDraft && draft?.status !== 'completed' ? 'pre_draft' : resolveWaiverSeasonPhase({
         lifecycleState: league.lifecycleState,
         latestSeasonStatus: latest?.status ?? null,
         hasCompletedSeason: Number(completed) > 0,
@@ -69,7 +69,7 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
       seasonId: latest?.id ?? null,
     }
   } catch {
-    return REGULAR
+    return { ...REGULAR, phase: 'pre_draft' }
   }
 }
 

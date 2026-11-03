@@ -256,7 +256,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
   it('pauses route polling while the first asset picker is open, before a player is selected', () => {
     expect(routeRefreshClaimed()).toBe(false)
     const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
-    fireEvent.click(screen.getAllByRole('button', { name: '+ Add asset', exact: true })[0])
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".af-tc-team[data-side='give'] .af-tc-add")!)
     expect(routeRefreshClaimed()).toBe(true)
     fireEvent.click(screen.getAllByRole('button', { name: 'Close', exact: true })[0])
     expect(routeRefreshClaimed()).toBe(false)
@@ -323,7 +323,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     await analyze(container)
     expect(screen.getByText('Re-evaluated counteroffers')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
-    expect(container.querySelector('.af-tc-review')!.textContent).toContain('Depth Receiver')
+    expect(container.querySelector(".af-tc-team[data-side='get']")!.textContent).toContain('Depth Receiver')
     expect(container.querySelector('.af-tc-verdict')).toBeNull()
     await act(async () => { fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!) })
     const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/trade-value/analyze'))
@@ -344,7 +344,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
       fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!)
     })
 
-    const review = container.querySelector('.af-tc-review')!.textContent ?? ''
+    const review = container.querySelector('.af-tc-builder')!.textContent ?? ''
     expect(review).toContain('5,928')
     expect(review).toContain('base 4,500')
     // The totals add up to the grade's totals, not to the market prices.

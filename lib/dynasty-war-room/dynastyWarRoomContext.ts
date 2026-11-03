@@ -260,6 +260,7 @@ export async function buildDynastyWarRoomContext(
     position: string
     team: string | null
     slotType: string
+    lineupSection: 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
   }
   const rawPlayers: RawPlayer[] = []
   for (const r of rosterRows) {
@@ -279,6 +280,7 @@ export async function buildDynastyWarRoomContext(
           position,
           team: team ? team.toUpperCase() : null,
           slotType: sectionSlotType(sec),
+          lineupSection: sec,
         })
       }
     }
@@ -333,6 +335,7 @@ export async function buildDynastyWarRoomContext(
       position: p.position,
       team: p.team,
       slotType: p.slotType,
+      lineupSection: p.lineupSection,
       isStarterSlot: p.slotType === 'starter',
       age,
       dynastyValue: null,

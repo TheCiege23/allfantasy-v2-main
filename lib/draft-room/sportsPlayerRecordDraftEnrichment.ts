@@ -36,6 +36,13 @@ export type SportsPlayerRecordDraftAugment = {
 }
 
 export type NbaDraftSeasonRates = {
+  assistsPerGame?: number | null
+  stealsPerGame?: number | null
+  blocksPerGame?: number | null
+  threePointersMadePerGame?: number | null
+  fieldGoalPercentage?: number | null
+  freeThrowPercentage?: number | null
+  gamesPlayed?: number | null
   pointsPerGame: number | null
   reboundsPerGame: number | null
   minutesPerGame: number | null
@@ -70,7 +77,18 @@ export function extractNbaDraftSeasonRates(blob: unknown): NbaDraftSeasonRates |
       ? Math.round(candidate * 10) / 10
       : null
   }
+  const percentage = (made: string[], attempted: string[]): number | null => {
+    const m = number(made), a = number(attempted)
+    return m != null && a != null && a > 0 && m <= a ? m / a : null
+  }
   const result = {
+    gamesPlayed: games,
+    assistsPerGame: rate(['assists_per_game', 'assistsPerGame', 'apg'], ['assists', 'ast'], 40),
+    stealsPerGame: rate(['steals_per_game', 'stealsPerGame', 'spg'], ['steals', 'stl'], 20),
+    blocksPerGame: rate(['blocks_per_game', 'blocksPerGame', 'bpg'], ['blocks', 'blk'], 20),
+    threePointersMadePerGame: rate(['three_points_made_per_game'], ['three_points_made', 'threePointersMade'], 20),
+    fieldGoalPercentage: percentage(['field_goals_made'], ['field_goals_attempted']),
+    freeThrowPercentage: percentage(['free_throws_made'], ['free_throws_attempted']),
     pointsPerGame: rate(['points_per_game', 'pointsPerGame', 'ppg'], ['points', 'pts'], 100),
     reboundsPerGame: rate(['rebounds_per_game', 'reboundsPerGame', 'rpg'], ['total_rebounds', 'rebounds', 'reb', 'Total Rebounds'], 40),
     minutesPerGame: rate(['minutes_per_game', 'minutesPerGame', 'mpg', 'average_minutes'], ['minutes', 'minutes_played', 'Minutes Played'], 60),

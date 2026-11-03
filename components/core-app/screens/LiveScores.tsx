@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
 import { LiveLeaguesGlance } from '@/components/core-app/screens/LiveLeaguesGlance'
+import { LiveNowStrip } from '@/components/core-app/screens/LiveNowStrip'
+import { liveGameAnchor, liveSlateStrip } from '@/lib/live/liveSlateStrip'
 import { buildLeaguesAtAGlance, type LeagueRef } from '@/lib/live/leaguesAtAGlance'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import { gameStage, groupByStage } from '@/lib/live/gameStage'
@@ -50,6 +52,11 @@ import {
   type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
+// Redraft batch B3: broadcast score bugs, scoped to the /core shell's data-format="redraft".
+import '@/components/core-app/af-core-redraft-matchup.css'
+// Redraft: the "now" strip, the games strip and the matchup scoreboard card (design board LiveScores).
+import '@/components/core-app/af-core-redraft-live.css'
+import { liveGameBug } from '@/lib/core-app/redraftCoreScoreBug'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   countSuffix,
@@ -363,9 +370,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     [scopedGames],
   )
 
+  /*
+   * "Live now" (the games strip's filter, redraft design board): a client-side narrowing of the slate
+   * already held, on `gameStage`'s rule. It never changes what is loaded or polled.
+   */
+  const [liveOnly, setLiveOnly] = useState(false)
+  const slateStrip = useMemo(() => liveSlateStrip(orderedGames), [orderedGames])
   const visibleGames = useMemo(
-    () => orderedGames.filter((game) => matchesLiveGameQuery(game, query)),
-    [orderedGames, query],
+    () => orderedGames.filter((game) => matchesLiveGameQuery(game, query) && (!liveOnly || gameStage(game) === 'live')),
+    [orderedGames, query, liveOnly],
   )
   /*
    * The college Top 25 filter emptied this slate, so EmptySlate says so and carries its own "Show all
@@ -451,6 +464,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   }
   const pickSport = (next: string) => {
     setSport(next)
+    setLiveOnly(false)
     syncViewToUrl(next, scope)
     void load(next, scope)
   }
@@ -563,6 +577,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.', language)}
         </p>
       </header>
+
+      <LiveNowStrip
+        strip={slateStrip}
+        now={now}
+        sportLabel={activeSportLabel}
+        hasRosterData={data.hasRosterData}
+        liveOnly={liveOnly}
+        onLiveOnly={setLiveOnly}
+      />
 
       {selectedLeagueId ? (
         <LiveMatchupStrip
@@ -754,7 +777,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           ) : null}
 
           {visibleGames.length === 0 ? (
-            query.trim() ? (
+            liveOnly && !query.trim() ? (
+              <div className="af-live-empty" data-testid="live-only-empty">
+                <p className="af-live-empty-title">{lsc('No games are live right now.', language)}</p>
+                <button type="button" className="af-btn af-live-empty-action" onClick={() => setLiveOnly(false)}>
+                  {lsc('Show every game', language)}
+                </button>
+              </div>
+            ) : query.trim() ? (
               <div className="af-live-empty">
                 <p className="af-live-empty-title">{noScoreboardMatch(query.trim(), language)}</p>
                 <p className="af-live-empty-body">
@@ -1086,6 +1116,8 @@ export function GameCard({
   const isBaseball =
     game.sport === 'MLB' || situation?.baseball != null || game.home.hits != null || game.away.hits != null
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
+  /* The status bar's tone, lead word and period text (lib/core-app/redraftCoreScoreBug.ts). */
+  const bug = liveGameBug(game)
 
   /*
    * ⚠ `data-changed` IS THE ONLY THING THAT MOVES. The card is not re-mounted
@@ -1095,8 +1127,10 @@ export function GameCard({
    */
   return (
     <article
+      id={liveGameAnchor(game.gameId)}
       className="af-live-game"
       data-live={game.isLive}
+      data-state={bug.tone}
       data-changed={scoreChanged && !lowDataOn ? 'true' : undefined}
     >
       <div className="af-live-game-head">
@@ -1104,7 +1138,12 @@ export function GameCard({
         {game.isLive ? (
           <span className="af-live-clock">
             <span className="af-live-pulse" aria-hidden />
-            <span className="af-num">{game.clockLabel ?? game.statusDetail}</span>
+            {/* The bar's lead word. Redraft only — af-core-redraft-matchup.css hides it elsewhere. */}
+            <span className="af-live-bug-word af-label">{lsc('Live', language)}</span>
+            {/* Never "Q0": a period-zero placeholder is dropped, and nothing usable reads "Live". */}
+            <span className="af-num" data-fallback={bug.label == null || undefined}>
+              {bug.label ?? lsc('Live', language)}
+            </span>
           </span>
         ) : (
           <span className="af-live-clock" data-idle="true">
@@ -1338,7 +1377,7 @@ function FinalGameRow({
     </span>
   )
   return (
-    <li className="af-live-final" data-open={open}>
+    <li id={liveGameAnchor(game.gameId)} className="af-live-final" data-open={open}>
       <button
         type="button"
         className="af-live-final-toggle"

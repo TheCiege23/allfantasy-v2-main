@@ -64,10 +64,10 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
     expect(src).toMatch(/min-w-0 overflow-x-auto overscroll-x-contain[\s\S]{0,200}data-testid="draft-mobile-board-scroll"/)
   })
 
-  it('Players tab wraps its content in an overflow-x-auto scroll container', () => {
+  it('Players tab bounds the player list without adding a second horizontal scroller', () => {
     expect(src).toMatch(/data-testid="draft-mobile-players-sheet"/)
     expect(src).toMatch(/data-testid="draft-mobile-players-scroll"/)
-    expect(src).toMatch(/min-w-0 overflow-x-auto overscroll-x-contain[\s\S]{0,200}data-testid="draft-mobile-players-scroll"/)
+    expect(src).toMatch(/h-full min-h-0 min-w-0 overflow-hidden[\s\S]{0,200}data-testid="draft-mobile-players-scroll"/)
   })
 
   it('Queue / Roster / Chat tabs render WITHOUT a horizontal scroll wrapper (their content is column-shaped)', () => {

@@ -136,6 +136,19 @@ function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['sou
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
 ): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
+  return runRosterLineupWithEngine(input, true)
+}
+
+/** Read-only rehearsal of the same validation, taxi and lock gates as a member save. */
+export async function previewRosterLineupWithEngine(
+  input: Omit<PersistRosterLineupInput, 'source' | 'skipLockCheck' | 'taxiProtection' | 'transactionCheck'>,
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
+  return runRosterLineupWithEngine({ ...input, source: 'user_save', skipLockCheck: false, taxiProtection: undefined }, false)
+}
+
+async function runRosterLineupWithEngine(
+  input: PersistRosterLineupInput, persist: boolean,
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
   })
@@ -264,6 +277,19 @@ export async function persistRosterLineupWithEngine(
     if (campusIssues.length) return { ok: false, error: campusIssues.map((i) => i.message).join(' '), status: 400 }
   }
 
+  // Survivor's "forced bench" disadvantage (lib/survivor/survivorForcedBench.ts). SURVIVOR LEAGUES ONLY:
+  // every other league stops at this boolean and never loads the module. A commissioner override or an
+  // import is never refused, as above.
+  if (league.survivorMode === true && (input.source === 'user_save' || input.source === 'system')) {
+    const { forcedBenchSaveRefusal } = await import('@/lib/survivor/survivorForcedBench')
+    const names = lineupPlayerNames(roster.playerData, input.nextPlayerData)
+    const refusal = await forcedBenchSaveRefusal({
+      leagueId: input.leagueId, rosterId: input.rosterId, week: input.week,
+      starterIds: lineupPlayerIds(input.nextPlayerData, 'starters'), language: league.language ?? null, nameOf: names,
+    })
+    if (refusal) return { ok: false, error: refusal, status: 409 }
+  }
+
   const leagueWeek = weekFromLeagueSettings(league.settings)
 
   if (!input.skipLockCheck) {
@@ -293,6 +319,9 @@ export async function persistRosterLineupWithEngine(
       return { ok: false, error: 'That player\'s game has started, so their lineup position is locked.', status: 403 }
     }
   }
+
+  // Evidence collection must end before transactions, history, promotions or notifications.
+  if (!persist) return { ok: true }
 
   const before = roster.playerData as Prisma.InputJsonValue
 

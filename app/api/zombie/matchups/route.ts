@@ -1,3 +1,5 @@
+import { parseZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
+import { beta2025ContextFromSnapshot } from '@/lib/zombie/beta2025Winnings'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -48,7 +50,7 @@ export async function GET(req: Request) {
     getZombieLeagueConfig(leagueId).catch(() => null),
     prisma.zombieWeeklyResolution.findUnique({
       where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
-      select: { status: true, resolvedAt: true, infectionCount: true },
+      select: { status: true, resolvedAt: true, infectionCount: true, settlementSnapshot: true },
     }),
     prisma.roster.findMany({
       where: { leagueId },
@@ -65,7 +67,22 @@ export async function GET(req: Request) {
     }),
     resolveWhispererViewer(leagueId, userId),
   ])
-  if (!results) return NextResponse.json({ matchups: [], week })
+  const winningsContext = beta2025ContextFromSnapshot(resolution?.settlementSnapshot)
+  const winningsPolicy = winningsContext || resolution?.status !== 'complete' ? 'beta_2025' : 'legacy_score'
+  if (!results) return NextResponse.json({
+    matchups: [],
+    week,
+    rules: {
+      bashingThreshold: rules.bashingThreshold,
+      maulingThreshold: rules.maulingThreshold,
+      winningsPolicy,
+      bashShare: winningsPolicy === 'beta_2025' ? 1 : BASH_TRANSFER_SHARE,
+      maulShare: winningsPolicy === 'beta_2025' ? 1 : MAUL_TRANSFER_SHARE,
+    },
+    resolution: resolution
+      ? { status: resolution.status, resolvedAt: resolution.resolvedAt, infectionCount: resolution.infectionCount }
+      : null,
+  })
 
   const raw = zombieTeams.map((t) => ({ rosterId: t.rosterId, status: t.status }))
   const shown = viewer.canSee ? raw : redactStatusEntries(raw, viewer.identity)
@@ -81,6 +98,10 @@ export async function GET(req: Request) {
     rules,
     lossToZombieInfects: config?.infectionLossToZombie !== false,
     myRosterId,
+    winningsContext,
+    hideWinningsOf: rosterId => !viewer.canSee && viewer.identity.rosterIds.has(rosterId),
+    winningsPolicy,
+    winningsRules: parseZombieSettlementSnapshot(resolution?.settlementSnapshot)?.rules,
   })
 
   return NextResponse.json({
@@ -89,8 +110,9 @@ export async function GET(req: Request) {
     rules: {
       bashingThreshold: rules.bashingThreshold,
       maulingThreshold: rules.maulingThreshold,
-      bashShare: BASH_TRANSFER_SHARE,
-      maulShare: MAUL_TRANSFER_SHARE,
+      winningsPolicy,
+      bashShare: winningsPolicy === 'beta_2025' ? 1 : BASH_TRANSFER_SHARE,
+      maulShare: winningsPolicy === 'beta_2025' ? 1 : MAUL_TRANSFER_SHARE,
     },
     resolution: resolution
       ? { status: resolution.status, resolvedAt: resolution.resolvedAt, infectionCount: resolution.infectionCount }

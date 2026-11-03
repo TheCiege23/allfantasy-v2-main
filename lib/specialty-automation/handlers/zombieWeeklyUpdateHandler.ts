@@ -5,7 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { buildWeeklyUpdate, composeWeeklyUpdateBody } from '@/lib/zombie/weeklyUpdateEngine'
+import { buildWeeklyUpdate, postWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
 import { getZombieSeasonSchedule } from '@/lib/zombie/zombieSeasonSchedule'
 
@@ -28,7 +28,7 @@ export async function triggerZombieLeagueWeeklyUpdate(
   try {
     const z = await prisma.zombieLeague.findUnique({
       where: { leagueId },
-      select: { id: true, status: true, sport: true, universeId: true },
+      select: { id: true, status: true, sport: true, universeId: true, weeklyUpdateApproval: true, weeklyUpdateAutoPost: true },
     })
     if (!z) {
       return { leagueId, success: false, week, error: 'Zombie league not found' }
@@ -36,62 +36,26 @@ export async function triggerZombieLeagueWeeklyUpdate(
     if (z.status !== 'active' && z.status !== 'in_progress') {
       return { leagueId, success: false, week, error: `League status ${z.status}, skipping update` }
     }
+    if (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval) {
+      return { leagueId, success: false, week, error: 'Automatic weekly updates are disabled' }
+    }
 
-    // Build weekly update (infections, resource awards)
+    const resolution = await prisma.zombieWeeklyResolution.findUnique({
+      where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
+      select: { status: true },
+    })
+    if (resolution?.status !== 'complete') {
+      return { leagueId, success: false, week, error: 'Week has not resolved yet' }
+    }
+    const existing = await prisma.zombieAnnouncement.findUnique({
+      where: { idempotencyKey: `zombie-weekly:${z.id}:${week}` },
+      select: { isPosted: true },
+    })
+    if (existing?.isPosted) return { leagueId, success: true, week, message: 'Weekly update already posted' }
     const draft = await buildWeeklyUpdate(leagueId, week)
-    const text = composeWeeklyUpdateBody(draft)
+    await postWeeklyUpdate(leagueId, week, draft)
 
-    // Get league owner for system announcement
-    const lg = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-    if (!lg?.userId) {
-      return { leagueId, success: false, week, error: 'League owner not found' }
-    }
-
-    // Post to league chat as host announcement
-    await prisma.leagueChatMessage.create({
-      data: {
-        leagueId,
-        userId: lg.userId,
-        message: text.slice(0, 100_000),
-        type: 'host_announcement',
-        metadata: {
-          senderIsHost: true,
-          contentType: 'host_announcement',
-          isPinned: true,
-          zombieWeeklyUpdate: true,
-          week,
-        },
-      },
-    })
-
-    // Create/update announcement record
-    const existing = await prisma.zombieAnnouncement.findFirst({
-      where: { zombieLeagueId: z.id, week, type: 'weekly_update' },
-      orderBy: { createdAt: 'desc' },
-    })
-
-    if (existing && !existing.isPosted) {
-      await prisma.zombieAnnouncement.update({
-        where: { id: existing.id },
-        data: { isPosted: true, postedAt: new Date(), content: text },
-      })
-    } else if (!existing) {
-      await prisma.zombieAnnouncement.create({
-        data: {
-          zombieLeagueId: z.id,
-          universeId: z.universeId,
-          type: 'weekly_update',
-          title: `Week ${week} — Horde Report`,
-          content: text,
-          week,
-          isPosted: true,
-          postedAt: new Date(),
-          isPublic: true,
-        },
-      })
-    }
-
-    return { leagueId, success: true, week, message: 'Weekly update posted' }
+    return { leagueId, success: true, week, message: z.weeklyUpdateApproval ? 'Weekly update ready for review' : 'Weekly update posted' }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { leagueId, success: false, week, error: msg }
@@ -127,7 +91,7 @@ export async function triggerZombieUniverseWeeklyUpdates(
     const successCount = results.filter((r) => r.success).length
     const failureCount = results.filter((r) => !r.success).length
     const universeMsg = {
-      id: `universe-summary-w${week}-${Date.now()}`,
+      id: `universe-summary-w${week}`,
       userId: 'system',
       userName: 'Universe Horde Report',
       body:
@@ -146,7 +110,8 @@ export async function triggerZombieUniverseWeeklyUpdates(
         ? settings.universeChat
         : []
       : []
-    const updated = [...existing, universeMsg].slice(-200)
+    const updated = existing.some((entry: { id?: string }) => entry.id === universeMsg.id)
+      ? existing : [...existing, universeMsg].slice(-200)
 
     await prisma.zombieUniverse.update({
       where: { id: universeId },
@@ -184,7 +149,7 @@ export async function triggerAllZombieWeeklyUpdates(): Promise<{
     // Get all active zombie leagues grouped by sport.
     const leagues = await prisma.zombieLeague.findMany({
       where: { status: { in: ['active', 'in_progress'] } },
-      select: { leagueId: true, sport: true, currentWeek: true, universeId: true },
+      select: { id: true, leagueId: true, sport: true, currentWeek: true, universeId: true },
     })
 
     const dueLeagues = leagues.filter((league) => {
@@ -195,13 +160,19 @@ export async function triggerAllZombieWeeklyUpdates(): Promise<{
     const universeSummary = new Map<string, { success: number; failed: number; week: number }>()
 
     for (const league of dueLeagues) {
-      const result = await triggerZombieLeagueWeeklyUpdate(league.leagueId, league.currentWeek ?? 1)
+      const latest = await prisma.zombieWeeklyResolution.findFirst({
+        where: { zombieLeagueId: league.id, status: 'complete' },
+        orderBy: { week: 'desc' },
+        select: { week: true },
+      })
+      if (!latest) continue
+      const result = await triggerZombieLeagueWeeklyUpdate(league.leagueId, latest.week)
       results.push(result)
       if (league.universeId) {
         const prev = universeSummary.get(league.universeId) ?? {
           success: 0,
           failed: 0,
-          week: league.currentWeek ?? 1,
+          week: latest.week,
         }
         if (result.success) prev.success += 1
         else prev.failed += 1
@@ -216,7 +187,7 @@ export async function triggerAllZombieWeeklyUpdates(): Promise<{
       }))?.settings as Record<string, unknown> | null
       const existing = Array.isArray(settings?.universeChat) ? settings.universeChat : []
       const message = {
-        id: `universe-summary-w${summary.week}-${Date.now()}`,
+        id: `universe-summary-w${summary.week}`,
         userId: 'system',
         userName: 'Universe Horde Report',
         body:
@@ -224,10 +195,12 @@ export async function triggerAllZombieWeeklyUpdates(): Promise<{
           (summary.failed > 0 ? `, ${summary.failed} failed.` : '.'),
         createdAt: new Date().toISOString(),
       }
-      await prisma.zombieUniverse.update({
-        where: { id: universeId },
-        data: { settings: { ...(settings ?? {}), universeChat: [...existing, message].slice(-200) } },
-      })
+      if (!existing.some((entry: { id?: string }) => entry.id === message.id)) {
+        await prisma.zombieUniverse.update({
+          where: { id: universeId },
+          data: { settings: { ...(settings ?? {}), universeChat: [...existing, message].slice(-200) } },
+        })
+      }
     }
 
     const succeeded = results.filter((r) => r.success).length

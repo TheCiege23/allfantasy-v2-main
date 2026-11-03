@@ -32,6 +32,8 @@ const m = vi.hoisted(() => {
     welcome: vi.fn(),
   }
 })
+const forcedBench = vi.hoisted(() => ({ list: vi.fn(async () => [] as unknown[]) }))
+vi.mock('@/lib/survivor/survivorRewardEngine', () => ({ listSurvivorRewards: forcedBench.list }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
 vi.mock('@/lib/inactive-manager/welcomeBackService', () => ({ buildWelcomeBack: m.welcome }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -253,5 +255,25 @@ describe('the hourly run', () => {
   it('records a failure for one team and carries on', async () => {
     m.players.mockRejectedValueOnce(new Error('db down'))
     expect((await runInactiveManagerLineups()).failures).toEqual([{ leagueId: 'L', rosterId: 'r1', error: 'db down' }])
+  })
+})
+
+describe('Survivor forced bench (Chimmy respects it)', () => {
+  beforeEach(() => {
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 'x', byUserId: 'c' } } }
+    // rb-good would start over rb-out on projection; the forced bench on rb-good keeps him out.
+    forcedBench.list.mockResolvedValue([{ spec: { type: 'forced_bench', chooserRosterId: 'r9', targetRosterId: 'r1', playerId: 'rb-good' }, status: 'applied', applyWeek: 7 }])
+  })
+
+  it('a Survivor league: the benched player is never put in the lineup', async () => {
+    m.state.league = { ...m.state.league, survivorMode: true }
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 0, unchanged: 1 })
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('a league that is not Survivor never reads the ledger and plays as before', async () => {
+    m.state.league = { ...m.state.league, survivorMode: false }
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 1 })
+    expect(forcedBench.list).not.toHaveBeenCalled()
   })
 })

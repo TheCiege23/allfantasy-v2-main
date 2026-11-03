@@ -13,15 +13,14 @@ export function LeagueWorkspaceNavigation({ leagueId, platform, sourceLeagueId, 
   leagueName: string
   season?: number | null
 }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const { language, t } = useOptionalLanguage()
   const mode = leagueWorkspaceMode(platform, language)
   const source = mode.authority === 'NATIVE' ? null : resolveSourceLink({ platform, sourceLeagueId, leagueName, season })
   return (
-    <section className="af-core af-workspace-navigation" aria-label={es ? 'Navegación de la liga' : 'League workspace navigation'}>
-      <nav className="af-workspace-navigation-links" aria-label={es ? 'Volver a los paneles' : 'Dashboard navigation'}>
-        <Link href={ALL_LEAGUES_DASHBOARD_HREF}>{es ? '← Volver al panel' : '← Back to Dashboard'}</Link>
-        <Link href={leagueEntryHref({ id: leagueId, platform })}>{mode.authority === 'NATIVE' ? (es ? 'Inicio de la liga' : 'League Home') : (es ? 'Panel de la liga' : 'League Dashboard')}</Link>
+    <section className="af-core af-workspace-navigation" aria-label={t('league.workspaceNav.aria')}>
+      <nav className="af-workspace-navigation-links" aria-label={t('league.workspaceNav.dashboardAria')}>
+        <Link href={ALL_LEAGUES_DASHBOARD_HREF}>{t('league.workspaceNav.backToDashboard')}</Link>
+        <Link href={leagueEntryHref({ id: leagueId, platform })}>{mode.authority === 'NATIVE' ? t('league.workspaceNav.leagueHome') : t('league.workspaceNav.leagueDashboard')}</Link>
         {source ? <a href={source.href} target="_blank" rel="noopener noreferrer">{source.label} ↗</a> : null}
       </nav>
       <div className="af-workspace-navigation-mode" data-authority={mode.authority}>

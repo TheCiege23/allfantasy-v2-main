@@ -2,6 +2,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { championshipTotal, rankBrackets, scoreAndPotential } from "@/lib/playoffs/playoffCompetition"
 import type { PlayoffSport } from "@/lib/playoffs/types"
+import { eligibleNbaCupPicks } from "@/lib/playoffs/nbaCupTournament"
 
 export const dynamic = "force-dynamic"
 
@@ -9,25 +10,25 @@ export default async function UniversalBracketStandings(props: {
   searchParams: Promise<{ sport?: string; season?: string }>
 }) {
   const params = await props.searchParams
-  const sport: PlayoffSport = params.sport === "nba_cup" ? "nba_cup" : "ncaaf"
+  const sport: PlayoffSport = params.sport === "nba_cup" ? "nba_cup" : params.sport === "nfl" ? "nfl" : "ncaaf"
   const parsedSeason = Number(params.season)
   const season = Number.isInteger(parsedSeason) && parsedSeason >= 2024 && parsedSeason <= 2100
     ? parsedSeason : new Date().getUTCFullYear()
   const entries = await (prisma as any).playoffBracketEntry.findMany({
     where: { finalizedAt: { not: null }, challenge: { sport, seasonYear: season, isTestMode: false } },
     select: {
-      id: true, name: true, tiebreakerTotalScore: true,
+      id: true, name: true, tiebreakerTotalScore: true, finalizedAt: true,
       user: { select: { displayName: true, username: true } },
       picks: { select: { seriesId: true, pickTeamName: true } },
       challenge: {
         select: { id: true, name: true, config: true, series: {
-          select: { id: true, round: true, winnerTeamName: true, homeTeamName: true,
+          select: { id: true, round: true, startsAt: true, winnerTeamName: true, homeTeamName: true,
             awayTeamName: true, liveHomeScore: true, liveAwayScore: true },
         } },
       },
     },
   }) as Array<{
-    id: string; name: string; tiebreakerTotalScore: number | null
+    id: string; name: string; tiebreakerTotalScore: number | null; finalizedAt: Date | null
     user: { displayName: string | null; username: string | null }
     picks: Array<{ seriesId: string; pickTeamName: string }>
     challenge: { id: string; name: string; config: { visibility?: string } | null; series: any[] }
@@ -40,10 +41,10 @@ export default async function UniversalBracketStandings(props: {
     leagueId: entry.challenge.id,
     leagueName: entry.challenge.config?.visibility === "public" ? entry.challenge.name : "Private league",
     tiebreakerTotalScore: entry.tiebreakerTotalScore,
-    ...scoreAndPotential(entry.challenge.series, entry.picks, sport),
+    ...scoreAndPotential(entry.challenge.series, sport === "nba_cup" ? eligibleNbaCupPicks(entry.challenge.series, entry.picks, entry.finalizedAt) : entry.picks, sport),
   }))
   const ranked = rankBrackets(scored, completedFinal)
-  const title = sport === "ncaaf" ? "College Football Playoff" : "NBA Cup"
+  const title = sport === "ncaaf" ? "College Football Playoff" : sport === "nfl" ? "NFL Playoffs" : "NBA Cup"
 
   return <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
     <div className="mx-auto max-w-6xl">
@@ -57,6 +58,7 @@ export default async function UniversalBracketStandings(props: {
         <div className="flex gap-2">
           <Link href={`/brackets/standings?sport=ncaaf&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "ncaaf" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>CFP</Link>
           <Link href={`/brackets/standings?sport=nba_cup&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "nba_cup" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>NBA Cup</Link>
+          <Link href={`/brackets/standings?sport=nfl&season=${season}`} className={`rounded-xl border px-4 py-2 text-sm font-bold ${sport === "nfl" ? "border-teal-300 bg-teal-300 text-slate-950" : "border-white/20 text-white"}`}>NFL</Link>
         </div>
       </div>
       <div className="mt-8 overflow-x-auto rounded-3xl border border-white/15 bg-slate-900/80 shadow-2xl">
@@ -76,7 +78,7 @@ export default async function UniversalBracketStandings(props: {
             </tr>)}
           </tbody>
         </table>
-        {ranked.length === 0 && <p className="p-8 text-center text-slate-300">No finalized brackets yet. Make your picks before the first game and claim the first spot.</p>}
+        {ranked.length === 0 && <p className="p-8 text-center text-slate-300">No finalized brackets yet. {sport === "nba_cup" ? "Pick the upcoming Cup games and finalize to claim the first spot." : "Make your picks before the first game and claim the first spot."}</p>}
       </div>
       <p className="mt-4 text-sm text-slate-400">Ties: more points, then closest predicted final-game combined score once final, then more correct picks. Equal brackets share a rank. Potential does not break ties.</p>
       <p className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm font-semibold text-amber-100">No prizes, gambling, betting, entry fees, or payouts are offered by AllFantasy. Paid subscriptions only provide extra bracket capacity.</p>

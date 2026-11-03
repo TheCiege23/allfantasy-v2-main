@@ -371,6 +371,8 @@ model PlayerIdentityMap {
   currentTeam       String?
   dob               String?
   sleeperId         String?  @unique
+  /// NBA Sleeper ids live in a different namespace from NFL Sleeper ids.
+  sleeperNbaId      String?
   fantasyCalcId     String?
   rollingInsightsId String?
   apiSportsId       String?
@@ -407,6 +409,7 @@ model PlayerIdentityMap {
   fantraxId         String?
 
   @@index([normalizedName])
+  @@unique([sport, sleeperNbaId])
   @@index([fantasyCalcId])
   @@index([rollingInsightsId])
   @@index([apiSportsId])
@@ -6237,6 +6240,8 @@ enum LeagueLifecycleState {
 
 model League {
   id                                    String                                 @id @default(uuid())
+  pirateProtectionSets                  PirateProtectionSet[]
+  pirateClaims                          PirateClaim[]
   // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
   // docs/commissioner-os/TENANCY.md §5.
   //
@@ -8107,6 +8112,7 @@ model LeagueChatMessage {
   discordMessageId  String?  @db.VarChar(64)
   sourceDiscord     Boolean  @default(false)
   globalBroadcastId String?  @db.VarChar(64)
+  zombieWeeklyAnnouncementId String? @unique @db.VarChar(64)
   /// @chimmy private thread â€” only `visibleToUserId` should see the row when true.
   isPrivate         Boolean  @default(false)
   mentionedUserIds  String[] @default([])
@@ -10257,6 +10263,8 @@ model ZombieLeague {
   commissionerId           String?
   currentTeamCount         Int                      @default(0)
   currentWeek              Int                      @default(0)
+  correctionHoldFromWeek   Int?
+  latestCorrectionReviewId String?
   draftScheduledAt         DateTime?
   isPaid                   Boolean                  @default(false)
   isSingleLeague           Boolean                  @default(false)
@@ -10265,6 +10273,8 @@ model ZombieLeague {
   potTotal                 Float                    @default(0)
   season                   Int                      @default(2026)
   seasonStartWeek          Int?
+  experienceMode           String                   @default("enhanced") @db.VarChar(16)
+  rulesSnapshot            Json?
   slug                     String                   @default("") @db.VarChar(160)
   sport                    String                   @default("NFL") @db.VarChar(12)
   status                   String                   @default("setup")
@@ -10274,6 +10284,7 @@ model ZombieLeague {
   ultimateSurvivorPot      Boolean                  @default(false)
   weeklyPayoutEnabled      Boolean                  @default(false)
   whispererAmbushCount     Int                      @default(3)
+  whispererCount           Int                      @default(1)
   whispererIsPublic        Boolean                  @default(true)
   whispererSelectionMode   String                   @default("random")
   /// 0=Sun â€¦ 6=Sat (UTC). Null = no scheduled weekly post.
@@ -10304,13 +10315,73 @@ model ZombieLeague {
   resources                ZombieResourceLedger[]
   rulesDocuments           ZombieRulesDocument[]
   weeklyResolutions        ZombieWeeklyResolution[]
+  externalWeeklyPayouts    ZombieExternalWeeklyPayout[]
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
+  coWhisperers             ZombieCoWhisperer[]
+  roleWorkflows            ZombieRoleWorkflow[]
+  correctionReviews        ZombieCorrectionReview[]
 
   @@index([universeId])
   @@index([levelId])
   @@index([status])
   @@map("zombie_leagues")
+}
+
+/// Versioned Zombie season reviews, ownership history, ballots and acceptance evidence.
+model ZombieOperationsRecord {
+  id String @id @db.VarChar(180)
+  scope String @db.VarChar(100)
+  season Int
+  kind String @db.VarChar(32)
+  payload Json
+  actorUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([scope, season, kind])
+  @@map("zombie_operations_records")
+}
+
+model ZombieCorrectionReview {
+  id                 String       @id @default(uuid())
+  zombieLeagueId     String
+  fromWeek           Int
+  sourceHash         String       @db.VarChar(64)
+  status             String       @default("ready") @db.VarChar(24)
+  source             Json
+  plan               Json
+  requestedByUserId  String
+  approvedByUserId   String?
+  reason             String?
+  appliedAt          DateTime?
+  effectsPending     Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  league             ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@unique([zombieLeagueId, fromWeek, sourceHash], map: "zombie_correction_source_key")
+  @@index([effectsPending, updatedAt])
+  @@map("zombie_correction_reviews")
+}
+
+model ZombieRoleWorkflow {
+  id String @id @db.VarChar(160)
+  zombieLeagueId String
+  kind String @db.VarChar(32)
+  week Int?
+  actorUserId String?
+  targetUserId String?
+  status String @default("pending") @db.VarChar(24)
+  deadlineAt DateTime?
+  state Json
+  decision String? @db.VarChar(24)
+  decidedByUserId String?
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@index([zombieLeagueId, status])
+  @@index([status, deadlineAt])
+  @@map("zombie_role_workflows")
 }
 
 model WhispererRecord {
@@ -10339,6 +10410,27 @@ model WhispererRecord {
   @@index([zombieLeagueId])
   @@index([userId])
   @@map("zombie_whisperer_records")
+}
+
+/// Optional second Whisperer seat for NBA, NHL, and MLB. Primary record remains intact.
+model ZombieCoWhisperer {
+  id                  String       @id @default(cuid())
+  zombieLeagueId      String       @unique
+  userId              String
+  displayName         String
+  selectionMode       String
+  selectedAt          DateTime     @default(now())
+  isPubliclyRevealed  Boolean      @default(true)
+  ambushesGranted     Int          @default(3)
+  ambushesUsed        Int          @default(0)
+  ambushesRemaining   Int          @default(3)
+  wasDefeated         Boolean      @default(false)
+  defeatedAtWeek      Int?
+  createdAt           DateTime     @default(now())
+  league              ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, userId])
+  @@map("zombie_co_whisperers")
 }
 
 model ZombieInfectionEvent {
@@ -10386,6 +10478,7 @@ model ZombieWeeklyResolution {
   weaponAwards           Json?
   resolvedAt             DateTime?
   requiresStatCorrection Boolean      @default(false)
+  settlementSnapshot     Json?
   createdAt              DateTime     @default(now())
   league                 ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
@@ -10490,6 +10583,7 @@ model ZombieAnnouncement {
   createdAt      DateTime     @default(now())
   /// When set, post only after this time (cron queue).
   scheduledFor   DateTime?
+  idempotencyKey String?      @unique @db.VarChar(128)
   league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
   @@index([zombieLeagueId, type])
@@ -10511,6 +10605,26 @@ model ZombieNameRecord {
 
   @@index([universeId])
   @@map("zombie_name_records")
+}
+
+/// Commissioner-recorded amount won on an external fantasy payout platform. No money moves here.
+model ZombieExternalWeeklyPayout {
+  id             String        @id @default(cuid())
+  zombieLeagueId String
+  week           Int
+  winnerRosterId String        @db.VarChar(64)
+  amountCents    Int
+  providerName   String        @db.VarChar(80)
+  status         String        @default("recorded") @db.VarChar(24)
+  reference      String?       @db.VarChar(160)
+  recordedById   String        @db.VarChar(64)
+  recordedAt     DateTime      @default(now())
+  confirmedAt    DateTime?
+  league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, week])
+  @@index([winnerRosterId])
+  @@map("zombie_external_weekly_payouts")
 }
 
 model ZombiePaidConfig {
@@ -10804,6 +10918,7 @@ model ZombieLeagueConfig {
   infectionLossToWhisperer  Boolean  @default(true)
   infectionLossToZombie     Boolean  @default(true)
   serumReviveCount          Int      @default(2)
+  autoSerumRevive           Boolean  @default(false)
   serumAwardHighScore       Boolean  @default(true)
   serumAwardOnBashMaul      Boolean  @default(true)
   serumUseBeforeLastStarter Boolean  @default(true)
@@ -11876,6 +11991,8 @@ model ZombieTeamItem {
   activatesAtWeek Int?
   /// ready | pending_activation â€” serum registers before kickoff, resolves at score finalization.
   activationState String           @default("ready")
+  acquiredAtWeek  Int?
+  awardKey        String?          @unique @db.VarChar(160)
   team            ZombieLeagueTeam @relation(fields: [teamStatusId], references: [id], onDelete: Cascade)
 
   @@index([teamStatusId])
@@ -14743,6 +14860,7 @@ model RedraftRosterMoveHistory {
 
 model RedraftMatchup {
   id               String            @id @default(cuid())
+  pirateClaims     PirateClaim[]
   seasonId         String
   leagueId         String
   week             Int
@@ -14769,6 +14887,69 @@ model RedraftMatchup {
   @@index([homeRosterId])
   @@index([awayRosterId])
   @@map("redraft_matchups")
+}
+
+/// One manager's protection declaration for one scoring period. A void set remains
+/// persisted so an attempted late/oversized change cannot silently restore locks.
+model PirateProtectionSet {
+  id            String   @id @default(cuid())
+  leagueId      String
+  seasonId      String
+  week          Int
+  rosterId      String
+  playerIds     Json     @default("[]")
+  lockAt        DateTime
+  status        String   @default("active") @db.VarChar(16)
+  voidReason    String?  @db.VarChar(64)
+  actorUserId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, seasonId, week, rosterId])
+  @@index([leagueId, seasonId, week])
+  @@map("pirate_protection_sets")
+}
+
+/// Exactly one optional steal for each final head-to-head matchup.
+model PirateClaim {
+  id               String          @id @default(cuid())
+  leagueId         String
+  seasonId         String
+  week             Int
+  matchupId        String?
+  playoffMatchupId String?
+  claimCycle       Int             @default(0)
+  winnerRosterId   String
+  loserRosterId    String
+  playerId         String?
+  offeredPlayerId  String?
+  counterPlayerId  String?
+  status           String          @default("awaiting_selection") @db.VarChar(32)
+  deadlineAt       DateTime?
+  selectionDeadlineAt DateTime?
+  settledReturnPlayerId String?
+  overflowGraceUntil DateTime?
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reversalReason   String?
+  selectedAt       DateTime?
+  respondedAt      DateTime?
+  transferredAt    DateTime?
+  resolutionNote   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  league           League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  matchup          RedraftMatchup? @relation(fields: [matchupId], references: [id], onDelete: Cascade)
+  playoffMatchup   RedraftPlayoffMatchup? @relation(fields: [playoffMatchupId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, seasonId, week])
+  @@unique([matchupId, winnerRosterId, claimCycle])
+  @@unique([playoffMatchupId, winnerRosterId, claimCycle])
+  @@index([status, deadlineAt])
+  @@index([status, selectionDeadlineAt])
+  @@index([loserRosterId, playerId, status])
+  @@map("pirate_claims")
 }
 
 model RedraftWaiverClaim {
@@ -15476,6 +15657,7 @@ model RedraftPlayoffSeed {
 }
 
 model RedraftPlayoffMatchup {
+  pirateClaims   PirateClaim[]
   id             String                  @id
   seasonId       String
   roundId        String

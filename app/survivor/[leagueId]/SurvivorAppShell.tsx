@@ -15,7 +15,8 @@ import { LeagueSettingsTab } from '@/components/league/LeagueSettingsTab'
 import { CommissionerToolsTab } from '@/components/league/CommissionerToolsTab'
 import { SurvivorFormatTab } from '@/components/league/SurvivorFormatTab'
 import { getLeagueTypeMedia } from '@/lib/league-media/leagueTypeMedia'
-import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
+import { legacyBackdropScene } from '@/lib/survivor/survivorLegacyIsland'
+import '@/app/survivor/survivor-island.css'
 
 function pathActive(pathname: string, href: string, isHome?: boolean) {
   if (isHome) return pathname === href
@@ -128,32 +129,27 @@ function SurvivorAppShellInner({
 
   const displayName = ctx.season?.userState?.displayName ?? 'Player'
 
-  const atmosphereMood = useMemo(() => {
-    if (pathname.includes('/tribal')) return 'tribal'
-    if (pathname.includes('/exile')) return 'exile'
-    if (pathname.includes('/jury')) return 'jury'
-    if (pathname.includes('/tribe')) return 'merge'
-    return 'default'
-  }, [pathname])
+  // The island scene behind the top of the page, from the route (the hub draws its own banner on top).
+  const backdropScene = useMemo(() => legacyBackdropScene(pathname), [pathname])
 
   return (
     <>
-      <SpecialtyLeagueAtmosphere variant="survivor" mood={atmosphereMood} />
       <div
-        className="relative z-[1] flex min-h-screen flex-col text-[var(--survivor-text-bright)]"
-        style={{ background: 'transparent' }}
+        className="sv-island relative z-[1] flex min-h-screen flex-col text-[var(--survivor-text-bright)]"
+        data-scene={backdropScene}
+        style={{ '--sv-scene': `url('/survivor/scenes/${backdropScene}.svg')` } as React.CSSProperties}
       >
       {/* Top bar — mobile + desktop */}
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-[var(--survivor-border)] bg-black/45 px-3 py-2 backdrop-blur-xl md:pl-[72px]">
+      <header className="sv-topbar sticky top-0 z-40 flex items-center gap-2 border-b px-3 py-2 md:pl-[72px]">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-bold uppercase tracking-wider text-white/55">
+          <p className="sv-topbar-league truncate text-[11px] uppercase">
             {ctx.leagueName}
           </p>
           <p className="truncate text-[13px] font-semibold text-white">Survivor · Season</p>
         </div>
         <NotificationBell leagueId={leagueId} season={ctx.season} />
         <div
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/30"
           title="Your status"
         >
           <span
@@ -162,7 +158,7 @@ function SurvivorAppShellInner({
               ctx.playerState === 'exile' && 'bg-violet-400',
               ctx.playerState === 'jury' && 'bg-amber-400',
               tribalHot && 'tribal-dot-pulse bg-red-500',
-              !tribalHot && ctx.playerState === 'active' && 'bg-emerald-400',
+              !tribalHot && ctx.playerState === 'active' && 'bg-[var(--survivor-torch)]',
             )}
           />
         </div>
@@ -184,13 +180,13 @@ function SurvivorAppShellInner({
         {/* Desktop sidebar */}
         <aside
           className={clsx(
-            'hidden md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:flex-col md:border-r md:border-[var(--survivor-border)] md:bg-[#05070c]/78 md:backdrop-blur-xl',
+            'sv-rail hidden md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:flex-col md:border-r',
             expanded ? 'md:w-[220px]' : 'md:w-16',
           )}
         >
           <button
             type="button"
-            className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-lg"
+            className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-lg text-[var(--survivor-gold)]"
             onClick={() => setExpanded(!expanded)}
             aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
           >
@@ -203,14 +199,13 @@ function SurvivorAppShellInner({
                   key={item.href}
                   type="button"
                   onClick={() => item.onClick?.()}
+                  data-active={settingsOpen ? 'true' : undefined}
                   className={clsx(
-                    'relative flex items-center gap-3 rounded-lg px-2 py-2.5 text-[13px] transition-colors',
-                    settingsOpen
-                      ? 'bg-sky-500/15 text-sky-100'
-                      : 'text-white/55 hover:bg-white/[0.05] hover:text-white/90',
+                    'sv-nav-item relative flex items-center gap-3 rounded-lg px-2 py-2.5 text-[13px] transition-colors',
+                    !settingsOpen && 'text-white/55 hover:bg-white/[0.05] hover:text-white/90',
                   )}
                 >
-                  <span className="flex w-8 justify-center text-lg">{item.icon}</span>
+                  <span className="sv-nav-glyph flex w-8 justify-center text-lg">{item.icon}</span>
                   {expanded ? <span className="truncate">{item.label}</span> : null}
                   {item.dot ? (
                     <span
@@ -228,14 +223,13 @@ function SurvivorAppShellInner({
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-active={pathActive(pathname, item.href, Boolean(item.home)) ? 'true' : undefined}
                   className={clsx(
-                    'relative flex items-center gap-3 rounded-lg px-2 py-2.5 text-[13px] transition-colors',
-                    pathActive(pathname, item.href, Boolean(item.home))
-                      ? 'bg-sky-500/15 text-sky-100'
-                      : 'text-white/55 hover:bg-white/[0.05] hover:text-white/90',
+                    'sv-nav-item relative flex items-center gap-3 rounded-lg px-2 py-2.5 text-[13px] transition-colors',
+                    !pathActive(pathname, item.href, Boolean(item.home)) && 'text-white/55 hover:bg-white/[0.05] hover:text-white/90',
                   )}
                 >
-                  <span className="flex w-8 justify-center text-lg">{item.icon}</span>
+                  <span className="sv-nav-glyph flex w-8 justify-center text-lg">{item.icon}</span>
                   {expanded ? <span className="truncate">{item.label}</span> : null}
                   {item.dot ? (
                     <span
@@ -256,7 +250,7 @@ function SurvivorAppShellInner({
 
         <main
           className={clsx(
-            'flex-1 pb-24 transition-[padding] duration-200 md:pb-8',
+            'min-w-0 flex-1 pb-24 transition-[padding] duration-200 md:pb-8',
             expanded ? 'md:pl-[220px]' : 'md:pl-16',
           )}
         >
@@ -265,15 +259,13 @@ function SurvivorAppShellInner({
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-[var(--survivor-border)] bg-[#05070c]/88 px-1 py-1 backdrop-blur-xl md:hidden">
+      <nav className="sv-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex border-t px-1 py-1 md:hidden">
         {mobileMain.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className={clsx(
-              'flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[11px] text-white/70',
-              pathActive(pathname, item.href, item.href === base) && 'bg-white/[0.06] text-sky-200',
-            )}
+            data-active={pathActive(pathname, item.href, item.href === base) ? 'true' : undefined}
+            className="sv-bottom-item flex min-h-[52px] flex-1 flex-col items-center justify-center rounded-lg text-[11px] text-white/70"
           >
             <span className="relative text-lg">
               {item.icon}
@@ -302,10 +294,10 @@ function SurvivorAppShellInner({
           onClick={() => setMoreOpen(false)}
         >
           <div
-            className="absolute bottom-0 left-0 right-0 max-h-[70vh] overflow-y-auto rounded-t-2xl border border-white/10 bg-[var(--survivor-panel)] p-4"
+            className="sv-sheet absolute bottom-0 left-0 right-0 max-h-[70vh] overflow-y-auto rounded-t-2xl border p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">More</p>
+            <p className="sv-kicker text-[11px]">More</p>
             <div className="mt-3 grid gap-2">
               <Link
                 href={`${base}/challenges`}
@@ -361,12 +353,12 @@ function SurvivorAppShellInner({
       {/* Player status — desktop bottom of sidebar area */}
       <div
         className={clsx(
-          'pointer-events-none fixed bottom-0 left-0 z-20 hidden flex-col border-t border-[var(--survivor-border)] bg-[#05070c]/95 p-2 md:flex',
+          'sv-status-dock pointer-events-none fixed bottom-0 left-0 z-20 hidden flex-col border-t p-2 md:flex',
           expanded ? 'w-[220px]' : 'w-16',
         )}
       >
-        <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-white/[0.04] p-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/80">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/25 p-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sv-accent-soft)] text-xs font-bold text-[var(--survivor-torch)]">
             {displayName.slice(0, 1)}
           </div>
           <div className="min-w-0 flex-1 overflow-hidden lg:block">

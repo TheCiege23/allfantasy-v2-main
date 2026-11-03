@@ -43,6 +43,8 @@ export interface PlayerAssetModel {
 
 /** Key stat summary for draft panels (sport-appropriate). */
 export interface PlayerStatSnapshotModel {
+  /** Actual stored season, including a previous-season fallback. */
+  seasonLabel?: string | null
   /** e.g. "ADP 12" or "PPG 22.1" */
   primaryStatLabel?: string | null
   primaryStatValue?: number | null
@@ -58,6 +60,13 @@ export interface PlayerStatSnapshotModel {
   pointsPerGame?: number | null
   reboundsPerGame?: number | null
   minutesPerGame?: number | null
+  assistsPerGame?: number | null
+  stealsPerGame?: number | null
+  blocksPerGame?: number | null
+  threePointersMadePerGame?: number | null
+  fieldGoalPercentage?: number | null
+  freeThrowPercentage?: number | null
+  gamesPlayed?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {

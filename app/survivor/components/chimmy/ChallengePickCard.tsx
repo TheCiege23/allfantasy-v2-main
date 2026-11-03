@@ -15,13 +15,13 @@ export function ChallengePickCard({
 }) {
   const [v, setV] = useState('')
   return (
-    <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-orange-200">⚡ Private submission</p>
-      <p className="mt-1 text-[15px] font-semibold text-white">{title}</p>
+    <div className="sv-chimmy-card rounded-xl border p-4">
+      <p className="sv-kicker text-[11px]">⚡ Private submission</p>
+      <p className="sv-h mt-1 text-[15px]">{title}</p>
       <p className="mt-2 text-[12px] text-white/65">{instructions}</p>
       <div className="mt-3">{children}</div>
       <input
-        className="mt-3 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[13px] text-white"
+        className="mt-3 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[13px] text-white placeholder:text-white/40 focus:border-[rgba(240,163,94,0.55)] focus:outline-none"
         value={v}
         onChange={(e) => setV(e.target.value)}
         placeholder="Your pick"
@@ -29,7 +29,7 @@ export function ChallengePickCard({
       />
       <button
         type="button"
-        className="mt-3 w-full min-h-[48px] rounded-lg bg-sky-600/80 text-[13px] font-semibold text-white"
+        className="mt-3 w-full min-h-[48px] rounded-lg bg-[var(--survivor-torch,#f0a35e)] text-[13px] font-semibold text-[#1a0f05] hover:bg-[#f4b47a]"
         onClick={() => onLock?.(v)}
       >
         Lock in pick

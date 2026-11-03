@@ -7,6 +7,7 @@ import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
 import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
 import '@/components/core-app/af-waivers.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
@@ -51,25 +52,40 @@ export function waiverRuleText(english: string, language: string): string {
   }).join(' · ')
 }
 
+/**
+ * The share of the league's FAAB budget still left, 0–1, or null when it cannot be drawn honestly: no
+ * budget on file, a zero budget, or a remaining figure above the budget (a commissioner top-up the
+ * budget column does not reflect — a bar pinned at 100% would hide that). Exported for tests.
+ */
+export function faabTrack(remaining: number | null | undefined, budget: number | null | undefined): number | null {
+  if (remaining == null || budget == null || !Number.isFinite(remaining) || !Number.isFinite(budget)) return null
+  if (budget <= 0 || remaining < 0 || remaining > budget) return null
+  return remaining / budget
+}
+
 function Tile({
   label,
   state,
   render,
   sub,
   help,
+  tile,
 }: {
   label: string
   state: SectionState<unknown>
-  render?: (d: never) => { value: string; sub?: string }
+  /** `track`, 0–1: a share of a known total, drawn as a bar only in the redraft identity (see below). */
+  render?: (d: never) => { value: string; of?: string; sub?: string; track?: number | null }
   sub?: string
   /** A "?" beside the label (lib/core-app/helpTopics.ts). */
   help?: HelpTopicId
+  /** Which tile this is, for the redraft stylesheet (af-core-redraft-waivers-finder.css). */
+  tile?: string
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   if (!state.available) {
     return (
-      <div className="af-wv-tile" data-missing="true">
+      <div className="af-wv-tile" data-missing="true" data-tile={tile}>
         <div className="af-wv-tile-value af-num">—</div>
         <div className="af-label">
           {copy(label)}
@@ -79,15 +95,30 @@ function Tile({
       </div>
     )
   }
-  const out = render ? render(state.data as never) : { value: String(state.data), sub }
+  const out: { value: string; of?: string; sub?: string; track?: number | null } = render ? render(state.data as never) : { value: String(state.data), sub }
   return (
-    <div className="af-wv-tile">
-      <div className="af-wv-tile-value af-num">{out.value}</div>
+    <div className="af-wv-tile" data-tile={tile}>
+      <div className="af-wv-tile-value af-num">
+        {out.value}
+        {/* "/ $100" — the denominator, only when it is a real figure (the FAAB tile's league budget). */}
+        {out.of ? <span className="af-wv-tile-of"> {out.of}</span> : null}
+      </div>
       <div className="af-label">
         {copy(label)}
         {help ? <> <TopicTip topic={help} /></> : null}
       </div>
       {out.sub ? <div className="af-wv-tile-sub">{copy(out.sub)}</div> : null}
+      {/*
+        A decorative bar for a share the screen already states in text (the tile's "$63", the rules'
+        "$100 budget"). Empty inline spans: with no stylesheet rule they take no space and draw nothing,
+        so every league outside the redraft identity renders exactly as before (the capture script's
+        dynasty control proves it pixel for pixel). aria-hidden: the figure is already read out above.
+      */}
+      {out.track != null ? (
+        <span className="af-wv-track" aria-hidden="true" data-testid="waiver-faab-track">
+          <span className="af-wv-track-fill" style={{ width: `${Math.round(out.track * 100)}%` }} />
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -103,6 +134,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
     'waivers',
   )
   const isFaab = data.waiverType.available && data.waiverType.data.kind === 'faab'
+  /* The league's starting budget, when it was read — the denominator of the FAAB bar. */
+  const faabBudget = isFaab && data.waiverType.available ? data.waiverType.data.budget : null
   const schedule = data.processTime.available ? data.processTime.data.schedule : null
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
@@ -141,6 +174,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             <Tile
               label="Your FAAB"
               help="faab"
+              tile="faab"
               state={data.budget}
               render={(d: never) => {
                 const b = d as unknown as {
@@ -150,10 +184,12 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 }
                 return {
                   value: `$${b.faabRemaining}`,
+                  of: faabTrack(b.faabRemaining, faabBudget) != null ? `/ $${faabBudget}` : undefined,
                   sub:
                     b.rankByBudget != null
                       ? m.budgetRank(b.rankByBudget, b.rostersWithBudget)
                       : undefined,
+                  track: faabTrack(b.faabRemaining, faabBudget),
                 }
               }}
             />
@@ -161,6 +197,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             <Tile
               label="Waiver priority"
               help="waiverPriority"
+              tile="priority"
               state={data.waiverPriority}
               render={(d: never) => {
                 const w = d as unknown as { priority: number; leagueRosters: number }
@@ -168,8 +205,38 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               }}
             />
 
+            {/*
+              The next run as a KPI beside the money it spends (the redesign's strip). The same instant
+              the sticky line above counts down, so on a phone — where that line is always on screen —
+              this tile is hidden (af-waivers.css) rather than said twice. A schedule we have not read is
+              the loader's own sentence, never a guessed day.
+            */}
+            {schedule && data.processTime.available ? (
+              <div className="af-wv-tile" data-tile="next-run" data-testid="waiver-next-run-tile">
+                <div className="af-wv-tile-value">{copy(data.processTime.data.dayLabel)}</div>
+                <div className="af-label">{copy('Next waiver run')}</div>
+                <div className="af-wv-tile-sub">
+                  <WaiverRunClock schedule={schedule} compact />
+                </div>
+              </div>
+            ) : (
+              <Tile label="Next waiver run" tile="next-run" state={data.processTime} />
+            )}
+
+            <Tile
+              label="Claims queued"
+              help="claimsQueued"
+              tile="claims"
+              state={data.claimsQueued}
+              render={(d: never) => {
+                const c = d as unknown as { count: number }
+                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
+              }}
+            />
+
             <Tile
               label="Players held"
+              tile="held"
               state={data.rosterLoad}
               render={(d: never) => {
                 const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
@@ -177,16 +244,6 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                   value: String(r.playersHeld),
                   sub: m.rosterLoad(r.starters, r.bench, r.reserve),
                 }
-              }}
-            />
-
-            <Tile
-              label="Claims queued"
-              help="claimsQueued"
-              state={data.claimsQueued}
-              render={(d: never) => {
-                const c = d as unknown as { count: number }
-                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
               }}
             />
           </div>

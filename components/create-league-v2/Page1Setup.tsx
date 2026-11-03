@@ -48,6 +48,7 @@ type LeagueTypeCard = {
 }
 
 const LEAGUE_TYPES: LeagueTypeCard[] = [
+  { id: 'pirate', title: 'Pirate', subtitle: 'Win matchups and steal unprotected players', icon: '☠' },
   { id: 'redraft', title: 'Redraft', subtitle: 'Fresh draft every season', icon: '◆' },
   { id: 'dynasty', title: 'Dynasty', subtitle: 'Keep your core forever', icon: '♔' },
   { id: 'keeper', title: 'Keeper', subtitle: 'Hold a few, draft the rest', icon: '⬡' },
@@ -368,7 +369,11 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <PillRow
             options={teamCountOptions}
             value={state.teamCount}
-            onChange={(teamCount) => onChange({ teamCount })}
+            onChange={(teamCount) => {
+              const validTribes = getSurvivorTribeOptions(teamCount)
+              onChange({ teamCount, ...(effectiveType === 'survivor' && !validTribes.includes(state.survivorTribeCount)
+                ? { survivorTribeCount: validTribes[0] ?? 2 } : {}) })
+            }}
             accent={accent}
             ariaLabel="Number of teams"
           />

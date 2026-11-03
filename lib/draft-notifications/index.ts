@@ -5,6 +5,8 @@ export {
   createDraftNotification,
   createDraftNotificationForUsers,
   notifyOnTheClockAfterPick,
+  notifyDraftLifecycle,
+  notifyDraftTimeSet,
   notifyDraftPaused,
   notifyDraftResumed,
   notifyAutoPickFired,

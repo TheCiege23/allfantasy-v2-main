@@ -130,12 +130,14 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await r.findByText('Vista previa del orden del draft de novatos 2027')
     const text = r.container.textContent ?? ''
-    for (const s of ['Horario, reloj de selección, rondas y orden del draft.', 'La fecha y la hora están en la zona horaria de la liga', 'Elige una fecha', 'Elige una hora',
+    for (const s of ['Horario, reloj de selección, rondas y orden del draft.', 'La fecha y la hora están en la zona horaria de la liga', 'Elige una hora',
       'Serpiente', 'Lineal', 'Subasta', '90 segundos', '8 horas', '15 rondas', 'Draft en vivo', 'Solo para drafts lentos',
       'Llenar con CI', 'Vacío', 'Calculado automáticamente para la temporada 2027', 'Modo de orden del draft', 'Sin playoffs', 'Equipos de playoffs', 'Campeón', 'Subcampeón']) {
       expect(text, s).toContain(s)
     }
     expect(r.container.querySelector('[title="Llenar los puestos vacíos con equipos de Chimmy Intelligence"]')).not.toBeNull()
+    // The typed date reads day first in Spanish.
+    expect(r.container.querySelector('input[placeholder="DD/MM/AAAA"]')).not.toBeNull()
     // Keepers block is gone; the panel never says "IA" (the brand is Chimmy Intelligence).
     expect(text).not.toContain('Definir jugadores')
     expect(text).not.toMatch(/\bIA\b/)
@@ -192,8 +194,9 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     stubFetch()
     const d = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await d.findByText('2027 Rookie Draft Order Preview')
-    for (const s of ['90 Seconds', '15 rounds', 'Snake', 'Fill with CI', 'Pick a date', 'Live draft', 'Auto-calculated for 2027 season', 'Champion', 'Runner-Up']) expect(d.container.textContent, s).toContain(s)
+    for (const s of ['90 Seconds', '15 rounds', 'Snake', 'Fill with CI', 'Pick a time', 'Live draft', 'Auto-calculated for 2027 season', 'Champion', 'Runner-Up']) expect(d.container.textContent, s).toContain(s)
     expect(d.container.textContent).not.toMatch(/\bAI\b|Set Players|Keepers/)
+    expect(d.container.querySelector('input[placeholder="MM/DD/YYYY"]')).not.toBeNull()
     cleanup()
     const p = render(<PlayoffSettingsEditor leagueId="l1" />)
     await p.findByText('Playoff Format — NFL')

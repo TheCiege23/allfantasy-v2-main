@@ -1,3 +1,4 @@
+import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
@@ -45,6 +46,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       subtitle: 'Fresh draft every season',
       introVideoUrl: '/media/create-league/concept/videos/Redraft.mp4',
       introPosterUrl: '/images/league-types/redraft.png',
+    },
+    {
+      id: 'pirate',
+      title: 'Pirate',
+      subtitle: 'Win matchups and steal unprotected players',
+      introVideoUrl: '/media/league-intros/pirate-claim.mp4',
+      introPosterUrl: '/images/league-types/pirate-hero.png',
     },
     {
       id: 'dynasty',
@@ -131,6 +139,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   sports: ALL_SPORTS,
   allowedSportsByConcept: {
     redraft: ALL_SPORTS,
+    pirate: ['NFL', 'NBA', 'MLB', 'NHL'],
     dynasty: ALL_SPORTS,
     keeper: ALL_SPORTS,
     best_ball: ALL_SPORTS,
@@ -143,7 +152,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
      * before it can eliminate a roster. This list controls both the wizard and create API.
      */
     guillotine: ['NFL', 'NBA', 'NHL', 'MLB'],
-    zombie: ['NFL', 'NBA', 'MLB', 'NHL'],
+    zombie: [...ALL_SPORTS],
     survivor: SURVIVOR_ALLOWED_SPORTS,
     tournament: ALL_SPORTS,
     big_brother: ALL_SPORTS,
@@ -151,6 +160,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   allowedDraftTypesByConcept: {
     // A slow Redraft is a snake draft with a longer pick clock, not a create API draft type.
     redraft: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
+    pirate: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
     dynasty: ['snake', 'linear', 'auction', 'offline', 'auto'],
     keeper: ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto', 'team'],
     best_ball: ['snake', 'linear', 'auction', 'offline', 'auto'],
@@ -174,6 +184,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
       SOCCER: ['soc_points'],
+    },
+    pirate: {
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
+      NBA: ['nba_points'],
+      MLB: ['mlb_points'],
+      NHL: ['nhl_points'],
     },
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
@@ -236,6 +252,9 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
+      NCAAF: ['ncaaf_half_ppr'],
+      NCAAB: ['ncaab_points'],
+      SOCCER: ['soc_points'],
     },
     survivor: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
@@ -272,6 +291,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: UNIVERSAL_CREATE_TEAM_COUNTS,
       NCAAB: UNIVERSAL_CREATE_TEAM_COUNTS,
       SOCCER: UNIVERSAL_CREATE_TEAM_COUNTS,
+    },
+    pirate: {
+      NFL: [4, 6, 8, 10, 12, 14, 16],
+      NBA: [4, 6, 8, 10, 12, 14, 16],
+      MLB: [4, 6, 8, 10, 12, 14, 16],
+      NHL: [4, 6, 8, 10, 12, 14, 16],
     },
     dynasty: {
       NFL: [4, 6, 8, 10, 12, 14, 16],
@@ -330,12 +355,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
     // schedule adds double-chop weeks in league settings to finish a large league in time.
     guillotine: Object.fromEntries(ALL_SPORTS.map((sport) => [sport, guillotineTeamCountOptions()])),
-    zombie: {
-      NFL: [8, 10, 12, 14],
-      NBA: [8, 10, 12, 14],
-      MLB: [8, 10, 12, 14],
-      NHL: [8, 10, 12, 14],
-    },
+    zombie: Object.fromEntries(ALL_SPORTS.map(sport => [sport, getZombieCreationTeamCounts(sport)])),
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten
     // on save. New leagues are offered the 16 / 20 subset of it; read it rather than restating it.

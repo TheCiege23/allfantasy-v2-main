@@ -319,6 +319,12 @@ export async function processReturnFromExile(
   const week = opts?.week ?? 0
   const mode = opts?.conversionMode ?? 'faab'
   const tokens = top.tokenBalance
+  // The commissioner's rate (League.settings.survivorSideGames.exileTokenFaabRate) replaces the
+  // hard-coded $5 once set; left at 0 the legacy league keeps its $5, exactly as before.
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const { readSurvivorSideGameSettings } = await import('./survivorSideGameSettings')
+  const setRate = readSurvivorSideGameSettings(leagueRow?.settings).exileTokenFaabRate
+  const faabPerToken = setRate > 0 ? setRate : TOKEN_TO_FAAB
 
   if (tokens > 0 && mode === 'faab') {
     const roster = await prisma.roster.findFirst({
@@ -328,7 +334,7 @@ export async function processReturnFromExile(
     if (roster) {
       await prisma.roster.update({
         where: { id: roster.id },
-        data: { faabRemaining: (roster.faabRemaining ?? 0) + tokens * TOKEN_TO_FAAB },
+        data: { faabRemaining: (roster.faabRemaining ?? 0) + tokens * faabPerToken },
       })
     }
     await logSurvivorAuditEntry({
@@ -342,7 +348,7 @@ export async function processReturnFromExile(
         tokenBalance: tokens,
         converted: true,
         conversion: 'faab',
-        faabPerToken: TOKEN_TO_FAAB,
+        faabPerToken,
       },
       isVisibleToPublic: false,
     })

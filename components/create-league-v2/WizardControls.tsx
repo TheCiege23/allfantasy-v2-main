@@ -1,61 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Check } from 'lucide-react'
 
-function cx(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(' ')
-}
-
-/**
- * A checkbox that always shows whether it is ticked.
- *
- * 🛑 THE NATIVE BOX COULD NOT. `@tailwindcss/forms` draws checkboxes with `appearance: none`, a
- * `currentColor` fill and a WHITE tick. In dark mode the text colour is near-white, so a ticked
- * box was white-on-white: measured 2026-10-12 on the median-game box, fill rgba(255,255,255,.92)
- * with the white tick inside — managers could not tell their click had worked. The box here is
- * drawn from state (violet fill + white check when on), so it reads the same in both modes and
- * on every platform. The real input stays on top at full size and opacity 0, so tapping,
- * keyboard, screen readers and `locator('input').check()` all keep working.
- */
-export function CheckBox({
-  checked,
-  onChange,
-  disabled = false,
-  testId,
-  className,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-  testId?: string
-  className?: string
-}) {
-  return (
-    <span className={cx('relative inline-grid h-5 w-5 shrink-0 place-items-center', className)}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        className="peer absolute inset-0 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-        data-testid={testId}
-      />
-      <span
-        aria-hidden="true"
-        data-checked={checked ? 'true' : 'false'}
-        className={cx(
-          'pointer-events-none grid h-5 w-5 place-items-center rounded-md border-2 transition-colors motion-reduce:transition-none',
-          'peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[color:var(--surface-app)]',
-          checked ? 'border-violet-600 bg-violet-600 text-[#ffffff]' : 'border-[color:var(--text-tertiary)] bg-transparent',
-          disabled && 'opacity-50',
-        )}
-      >
-        {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} /> : null}
-      </span>
-    </span>
-  )
-}
+// CheckBox moved to components/ui/checkbox.tsx; re-exported here so existing callers are unchanged.
+export { CheckBox } from '@/components/ui/checkbox'
 
 /**
  * A "?" that explains a choice. Tap to open, tap again, tap elsewhere or press Escape to close —

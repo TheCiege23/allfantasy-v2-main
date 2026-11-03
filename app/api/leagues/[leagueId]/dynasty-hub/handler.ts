@@ -10,10 +10,18 @@
  * Reads through the same deterministic context the War Room uses, so taxi slots and pick capital
  * (native `future_draft_picks` or the imported-pick inventory) agree with what the War Room shows.
  * No AI call. Scoped to the viewer's own team only.
+ *
+ * Also feeds the dynasty League home (`DynastyLeagueHomeExtras`): `titles` (championship rafters,
+ * league-wide) and `pipeline` (the viewer's taxi / devy / rookie counts). Both are null when there
+ * is nothing real to show.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/get-current-user'
 import { buildDynastyWarRoomContext } from '@/lib/dynasty-war-room/dynastyWarRoomContext'
+import { prisma } from '@/lib/prisma'
+import { loadKnownYearsExp } from '@/lib/roster-lineup-engine/playerYearsExp'
+import { leagueRunsDevy, summarizePipeline } from '@/lib/league/dynastyHomeExtras'
+import { loadChampionRafters } from '@/lib/league/dynastyChampionRafters'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,9 +37,11 @@ export async function GET(
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 
   const context = result.context
+  // League-wide, so it is read before the "has a team" branch: a commissioner host sees it too.
+  const titles = await loadChampionRafters(leagueId, user.id, context.season)
   const myTeam = context.teams.find((t) => t.isUserTeam) ?? null
   if (!myTeam) {
-    return NextResponse.json({ taxi: [], picks: [], hasTeam: false, picksState: context.availability.futurePicks })
+    return NextResponse.json({ taxi: [], picks: [], hasTeam: false, picksState: context.availability.futurePicks, titles, pipeline: null })
   }
 
   const teamNameByRosterId = new Map(context.teams.map((t) => [t.rosterId, t.teamName ?? t.ownerName]))
@@ -64,10 +74,29 @@ export async function GET(
       }
     })
 
+  // Pipeline counts for the dynasty League home. Rookies come only from KNOWN experience
+  // (`SportsPlayer.yearsExp`, the same reader the rollover and taxi checks use); unknown stays unknown.
+  const leagueShape = await prisma.league
+    .findUnique({ where: { id: leagueId }, select: { leagueVariant: true, leagueType: true } })
+    .catch(() => null)
+  const proIds = myTeam.players.filter((p) => p.lineupSection !== 'devy').map((p) => p.playerId)
+  const yearsExpByPlayerId = await loadKnownYearsExp(
+    [...new Set([context.sport, context.sport.toUpperCase(), context.sport.toLowerCase()])],
+    [...new Set(proIds)],
+  ).catch(() => new Map<string, number>())
+  const pipeline = summarizePipeline({
+    players: myTeam.players,
+    taxiSlots: context.roster.taxiSlots,
+    leagueHasDevy: leagueRunsDevy(leagueShape ?? {}),
+    yearsExpByPlayerId,
+  })
+
   return NextResponse.json({
     taxi,
     picks,
     hasTeam: true,
     picksState: context.availability.futurePicks,
+    titles,
+    pipeline,
   })
 }

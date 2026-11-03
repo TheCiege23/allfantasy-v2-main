@@ -215,6 +215,32 @@ function renderModal(extra: Partial<React.ComponentProps<typeof TradeCenterModal
 }
 
 describe('redraft Trade Center modal — Spanish, every step', () => {
+  it.each(['eligible', 'blocked'] as const)('shows the Zombie preview when eligibility is %s', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ snapshot: null, tradeGrade: {
+        gradeScope: 'zombie_future_scoring',
+        zombieEligibility: { status },
+        zombieInventory: status === 'eligible'
+          ? { proposer: { before: 10, after: 32 }, receiver: { before: 32, after: 10 } }
+          : undefined,
+      } }),
+    })))
+    renderModal({ currentWeek: 3, initialReceiverRosterId: 'r2' })
+    await waitFor(() => expect(screen.getByTestId('trade-asset-player-p2')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('trade-asset-player-p1'))
+    fireEvent.click(screen.getByTestId('trade-asset-player-p2'))
+    fireEvent.click(screen.getByTestId('trade-step-next'))
+    if (status === 'eligible') {
+      expect(await screen.findByText('Elegibilidad Zombie actual verificada')).toBeTruthy()
+      expect(screen.getByText('10 → 32')).toBeTruthy()
+      expect(screen.getByText('32 → 10')).toBeTruthy()
+    } else {
+      expect(await screen.findByText('Intercambio Zombie bloqueado')).toBeTruthy()
+      expect(screen.queryByText('10 → 32')).toBeNull()
+    }
+  })
+
   it('partner → assets → review → sent, two teams', async () => {
     renderModal()
     // Step 1.
@@ -224,14 +250,21 @@ describe('redraft Trade Center modal — Spanish, every step', () => {
     expect(screen.getByTestId('app-modal-close').getAttribute('aria-label')).toBe('Cerrar')
     fireEvent.click(screen.getByTestId('trade-partner-card-r2'))
     expect(document.body.textContent).toContain('agrega hasta 2 equipos más')
+    // The chosen partner draws a tick, not only a pink tint.
+    expect(screen.getByTestId('trade-partner-card-r2').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('trade-partner-check-r2').getAttribute('data-selection-check')).toBe('on')
+    expect(screen.getByTestId('trade-partner-check-r3').getAttribute('data-selection-check')).toBe('off')
     expectFullySpanish()
 
     // Step 2.
     fireEvent.click(screen.getByTestId('trade-step-next'))
     await waitFor(() => expect(screen.getByTestId('trade-asset-player-p2')).toBeTruthy())
     expect(document.body.textContent).toContain('Nada seleccionado')
+    expect(screen.getByTestId('trade-asset-check-p1').getAttribute('data-selection-check')).toBe('off')
     fireEvent.click(screen.getByTestId('trade-asset-player-p1'))
     fireEvent.click(screen.getByTestId('trade-asset-player-p2'))
+    expect(screen.getByTestId('trade-asset-player-p1').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('trade-asset-check-p1').getAttribute('data-selection-check')).toBe('on')
     fireEvent.change(screen.getByTestId('trade-faab-mine'), { target: { value: '90' } })
     const assetsText = expectFullySpanish()
     expect(assetsText).toContain('Los Halcones envía')

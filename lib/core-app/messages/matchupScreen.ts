@@ -39,6 +39,61 @@ export const matchupScreenMessages = defineMessages({
       `meetings on file; last: ${you > them ? 'W' : you < them ? 'L' : 'T'} ${you.toFixed(1)}–${them.toFixed(1)} (wk ${week})`,
     builtWithout: (you: number, opponent: number) =>
       `built without ${you} of your starters and ${opponent} of theirs, so both totals read low`,
+
+    // Scoreboard — the live line under each score.
+    liveCount: (n: number) => `${n} live`,
+    scoreProj: (proj: string, value: number) => `${proj} ${value.toFixed(1)}`,
+
+    // Per-player state chips on a live board (a kickoff time is its own chip).
+    chipLive: 'LIVE',
+    chipFinal: 'FINAL',
+
+    // Insight cards — each drawn only when the stored data answers it.
+    insightsLabel: 'What this week turns on',
+    swingLabel: 'Swing game',
+    swingOnNow: 'on now',
+    swingBody: (yours: string[], theirs: string[], inGame: number, remaining: number) => {
+      const list = (names: string[]) =>
+        names.length <= 3
+          ? names.length === 1
+            ? names[0]
+            : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+          : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+      const who =
+        yours.length && theirs.length
+          ? `Your ${list(yours)} against their ${list(theirs)}.`
+          : yours.length
+            ? `Your ${list(yours)}, and nobody of theirs.`
+            : `Their ${list(theirs)}, and nobody of yours.`
+      return `${who} ${inGame} of ${remaining} starters still to play.`
+    },
+    lineupLabel: 'Lineup check',
+    lineupTitle: (n: number, name: string | null, slot: string) =>
+      n > 1 ? `${n} starters will score nothing` : name ? `${name} will score nothing` : `Your ${slot} slot is empty`,
+    lineupItem: (name: string | null, slot: string, reason: 'empty' | 'bye' | 'out') =>
+      name == null || reason === 'empty'
+        ? `${slot} is empty`
+        : `${name} (${reason === 'bye' ? 'bye' : 'out'}) is in your ${slot} slot`,
+    lineupFix: (n: number): string =>
+      n === 1 ? 'That is a certain zero until the lineup changes.' : 'Each one is a certain zero until the lineup changes.',
+    toWinLabel: 'To win',
+    toWinNeed: (needed: number) => `${needed.toFixed(1)} more points`,
+    toWinAhead: 'Already past their projection',
+    toWinBody: (needed: number, theirProjected: number, yourScore: number, left: number, leftProjected: number | null) => {
+      const head =
+        needed > 0
+          ? `That passes their projected final of ${theirProjected.toFixed(1)}.`
+          : `Your ${yourScore.toFixed(1)} already beats their projected final of ${theirProjected.toFixed(1)}.`
+      const tail =
+        left === 0
+          ? ' Everyone of yours has kicked off.'
+          : leftProjected != null
+            ? left === 1
+              ? ` Your one still to play projects for ${leftProjected.toFixed(1)}.`
+              : ` Your ${left} still to play project for ${leftProjected.toFixed(1)}.`
+            : ''
+      return head + tail
+    },
   },
   es: {
     bannerTipTitle: 'Cómo leer este marcador',
@@ -68,5 +123,57 @@ export const matchupScreenMessages = defineMessages({
       `enfrentamientos registrados; último: ${you.toFixed(1)}–${them.toFixed(1)} (sem. ${week})`,
     builtWithout: (you, opponent) =>
       `calculado sin ${you} de tus titulares y ${opponent} de los suyos; ambos totales pueden ser bajos`,
+
+    liveCount: (n) => `${n} en vivo`,
+    scoreProj: (proj, value) => `${proj} ${value.toFixed(1)}`,
+
+    chipLive: 'EN VIVO',
+    chipFinal: 'FINAL',
+
+    insightsLabel: 'De qué depende esta semana',
+    swingLabel: 'Partido clave',
+    swingOnNow: 'en juego',
+    swingBody: (yours, theirs, inGame, remaining) => {
+      const list = (names: string[]) =>
+        names.length <= 3
+          ? names.length === 1
+            ? names[0]
+            : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`
+          : `${names.slice(0, 3).join(', ')} y ${names.length - 3} más`
+      const who =
+        yours.length && theirs.length
+          ? `${yours.length === 1 ? 'Tu' : 'Tus'} ${list(yours)} contra ${theirs.length === 1 ? 'su' : 'sus'} ${list(theirs)}.`
+          : yours.length
+            ? `${yours.length === 1 ? 'Tu' : 'Tus'} ${list(yours)}, y ninguno de los suyos.`
+            : `${theirs.length === 1 ? 'Su' : 'Sus'} ${list(theirs)}, y ninguno de los tuyos.`
+      return `${who} ${inGame} de los ${remaining} titulares que faltan por jugar.`
+    },
+    lineupLabel: 'Revisa tu alineación',
+    lineupTitle: (n, name, slot) =>
+      n > 1 ? `${n} titulares no sumarán puntos` : name ? `${name} no sumará puntos` : `Tu posición ${slot} está vacía`,
+    lineupItem: (name, slot, reason) =>
+      name == null || reason === 'empty'
+        ? `${slot} está vacía`
+        : `${name} (${reason === 'bye' ? 'descanso' : 'fuera'}) está en tu posición ${slot}`,
+    lineupFix: (n) =>
+      n === 1 ? 'Es un cero seguro hasta que cambie la alineación.' : 'Cada uno es un cero seguro hasta que cambie la alineación.',
+    toWinLabel: 'Para ganar',
+    toWinNeed: (needed) => `${needed.toFixed(1)} puntos más`,
+    toWinAhead: 'Ya superas su proyección',
+    toWinBody: (needed, theirProjected, yourScore, left, leftProjected) => {
+      const head =
+        needed > 0
+          ? `Con eso superas su total proyectado de ${theirProjected.toFixed(1)}.`
+          : `Tus ${yourScore.toFixed(1)} ya superan su total proyectado de ${theirProjected.toFixed(1)}.`
+      const tail =
+        left === 0
+          ? ' Todos los tuyos ya empezaron a jugar.'
+          : leftProjected != null
+            ? left === 1
+              ? ` Tu titular pendiente proyecta ${leftProjected.toFixed(1)}.`
+              : ` Tus ${left} pendientes proyectan ${leftProjected.toFixed(1)}.`
+            : ''
+      return head + tail
+    },
   },
 })

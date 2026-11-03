@@ -199,6 +199,46 @@ function grokClient(): OpenAI | null {
 }
 
 /**
+ * Why a provider loop returned null.
+ *
+ * ⚠ EVERY null SENDS THE TURN TO THE PUSH PATH, WHICH HAS NO TOOLS AND ITS OWN PROMPT — and nothing
+ * recorded which way it went. On 2026-10-31 "Explain PPR scoring in two short sentences" and "Find me
+ * an open NBA league" were both answered by the push path (no league finder, the old five-heading
+ * shape), while the same NBA question a minute later went through the loop and searched. Whether the
+ * first two hit the deadline, a refusal or a provider error was unknowable. Provider errors already
+ * reached `reportProviderFailure`; the quiet give-ups reached nothing.
+ */
+export type ToolLoopGiveUp =
+  | 'deadline'
+  | 'refusal'
+  | 'max_tokens'
+  | 'empty_text'
+  | 'turn_ceiling'
+  | 'no_message'
+  | 'provider_error'
+  | 'providers_unavailable'
+
+/**
+ * One log line per give-up: a reason code and counters. Never the question, a key or a URL — the
+ * reason is what the owner needs, and the question is the user's.
+ */
+function logGiveUp(
+  provider: ChimmyToolLoopProvider | 'all',
+  reason: ToolLoopGiveUp,
+  detail: { turn?: number; toolsUsed?: string[]; status?: number; startedAt?: number } = {},
+): null {
+  console.warn('[chimmy-tool-loop] gave up', {
+    provider,
+    reason,
+    turn: detail.turn ?? null,
+    tools: detail.toolsUsed?.length ? detail.toolsUsed.join(',') : null,
+    status: detail.status ?? null,
+    elapsedMs: detail.startedAt ? Date.now() - detail.startedAt : null,
+  })
+  return null
+}
+
+/**
  * Whether the loop can run at all — feature flag on, spend allowed, key present.
  *
  * ⚠ THIS BOUNDARY WAS TRACKED NOWHERE. It appeared in neither the GUARDED list
@@ -262,7 +302,7 @@ export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<Chimm
     }
     return outcome && failedOver.length > 0 ? { ...outcome, failedOver } : outcome
   }
-  return null
+  return logGiveUp('all', 'providers_unavailable')
 }
 
 /**
@@ -299,7 +339,8 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
   ]
   const toolsUsed: string[] = []
   const evidence: string[] = []
-  const deadline = Date.now() + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
+  const startedAt = Date.now()
+  const deadline = startedAt + Math.min(CLAUDE_LOOP_BUDGET_MS, Math.max(5_000, args.budgetMs ?? CLAUDE_LOOP_BUDGET_MS))
   let useFallbacks = true
 
   const call = async (final: boolean): Promise<Anthropic.Message> => {
@@ -354,7 +395,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
-      if (Date.now() >= deadline) return null
+      if (Date.now() >= deadline) return logGiveUp('claude', 'deadline', { turn, toolsUsed, startedAt })
       const final = turn === MAX_TOOL_TURNS
 
       let response: Anthropic.Message
@@ -375,7 +416,9 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
       }
 
       // A refusal or a truncated answer is not an answer: fall back to the push path.
-      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null
+      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') {
+        return logGiveUp('claude', response.stop_reason, { turn, toolsUsed, startedAt })
+      }
 
       // Keep the FULL content, thinking blocks included — they must go back unchanged.
       messages.push({ role: 'assistant', content: response.content })
@@ -387,11 +430,11 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
           .map((b) => b.text)
           .join('')
           .trim()
-        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model, evidence: evidence.join('\n\n') } : logGiveUp('claude', 'empty_text', { turn, toolsUsed, startedAt })
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
-      if (turn === MAX_TOOL_TURNS) return null
+      if (turn === MAX_TOOL_TURNS) return logGiveUp('claude', 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       /*
        * Sequential on purpose: `find_league_by_name` rebinds `context.leagueId`, and the league
@@ -412,6 +455,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
     // As for Grok: the user falls back quietly; the owner hears about billing/credential failures.
     const e = err as { status?: number; message?: string } | null
     reportProviderFailure({ provider: 'anthropic', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
+    logGiveUp('claude', 'provider_error', { toolsUsed, status: e?.status, startedAt })
     return isProviderUnavailable(e?.status, toolsUsed.length) ? PROVIDER_UNAVAILABLE : null
   }
 }
@@ -431,6 +475,7 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
 
   const toolsUsed: string[] = []
   const evidence: string[] = []
+  const startedAt = Date.now()
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
@@ -464,14 +509,14 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
       })
 
       const message = response.choices?.[0]?.message
-      if (!message) return null
+      if (!message) return logGiveUp(provider, 'no_message', { turn, toolsUsed, startedAt })
 
       messages.push(message)
 
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
         const text = typeof message.content === 'string' ? message.content.trim() : ''
-        return text ? { text, toolsUsed, turns: turn, provider, model, evidence: evidence.join('\n\n') } : null
+        return text ? { text, toolsUsed, turns: turn, provider, model, evidence: evidence.join('\n\n') } : logGiveUp(provider, 'empty_text', { turn, toolsUsed, startedAt })
       }
 
       /*
@@ -480,7 +525,7 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
        * would return nothing at all after paying for every call. Bail to the
        * push path instead of burning another request.
        */
-      if (turn === MAX_TOOL_TURNS) return null
+      if (turn === MAX_TOOL_TURNS) return logGiveUp(provider, 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       for (const call of calls) {
         const fn = (call as { function?: { name?: string; arguments?: string } }).function
@@ -515,6 +560,7 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
      */
     const e = err as { status?: number; message?: string } | null
     reportProviderFailure({ provider, status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
+    logGiveUp(provider, 'provider_error', { toolsUsed, status: e?.status, startedAt })
     return isProviderUnavailable(e?.status, toolsUsed.length) ? PROVIDER_UNAVAILABLE : null
   }
 }

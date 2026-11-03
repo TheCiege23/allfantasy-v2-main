@@ -21,10 +21,10 @@
  *   6. Stats line falls back through the chain:
  *        normalized.stats.summary
  *          → "Proj N pts" (when `normalized.projection` is finite)
- *          → "No stats available"
+ *          → omitted when unavailable
  *      The stat line carries a stable
  *      `data-testid="draft-player-stats-summary"`.
- *   7. ADP / Bye column renders with `—` placeholders for missing data
+ *   7. Selected ADP remains honest; missing row values are omitted and Bye is NFL-only
  *      and stable testids (`draft-player-adp` / `draft-player-bye`).
  *   8. NFL projection splits grid renders inside the row variant when
  *      both presentationVariant === 'redraft_snake' AND the splits are
@@ -69,7 +69,8 @@ describe('DraftPlayerCard — name / position / team rendering', () => {
 
   it('teamAbbr falls back to `FA` when null', () => {
     // Both card and row variants render the team chip; both use `?? 'FA'`.
-    expect(src.match(/teamAbbr \?\? 'FA'/g) ?? []).toHaveLength(2)
+    expect(src).toMatch(/teamAbbr \?\? 'FA'/)
+    expect(src).toMatch(/teamAbbr \?\? 'Free agent'/)
   })
 
   it('teamAbbr resolves through display.metadata first, then prop, then null', () => {
@@ -163,10 +164,11 @@ describe('DraftPlayerCard — injury status badge', () => {
 describe('DraftPlayerCard — stats summary fallback chain', () => {
   const src = read('components/app/draft-room/DraftPlayerCard.tsx')
 
-  it('prefers normalized.stats.summary, then projected points, then "No stats available"', () => {
-    expect(src).toMatch(
-      /const statLine =[\s\S]+?normalized\.stats\?\.summary \?\?[\s\S]+?projectedPoints != null[\s\S]+?'No stats available'/,
-    )
+  it('keeps genuine summaries and finite projections while omitting empty-stat filler', () => {
+    expect(src).toMatch(/const storedSummary = normalized\.stats\?\.summary/)
+    expect(src).toMatch(/const statLine = meaningfulSummary \?\?/)
+    expect(src).toMatch(/projectedPoints != null/)
+    expect(src).not.toMatch(/: 'No stats available'/)
   })
 
   it('projectedPoints accepts only finite numbers', () => {

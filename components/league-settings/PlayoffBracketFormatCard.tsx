@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { SelectionCheck } from '@/components/ui/selection-check'
 import { useSaveScopeParticipant } from '@/components/league-settings/home/SettingsSaveScope'
 import { naturalByePlan } from '@/lib/playoff-brackets/byePlan'
 
@@ -159,8 +160,9 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
           const checked = target === view.playoffTeams && same(o.plan, choice)
           return (
             <label key={o.plan.join('-')}
-              className={`block min-w-0 cursor-pointer rounded-xl border p-3 transition ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
+              className={`relative block min-w-0 cursor-pointer rounded-xl border p-3 pr-10 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-cyan-400/60 ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
               <input type="radio" className="sr-only" checked={checked} disabled={!canEdit || view.locked} onChange={() => { setChoice(o.plan); setTarget(view.playoffTeams) }} />
+              <SelectionCheck selected={checked} className="absolute right-3 top-3 text-white" testId={`playoff-bracket-check-${o.plan.join('-')}`} />
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="text-[13px] font-semibold text-white/90">{o.natural ? t('lsHub.po.br.standard') : describe(o.plan)}</span>
                 {premiumNeeded(o) && (
@@ -200,9 +202,10 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
           {noPlayIn && (() => {
             const checked = target === qualifiers && same(noPlayIn.plan, choice)
             return (
-              <label className={`block min-w-0 cursor-pointer rounded-xl border p-3 transition ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
+              <label className={`relative block min-w-0 cursor-pointer rounded-xl border p-3 pr-10 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-cyan-400/60 ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
                 <input type="radio" className="sr-only" checked={checked} disabled={!canEdit || view.locked}
                   onChange={() => { setChoice(noPlayIn.plan); setTarget(qualifiers) }} data-testid="playoff-play-in-none" />
+                <SelectionCheck selected={checked} className="absolute right-3 top-3 text-white" testId="playoff-play-in-none-check" />
                 <span className="text-[13px] font-semibold text-white/90">{fill(t('lsHub.po.pi.none'), { n: qualifiers })}</span>
               </label>
             )
@@ -211,9 +214,10 @@ export function PlayoffBracketFormatCard({ leagueId, playoffTeams, canEdit }: { 
             const checked = target === p.seeds && same(p.plan, choice)
             const games = p.games.map(([a, b]) => `#${a} v #${b}`).join(' · ')
             return (
-              <label key={p.spots} className={`block min-w-0 cursor-pointer rounded-xl border p-3 transition ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
+              <label key={p.spots} className={`relative block min-w-0 cursor-pointer rounded-xl border p-3 pr-10 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-cyan-400/60 ${checked ? 'border-cyan-500/40 bg-cyan-950/20' : 'border-white/10 bg-white/[0.02]'}`}>
                 <input type="radio" className="sr-only" checked={checked} disabled={!canEdit || view.locked}
                   onChange={() => { setChoice(p.plan); setTarget(p.seeds) }} data-testid={`playoff-play-in-${p.spots}`} />
+                <SelectionCheck selected={checked} className="absolute right-3 top-3 text-white" testId={`playoff-play-in-${p.spots}-check`} />
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="text-[13px] font-semibold text-white/90">{t(p.spots === 1 ? 'lsHub.po.pi.one' : 'lsHub.po.pi.two')}</span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-bold text-violet-300">

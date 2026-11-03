@@ -1,5 +1,11 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
+// These tests isolate their own waiver/lifecycle behavior; the pre-draft policy has its own route tests.
+vi.mock('@/lib/waiver-wire/season-phase-gate', () => ({
+  loadWaiverPhasePolicy: async () => ({ phase: 'regular', claimsAllowed: true, immediateAddsAllowed: true, firstComeAdds: false, code: null, reason: null }),
+  loadWaiverRunPhaseGate: async () => () => null,
+}))
+
 const h = vi.hoisted(() => ({ claimUpdate: vi.fn(), tx: vi.fn(), result: vi.fn(), locked: vi.fn(), hook: vi.fn(), runUpdate: vi.fn() }))
 const metadata = { commissionerOverrides: { bypassInsufficientFaab: true } }
 vi.mock('@/lib/prisma', () => ({ prisma: {

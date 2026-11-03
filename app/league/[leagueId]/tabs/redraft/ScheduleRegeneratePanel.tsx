@@ -60,21 +60,21 @@ export function ScheduleRegeneratePanel({
 
   return (
     <section
-      className="mb-4 rounded-lg border border-[color:var(--border-subtle,#2a2a2a)] bg-[color:var(--surface-1,#141414)] p-4"
+      className="mb-4 rounded-lg border rdt rdt-card p-4"
       data-testid="schedule-regenerate-panel"
       aria-label={t('schedRegen.title')}
     >
       <h3 className="text-sm font-bold uppercase tracking-wide">{t('schedRegen.title')}</h3>
-      <p className="mt-1 text-xs text-[color:var(--text-secondary,#b4b4b4)]">{t('schedRegen.body')}</p>
+      <p className="mt-1 text-xs rdt-muted">{t('schedRegen.body')}</p>
 
       {confirming ? (
-        <div role="alertdialog" aria-label={t('schedRegen.confirmTitle')} className="mt-3 rounded-md border border-amber-500/40 p-3">
+        <div role="alertdialog" aria-label={t('schedRegen.confirmTitle')} className="mt-3 rounded-md border rdt-warn-line p-3">
           <p className="text-sm font-semibold">{t('schedRegen.confirmTitle')}</p>
           <p className="mt-1 text-xs">{t('schedRegen.confirmBody')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              className="min-h-11 rounded-md border border-amber-500/60 px-3 text-sm font-semibold disabled:opacity-50"
+              className="min-h-11 rounded-md border rdt-warn-line px-3 text-sm font-semibold disabled:opacity-50"
               disabled={busy}
               onClick={() => void run(true)}
             >
@@ -82,7 +82,7 @@ export function ScheduleRegeneratePanel({
             </button>
             <button
               type="button"
-              className="min-h-11 rounded-md border border-[color:var(--border-subtle,#2a2a2a)] px-3 text-sm disabled:opacity-50"
+              className="min-h-11 rounded-md border rdt-btn px-3 text-sm disabled:opacity-50"
               disabled={busy}
               onClick={() => {
                 setConfirming(false)
@@ -96,7 +96,7 @@ export function ScheduleRegeneratePanel({
       ) : (
         <button
           type="button"
-          className="mt-3 min-h-11 rounded-md border border-[color:var(--border-subtle,#2a2a2a)] px-3 text-sm font-semibold disabled:opacity-50"
+          className="mt-3 min-h-11 rounded-md border rdt-btn px-3 text-sm font-semibold disabled:opacity-50"
           disabled={busy}
           onClick={() => void run(false)}
         >
@@ -105,7 +105,7 @@ export function ScheduleRegeneratePanel({
       )}
 
       {message ? (
-        <p role="status" className={`mt-3 text-sm ${message.tone === 'ok' ? 'text-emerald-400' : 'text-amber-300'}`}>
+        <p role="status" className={`mt-3 text-sm ${message.tone === 'ok' ? 'rdt-good' : 'rdt-warn'}`}>
           {message.text}
         </p>
       ) : null}

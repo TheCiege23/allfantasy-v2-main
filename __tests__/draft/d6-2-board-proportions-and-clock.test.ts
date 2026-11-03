@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { translations } from '@/lib/i18n/translations'
 
 /**
  * D.6.2 — visual layout fixes after D.6.1:
@@ -109,7 +110,9 @@ describe('D.6.2 — top-middle RESUME DRAFT replaced with prominent clock', () =
   })
 
   it('paused state shows a "Resume" badge inside the clock pill (commissioner click target)', () => {
-    expect(src).toMatch(/>\s*Resume\s*<\/span>/)
+    // The badge copy now goes through t(); "Resume" is its English value.
+    expect(src).toMatch(/>\s*\{t\('draftRoom\.topBar\.resumeBadge'\)\}\s*<\/span>/)
+    expect(translations.en['draftRoom.topBar.resumeBadge']).toBe('Resume')
     expect(src).toMatch(/data-paused=\{draftStatus === 'paused' \? 'true' : 'false'\}/)
   })
 
@@ -120,7 +123,8 @@ describe('D.6.2 — top-middle RESUME DRAFT replaced with prominent clock', () =
   })
 
   it('non-commissioner paused state still shows clock with a Paused badge (read-only)', () => {
-    expect(src).toMatch(/>\s*Paused\s*<\/span>/)
+    expect(src).toMatch(/>\s*\{t\('draftRoom\.topBar\.timerPaused'\)\}\s*<\/span>/)
+    expect(translations.en['draftRoom.topBar.timerPaused']).toBe('Paused')
   })
 
   it('clock pill uses large, prominent typography (text-xl / sm:text-2xl + min-h-[36px])', () => {

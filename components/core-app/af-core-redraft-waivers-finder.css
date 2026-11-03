@@ -1,0 +1,116 @@
+/* Redraft identity on /core — batch B5: Waivers, Player Finder, Draft HQ (2026-10-31).
+ *
+ * EVERY RULE HERE IS SCOPED TO `.af-core.af-shell[data-format=redraft]`, the stamp AfCoreShell puts on its
+ * root for a redraft league (lib/core-app/coreShellRedraftIdentity.ts). /core renders these screens for an
+ * IMPORTED league (a native `?league=` redirects to /league/[id]), so the stamp here comes from
+ * `isImportedRedraftLeague`. No stamp, no effect: dynasty, keeper, best ball, guillotine, an import whose
+ * stored data does not positively say redraft, and every cross-league board render exactly as before.
+ *
+ * Tokens are the foundation's (components/league/native/redraft-identity.css, docs/design/redraft-identity.md)
+ * — `--rd-*` plus /core's own mode-aware palette, so LIGHT MODE NEEDS NO SECOND BLOCK: --surface, --text,
+ * --good, --warn… already carry the light values, and the foundation already ships light `--rd-*`.
+ *
+ * ⚠ NO HEX, NO rgba() LITERAL, NOTHING UNDER 11px. __tests__/core-app/redraftCoreB5Css.test.ts fails on any.
+ *
+ * ⚠ `--rd-b5: on` on each screen root is a MARKER, not a colour: scripts/redraft-core-b5-capture.mjs reads
+ * it to refuse an "after" frame this file did not reach, a "before" frame it already reached, and a dynasty
+ * control it leaked into.
+ *
+ * ⚠ SPECIFICITY. The prefix alone is (0,3,0) and every rule adds at least one class, so it beats the screens'
+ * own sheets (af-waivers.css, af-player-finder.css, af-draft-hq.css: (0,1,0)–(0,2,0)) and their
+ * `html[data-mode='light'] .af-core …` overrides ((0,3,1) at most) without !important.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK AT THE END, NOT NESTED (CLAUDE.md, af-matchup.css 2026-08-30).
+ *
+ * Files this batch styles but does not edit: af-waivers.css, af-player-finder.css, af-draft-hq.css and
+ * components/decide/broadcast-deck.css (WaiverIntel's `.bdx-embed-core` — only its `--bdx-*` tokens are
+ * re-pointed below, the same move the deck's redraft batch makes inside the workspace). */
+
+/* ── Marker ───────────────────────────────────────────────────────────────────────────────────────── */
+.af-core.af-shell[data-format=redraft] :is(.af-wv,.af-pf,.af-dh){--rd-b5:on}
+
+/* ── Shared: a short sport bar before a section label, the system B2 uses on My team ──────────────── */
+.af-core.af-shell[data-format=redraft] :is(.af-dh-section-head,.af-pf-section-head) > h2.af-label{display:inline-flex;align-items:center;gap:8px;color:var(--text2)}
+.af-core.af-shell[data-format=redraft] :is(.af-dh-section-head,.af-pf-section-head) > h2.af-label::before{content:'';flex:0 0 auto;width:14px;height:3px;border-radius:2px;background:var(--rd-accent)}
+
+/* Screen titles: the heavy upright display, underlined by the sport bar. */
+.af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1){letter-spacing:-0.025em}
+.af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1)::after{content:'';display:block;width:34px;height:4px;margin-top:8px;border-radius:2px;background:var(--rd-accent)}
+
+/* ── Waivers · the claim window as the hero ───────────────────────────────────────────────────────── */
+
+/* "Next waiver run · Wednesday 03:00 · in 2d 11h": the one line with a deadline. The sport frame and the
+ * hero wash (--rd-glow is fainter than --rd-accent-soft, so --text on it keeps the measured contrast). The
+ * countdown takes the accent; WaiverRunClock's own `data-soon` (under an hour) keeps --warn and wins. */
+.af-core.af-shell[data-format=redraft] .af-wv-next{border-color:var(--rd-accent-line);background-color:var(--surface);background-image:linear-gradient(115deg,var(--rd-glow),transparent 70%);border-radius:14px;padding:12px 16px;font-size:16px;font-weight:800}
+.af-core.af-shell[data-format=redraft] .af-wv-next .af-wv-clock-in{color:var(--rd-accent-text);font-weight:850}
+.af-core.af-shell[data-format=redraft] .af-wv-next [data-soon='true'] .af-wv-clock-in{color:var(--warn)}
+
+/* Tiles: one card language with the rest of the redraft screens. */
+.af-core.af-shell[data-format=redraft] .af-wv-tile{border-radius:14px}
+/* The FAAB tile is the lead number: it is what a claim spends. */
+.af-core.af-shell[data-format=redraft] .af-wv-tile[data-tile='faab']:not([data-missing='true']){border-color:var(--rd-accent-line);border-top:3px solid var(--rd-accent);background:var(--rd-surface-elev)}
+.af-core.af-shell[data-format=redraft] .af-wv-tile[data-tile='faab']:not([data-missing='true']) .af-wv-tile-value{color:var(--rd-accent-text)}
+/* FAAB left as a share of the league's budget (Waivers.tsx `faabTrack`): drawn only when both are real. */
+.af-core.af-shell[data-format=redraft] .af-wv-track{display:block;height:6px;margin-top:9px;border-radius:999px;background:var(--rd-track);overflow:hidden}
+.af-core.af-shell[data-format=redraft] .af-wv-track-fill{display:block;height:100%;border-radius:inherit;background:var(--rd-accent)}
+
+/* The rules box and the pricing note: reference, framed in the sport line. */
+.af-core.af-shell[data-format=redraft] .af-wv-rules-box{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-wv-rule-budget{color:var(--rd-accent-text)}
+
+/* Waiver intel (WaiverIntel `surface="core"`): broadcast-deck.css already maps the deck onto /core's
+ * palette for the embed; the magenta→orange gradient and the italic display are the deck's own voice, so
+ * here the gradient becomes the sport and the display goes upright, as the deck's redraft batch does. */
+.af-core.af-shell[data-format=redraft] .bdx.bdx-embed-core{--bdx-grad:var(--rd-accent);--bdx-info:var(--rd-accent-text);--bdx-me:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .bdx.bdx-embed-core .bdx-disp{font-style:normal;text-transform:none;font-weight:850;letter-spacing:-0.015em}
+.af-core.af-shell[data-format=redraft] .bdx.bdx-embed-core .bdx-kick h2::after{width:30px;background:var(--rd-accent)}
+
+/* ── Player Finder ────────────────────────────────────────────────────────────────────────────────── */
+
+/* ⚠ THE FINDER'S ROOT IS ITSELF `.af-core` (PlayerFinder.tsx), and `.af-core` re-declares /core's default
+ * --accent family, so inside it the sport re-pointing from redraft-identity.css was lost: the active match,
+ * "rostered in" and every link read the default cyan in a redraft league. Restated here on that root. */
+.af-core.af-shell[data-format=redraft] .af-pf.af-core{--accent:var(--rd-accent-text);--accent-ink:var(--rd-accent-ink);--accent-soft:var(--rd-accent-soft);--accent-line:var(--rd-accent-line)}
+
+/* The open match: the sport rail on its leading edge. */
+.af-core.af-shell[data-format=redraft] .af-pf-match[data-active='true']{box-shadow:inset 3px 0 0 var(--rd-accent)}
+/* The player card: the hero frame and wash, the name in the heavy display. */
+.af-core.af-shell[data-format=redraft] .af-pf-detail{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
+.af-core.af-shell[data-format=redraft] .af-pf-name{font-weight:900;letter-spacing:-0.03em}
+.af-core.af-shell[data-format=redraft] .af-pf-headshot{border-color:var(--rd-accent-line)}
+.af-core.af-shell[data-format=redraft] .af-pf-tile{border-radius:14px}
+
+/* ── Draft HQ ─────────────────────────────────────────────────────────────────────────────────────── */
+
+/* The board card is the hero: the sport cap, frame and wash. */
+.af-core.af-shell[data-format=redraft] .af-dh-board{border-color:var(--rd-accent-line);border-top:3px solid var(--rd-accent);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
+.af-core.af-shell[data-format=redraft] .af-dh-title{letter-spacing:-0.025em}
+/* A draft that has not started is the sport's pill; live / paused / done keep their own tones. */
+.af-core.af-shell[data-format=redraft] .af-dh-status[data-tone='future']{background:transparent;border:1px solid var(--rd-accent-line);color:var(--rd-accent-text);font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace)}
+/* "Your slot" — the fact a manager opens this card for. */
+.af-core.af-shell[data-format=redraft] .af-dh-fact:last-child:not([data-missing='true']) .af-dh-fact-value{color:var(--rd-accent-text)}
+
+/* Pick labels ("1.02") in the sport, so the picks read as one system across the screen. */
+.af-core.af-shell[data-format=redraft] :is(.af-dh-pick,.af-dh-made-row) .af-dh-pick-label{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-dh-pick{border-color:var(--rd-accent-line)}
+
+/* ⚠ YOUR PICKS ON THE BOARD WERE UNREADABLE IN BOTH MODES. af-draft-hq.css draws them --accent-ink on
+ * --accent-soft: --accent-ink is the ink for a SOLID accent fill (#ffffff in light, near-black in dark),
+ * and --accent-soft is a 10–16% tint over the page — so white on near-white in light mode and near-black
+ * on near-black in dark. Here: --text on the tint, marked by a sport rail. Same for your chip in the team
+ * strip and for a "B" grade letter. */
+.af-core.af-shell[data-format=redraft] .af-dh-bpick[data-you='true']{background:var(--rd-accent-soft);color:var(--text);box-shadow:inset 3px 0 0 var(--rd-accent)}
+.af-core.af-shell[data-format=redraft] .af-dh-bpick[data-you='true'] :is(.af-dh-bpick-meta,.af-dh-bpick-team){color:var(--text2);opacity:1}
+.af-core.af-shell[data-format=redraft] .af-dh-teamchip[data-you='true']{background:var(--rd-accent-soft);border-color:var(--rd-accent-line);color:var(--rd-accent-text);font-weight:800}
+.af-core.af-shell[data-format=redraft] .af-dh-teamchip[data-you='true'] .af-dh-teamchip-n{color:var(--rd-accent-text);opacity:1}
+/* A "B" is readable ink on a chip, NOT the sport colour: MLB's accent is red, and a red B beside a red F
+ * reads as a failing grade (caught in the MLB capture). */
+.af-core.af-shell[data-format=redraft] .af-dh-grade-letter[data-grade='B']{background:var(--chip);color:var(--text);border:1px solid var(--line2)}
+.af-core.af-shell[data-format=redraft] .af-dh-round-title{color:var(--text2)}
+
+@media (max-width:720px){
+  /* Phone: the hero line steps down a size; the title bar sits closer. */
+  .af-core.af-shell[data-format=redraft] .af-wv-next{font-size:14px;padding:10px 14px}
+  .af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1)::after{margin-top:6px}
+}

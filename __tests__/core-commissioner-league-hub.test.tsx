@@ -17,10 +17,13 @@ vi.mock('@/lib/core-app/commissioner/reports', () => ({
   loadAuditTimeline: () => Promise.resolve({ available: true, data: [] }),
   loadActivityCharts,
 }))
-// The streamed sections are async server components; their own suites cover them.
-vi.mock('@/components/core-app/commissioner/HubReports', () => ({
+// The streamed sections are async server components; their own suites cover them. The health
+// breakdown's static half is synchronous and real, so the card's free bars are pinned here.
+vi.mock('@/components/core-app/commissioner/HubReports', async (actual) => ({
+  ...(await actual<typeof import('@/components/core-app/commissioner/HubReports')>()),
   OperationalCharts: () => null,
   ChartsFallback: () => null,
+  HealthBreakdown: () => null,
   RecentChanges: () => null,
   RecentChangesFallback: () => null,
   AuditTimeline: () => null,
@@ -241,6 +244,32 @@ describe('<CommissionerHub /> — commissioner depth paywall', () => {
     render(<CommissionerHub data={hub({ depth: LOCKED })} />)
     expect(document.getElementById('ch-lineups')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Lineups' })).toBeNull()
+  })
+
+  it('locked: the health card still breaks the score into its five parts — lineups and dues from the hub, the activity three named as the plan', () => {
+    const flags = [
+      { key: 'lineups', label: 'Missing lineups', measured: true, severity: 'warn', count: 2, headline: '', detail: '', names: [], action: null },
+      { key: 'dues', label: 'Unpaid dues', measured: false, reason: 'Dues aren’t tracked here.', action: null },
+    ] as unknown as CommissionerHubData['health']['flags']
+    const teams = Array.from({ length: 12 }, (_, i) => ({ name: `T${i}`, platformUserId: null }))
+    render(
+      <CommissionerHub
+        data={hub({ depth: LOCKED, health: { score: { available: false, reason: 'x' }, flags }, grant: { teams } as unknown as CommissionerHubData['grant'] })}
+      />,
+    )
+    const card = screen.getByTestId('health-breakdown')
+    expect(document.getElementById('ch-health')!.contains(card)).toBe(true)
+    const rows = [...card.querySelectorAll('li')]
+    expect(rows.map((li) => li.querySelector('.af-ch-hb-name')!.textContent)).toEqual([
+      'Lineups set', 'Waiver activity', 'Trade activity', 'Dues paid', 'Chat engagement',
+    ])
+    // 10 of 12 lineups full → 83, with the counts it came from.
+    expect(rows[0].querySelector('.af-ch-hb-value')!.textContent).toBe('83')
+    expect(rows[0].textContent).toContain('10 of 12 teams have a full lineup')
+    // Not measured is never drawn as zero.
+    expect(rows[3].getAttribute('data-measured')).toBe('false')
+    expect(rows[3].textContent).toContain('Dues aren’t tracked here.')
+    for (const i of [1, 2, 4]) expect(rows[i].textContent).toContain('Part of AF Commissioner.')
   })
 
   it('locked: the charts read is never started', () => {

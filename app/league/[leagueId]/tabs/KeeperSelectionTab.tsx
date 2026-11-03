@@ -37,6 +37,15 @@ type EligRow = {
   yearsKept: number
 }
 
+type KeeperValue = { marketRank: number; pickSlot: number; surplus: number }
+type ValueReport = { available: true; values: Record<string, KeeperValue> } | { available: false; reason: string }
+
+/** "+92 value · market #10, costs pick ~#102" — the keeper value report line for one player. */
+export function keeperValueLine(v: KeeperValue): string {
+  const head = v.surplus > 0 ? `+${v.surplus} value` : v.surplus === 0 ? 'Even value' : `Worth ${-v.surplus} picks less than his cost`
+  return `${head} · market #${v.marketRank}, costs pick ~#${v.pickSlot}`
+}
+
 type KeeperRec = {
   id: string
   playerId: string
@@ -51,6 +60,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
   const [ctx, setCtx] = useState<ContextPayload | null>(null)
   const [players, setPlayers] = useState<RosterPlayer[]>([])
   const [eligibility, setEligibility] = useState<EligRow[]>([])
+  const [valueReport, setValueReport] = useState<ValueReport | null>(null)
   const [records, setRecords] = useState<KeeperRec[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -96,8 +106,10 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
       const eligJson = await eligRes.json().catch(() => ({}))
       if (eligRes.ok && Array.isArray(eligJson.raw)) {
         setEligibility(eligJson.raw as EligRow[])
+        setValueReport(eligJson.valueReport && typeof eligJson.valueReport === 'object' ? (eligJson.valueReport as ValueReport) : null)
       } else {
         setEligibility([])
+        setValueReport(null)
       }
 
       const rosterJson = await rosterRes.json().catch(() => ({}))
@@ -271,6 +283,12 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
             </p>
           </div>
 
+          {valueReport?.available ? (
+            <p className="text-[11px] text-white/50" data-testid="keeper-value-note">
+              Keeper value: each player&apos;s market rank against the overall pick his keeper costs. Positive means he is worth more than the pick.
+            </p>
+          ) : null}
+
           <div className="space-y-2">
             {players.length === 0 ? (
               <p className="text-[12px] text-white/45">No players on your roster for this season yet.</p>
@@ -284,6 +302,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                     key={p.playerId}
                     type="button"
                     disabled={locked || deadlinePassed || Boolean(ineligible)}
+                    aria-pressed={sel}
+                    data-testid={`keeper-select-${p.playerId}`}
                     onClick={() => toggle(p.playerId)}
                     className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                       sel
@@ -291,7 +311,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                         : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15'
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    <span className="mt-0.5 text-amber-300/90">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
+                    <span className="mt-0.5 text-amber-300/90" aria-hidden="true">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[14px] font-semibold text-white">{p.playerName}</span>
                       <span className="text-[11px] text-white/45">
@@ -303,6 +323,14 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                           Projected cost:{' '}
                           {e.projectedCost ??
                             (e.projectedCostRound != null ? `Round ${e.projectedCostRound}` : '—')}
+                        </span>
+                      ) : null}
+                      {valueReport?.available && valueReport.values[p.playerId] ? (
+                        <span
+                          className={`mt-0.5 block text-[11px] ${valueReport.values[p.playerId].surplus > 0 ? 'text-emerald-300/85' : 'text-white/45'}`}
+                          data-testid="keeper-value"
+                        >
+                          {keeperValueLine(valueReport.values[p.playerId])}
                         </span>
                       ) : null}
                       {ineligible ? (

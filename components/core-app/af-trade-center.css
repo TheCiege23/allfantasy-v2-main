@@ -2062,17 +2062,17 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-timeline-lineup[data-direction='unknown'] { color: var(--muted); font-weight: 400; }
 
 /*
- * ── Phone builder: step bar, review, asset sheet (item #9) ───────────────
+ * ── Phone builder: balance bar, asset sheet (item #9) ────────────────────
  *
  * Appended as its own blocks, outside every existing @media — see the warning
  * near the top of this file about inserting a query inside another.
  *
- * ⚠ ALL-WIDTH DEFAULTS FIRST. The step bar and review summary are always in the
- * DOM (the markup is identical at every width) and must not exist above 720px;
- * the two wrappers must never add a box or a flex gap at any width.
+ * ⚠ ALL-WIDTH DEFAULTS FIRST. The balance bar (still `.af-tc-stepbar`, from
+ * when it carried step tabs) is always in the DOM — the markup is identical at
+ * every width — and must not exist above 720px; the two wrappers must never add
+ * a box or a flex gap at any width.
  */
 .af-tc-stepbar,
-.af-tc-review,
 .af-tc-step-anchor {
   display: none;
 }
@@ -2170,66 +2170,6 @@ html[data-mode='light'] .af-core .af-tc {
     backdrop-filter: blur(12px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
   }
-  .af-tc-steps {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    padding: 3px;
-    border-radius: 11px;
-    background: var(--surface2);
-  }
-  /* (0,2,0) beats the base `button` rules; `.af-btn` is not involved here. */
-  .af-core .af-tc-step {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    min-width: 0;
-    min-height: 44px;
-    padding: 0 4px;
-    border: 0;
-    border-radius: 9px;
-    background: transparent;
-    color: var(--muted);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .af-core .af-tc-step[data-on='true'] {
-    background: var(--accent-soft);
-    color: var(--text);
-    box-shadow: inset 0 0 0 1px var(--accent-line);
-  }
-  .af-core .af-tc-step:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-  }
-  /*
-   * Hidden since the fourth tab: at 390px a tab is ~83px wide, and the number circle plus a count
-   * badge truncated "Offers" to "Off…". The labels say what each step is; the order is visible.
-   */
-  .af-tc-step-num {
-    display: none;
-  }
-  .af-tc-step[data-on='true'] .af-tc-step-num {
-    background: var(--accent);
-    color: var(--accent-ink);
-  }
-  .af-tc-step-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .af-tc-step-count {
-    flex: 0 0 auto;
-    min-width: 18px;
-    padding: 1px 5px;
-    border-radius: 999px;
-    background: var(--line);
-    font-size: 11px;
-    text-align: center;
-  }
   .af-tc-stepbar-row {
     display: flex;
     align-items: center;
@@ -2265,20 +2205,8 @@ html[data-mode='light'] .af-core .af-tc {
     text-align: center;
   }
 
-  /*
-   * One step at a time. Every section that belongs to particular steps says so
-   * in `data-mstep`; anything untagged (header, inbox, league context) shows on
-   * all three.
-   */
-  .af-tc[data-mobile-step='offers'] [data-mstep]:not([data-mstep~='offers']),
-  .af-tc[data-mobile-step='give'] [data-mstep]:not([data-mstep~='give']),
-  .af-tc[data-mobile-step='get'] [data-mstep]:not([data-mstep~='get']),
-  .af-tc[data-mobile-step='review'] [data-mstep]:not([data-mstep~='review']) {
-    display: none;
-  }
-
-  /* The page's intro paragraph is for someone arriving, not someone mid-deal. */
-  .af-tc:not([data-mobile-step='offers']) .af-tc-lede {
+  /* The page's intro paragraph is for a desktop visitor; on a phone the calculator leads. */
+  .af-tc-lede {
     display: none;
   }
 
@@ -2305,70 +2233,6 @@ html[data-mode='light'] .af-core .af-tc {
     font-size: 12px;
   }
 
-  .af-tc[data-mobile-step='review'] .af-tc-review {
-    display: grid;
-    gap: 12px;
-  }
-  .af-tc-review-side {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--surface);
-  }
-  .af-tc-review-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .af-core .af-tc-review-edit {
-    min-height: 44px;
-    padding: 0 14px;
-    border: 1px solid var(--line2);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--accent);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .af-tc-review-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .af-tc-review-list li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-    color: var(--text);
-    font-size: 13px;
-  }
-  /* Why a line has no value — on its own line under the row, since a phone cannot hover. */
-  .af-tc-review-why {
-    flex: 1 0 100%;
-    margin-top: -4px;
-    color: var(--faint);
-    font-size: 11px;
-    line-height: 1.35;
-  }
-  .af-tc-review-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .af-tc-review-list [data-unpriced='true'] {
-    color: var(--faint);
-  }
 }
 
 /*
@@ -2800,3 +2664,271 @@ html[data-mode='light'] .af-core .af-tc {
 
 .af-tc-saved-list summary, .af-tc-partner-evidence summary { min-height:44px; align-content:center; cursor:pointer; }
 .af-tc-partner-evidence summary:focus-visible { outline:2px solid var(--accent, #75e2dc); outline-offset:3px; }
+
+/*
+ * ── KTC-STYLE CALCULATOR (2026-10-31) ─────────────────────────────────────
+ *
+ * Both sides of the deal on one screen, each led by a labelled total bar and
+ * a search control, a balance meter in the sticky phone bar, and everything
+ * that is not the deal folded below it. See the note above `TradeCenter` in
+ * TradeCenter.tsx.
+ *
+ * Appended at the end of the file, outside every existing `@media` block —
+ * see the warning near the top about inserting a query inside another.
+ */
+
+/* The side's label and running total, at the top of the side. */
+.af-tc-total.af-tc-side-bar {
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-tc-side-bar b {
+  font-size: 15px;
+}
+.af-tc-side-bar .af-tc-total-note {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* "+ Add asset" became a search field: it opens the picker with its search focused. */
+.af-tc-team .af-tc-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+}
+.af-tc-team .af-tc-add:hover,
+.af-tc-team .af-tc-add:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+.af-tc-add-icon {
+  color: var(--accent);
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Where the deal leans. The fill is the GET side's share, so past the middle tick favours you. */
+.af-tc-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-tc-meter-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-tc-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.af-tc-meter-track::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--surface);
+}
+.af-tc-meter[data-tone='good'] .af-tc-meter-fill { background: var(--good); }
+.af-tc-meter[data-tone='bad'] .af-tc-meter-fill { background: var(--bad); }
+.af-tc-meter-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.af-tc-meter[data-tone='good'] .af-tc-meter-label { color: var(--good); }
+.af-tc-meter[data-tone='bad'] .af-tc-meter-label { color: var(--bad); }
+
+/* Trade ideas, and offers / drafts / alerts: one line each until opened. */
+.af-tc-fold {
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-fold[open] {
+  padding-bottom: 14px;
+}
+.af-tc-fold > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 48px;
+  padding: 6px 0;
+  color: var(--text);
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+}
+.af-tc-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.af-tc-fold > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.af-tc-fold[open] > summary::after {
+  transform: rotate(180deg);
+}
+.af-tc-fold > :not(summary) {
+  margin-top: 12px;
+}
+.af-tc-fold-note {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.af-tc-fold-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  /* KTC order on a phone: what you get, then what it costs you. */
+  .af-tc-builder .af-tc-team[data-side='get'] {
+    order: -1;
+  }
+  .af-tc-team {
+    gap: 8px;
+    padding: 12px;
+  }
+  /* The sticky bar carries the meter on a phone; the full value rail would say it twice. */
+  .af-tc-balance {
+    display: none;
+  }
+}
+
+/* ── Partner select: every other team in one control ─────────────────────── */
+.af-tc-partner-select select {
+  width: 100%;
+  max-width: 420px;
+  min-height: 44px;
+  margin: 6px 0 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+@media (max-width: 720px) {
+  /* On a phone the select is the picker; the chip row is a second, longer copy of it. */
+  .af-tc-partner .af-tc-partner-chips { display: none; }
+  .af-tc-partner-select select { max-width: none; }
+}
+
+/* ── Trade center panel: Active · Review · History ───────────────────────── */
+.af-tcp { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.af-tcp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.af-tcp-head h2 { margin: 0; font-size: 18px; color: var(--text); }
+.af-tcp-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--line); }
+.af-tcp-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 16px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.af-tcp-tab[data-on='true'] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18); }
+.af-tcp-count { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 11px; text-align: center; }
+.af-tcp-empty, .af-tcp-hint { margin: 0; padding: 18px; border: 1px dashed var(--line2); border-radius: 14px; color: var(--muted); font-size: 14px; }
+.af-tcp-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
+.af-tcp-list { display: flex; flex-direction: column; gap: 10px; }
+.af-tcp-card {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.af-tcp-card:hover { border-color: var(--line2); }
+.af-tcp-card[data-on='true'] { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line) inset; }
+.af-tcp-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.af-tcp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--surface2); color: var(--text2); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.af-tcp-card[data-status='incoming'] .af-tcp-chip, .af-tcp-card[data-status='votes'] .af-tcp-chip { background: var(--accent-soft); color: var(--text); }
+.af-tcp-when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.af-tcp-card-who { font-size: 16px; font-weight: 800; }
+.af-tcp-card-sub { color: var(--muted); font-size: 13px; }
+.af-tcp-assets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.af-tcp-sidewrap { display: inline-flex; align-items: center; gap: 8px; }
+.af-tcp-side { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.af-tcp-swap { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); color: var(--muted); font-size: 14px; }
+.af-tcp-token { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; max-width: 76px; }
+.af-tcp-token-face {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 50%; overflow: hidden; object-fit: cover;
+  background: var(--surface2); border: 1px solid var(--line2); color: var(--text2); font-size: 12px; font-weight: 800; line-height: 1;
+}
+.af-tcp-token--pick .af-tcp-token-face b { font-size: 11px; }
+.af-tcp-token--pick .af-tcp-token-face small { font-size: 11px; color: var(--muted); }
+.af-tcp-token-name { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); font-size: 11px; }
+.af-tcp-detail { position: sticky; top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.af-tcp-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.af-tcp-detail-head h3 { margin: 0; font-size: 17px; color: var(--text); }
+.af-tcp-close { min-width: 44px; min-height: 44px; border: 0; border-radius: 10px; background: var(--surface2); color: var(--text); font-size: 18px; cursor: pointer; }
+.af-tcp-detail-body { display: flex; flex-direction: column; gap: 12px; }
+.af-tcp-detail-meta { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.af-tcp-grade { margin: 0; font-size: 13px; color: var(--text2); }
+.af-tcp-team { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); }
+.af-tcp-team[data-viewer] { border-color: var(--accent-line); }
+.af-tcp-team header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.af-tcp-team header img, .af-tcp-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.af-tcp-avatar { display: inline-flex; align-items: center; justify-content: center; background: var(--surface); color: var(--text2); font-size: 11px; font-weight: 800; }
+.af-tcp-team header b { flex: 1; min-width: 0; color: var(--text); font-size: 15px; }
+.af-tcp-standing { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.af-tcp-standing[data-standing='accepted'] { color: var(--good); }
+.af-tcp-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.af-tcp-cols ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.af-tcp-line { display: flex; align-items: center; gap: 8px; }
+.af-tcp-line .af-tcp-token-name { display: none; }
+.af-tcp-line-text { display: flex; flex-direction: column; min-width: 0; }
+.af-tcp-line-text b { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.af-tcp-line-text small { color: var(--muted); font-size: 12px; }
+.af-tcp-none { color: var(--muted); font-size: 13px; }
+.af-tcp-idol { align-self: flex-start; margin: 2px 0; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--text); font-size: 11px; font-weight: 700; }
+.af-tcp-vote p { margin: 6px 0 0; color: var(--text2); font-size: 13px; }
+.af-tcp-meter { height: 8px; border-radius: 4px; background: var(--surface2); overflow: hidden; }
+.af-tcp-meter span { display: block; height: 100%; background: var(--bad); border-radius: 4px; }
+.af-tcp-note { margin: 0; color: var(--muted); font-size: 13px; }
+.af-tcp-error { margin: 0; color: var(--bad); font-size: 13px; }
+.af-tcp-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.af-tcp-actions .af-btn { min-height: 44px; }
+@media (max-width: 720px) {
+  .af-tcp-split { grid-template-columns: minmax(0, 1fr); }
+  .af-tcp-split[data-detail='closed'] .af-tcp-detail { display: none; }
+  /* The open trade rises as a sheet over the list, as the phone design has it. */
+  .af-tcp-split[data-detail='open'] .af-tcp-detail {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 60;
+    max-height: 86vh; overflow-y: auto; border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.35);
+  }
+  .af-tcp-cols { grid-template-columns: minmax(0, 1fr); }
+}

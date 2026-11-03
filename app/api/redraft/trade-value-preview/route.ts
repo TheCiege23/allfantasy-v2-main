@@ -43,6 +43,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
 import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
+import { createZombieNativeItemGrader } from '@/lib/decision-os/trade/zombieNativeItemGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import { resolveRedraftTeamWindow } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
@@ -150,6 +151,36 @@ export async function POST(req: NextRequest) {
    */
   if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only the proposer roster owner can price this trade' }, { status: 403 })
+  }
+
+  if (assets.some(asset => asset.assetType === 'zombie_item')) {
+    // Generic snapshots cannot represent an item asset. Return only the native Zombie estimate.
+    const grader = await createZombieNativeItemGrader(leagueId)
+    const grade = await grader.grade({
+      proposerRosterId, receiverRosterId, status: 'pending',
+      assets: assets.map(asset => ({
+        assetType: String(asset.assetType ?? 'player'),
+        fromRosterId: String(asset.fromRosterId ?? ''),
+        toRosterId: String(asset.toRosterId ?? ''),
+        playerId: asset.playerId ?? null,
+        playerName: asset.playerName ?? null,
+        metadata: asset.metadata ?? null,
+      })),
+    })
+    return NextResponse.json({ snapshot: null, tradeGrade: {
+      grade: null,
+      partnerGrade: null,
+      gradeLabel: grade.graded ? 'Future scoring estimate only' : null,
+      gradeWithheld: grade.graded
+        ? 'A complete Zombie grade needs infection, revival, loot, and cash payout outcomes.'
+        : grade.reason,
+      giveValue: grade.graded ? grade.giveValue : null,
+      getValue: grade.graded ? grade.getValue : null,
+      evaluationReceiptId: null,
+      gradeScope: 'zombie_future_scoring',
+      zombieEligibility: grade.zombieEligibility,
+      zombieInventory: grade.zombieInventory,
+    } })
   }
 
   /*

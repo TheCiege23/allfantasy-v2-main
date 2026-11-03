@@ -154,7 +154,7 @@ export async function postSurvivorEpisodeRecap(args: {
   outcome: 'removed_to_waivers' | 'exile_island'
   write?: typeof writeEpisodeRecap
 }): Promise<EpisodeRecapResult> {
-  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { aiRecaps: true, userId: true } })
+  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { aiRecaps: true, userId: true, settings: true } })
   if (!league?.aiRecaps) return 'off'
   if (!league.userId) return 'no_plan'
   const owner = await prisma.appUser.findUnique({ where: { id: league.userId }, select: { email: true, username: true } }).catch(() => null)
@@ -168,7 +168,10 @@ export async function postSurvivorEpisodeRecap(args: {
   const out = council?.eliminatedUserId
     ? await prisma.survivorPlayer.findFirst({ where: { leagueId: args.leagueId, userId: council.eliminatedUserId }, select: { isJuryMember: true } })
     : null
-  const destination: SurvivorEpisodeFacts['destination'] = args.outcome === 'exile_island' ? 'exile' : out?.isJuryMember ? 'jury' : 'out'
+  // Exile secrecy (survivorExileSecrecy.ts): the recap is public, so a hidden Exile reads as "out".
+  const { exileMembershipHidden } = await import('./survivorExileSecrecy')
+  const exileShown = !exileMembershipHidden(league.settings)
+  const destination: SurvivorEpisodeFacts['destination'] = args.outcome === 'exile_island' ? (exileShown ? 'exile' : 'out') : out?.isJuryMember ? 'jury' : 'out'
   const facts = await loadEpisodeFacts(args.leagueId, args.councilId, destination)
   if (!facts) return 'no_facts'
 

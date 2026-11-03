@@ -1,5 +1,7 @@
 'use client'
 
+import { useMessages } from '@/components/i18n/useMessages'
+import { zombieCreationMessages } from './ZombieCreationOptions'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { useMemo } from 'react'
 import type { AccentTone } from '@/lib/create-league-v2/theme'
@@ -105,6 +107,7 @@ export function CreateLeagueReviewStep({
   accent: AccentTone
 }) {
   const { t } = useLanguage()
+  const zombieCopy = useMessages(zombieCreationMessages)
   const leagueType = getEffectiveLeagueType(state)
 
   const conceptLabel = useMemo(() => {
@@ -146,6 +149,10 @@ export function CreateLeagueReviewStep({
     { label: 'Scoring preset', value: scoringLabel },
     { label: 'Draft type', value: draftLabel },
     { label: 'Teams / pool', value: String(state.teamCount) },
+    ...(leagueType === 'zombie' ? [
+      { label: zombieCopy.count, value: (state.zombieLeagueCount ?? 1) === 1 ? zombieCopy.single : zombieCopy.multiple(state.zombieLeagueCount ?? 1) },
+      { label: zombieCopy.title, value: zombieCopy.seats(state.zombieLeagueCount ?? 1, state.teamCount) },
+    ] : []),
     { label: 'League name', value: state.name.trim() || '—' },
     { label: 'Timezone', value: state.timezone?.trim() ? state.timezone : 'America/New_York' },
     { label: 'Language', value: languageLabel },

@@ -118,7 +118,7 @@ function fullName(p: FeedPlayer): string {
  * enrichment must not fail the run that populated the roster.
  */
 export async function refreshSleeperPlayerRows(args: {
-  sport?: 'NFL'
+  sport?: 'NFL' | 'NBA'
   /** How many players to touch this run. Keeps one unit small. */
   limit?: number
   /** Checked BETWEEN batches, never inside one. */
@@ -162,7 +162,7 @@ export async function refreshSleeperPlayerRows(args: {
    */
   const existing = await prisma.sportsPlayer
     .findMany({
-      where: { sport, source: SOURCE, sleeperId: { not: null } },
+      where: { sport, source: SOURCE, sleeperId: { not: null }, fetchedAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
       orderBy: { fetchedAt: 'asc' },
       select: { id: true, sleeperId: true },
       take: limit,
@@ -232,7 +232,9 @@ export async function refreshSleeperPlayerRows(args: {
       .catch(() => [])
     const haveIds = new Set(known.map((k) => k.sleeperId).filter(Boolean) as string[])
 
-    const missing = [...byId.entries()].filter(([id]) => !haveIds.has(id)).slice(0, createBudget)
+    const missing = [...byId.entries()].filter(([id]) => !haveIds.has(id))
+      .sort(([, a], [, b]) => Number(Boolean(b.team)) - Number(Boolean(a.team)))
+      .slice(0, createBudget)
     for (const [id, p] of missing) {
       if (isExhausted()) break
       const ok = await prisma.sportsPlayer
@@ -256,7 +258,7 @@ export async function refreshSleeperPlayerRows(args: {
             height: p.height?.trim() || null,
             weight: p.weight?.trim() || null,
             college: p.college?.trim() || null,
-            imageUrl: `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`,
+            imageUrl: `https://sleepercdn.com/content/${sport.toLowerCase()}/players/thumb/${id}.jpg`,
             sleeperId: id,
             status: p.status?.trim() || null,
             dob: sleeperBirthday(p) ?? null,

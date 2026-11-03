@@ -5,11 +5,36 @@
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
  *
- * CFP and NBA Cup pools use admin-published fields and game times. Single-game
- * finals are entered through the audited result route until verified provider
- * ingestion is available. Both sports have their own persisted round keys.
+ * CFP retains its published field and first-game lock. NBA Cup uses scheduled
+ * provider ingestion for Group Play and confirmed knockout matchups, with each
+ * game locking at tipoff. Both sports have their own persisted round keys.
+ *
+ * NFL is a single-game bracket like the CFP (one lock, at the first Wild Card
+ * kickoff), seeded from standings and fed by the ESPN postseason scoreboard;
+ * its divisional round reseeds (lib/playoffs/nflPlayoffs.ts).
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
+
+/** Persisted challenge summaries returned by the authenticated list endpoint. */
+export type PlayoffChallengeListItem = {
+  challengeId: string
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+  seasonYear: number
+  participantCount: number
+  entryCount: number
+  inviteCode: string
+  config?: PlayoffChallengeConfig | null
+}
+
+export type PlayoffCreateResponse = {
+  challengeId: string
+  entryId: string | null
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+}
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -99,6 +124,12 @@ export type PlayoffRoundKey =
   | "cfp_quarterfinals"
   | "cfp_semifinals"
   | "cfp_championship"
+  // NFL playoffs — single games; the divisional round reseeds.
+  | "nfl_wild_card"
+  | "nfl_divisional"
+  | "nfl_conference"
+  | "nfl_super_bowl"
+  | "cup_group_play"
   | "cup_quarterfinals"
   | "cup_semifinals"
   | "cup_championship"
@@ -118,7 +149,7 @@ export type PlayoffSeriesSlot = "home" | "away"
  * conferences in its draw — seeds are national — so its halves are named by
  * position: the 1/4 side (`upper`) and the 2/3 side (`lower`).
  */
-export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
+export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "afc" | "nfc" | "finals"
 
 export type BracketTeamProfile = {
   won: number | null
@@ -130,6 +161,7 @@ export type BracketTeamProfile = {
 }
 
 export type PlayoffChallengeView = {
+  participants?: Array<{ userId: string; displayName: string; entryCount: number }>
   challenge: {
     id: string
     name: string
@@ -186,6 +218,7 @@ export type PlayoffChallengeView = {
   teamProfiles?: Record<string, BracketTeamProfile>
   /** Published-team crest URLs, resolved from ingested team rows at request time. */
   teamLogos?: Record<string, string>
+  nbaCupLastSyncedAt?: string | null
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null

@@ -134,5 +134,15 @@ describe('keeper rule settings gate', () => {
     expect(await keeperRuleSettingsRefusal('u', { keeperRoundPenalty: 9 }, cur)).toMatchObject({ status: 400 })
     expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_min_cost_round: 0 } }, cur)).toMatchObject({ status: 400 })
     expect(await keeperRuleSettingsRefusal('u', { keeperConflictRule: 'coin_flip' }, cur)).toMatchObject({ status: 400 })
+    expect(await keeperRuleSettingsRefusal('u', { keeperMissedDeadlineRule: 'auto_random' }, cur)).toMatchObject({ status: 400 })
+  })
+
+  it('"AF keeps their best-value players" for a missed deadline needs AF Commissioner; "keeps nobody" is free', async () => {
+    mockEvaluate.mockResolvedValue({ allowed: false })
+    expect(await keeperRuleSettingsRefusal('u', { keeperMissedDeadlineRule: 'auto_best_value' }, cur)).toMatchObject({ status: 403 })
+    expect(await keeperRuleSettingsRefusal('u', { keeperMissedDeadlineRule: 'auto_best_value' }, { ...cur, keeperMissedDeadlineRule: 'auto_best_value' })).toBeNull()
+    expect(await keeperRuleSettingsRefusal('u', { keeperMissedDeadlineRule: 'auto_no_keepers' }, { ...cur, keeperMissedDeadlineRule: 'auto_best_value' })).toBeNull()
+    mockEvaluate.mockResolvedValue({ allowed: true })
+    expect(await keeperRuleSettingsRefusal('u', { keeperMissedDeadlineRule: 'auto_best_value' }, cur)).toBeNull()
   })
 })

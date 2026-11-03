@@ -41,11 +41,13 @@ describe('getDraftStatColumnsForSport', () => {
     expect(getDraftStatColumnsForSport('NCAAF', { position: 'PK' }).some((c) => c.key === 'fgm')).toBe(true)
   })
 
-  it('NBA / NCAAB share basketball columns', () => {
+  it('NBA exposes observed rates and shooting while college keeps its existing columns', () => {
     const nba = getDraftStatColumnsForSport('NBA')
     const ncaab = getDraftStatColumnsForSport('NCAAB')
-    expect(nba.map((c) => c.key)).toEqual(ncaab.map((c) => c.key))
-    expect(nba.map((c) => c.key)).toContain('pts')
+    expect(nba.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'fg_pct', 'ft_pct', 'gp', 'nba_proj'])
+    expect(ncaab.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
+    expect(nba.find(c => c.key === 'ast')?.label).toBe('APG')
+    expect(ncaab.find(c => c.key === 'ast')?.label).toBe('AST')
   })
 
   it('MLB hitter vs pitcher by position', () => {

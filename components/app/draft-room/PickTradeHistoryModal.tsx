@@ -15,6 +15,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { ArrowRight, X, History } from 'lucide-react'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export interface PickTradeHistoryModalProps {
   open: boolean
@@ -33,6 +34,7 @@ export function PickTradeHistoryModal({
   focusOriginalRosterId = null,
 }: PickTradeHistoryModalProps) {
   const focusRef = useRef<HTMLLIElement | null>(null)
+  const { t, tInterpolate } = useOptionalLanguage()
 
   const byRound = useMemo(() => {
     const groups = new Map<number, TradedPickRecord[]>()
@@ -65,7 +67,7 @@ export function PickTradeHistoryModal({
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Pick trade history"
+      aria-label={t('draftRoom.tradeHistory.title')}
       data-testid="pick-trade-history-modal"
       onClick={onClose}
     >
@@ -77,9 +79,12 @@ export function PickTradeHistoryModal({
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-cyan-300/80" aria-hidden />
             <div>
-              <h2 className="text-sm font-semibold text-white">Pick trade history</h2>
+              <h2 className="text-sm font-semibold text-white">{t('draftRoom.tradeHistory.title')}</h2>
               <p className="text-[11px] text-white/50">
-                {tradedPicks.length} {tradedPicks.length === 1 ? 'traded pick' : 'traded picks'}
+                {tInterpolate(
+                  tradedPicks.length === 1 ? 'draftRoom.tradeHistory.countOne' : 'draftRoom.tradeHistory.countOther',
+                  { count: tradedPicks.length },
+                )}
               </p>
             </div>
           </div>
@@ -87,7 +92,7 @@ export function PickTradeHistoryModal({
             type="button"
             onClick={onClose}
             className="rounded-full p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
-            aria-label="Close"
+            aria-label={t('draftRoom.tradeHistory.close')}
             data-testid="pick-trade-history-modal-close"
           >
             <X className="h-4 w-4" />
@@ -96,13 +101,13 @@ export function PickTradeHistoryModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {byRound.length === 0 ? (
-            <p className="py-8 text-center text-xs text-white/45">No picks have been traded yet.</p>
+            <p className="py-8 text-center text-xs text-white/45">{t('draftRoom.tradeHistory.empty')}</p>
           ) : (
             <div className="space-y-4">
               {byRound.map(([round, entries]) => (
                 <section key={round}>
                   <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">
-                    Round {round}
+                    {tInterpolate('draftRoom.tradeHistory.round', { round })}
                   </p>
                   <ul className="space-y-1">
                     {entries.map((entry, idx) => {
@@ -122,11 +127,11 @@ export function PickTradeHistoryModal({
                           data-testid={`pick-trade-history-row-${round}-${entry.originalRosterId}`}
                         >
                           <span className="min-w-0 flex-1 truncate font-medium text-white/90">
-                            {entry.previousOwnerName || 'Unknown'}
+                            {entry.previousOwnerName || t('draftRoom.tradeHistory.unknownOwner')}
                           </span>
                           <ArrowRight className="h-3 w-3 shrink-0 text-white/45" aria-hidden />
                           <span className="min-w-0 flex-1 truncate text-right font-medium text-cyan-200">
-                            {entry.newOwnerName || 'Unknown'}
+                            {entry.newOwnerName || t('draftRoom.tradeHistory.unknownOwner')}
                           </span>
                           {entry.season ? (
                             <span className="ml-2 shrink-0 rounded border border-white/10 bg-black/25 px-1.5 py-0.5 text-[11px] text-white/55">
@@ -144,7 +149,7 @@ export function PickTradeHistoryModal({
         </div>
 
         <footer className="border-t border-white/8 bg-[#050c1d] px-4 py-2 text-[11px] text-white/40">
-          Read-only · open a pick's menu to propose new trades
+          {t('draftRoom.tradeHistory.footer')}
         </footer>
       </div>
     </div>

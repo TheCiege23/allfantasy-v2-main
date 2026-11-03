@@ -25,6 +25,8 @@ export interface TribalCouncilView {
   attendingTribeId: string | null
   votingOpensAt: string | null
   votingDeadline: string | null
+  /** When ballots are due (votesDueHoursBeforeCeremony); the deadline itself when no earlier time is set. */
+  ballotsDueAt?: string | null
   isRevealed: boolean
   you: {
     isEligibleVoter: boolean
@@ -236,6 +238,8 @@ export async function buildTribalCouncilView(access: SurvivorAccessContext): Pro
     attendingTribeId: council.attendingTribeId,
     votingOpensAt: iso(council.votingOpensAt),
     votingDeadline: iso(council.votingDeadline ?? council.voteDeadlineAt),
+    // Ballots may be due before the ceremony (votesDueHoursBeforeCeremony); equal to the deadline when not.
+    ballotsDueAt: iso(ctx.ballotsDueAt ?? council.voteDeadlineAt),
     isRevealed: readStarted,
     you: {
       isEligibleVoter: eligibility.voterUserIds.includes(userId),

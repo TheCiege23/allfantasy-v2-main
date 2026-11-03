@@ -19,17 +19,24 @@ function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   return raw.league.sport === 'NFL' ? 'standard' : raw.settings?.scoringType ?? null
 }
 
-function detectEspnDynasty(raw: EspnImportPayload): boolean {
+/**
+ * ESPN's own keeper count, or undefined when ESPN sent no number. Stored raw as `espn_keeper_count` so a
+ * reader can tell "ESPN said zero keepers" (redraft) from "ESPN said nothing" — `isDynasty: false`
+ * means both. Read by lib/league-media/redraftIdentity.ts (`isImportedRedraftLeague`).
+ */
+export function espnKeeperCount(raw: EspnImportPayload): number | undefined {
   const settings = raw.settings?.raw ?? {}
-  const keeperCount =
-    typeof settings.keeperCount === 'number'
-      ? settings.keeperCount
-      : typeof settings.draftSettings === 'object' &&
-          settings.draftSettings &&
-          typeof (settings.draftSettings as Record<string, unknown>).keeperCount === 'number'
-        ? ((settings.draftSettings as Record<string, unknown>).keeperCount as number)
-        : 0
-  return keeperCount > 0
+  if (typeof settings.keeperCount === 'number') return settings.keeperCount
+  const draft = settings.draftSettings
+  if (draft && typeof draft === 'object') {
+    const count = (draft as Record<string, unknown>).keeperCount
+    if (typeof count === 'number') return count
+  }
+  return undefined
+}
+
+function detectEspnDynasty(raw: EspnImportPayload): boolean {
+  return (espnKeeperCount(raw) ?? 0) > 0
 }
 
 export function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
@@ -193,6 +200,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         rosterSize,
         scoring: scoringFormat,
         isDynasty,
+        espn_keeper_count: espnKeeperCount(raw),
         // Same fix as SleeperLeagueMapper (Phase OS-C5): `League.status` has no DB
         // default, so a missing value here leaves imported leagues invisible on
         // Dashboard. ESPN has no direct status string — `raw.league.isFinished`

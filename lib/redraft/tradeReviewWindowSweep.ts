@@ -17,6 +17,7 @@ import { finalizeRedraftTrade, upsertRedraftTradeDecision } from '@/lib/redraft/
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 import { heldTradeIds } from '@/lib/integrity/holdFlaggedTrades'
+import { survivorHeldRedraftProposalIds } from '@/lib/survivor/survivorTradeCheckHold'
 import { MULTI_TEAM_TRADE_CLOSED_TITLE, notifyMultiTeamTradeParties } from '@/lib/redraft/multiTeamTradeNotices'
 import { isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 
@@ -46,7 +47,8 @@ export async function processDueTradeReviews(opts?: { limit?: number; now?: Date
   const limit = Math.max(1, Math.min(opts?.limit ?? DEFAULT_TRADE_REVIEW_LIMIT, 200))
   // Flagged trades in leagues that hold them wait for the commissioner, not the clock — left out of
   // the read, so they cannot occupy the batch and starve every other due trade.
-  const held = await heldTradeIds()
+  // Also Survivor trades held because the trade-rule check could not run (lib/survivor/survivorTradeCheckHold.ts).
+  const held = [...new Set([...(await heldTradeIds()), ...(await survivorHeldRedraftProposalIds(now))])]
   const dueWhere = { status: 'pending', acceptedAt: { not: null }, expiresAt: { lt: now }, vetoMode: { in: ['commissioner', 'league_vote'] } }
   const heldDue = held.length ? await prisma.redraftTradeProposal.count({ where: { ...dueWhere, id: { in: held } } }) : 0
   const due = await prisma.redraftTradeProposal.findMany({

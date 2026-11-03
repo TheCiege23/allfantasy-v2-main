@@ -1,10 +1,12 @@
 import { isPlayoffSeriesResolved } from "./playoffBracketProjection"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
 import type { PlayoffPickView, PlayoffSeriesView } from "./types"
+import { nbaCupLockedReason } from "./nbaCupTournament"
 
 export type PlayoffCompletionMode = "full_bracket_required" | "available_picks_only"
 
 export type PlayoffCompletionContext = {
+  sport?: string
   lockRule: string | null | undefined
   isPoolOwner?: boolean
   isTestMode?: boolean
@@ -29,6 +31,7 @@ function hasPickForSeries(picks: PlayoffPickView[], seriesId: string): boolean {
 }
 
 export function resolvePlayoffCompletionMode(context: PlayoffCompletionContext): PlayoffCompletionMode {
+  if (context.sport === "nba_cup" && !context.isTestMode) return "available_picks_only"
   if (context.partialVerificationEnabled === true) return "available_picks_only"
   return canUsePlayoffLatePicks(context) ? "available_picks_only" : "full_bracket_required"
 }
@@ -42,6 +45,7 @@ export function getRequiredPlayoffSeriesForCompletion(
   if (mode === "full_bracket_required") return series
 
   return series.filter((item) => {
+    if (context.sport === "nba_cup" && !context.isTestMode) return !nbaCupLockedReason(item)
     if (!isPlayoffSeriesResolved(item)) return false
     const lockReason = getPlayoffSeriesLockedReason(item, context.lockRule, context)
     return !lockReason || hasPickForSeries(picks, item.id)
@@ -56,11 +60,19 @@ export function getPlayoffCompletionSummary(
   const mode = resolvePlayoffCompletionMode(context)
   const requiredSeries = getRequiredPlayoffSeriesForCompletion(series, picks, context)
   const requiredSeriesIds = requiredSeries.map((item) => item.id)
-  const missingRequiredSeriesIds = requiredSeriesIds.filter((seriesId) => !hasPickForSeries(picks, seriesId))
+  const missingRequiredSeriesIds = requiredSeriesIds.filter((seriesId) => {
+    if (context.sport === "nba_cup" && !context.isTestMode) {
+      const game = requiredSeries.find((item) => item.id === seriesId)!
+      return !picks.some((pick) => pick.seriesId === seriesId && [game.homeTeamName, game.awayTeamName].includes(pick.pickTeamName))
+    }
+    return !hasPickForSeries(picks, seriesId)
+  })
   const savedRequiredPickCount = requiredSeriesIds.length - missingRequiredSeriesIds.length
   const unavailableSeriesCount = Math.max(0, series.length - requiredSeriesIds.length)
   const isSubmittable = requiredSeriesIds.length > 0 && missingRequiredSeriesIds.length === 0
-  const message = mode === "available_picks_only"
+  const message = context.sport === "nba_cup" && !context.isTestMode
+    ? "Pick every currently available NBA Cup game, then finalize. Started games earn no late points; new matchups appear automatically."
+    : mode === "available_picks_only"
     ? "Complete all currently available series before submitting this test bracket."
     : "Complete every series before submitting this bracket."
 

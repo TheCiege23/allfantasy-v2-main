@@ -34,6 +34,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
 import {
   REDRAFT_DRAFT_PICK_REFUSAL,
   resolveNflRedraftTradeRuntime,
@@ -47,6 +48,7 @@ import {
   REDRAFT_MOVES_LOCKED_MESSAGE,
   isRedraftLeagueMovesLocked,
 } from '@/lib/redraft/tradeMoveLock'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 
 export type RedraftProposalValidationSource = 'nfl_runtime' | 'league_runtime' | 'ownership_fallback' | 'league_lock'
 
@@ -66,10 +68,53 @@ export type RedraftProposalValidationInput = {
 
 type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'league'>
 
+async function pirateTradeRefusal(input: RedraftProposalValidationInput, source: RedraftProposalValidationSource): Promise<RedraftProposalValidation | null> {
+  try {
+    await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+    })))
+    return null
+  } catch (error) {
+    return { ok: false, code: 'PIRATE_TRADE_LOCK', message: error instanceof Error ? error.message : 'Pirate trade is locked.', source }
+  }
+}
+
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
 ): Promise<RedraftProposalValidation> {
+  const base = await validateRedraftTradeProposalCore(input, db)
+  if (!base.ok) return base
+  // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).
+  // One league read and out for every other league: lib/survivor/survivorTradeRuleHook.ts.
+  const survivor = await checkSurvivorTradeRules({
+    leagueId: input.leagueId,
+    rosterIds: [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])],
+    rosterIdSpace: 'redraft',
+    players: input.assets
+      .filter((a) => a.assetType === 'player' && a.playerId)
+      .map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
+  })
+  if (!survivor.ok) return { ok: false, code: survivor.code, message: survivor.message, source: base.source }
+  return base
+}
+
+async function validateRedraftTradeProposalCore(
+  input: RedraftProposalValidationInput,
+  db: ValidationDb,
+): Promise<RedraftProposalValidation> {
+  const itemAssets = input.assets.filter(a => a.assetType === 'zombie_item')
+  if (itemAssets.length) {
+    try {
+      await (await import('@/lib/zombie/beta2025ItemTrades')).validateBetaTradeItems(db as never, input.leagueId, [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])], itemAssets)
+    } catch (error) {
+      return { ok: false, code: 'ZOMBIE_ITEM_TRADE_INVALID', message: error instanceof Error ? error.message : 'Item trade is unavailable.', source: 'league_runtime' }
+    }
+    // The normal runtime still checks deadlines, move locks, players, FAAB and roster limits.
+    // The synthetic consideration exists only in this validation call; real inventory assets are stored.
+    const ordinary = input.assets.filter(a => a.assetType !== 'zombie_item')
+    input = { ...input, assets: ordinary.length ? ordinary : [{ assetType: 'future_consideration', fromRosterId: input.proposerRosterId, toRosterId: input.receiverRosterId }] }
+  }
   const runtime = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (runtime.ok) {
     const result = validateNflRedraftTradeProposal({
@@ -84,6 +129,8 @@ export async function validateRedraftTradeProposalAtCreation(
     if (deadline.passed) {
       return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
     }
+    const pirateRefusal = await pirateTradeRefusal(input, 'nfl_runtime')
+    if (pirateRefusal) return pirateRefusal
     return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
   }
 
@@ -115,9 +162,10 @@ export async function validateRedraftTradeProposalAtCreation(
       ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
-    return result.ok
-      ? { ok: true, warnings: result.warnings, source: 'league_runtime' }
-      : { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    const pirateRefusal = await pirateTradeRefusal(input, 'league_runtime')
+    if (pirateRefusal) return pirateRefusal
+    return { ok: true, warnings: result.warnings, source: 'league_runtime' }
   }
 
   if (deadline.passed) {
@@ -128,7 +176,9 @@ export async function validateRedraftTradeProposalAtCreation(
       source: 'ownership_fallback',
     }
   }
-  return validateOwnershipFallback(db, input)
+  const ownership = await validateOwnershipFallback(db, input)
+  if (!ownership.ok) return ownership
+  return (await pirateTradeRefusal(input, 'ownership_fallback')) ?? ownership
 }
 
 function faabAmountOf(asset: NflRedraftTradeAssetInput): number {

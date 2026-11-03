@@ -9,8 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   clock: 0,
   daily: vi.fn(),
+  cup: vi.fn(),
   points: vi.fn(),
-  loopOpts: null as { budgetMs?: number } | null,
+  loopOpts: null as { budgetMs?: number; isActive?: () => Promise<boolean> } | null,
   /* When set, the loop runs one more tick this many ms into the invocation. */
   loopTickAt: null as number | null,
   meta: null as Record<string, unknown> | null,
@@ -18,6 +19,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+vi.mock('@/lib/playoffs/nbaCupLiveTick', () => ({ refreshNbaCupLive: () => h.cup() }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_m: unknown, fn: () => Promise<unknown>, map: (r: unknown) => { metadata: Record<string, unknown> }) => {
     const r = await fn()
@@ -30,6 +32,7 @@ vi.mock('@/server/services/liveScoring/liveScoreRunner', () => ({
 }))
 vi.mock('@/lib/live/rollingInsightsLiveProvider', () => ({ RollingInsightsLiveProvider: class {} }))
 vi.mock('@/lib/live/gamedayPoller', () => ({
+  anyGameInProgress: async () => false,
   runPollLoop: async (_tick: () => Promise<void>, opts: { budgetMs?: number }) => {
     h.loopOpts = opts
     if (h.loopTickAt != null) {
@@ -68,12 +71,24 @@ beforeEach(() => {
   vi.spyOn(Date, 'now').mockImplementation(() => h.clock)
   h.points.mockResolvedValue(null)
   h.daily.mockResolvedValue({ enabled: ['NBA'], sports: {}, seasonsRescored: 0, matchupsRecalculated: 0, rescoreErrors: 0 })
+  h.cup.mockResolvedValue({ activeGames: 0, providerFailures: 0 })
 })
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
 describe('live-score-tick — invocation budget', () => {
+  it('keeps polling for a live Cup game independently of the NFL slate', async () => {
+    h.cup.mockResolvedValue({ activeGames: 1, providerFailures: 0 })
+    await GET(req())
+    expect(await h.loopOpts?.isActive?.()).toBe(true)
+    expect(h.meta?.nbaCupLive).toMatchObject({ activeGames: 1, providerFailures: 0 })
+  })
+  it('reports a failed Cup pass without interrupting other live scoring', async () => {
+    h.cup.mockRejectedValue(new Error('test provider failure'))
+    expect((await GET(req())).status).toBe(200)
+    expect(h.meta?.nbaCupLive).toMatchObject({ providerFailures: 1, skipped: 'sync-failed' })
+  })
   it('charges the first tick to the budget: the loop gets only what is left', async () => {
     h.points.mockImplementation(async () => {
       h.clock += 25_000

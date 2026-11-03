@@ -107,7 +107,9 @@ export async function POST(
      * redraft runtime's convention, opted into explicitly and never the default. The elevated
      * commissioner gate above is what makes it safe to read from the body.
      */
-    await finalizeAfLeagueTradeProcessing({ tradeId, actorUserId: userId, commissionerOverride: body.commissionerOverride === true })
+    // Elevated-commissioner only (gate above), so this processing is the commissioner's decision: a
+    // Survivor free-trade token the managers hold is not spent by it (survivorBypassSourceToRedeem).
+    await finalizeAfLeagueTradeProcessing({ tradeId, actorUserId: userId, commissionerOverride: body.commissionerOverride === true, commissionerApproved: true })
     return NextResponse.json({ ok: true, ...(sports.decision ? { sportsDataDecision: sports.decision } : {}) })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

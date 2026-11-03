@@ -7,6 +7,7 @@ import { extractChimmyGifMood, resolveChimmyGif } from '@/lib/chimmy/chimmyGif'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
+import { priorConversationTurns } from '@/lib/chimmy-chat/conversation-context'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
 import { compoundDecision } from '@/lib/chimmy/decisionClauses'
@@ -44,6 +45,9 @@ import {
   type ChimmyLeagueGroundingFailure,
   type ChimmyLeagueSnapshot,
 } from '@/lib/chimmy/chimmy-league-snapshot'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
 import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -209,7 +213,6 @@ import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnal
 import { getAiMemory } from '@/lib/ai-memory/ai-memory-store'
 import { COACHING_PROFILE_KEY, mergeCoachingProfiles } from '@/lib/chimmy-personalization/remembered'
 import {
-  appendOrchestrationFooterIfMissing,
   buildOrchestrationMeta,
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
@@ -969,6 +972,9 @@ function buildLeagueGroundingLine(args: {
 }): string | undefined {
   if (args.leagueSnapshot) {
     const s = args.leagueSnapshot
+    const type = leagueTypeBasis({ settings: s.settings, leagueType: s.leagueType, platform: s.platform })
+    const variant = leagueVariantFor(s.settings, s.leagueType)
+    const formatCoverage = tradeFormatCoverage({ settings: s.settings, leagueType: s.leagueType })
 
     /*
      * 🛑 SCORING WAS ABSENT FROM THIS LINE AND IS THE REASON THIS FUNCTION
@@ -1007,7 +1013,12 @@ function buildLeagueGroundingLine(args: {
       seasonLine,
       scoring,
       s.leagueSize != null ? `teams=${s.leagueSize}` : null,
-      `dynasty=${s.isDynasty}`,
+      `leagueType=${type.type} (${type.source})`,
+      `dynasty=${variant.dynasty}`,
+      `keeper=${variant.keeper}`,
+      formatCoverage.gaps.length > 0 && type.type !== 'guillotine'
+        ? `shared proposal value limits=${formatCoverage.gaps.join(' ')} Do not claim these effects are priced.`
+        : null,
       s.leagueVariant ? `variant=${s.leagueVariant}` : null,
       `platform=${s.platform}`,
       `platformLeagueId=${s.platformLeagueId}`,
@@ -1414,7 +1425,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const freeSummaryRequested = asksForFreeSummary(formData, selectedAssistantMode)
   let leagueId = requestedLeagueId ?? null
   let leagueNameHint = requestedLeagueNameHint ?? null
-  const conversation = markEarlierImageTurns(parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS))
+  const conversation = markEarlierImageTurns(priorConversationTurns(parsedConversation, message, MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
 
   const initialIntent = classifyPecrIntent(message)
@@ -1658,10 +1669,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     return NextResponse.json(buildLeagueGroundingErrorPayload(), { status: 412 })
   }
 
-  const staleness = buildChimmyStalenessWarning({
+  /*
+   * ⚠ NO LEAGUE IN SCOPE, NO LEAGUE DATA TO BE STALE. A null `lastSyncedAt` reads as "timestamp
+   * unavailable", and the prompt says to always repeat the warning — so "Explain PPR scoring" with no
+   * league selected (2026-10-31) was told twice that its league data might be stale.
+   */
+  const freshness = buildChimmyStalenessWarning({
     lastSyncedAt: leagueSnapshot?.lastSyncedAt ?? null,
     intent: initialIntent,
   })
+  const staleness = leagueSnapshot ? freshness : { ...freshness, warning: null }
   const sourceReferences = buildChimmySourceReferences({
     leagueId: leagueId ?? null,
     intent: initialIntent,
@@ -2511,7 +2528,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   ]
     .concat(
       staleness.warning
-        ? [`## DATA FRESHNESS\n${staleness.warning}\nAlways include this warning when answering.`]
+        ? [`## DATA FRESHNESS\n${staleness.warning}\nThe route appends this warning once; do not repeat it in your prose.`]
         : [],
       sourceReferences.length > 0
         ? [
@@ -2619,7 +2636,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           season: leagueSnapshot.season,
           leagueSize: leagueSnapshot.leagueSize,
           scoring: leagueSnapshot.scoring,
-          isDynasty: leagueSnapshot.isDynasty,
+          leagueType: leagueTypeBasis({ settings: leagueSnapshot.settings, leagueType: leagueSnapshot.leagueType, platform: leagueSnapshot.platform }).type,
+          isDynasty: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).dynasty,
+          isKeeper: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).keeper,
           timezone: leagueSnapshot.timezone,
           lastSyncedAt: leagueSnapshot.lastSyncedAt?.toISOString() ?? null,
           importedAt: leagueSnapshot.importedAt?.toISOString() ?? null,
@@ -3162,7 +3181,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -4332,10 +4351,12 @@ ${describedTradeCtx}`
     if (chimmySportDigestFreshness) {
       dataSources.push('sports_digest_db')
     }
-    const displayExplanation = appendOrchestrationFooterIfMissing(
-      pecrOutput.sanitizedAiExplanation || '',
-      chimmyOrchestrationMeta
-    )
+    /*
+     * No routing footer. One was appended to every reply that skipped the five required headings —
+     * "Intent: … (~62% route match)", "Routing note: …" — so dropping the headings from the prompt
+     * would have put the classifier's score under every answer instead of inside some of them.
+     */
+    const displayExplanation = (pecrOutput.sanitizedAiExplanation || '').trim()
     const displayWithStaleness = staleness.warning
       ? `${displayExplanation}\n\nData freshness: ${staleness.warning}`
       : displayExplanation

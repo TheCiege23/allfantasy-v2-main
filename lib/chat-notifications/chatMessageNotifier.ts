@@ -19,8 +19,8 @@ import {
 import { safeDisplayName } from './displayName'
 
 /**
- * "You got a message" — bell, push, email and (once Twilio is live) a text — for DMs, huddles and,
- * opt-in, league chat. SERVER-SIDE, fired after the message is saved.
+ * Message notifications run server-side after the message is saved. League chat uses
+ * opt-in bell and push alerts. DMs and huddles can also use email and SMS.
  *
  * 🛑 WHY THE SERVER. @mentions are dispatched from the BROWSER after a send (`/api/shared/chat/
  * mentions`), which means a closed tab, a failed follow-up request or a different client silently
@@ -367,7 +367,7 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
     const saved = p.notificationPreferences as NotificationPreferences | null
     if (saved?.globalEnabled === false) continue
     const cat = resolveNotificationPreferences(saved).categories?.league_chat
-    if (cat?.enabled && (cat.inApp || cat.email || cat.sms || (cat.push ?? cat.inApp))) optedIn.add(p.userId)
+    if (cat?.enabled && (cat.inApp || cat.push)) optedIn.add(p.userId)
   }
   const report: ChatNotifyReport = {
     recipients: memberIds.filter((id) => !optedIn.has(id)).map((userId) => ({ userId, outcome: 'not_opted_in' as const })),
@@ -376,22 +376,17 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
 
   const recipients = [...optedIn]
   const blockers = await blockersOf(input.senderUserId, recipients)
-  const [{ name: senderName, avatarUrl: senderAvatarUrl }, league, users] = await Promise.all([
+  const [{ name: senderName, avatarUrl: senderAvatarUrl }, league] = await Promise.all([
     senderOf(input.senderUserId),
     prisma.league.findUnique({ where: { id: input.leagueId }, select: { name: true } }).catch(() => null),
-    prisma.appUser
-      .findMany({ where: { id: { in: recipients } }, select: { id: true, email: true } })
-      .catch(() => [] as Array<{ id: string; email: string | null }>),
   ])
   const leagueName = safeDisplayName([league?.name], 'League chat', 60)
-  const emailOf = new Map(users.map((u) => [u.id, u.email?.trim() || null]))
   const preview = buildMessagePreview({
     messageType: input.messageType,
     body: input.body,
     metadata: input.metadata ?? null,
   })
-  const href = `/league/${encodeURIComponent(input.leagueId)}`
-  const baseUrl = getBaseUrl()
+  const href = `/league/${encodeURIComponent(input.leagueId)}?openChat=league&message=${encodeURIComponent(input.messageId)}`
   const messageAt = toDate(input.createdAt, now)
 
   for (const userId of recipients) {
@@ -412,8 +407,6 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
         report.recipients.push({ userId, outcome: gate.outcome })
         continue
       }
-      const email = emailOf.get(userId) ?? null
-      const sendEmail = gate.email && Boolean(email) && !(await emailUnsubscribed(email!))
       await dispatchNotification({
         userIds: [userId],
         category: 'league_chat',
@@ -421,8 +414,6 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
         type: 'league_chat_message',
         title: `${senderName} · ${leagueName}`,
         body: preview,
-        // Sender name and preview are user-written; neither goes over SMS.
-        smsBody: 'New message in your league chat. Open AllFantasy to read it.',
         actionHref: href,
         actionLabel: 'Open league chat',
         leagueId: input.leagueId,
@@ -435,20 +426,9 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
           pushTag: `league-chat-${input.leagueId}`,
           ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
         },
-        skipChannels: sendEmail ? undefined : { email: true },
-        emailOverride: sendEmail
-          ? buildDirectMessageEmail({
-              senderName,
-              preview,
-              threadTitle: leagueName,
-              isGroup: true,
-              conversationUrl: `${baseUrl}${href}`,
-              baseUrl,
-              unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email!))}`,
-            })
-          : undefined,
+        skipChannels: { email: true, sms: true },
       })
-      report.recipients.push({ userId, outcome: 'alerted', email: sendEmail })
+      report.recipients.push({ userId, outcome: 'alerted', email: false })
     } catch (e) {
       console.error('[chat-notifications] league chat alert failed', { leagueId: input.leagueId, userId, ...logSafe(e) })
       report.recipients.push({ userId, outcome: 'failed' })

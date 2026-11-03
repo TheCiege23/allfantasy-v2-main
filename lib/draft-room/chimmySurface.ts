@@ -1,3 +1,5 @@
+import { DRAFT_PHONE_LANDSCAPE_QUERY } from './phoneDraftLayout'
+
 /**
  * Which draft-room surface shows Chimmy at a given viewport.
  *
@@ -23,6 +25,7 @@ export function chimmySurfaceForWidth(width: number): ChimmySurface {
 /** The surface for the current window, measured the way the CSS breakpoints are (media queries). */
 export function currentChimmySurface(): ChimmySurface {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'mobile_tray'
+  if (window.matchMedia(DRAFT_PHONE_LANDSCAPE_QUERY).matches) return 'mobile_tray'
   if (window.matchMedia(`(min-width: ${XL_MIN_WIDTH_PX}px)`).matches) return 'right_dock'
   if (window.matchMedia(`(min-width: ${MD_MIN_WIDTH_PX}px)`).matches) return 'bottom_dock'
   return 'mobile_tray'

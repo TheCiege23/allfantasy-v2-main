@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef } from 'react'
 import { ArrowRight, CalendarClock, PartyPopper, Settings2, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
 import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
 
@@ -101,7 +102,7 @@ export function PostCreateWelcomeSheet({
     }
   }, [onClose])
 
-  const draftLabel = formatWelcomeDraftDate(league.draftDateIso, league.timezone, language === 'es' ? 'es' : undefined)
+  const draftLabel = formatWelcomeDraftDate(league.draftDateIso, league.timezone, intlLocaleOrBrowserDefault(language))
   const scoring = [
     league.scoringLabel,
     typeof league.tePremiumPoints === 'number'

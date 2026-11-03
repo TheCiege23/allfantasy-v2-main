@@ -26,6 +26,7 @@ vi.mock('@/lib/commissioner/CommissionerChangeNotifier', () => ({ notifyCommissi
 vi.mock('@/lib/commissioner/CommissionerRatingTrigger', () => ({ checkAndTriggerRatingIfOffseason: m.rating }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    zombieLeague: { findUnique: vi.fn().mockResolvedValue(null) },
     league: { findUnique: m.leagueFindUnique, update: m.leagueUpdate },
     leagueSeason: { upsert: m.leagueSeasonUpsert, findUnique: vi.fn().mockResolvedValue(null) },
     redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
@@ -303,5 +304,16 @@ describe('POST renew — FAAB at rollover (lib/waiver-wire/faab-rollover.ts)', (
     m.waiverSettingsFindUnique.mockRejectedValue(new Error('db down'))
     expect((await post({})).status).toBe(200)
     expect(m.rosterUpdateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('Zombie renewal history protection',()=>{
+  it.each(['NFL','NBA','NHL','MLB'])('%s uses dedicated season renewal before any generic reset',async sport=>{
+    m.leagueFindUnique.mockResolvedValue(redraftLeague({sport,leagueVariant:'zombie',leagueType:'zombie'}))
+    const response=await post({})
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toBe('zombie_season_renewal_required')
+    expect(m.nativeRenew).not.toHaveBeenCalled();expect(m.renew).not.toHaveBeenCalled()
+    expect(m.leagueUpdate).not.toHaveBeenCalled();expect(m.rosterUpdateMany).not.toHaveBeenCalled()
   })
 })

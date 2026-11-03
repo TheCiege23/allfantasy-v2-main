@@ -44,7 +44,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       # The guard shells out to `scripts/db-readonly-probe.mjs`, which uses `pg` directly rather
       # than importing Prisma — deliberately, so the script cannot write and cannot pull `.env`

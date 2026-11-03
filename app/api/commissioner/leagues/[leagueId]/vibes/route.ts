@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCommissionerRole } from "@/lib/league/permissions"
 import { isNativePlatform, listingVerification } from "@/lib/public-discovery/externalListing"
+import { ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { LEAGUE_VIBES_KEY, normalizeLeagueVibes, readLeagueVibes } from "@/lib/public-discovery/vibes"
 
 export const dynamic = "force-dynamic"
@@ -36,7 +37,7 @@ async function authorize(leagueId: string, scope: "read" | "write") {
       if (e instanceof Response) return { error: e }
       throw e
     }
-  } else if (league.userId !== userId || !listingVerification(league)) {
+  } else if (league.userId !== userId || !listingVerification({ ...league, ownerCommissionsTeam: await ownerCommissions(league) })) {
     return { error: NextResponse.json({ error: "Only the league's commissioner can set its vibe." }, { status: 403 }) }
   }
   return { league }

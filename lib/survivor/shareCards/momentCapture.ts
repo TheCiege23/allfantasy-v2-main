@@ -6,6 +6,7 @@ import { SURVIVOR_TRIBE_CATALOG, tribeCatalogIdFor, tribeSportKey } from '@/lib/
 import { getTribeImmunityForWeek, isTribeImmunityTableAvailable, MERGED_IMMUNITY_TRIBE } from '@/lib/survivor/survivorTribeImmunity'
 import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
+import { exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 import { safeIdolId } from './cardContent'
 import { countImmunityMoments, createShareMomentOnce } from './momentStore'
 import { recapMomentId, type ShareMomentPayload } from './types'
@@ -48,6 +49,8 @@ interface LeagueFacts {
   phase: string | null
   /** League.survivorRevealMode — paces the Tribal Council read (exile-scroll reveal gate). */
   revealMode: string | null
+  /** The commissioner's "hide who is on Exile" switch (League.settings.survivorSideGames). */
+  exileHidden?: boolean
 }
 
 async function leagueFacts(leagueId: string): Promise<LeagueFacts | null> {
@@ -62,6 +65,7 @@ async function leagueFacts(leagueId: string): Promise<LeagueFacts | null> {
     settings: normalizeSurvivorFoundationSettings(raw),
     phase: league.survivorPhase ?? null,
     revealMode: league.survivorRevealMode ?? null,
+    exileHidden: exileMembershipHidden(raw),
   }
 }
 
@@ -260,11 +264,13 @@ async function captureWeekRecapMoment(
   const players = await prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, playerState: true } })
   const exileOn = facts.settings.exileIslandEnabled && facts.settings.eliminationOutcome === 'exile_island'
   const counts = weekRecapCounts(players, council.eliminatedUserId, exileOn)
+  // Exile secrecy: a public card never says the voted-out manager went to Exile, nor how many are there.
+  const exileShown = exileOn && !facts.exileHidden
   const merged = JURY_PHASES.has(council.phase) || JURY_PHASES.has(facts.phase ?? '')
   const tribe = merged ? { tribeName: null, crestPath: null } : await tribeFacts(council.attendingTribeId, facts.sport)
   const subject = await resolveSubject(leagueId, council.eliminatedUserId, council.eliminatedRosterId)
   const next = facts.settings.eliminationOutcome === 'exile_island'
-    ? 'exile'
+    ? (facts.exileHidden ? null : 'exile')
     : facts.settings.juryEnabled && merged ? 'jury' : null
   const result = await createShareMomentOnce({
     id: recapMomentId(council.id), leagueId, type: 'recap', week: council.week, subjectUserId: RECAP_SUBJECT, subjectRosterId: null,
@@ -274,7 +280,7 @@ async function captureWeekRecapMoment(
       tally: countedTallyFromScrolls(scrolls),
       next,
       remaining: counts.remaining,
-      onExile: exileOn ? counts.onExile : null,
+      onExile: exileShown ? counts.onExile : null,
       merged,
     },
   })

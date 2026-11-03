@@ -32,7 +32,7 @@ export type PlayerNewsSubject = {
   bucket: StatusBucket | `news:${string}`
 }
 
-/** Transactions change rosters today, so they are worth a push; generic news is not. */
+/** Legacy classification retained for source metadata; all relevant news now uses instant delivery. */
 const INSTANT_NEWS = /^news:(trade|release|signing|suspension|roster_move|waiver|retirement)$/
 
 export function subjectIsInstantWorthy(subject: PlayerNewsSubject): boolean {

@@ -97,6 +97,13 @@ describe('the grounding line carries the verified league facts', () => {
     expect(BLOCK).toContain('scoring=')
   })
 
+  it('states the confirmed concept instead of the stale dynasty column', () => {
+    expect(BLOCK).toContain('leagueTypeBasis({ settings: s.settings, leagueType: s.leagueType')
+    expect(BLOCK).toContain('leagueType=${type.type} (${type.source})')
+    expect(BLOCK).toContain('dynasty=${variant.dynasty}')
+    expect(BLOCK).toContain('shared proposal value limits=')
+  })
+
   /*
    * ⚠ AND AN ABSENT SCORING IS STATED, NOT DROPPED. `.filter(Boolean)` would
    * remove a null, and silence reads to a model as "nothing worth mentioning" —

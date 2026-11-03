@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,11 @@ export async function GET(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const [resolvedRules, leagueConfig] = await Promise.all([
+    getZombieRulesForSport(z.sport),
+    getZombieLeagueConfig(leagueId),
+  ])
+  const rules = { ...resolvedRules, reviveThreshold: z.sport.toUpperCase() === 'NFL' ? 2 : leagueConfig?.serumReviveCount ?? resolvedRules.reviveThreshold }
 
   let targetUserId = session.user.id
   if (userIdParam && userIdParam !== session.user.id) {
@@ -39,10 +45,11 @@ export async function GET(req: Request) {
   if (!roster) {
     return NextResponse.json({
       items: [],
-      rules: await getZombieRulesForSport(z.sport),
+      rules,
       history: [],
       resolution: null,
       isCommissionerView: targetUserId !== session.user.id,
+      experienceMode: z.experienceMode,
       pendingBashingDecision: null,
     })
   }
@@ -80,6 +87,12 @@ export async function GET(req: Request) {
     where: { zombieLeagueId: z.id },
     select: { userId: true, ambushesRemaining: true },
   })
+
+  const coWhisperer = await prisma.zombieCoWhisperer.findUnique({
+    where: { zombieLeagueId_userId: { zombieLeagueId: z.id, userId: targetUserId } },
+    select: { userId: true, ambushesRemaining: true },
+  })
+  const ownWhisperer = whisperer?.userId === targetUserId ? whisperer : coWhisperer
 
   const viewer = await resolveWhispererViewer(leagueId, session.user.id)
 
@@ -129,18 +142,31 @@ export async function GET(req: Request) {
     }
   }
 
+  let appliedItemBonus: unknown = null
+  if (z.sport === 'NFL') {
+    const season = await prisma.redraftSeason.findFirst({ where: { leagueId, season: z.season }, select: { id: true } })
+    const nativeRoster = season && await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: targetUserId }, select: { id: true } })
+    const matchup = nativeRoster && await prisma.redraftMatchup.findFirst({ where: { seasonId: season!.id, week, OR: [{ homeRosterId: nativeRoster.id }, { awayRosterId: nativeRoster.id }] }, select: { homeRosterId: true, lineupSnapshots: true } })
+    const receipt = (matchup?.lineupSnapshots as { zombieItems?: { policy?: string; home?: unknown; away?: unknown } } | null)?.zombieItems
+    if (receipt?.policy === 'beta_2025') appliedItemBonus = matchup?.homeRosterId === nativeRoster?.id ? receipt.home : receipt.away
+  }
+
   return NextResponse.json({
     items: team?.items ?? [],
+    appliedItemBonus,
+    weekBecameZombie: team?.weekBecameZombie ?? null,
+    itemPolicy: z.sport.toUpperCase() === 'NFL' ? 'beta_2025' : 'legacy',
     teamStatus: team?.status ?? 'Survivor',
-    rules: await getZombieRulesForSport(z.sport),
+    rules,
     history,
     resolution,
     // Only a viewer allowed to know the Whisperer learns who it is.
-    whispererUserId: viewer.canSee ? (whisperer?.userId ?? null) : null,
-    isWhisperer: whisperer?.userId === targetUserId,
-    ambushesRemaining: whisperer?.userId === targetUserId ? whisperer.ambushesRemaining : null,
+    whispererUserId: viewer.canSee ? (ownWhisperer?.userId ?? whisperer?.userId ?? null) : null,
+    isWhisperer: Boolean(ownWhisperer),
+    ambushesRemaining: ownWhisperer?.ambushesRemaining ?? null,
     isCommissionerView: targetUserId !== session.user.id,
     isPaid: z.isPaid,
+    experienceMode: z.experienceMode,
     week,
     pendingBashingDecision,
   })

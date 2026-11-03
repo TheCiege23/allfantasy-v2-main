@@ -149,6 +149,37 @@ describe('the avatar gate is a session and nothing more', () => {
     // An upload supersedes a preset, and the route owns that rather than each editor.
     expect(h.transaction).toHaveBeenCalledOnce()
   })
+
+  it('accepts the configured UploadThing store when Railway has no Blob token', async () => {
+    const priorBlob = process.env.BLOB_READ_WRITE_TOKEN
+    const priorFallback = process.env.BLOB1_READ_WRITE_TOKEN
+    const priorUploadThing = process.env.UPLOADTHING_TOKEN
+    try {
+      delete process.env.BLOB_READ_WRITE_TOKEN
+      delete process.env.BLOB1_READ_WRITE_TOKEN
+      process.env.UPLOADTHING_TOKEN = 'configured-token'
+      h.persistBytes.mockResolvedValue({ url: 'https://ufs.sh/f/avatar.png' })
+      h.transaction.mockResolvedValue([])
+      const file = {
+        type: 'image/png', size: 3, name: 'a.png',
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      }
+      const req = { formData: async () => ({ get: () => file }) }
+      const { POST } = await import('@/app/api/user/profile/avatar/route')
+
+      const res = await POST(req as never)
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ url: 'https://ufs.sh/f/avatar.png' })
+    } finally {
+      if (priorBlob === undefined) delete process.env.BLOB_READ_WRITE_TOKEN
+      else process.env.BLOB_READ_WRITE_TOKEN = priorBlob
+      if (priorFallback === undefined) delete process.env.BLOB1_READ_WRITE_TOKEN
+      else process.env.BLOB1_READ_WRITE_TOKEN = priorFallback
+      if (priorUploadThing === undefined) delete process.env.UPLOADTHING_TOKEN
+      else process.env.UPLOADTHING_TOKEN = priorUploadThing
+    }
+  })
 })
 
 describe('the refusal is rendered as a sentence, not a code', () => {

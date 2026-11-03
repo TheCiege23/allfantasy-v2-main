@@ -382,7 +382,7 @@ describe('Commit L / M / N / O / P / Q / R / S / T / U locks all still hold afte
   it('Commit P — DraftPlayerCard still uses the projection fallback chain', () => {
     const card = read('components/app/draft-room/DraftPlayerCard.tsx')
     expect(card).toMatch(
-      /normalized\.stats\?\.summary \?\?[\s\S]+?projectedPoints != null[\s\S]+?'No stats available'/,
+      /const statLine = meaningfulSummary \?\?[\s\S]+?projectedPoints != null/,
     )
   })
 

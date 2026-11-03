@@ -19,6 +19,7 @@ import {
   type ScheduleRuntimeTeamInput,
 } from './canonicalScheduleRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { logAction } from '@/server/services/auditService'
 import {
@@ -240,10 +241,13 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   const loadRules = deps.loadRules ?? defaultScheduleRuntimeDeps.loadRules
   const rules = await loadRules(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
+  if (String(rules.general.sport).toUpperCase() === 'SOCCER') {
+    await ensureDailySportSeasonStart('SOCCER', season.season, { db: prisma }).catch(() => null)
+  }
   // Any season-capable sport running a standard weekly season — not only NFL redraft, which
   // left every keeper, dynasty and best-ball league (and every NHL/NCAAB one) on week 1 forever.
   // The reason code keeps its name for its consumers; it now means "format not covered".
-  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format, season.season)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }
@@ -347,7 +351,10 @@ export async function generateNflRedraftScheduleForSeason(input: {
 
   const rules = await resolveCanonicalLeagueRules(season.leagueId)
   if (!rules) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League rules could not be resolved.' }
-  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
+  if (String(rules.general.sport).toUpperCase() === 'SOCCER') {
+    await ensureDailySportSeasonStart('SOCCER', season.season, { db: prisma }).catch(() => null)
+  }
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format, season.season)) {
     return { ok: false, code: 'NOT_NFL_REDRAFT', message: "This league's format schedules its own weeks; a head-to-head schedule can't be generated for it." }
   }
   if (season.rosters.length < 2) {

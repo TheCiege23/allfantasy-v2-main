@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { FinalScoreLogos } from './FinalScoreLogos'
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -76,6 +77,7 @@ export function NotificationFeedItem({ notification }: { notification: Notificat
         {n.body && (
           <p className="mt-0.5 text-[11px] text-white/40 line-clamp-2">{n.body}</p>
         )}
+        <FinalScoreLogos type={n.type} meta={n.meta} />
         {isUnread && <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-cyan-400" />}
       </div>
     </div>

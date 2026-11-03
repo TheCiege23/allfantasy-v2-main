@@ -341,6 +341,9 @@ export const PROBES = {
   // Breaking-news and live-game-moment alerts (2026-10-15). A heartbeat: it correctly sends nothing
   // on a quiet news day with no games, so an output probe would cry wolf.
   '/api/cron/sports-alerts': { heartbeat: 'cron-sports-alerts' },
+  // NBA Cup live scores (2026-11-01). A heartbeat: outside a Cup game window it correctly fetches
+  // nothing, so an output probe would cry wolf for most of the year.
+  '/api/cron/nba-cup-live': { heartbeat: 'cron-nba-cup-live' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
@@ -446,7 +449,7 @@ export const PROBES = {
    * that ever changes, request traffic writes this heartbeat and the probe stops meaning anything.
    */
   '/api/keeper/session': { heartbeat: 'cron-keeper-session' },
-  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
+  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
 

@@ -1364,16 +1364,16 @@ function CommishGeneralPanel({
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-[11px] text-white/45">{t('lsPanel.leagueName')}</label>
+        <label className="text-[11px] text-secondary">{t('lsPanel.leagueName')}</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white"
+          className="mt-1 w-full rounded-xl border border-subtle bg-[#1a1f3a] px-3 py-2 text-[13px] text-primary"
         />
-        <p className="mt-1 text-[11px] text-white/35">{t('lsPanel.cg.mirrorNote')}</p>
+        <p className="mt-1 text-[11px] text-secondary">{t('lsPanel.cg.mirrorNote')}</p>
       </div>
       <label className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
-        <span className="text-[12px] text-white/85">{t('lsPanel.cg.public')}</span>
+        <span className="text-[12px] text-primary">{t('lsPanel.cg.public')}</span>
         <input type="checkbox" className="h-4 w-4 accent-[#ff3d81]" />
       </label>
       {sleeperSettingsHref ? (

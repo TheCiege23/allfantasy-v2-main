@@ -70,6 +70,7 @@ export type DraftPlayerCardProps = {
   /** Label for the ADP column (e.g. AI ADP when sorting by AI ADP). */
   adpMetricLabel?: string
   /** NFL redraft pool: projection + split stats (from `/draft/pool`). */
+  compactStats?: string | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
 }
 
@@ -186,6 +187,7 @@ function DraftPlayerCardInner({
   isQueued = false,
   adpMetricLabel = 'ADP',
   nflDraftProjectionSplits = null,
+  compactStats = null,
 }: DraftPlayerCardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const posU = position.trim().toUpperCase()
@@ -254,7 +256,8 @@ function DraftPlayerCardInner({
   )
   // The ADP cell shows the value its label names. `normalized.adp` falls back to the display
   // model's primary stat, so an "AI ADP" label could sit over market ADP or even FPPG.
-  const adpCellValue = adp ?? (adpMetricLabel === 'ADP' ? normalized.adp : null)
+  const modelMarketAdp = display?.stats?.adp ?? (display?.stats?.primaryStatLabel === 'ADP' ? display.stats.primaryStatValue : null)
+  const adpCellValue = adp === undefined && adpMetricLabel === 'ADP' ? modelMarketAdp : adp ?? null
 
   // Position tag filled in the board's colour for that position (null for a blank position).
   const positionTint = positionTintHex(position)
@@ -285,11 +288,11 @@ function DraftPlayerCardInner({
         .map(([label, value]) => `${label} ${value.toFixed(1)}`)
         .join(' · ')
     : ''
-  const statLine = normalized.stats?.summary ??
-    (projectedPoints != null
-      ? `Proj ${projectedPoints.toFixed(1)} pts`
-      : 'No stats available')
-  const displayStatLine = nbaRates || statLine
+  const storedSummary = normalized.stats?.summary
+  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:AI )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
+  const statLine = meaningfulSummary ?? (projectedPoints != null ? `Proj ${projectedPoints.toFixed(1)} pts` : '')
+  const boxScoreLine = compactStats || nbaRates
+  const displayStatLine = boxScoreLine ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 
@@ -438,7 +441,7 @@ function DraftPlayerCardInner({
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap max-md:flex-nowrap max-md:overflow-hidden">
           <p
-            className={`truncate font-bold text-white ${rs ? 'text-[13px] tracking-tight' : ''}`}
+            className={`truncate font-bold text-white ${rs ? 'text-sm tracking-tight' : ''}`}
             data-testid={testId ? `${testId}-name` : 'draft-player-name'}
           >
             {displayName}
@@ -502,12 +505,12 @@ function DraftPlayerCardInner({
           )}
         </div>
         <p className="text-[11px] text-white/70">
-          <span className="font-medium text-white/88">{teamAbbr ?? '—'}</span>
+          <span className="font-medium text-white/88">{teamAbbr ?? 'Free agent'}</span>
           {!rs ? ` · ${position}` : ''}
           {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
           {resolvedProjectedLandingSpot ? ` · ${resolvedProjectedLandingSpot}` : ''}
           {/* Phone only: the ADP/Bye box is hidden there, so its two numbers ride this line. */}
-          <span className="md:hidden" data-testid={testId ? `${testId}-adp-inline` : 'draft-player-adp-inline'}>
+          {adpCellValue != null ? <span className="md:hidden" data-testid={testId ? `${testId}-adp-inline` : 'draft-player-adp-inline'}>
             {/* Same value and Bye rule as the md+ box: adpCellValue, and Bye only where the sport has one. */}
             {` · ${adpMetricLabel} `}
             <span className="text-white">{formatAdpDisplay(adpCellValue)}</span>
@@ -517,14 +520,14 @@ function DraftPlayerCardInner({
                 <span className="text-white">{formatBye(normalized.byeWeek)}</span>
               </>
             ) : null}
-          </span>
+          </span> : null}
         </p>
         {injuryStatus ? (
           <span
-            data-testid={testId ? `${testId}-injury-status` : 'draft-player-injury-status'}
             className={`mt-0.5 inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
               rs ? 'border-rose-400/35 bg-rose-500/15 text-rose-100' : 'border-rose-400/25 bg-rose-500/10 text-rose-100/90'
             }`}
+            data-testid={testId ? `${testId}-injury-status` : 'draft-player-injury-status'}
           >
             {injuryStatus}
           </span>
@@ -534,7 +537,7 @@ function DraftPlayerCardInner({
           className={`truncate text-[11px] text-white/60 ${rs ? 'mt-1 max-md:mt-0' : ''} ${
             // statSummaryFromDisplay falls back to "ADP n" / "No stats available"; on a phone the
             // meta line above already carries ADP, so only a line with real stats earns the height.
-            /^ADP\b/.test(displayStatLine) || displayStatLine === 'No stats available' ? 'max-md:hidden' : ''
+            !displayStatLine || /^ADP\b/.test(displayStatLine) || displayStatLine === 'No stats available' ? 'max-md:hidden' : ''
           }`}
           title={displayStatLine}
         >
@@ -560,7 +563,7 @@ function DraftPlayerCardInner({
         <div
           className={`text-right text-[11px] tabular-nums font-semibold text-white max-md:hidden ${rs ? 'rounded-lg bg-[#1d2236] px-1.5 py-1' : ''}`}
         >
-          <div>
+          {adpCellValue != null ? <div>
             <span className={rs ? 'text-[11px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}
             <span
               className="text-white"
@@ -568,7 +571,7 @@ function DraftPlayerCardInner({
             >
               {formatAdpDisplay(adpCellValue)}
             </span>
-          </div>
+          </div> : null}
           {showBye ? (
             <div className={rs ? 'mt-0.5' : ''}>
               Bye{' '}
