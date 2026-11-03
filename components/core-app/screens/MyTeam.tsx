@@ -398,7 +398,9 @@ function gradeSubtitle(g: RosterGrade, language: string | null | undefined): str
    * are reading. Both are honest; presenting them identically would not be.
    */
   parts.push(
-    g.basis.leagueScored ? m.valuedUnderScoring : m.marketPricesUnadjusted,
+    g.basis.source === 'nba_projection'
+      ? 'AllFantasy projection estimate · fantasy points per game'
+      : g.basis.leagueScored ? m.valuedUnderScoring : m.marketPricesUnadjusted,
   )
   return parts.join(' · ')
 }
