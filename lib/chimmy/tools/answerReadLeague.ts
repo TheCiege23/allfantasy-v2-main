@@ -12,6 +12,7 @@ export const WORLD_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'get_season_stat_leaders',
   'get_stat_leaders',
   'get_upcoming_games',
+  'get_real_game_results',
   'get_real_standings',
 ])
 

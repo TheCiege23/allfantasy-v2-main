@@ -2495,7 +2495,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     )
   }
 
+  const selectedLeagueRules = leagueSnapshot && userId && /\b(?:rules?|constitution|bylaws?|scoring|tiebreakers?|playoff settings|roster slots?)\b/i.test(message)
+    ? await import('@/lib/chimmy/tools/selectedLeagueRules')
+        .then(({ buildSelectedLeagueRules }) => buildSelectedLeagueRules(leagueSnapshot.id, userId))
+        .catch(() => 'The selected league settings and constitution could not be verified.')
+    : null
   const combinedMemorySection = [
+    selectedLeagueRules,
     savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
@@ -3187,9 +3193,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * the instructions because it changes every minute and Claude caches the instructions.
        */
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
-      groundingLine: decisionOsGrounding && leagueSnapshot
+      groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot
         ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
-        : null,
+        : null].filter(Boolean).join('\n\n') || null,
       clockLine: userTemporalContext.promptLine,
       /*
        * The user's saved Chimmy preferences (explanation style, risk, humor…). The fallback path has

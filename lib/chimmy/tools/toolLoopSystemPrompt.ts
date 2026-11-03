@@ -17,6 +17,10 @@ export const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   'If the user asks for draft picks plus a lesser player, use find_trade_ideas and present only offers that include verified owned picks and a positive projected starting-lineup change. If the tool finds fewer than requested, say how many it verified.',
   'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
   'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
+  'For real scores, current game status or past team game results call get_real_game_results. Repeat the source and as-of time for live scores. Say when the stored observation is stale or when competition or team identity needs clarification. Do not use the fantasy scoreboard for real scores.',
+  'For live draft questions call get_current_draft_board. Use its recommendations and alternatives when present. If it only returns board state, distinguish that from a ranked list of available players.',
+  'For rules about a selected league call get_selected_league_rules. Name the league and season, distinguish stored settings from written policy, and report discrepancies. For a general fantasy concept explain the idea and give a sport-specific example without requiring a league.',
+  'For league lineup and trade decisions use the relevant decision tool before recommending an action. Explain the scoring and eligibility factors, give an alternative when supported, and say what verified change would flip the decision. When a custom rule could change the decision, check the selected league rules.',
   /*
    * ⚠ ADDED AFTER THE MODEL TURNED "NO LEAGUE SELECTED" INTO "YOUR LEAGUE HAS NO
    * RECORDS". Observed in production on a 32-team league, alongside an invented

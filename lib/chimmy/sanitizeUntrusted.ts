@@ -52,7 +52,7 @@ function isStructural(code: number): boolean {
   return false
 }
 
-export function sanitizeUntrusted(raw: unknown): string {
+export function sanitizeUntrusted(raw: unknown, maxLength = MAX_UNTRUSTED_LEN): string {
   if (raw === null || raw === undefined) return '(none)'
   if (typeof raw === 'number') return Number.isFinite(raw) ? String(raw) : '(invalid number)'
   if (typeof raw === 'boolean') return String(raw)
@@ -85,8 +85,8 @@ export function sanitizeUntrusted(raw: unknown): string {
   // Collapse the runs the substitution above can leave behind.
   out = out.replace(/\s{2,}/g, ' ').trim()
 
-  if (out.length > MAX_UNTRUSTED_LEN) {
-    out = `${out.slice(0, MAX_UNTRUSTED_LEN)}… (truncated)`
+  if (out.length > maxLength) {
+    out = `${out.slice(0, maxLength)}… (truncated)`
   }
   return out.length > 0 ? out : '(empty)'
 }
