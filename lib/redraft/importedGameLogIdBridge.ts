@@ -68,16 +68,22 @@ export async function bridgeImportedGameLogIds(args: {
     unresolved: ids.filter((id) => !ambiguous.includes(id) && ![...mapping.values()].includes(id)), ambiguous }
 }
 
+function nbaNameKey(name: string): string {
+  const key = normalizePlayerName(name.normalize('NFKD').replace(/\p{M}/gu, ''))
+  // NBA player 1641842 is listed as Ronald Holland II, with the profile slug ron-holland.
+  return key === 'ronald holland' ? 'ron holland' : key
+}
+
 /** Resolve Sleeper's NBA ids via the provider catalog, never by their numeric value. */
 async function bridgeSleeperNbaIds(ids: string[]) {
   const players = await prisma.sportsPlayer.findMany({
     where: { sport: 'NBA', source: 'sleeper', sleeperId: { in: ids } },
-    select: { sleeperId: true, name: true, team: true },
+    select: { sleeperId: true, name: true, team: true, dob: true },
   })
-  const names = [...new Set(players.map((player) => normalizePlayerName(player.name)))]
+  const names = [...new Set(players.flatMap((player) => [normalizePlayerName(player.name), nbaNameKey(player.name)]))]
   const candidates = await prisma.playerIdentityMap.findMany({
     where: { sport: 'NBA', normalizedName: { in: names }, rollingInsightsId: { not: null } },
-    select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true },
+    select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true, dob: true },
   })
 
   const matches = new Map<string, (typeof candidates)[number]>()
@@ -90,11 +96,21 @@ async function bridgeSleeperNbaIds(ids: string[]) {
     }
     const player = sources[0]
     if (!player) continue
-    const name = normalizePlayerName(player.name)
+    const name = nbaNameKey(player.name)
     const team = player.team ? proTeamCode('NBA', player.team) : null
-    if (!name || !team) continue
-    const targets = candidates.filter((candidate) => candidate.normalizedName === name &&
-      candidate.currentTeam && proTeamCode('NBA', candidate.currentTeam) === team)
+    if (!name) continue
+    const named = candidates.filter((candidate) => nbaNameKey(candidate.canonicalName) === name)
+    const byTeam = team ? named.filter((candidate) => proTeamCode('NBA', candidate.currentTeam) === team) : []
+    // A free agent or a player whose team changed can still be corroborated by birth date.
+    const dob = player.dob?.trim()
+    const byBirthDate = dob && /^\d{4}-\d{2}-\d{2}$/.test(dob)
+      ? named.filter((candidate) => candidate.dob === dob)
+      : []
+    if (byTeam.length === 1 && byBirthDate.length === 1 && byTeam[0]!.id !== byBirthDate[0]!.id) {
+      ambiguous.push(id)
+      continue
+    }
+    const targets = byBirthDate.length === 1 ? byBirthDate : byTeam.length ? byTeam : byBirthDate
     if (targets.length > 1) ambiguous.push(id)
     if (targets.length === 1) matches.set(id, targets[0]!)
   }
