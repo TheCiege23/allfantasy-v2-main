@@ -7,6 +7,8 @@ import { handoffFor } from '@/lib/core-app/platformLinks'
 import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { survivorNotificationKind } from '@/lib/core-app/survivorNotificationIcon'
+import { isAllowedDeepLink } from '@/lib/routing/DeepLinkHandler'
+import { isSafeInternalPath } from '@/lib/auth/auth-intent-resolver'
 
 /**
  * 22c — the notifications centre, and the push suppression rule behind it.
@@ -414,6 +416,10 @@ export async function getNotificationsCenter(input: {
     const kind = classifyStored(n.type, n.title, n.body, n.meta)
     const metadata = n.meta && typeof n.meta === 'object' ? n.meta as Record<string, unknown> : null
     const storedHref = metadata?.actionHref
+    const isChat = ['mention', 'league_chat_message', 'at_all', 'direct_message', 'huddle_message'].includes(n.type)
+    const chatHref = isChat && isSafeInternalPath(storedHref) && isAllowedDeepLink(storedHref)
+      ? storedHref.trim()
+      : null
     const gameHref = n.type.startsWith('game_') || n.type === 'postgame_recap'
       ? typeof storedHref === 'string' && /^\/core\/live(?:\?|$)/.test(storedHref) ? storedHref : '/core/live'
       : null
@@ -453,7 +459,9 @@ export async function getNotificationsCenter(input: {
       createdAt: n.createdAt.toISOString(),
       read: n.readAt != null,
       severity: severityOf(n.severity),
-      action: n.leagueId
+      action: chatHref
+        ? { label: 'Open chat', href: chatHref, external: false }
+        : n.leagueId
         ? {
             label: n.type === 'trade_offer_reminder' || n.type === 'trade_offer_expiring' ? 'Respond to offer' : kind === 'lineups' ? 'Review lineup' : kind === 'trades' ? 'Review trade' : kind === 'waivers' ? 'Review waivers' : kind === 'drafts' ? 'Open Draft HQ' : 'Open league',
             href: n.type === 'trade_offer_reminder' || n.type === 'trade_offer_expiring'

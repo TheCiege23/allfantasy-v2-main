@@ -324,7 +324,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const { action } = event;
-  const { url, leagueId, type } = event.notification.data;
+  const { url, leagueId, type } = event.notification.data || {};
 
   let targetUrl = url || '/app';
 
@@ -336,14 +336,14 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
+      .then(async (windowClients) => {
         for (const client of windowClients) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.focus();
-            if ('navigate' in client) {
-              client.navigate(targetUrl);
-            }
-            return;
+          if (new URL(client.url).origin !== self.location.origin || !('navigate' in client)) continue;
+          try {
+            const navigated = await client.navigate(targetUrl);
+            if (navigated) return await navigated.focus();
+          } catch {
+            // The client may have closed while the notification was being opened.
           }
         }
         return clients.openWindow(targetUrl);
