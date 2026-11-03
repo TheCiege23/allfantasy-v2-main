@@ -154,7 +154,7 @@ function Row({
         </span>
         <FinalScoreLogos type={row.type ?? ''} meta={row.meta} />
         {/* The specific reason. Never "you have an update". */}
-        <span className="af-nt-detail">{copy(row.detail)}</span>
+        <span className="af-nt-detail" title={copy(row.detail)}>{copy(row.detail)}</span>
         {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? m.matchingNotices(row.relatedIds.length) : ''}</span> : null}
       </span>
 
@@ -175,7 +175,6 @@ function Row({
       ) : <span className="af-nt-row-link">{content}</span>}
       {!urgent ? <details className="af-nt-row-menu">
         <summary aria-label={copy('Notification details')}>⋯</summary>
-        <p>{copy(row.detail)}</p>
         <DeliveryDetails meta={row.meta} copy={copy} />
         {groupedRows.length > 1 ? <ul>{groupedRows.map((item) => <li key={item.id}>{item.action && !item.action.external
           ? <Link href={item.action.href} onClick={() => onRead?.(item.id)}>{copy(item.detail || item.title)}</Link>
