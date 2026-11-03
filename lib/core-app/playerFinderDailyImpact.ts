@@ -5,7 +5,9 @@ import { loadDailySportOutlook, type OutlookPlayerInput } from '@/lib/projection
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
 import { resolveClaimTarget } from '@/lib/shared-services/league-hub/replacementOptions'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import { identityForFinderPlayer, rosterIdForFinderPlayer } from './playerFinderIdentityBridge'
+import { normalizePosition } from './positionNormalization'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import type { LeagueSlot, RecommendedMove } from './playerFinder'
@@ -13,7 +15,7 @@ import type { LeagueSlot, RecommendedMove } from './playerFinder'
 const DAILY_SPORTS = new Set(['NBA', 'NHL', 'MLB'])
 type Subject = { sport: string; source: string; externalId: string; sleeperId: string | null; name: string; position: string | null; team: string | null }
 type Athlete = { name: string; position: string | null; team: string | null; status: string | null }
-type Identity = { id: string; rollingInsightsId: string | null; sleeperNbaId: string | null; fantraxId: string | null }
+type Identity = { id: string; canonicalName: string; position: string | null; rollingInsightsId: string | null; sleeperNbaId: string | null; fantraxId: string | null }
 
 function ids(value: unknown): string[] {
   return Array.isArray(value) ? value.map((id) => String(id ?? '').trim()).filter(Boolean) : []
@@ -92,7 +94,7 @@ export async function getFinderDailyImpact(
         { rollingInsightsId: { in: ownIds } }, { fantraxId: { in: ownIds } },
         ...(subject.sport === 'NBA' ? [{ sleeperNbaId: { in: ownIds } }] : []),
       ] },
-      select: { id: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
+      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
     })
     const identityByRosterId = new Map<string, Identity | null>()
     for (const identity of identityRows) {
@@ -116,7 +118,13 @@ export async function getFinderDailyImpact(
         : platform === 'fantrax'
           ? row.source === 'rolling_insights' && row.externalId === identity?.rollingInsightsId
           : row.externalId === id && (row.source === 'rolling_insights' || row.source === 'thesportsdb')))
-      if (athlete) athleteById.set(id, athlete)
+      if (athlete) {
+        athleteById.set(id, athlete)
+        if (identity && (!playerNamesAgree(identity.canonicalName, athlete.name) ||
+          (identity.position && athlete.position && normalizePosition(identity.position) !== normalizePosition(athlete.position)))) {
+          identityByRosterId.set(id, null)
+        }
+      }
     }
     athleteById.set(subjectId, { name: subject.name, position: subject.position, team: subject.team, status: null })
 
@@ -132,7 +140,7 @@ export async function getFinderDailyImpact(
     }) : []
     const poolIdentities = topRows.length ? await prisma.playerIdentityMap.findMany({
       where: { sport: subject.sport, id: { in: topRows.map((item) => item.playerId) } },
-      select: { id: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
+      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
     }) : []
     const poolRows = poolIdentities.length ? await prisma.sportsPlayer.findMany({
       where: { sport: subject.sport, source: 'rolling_insights',
@@ -147,14 +155,20 @@ export async function getFinderDailyImpact(
     const pool = poolIdentities.flatMap((identity) => {
       const id = rosterKey(platform, identity)
       const athlete = poolRows.find((row) => row.externalId === identity.rollingInsightsId)
-      return id && poolKeyCounts.get(id) === 1 && athlete && !allIds.has(id) && athlete.team && !unavailable(athlete.status)
+      return id && poolKeyCounts.get(id) === 1 && athlete && !allIds.has(id) && athlete.team &&
+        playerNamesAgree(identity.canonicalName, athlete.name) &&
+        (!identity.position || !athlete.position || normalizePosition(identity.position) === normalizePosition(athlete.position)) &&
+        !unavailable(athlete.status)
         ? [{ id, identity, athlete }] : []
     })
 
     const outlookPlayers: OutlookPlayerInput[] = [
-      ...ownIds.map((id) => ({ key: `roster:${id}`, lookupId: identityByRosterId.get(id)?.id ??
-        (isNativePlatform(platform) && /^\d+$/.test(id) ? id : null), team: athleteById.get(id)?.team ?? null,
-        injuryStatus: athleteById.get(id)?.status ?? null })),
+      ...ownIds.map((id) => {
+        const identity = identityByRosterId.get(id)
+        return { key: `roster:${id}`, lookupId: identity === null ? null : identity?.id ??
+          (isNativePlatform(platform) && /^\d+$/.test(id) ? id : null), team: athleteById.get(id)?.team ?? null,
+          injuryStatus: athleteById.get(id)?.status ?? null }
+      }),
       ...pool.map(({ id, identity, athlete }) => ({ key: `pool:${id}`, lookupId: identity.id,
         team: athlete.team, injuryStatus: athlete.status })),
     ]
