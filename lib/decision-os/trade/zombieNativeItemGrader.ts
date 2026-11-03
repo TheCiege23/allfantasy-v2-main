@@ -142,7 +142,13 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
       const giveValue = playerGive.total + proposerItems.outgoingCost
       const getValue = playerGet.total + proposerItems.incomingBenefit
       if (giveValue <= 0 && getValue <= 0) return withheld('These players and items have no verified future scoring edge in this Zombie league.')
-      const basis = `Zombie · league scoring and free-agent replacement for players; actual team inventory and top-two weapons, bomb suppression, and today's Horde prevalence held constant for item estimates over weeks ${window.currentWeek + 1}–${window.finalWeek}. Infection, revival, loot, cash payouts, and current-week locked item bonuses are not numerically priced.`
+      const eligibleTeams = teams.map(team => {
+        try { return { id: team.id, role: itemRole(team.status) } } catch { return null }
+      })
+      if (eligibleTeams.some(team => team === null)) return withheld('A Zombie team’s trade eligibility role could not be verified.')
+      const eligiblePartners = eligibleTeams.filter(team => team && team.id !== proposer.id && team.role !== 'Zombie').length
+      const tradeWindowBasis = ` ${eligiblePartners} of ${Math.max(0, teams.length - 1)} other managers are currently eligible to trade; future infection or revival can change that count.`
+      const basis = `Zombie · league scoring and free-agent replacement for players; actual team inventory and top-two weapons, bomb suppression, and today's Horde prevalence held constant for item estimates over weeks ${window.currentWeek + 1}–${window.finalWeek}.${tradeWindowBasis} Future infection, revival, loot, cash payouts, and current-week locked item bonuses are not numerically priced.`
       const itemLines = items.map(({ id, item, fromRosterId }) => {
         const fromProposer = fromRosterId === proposal.proposerRosterId
         const value = fromProposer ? proposerItems.outgoingValues.get(id) : proposerItems.incomingValues.get(id)

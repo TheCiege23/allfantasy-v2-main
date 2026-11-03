@@ -62,7 +62,8 @@ describe('native Zombie item proposal grading', () => {
     expect(grade.letter).toBe('A')
     expect(grade.partnerLetter).toBe('F')
     expect(grade.lines.filter(line => line.valueSource === 'zombie_item')).toHaveLength(2)
-    expect(grade.basis).toContain('Infection, revival, loot, cash payouts')
+    expect(grade.basis).toContain('1 of 4 other managers are currently eligible to trade')
+    expect(grade.basis).toContain('Future infection, revival, loot, cash payouts')
   })
 
   it('withholds when either current participant is infected', async () => {
