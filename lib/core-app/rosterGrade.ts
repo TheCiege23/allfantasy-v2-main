@@ -93,6 +93,18 @@ function median(ns: number[]): number {
   return s.length % 2 ? s[mid] : Math.round(((s[mid - 1] + s[mid]) / 2) * 100) / 100
 }
 
+export type NbaRosterCoverage = {
+  threshold: number
+  modelUnavailableReason: string | null
+  teams: Array<{
+    platformUserId: string
+    rostered: number
+    qualified: number
+    required: number
+    missing: Array<{ playerId: string; reason: 'unmapped_identity' | 'missing_qualified_projection' }>
+  }>
+}
+
 export async function getRosterGrade(args: {
   leagueId: string
   /** The claimed team's platform user id candidates, same list My Team uses. */
@@ -108,6 +120,7 @@ export async function getRosterGrade(args: {
    */
   scoringSettings?: Record<string, unknown> | null
   projectionWeek?: { season: string; week: number } | null
+  onNbaCoverage?: (report: NbaRosterCoverage) => void
 }): Promise<RosterGrade | null> {
   const { leagueId, myPlatformUserIds, isDynasty, starters } = args
   if (myPlatformUserIds.length === 0) return null
@@ -194,7 +207,29 @@ export async function getRosterGrade(args: {
       bridgeImportedGameLogIds({ provider: 'sleeper', sport: 'NBA', rosterIds: everyId }),
       loadSportPointsBase({ sport: 'NBA', league }),
     ])
-    if (!model.ok || model.ctx.valueKind !== 'points') return null
+    const threshold = 0.8
+    function reportCoverage(modelUnavailableReason: string | null) {
+      if (!args.onNbaCoverage) return
+      const linked = new Set(bridge.gameLogIds.map((id) => bridge.rosterIdFor(id)))
+      args.onNbaCoverage({
+        threshold,
+        modelUnavailableReason,
+        teams: [...byTeam].map(([platformUserId, ids]) => ({
+          platformUserId,
+          rostered: ids.length,
+          qualified: ids.filter((id) => priced.has(id)).length,
+          required: Math.ceil(ids.length * threshold),
+          missing: ids.filter((id) => !priced.has(id)).map((playerId) => ({
+            playerId,
+            reason: linked.has(playerId) ? 'missing_qualified_projection' : 'unmapped_identity',
+          })),
+        })),
+      })
+    }
+    if (!model.ok || model.ctx.valueKind !== 'points') {
+      reportCoverage(model.ok ? 'This league does not use points scoring.' : model.reason)
+      return null
+    }
     for (const player of model.ctx.board) {
       const rosterId = bridge.rosterIdFor(player.id)
       if (rosterId && meetsSampleBar(player) && Number.isFinite(player.perGame)) {
@@ -218,7 +253,8 @@ export async function getRosterGrade(args: {
       }
     }
     // Compare only when coverage is strong for every team, including its bench.
-    if ([...byTeam.values()].some((ids) => ids.filter((id) => priced.has(id)).length < ids.length * 0.8)) return null
+    reportCoverage(null)
+    if ([...byTeam.values()].some((ids) => ids.filter((id) => priced.has(id)).length < ids.length * threshold)) return null
     leagueScored = true
   }
   if (priced.size < everyId.length * 0.5) return null
