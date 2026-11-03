@@ -129,7 +129,9 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
       if (playerAssets.length) {
         const loaded = await context()
         if (!loaded.ok) return withheld(loaded.reason)
-        const playerWindow = { ...loaded.ctx, weeksLeft: Math.min(loaded.ctx.weeksLeft, Math.max(0, window.finalWeek - window.currentWeek + 1)) }
+        // Item receipts for the current week may already be frozen. Compare every asset on the same
+        // future-week window rather than including the current week for players alone.
+        const playerWindow = { ...loaded.ctx, weeksLeft: Math.min(loaded.ctx.weeksLeft, Math.max(0, window.finalWeek - window.currentWeek)) }
         const give = priceZombiePlayerSide(giveInputs.assets, 'give', playerWindow)
         const get = priceZombiePlayerSide(getInputs.assets, 'get', playerWindow)
         if ('withheld' in give) return withheld(give.withheld)

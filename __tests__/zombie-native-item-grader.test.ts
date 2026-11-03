@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   zombie: { id: 'z', sport: 'NFL', status: 'active', season: 2026, currentWeek: 4, totalWeeks: 8,
     correctionHoldFromWeek: null as number | null, experienceMode: 'enhanced' },
   teams: [] as Array<Record<string, unknown>>,
+  playerContext: false,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -21,7 +22,12 @@ vi.mock('@/lib/zombie/beta2025ItemTrades', () => ({
     return asset.metadata.zombieItemId
   },
 }))
-vi.mock('@/lib/decision-os/trade/guillotineContext', () => ({ loadZombiePlayerContext: async () => ({ ok: false, reason: 'No player context' }) }))
+vi.mock('@/lib/decision-os/trade/guillotineContext', () => ({ loadZombiePlayerContext: async () => h.playerContext
+  ? { ok: true, ctx: {
+    board: [{ id: 'p1', name: 'Player One', position: 'QB', perGame: 10, sampleGames: 12, aliases: [] }],
+    seats: [{ slot: 'QB', eligible: ['QB'] }], replacementBySlot: new Map([['QB', { name: 'Free QB', perGame: 2 }]]), weeksLeft: 9,
+  } }
+  : { ok: false, reason: 'No player context' } }))
 
 import { createZombieNativeItemGrader } from '@/lib/decision-os/trade/zombieNativeItemGrader'
 
@@ -38,6 +44,7 @@ const proposal = () => ({
 beforeEach(() => {
   h.role = 'Survivor'
   h.zombie.correctionHoldFromWeek = null
+  h.playerContext = false
   h.teams = [
     { id: 'tp', rosterId: 'lp', redraftRosterId: 'rp', status: h.role, items: [owned('serum', 'serum')] },
     { id: 'tr', rosterId: 'lr', redraftRosterId: 'rr', status: 'Survivor', items: [owned('bow', 'weapon_bow')] },
@@ -75,5 +82,17 @@ describe('native Zombie item proposal grading', () => {
     const grade = await held.grade(proposal())
     expect(grade.graded).toBe(false)
     if (!grade.graded) expect(grade.reason).toContain('correction')
+  })
+
+  it('prices mixed players and items on the same future-week window', async () => {
+    h.playerContext = true
+    const mixed = { ...proposal(), assets: [
+      ...proposal().assets,
+      { assetType: 'player', fromRosterId: 'rp', toRosterId: 'rr', playerId: 'p1', playerName: 'Player One' },
+    ] }
+    const grader = await createZombieNativeItemGrader('league')
+    const grade = await grader.grade(mixed)
+    if (!grade.graded) throw new Error(grade.reason)
+    expect(grade.lines.find(line => line.name === 'Player One')?.leagueValue).toBe(32)
   })
 })
