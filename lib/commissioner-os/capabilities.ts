@@ -111,6 +111,7 @@ const FORMAT_CAPABILITIES: Readonly<Record<LeagueFormatId, readonly Commissioner
   keeper: ['roster.keeper_carryover'],
   best_ball: ['lineup.best_ball'],
   guillotine: ['elimination.guillotine', 'rewards.faab'],
+  pirate: ['governance.configurable_rules'],
   survivor: ['survivor.tribes', 'phase.state_machine'],
   tournament: ['advancement.tournament', 'phase.state_machine'],
   devy: ['roster.dynasty_carryover', 'roster.college_assets'],

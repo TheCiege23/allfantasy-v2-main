@@ -17,7 +17,7 @@
  * server without push keys; and the sign-in, sign-up and onboarding screens themselves.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
@@ -32,6 +32,7 @@ import {
 } from '@/lib/push-notifications/signInPushAsk'
 import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
+import { usePublishSignInPushVisibility } from '@/lib/push-notifications/signInPushVisibility'
 
 type Mode = 'web' | 'app' | 'homeScreen'
 
@@ -53,6 +54,8 @@ export function SignInPushSheet() {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState(false)
   const [tapped, setTapped] = useState(false)
+  const dialog = useRef<HTMLDivElement | null>(null)
+  usePublishSignInPushVisibility(open)
   const web = useWebPushSubscription(vapidKey)
   const app = useIosAppPush({ registerOnMount: false })
 
@@ -110,6 +113,13 @@ export function SignInPushSheet() {
     if (app.permission === 'granted' && app.registered) setDone(true)
   }, [tapped, mode, app.permission, app.registered])
 
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement
+    dialog.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }) }
+  }, [open])
+
   if (!open) return null
 
   const close = () => {
@@ -138,10 +148,20 @@ export function SignInPushSheet() {
 
   return (
     <div
+      ref={dialog}
       role="dialog"
       aria-modal="true"
       aria-labelledby="af-signin-push-title"
       data-testid="signin-push-sheet"
+      onKeyDown={event => {
+        if (event.key === 'Escape' && !busy) { event.preventDefault(); close(); return }
+        if (event.key !== 'Tab') return
+        const buttons = Array.from(dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
+        const first = buttons[0], last = buttons[buttons.length - 1]
+        if (!first) { event.preventDefault(); return }
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      }}
       {...(mode === 'app' ? {} : { 'data-hide-in-ios-app': true })}
       style={{
         position: 'fixed',
@@ -151,7 +171,8 @@ export function SignInPushSheet() {
         alignItems: 'flex-end',
         justifyContent: 'center',
         background: 'rgba(0,0,0,0.55)',
-        padding: 16,
+        padding: 'max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px))',
+        overflowY: 'auto',
       }}
     >
       <div
@@ -163,7 +184,8 @@ export function SignInPushSheet() {
           color: '#f4f4f5',
           border: '1px solid rgba(255,255,255,0.12)',
           padding: 20,
-          marginBottom: 'env(safe-area-inset-bottom, 0px)',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
         }}
       >
         <h2 id="af-signin-push-title" style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800 }}>
@@ -181,7 +203,7 @@ export function SignInPushSheet() {
         ) : (
           <>
             <p style={{ margin: 0, color: '#d4d4d8' }}>
-              Get a ping when a starter is ruled out, a trade comes in, someone messages you, or you're on the clock in a
+              Get a ping when a starter is ruled out, a trade comes in, someone messages you, or you are on the clock in a
               draft.
             </p>
             <p style={{ margin: '8px 0 0', color: '#a1a1aa', fontSize: 13 }}>

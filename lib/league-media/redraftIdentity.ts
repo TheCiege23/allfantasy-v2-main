@@ -11,7 +11,7 @@
  * only adds the two things a visual needs on top of it:
  *   - native only: an imported league keeps its provider's presentation (`isNativePlatform`);
  *   - a variant that names another registered format (dynasty, keeper, best_ball, guillotine,
- *     survivor, tournament, devy, c2c, zombie, salary_cap, big_brother) is never themed as redraft,
+ *     survivor, tournament, devy, c2c, zombie, salary_cap, big_brother, pirate) is never themed as redraft,
  *     even when `leagueType` still says `redraft` — the list is keyed on `LeagueFormatId`, so adding
  *     a format to lib/league/format-engine.ts fails the typecheck here until it is placed.
  *
@@ -61,6 +61,7 @@ const NON_REDRAFT_FORMATS: Record<Exclude<LeagueFormatId, 'redraft'>, true> = {
   zombie: true,
   salary_cap: true,
   big_brother: true,
+  pirate: true,
 }
 
 export type RedraftIdentityLeague = {

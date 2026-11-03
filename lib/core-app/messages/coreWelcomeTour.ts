@@ -28,6 +28,7 @@ export const coreWelcomeTourMessages = defineMessages({
     /** `step` is 1-based. */
     progress: (step: number, total: number) => `Step ${step} of ${total}`,
     dismiss: 'Dismiss welcome guide',
+    closeGuide: 'Close guide',
     back: 'Back',
     next: 'Next',
     start: 'Get started',
@@ -51,6 +52,7 @@ export const coreWelcomeTourMessages = defineMessages({
     playActionReady: 'Revisar mis alineaciones',
     progress: (step, total) => `Paso ${step} de ${total}`,
     dismiss: 'Cerrar guía de bienvenida',
+    closeGuide: 'Cerrar guía',
     back: 'Atrás',
     next: 'Siguiente',
     start: 'Empezar',

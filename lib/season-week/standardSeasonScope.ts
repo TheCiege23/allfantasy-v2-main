@@ -17,6 +17,7 @@ import { canRunSeasonForSport } from '@/lib/sport-scope'
 
 export const STANDARD_WEEKLY_SEASON_FORMATS: ReadonlySet<string> = new Set([
   'redraft',
+  'pirate',
   'keeper',
   'dynasty',
   'best_ball',

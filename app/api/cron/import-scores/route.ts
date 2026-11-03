@@ -529,7 +529,7 @@ async function handle(req: NextRequest) {
        * sent by lib/engagement-alerts (the minute-by-minute game engine), which also sent them — so
        * followers got every halftime and final twice. AF_LEGACY_GAME_ALERTS=1 turns this back on.
        */
-      if (process.env.AF_LEGACY_GAME_ALERTS === "1" && !budget.exhausted()) {
+      if (process.env.AF_LEGACY_GAME_ALERTS === "1" && url.searchParams.get('notifications') !== '0' && !budget.exhausted()) {
         scoreAlerts = await dispatchTeamScoreAlerts({ budget }).catch((err: unknown) => ({
           error: err instanceof Error ? err.message.slice(0, 200) : "failed",
         }))

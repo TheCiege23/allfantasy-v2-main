@@ -9,6 +9,8 @@ const updateStandingsMock = vi.fn()
 vi.mock("@/lib/adminAuth", () => ({
   requireAdminOrBearer: requireAdminOrBearerMock,
 }))
+vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: vi.fn() }))
+vi.mock('@/lib/pirate/service', () => ({ seedPirateClaims: vi.fn(), queuePirateProtectionReminders: vi.fn(), maintainPirateClaims: vi.fn() }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
