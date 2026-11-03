@@ -444,7 +444,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       const ncaabFantraxIdentities = await withSyncJobRun(
         { jobName: 'ncaab-fantrax-identities', sport: 'NCAAB', provider: 'fantrax', trigger: 'cron' },
         async () => {
-          if (budget.remainingMs() < 15_000) return { skipped: 'deferred: run budget too low', proposed: 0, updated: 0 }
+          if (budget.remainingMs() < 60_000) return { skipped: 'deferred: run budget too low', proposed: 0, updated: 0 }
           const { ingestNcaabFantraxIdentities } = await import('@/lib/player-identity/ingestNcaabFantraxIdentities')
           return ingestNcaabFantraxIdentities()
         },
