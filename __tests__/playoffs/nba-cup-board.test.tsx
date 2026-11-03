@@ -20,6 +20,30 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("shows mobile knockout rounds and only enables picks before tipoff", () => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    try {
+      const v = view()
+      v.activeEntry!.finalizedAt = "2020-10-29T00:00:00Z"
+      const matchup = { homeTeamName: "Boston Celtics", awayTeamName: "Charlotte Hornets" }
+      const quarter = v.series.find((game) => game.round === "cup_quarterfinals")!
+      const semi = v.series.find((game) => game.round === "cup_semifinals")!
+      Object.assign(quarter, matchup, { startsAt: "2020-12-04T00:00:00Z" })
+      Object.assign(semi, matchup, { startsAt: "2099-12-08T00:00:00Z" })
+      render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+      expect(screen.queryByTestId("pb-scroller")).not.toBeInTheDocument()
+      expect(within(screen.getByTestId(`cup-game-${quarter.seriesNumber}`)).getByRole("button", { name: "Pick Boston Celtics" })).toBeDisabled()
+      expect(within(screen.getByRole("region", { name: "Semifinals" })).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
+      expect(screen.getByRole("region", { name: "Championship" })).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("keeps incomplete group finals pending in the standings and tournament phases", () => {
     const v=view()
     v.series=v.series.filter((game) => game.id === "past").map((game) => ({...game,liveHomeScore:110,liveAwayScore:105}))
