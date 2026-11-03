@@ -824,8 +824,7 @@ export async function scoreRosterForWeek(args: {
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
   const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
-  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
-  if (!league || !isNativePlatform(league.platform) || !isBasketballC2CLeague(league)) return result
+  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return result
   const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
   const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
   if (mode !== 'points' || bestBall || useDevyEngine) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
@@ -845,21 +844,16 @@ async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
   args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
-  if (!league || !isNativePlatform(league.platform)) return null
-  const { campusPointsForMatchup, campusSport } = await import('@/lib/c2c/campusScoring')
-  const sport = campusSport(league)
-  if (sport === 'football') {
-    return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
-  }
-  return null
+  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return null
+  const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
+  return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
 }
 
 async function loadBasketballCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
   args: { leagueId: string; season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
-  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
-  if (!league || !isNativePlatform(league.platform) || !isBasketballC2CLeague(league)) return null
+  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return null
   const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
   const config = await getC2CConfig(args.leagueId)
   if (!config || config.collegeScoringSystem !== 'points' || config.bestBallCollege || config.standingsModel !== 'unified') throw new Error('NBA Campus to Canton scoring requires standard college points, a manual college lineup and unified standings.')
