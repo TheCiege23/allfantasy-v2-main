@@ -235,7 +235,7 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
       leagueId, seasonId: state.season.id,
       week: { in: [...new Set([state.week, ...claims.map((claim) => claim.week)])] },
     },
-    select: { rosterId: true, week: true, playerIds: true, status: true, voidReason: true, updatedAt: true },
+    select: { rosterId: true, week: true, playerIds: true, status: true, voidReason: true, updatedAt: true, lockAt: true },
   })
   const rulingEvents = await db.redraftLeagueTransaction.findMany({
     where: { leagueId, seasonId: state.season.id, type: 'pirate_lineup_ruling' },
@@ -267,14 +267,17 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
       seasonId: state.season.id, rosterId: claim.loserRosterId, week: claim.week }, db))
     return [claim.id, await evidenceByPeriod.get(key)]
   })))
+  const myRosterId = rosters.find((roster) => roster.ownerId === actorUserId)?.id ?? null
+  const mySet = protections.find((set) => set.rosterId === myRosterId && set.week === state.week)
+  const lockAt = state.lockAt && mySet?.lockAt && mySet.lockAt < state.lockAt ? mySet.lockAt : state.lockAt
   return {
     league: { id: state.league.id, name: (await db.league.findUnique({ where: { id: leagueId }, select: { name: true } }))?.name, sport: state.league.sport, rosterLimit },
     rules: state.rules,
     season: state.season,
     week: state.week,
-    lockAt: state.lockAt,
-    canEditProtections: !isProtectionLocked(state.lockAt),
-    myRosterId: rosters.find((roster) => roster.ownerId === actorUserId)?.id ?? null,
+    lockAt,
+    canEditProtections: Boolean(myRosterId && mySet?.status !== 'void' && !isProtectionLocked(lockAt)),
+    myRosterId,
     rosters,
     protections,
     lineupRulings,

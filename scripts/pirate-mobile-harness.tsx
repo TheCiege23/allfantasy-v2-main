@@ -37,4 +37,5 @@ window.fetch = async (input, init) => {
   return originalFetch(input, init)
 }
 
-createRoot(document.getElementById('root')!).render(<main className="mx-auto min-h-screen max-w-7xl p-3 sm:p-8"><PirateHome leagueId="pirate-mobile-fixture" isCommissioner /></main>)
+const root = document.getElementById('root')!
+createRoot(root).render(<main className="mx-auto min-h-screen max-w-7xl p-3 sm:p-8"><PirateHome leagueId={root.dataset.leagueId ?? 'pirate-mobile-fixture'} isCommissioner={!root.dataset.leagueId} /></main>)

@@ -1,14 +1,86 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PirateHome } from '@/components/pirate/PirateHome'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('Pirate Deck', () => {
+  const players = ['Alex Starter', 'Blake Bench', 'Casey Reserve'].map((playerName, i) => ({
+    id: String(i), playerId: String(i), playerName, position: 'QB', team: 'GB', slotType: ['QB', 'BENCH', 'IR'][i],
+  }))
+  function deck() {
+    return {
+      league: { id: 'league', name: 'Sea Wolves', sport: 'NFL', rosterLimit: 4 },
+      rules: { protectionLimit: 2, claimHours: 24 },
+      season: { playoffStartWeek: 15 }, week: 9,
+      lockAt: new Date(Date.now() + 60 * 60000).toISOString(),
+      canEditProtections: true, myRosterId: 'mine',
+      rosters: [{ id: 'mine', ownerId: 'owner', ownerName: 'Captain', teamName: null, players }],
+      protections: [{ rosterId: 'mine', week: 9, status: 'active', playerIds: ['0'] }],
+      lineupRulings: [], lineupPreviews: {}, claims: [] as Array<Record<string, unknown>>,
+    }
+  }
+
+  it('distinguishes saved and unsaved protections, enforces capacity and saves an IR lock', async () => {
+    const initial = deck()
+    const next = { ...initial, protections: [{ ...initial.protections[0], playerIds: ['0', '2'] }] }
+    const json = (value: unknown) => ({ ok: true, json: async () => value })
+    const fetcher = vi.fn().mockResolvedValueOnce(json(initial)).mockResolvedValueOnce(json({})).mockResolvedValueOnce(json(next))
+    vi.stubGlobal('fetch', fetcher)
+    render(<PirateHome leagueId="league" isCommissioner={false} />)
+    expect(await screen.findByRole('heading', { name: 'Your protections are saved' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Manage protections' }).getAttribute('href')).toBe('#pirate-protections')
+    expect(screen.getByText('1 of 2 protected')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Alex Starter' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Casey Reserve' }))
+    expect(screen.getByText('Lock unsaved')).toBeTruthy()
+    expect(screen.getByText('1 of 2 protected · 2 selected, unsaved')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Blake Bench' }))
+    expect(screen.getByRole('alert').textContent).toContain('Only 2 players')
+    fireEvent.click(screen.getByRole('button', { name: 'Save protection locks' }))
+    expect(await screen.findByText('2 of 2 protected')).toBeTruthy()
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ rosterId: 'mine', week: 9, playerIds: ['0', '2'] })
+  })
+
+  it('shows the most urgent personal claim and links to that exact claim', async () => {
+    const data = deck()
+    const soon = new Date(Date.now() + 5 * 60000).toISOString()
+    data.claims = [
+      { id: 'unrelated', winnerRosterId: 'other', loserRosterId: 'other2', status: 'pending', week: 8, deadlineAt: soon },
+      { id: 'win', winnerRosterId: 'mine', loserRosterId: 'other', status: 'awaiting_selection', week: 8, selectionDeadlineAt: data.lockAt },
+      { id: 'loss', winnerRosterId: 'other', loserRosterId: 'mine', status: 'pending', playerId: '0', week: 8, deadlineAt: soon },
+    ]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => data }))
+    render(<PirateHome leagueId="league" isCommissioner={false} />)
+    expect(await screen.findByRole('heading', { name: 'Respond to a claim' })).toBeTruthy()
+    expect(screen.getByText('Alex Starter transfers automatically if you don’t respond.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open claim' }).getAttribute('href')).toBe('#pirate-claim-loss')
+    expect(screen.getByText('1 more claim needs your attention.')).toBeTruthy()
+  })
+
+  it('keeps saved protections visible and blocks stale editing after the first game locks', async () => {
+    const data = deck()
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => data })
+    vi.stubGlobal('fetch', fetcher)
+    render(<PirateHome leagueId="league" isCommissioner={false} />)
+    const row = await screen.findByRole<HTMLButtonElement>('button', { name: 'Alex Starter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Casey Reserve' }))
+    expect(screen.getByText('Lock unsaved')).toBeTruthy()
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(data.lockAt))
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(row.disabled).toBe(true)
+    expect(row.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Casey Reserve' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByText(/unsaved changes didn’t apply/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Save protection locks' })).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it.each([null, 'Bench Player', 'joint'])('shows commissioner recovery and the exact verified pickup option (drop: %s)', async (dropPlayerName) => {
     const joint = dropPlayerName === 'joint'
     const dashboard = {

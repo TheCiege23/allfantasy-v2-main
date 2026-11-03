@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Anchor, Clock3, LockKeyhole, Shield, Skull, Sparkles, Trophy, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Anchor, ArrowRight, Clock3, LockKeyhole, LockKeyholeOpen, Skull, Sparkles, X } from 'lucide-react'
 
 type Player = { id: string; playerId: string; playerName: string; position: string; team: string | null; slotType: string }
 type Roster = { id: string; ownerId: string; ownerName: string; teamName: string | null; players: Player[] }
@@ -37,7 +37,18 @@ type Data = {
 
 function dateText(value: string | null): string {
   if (!value) return 'Schedule pending'
-  return new Date(value).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return new Date(value).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+}
+
+function beforeDeadline(value: string | null, now: number) {
+  return !value || Date.parse(value) > now
+}
+
+function timeRemaining(value: string, now: number) {
+  const minutes = Math.ceil((Date.parse(value) - now) / 60000)
+  if (minutes <= 1) return 'Less than a minute left'
+  const hours = Math.floor(minutes / 60)
+  return hours ? `${hours}h ${minutes % 60}m left` : `${minutes}m left`
 }
 
 function nameOf(roster: Roster | undefined): string {
@@ -63,6 +74,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
   const [showVideo, setShowVideo] = useState(false)
   const [celebration, setCelebration] = useState<{ winner: string; loser: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [now, setNow] = useState(Date.now)
 
   const refresh = useCallback(async () => {
     const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/pirate`, { cache: 'no-store' })
@@ -70,6 +82,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
     if (!response.ok) throw new Error(payload.error || 'Unable to load the Pirate League.')
     const next = payload as Data
     setData(next)
+    setNow(Date.now())
     setSettings(next.rules)
     const own = next.protections.find((set) => set.rosterId === next.myRosterId && set.week === next.week)
     setSelected(own?.status === 'active' && Array.isArray(own.playerIds) ? own.playerIds : [])
@@ -87,6 +100,19 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
   const myRoster = data?.myRosterId ? byId.get(data.myRosterId) : undefined
   const mySet = data?.protections.find((set) => set.rosterId === data.myRosterId && set.week === data.week)
   const selectedSet = new Set(selected)
+  const saved = mySet?.status === 'active' ? mySet.playerIds : []
+  const savedSet = new Set(saved)
+  const dirty = selected.length !== saved.length || selected.some((id) => !savedSet.has(id))
+  const lockAt = data?.lockAt ?? null
+  const canEdit = Boolean(data?.canEditProtections && lockAt && beforeDeadline(lockAt, now) && mySet?.status !== 'void')
+
+  useEffect(() => {
+    if (!data) return
+    const update = () => setNow(Date.now())
+    const timer = window.setInterval(update, 1000)
+    window.addEventListener('focus', update)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update) }
+  }, [data])
 
   async function mutate(url: string, body: Record<string, unknown>, celebrate = false) {
     setBusy(true)
@@ -119,7 +145,8 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
   }
 
   function toggle(playerId: string) {
-    if (!data?.canEditProtections || mySet?.status === 'void') return
+    if (!data || !canEdit || !beforeDeadline(lockAt, Date.now())) return
+    setError('')
     if (selectedSet.has(playerId)) {
       setSelected(selected.filter((id) => id !== playerId))
       return
@@ -128,7 +155,6 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
       setError(`Only ${data.rules.protectionLimit} players can be protected. Remove a lock before adding another.`)
       return
     }
-    setError('')
     setSelected([...selected, playerId])
   }
 
@@ -141,13 +167,39 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
   const rosterOverflow = Math.max(0, (myRoster?.players.length ?? 0) - (data?.league.rosterLimit ?? 0))
   const overflowGraceUntil = data?.claims.filter((claim) => claim.winnerRosterId === data.myRosterId && claim.status === 'transferred' && claim.overflowGraceUntil)
     .map((claim) => claim.overflowGraceUntil!).sort()[0] ?? null
+  const personalActions = activeClaims.flatMap((claim) => {
+    if (!myRoster) return []
+    const winner = claim.winnerRosterId === myRoster.id
+    const loser = claim.loserRosterId === myRoster.id
+    if (winner && claim.status === 'awaiting_selection' && beforeDeadline(claim.selectionDeadlineAt, now)) {
+      return [{ claim, title: 'Choose a player to steal', deadline: claim.selectionDeadlineAt, detail: 'Pick an unprotected player from the losing roster.' }]
+    }
+    if (loser && claim.status === 'pending' && beforeDeadline(claim.deadlineAt, now)) {
+      return [{ claim, title: 'Respond to a claim', deadline: claim.deadlineAt, detail: `${playerName(myRoster, claim.playerId)} transfers automatically if you don’t respond.` }]
+    }
+    if (winner && claim.status === 'countered' && beforeDeadline(claim.deadlineAt, now)) {
+      return [{ claim, title: 'Review a counteroffer', deadline: claim.deadlineAt, detail: 'Decide whether to send the requested player in return.' }]
+    }
+    return []
+  }).sort((a, b) => (a.deadline ? Date.parse(a.deadline) : Infinity) - (b.deadline ? Date.parse(b.deadline) : Infinity))
+  const nextClaim = personalActions[0]
+  const canManage = canEdit && Boolean(myRoster?.players.length)
+  const nextTitle = nextClaim?.title ?? (!myRoster ? 'Claim a team to get started' : mySet?.status === 'void'
+    ? 'Protections voided this week' : canManage ? dirty ? 'Save your protection changes' : saved.length ? 'Your protections are saved' : 'Protect your players'
+    : !lockAt ? 'Waiting for the league schedule' : 'You’re caught up')
+  const nextDetail = nextClaim?.detail ?? (!myRoster ? 'Once you have a roster, you can protect players and respond to claims here.'
+    : mySet?.status === 'void' ? 'See the protection deck for the reason.'
+    : canManage ? 'Only saved protections carry into the matchup. Unused slots expire at lock.'
+    : !lockAt ? 'Protection editing opens when the first game time is confirmed.' : 'Check your saved protections and watch the claim board for updates.')
+  const actionDeadline = nextClaim ? nextClaim.deadline : canManage ? lockAt : null
+  const shownSelection = canEdit ? selectedSet : savedSet
 
   return (
     <div className="mx-auto w-full max-w-6xl pb-20 text-white">
       <div className="relative isolate overflow-hidden rounded-[28px] border border-amber-300/25 bg-[#071625] shadow-[0_24px_80px_rgba(0,0,0,.4)]">
         <div className="absolute inset-0 bg-[url('/images/league-types/pirate-hero.png')] bg-cover bg-[center_55%] opacity-80" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#03101e] via-[#03101e]/75 to-[#03101e]/10 sm:bg-gradient-to-r sm:from-[#03101e] sm:via-[#03101e]/90 sm:via-45% sm:to-[#03101e]/25" />
-        <div className="relative flex min-h-[295px] flex-col justify-between gap-8 p-6 sm:p-9">
+        <div className="relative flex flex-col justify-between gap-4 p-4 sm:min-h-[235px] sm:gap-8 sm:p-9">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/35 bg-[#061421]/80 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[.2em] text-amber-200">
               <Anchor size={14} /> Pirate League
@@ -156,8 +208,8 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
           </div>
           <div className="max-w-xl">
             <p className="text-xs font-semibold uppercase tracking-[.23em] text-amber-300">The weekly hunt</p>
-            <h2 className="mt-2 text-4xl font-black tracking-tight sm:text-6xl">{data?.league.name || 'Claim the booty'}</h2>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-slate-200 sm:text-base">Lock your crew before the first game. Win your matchup. Choose one unprotected player from the losing roster.</p>
+            <h2 className="mt-1 break-words text-2xl font-black tracking-tight sm:text-5xl">{data?.league.name || 'Pirate Deck'}</h2>
+            <p className="mt-3 hidden max-w-lg text-sm leading-6 text-slate-200 sm:block">Protect your players before the first game. Win your matchup and claim an unprotected player.</p>
           </div>
         </div>
       </div>
@@ -167,24 +219,26 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
       {message && <p role="status" className="mt-5 rounded-xl border border-emerald-400/35 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">{message}</p>}
       {data && (
         <>
+          <section aria-labelledby="pirate-next-action" className="mt-3 rounded-2xl border border-amber-300/35 bg-[#102234] p-4 sm:mt-5 sm:p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#fde68a]">Your next move</p>
+            <h3 id="pirate-next-action" className="mt-1 text-xl font-black">{nextTitle}</h3>
+            <p className="mt-1 text-sm leading-5 text-slate-200">{nextDetail}</p>
+            {actionDeadline && <p className="mt-2 flex items-start gap-2 text-sm font-semibold text-[#fde68a]"><Clock3 size={16} aria-hidden="true" className="mt-0.5 shrink-0" /><span>{nextClaim ? 'Due' : 'Locks'} <time dateTime={actionDeadline}>{dateText(actionDeadline)}</time> · {timeRemaining(actionDeadline, now)}</span></p>}
+            {(nextClaim || myRoster) && <a href={nextClaim ? `#pirate-claim-${nextClaim.claim.id}` : '#pirate-protections'} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-sm font-black text-[#071522] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto">{nextClaim ? 'Open claim' : canManage ? 'Manage protections' : 'View protections'} <ArrowRight size={16} aria-hidden="true" /></a>}
+            {personalActions.length > 1 && <p className="mt-2 text-xs text-slate-300">{personalActions.length - 1} more {personalActions.length === 2 ? 'claim needs' : 'claims need'} your attention.</p>}
+          </section>
           {myRoster && data.league.rosterLimit > 0 && rosterOverflow > 0 && (
             <p role="status" className="mt-5 rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm leading-6 text-amber-100">
               Your crew has {myRoster.players.length} players in a {data.league.rosterLimit}-player roster after a steal. Free {rosterOverflow} {rosterOverflow === 1 ? 'spot' : 'spots'} before another acquisition{overflowGraceUntil ? ` and by ${dateText(overflowGraceUntil)}` : ''}. No player will be dropped automatically.
             </p>
           )}
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Stat icon={<Shield size={18} />} label="Protection" value={`${selected.length} / ${data.rules.protectionLimit}`} detail={mySet?.status === 'void' ? 'Voided this week' : data.canEditProtections ? 'Still editable' : 'Locked for this week'} />
-            <Stat icon={<Clock3 size={18} />} label="First game lock" value={dateText(data.lockAt)} detail={data.lockAt ? 'League schedule time' : 'Awaiting sport schedule'} />
-            <Stat icon={<Trophy size={18} />} label="Active claims" value={String(activeClaims.length)} detail={`${data.rules.claimHours}h to respond after selection`} />
-          </div>
-
           <div className="mt-7 grid items-start gap-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,.88fr)]">
-            <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#081625] shadow-[0_18px_55px_rgba(0,0,0,.24)]">
+            <section id="pirate-protections" aria-labelledby="pirate-protection-heading" tabIndex={-1} className="min-w-0 scroll-mt-24 overflow-hidden rounded-[24px] border border-white/10 bg-[#081625] shadow-[0_18px_55px_rgba(0,0,0,.24)]">
               <div className="border-b border-white/10 bg-gradient-to-r from-amber-400/10 to-transparent p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[.18em] text-amber-300">Your crew</p>
-                    <h3 className="mt-1 text-2xl font-black">Protection deck</h3>
+                    <h3 id="pirate-protection-heading" className="mt-1 text-2xl font-black">Protection deck</h3>
                     <p className="mt-1 text-sm leading-5 text-slate-400">Choose any starter, bench player, or IR player. Empty slots expire when games begin.</p>
                   </div>
                   <LockKeyhole className="shrink-0 text-amber-300" size={25} />
@@ -194,35 +248,47 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                 <p className="p-6 text-sm text-slate-300">Claim a team in this league to set its protections.</p>
               ) : (
                 <div className="p-4 sm:p-6">
+                  <div className="mb-4 rounded-xl border border-white/15 bg-white/5 p-3">
+                    <p aria-live="polite" className="text-sm font-bold">{saved.length} of {data.rules.protectionLimit} protected{canEdit && dirty ? ` · ${selected.length} selected, unsaved` : ''}</p>
+                    <p className="mt-1 text-sm text-slate-300">{lockAt ? <>{canEdit ? 'Protections lock' : 'Protection lock'} <time dateTime={lockAt}>{dateText(lockAt)}</time></> : 'Lock time is not available yet.'}</p>
+                    {!canEdit && dirty && <p className="mt-1 text-sm text-amber-200">Your unsaved changes didn’t apply. The roster shows your saved protections.</p>}
+                  </div>
                   {mySet?.status === 'void' && <p className="mb-4 rounded-xl border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">All locks were voided for this week: {mySet.voidReason === 'over_limit' ? 'too many players were submitted' : mySet.voidReason === 'illegal_lineup' ? 'the commissioner ruled the lineup illegal with an available replacement' : 'a change was attempted after games began'}.</p>}
                   <div className="grid gap-2">
                     {myRoster.players.map((player) => {
-                      const locked = selectedSet.has(player.playerId)
+                      const locked = shownSelection.has(player.playerId)
+                      const label = canEdit && locked !== savedSet.has(player.playerId)
+                        ? locked ? 'Lock unsaved' : 'Unlock unsaved'
+                        : locked ? 'Protected' : 'Unprotected'
                       return (
                         <button
                           key={player.id}
                           type="button"
-                          disabled={!data.canEditProtections || mySet?.status === 'void' || busy}
+                          disabled={!canEdit || busy}
                           onClick={() => toggle(player.playerId)}
                           aria-pressed={locked}
+                          aria-label={player.playerName}
                           className={`flex min-h-[56px] items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${locked ? 'border-amber-300/55 bg-amber-300/12 shadow-[inset_0_0_0_1px_rgba(251,191,36,.12)]' : 'border-white/10 bg-white/[.035] hover:border-white/25 hover:bg-white/[.07]'}`}
                         >
                           <span className="min-w-0">
                             <span className="block truncate text-sm font-semibold text-white">{player.playerName}</span>
                             <span className="block text-xs text-slate-400">{player.position} · {player.team || 'FA'} · {player.slotType}</span>
                           </span>
-                          <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${locked ? 'bg-amber-300 text-[#071522]' : 'bg-white/10 text-slate-400'}`}><LockKeyhole size={17} /></span>
+                          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold ${locked ? 'bg-amber-300 text-[#071522]' : 'bg-white/10 text-slate-200'}`}>{locked ? <LockKeyhole size={15} aria-hidden="true" /> : <LockKeyholeOpen size={15} aria-hidden="true" />}{label}</span>
                         </button>
                       )
                     })}
                     {!myRoster.players.length && <p className="py-6 text-sm text-slate-400">Your roster is empty. Draft players before setting protections.</p>}
                   </div>
-                  <button
+                  {canManage && <button
                     type="button"
-                    disabled={!data.canEditProtections || mySet?.status === 'void' || busy || !data.lockAt}
-                    onClick={() => mutate(`${base}/protections`, { rosterId: myRoster.id, week: data.week, playerIds: selected })}
+                    disabled={busy || !dirty}
+                    onClick={() => {
+                      if (!beforeDeadline(lockAt, Date.now())) { setNow(Date.now()); return }
+                      void mutate(`${base}/protections`, { rosterId: myRoster.id, week: data.week, playerIds: selected })
+                    }}
                     className="mt-4 min-h-[48px] w-full rounded-xl bg-amber-300 px-4 py-3 text-sm font-black text-[#071522] transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-45"
-                  >{busy ? 'Saving…' : 'Save protection locks'}</button>
+                  >{busy ? 'Saving…' : dirty ? 'Save protection locks' : saved.length ? 'Protections saved' : 'Select players to protect'}</button>}
                 </div>
               )}
             </section>
@@ -243,7 +309,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                   const locked = new Set(protection?.status === 'active' ? protection.playerIds : [])
                   const claimable = loser?.players.filter((player) => !locked.has(player.playerId)) ?? []
                   return (
-                    <div key={claim.id} className="rounded-2xl border border-white/12 bg-[#0d2133] p-4">
+                    <div key={claim.id} id={`pirate-claim-${claim.id}`} tabIndex={-1} className="scroll-mt-24 rounded-2xl border border-white/12 bg-[#0d2133] p-4">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] font-bold uppercase tracking-[.15em] text-amber-300">Week {claim.week} · {claim.status.replaceAll('_', ' ')}</span>
                         <Skull size={17} className="text-amber-300/70" />
@@ -425,16 +491,6 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function Stat({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#081625] px-4 py-4">
-      <div className="flex items-center gap-2 text-amber-300">{icon}<span className="text-[11px] font-bold uppercase tracking-[.17em]">{label}</span></div>
-      <p className="mt-2 text-lg font-black text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-400">{detail}</p>
     </div>
   )
 }
