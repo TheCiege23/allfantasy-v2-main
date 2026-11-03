@@ -69,7 +69,9 @@ export async function bridgeImportedGameLogIds(args: {
 }
 
 function nbaNameKey(name: string): string {
-  return normalizePlayerName(name.normalize('NFKD').replace(/\p{M}/gu, ''))
+  const key = normalizePlayerName(name.normalize('NFKD').replace(/\p{M}/gu, ''))
+  // NBA player 1641842 is listed as Ronald Holland II, with the profile slug ron-holland.
+  return key === 'ronald holland' ? 'ron holland' : key
 }
 
 /** Resolve Sleeper's NBA ids via the provider catalog, never by their numeric value. */
