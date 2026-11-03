@@ -26,14 +26,15 @@ async function main(leagueId: string | undefined) {
     orderBy: { id: 'asc' },
     select: { platformUserId: true },
   })
-  let report: NbaRosterCoverage | undefined
+  const audit: { report?: NbaRosterCoverage } = {}
   await getRosterGrade({
     leagueId,
     isDynasty: Boolean(league.isDynasty),
     myPlatformUserIds: rosters.map((roster) => roster.platformUserId),
     starters: [],
-    onNbaCoverage: (coverage) => { report = coverage },
+    onNbaCoverage: (coverage) => { audit.report = coverage },
   })
+  const { report } = audit
   if (!report) throw new Error('The grader did not reach the coverage check. Check the stored rosters.')
 
   const missingIds = [...new Set(report.teams.flatMap((team) => team.missing.map((player) => player.playerId)))]
