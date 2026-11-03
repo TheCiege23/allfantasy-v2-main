@@ -66,6 +66,7 @@ describe('the league list opens native homes directly', () => {
       counts: { live: 1, history: 0, all: 1, needs: 0, playing: 0, quiet: 1, commissioner: 1, drafting: 0, dynasty: 0 },
     }
     render(<MyLeaguesV4 {...data} importHref="/import" />)
+    expect(screen.getByRole('link', { name: 'My brackets' })).toHaveAttribute('href', '/brackets/my')
     expect(screen.queryByRole('link', { name: 'League dashboard' })).toBeNull()
     expect(screen.getByRole('link', { name: /Open League/ })).toHaveAttribute('href', '/league/native-one')
   })

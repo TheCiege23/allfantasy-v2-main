@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -14,8 +15,10 @@ export const dynamic = "force-dynamic"
 
 export default async function SharedPlayoffEntryPage(props: {
   params: Promise<{ leagueId: string; entryId: string }>
+  searchParams?: Promise<{ view?: string }>
 }) {
   const { leagueId, entryId } = await props.params
+  const searchParams = await props.searchParams
   const session = await getServerSession(authOptions).catch(() => null)
   const viewerId = String((session?.user as { id?: string } | undefined)?.id ?? "")
   const entry = await (prisma as any).playoffBracketEntry.findUnique({
@@ -33,6 +36,13 @@ export default async function SharedPlayoffEntryPage(props: {
 
   if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup", "nfl"].includes(entry.challenge.sport)) {
     return <main className="mx-auto max-w-3xl p-8"><h1 className="text-2xl font-bold">Bracket not found</h1></main>
+  }
+
+  // Older shared entry links were commonly sent as invitations. Keep the
+  // explicit read-only view available, but take legacy links to the league.
+  if (searchParams?.view !== "bracket") {
+    const destination = `/brackets/leagues/${encodeURIComponent(leagueId)}`
+    redirect(viewerId ? destination : `/login?callbackUrl=${encodeURIComponent(destination)}`)
   }
 
   const config = entry.challenge.config as { visibility?: string } | null

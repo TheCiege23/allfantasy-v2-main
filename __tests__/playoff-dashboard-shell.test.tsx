@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import PlayoffBracketShell from "@/components/brackets/playoffs/PlayoffBracketShell"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
@@ -88,6 +88,25 @@ describe("PlayoffBracketShell dashboard", () => {
     vi.clearAllMocks()
     useSessionMock.mockReturnValue({ data: null })
     getPlayoffBracketViewClientMock.mockResolvedValue(buildView())
+  })
+
+  it("adds another participant after they finalize while the Cup dashboard is open", async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }))
+    try {
+      const base = buildView()
+      const owner = { ...base.entries[0], isComplete: true, finalizedAt: new Date().toISOString(), rank: 1 }
+      const draft = { ...base.entries[0], id: "entry-2", userId: "user-2", name: "Friend's bracket", isComplete: false }
+      const initial = buildView({ challenge: { ...base.challenge, sport: "nba_cup" }, entries: [owner, draft], activeEntry: owner })
+      const finalized = { ...draft, isComplete: true, finalizedAt: new Date().toISOString(), rank: 2 }
+      getPlayoffBracketViewClientMock.mockResolvedValue({ ...initial, entries: [owner, finalized] })
+      const result = render(<PlayoffBracketShell initialView={initial} />)
+      expect(within(screen.getByTestId("playoff-dashboard-leaderboard")).queryByText(/Friend's bracket/)).not.toBeInTheDocument()
+      expect(screen.getByText(/1 saved bracket is not ranked yet/)).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect(within(screen.getByTestId("playoff-dashboard-leaderboard")).getByText(/Friend's bracket/)).toBeInTheDocument()
+      result.unmount()
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals() }
   })
 
   it("renders NBA dashboard title and does not show NCAA label", () => {

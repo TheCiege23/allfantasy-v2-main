@@ -248,6 +248,9 @@ export function MyLeaguesV4({
         </div>
 
         <div className="af-ml-actions">
+          <Link href="/brackets/my" className="af-ml-btn af-ml-btn--ghost">
+            {language?.startsWith('es') ? 'Mis cuadros' : 'My brackets'}
+          </Link>
           <Link href="/create-league" className="af-ml-btn">
             Create a league
           </Link>

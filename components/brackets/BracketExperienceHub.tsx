@@ -8,6 +8,7 @@ import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
 import { roundPointsTable } from "@/lib/playoffs/playoffScoring"
 import { createPlayoffBracketEntryClient, getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
 import { bracketExperienceCopy } from "@/lib/brackets/bracketExperienceCopy"
+import { bracketInviteUrl } from "@/lib/brackets/inviteUrl"
 import { orderHubTournaments, type HubTournament } from "@/lib/brackets/hubTournaments"
 import MlbBracketBoard from "./playoffs/MlbBracketBoard"
 import BracketFunnel, { funnelFromSeries } from "./BracketFunnel"
@@ -91,12 +92,10 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
     finally { if (generation.current === current) setLoading(false) }
   }
 
-  async function share(invite = false) {
+  async function share() {
     if (!view) return
-    const path = !invite && view.activeEntry
-      ? `/brackets/leagues/${view.challenge.id}/entries/${view.activeEntry.id}/view`
-      : `/brackets/leagues/${view.challenge.id}`
-    try { await navigator.clipboard.writeText(`${window.location.origin}${path}`); setNotice(copy.copied) }
+    const url = bracketInviteUrl(window.location.origin, view.challenge.id, view.challenge.inviteCode)
+    try { await navigator.clipboard.writeText(url); setNotice(copy.copied) }
     catch { setNotice(copy.copyFailed) }
   }
 
@@ -190,7 +189,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
         <section className="af-bx-panel"><div className="af-bx-sidebody"><p className="af-bx-eyebrow">{copy.leagues}</p><h2>{view?.challenge.name || copy.crew}</h2>
           <p className="af-bx-muted">{view ? `${view.participants?.length ?? 0} ${copy.members} · ${view.entries.length} ${copy.brackets}` : copy.crewBody}</p>
           {leagues.length > 1 ? <label className="af-bx-select">{copy.selectLeague}<select value={view?.challenge.id ?? leagues[0].challengeId} onChange={(event) => void selectLeague(event.target.value)}>{leagues.map((league) => <option key={league.challengeId} value={league.challengeId}>{league.name}</option>)}</select></label> : null}
-          {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share(true)} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share(true)}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
+          {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share()} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share()}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
         </div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2><Trophy size={17} />{copy.leaderboard}</h2></header><div className="af-bx-sidebody">{standings(3)}<Link className="af-bx-btn af-bx-wide" href={boardHref}>{copy.fullBoard} <ArrowRight size={14} /></Link></div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2>{copy.leagueRules}</h2></header><div className="af-bx-sidebody"><div className="af-bx-rule"><span>{copy.limit}</span><strong>{copy.capacity}</strong></div><div className="af-bx-rule"><span>{copy.visibility}</span><strong>{copy.hidden}</strong></div><div className="af-bx-rule"><span>{copy.tiebreak}</span><strong>{copy.total}</strong></div></div></section>
