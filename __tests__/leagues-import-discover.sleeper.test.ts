@@ -13,6 +13,9 @@ const getUserLeaguesMock = vi.fn()
  */
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    userProfile: {
+      findUnique: vi.fn().mockResolvedValue({ sleeperUserId: 'sleeper-user-1', sleeperUsername: 'theciege24' }),
+    },
     deletedLeagueTombstone: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
@@ -106,6 +109,50 @@ describe('POST /api/leagues/import/discover Sleeper account discovery', () => {
       'nfl',
       '2026',
     )
+  })
+
+  it('includes Sleeper NBA leagues in linked-account discovery', async () => {
+    getUserLeaguesMock.mockImplementation(async (_userId: string, sport: string) =>
+      sport === 'nba'
+        ? [{ league_id: 'nba-1', name: 'Road To Glory NBA', sport: 'nba', season: '2026', status: 'in_season', total_rosters: 32, settings: { type: 2 } }]
+        : [{ league_id: 'nfl-1', name: 'Football League', sport: 'nfl', season: '2026', status: 'in_season', total_rosters: 12, settings: { type: 2 } }],
+    )
+
+    const { POST } = await import('@/app/api/leagues/import/discover/route')
+    const res = await POST(new Request('http://localhost/api/leagues/import/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'sleeper', sport: 'all', season: '2026' }),
+    }) as any)
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.leagues.map((league: { sourceId: string; sport: string }) => [league.sourceId, league.sport])).toEqual([
+      ['nfl-1', 'nfl'],
+      ['nba-1', 'nba'],
+    ])
+    expect(getUserLeaguesMock).toHaveBeenCalledWith('sleeper-user-1', 'nfl', '2026')
+    expect(getUserLeaguesMock).toHaveBeenCalledWith('sleeper-user-1', 'nba', '2026')
+    expect(body.warning).toBeUndefined()
+  })
+
+  it('shows available leagues and warns if NBA discovery fails', async () => {
+    getUserLeaguesMock.mockImplementation(async (_userId: string, sport: string) => {
+      if (sport === 'nba') throw new Error('Sleeper unavailable')
+      return [{ league_id: 'nfl-1', name: 'Football League', sport: 'nfl', season: '2026', status: 'in_season', total_rosters: 12, settings: { type: 2 } }]
+    })
+
+    const { POST } = await import('@/app/api/leagues/import/discover/route')
+    const res = await POST(new Request('http://localhost/api/leagues/import/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'sleeper', sport: 'all', season: '2026' }),
+    }) as any)
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.leagues.map((league: { sourceId: string }) => league.sourceId)).toEqual(['nfl-1'])
+    expect(body.warning).toContain('NBA')
   })
 
   it('returns 404 when the provider account cannot be found', async () => {

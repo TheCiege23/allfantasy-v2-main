@@ -488,7 +488,7 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
     /* No setup words here: an empty Sleeper result is usually a typo, and a
        "connect your accounts" link would send someone to fix what is not broken. */
     return (
-      'No NFL leagues came back for that Sleeper username this season. Check the ' +
+      'No NFL or NBA leagues came back for that Sleeper username this season. Check the ' +
       'spelling, or leave it blank to use the Sleeper account on your profile.'
     )
   }
@@ -786,9 +786,8 @@ const TRACKED_SPORTS = ['nfl', 'nba', 'nhl', 'mlb'] as const
 /**
  * `sport` is a required field on league_connected, but DiscoveredLeague.sport is
  * an optional free string echoed back by the provider. Falling back to 'nfl' is
- * not a guess: both discovery calls in this file request `{ sport: 'nfl' }`
- * explicitly, so an unset or unrecognised value on a row we asked for as NFL is
- * a missing echo, not a different sport.
+ * only a fallback for providers that omit sport on the response. Sleeper discovery
+ * requests NFL and NBA, and its rows carry the actual provider sport.
  */
 function toSport(raw: string | undefined): Sport {
   const value = (raw ?? '').trim().toLowerCase()
@@ -976,7 +975,7 @@ export function ImportV4({
       setHandleLinkedElsewhere(false)
       setPhase({ k: 'discovering' })
       const seq = ++discoverSeq.current
-      const res = await discoverProviderLeagues(provider, identifier, { sport: 'nfl' })
+      const res = await discoverProviderLeagues(provider, identifier, { sport: provider === 'sleeper' ? 'all' : 'nfl' })
       if (seq !== discoverSeq.current) return
       if (!res.ok && res.verificationRequired) {
         setVerifyGate({ k: 'discover', identifier })
@@ -1028,6 +1027,7 @@ export function ImportV4({
         leagues?: DiscoveredLeague[]
         accountLabel?: string
         handleLinkedElsewhere?: boolean
+        warning?: string
       }
       const found = payload?.leagues ?? []
       setLeagues(found)
@@ -1047,7 +1047,8 @@ export function ImportV4({
        * so it has no answer to report. Speaking there would greet someone with an
        * error for a screen they had only just opened.
        */
-      if (found.length === 0) setError(emptyDiscoveryMessage(provider))
+      if (payload?.warning) setError(payload.warning)
+      else if (found.length === 0) setError(emptyDiscoveryMessage(provider))
       setPhase({ k: 'idle' })
     },
     [provider, yahooConnected]
@@ -1066,7 +1067,7 @@ export function ImportV4({
     if (!supportsImportProviderDiscovery(provider)) return
     let cancelled = false
     const seq = discoverSeq.current
-    void discoverProviderLeagues(provider, '', { sport: 'nfl' }).then((res) => {
+    void discoverProviderLeagues(provider, '', { sport: provider === 'sleeper' ? 'all' : 'nfl' }).then((res) => {
       // An explicit lookup started since then owns the screen now.
       if (cancelled || seq !== discoverSeq.current) return
       /*
@@ -1080,7 +1081,8 @@ export function ImportV4({
         return
       }
       if (!res.ok) return
-      const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
+      const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string; warning?: string }
+      if (payload?.warning) setError(payload.warning)
       if (!payload?.leagues?.length) return
       setLeagues(payload.leagues)
       setExcluded(defaultExclusionsFor(payload.leagues))
