@@ -489,6 +489,7 @@ async function resolvePlayers(
    * someone's lineup — see `providerIdentityNames.ts`.
    */
   platform: string,
+  fantraxSnapshotId?: string | null,
 ): Promise<Map<string, LineupPlayer>> {
   /*
    * ⚠ IN AN IDP LEAGUE THE GENERIC NUMBER IS NOT A PROJECTION OF ANYTHING for a
@@ -875,7 +876,7 @@ async function resolvePlayers(
 
   const unresolvedIds = ids.filter((id) => !out.has(id))
   const providerNames = unresolvedIds.length
-    ? await lookupProviderIdentityNames(platform, sport, unresolvedIds).catch(
+    ? await lookupProviderIdentityNames(platform, sport, unresolvedIds, fantraxSnapshotId).catch(
         () => new Map<string, { name: string }>(),
       )
     : new Map<string, { name: string }>()
@@ -1228,7 +1229,8 @@ async function loadMyTeamData(
     projectionWeek,
     sportsWeek,
     scoringSettings,
-    String(league.platform ?? '')
+    String(league.platform ?? ''),
+    league.platformLeagueId,
   ))
 
   // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
@@ -1641,7 +1643,7 @@ async function loadMyTeamData(
     const missing = [...new Set([...lineups.values()].flat())].filter((id) => !resolved.has(id))
     const extra =
       missing.length > 0
-        ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''))
+        ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''), league.platformLeagueId)
         : new Map<string, LineupPlayer>()
     if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
     // The opponent's starters get the same game-day read yours did, so the forecast knows who has played.
