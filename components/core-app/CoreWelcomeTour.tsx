@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSignInPushVisible } from '@/lib/push-notifications/signInPushVisibility'
 import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
 import { useMessages } from '@/components/i18n/useMessages'
 import { coreWelcomeTourMessages } from '@/lib/core-app/messages/coreWelcomeTour'
@@ -32,6 +33,18 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   const m = useMessages(coreWelcomeTourMessages)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
+  const pushVisible = useSignInPushVisible()
+  const guide = useRef<HTMLElement | null>(null)
+  const deferred = useRef(false)
+  const turn = useHomePromptTurn('welcome-tour', open)
+  useEffect(() => {
+    if (pushVisible) { deferred.current = true; return }
+    if (open && turn && deferred.current) {
+      guide.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      guide.current?.focus({ preventScroll: true })
+      deferred.current = false
+    }
+  }, [open, pushVisible, turn])
 
   useEffect(() => {
     try {
@@ -73,8 +86,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   ]
 
   // One optional prompt at a time on the /core home (HomePromptSlot).
-  const turn = useHomePromptTurn('welcome-tour', open)
-  if (!turn) return null
+  if (!turn || pushVisible) return null
   const current = steps[step]
 
   function finish() {
@@ -83,7 +95,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   }
 
   return (
-    <section className="af-welcome" aria-labelledby="af-welcome-title">
+    <section ref={guide} tabIndex={-1} className="af-welcome" aria-labelledby="af-welcome-title">
       <div
         className="af-welcome-progress"
         role="progressbar"
@@ -99,6 +111,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       <h2 id="af-welcome-title">{current.title}</h2>
       <p>{current.body}</p>
       <div className="af-welcome-actions">
+        <button type="button" onClick={finish}>{m.closeGuide}</button>
         {current.action ? <Link href={current.action.href} onClick={finish}>{current.action.label}</Link> : null}
         {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{m.back}</button> : null}
         {step < steps.length - 1 ? (

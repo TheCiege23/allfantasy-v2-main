@@ -15,6 +15,8 @@ const querySchema = z.object({
   sport: z.string().trim().optional(),
 });
 
+const NON_NFL_SPORTS = ['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'];
+
 export async function GET(req: Request) {
   // Unauthenticated catalog search over ~95k rows, driven by 250ms-debounced
   // autocomplete. `includeIpInKey` is load-bearing: without it the key collapses to
@@ -48,11 +50,12 @@ export async function GET(req: Request) {
   const found = await (prisma as any).sportsPlayer.findMany({
     where: {
       ...(sportUpper ? { sport: sportUpper } : {}),
-      // A result with no sleeperId has no public /players/{slug} page — see
-      // lib/core-app/playerSlug.ts. Filtering here, not just at link-build time,
-      // means every hit this endpoint returns is guaranteed clickable rather than
-      // a dead end the caller has to silently drop.
-      sleeperId: { not: null },
+      // NFL pages use Sleeper ids. Other sports use source-qualified external ids.
+      ...(sportUpper === 'NFL' ? { sleeperId: { not: null } } :
+        !sportUpper ? { AND: [{ OR: [
+          { sport: 'NFL', sleeperId: { not: null } },
+          { sport: { in: NON_NFL_SPORTS } },
+        ] }] } : {}),
       OR: [
         { name: { contains: q, mode: 'insensitive' } },
         { position: { contains: q, mode: 'insensitive' } },
@@ -60,7 +63,7 @@ export async function GET(req: Request) {
     },
     // `externalId` is what the Player Finder's links are keyed on (sport-qualified,
     // see lib/core-app/playerRef.ts); additive, every earlier caller ignores it.
-    select: { id: true, externalId: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
+    select: { id: true, externalId: true, source: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
     // Over-fetch: one person is stored once PER PROVIDER (Sleeper, Rolling Insights,
     // TheSportsDB…), so `limit` rows can be as few as limit/3 people. See collapse below.
     take: Math.min(limit * PROVIDER_ROWS_PER_PERSON, 200),
@@ -93,6 +96,7 @@ const PROVIDER_ROWS_PER_PERSON = 4;
 type SearchRow = {
   id: string;
   externalId: string;
+  source?: string | null;
   name: string;
   sport: string;
   position: string | null;
@@ -121,11 +125,13 @@ function collapseSamePerson(rows: SearchRow[]): SearchRow[] {
   const groups = new Map<string, SearchRow[]>();
   const loose: SearchRow[] = [];
   for (const row of rows) {
-    if (!row.sleeperId) {
+    if (row.sport === 'NFL' && !row.sleeperId) {
       loose.push(row);
       continue;
     }
-    const key = `${row.sport}|${row.sleeperId}`;
+    const key = row.sport === 'NFL'
+      ? `${row.sport}|${row.sleeperId}`
+      : `${row.sport}|${row.source ?? ''}|${row.externalId}`;
     const group = groups.get(key);
     if (group) group.push(row);
     else groups.set(key, [row]);

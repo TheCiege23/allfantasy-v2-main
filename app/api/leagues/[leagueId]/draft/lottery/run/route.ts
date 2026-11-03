@@ -14,6 +14,7 @@ import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } 
 import { runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,9 @@ export async function POST(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
+
+  const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
+  if (lotteryRestriction) return NextResponse.json({ error: lotteryRestriction }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const finalize = Boolean(body.finalize)

@@ -379,6 +379,17 @@ export function TradeCenter({
                   </div>
                 </div>
                 )}
+                {p.tradeGrade?.gradeScope === 'zombie_future_scoring' ? (
+                  <p className="mt-2 rounded border border-amber-300/20 bg-amber-300/[0.06] px-2 py-1.5 text-[11px] text-amber-50/85" data-testid="zombie-item-grade-scope">
+                    {p.tradeGrade.giveValue != null && p.tradeGrade.getValue != null
+                      ? pickEnEs({
+                          en: `Projected future scoring: gives ${Math.round(p.tradeGrade.giveValue)} points, gets ${Math.round(p.tradeGrade.getValue)} points.`,
+                          es: `Puntos futuros proyectados: entrega ${Math.round(p.tradeGrade.giveValue)} puntos, recibe ${Math.round(p.tradeGrade.getValue)} puntos.`,
+                        }, language)
+                      : p.tradeGrade.gradeWithheld}
+                    {' '}{pickEnEs({ en: 'Item estimates hold today’s Horde share constant. The full grade is withheld until infection, revival, loot and cash payouts can be priced.', es: 'La estimación de objetos mantiene constante la proporción actual de zombis. La calificación completa se retiene hasta valorar infección, resurrección, botín y premios en efectivo.' }, language)}
+                  </p>
+                ) : null}
                 {multiTeam && p.tradeGrade?.gradeWithheld ? (
                   <p className="mt-2 text-white/45" data-testid="trade-proposal-grade-note">
                     {p.tradeGrade.gradeWithheld === MULTI_TEAM_GRADE_WITHHELD_EN

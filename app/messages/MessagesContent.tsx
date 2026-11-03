@@ -170,6 +170,7 @@ export default function MessagesContent() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [mediaViewerUrl, setMediaViewerUrl] = useState<string | null>(null)
+  const messageListRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pinned, setPinned] = useState<PlatformChatMessage[]>([])
@@ -448,9 +449,15 @@ export default function MessagesContent() {
 
   useEffect(() => {
     if (!focusedMessageId) return
+    const list = messageListRef.current
     const target = document.getElementById(`message-row-${focusedMessageId}`)
-    if (!target) return
-    target.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (!list || !target || !list.contains(target)) return
+    const listBounds = list.getBoundingClientRect()
+    const targetBounds = target.getBoundingClientRect()
+    list.scrollTo({
+      top: list.scrollTop + targetBounds.top - listBounds.top - (list.clientHeight - targetBounds.height) / 2,
+      behavior: "smooth",
+    })
     const timer = window.setTimeout(() => setFocusedMessageId(null), 2800)
     return () => window.clearTimeout(timer)
   }, [focusedMessageId, messages])
@@ -873,7 +880,7 @@ export default function MessagesContent() {
           className="mode-panel rounded-2xl border overflow-hidden"
           style={{ borderColor: "var(--border)", minHeight: "420px" }}
         >
-          <div className="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-[280px_minmax(0,1fr)]">
             <div
               className={`border-b md:border-b-0 md:border-r flex flex-col ${selectedThreadId ? "hidden md:flex" : "flex"}`}
               style={{ borderColor: "var(--border)" }}
@@ -975,7 +982,7 @@ export default function MessagesContent() {
               </ul>
             </div>
 
-            <div className={`flex flex-col min-h-[320px] ${selectedThreadId ? "flex" : "hidden md:flex"}`}>
+            <div className={`min-w-0 flex flex-col min-h-[320px] ${selectedThreadId ? "flex" : "hidden md:flex"}`}>
               {selectedThreadId ? (
                 <>
                   <div className="flex items-center gap-2 p-3 border-b" style={{ borderColor: "var(--border)" }}>
@@ -1134,7 +1141,7 @@ export default function MessagesContent() {
                         : `${hiddenBlockedMessageCount} messages are hidden because senders are blocked.`}
                     </p>
                   )}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-[200px]">
+                  <div ref={messageListRef} className="min-h-[200px] max-h-[60dvh] flex-1 overflow-y-auto p-3 space-y-2">
                     {selectedThreadId && pinned.length > 0 && (
                       <PinnedSection
                         pinned={pinned}
@@ -1390,7 +1397,7 @@ export default function MessagesContent() {
                               : "Message… (type @ to mention)"
                       }
                       disabled={selectedThreadBlockedDirect || !selectedThreadAllowsReplies}
-                      className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+                      className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-base outline-none sm:text-sm"
                       style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
                     />
                     {showMentionDropdown && mentionState && (

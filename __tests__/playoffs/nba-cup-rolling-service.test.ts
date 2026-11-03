@@ -65,6 +65,12 @@ describe("NBA Cup server rules", () => {
     expect(db.playoffBracketEntry.updateMany).toHaveBeenCalledWith({ where: { id: "entry", finalizedAt: null }, data: { finalizedAt: expect.any(Date) } })
     expect(db.playoffBracketEntry.update).toHaveBeenCalledWith({ where: { id: "entry" }, data: { tiebreakerTotalScore: 211 } })
   })
+
+  it("finalizes Cup picks without requiring or replacing a championship guess", async () => {
+    await expect(submitPlayoffBracketEntry(input)).resolves.toMatchObject({ entryId: "entry" })
+    expect(db.playoffBracketEntry.updateMany).toHaveBeenCalledWith({ where: { id: "entry", finalizedAt: null }, data: { finalizedAt: expect.any(Date) } })
+    expect(db.playoffBracketEntry.update).not.toHaveBeenCalled()
+  })
   it("preserves the CFP first-game lock", async () => {
     db.playoffBracketSeries.findUnique.mockResolvedValue({ ...game, challenge: { ...challenge, sport: "ncaaf" } })
     await expect(savePlayoffBracketPick(input)).rejects.toThrow(/first game/)

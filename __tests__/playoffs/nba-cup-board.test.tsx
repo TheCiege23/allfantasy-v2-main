@@ -20,6 +20,42 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("offers a direct link to later Group Play dates with pick controls available", () => {
+    const v = view()
+    const first = v.series.find((game) => game.id === "group")!
+    v.series.push({ ...first, id: "later", seriesNumber: 1003, startsAt: "2099-11-13T20:00:00Z" })
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    const dates = screen.getByRole("navigation", { name: "Jump to a Group Play date" })
+    const later = within(dates).getByRole("link", { name: /Nov 13/ })
+    const day = document.getElementById(later.getAttribute("href")!.slice(1))!
+    expect(within(day).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
+    expect(screen.getByRole("link", { name: /Next date: .*Nov 13/ })).toHaveAttribute("href", later.getAttribute("href"))
+  })
+
+  it("shows mobile knockout rounds and only enables picks before tipoff", () => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    try {
+      const v = view()
+      v.activeEntry!.finalizedAt = "2020-10-29T00:00:00Z"
+      const matchup = { homeTeamName: "Boston Celtics", awayTeamName: "Charlotte Hornets" }
+      const quarter = v.series.find((game) => game.round === "cup_quarterfinals")!
+      const semi = v.series.find((game) => game.round === "cup_semifinals")!
+      Object.assign(quarter, matchup, { startsAt: "2020-12-04T00:00:00Z" })
+      Object.assign(semi, matchup, { startsAt: "2099-12-08T00:00:00Z" })
+      render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+      expect(screen.queryByTestId("pb-scroller")).not.toBeInTheDocument()
+      expect(within(screen.getByTestId(`cup-game-${quarter.seriesNumber}`)).getByRole("button", { name: "Pick Boston Celtics" })).toBeDisabled()
+      expect(within(screen.getByRole("region", { name: "Semifinals" })).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
+      expect(screen.getByRole("region", { name: "Championship" })).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("keeps incomplete group finals pending in the standings and tournament phases", () => {
     const v=view()
     v.series=v.series.filter((game) => game.id === "past").map((game) => ({...game,liveHomeScore:110,liveAwayScore:105}))
@@ -39,7 +75,8 @@ describe("NBA Cup remaining-game board", () => {
   })
   it("explains group-play scoring above both stages using the scorer's points", () => {
     render(<MlbBracketBoard view={view()} onViewChange={() => {}} />)
-    const scoring = screen.getByRole("region", { name: "NBA Cup scoring" })
+    fireEvent.click(screen.getByText("Scoring rules"))
+    const scoring = screen.getByLabelText("NBA Cup scoring")
     expect(within(scoring).getByText(/Each correct Group Play winner earns 1 point/)).toHaveTextContent("Group Play and knockout points both count toward your league and universal standings.")
     const tiles = within(scoring).getByTestId("pb-scoring-tiles")
     expect(Array.from(tiles.children).map((tile) => tile.textContent)).toEqual([
@@ -55,6 +92,8 @@ describe("NBA Cup remaining-game board", () => {
     expect(within(group).getByRole("img", { name: "Boston Celtics" })).toHaveAttribute("src", "https://example.test/bos.png")
     expect(screen.getByText(/Join anytime/)).toBeInTheDocument()
     expect(screen.queryByText(/must be published/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Knockout picks open after Group Play ends/)).toBeVisible()
+    expect(screen.queryByTestId("pb-scroller")).not.toBeInTheDocument()
     expect(screen.queryByTestId("cup-game-1002")).not.toBeInTheDocument()
     expect(within(screen.getByTestId("cup-game-1001")).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
   })

@@ -18,7 +18,7 @@ import {
 import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SelectionCheck } from '@/components/ui/selection-check'
-import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
+import { intlLocaleOrBrowserDefault, pickEnEs } from '@/lib/i18n/bilingual'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -31,6 +31,9 @@ type PreviewGrade = {
   giveValue: number | null
   getValue: number | null
   evaluationReceiptId: string | null
+  gradeScope?: 'zombie_future_scoring'
+  zombieEligibility?: { status: 'eligible' | 'blocked'; reason?: string }
+  zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
 }
 
 function initials(name: string): string {
@@ -810,7 +813,24 @@ export function TradeCenterModal({
                   </span>
                 ) : null}
               </div>
-              {serverGrade?.grade && serverGrade.giveValue != null && serverGrade.getValue != null ? (
+              {serverGrade?.zombieEligibility && (
+                <div role="status" className="rounded border border-white/20 bg-black/30 p-2 text-xs text-white">
+                  <strong>{serverGrade.zombieEligibility.status === 'blocked'
+                    ? pickEnEs({ en: 'Zombie trade blocked', es: 'Intercambio Zombie bloqueado' }, language)
+                    : pickEnEs({ en: 'Current Zombie eligibility verified', es: 'Elegibilidad Zombie actual verificada' }, language)}</strong>
+                  {serverGrade.zombieEligibility.reason && <p>{serverGrade.zombieEligibility.reason}</p>}
+                </div>
+              )}
+              {serverGrade?.zombieInventory && (
+                <section className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Projected item points · Before → After', es: 'Puntos proyectados de objetos · Antes → Después' }, language)}</h4>
+                  <dl className="mt-1 grid grid-cols-2 gap-2">
+                    <div><dt>{proposerName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.proposer.before} → {serverGrade.zombieInventory.proposer.after}</dd></div>
+                    <div><dt>{receiverName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.receiver.before} → {serverGrade.zombieInventory.receiver.after}</dd></div>
+                  </dl>
+                </section>
+              )}
+              {(serverGrade?.grade || serverGrade?.gradeScope === 'zombie_future_scoring') && serverGrade?.giveValue != null && serverGrade?.getValue != null ? (
                 <div className="grid grid-cols-2 gap-2 text-[11px]" data-testid="trade-value-grade-totals">
                   <div className="rounded border border-white/10 bg-black/20 p-2">
                     <p className="text-white/50">{tInterpolate('tradeCenter.modal.teamSends', { name: proposerName })}</p>
@@ -826,7 +846,17 @@ export function TradeCenterModal({
                   {tInterpolate('tradeCenter.modal.review.notGraded', { reason: serverGrade.gradeWithheld })}
                 </p>
               ) : null}
-              {serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
+              {serverGrade?.gradeScope === 'zombie_future_scoring'
+                ? <p className="text-[11px] text-white/70">{pickEnEs({ en: 'Future scoring estimate only', es: 'Solo estimación de puntos futuros' }, language)}</p>
+                : serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
+              {serverGrade?.gradeScope === 'zombie_future_scoring' ? (
+                <p className="text-[11px] text-amber-200/80" data-testid="zombie-item-preview-scope">
+                  {pickEnEs({
+                    en: 'Item estimates use current inventory and hold today’s Horde share constant. The full grade is withheld until infection, revival, loot and cash payouts can be priced.',
+                    es: 'La estimación de objetos usa el inventario actual y mantiene constante la proporción de zombis. La calificación completa se retiene hasta valorar infección, resurrección, botín y premios en efectivo.',
+                  }, language)}
+                </p>
+              ) : null}
               {/*
                 * Phase 6.2/6.3/6.4 — the derivation, not just the verdict. Everything below was
                 * already computed and stored by the engine and rendered nowhere, which made the

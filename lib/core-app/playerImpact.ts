@@ -83,8 +83,8 @@ export type LeagueImpact = {
   isStarting: boolean
   afPoints: SectionState<{
     points: number
-    matchedKeys: number
-    scoredKeys: number
+    matchedKeys: number | null
+    scoredKeys: number | null
   }>
   replacements: SectionState<ReplacementOption[]>
   /**

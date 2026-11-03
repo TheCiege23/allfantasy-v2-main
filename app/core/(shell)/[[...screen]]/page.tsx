@@ -84,6 +84,7 @@ import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
@@ -2400,7 +2401,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const finderScope = resolveLeagueScope(playedLeagues.map((l) => l.id), finderSavedPicks)
   const finderLeagueIds = finderScope.leagueIds
 
-  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
+  const playerSport = normalizeFinderSport(sp.sport)
+  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
    * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
@@ -3679,6 +3681,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           language: hubLanguage,
         }).catch(() => null)
       : null
+
+  // A native commissioner starts with the league's actual settings editors.
+  // The existing activity workspace remains reachable from that page.
+  if (commissionerHub?.allowed && commissionerHub.league.native && sp.workspace !== 'activity') {
+    redirect(`/league/${encodeURIComponent(commissionerHub.league.id)}?view=commissioner`)
+  }
 
   /*
    * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
@@ -5043,6 +5051,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'players' ? (
         <PlayerFinder
           query={playerQuery}
+          sport={playerSport}
           matches={playerMatches}
           detail={playerDetail}
           leagueCount={finderScope.count}

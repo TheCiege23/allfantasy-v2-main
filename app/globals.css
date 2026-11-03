@@ -580,13 +580,13 @@
 }
 
 html[data-mode="dark"] .af-world-cup-page,
-html[data-mode="legacy"] .af-world-cup-page {
+html[data-mode="legacy"] .af-world-cup-page:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background: #05070b !important;
   color: white !important;
 }
 
 html[data-mode="dark"] .af-world-cup-header,
-html[data-mode="legacy"] .af-world-cup-header {
+html[data-mode="legacy"] .af-world-cup-header:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background:
     radial-gradient(circle at 50% 0%, rgba(251,191,36,0.16), transparent 34%),
     radial-gradient(circle at 8% 0%, rgba(34,211,238,0.16), transparent 38%),
@@ -595,7 +595,7 @@ html[data-mode="legacy"] .af-world-cup-header {
 }
 
 html[data-mode="dark"] .af-world-cup-promo-card,
-html[data-mode="legacy"] .af-world-cup-promo-card {
+html[data-mode="legacy"] .af-world-cup-promo-card:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background:
     radial-gradient(circle at 12% 0%, rgba(34,211,238,0.22), transparent 32%),
     radial-gradient(circle at 88% 12%, rgba(251,191,36,0.18), transparent 30%),
@@ -603,7 +603,7 @@ html[data-mode="legacy"] .af-world-cup-promo-card {
   border-color: rgba(165,243,252,0.25);
 }
 
-html[data-mode="light"] .af-world-cup-atmosphere {
+html[data-mode="light"] .af-world-cup-atmosphere:where(:not(.af-draft-dark, .af-draft-dark *)) {
   display: none !important;
 }
 
@@ -617,7 +617,7 @@ html[data-mode="dark"] .mode-image-safe {
   filter: saturate(1.05) brightness(1.02);
 }
 
-html[data-mode="legacy"] .mode-image-safe {
+html[data-mode="legacy"] .mode-image-safe:where(:not(.af-draft-dark, .af-draft-dark *)) {
   filter: hue-rotate(-8deg) saturate(1.08) brightness(1.03);
 }
 
@@ -629,7 +629,7 @@ html[data-mode="legacy"] .mode-image-safe {
     drop-shadow(0 0 64px rgba(59, 130, 246, 0.16));
 }
 
-html[data-mode="light"] .hero-shield {
+html[data-mode="light"] .hero-shield:where(:not(.af-draft-dark, .af-draft-dark *)) {
   /* Light mode: soft natural shadow, no glow */
   filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.13));
 }
@@ -678,145 +678,145 @@ footer button {
   align-items: center;
 }
 
-html[data-mode="light"] .mode-readable [class*="text-white"] {
+html[data-mode="light"] .mode-readable [class*="text-white"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   color: var(--text) !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="text-gray-"] {
+html[data-mode="light"] .mode-readable [class*="text-gray-"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   color: var(--muted) !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="bg-black"] {
+html[data-mode="light"] .mode-readable [class*="bg-black"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: color-mix(in srgb, var(--panel2) 88%, transparent) !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="bg-slate-950"],
-html[data-mode="light"] .mode-readable [class*="bg-slate-900"],
-html[data-mode="light"] .mode-readable [class*="bg-slate-800"],
-html[data-mode="light"] .mode-readable [class*="bg-slate-700"] {
+html[data-mode="light"] .mode-readable [class*="bg-slate-950"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-slate-900"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-slate-800"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-slate-700"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: color-mix(in srgb, var(--panel) 94%, transparent) !important;
   color: var(--text) !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="text-slate-500"],
-html[data-mode="light"] .mode-readable [class*="text-slate-400"],
-html[data-mode="light"] .mode-readable [class*="text-slate-300"],
-html[data-mode="light"] .mode-readable [class*="text-slate-200"] {
+html[data-mode="light"] .mode-readable [class*="text-slate-500"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="text-slate-400"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="text-slate-300"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="text-slate-200"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   color: var(--muted) !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="border-slate-800"],
-html[data-mode="light"] .mode-readable [class*="border-slate-700"],
-html[data-mode="light"] .mode-readable [class*="border-slate-600"] {
+html[data-mode="light"] .mode-readable [class*="border-slate-800"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="border-slate-700"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="border-slate-600"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   border-color: var(--border) !important;
 }
 
 /* Common arbitrary dark backgrounds used across app pages (light mode fallback).
    Covers the frequent dark navy/midnight/slate hex values used as page + panel bg.
    Grouped by function: page roots, panel/card, gradient stops, gradient intermediates. */
-html[data-mode="light"] .mode-readable [class*="bg-[#020617]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#020711]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#02061a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#030816]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#030a1f]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#040914]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#040915]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#05060a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#05060b]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#05070b]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#060b1a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#07071a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#070b16]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#070b17]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#07111a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#081026]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#081121]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#081226]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#081329]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#090f1f]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0a0f]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0a12]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0a18]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0a1a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0a1f]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a0e1a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a1220]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a1228]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0a1328]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0B0F1E]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0b0f1e]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0b1120]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0b1326]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0c0c1e]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0c1020]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0c1224]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d0d1f]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d0d17]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d1117]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d1125]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d1526]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0d1528]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0E1424]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0e1424]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f0f14]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f0f1a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f1117]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f1521]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f172a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#101224]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#110b1e]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#111938]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#1a1a2e]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#1a1f3a]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#020617]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#020711]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#02061a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#030816]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#030a1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#040914]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#040915]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#05060a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#05060b]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#05070b]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#060b1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#07071a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#070b16]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#070b17]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#07111a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#081026]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#081121]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#081226]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#081329]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#090f1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0a0f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0a12]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0a18]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0a1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0a1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a0e1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a1220]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a1228]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0a1328]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0B0F1E]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0b0f1e]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0b1120]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0b1326]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0c0c1e]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0c1020]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0c1224]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d0d1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d0d17]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d1117]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d1125]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d1526]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0d1528]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0E1424]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0e1424]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f0f14]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f0f1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f1117]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f1521]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f172a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#101224]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#110b1e]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#111938]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#1a1a2e]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#1a1f3a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
 /* 2026-08-24 audit sweep: the highest-traffic dark hexes the clamp missed —
    measured on /dashboard, /league/*, draft room, and the AI-tools modals,
    where an unclamped panel plus the clamp's own text-white rule rendered
    dark-on-dark. */
-html[data-mode="light"] .mode-readable [class*="bg-[#030a20]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#050814]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#070b14]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0b0e2a]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0b1020]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0c1018]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#0f141d]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#121725]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#12163e]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#131929]"],
-html[data-mode="light"] .mode-readable [class*="bg-[#242838]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#030a20]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#050814]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#070b14]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0b0e2a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0b1020]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0c1018]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#0f141d]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#121725]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#12163e]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#131929]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="bg-[#242838]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
 /* gradient from-stops */
-html[data-mode="light"] .mode-readable [class*="from-[#07071a]"],
-html[data-mode="light"] .mode-readable [class*="from-[#0a0a0f]"],
-html[data-mode="light"] .mode-readable [class*="from-[#0d0d17]"],
+html[data-mode="light"] .mode-readable [class*="from-[#07071a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="from-[#0a0a0f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="from-[#0d0d17]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
 /* gradient via-stops */
-html[data-mode="light"] .mode-readable [class*="via-[#0d0d17]"],
+html[data-mode="light"] .mode-readable [class*="via-[#0d0d17]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
 /* gradient to-stops */
-html[data-mode="light"] .mode-readable [class*="to-[#0d0d1f]"],
-html[data-mode="light"] .mode-readable [class*="to-[#0f0f1a]"],
-html[data-mode="light"] .mode-readable [class*="to-[#0d1117]"] {
+html[data-mode="light"] .mode-readable [class*="to-[#0d0d1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="to-[#0f0f1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable [class*="to-[#0d1117]"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: color-mix(in srgb, var(--panel) 94%, transparent) !important;
   background-image: none !important;
 }
 
-html[data-mode="light"] .mode-readable [class*="border-white"] {
+html[data-mode="light"] .mode-readable [class*="border-white"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   border-color: var(--border) !important;
 }
 
 /* Root-level rescue for full-page surfaces that carry mode-readable themselves.
    The descendant rules above do not match the root element, so fixed or
    full-screen pages need equivalent self rules in light mode. */
-html[data-mode="light"] .mode-readable[class*="bg-[#05070b]"],
-html[data-mode="light"] .mode-readable[class*="bg-[#020713]"],
-html[data-mode="light"] .mode-readable[class*="bg-[#020711]"],
-html[data-mode="light"] .mode-readable[class*="bg-[#0a0a1f]"],
-html[data-mode="light"] .mode-readable[class*="bg-slate-950"],
-html[data-mode="light"] .mode-readable[class*="bg-slate-900"],
-html[data-mode="light"] .mode-readable[class*="bg-slate-800"] {
+html[data-mode="light"] .mode-readable[class*="bg-[#05070b]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-[#020713]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-[#020711]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-[#0a0a1f]"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-slate-950"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-slate-900"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .mode-readable[class*="bg-slate-800"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: var(--bg) !important;
   background-image: none !important;
   color: var(--text) !important;
 }
 
-html[data-mode="legacy"] .mode-readable [class*="text-black"] {
+html[data-mode="legacy"] .mode-readable [class*="text-black"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   color: var(--text) !important;
 }
 
@@ -1045,12 +1045,12 @@ h1, h2, h3, h4, h5, h6 {
 
 .gradient-bg-orbs { display: none; }
 
-html[data-mode="legacy"] .gradient-bg-orbs { display: block; }
+html[data-mode="legacy"] .gradient-bg-orbs:where(:not(.af-draft-dark, .af-draft-dark *)) { display: block; }
 
-html[data-mode="legacy"] .gradient-orb-1 { background: rgba(139,92,246,0.18); }
-html[data-mode="legacy"] .gradient-orb-2 { background: rgba(16,185,129,0.10); }
-html[data-mode="legacy"] .gradient-orb-3 { background: rgba(124,58,237,0.12); }
-html[data-mode="legacy"] .gradient-overlay { background: linear-gradient(to bottom, rgba(139,92,246,0.04), transparent, rgba(16,185,129,0.03)); }
+html[data-mode="legacy"] .gradient-orb-1:where(:not(.af-draft-dark, .af-draft-dark *)) { background: rgba(139,92,246,0.18); }
+html[data-mode="legacy"] .gradient-orb-2:where(:not(.af-draft-dark, .af-draft-dark *)) { background: rgba(16,185,129,0.10); }
+html[data-mode="legacy"] .gradient-orb-3:where(:not(.af-draft-dark, .af-draft-dark *)) { background: rgba(124,58,237,0.12); }
+html[data-mode="legacy"] .gradient-overlay:where(:not(.af-draft-dark, .af-draft-dark *)) { background: linear-gradient(to bottom, rgba(139,92,246,0.04), transparent, rgba(16,185,129,0.03)); }
 
 h1, h2, h3 {
   letter-spacing: -0.01em;
@@ -1115,7 +1115,7 @@ input:where([type='checkbox'], [type='radio']):where([class^='accent-'], [class*
 }
 
 html[data-mode="dark"] .glow-box,
-html[data-mode="legacy"] .glow-box {
+html[data-mode="legacy"] .glow-box:where(:not(.af-draft-dark, .af-draft-dark *)) {
   box-shadow:
     0 0 20px rgba(34,211,238,0.15),
     0 0 60px rgba(34,211,238,0.08),
@@ -1123,7 +1123,7 @@ html[data-mode="legacy"] .glow-box {
 }
 
 html[data-mode="dark"] .glow-box-strong,
-html[data-mode="legacy"] .glow-box-strong {
+html[data-mode="legacy"] .glow-box-strong:where(:not(.af-draft-dark, .af-draft-dark *)) {
   box-shadow:
     0 0 30px rgba(34,211,238,0.2),
     0 0 80px rgba(139,92,246,0.1),
@@ -1258,7 +1258,7 @@ html[data-mode="legacy"] .glow-box-strong {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 html[data-mode="dark"] .hover-lift:hover,
-html[data-mode="legacy"] .hover-lift:hover {
+html[data-mode="legacy"] .hover-lift:hover:where(:not(.af-draft-dark, .af-draft-dark *)) {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
@@ -1324,76 +1324,76 @@ html[data-mode="legacy"] .hover-lift:hover {
   display: none;
 }
 
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-cyan-300,
-html[data-mode="light"] .text-cyan-300 { color: #0891b2; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-cyan-400,
-html[data-mode="light"] .text-cyan-400 { color: #0e7490; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-200,
-html[data-mode="light"] .text-amber-200 { color: #92400e; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-300,
-html[data-mode="light"] .text-amber-300 { color: #b45309; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-400,
-html[data-mode="light"] .text-amber-400 { color: #d97706; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-300,
-html[data-mode="light"] .text-emerald-300 { color: #047857; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-400,
-html[data-mode="light"] .text-emerald-400 { color: #059669; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-300,
-html[data-mode="light"] .text-red-300 { color: #dc2626; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-400,
-html[data-mode="light"] .text-red-400 { color: #b91c1c; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-300,
-html[data-mode="light"] .text-red-300 { color: #dc2626; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-200,
-html[data-mode="light"] .text-red-200 { color: #b91c1c; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-200,
-html[data-mode="light"] .text-emerald-200 { color: #047857; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-100,
-html[data-mode="light"] .text-emerald-100 { color: #065f46; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-green-300,
-html[data-mode="light"] .text-green-300 { color: #15803d; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-green-400,
-html[data-mode="light"] .text-green-400 { color: #166534; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-sky-300,
-html[data-mode="light"] .text-sky-300 { color: #0369a1; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-sky-400,
-html[data-mode="light"] .text-sky-400 { color: #0284c7; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-violet-300,
-html[data-mode="light"] .text-violet-300 { color: #6d28d9; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-violet-400,
-html[data-mode="light"] .text-violet-400 { color: #5b21b6; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-purple-300,
-html[data-mode="light"] .text-purple-300 { color: #7c3aed; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-purple-400,
-html[data-mode="light"] .text-purple-400 { color: #6d28d9; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-indigo-300,
-html[data-mode="light"] .text-indigo-300 { color: #4338ca; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-indigo-400,
-html[data-mode="light"] .text-indigo-400 { color: #3730a3; }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .bg-white\/10,
-html[data-mode="light"] .bg-white\/10 { background: rgba(2,6,23,0.06); }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .bg-white\/5,
-html[data-mode="light"] .bg-white\/5 { background: rgba(2,6,23,0.03); }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/20,
-html[data-mode="light"] .border-white\/20 { border-color: rgba(2,6,23,0.12); }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/15,
-html[data-mode="light"] .border-white\/15 { border-color: rgba(2,6,23,0.10); }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/10,
-html[data-mode="light"] .border-white\/10 { border-color: rgba(2,6,23,0.08); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-cyan-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-cyan-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #0891b2; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-cyan-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-cyan-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #0e7490; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-200:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-amber-200:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #92400e; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-amber-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #b45309; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-amber-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-amber-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #d97706; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-emerald-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #047857; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-emerald-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #059669; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-red-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #dc2626; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-red-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #b91c1c; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-red-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #dc2626; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-red-200:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-red-200:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #b91c1c; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-200:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-emerald-200:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #047857; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-emerald-100:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-emerald-100:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #065f46; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-green-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-green-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #15803d; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-green-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-green-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #166534; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-sky-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-sky-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #0369a1; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-sky-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-sky-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #0284c7; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-violet-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-violet-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #6d28d9; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-violet-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-violet-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #5b21b6; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-purple-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-purple-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #7c3aed; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-purple-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-purple-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #6d28d9; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-indigo-300:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-indigo-300:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #4338ca; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .text-indigo-400:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .text-indigo-400:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #3730a3; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .bg-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .bg-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)) { background: rgba(2,6,23,0.06); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .bg-white\/5:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .bg-white\/5:where(:not(.af-draft-dark, .af-draft-dark *)) { background: rgba(2,6,23,0.03); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/20:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .border-white\/20:where(:not(.af-draft-dark, .af-draft-dark *)) { border-color: rgba(2,6,23,0.12); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/15:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .border-white\/15:where(:not(.af-draft-dark, .af-draft-dark *)) { border-color: rgba(2,6,23,0.10); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .border-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .border-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)) { border-color: rgba(2,6,23,0.08); }
 /* Inputs / textareas: override dark-only bg and placeholder in light mode */
-html[data-mode="light"] input[class*="bg-white"],
-html[data-mode="light"] textarea[class*="bg-white"],
-html[data-mode="light"] select[class*="bg-white"] {
+html[data-mode="light"] input[class*="bg-white"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] textarea[class*="bg-white"]:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] select[class*="bg-white"]:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background: var(--panel2) !important;
   color: var(--text) !important;
   border-color: var(--border) !important;
 }
-html[data-mode="light"] input::placeholder,
-html[data-mode="light"] textarea::placeholder {
+html[data-mode="light"] input:where(:not(.af-draft-dark, .af-draft-dark *))::placeholder,
+html[data-mode="light"] textarea:where(:not(.af-draft-dark, .af-draft-dark *))::placeholder {
   color: var(--muted2) !important;
 }
-html:not([data-mode="dark"]):not([data-mode="legacy"]) .via-white\/10,
-html[data-mode="light"] .via-white\/10 { --tw-gradient-stops: var(--tw-gradient-from), rgba(2,6,23,0.08), var(--tw-gradient-to); }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark *)) { --tw-gradient-stops: var(--tw-gradient-from), rgba(2,6,23,0.08), var(--tw-gradient-to); }
 
 @keyframes pulse-slow {
   0%, 100% { opacity: 0.4; transform: scale(1); }
@@ -1862,8 +1862,8 @@ html[data-mode="legacy"] {
 /* bg-[#0a0e1a] and bg-[#1a1f3a] are used by SettingsChrome.
    In light mode, reuse the bg-override rule above; these aliases ensure
    arbitrary-fraction variants (/50 etc.) are also caught. */
-html[data-mode="light"] [class*="bg-[#0a0e1a]"] { background-color: var(--bg) !important; }
-html[data-mode="light"] [class*="bg-[#1a1f3a]"] { background-color: var(--panel2) !important; background-image: none !important; }
+html[data-mode="light"] [class*="bg-[#0a0e1a]"]:where(:not(.af-draft-dark, .af-draft-dark *)) { background-color: var(--bg) !important; }
+html[data-mode="light"] [class*="bg-[#1a1f3a]"]:where(:not(.af-draft-dark, .af-draft-dark *)) { background-color: var(--panel2) !important; background-image: none !important; }
 
 .draft-live-focus-ring {
   scroll-margin-top: 64px;
@@ -3111,7 +3111,7 @@ select, option {
   display: none;
 }
 
-html[data-mode='light'] .af-atmo-guillotine {
+html[data-mode='light'] .af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: #fbf6f2;
   background-image:
     radial-gradient(ellipse 95% 55% at 50% -12%, rgba(179, 63, 23, 0.1), transparent 55%),
@@ -3119,16 +3119,16 @@ html[data-mode='light'] .af-atmo-guillotine {
     linear-gradient(185deg, #fdf8f4 0%, #fbf6f2 45%, #f6eee8 100%);
 }
 
-html[data-mode='light'] .af-atmo-guillotine::before {
+html[data-mode='light'] .af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *))::before {
   background: none;
 }
 
-html[data-mode='light'] .af-atmo-guillotine::after {
+html[data-mode='light'] .af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *))::after {
   filter: hue-rotate(-8deg) brightness(0.7);
   opacity: 0.06;
 }
 
-html[data-mode='light'] .af-atmo-mood--chop_week.af-atmo-guillotine {
+html[data-mode='light'] .af-atmo-mood--chop_week.af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: #fbf1ef;
   background-image:
     radial-gradient(ellipse 100% 60% at 50% -10%, rgba(185, 28, 28, 0.14), transparent 55%),
@@ -3136,7 +3136,7 @@ html[data-mode='light'] .af-atmo-mood--chop_week.af-atmo-guillotine {
     linear-gradient(185deg, #fcf2f0 0%, #fbf1ef 45%, #f5e4e1 100%);
 }
 
-html[data-mode='light'] .af-atmo-mood--final.af-atmo-guillotine {
+html[data-mode='light'] .af-atmo-mood--final.af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: #f7f1ec;
   background-image:
     radial-gradient(ellipse 34% 90% at 50% -8%, rgba(255, 196, 140, 0.35), rgba(179, 63, 23, 0.05) 55%, transparent 75%),
@@ -3144,12 +3144,12 @@ html[data-mode='light'] .af-atmo-mood--final.af-atmo-guillotine {
     linear-gradient(185deg, #faf5f0 0%, #f7f1ec 50%, #f1e8e1 100%);
 }
 
-html[data-mode='light'] .af-atmo-mood--eliminated.af-atmo-guillotine {
+html[data-mode='light'] .af-atmo-mood--eliminated.af-atmo-guillotine:where(:not(.af-draft-dark, .af-draft-dark *)) {
   background-color: #f3f2f2;
   background-image: linear-gradient(185deg, #f6f5f5 0%, #f3f2f2 50%, #ecebeb 100%);
 }
 
-html[data-mode='light'] .af-atmo-guillotine-embers {
+html[data-mode='light'] .af-atmo-guillotine-embers:where(:not(.af-draft-dark, .af-draft-dark *)) {
   display: none;
 }
 

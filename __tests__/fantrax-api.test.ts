@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getFantraxLeagues,
   getFantraxLeagueInfo,
+  getFantraxLeagueTeams,
   getFantraxPlayerIds,
   getFantraxStandings,
   flattenFantraxSchedule,
@@ -31,6 +32,21 @@ function resp(status: number, body: string) {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+it('requests lightweight league info and retains every team', async () => {
+  const teamInfo = Object.fromEntries(Array.from({ length: 256 }, (_, index) => [
+    `team-${index}`, { id: `team-${index}`, name: `Team ${index}` },
+  ]))
+  const data = { leagueName: 'Large league', seasonYear: 2026, teamInfo }
+  const fetchMock = vi.fn().mockResolvedValue(resp(200, JSON.stringify(data)))
+  vi.stubGlobal('fetch', fetchMock)
+
+  expect(await getFantraxLeagueTeams('LargeLeagueID')).toEqual({ ok: true, data })
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.stringContaining('leagueId=LargeLeagueID&excludePlayerInfo=true'),
+    expect.any(Object),
+  )
+})
 
 async function loadIsolated() {
   return import('@/lib/league-import/fantrax/fantraxApi')

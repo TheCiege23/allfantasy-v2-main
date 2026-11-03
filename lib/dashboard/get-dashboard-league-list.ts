@@ -627,7 +627,10 @@ export async function getDashboardLeagueListForUser(
           },
           teams: {
             where: { claimedByUserId: userId },
-            select: { isCommissioner: true, isCoCommissioner: true, role: true, teamName: true },
+            select: {
+              isCommissioner: true, isCoCommissioner: true, role: true, teamName: true,
+              externalId: true, wins: true, losses: true, ties: true,
+            },
           },
           rosters:
             opts?.rosterDetail === 'count'
@@ -827,6 +830,11 @@ export async function getDashboardLeagueListForUser(
       viewerOwnsRow: String(leagueRowOwnerId ?? '') === userId,
       /* The viewer's own team here, so two copies of one league (two teams in it) can be told apart. */
       viewerTeamName: typeof myTeam?.teamName === 'string' ? myTeam.teamName : null,
+      viewerTeamExternalId: typeof myTeam?.externalId === 'string' ? myTeam.externalId : null,
+      // A 0-0-0 row can be an unpopulated import. Keep it unknown until a result exists.
+      viewerWins: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.wins : null,
+      viewerLosses: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.losses : null,
+      viewerTies: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.ties : null,
       /*
        * Whether that route can take this league off the viewer's list: their own copy, or an
        * imported league someone else imported (tombstoned for them alone, filtered above). A

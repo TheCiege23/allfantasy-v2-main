@@ -49,6 +49,7 @@ type DraftSettingsResponse = {
   sessionVariant?: SessionVariantPayload | null
   sessionPreDraft?: boolean
   draftOrderMode?: DraftOrderMode
+  lotteryRestriction?: string | null
   lotteryConfig?: LotteryConfigPayload | null
   lotteryLastSeed?: string | null
   lotteryLastRunAt?: string | null
@@ -590,12 +591,14 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
               >
                 <option value="randomize">Randomize</option>
                 <option value="manual">Manual</option>
-                <option value="weighted_lottery">Weighted lottery</option>
+                <option value="weighted_lottery" disabled={Boolean(data?.lotteryRestriction)}>Weighted lottery</option>
               </select>
             ) : (
               <span className="text-sm text-white/90">{draftOrderMode === 'weighted_lottery' ? 'Weighted lottery' : draftOrderMode === 'manual' ? 'Manual' : 'Randomize'}</span>
             )}
           </div>
+
+          {data?.lotteryRestriction && <p className="text-xs text-white/65">{data.lotteryRestriction}</p>}
 
           {draftOrderMode === 'weighted_lottery' && (
             <div className="mt-4 rounded-lg border border-white/15 bg-black/30 p-4 space-y-3">

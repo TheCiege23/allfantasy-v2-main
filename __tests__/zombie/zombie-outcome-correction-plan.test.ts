@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { planZombieOutcomeReplay } from '@/lib/zombie/outcomeCorrectionPlanner'
+import { compareBeta2025TradeSlate } from '@/lib/zombie/beta2025CorrectionPlan'
 import type { ZombieSettlementSnapshotV1 } from '@/lib/zombie/weeklySettlementSnapshot'
 
 const base: ZombieSettlementSnapshotV1 = {
@@ -44,6 +45,35 @@ const row = (homeScore: number, awayScore: number) => [{
 }]
 
 describe('snapshot-based outcome correction plan', () => {
+  it('compares projected infection and weekly winnings on the same slate', () => {
+    const match = (home: number, away: number) => ({
+      ...row(home, away)[0]!, homeBaseScore: home, awayBaseScore: away,
+      homeWeaponBonus: 0, awayWeaponBonus: 0,
+    })
+    const beforeMatches = [match(101, 90)]
+    const input: Parameters<typeof compareBeta2025TradeSlate>[0] = {
+      zombieLeagueId: 'league',
+      before: {
+        week: 3, settledAt: '2026-10-27T00:00:00Z', deadlineAt: '2026-10-28T00:00:00Z',
+        snapshot: { ...base, itemsPolicy: 'beta_2025', itemMatchups: beforeMatches,
+          winnings: { policy: 'beta_2025', openingByRoster: { horde: 0, human: 2 } } },
+        matches: beforeMatches,
+      },
+      afterMatches: [match(90, 101)], afterItems: [],
+    }
+    const outcome = compareBeta2025TradeSlate(input)
+    expect(outcome.before.infections.map(i => i.victimRosterId)).toEqual(['human'])
+    expect(outcome.after.infections).toEqual([])
+    expect(outcome.before.totals.human).toBe(0)
+    expect(outcome.after.totals.human).toBe(6)
+    expect(() => compareBeta2025TradeSlate({
+      ...input, before: { ...input.before, matches: [] }, afterMatches: [],
+    })).toThrow('one matchup per team')
+    expect(() => compareBeta2025TradeSlate({
+      ...input, afterMatches: [match(Number.NaN, 101)],
+    })).toThrow('finite base scores')
+  })
+
   it('reverses a prior win and plans a new infection and awards', () => {
     const plan = planZombieOutcomeReplay(row(101, 90), base, 3, 'enhanced')
     expect(plan?.infections).toEqual([expect.objectContaining({

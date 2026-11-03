@@ -284,6 +284,13 @@ describe('🛑 the league\'s real format reaches the value engine', () => {
     expect(snap.context.keeperCount).toBe(3)
   })
 
+  it('a confirmed redraft clears a stale dynasty column in the captured context', async () => {
+    league = { ...BASE_LEAGUE, leagueType: 'dynasty', isDynasty: true,
+      settings: { ...BASE_LEAGUE.settings, leagueTypeConfirmation: { type: 'redraft' } } }
+    const snap = await captureRedraftTradeValueSnapshot(baseInput)
+    expect(snap.context).toMatchObject({ leagueType: 'redraft', isDynasty: false })
+  })
+
   it('still says redraft when the row says redraft — no behaviour change for the common case', async () => {
     league = { ...BASE_LEAGUE }
     const snap = await captureRedraftTradeValueSnapshot(baseInput)

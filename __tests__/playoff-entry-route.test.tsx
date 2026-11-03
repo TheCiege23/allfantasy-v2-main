@@ -52,6 +52,21 @@ describe("/brackets/leagues/[leagueId]/entries/[entryId]", () => {
     render(element as React.ReactElement)
 
     expect(screen.getByTestId("playoff-entry-shell")).toHaveTextContent("entry-entry-1")
+    expect(screen.getByRole("link", { name: "Fantasy Home" })).toHaveAttribute("href", "/core")
+    expect(screen.getByRole("link", { name: "Bracket Hub" })).toHaveAttribute("href", "/brackets")
+    expect(screen.getByRole("link", { name: "My Brackets" })).toHaveAttribute("href", "/brackets/my")
+    expect(screen.getByRole("link", { name: "League", exact: true })).toHaveAttribute("href", "/brackets/leagues/challenge-1")
+    expect(screen.queryByRole("link", { name: "Invite friends" })).not.toBeInTheDocument()
+  })
+
+  it("links the league owner to the invite panel without placing the invite code in navigation", async () => {
+    getPlayoffBracketViewMock.mockResolvedValue({
+      ...playoffView,
+      challenge: { ...playoffView.challenge, ownerUserId: "u1", inviteCode: "example-invite" },
+    })
+    const mod = await import("@/app/brackets/leagues/[leagueId]/entries/[entryId]/page")
+    render(await mod.default({ params: { leagueId: "challenge-1", entryId: "entry-1" } }) as React.ReactElement)
+    expect(screen.getByRole("link", { name: "Invite friends" })).toHaveAttribute("href", "/brackets/leagues/challenge-1#league-invite")
   })
 
   it("shows friendly not found when the entry does not match the pool request", async () => {

@@ -263,7 +263,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const survivorContract = format === 'survivor' ? getSurvivorDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount }) : null
   const survivorSnapshot = survivorContract ? buildSurvivorSettingsSnapshot({ sport, draftType: input.draftType, scoringPresetId: survivorContract.scoring_preset_id, teamCount: input.managerCount }) : null
   const redraftContract =
-    format === 'redraft'
+    (format === 'redraft' || format === 'pirate')
       ? getRedraftDefaultContract({
           sport,
           draftType: input.draftType,

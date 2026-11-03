@@ -11,7 +11,7 @@
 import type { FantraxLeagueInfo } from './fantraxApi'
 
 /** Stored `FantraxLeague.sport` values whose season spans two calendar years. */
-const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl'])
+const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl', 'ncaab'])
 
 export function isFantraxSplitSeasonSport(sport: string | null | undefined): boolean {
   return SPLIT_SEASON_SPORTS.has(String(sport ?? '').trim().toLowerCase())

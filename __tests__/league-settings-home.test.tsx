@@ -53,8 +53,8 @@ const rowValue = (id: string) => within(screen.getByTestId(`lsh-row-${id}`)).get
 
 function renderHome(i: BuildSettingsHomeInput, renderSubPage = vi.fn((id: string) => ({ title: `Edit ${id}`, content: <p>editor for {id}</p> }))) {
   const sections = buildLeagueSettingsHome(i)
-  render(<LeagueSettingsHome leagueName={i.league.name} sections={sections} canEdit={i.canEdit} renderSubPage={renderSubPage as never} />)
-  return { renderSubPage }
+  const view = render(<LeagueSettingsHome leagueName={i.league.name} sections={sections} canEdit={i.canEdit} renderSubPage={renderSubPage as never} />)
+  return { renderSubPage, ...view }
 }
 
 describe('formatters', () => {
@@ -101,6 +101,24 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.queryByTestId('lsh-section-guillotine')).toBeNull()
     expect(screen.getByTestId('lsh-section-playoffs')).toBeTruthy()
     expect(rowValue('playoffs')).toBe('6 teams · starts Wk 15')
+  })
+
+  it('puts Pirate rules in commissioner settings and keeps them visible to members', () => {
+    const pirate = input(
+      { formatLabel: 'Pirate League', guillotine: null },
+      { leagueType: 'pirate', leagueVariant: 'pirate', guillotineMode: false,
+        settings: { conceptRules: { extensions: { pirate: { protectionLimit: 3, selectionHours: 24, claimHours: 24, overflowGraceHours: 24, playoffClaims: true } } } } },
+    )
+    const view = renderHome(pirate)
+    expect(screen.getByTestId('lsh-section-pirate')).toBeTruthy()
+    expect(rowValue('pirate-rules')).toBe('3 protected · 24h to choose · 24h to respond')
+    expect(rowValue('pirate-playoffs')).toBe('On')
+    fireEvent.click(screen.getByTestId('lsh-row-pirate-rules'))
+    expect(view.renderSubPage).toHaveBeenCalledWith('pirate-rules')
+    view.unmount()
+    renderHome({ ...pirate, canEdit: false })
+    expect(screen.getByTestId('lsh-section-pirate')).toBeTruthy()
+    expect(screen.getByTestId('lsh-row-pirate-rules').getAttribute('data-readonly')).toBe('true')
   })
 
   it('🛑 members see the same values read-only: no editors, no commissioner tools', () => {

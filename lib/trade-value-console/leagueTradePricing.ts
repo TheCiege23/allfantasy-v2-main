@@ -986,7 +986,7 @@ export async function resolveLeagueTradeChart(args: {
     ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueRow.platformLeagueId,
-        isDynasty: leagueRow.isDynasty ?? true,
+        isDynasty: chartIsDynasty,
       }).catch(() => null)
     : null
 

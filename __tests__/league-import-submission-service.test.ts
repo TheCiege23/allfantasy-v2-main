@@ -75,6 +75,42 @@ describe('LeagueCreationImportSubmissionService', () => {
     expect(result.code).toBe('PROVIDER_UNAVAILABLE')
   })
 
+  it('rejects an email in the manual Fantrax league field before fetching', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { discoverProviderLeagues } = await import(
+      '@/lib/league-import/LeagueCreationImportSubmissionService'
+    )
+
+    const result = await discoverProviderLeagues('fantrax', 'manager@example.com')
+
+    expect(result).toMatchObject({ ok: false, status: 400 })
+    expect(result.error).toContain('Paste the Fantrax league URL')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts all 256 Fantrax teams when discovery takes more than a minute', async () => {
+    vi.useFakeTimers()
+    try {
+      const leagues = Array.from({ length: 256 }, (_, i) => ({ sourceId: `team-${i}` }))
+      vi.stubGlobal('fetch', vi.fn(async (_url, init: RequestInit) => {
+        await new Promise((resolve) => setTimeout(resolve, 70_000))
+        init.signal?.throwIfAborted()
+        return Response.json({ leagues })
+      }))
+      const { discoverProviderLeagues } = await import(
+        '@/lib/league-import/LeagueCreationImportSubmissionService'
+      )
+
+      const result = discoverProviderLeagues('fantrax', 'v2kzedypmm8jp61b')
+      await vi.advanceTimersByTimeAsync(70_000)
+
+      expect(await result).toEqual({ ok: true, data: { leagues } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('calls the provider discovery route with the account identifier', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

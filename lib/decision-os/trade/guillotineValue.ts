@@ -29,17 +29,15 @@
  * W(k) = Σ_{j=k+1..C} (T − j)/T weeks to whoever buys him. Equal odds is a stated assumption: a team well
  * clear of the chop line survives longer than this and one sitting on it does not.
  *
- * ── NBA ────────────────────────────────────────────────────────────────────────────────────────────────
- * The same model, with three inputs that are NOT the NFL's (`./guillotineContext.ts` loads them):
- *   - WEEKS LEFT come from the NBA period calendar the guillotine engine itself chops on — seven Eastern
- *     days from the recorded opener (`lib/season-week/dailySportSeasonStarts.ts`), 24 regular-season weeks
- *     (`lib/guillotine/sportConfig.ts`) — counting the week in progress, as the NFL's projections do.
- *   - The board is the NBA points board (`./sportPointsContext.ts`), scored per GAME on the league's rules.
- *     A guillotine chops on the WEEK, and a team plays three or four games in one, so every player's line
- *     is put on the week first: per game × the games a team has left ÷ the weeks left (`gamesPerWeek`).
- *     One multiplier on every player — it sizes the numbers, it cannot move the letter.
- *   - A free agent sets a replacement level only on MIN_SAMPLE_GAMES (10) games, not three: three NBA
- *     games is one week, which is the NFL's bar in weeks, not in evidence.
+ * ── NBA / NHL / MLB ─────────────────────────────────────────────────────────────────────────────────────
+ * The same model, with three inputs that differ from NFL (`./guillotineContext.ts` loads them):
+ *   - WEEKS LEFT come from the native period calendar — seven Eastern days from the recorded opener
+ *     (`lib/season-week/dailySportSeasonStarts.ts`) and that sport's guillotine regular-season weeks.
+ *   - The points board (`./sportPointsContext.ts`) is scored per team game on the league's rules. A
+ *     guillotine chops on the WEEK, so each line is put on that scale: per game × team games left ÷ chop
+ *     weeks left (`gamesPerWeek`). One multiplier on every player sizes the numbers but cannot move the letter.
+ *   - A free agent sets a replacement level only on MIN_SAMPLE_GAMES (10) games, rather than the NFL's
+ *     three-game bar. The grade also refuses a traded player whose projection has a thinner sample.
  * Everything on a guillotine board below is therefore points per scoring WEEK, whatever the field is
  * called (`perGame`): for the NFL one game is one week.
  */
@@ -48,15 +46,15 @@ import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import { indexBoard, meetsSampleBar, MIN_SAMPLE_GAMES, resolveBoardPlayer, type BoardPlayer } from './sportPointsValue'
 
-/** Sports whose guillotine trades are graded here. Every other sport's guillotine stays on its own grade. */
-export type GuillotineTradeSport = 'NFL' | 'NBA'
+/** Sports whose guillotine trades are graded here. */
+export type GuillotineTradeSport = 'NFL' | 'NBA' | 'NHL' | 'MLB'
 
 export function guillotineTradeSport(sport: string | null | undefined): GuillotineTradeSport | null {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NFL' || s === 'NBA' ? s : null
+  return s === 'NFL' || s === 'NBA' || s === 'NHL' || s === 'MLB' ? s : null
 }
 
-/** An NFL or NBA guillotine league — graded here, never on the market chart. Not `survivor_guillotine`: no trades. */
+/** A supported guillotine league — graded here, never on the market chart. Not `survivor_guillotine`: no trades. */
 export function isGuillotineTradeLeague(args: { sport: string | null | undefined; leagueType: string | null | undefined; leagueVariant?: string | null }): boolean {
   if (!guillotineTradeSport(args.sport)) return false
   return String(args.leagueType ?? '').trim().toLowerCase() === 'guillotine' || String(args.leagueVariant ?? '').trim().toLowerCase() === 'guillotine'
@@ -74,9 +72,9 @@ export type GuillotineSeat = { slot: string; eligible: readonly string[] }
 /** A free agent good enough to set a slot's replacement level must have played this many games (NFL). */
 export const MIN_REPLACEMENT_GAMES = 3
 
-/** The replacement-level games bar per sport: NFL three games (three weeks), NBA the points grade's ten. */
+/** The replacement-level games bar per sport: NFL three games, daily sports ten. */
 export function minReplacementGamesFor(sport: GuillotineTradeSport): number {
-  return sport === 'NBA' ? MIN_SAMPLE_GAMES : MIN_REPLACEMENT_GAMES
+  return sport === 'NFL' ? MIN_REPLACEMENT_GAMES : MIN_SAMPLE_GAMES
 }
 
 export type GuillotineRoster = {
@@ -87,7 +85,7 @@ export type GuillotineRoster = {
 }
 
 export type GuillotineContext = {
-  /** Absent means NFL (every context built before NBA was graded here). */
+  /** Absent means NFL for older callers. */
   sport?: GuillotineTradeSport
   /** Points per scoring WEEK, in `perGame` (see the header). */
   board: readonly BoardPlayer[]
@@ -96,9 +94,9 @@ export type GuillotineContext = {
   replacementBySlot: ReadonlyMap<string, { name: string; perGame: number }>
   teamsAlive: number
   startingTeams: number
-  /** Regular-season weeks left to play, the week in progress included (NFL projections; NBA period calendar). */
+  /** Regular-season weeks left to play, the week in progress included. */
   weeksLeft: number
-  /** Games a team plays in a scoring week, when that is not one (NBA); the board is already scaled by it. */
+  /** Games a team plays in a scoring week for daily sports; the board is already scaled by it. */
   gamesPerWeek?: number | null
   /** Games a free agent needs behind him to set a replacement level (`minReplacementGamesFor`). */
   minReplacementGames?: number
@@ -266,8 +264,8 @@ export function faabWorth(amount: number, ctx: Pick<GuillotineContext, 'liveFaab
 export function guillotineBasis(ctx: GuillotineContext): string {
   const weeks = ctx.survival[0] ?? 0
   const perWeek =
-    ctx.sport === 'NBA' && ctx.gamesPerWeek != null
-      ? ` An NBA week is about ${round1(ctx.gamesPerWeek)} games a team (the games left over the ${ctx.weeksLeft} chop weeks left), so a player’s points a week are his points a game times that.`
+    ctx.sport != null && ctx.sport !== 'NFL' && ctx.gamesPerWeek != null
+      ? ` An ${ctx.sport} week is about ${round1(ctx.gamesPerWeek)} games a team (the games left over the ${ctx.weeksLeft} chop weeks left), so a player’s points a week are his points a game times that.`
       : ''
   return (
     `Guilly value: projected points per week above the free agent a team can still add for the same starting slot ` +
@@ -307,8 +305,8 @@ export function gradeGuillotineDeal(args: {
       }
       const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
-      // The NBA board carries thin early-season lines; as on the NBA points grade, a thin one is not a price.
-      if (ctx.sport === 'NBA' && !meetsSampleBar(found.player)) {
+      // Daily-sport boards can carry thin early-season lines; a thin one is not a price.
+      if (ctx.sport != null && ctx.sport !== 'NFL' && !meetsSampleBar(found.player)) {
         return {
           withheld: `${found.player.name}’s projection rests on ${found.player.sampleGames} game${found.player.sampleGames === 1 ? '' : 's'}, too few to price — grades start at ${MIN_SAMPLE_GAMES} games. This deal is not graded.`,
         }

@@ -1,4 +1,6 @@
 import { leagueVariantFor, lineupEntriesFromSettings } from '@/lib/core-app/valueBook'
+import { isBestBallSettings } from '@/lib/core-app/lineupMode'
+import { readConfirmedLeagueConcept, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 
 /*
@@ -53,7 +55,8 @@ export function marketContextFor(
   const rec = scoringSettings.rec ?? scoringSettings.ppr ?? 0
   // `NAME:count` entries (ESPN, Yahoo, MFL, starter_slots) name the slot before the colon.
   const positions = lineupEntriesFromSettings(s).map((p) => String(p).toUpperCase().replace(/:\d+(?:-\d+)?$/, '').trim())
-  const type = (leagueType ?? '').toLowerCase()
+  const type = String(resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
+  const confirmedType = readConfirmedLeagueConcept(settings)
   /*
    * ⚠ `superflex` / `dynasty` / `keeper` COME FROM `valueBook.ts`, NOT FROM A
    * SECOND COPY OF THE PREDICATES. The value tables and this engine context are
@@ -71,7 +74,7 @@ export function marketContextFor(
       dynasty: variant.dynasty,
       keeper: variant.keeper,
       keeperShare: variant.keeperShare,
-      bestBall: type.includes('best ball') || type.includes('bestball'),
+      bestBall: type.replace(/[\s_-]/g, '') === 'bestball' || (!confirmedType && isBestBallSettings(settings)),
     },
     scoring: {
       settings: scoringSettings,

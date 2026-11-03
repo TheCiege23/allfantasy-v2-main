@@ -35,6 +35,24 @@ beforeEach(() => {
 })
 
 describe('Fantrax snapshot refresh', () => {
+  it('classifies a 160-team league named NCAA-FB by its college basketball player IDs', async () => {
+    h.info.mockResolvedValue({ ok: true, data: { leagueName: 'NCAA-FB', seasonYear: 2026 } })
+    const teams = Object.fromEntries(Array.from({ length: 160 }, (_, i) => [
+      `team-${i}`,
+      { teamName: i === 0 ? 'My team' : `Team ${i}`, rosterItems: [
+        { id: 'college-guard', position: 'G', status: 'ACTIVE' },
+      ] },
+    ]))
+    h.rosters.mockResolvedValue({ ok: true, data: teams })
+    h.players.mockImplementation(async (sport: string) => ({
+      ok: true,
+      data: sport === 'NCAAB' ? { 'college-guard': { name: 'College Guard', position: 'G' } } : {},
+    }))
+
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true, leagueName: 'NCAA-FB' })
+    expect(h.updateMany.mock.calls[0][0].data).toMatchObject({ sport: 'ncaab', teamCount: 160 })
+  })
+
   it('replaces stale rosters in the same owned UUID and preserves unnamed source reserves', async () => {
     const outcome = await importFantraxLeague(args)
     expect(outcome).toMatchObject({ ok: true, fantraxLeagueId: 'stable-uuid', leagueName: 'Renamed league' })

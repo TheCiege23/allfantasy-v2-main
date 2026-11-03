@@ -10,6 +10,7 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
   "/dashboard",
   "/discover",
   "/leagues",
+  "/league",
   "/web",
   "/app",
   "/bracket",

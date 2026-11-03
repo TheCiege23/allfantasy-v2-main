@@ -3,6 +3,8 @@ import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
+import { assertPirateAcquisitionCapacity } from '@/lib/pirate/rosterCapacity'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
@@ -255,6 +257,7 @@ export async function processWaiverWindow(
     try {
       await runWaiverSettlement(async (tx: Prisma.TransactionClient) => {
         if (claim.dropPlayerId) {
+          await assertNotReservedByPirateClaim(tx, claim.rosterId, claim.dropPlayerId)
           const dropResult = await tx.redraftRosterPlayer.updateMany({
             where: { rosterId: claim.rosterId, playerId: claim.dropPlayerId, droppedAt: null },
             data: { droppedAt: new Date() },
@@ -268,6 +271,7 @@ export async function processWaiverWindow(
           }
         }
 
+        await assertPirateAcquisitionCapacity(tx, leagueId, claim.rosterId)
         await tx.redraftRosterPlayer.create({
           data: {
             rosterId: claim.rosterId,

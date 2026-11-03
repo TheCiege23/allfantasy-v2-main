@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   rosterNeedCalls: [] as unknown[],
   sport: 'NFL',
   guillotineLoads: [] as unknown[],
+  zombieLoads: [] as unknown[],
+  dynastySettings: false,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -24,10 +26,10 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
     name: 'Dynasty for life',
     sport: h.sport,
     leagueSize: 12,
-    isDynasty: true,
+    isDynasty: h.leagueType === 'zombie' ? h.dynastySettings : true,
     leagueType: h.leagueType,
     scoring: 'ppr',
-    settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'] },
+    settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'], isDynasty: h.dynastySettings },
     waiverBudget: 100,
     taxiSlots: 0,
     leagueVariant: 'dynasty',
@@ -46,6 +48,18 @@ vi.mock('@/lib/decision-os/trade/guillotineContext', () => ({
       replacementBySlot: new Map([['FLEX', { name: 'Free', perGame: 12 }], ['SUPER_FLEX', { name: 'Free', perGame: 13 }]]),
       teamsAlive: 3, startingTeams: 12, weeksLeft: 13, survival: [1, 1 / 3, 0],
       liveFaab: 300, wireValue: 30, releaseValue: 30, lineupLabel: '1 FLEX, 1 SUPER_FLEX',
+    },
+  }),
+  loadZombiePlayerContext: async (league: unknown) => (h.zombieLoads.push(league), {
+    ok: true,
+    ctx: {
+      board: [
+        { id: 'puka', name: 'Puka Nacua', position: 'WR', perGame: 20, sampleGames: 5, aliases: ['p1'] },
+        { id: 'drake', name: 'Drake London', position: 'WR', perGame: 16, sampleGames: 5, aliases: ['p2'] },
+      ],
+      seats: [{ slot: 'FLEX', eligible: ['RB', 'WR', 'TE'] }],
+      replacementBySlot: new Map([['FLEX', { name: 'Best Free Agent', perGame: 12 }]]),
+      weeksLeft: 10, lineupLabel: '1 FLEX',
     },
   }),
 }))
@@ -119,6 +133,8 @@ beforeEach(() => {
   h.rosterNeedCalls = []
   h.sport = 'NFL'
   h.guillotineLoads = []
+  h.zombieLoads = []
+  h.dynastySettings = false
 })
 
 const graded = <T extends { graded: boolean }>(v: T) => {
@@ -364,6 +380,34 @@ describe('P0 package and team-direction regression through the shared league gra
     const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
     expect(view.lines.map((l) => l.valueSource)).toEqual(['guillotine_points', 'guillotine_faab'])
     expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport: 'NBA' })])
+  })
+
+  it('uses the Zombie free-agent replacement basis and withholds unpriced item deals', async () => {
+    h.leagueType = 'zombie'
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = graded(await grader.grade({
+      give: [{ kind: 'player', name: 'Drake London' }],
+      get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false,
+    }))
+    expect(view.lines.map((line) => [line.leagueValue, line.valueSource])).toEqual([[40, 'zombie_points'], [80, 'zombie_points']])
+    expect(view.action).toBe('review')
+    expect(view.basis).toContain('Infection, weapons, serums')
+    expect(grader.book).toBeNull()
+    expect(h.zombieLoads).toHaveLength(1)
+    const pickDeal = await grader.grade({ give: [{ kind: 'pick', year: 2027, round: 1 }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    expect(pickDeal.graded).toBe(false)
+  })
+
+  it('withholds a one-season Zombie grade when the league has a proven dynasty base', async () => {
+    h.leagueType = 'zombie'
+    h.dynastySettings = true
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const result = await grader.grade({
+      give: [{ kind: 'player', name: 'Drake London' }],
+      get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false,
+    })
+    expect(result).toMatchObject({ graded: false, reason: expect.stringContaining('future seasons') })
+    expect(h.zombieLoads).toHaveLength(0)
   })
 
   it('leaves every other league on the market chart', async () => {

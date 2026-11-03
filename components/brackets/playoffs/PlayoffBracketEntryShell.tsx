@@ -18,6 +18,7 @@ import {
   isPlayoffSeriesResolved,
 } from "@/lib/playoffs/playoffBracketProjection"
 import { getPlayoffCompletionSummary } from "@/lib/playoffs/playoffCompletion"
+import { nbaCupLockedReason } from "@/lib/playoffs/nbaCupTournament"
 import { getPlayoffPickResult } from "@/lib/playoffs/playoffScoring"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import PlayoffBracketBoard from "./PlayoffBracketBoard"
@@ -122,8 +123,12 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   )
   const completionMode = completion?.mode ?? "full_bracket_required"
   const validGuess = /^\d{1,3}$/.test(tiebreakerGuess) && Number(tiebreakerGuess) <= 500
+  const cupFinal = series.find((game) => game.round === "cup_championship")
+  const showTiebreaker = isLiveSingleGame && (!rollingCup || Boolean(cupFinal && !nbaCupLockedReason(cupFinal)))
+  const needsGuess = isLiveSingleGame && (!rollingCup || (showTiebreaker && Boolean(tiebreakerGuess.trim())))
   const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries)) &&
-    (!isLiveSingleGame || (validGuess && !pastDeadline && (rollingCup || Boolean(firstGameStartsAt))))
+    (!isLiveSingleGame || ((!needsGuess || validGuess) && !pastDeadline && (rollingCup || Boolean(firstGameStartsAt)))) &&
+    (!rollingCup || !activeEntry?.finalizedAt || (showTiebreaker && validGuess && Number(tiebreakerGuess) !== activeEntry.tiebreakerTotalScore))
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
   const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? rollingCup ? "Update tiebreaker" : "Update finalized picks" : "Finalize picks" :
     completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
@@ -193,7 +198,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         const result = await submitPlayoffBracketEntryClient({
           challengeId: view.challenge.id,
           entryId,
-          tiebreakerTotalScore: isLiveSingleGame ? Number(tiebreakerGuess) : undefined,
+          tiebreakerTotalScore: needsGuess && validGuess ? Number(tiebreakerGuess) : undefined,
         })
         toast.success(isLiveSingleGame ? "Picks finalized" : "Bracket submitted")
         router.push(result.redirectUrl)
@@ -263,14 +268,27 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           backLabel="Back to pool dashboard"
           actions={
             <>
-              {isLiveSingleGame ? <label className="af-pb-tiebreaker">Final game combined score <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
-              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share bracket</button> : null}
-              <button
+              {rollingCup ? (
+                <div className="af-pb-next-step" role="status">
+                  {activeEntry.finalizedAt ? (
+                    <><strong>Finalized</strong><span>Your changes to upcoming games save automatically. Each pick locks at tipoff.</span></>
+                  ) : completion?.isSubmittable ? (
+                    <><strong>{completion.savedRequiredPickCount} of {completion.requiredPickCount} available picks saved · Ready to finalize</strong><span>Finalize before your first selected game starts.</span></>
+                  ) : (
+                    <><strong>{completion?.savedRequiredPickCount ?? 0} of {completion?.requiredPickCount ?? 0} available picks saved</strong><span>{completion?.missingRequiredSeriesIds.length ? `${completion.missingRequiredSeriesIds.length} picks still needed before finalizing.` : "Confirmed games will appear when available."}</span>
+                      {completion?.missingRequiredSeriesIds.length && nextActionableSeries ? <button type="button" className="af-pb-btn" onClick={continuePicking}>Go to next missing pick</button> : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
+              {showTiebreaker ? <label className="af-pb-tiebreaker">{rollingCup ? "Optional championship tiebreaker" : "Final game combined score"} <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
+              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share my read-only bracket</button> : null}
+              {!rollingCup || !activeEntry.finalizedAt || showTiebreaker ? <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"
                 onClick={handleSubmit}
                 disabled={!canSubmit || submitting}
-                title={canSubmit ? undefined : pastDeadline ? "The first game has started." : isLiveSingleGame && !validGuess ? "Enter a final game combined score." : submitBlockedMessage}
+                title={canSubmit ? undefined : pastDeadline ? "The first game has started." : needsGuess && !validGuess ? "Enter a final game combined score." : submitBlockedMessage}
                 id="bracket-finalize" data-testid="pb-submit"
               >
                 {submitting
@@ -278,7 +296,12 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
                   : dirtySinceSubmit && activeEntry.isComplete && !rollingCup
                     ? isLiveSingleGame ? "Finalize updated picks" : `Re-${submitButtonLabel}`
                     : submitButtonLabel}
-              </button>
+              </button> : null}
+              {rollingCup && !activeEntry.finalizedAt && !canSubmit ? (
+                <p className="af-pb-note" role="status">
+                  {needsGuess && !validGuess ? "Enter a combined score from 0 to 500, or leave it blank." : submitBlockedMessage}
+                </p>
+              ) : null}
               {canSyncSeries ? (
                 <button
                   type="button"
