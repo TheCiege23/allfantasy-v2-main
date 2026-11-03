@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DynastyLotteryEligibility = {
   eligible: boolean
@@ -20,6 +21,26 @@ export function isDynastyLeagueRow(league: {
     (league.leagueVariant != null &&
       ['devy_dynasty', 'merged_devy_c2c'].includes(String(league.leagueVariant).toLowerCase()))
   )
+}
+
+/** Legacy draft routes also serve other formats, whose lottery behavior stays unchanged. */
+export async function legacyDraftLotteryRestriction(leagueId: string, draftId?: string): Promise<string | null> {
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { isDynasty: true, leagueVariant: true },
+  })
+  if (!league) return 'League not found'
+  if (!isDynastyLeagueRow(league)) return null
+  const draft = await prisma.draftSession.findFirst({
+    where: { leagueId, ...(draftId ? { id: draftId } : {}) }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { draftModeLabel: true, status: true },
+  })
+  if (draftId && !draft) return 'Draft not found'
+  if (String(draft?.draftModeLabel ?? '').toLowerCase() === 'startup' && !['completed', 'complete', 'post_draft'].includes(String(draft?.status ?? '').toLowerCase())) {
+    return 'Weighted lottery is only available for future rookie drafts, not the startup draft.'
+  }
+  const eligibility = await checkDynastyLotteryEligibility(leagueId)
+  return eligibility.eligible ? null : eligibility.reason
 }
 
 /**

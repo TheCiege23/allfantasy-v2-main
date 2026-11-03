@@ -36,6 +36,7 @@ import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -146,6 +147,7 @@ export async function GET(
       })(),
       getDraftOrderModeAndLotteryConfig(leagueId),
     ])
+    const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
     const providerStatus = getProviderStatus()
 
     const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub] = await Promise.all([
@@ -234,6 +236,7 @@ export async function GET(
       idpScoringPreset: (idpRosterSummary as { scoringPreset?: string } | null)?.scoringPreset ?? undefined,
       idpPositionMode: (idpRosterSummary as { positionMode?: string } | null)?.positionMode ?? undefined,
       draftOrderMode: orderModeAndLottery?.draftOrderMode ?? 'randomize',
+      lotteryRestriction,
       lotteryConfig: orderModeAndLottery?.lotteryConfig ?? null,
       lotteryLastSeed: orderModeAndLottery?.lotteryLastSeed ?? null,
       lotteryLastRunAt: orderModeAndLottery?.lotteryLastRunAt ?? null,
@@ -290,6 +293,11 @@ export async function PATCH(
   if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
+
+  if (body.draft_order_mode === 'weighted_lottery') {
+    const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
+    if (lotteryRestriction) return NextResponse.json({ error: lotteryRestriction }, { status: 403 })
+  }
 
   // Resolve league format for draft-type validation so format-specific ids
   // (devy_snake, c2c_auction, salary_cap → auction, etc.) are accepted here
