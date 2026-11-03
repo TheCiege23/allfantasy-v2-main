@@ -38,8 +38,10 @@ export function settlementReadiness(rows: Array<{week:number;status:string;requi
 }
 
 /** Whisperers are assigned when the drafted season activates, not during setup. */
-export function whispererReadiness(selected: number, required: number, draftComplete: boolean): Pick<ReadinessCheck, 'status' | 'detail'> {
+export function whispererReadiness(selected: number, required: number, draftComplete: boolean, policy?: 'offers' | 'defeated'): Pick<ReadinessCheck, 'status' | 'detail'> {
+  if (policy === 'defeated') return { status: 'ready', detail: 'The Whisperer was defeated. The 2025 succession choice controls replacement; a vacant seat is valid.' }
   if (selected >= required) return { status: 'ready', detail: `${selected} of ${required} Whisperer seats selected.` }
+  if (policy === 'offers') return { status: 'waiting', detail: 'Open the Zombie tab to review eligibility and sequential 24-hour Whisperer offers. Weekly settlement waits until the initial draw is resolved.' }
   if (!draftComplete) return { status: 'waiting', detail: `${selected} of ${required} selected. Whisperers are assigned when the drafted season activates.` }
   return { status: 'attention', detail: `${selected} of ${required} selected. Check season activation and Whisperer settings.` }
 }

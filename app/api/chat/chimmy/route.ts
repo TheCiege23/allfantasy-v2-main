@@ -46,6 +46,9 @@ import {
   type ChimmyLeagueGroundingFailure,
   type ChimmyLeagueSnapshot,
 } from '@/lib/chimmy/chimmy-league-snapshot'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
 import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -970,6 +973,9 @@ function buildLeagueGroundingLine(args: {
 }): string | undefined {
   if (args.leagueSnapshot) {
     const s = args.leagueSnapshot
+    const type = leagueTypeBasis({ settings: s.settings, leagueType: s.leagueType, platform: s.platform })
+    const variant = leagueVariantFor(s.settings, s.leagueType)
+    const formatCoverage = tradeFormatCoverage({ settings: s.settings, leagueType: s.leagueType })
 
     /*
      * 🛑 SCORING WAS ABSENT FROM THIS LINE AND IS THE REASON THIS FUNCTION
@@ -1008,7 +1014,12 @@ function buildLeagueGroundingLine(args: {
       seasonLine,
       scoring,
       s.leagueSize != null ? `teams=${s.leagueSize}` : null,
-      `dynasty=${s.isDynasty}`,
+      `leagueType=${type.type} (${type.source})`,
+      `dynasty=${variant.dynasty}`,
+      `keeper=${variant.keeper}`,
+      formatCoverage.gaps.length > 0 && type.type !== 'guillotine'
+        ? `shared proposal value limits=${formatCoverage.gaps.join(' ')} Do not claim these effects are priced.`
+        : null,
       s.leagueVariant ? `variant=${s.leagueVariant}` : null,
       `platform=${s.platform}`,
       `platformLeagueId=${s.platformLeagueId}`,
@@ -2632,7 +2643,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           season: leagueSnapshot.season,
           leagueSize: leagueSnapshot.leagueSize,
           scoring: leagueSnapshot.scoring,
-          isDynasty: leagueSnapshot.isDynasty,
+          leagueType: leagueTypeBasis({ settings: leagueSnapshot.settings, leagueType: leagueSnapshot.leagueType, platform: leagueSnapshot.platform }).type,
+          isDynasty: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).dynasty,
+          isKeeper: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).keeper,
           timezone: leagueSnapshot.timezone,
           lastSyncedAt: leagueSnapshot.lastSyncedAt?.toISOString() ?? null,
           importedAt: leagueSnapshot.importedAt?.toISOString() ?? null,

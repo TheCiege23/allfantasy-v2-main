@@ -189,6 +189,10 @@ export async function PATCH(req: Request) {
   }
 
   const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
+  if (z.sport === 'NFL' && ((seasonAmbushPatch !== undefined && seasonAmbushPatch !== 2 && experienceModePatch !== 'simple') ||
+      (requestedSelection !== undefined && requestedSelection !== 'veteran_priority'))) {
+    return NextResponse.json({ error: '2025 NFL uses veteran-first offers and two seasonal ambushes. Configure other sports separately.' }, { status: 400 })
+  }
   if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined || whispererCountPatch !== undefined) {
     const selected = await prisma.whispererRecord.findUnique({
       where: { zombieLeagueId: z.id },

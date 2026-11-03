@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
-import { buildWeeklyUpdate, composeWeeklyUpdateBody } from '@/lib/zombie/weeklyUpdateEngine'
+import { buildWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
+
+import { approveZombieWeeklyReport } from '@/lib/zombie/weeklyReportApproval'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,70 +25,14 @@ export async function GET(req: Request) {
   return NextResponse.json({ draft })
 }
 
-/** Approve & post pending weekly update (when weeklyUpdateApproval was true, optional flow). */
+/** Approval and its linked delivery receipt commit together. */
 export async function POST(req: Request) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
-  const week = typeof body.week === 'number' ? body.week : parseInt(String(body.week), 10)
-  if (!leagueId || !Number.isFinite(week)) {
-    return NextResponse.json({ error: 'leagueId and week required' }, { status: 400 })
-  }
-
-  await requireCommissionerOnly(leagueId, session.user.id)
-
-  const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
-  if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const pending = await prisma.zombieAnnouncement.findFirst({
-    where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: false },
-    orderBy: { createdAt: 'desc' },
-  })
-  const draft = await buildWeeklyUpdate(leagueId, week)
-  const text = pending?.content?.trim() ? pending.content : composeWeeklyUpdateBody(draft)
-
-  const lg = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-  if (lg?.userId) {
-    await prisma.leagueChatMessage.create({
-      data: {
-        leagueId,
-        userId: lg.userId,
-        message: text.slice(0, 100_000),
-        type: 'host_announcement',
-        metadata: {
-          senderIsHost: true,
-          contentType: 'host_announcement',
-          isPinned: true,
-          zombieWeeklyUpdate: true,
-          week,
-        },
-      },
-    })
-  }
-
-  if (pending) {
-    await prisma.zombieAnnouncement.update({
-      where: { id: pending.id },
-      data: { isPosted: true, postedAt: new Date(), content: text },
-    })
-  } else {
-    await prisma.zombieAnnouncement.create({
-      data: {
-        zombieLeagueId: z.id,
-        universeId: z.universeId,
-        type: 'weekly_update',
-        title: `Week ${week} — Horde report`,
-        content: text,
-        week,
-        isPosted: true,
-        postedAt: new Date(),
-        isPublic: true,
-      },
-    })
-  }
-
-  return NextResponse.json({ ok: true })
+  const userId = ((await getServerSession(authOptions as never)) as { user?: { id?: string } } | null)?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null
+  if (!body || typeof body.leagueId !== 'string' || typeof body.week !== 'number' || !Number.isInteger(body.week)) return NextResponse.json({ error: 'leagueId and integer week required' }, { status: 400 })
+  try { await requireCommissionerOnly(body.leagueId, userId) }
+  catch (error) { if (error instanceof Response) return error; throw error }
+  try { return NextResponse.json(await approveZombieWeeklyReport(body.leagueId, body.week)) }
+  catch { return NextResponse.json({ error: 'Report approval could not finish. Check settlement and correction status, then retry.' }, { status: 409 }) }
 }
-

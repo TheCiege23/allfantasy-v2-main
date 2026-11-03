@@ -2,7 +2,7 @@
 
 import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { pointsForSeries } from "@/lib/playoffs/playoffScoring"
-import { cupGameState } from "@/lib/playoffs/nbaCupBoard"
+import { buildNbaCupGroups, cupConferenceComplete, cupGameState } from "@/lib/playoffs/nbaCupBoard"
 import "./af-nba-cup.css"
 
 const PHASES = [
@@ -22,12 +22,15 @@ function fmt(ms: number): string {
  * with no scheduled game says "Dates TBA" rather than borrowing last season's.
  */
 export default function CupPhaseTrack({ series, sport }: { series: PlayoffSeriesView[]; sport: string }) {
+  const groups = buildNbaCupGroups(series)
   const phases = PHASES.map((phase) => {
     const rows = series.filter((row) => row.round === phase.round)
     const times = rows.map((row) => Date.parse(row.startsAt ?? "")).filter(Number.isFinite).sort((a, b) => a - b)
     const dates = times.length ? (fmt(times[0]) === fmt(times[times.length - 1]) ? fmt(times[0]) : `${fmt(times[0])} – ${fmt(times[times.length - 1])}`) : "Dates TBA"
     const live = rows.some((row) => cupGameState(row) === "live")
-    const done = rows.length > 0 && rows.every((row) => cupGameState(row) === "final")
+    const done = phase.round === "cup_group_play"
+      ? cupConferenceComplete(groups, "east") && cupConferenceComplete(groups, "west")
+      : rows.length > 0 && rows.every((row) => cupGameState(row) === "final")
     const place = phase.note ?? rows.find((row) => row.location)?.location ?? null
     return { ...phase, dates, live, done, place, points: pointsForSeries({ round: phase.round } as PlayoffSeriesView, sport), started: rows.some((row) => cupGameState(row) !== "scheduled") }
   })

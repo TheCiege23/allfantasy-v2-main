@@ -35,6 +35,8 @@ import { getFanCredPublicUrl } from '@/lib/legal/fancredPublicUrl'
 import { zombieRoleAccentClasses } from '@/lib/zombie/zombie-visual-system'
 import { ZombieIntroModal } from '@/components/zombie/ZombieIntroModal'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
+import { ZombieRoleActions } from '@/components/zombie/ZombieRoleActions'
+import { ZombieSeasonOperations } from '@/components/zombie/ZombieSeasonOperations'
 
 const LEAGUE_SAFE_URL = 'https://www.leaguesafe.com'
 
@@ -157,13 +159,14 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
   const [data, setData] = useState<Pack | null>(null)
   const [anims, setAnims] = useState<FeedAnimation[]>([])
   const [showIntroVideo, setShowIntroVideo] = useState(false)
+  const [roleRefresh, setRoleRefresh] = useState(0)
 
   useEffect(() => {
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Pack | null) => setData(d))
       .catch(() => setData(null))
-  }, [leagueId])
+  }, [leagueId, roleRefresh])
 
   useEffect(() => {
     if (data?.league?.backgroundTheme && userId) {
@@ -328,6 +331,8 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
         }}
       >
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 lg:px-6">
+        <ZombieRoleActions leagueId={leagueId} onChanged={() => setRoleRefresh(n => n + 1)} />
+        <ZombieSeasonOperations leagueId={leagueId} />
         <ZombieCommandHero
           leagueName={z.name}
           logoUrl={z.logoUrl}

@@ -28,6 +28,9 @@ export const finderSearchMessages = defineMessages({
 export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
   en: {
     searchLabel: 'Search any player',
+    sportLabel: 'Sport',
+    allSports: 'All sports',
+    soccer: 'Soccer',
     compareLabel: 'Compare with another player',
     searchButton: 'Search',
     suggestions: 'Suggestions',
@@ -38,6 +41,9 @@ export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
   },
   es: {
     searchLabel: 'Buscar cualquier jugador',
+    sportLabel: 'Deporte',
+    allSports: 'Todos los deportes',
+    soccer: 'Fútbol',
     compareLabel: 'Comparar con otro jugador',
     searchButton: 'Buscar',
     suggestions: 'Sugerencias',

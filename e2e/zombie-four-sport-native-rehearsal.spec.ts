@@ -1,4 +1,4 @@
-import { separateFixtureWhisperers, seedFinalNflFixtureTotals, fixtureNflDraftPositions } from './helpers/zombie-current-policy-fixture'
+import { separateFixtureWhisperers, seedFinalNflFixtureTotals, fixtureNflDraftPositions, acceptFixtureNflWhispererOffer } from './helpers/zombie-current-policy-fixture'
 import { finalizeRosterAssignments } from '../lib/live-draft-engine/RosterAssignmentService'
 import { startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { createZombieLeague } from '../lib/zombie/setupEngine'
@@ -93,7 +93,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       // Exercise the real commissioner API and persisted GET response before the draft.
       const reviveCount = sport === 'NFL' ? 2 : 3
       const choices = {
-        leagueId, whispererCount: whisperers, whispererAmbushCount: 5,
+        leagueId, whispererCount: whisperers, whispererAmbushCount: sport === 'NFL' ? 2 : 5,
         ambushCountPerWeek: 2, serumReviveCount: reviveCount, autoSerumRevive: true,
         weeklyUpdateAutoPost: true, weeklyUpdateApproval: false,
       }
@@ -103,7 +103,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       expect(loaded.ok(), await loaded.text()).toBeTruthy()
       const readback = await loaded.json()
       expect(readback.league).toMatchObject({
-        whispererCount: whisperers, whispererAmbushCount: 5,
+        whispererCount: whisperers, whispererAmbushCount: sport === 'NFL' ? 2 : 5,
         config: { ambushCountPerWeek: 2, serumReviveCount: reviveCount, autoSerumRevive: true },
       })
       expect(await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).toMatchObject({
@@ -163,6 +163,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId } })
       const activated = await ensureZombieSeasonActivated({ leagueId, redraftSeasonId: season.id })
       expect(activated.ok, `${sport}: ${JSON.stringify(activated)}`).toBe(true)
+      await acceptFixtureNflWhispererOffer(leagueId)
       const active = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(active.status).toBe('active')
       const lockedRules = await page.request.patch('/api/zombie/settings', {
@@ -263,7 +264,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       console.log(`${sport} native Zombie: draft, ${whisperers} Whisperer(s), week ${week}, infection, report, idempotency passed`)
     }
   } finally {
-    await prisma.sportsGame.deleteMany({ where: { source: 'zombie_synthetic_fixture', OR: leagueIds.map(id => ({ externalId: { startsWith: `zombie-fixture:${id}:` } })) } })
+    await prisma.sportsGame.deleteMany({ where: { source: { in: ['zombie_synthetic_fixture', 'api_sports'] }, OR: leagueIds.map(id => ({ externalId: { startsWith: `zombie-fixture:${id}:` } })) } })
     await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { startsWith: marker + '-NFL-' } } })
     await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     for (const leagueId of leagueIds) await prisma.automationLock.deleteMany({ where: { lockKey: `draft:${leagueId}:pick` } })

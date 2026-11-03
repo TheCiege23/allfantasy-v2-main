@@ -978,7 +978,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = zombieBaseScores.home
     away.points = zombieBaseScores.away
     if (zombieScoring) {
-      previousSnapshots = (await db.redraftMatchup.findUniqueOrThrow({ where: { id: matchupId }, select: { lineupSnapshots: true } })).lineupSnapshots
+      const liveMatchup = await db.redraftMatchup.findUniqueOrThrow({ where: { id: matchupId }, select: { lineupSnapshots: true, homeRosterId: true, awayRosterId: true } })
+      if (liveMatchup.homeRosterId !== homeRosterId || liveMatchup.awayRosterId !== awayRosterId) {
+        throw new Error('ZOMBIE_MATCHUP_CHANGED_RETRY')
+      }
+      previousSnapshots = liveMatchup.lineupSnapshots
       zombieItems = await (await import('@/lib/zombie/beta2025ItemService')).loadBetaItemScoreReceipt({ leagueId, week, season: seasonYear, homeRosterId, awayRosterId, previousSnapshots }, db as never)
       if (zombieItems) {
         home.points = Math.round((home.points + zombieItems.home.bonus) * 100) / 100

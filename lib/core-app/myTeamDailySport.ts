@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
 import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { loadDailySportOutlook, type OutlookPlayerInput } from '@/lib/projections/dailySportOutlook'
 import type { LineupPlayer } from './myTeam'
@@ -45,9 +46,25 @@ export async function applyDailySportToLineup(
     for (const r of rows) if (r.fantraxId) identityByFantraxId.set(r.fantraxId, r.id)
   }
 
+  const sleeperNba = sport === 'NBA' && String(league.platform ?? '').trim().toLowerCase() === 'sleeper'
+  const identityBySleeperId = new Map<string, string>()
+  if (sleeperNba) {
+    const bridge = await bridgeImportedGameLogIds({
+      provider: 'sleeper',
+      sport,
+      rosterIds: pending.map(([id]) => id),
+    }).catch(() => null)
+    for (const identityId of bridge?.gameLogIds ?? []) {
+      const sleeperId = bridge?.rosterIdFor(identityId)
+      if (sleeperId) identityBySleeperId.set(sleeperId, identityId)
+    }
+  }
+
   const players: OutlookPlayerInput[] = pending.map(([id, p]) => ({
     key: id,
-    lookupId: identityByFantraxId.get(id) ?? id,
+    lookupId: sleeperNba
+      ? identityBySleeperId.get(id) ?? `unbridged:${id}`
+      : identityByFantraxId.get(id) ?? id,
     team: p.team,
     injuryStatus: p.injuryStatus,
   }))

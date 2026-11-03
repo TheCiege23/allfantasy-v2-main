@@ -20,6 +20,8 @@ import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
 import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
 import { captureZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
 import { reconcileOutcomeChangingCorrection } from '@/lib/zombie/outcomeCorrectionReconciler'
+import { betaWhispererSelectionPending, settleBetaCombat } from './beta2025RoleWorkflows'
+import { reconcileBetaCorrectionAutomatically } from './beta2025CorrectionService'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -47,6 +49,7 @@ export async function runWeeklyResolution(
     include: { league: true },
   })
   if (!z) throw new Error('Zombie league not found')
+  if (z.correctionHoldFromWeek != null && (!opts?.force || week > z.correctionHoldFromWeek)) return { resolution: null, skipped: true, reason: 'stat_correction_reconciliation_required' }
 
   const existing = await prisma.zombieWeeklyResolution.findUnique({
     where: { zombieLeagueId_week: { zombieLeagueId, week } },
@@ -77,6 +80,10 @@ export async function runWeeklyResolution(
           old.homeScore === matchup.homeScore && old.awayScore === matchup.awayScore
       }))
     if (same) {
+      if (z.correctionHoldFromWeek === week && (existing.settlementSnapshot as { itemsPolicy?: string } | null)?.itemsPolicy === 'beta_2025') {
+        const corrected = await reconcileBetaCorrectionAutomatically(z.leagueId, week, z.league.userId).catch(() => null)
+        return corrected ? { resolution: corrected } : { resolution: existing, skipped: true, reason: 'stat_correction_reconciliation_required' }
+      }
       if (existing.requiresStatCorrection) {
         const cleared = await prisma.zombieWeeklyResolution.update({
           where: { zombieLeagueId_week: { zombieLeagueId, week } },
@@ -87,6 +94,10 @@ export async function runWeeklyResolution(
       return { resolution: existing }
     }
     if (opts.reason === 'stat_correction' && season && z.league.userId) {
+      if ((existing.settlementSnapshot as { itemsPolicy?: string } | null)?.itemsPolicy === 'beta_2025') {
+        const corrected = await reconcileBetaCorrectionAutomatically(z.leagueId, week, z.league.userId).catch(() => null)
+        if (corrected) return { resolution: corrected }
+      }
       const reconciled = await reconcileScoreOnlyCorrection({
         zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
         sport: z.sport, week, ownerUserId: z.league.userId, previous: existing,
@@ -106,6 +117,9 @@ export async function runWeeklyResolution(
       where: { zombieLeagueId, week, status: 'complete', requiresStatCorrection: false },
       data: { requiresStatCorrection: true },
     })
+    if ((existing.settlementSnapshot as { itemsPolicy?: string } | null)?.itemsPolicy === 'beta_2025') {
+      await prisma.zombieLeague.updateMany({ where: { id: z.id, OR: [{ correctionHoldFromWeek: null }, { correctionHoldFromWeek: { gt: week } }] }, data: { correctionHoldFromWeek: week } })
+    }
     if (marked.count > 0) {
       await notifyCommissioner(z.leagueId, 'commissioner_override_required',
         `Week ${week} score correction needs reconciliation`,
@@ -122,6 +136,9 @@ export async function runWeeklyResolution(
    * league on — a week of the game silently erased. A stat-correction replay is of a sealed week, so it
    * still passes.
    */
+  if (z.sport === 'NFL' && await betaWhispererSelectionPending(z.id)) {
+    return { resolution: null, skipped: true, reason: 'whisperer_offer_pending' }
+  }
   const readiness = await getZombieWeekReadiness(z.leagueId, week, z.season)
   if (!readiness.ready) {
     return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
@@ -138,6 +155,8 @@ export async function runWeeklyResolution(
     if (usesBeta2025Items(z) && (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))) {
       settlementSnapshot = await itemTransaction(async tx => {
         await lockItemLeague(tx, z.leagueId)
+        const liveLeague = await tx.zombieLeague.findUniqueOrThrow({ where: { id: z.id }, select: { correctionHoldFromWeek: true } })
+        if (liveLeague.correctionHoldFromWeek != null) throw new Error('ZOMBIE_CORRECTION_HOLD')
         const live = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId, week } } })
         if (live?.status === 'review_required') throw new Error('ZOMBIE_ITEMS_REVIEW_REQUIRED')
         const snapshot = live?.settlementSnapshot as Awaited<ReturnType<typeof captureZombieSettlementSnapshot>> | null ??
@@ -151,6 +170,7 @@ export async function runWeeklyResolution(
       ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport, week, z.season)
       : null
   } catch (error) {
+    if (error instanceof Error && error.message === 'ZOMBIE_CORRECTION_HOLD') return { resolution: null, skipped: true, reason: 'stat_correction_reconciliation_required' }
     if (!(error instanceof Error) || (!error.message.startsWith('ZOMBIE_WINNINGS_') && !error.message.startsWith('ZOMBIE_ITEMS_'))) throw error
     const held = await prisma.zombieWeeklyResolution.upsert({
       where: { zombieLeagueId_week: { zombieLeagueId, week } },
@@ -218,10 +238,13 @@ export async function runWeeklyResolution(
     await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
     await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
   }
-  await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
-  await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
-  if (betaItems) await settleBetaItems(zombieLeagueId, week)
+  if (betaItems) {
+    await settleBetaItems(zombieLeagueId, week)
+    await settleBetaCombat(zombieLeagueId, week)
+  }
   else {
+    await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
+    await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
     await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
     await awardNativeSerumsForWeek(z.leagueId, week, z.season)
     await autoReviveEligibleZombies(z.leagueId, week)

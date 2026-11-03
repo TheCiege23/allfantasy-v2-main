@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Save, Share2 } from 'lucide-react'
 import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
+import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 
 type SessionPick = {
@@ -250,6 +251,8 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
           </p>
         </div>
       </div>
+
+      <DraftModeBanner mode={resolveDraftRoomMode({ isMock: true })} />
 
       {draft.progress?.currentOverall && draft.status === 'in_progress' && (
         <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">

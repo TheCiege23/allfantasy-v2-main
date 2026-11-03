@@ -2,6 +2,7 @@ import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealT
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import { prisma } from '@/lib/prisma'
+import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
@@ -700,6 +701,7 @@ async function applyProcessResult(input: {
     const meta = playerMetaForResult(input.state, result.addPlayerId)
     await prisma.$transaction(async (tx) => {
       if (result.dropPlayerId) {
+        await assertNotReservedByPirateClaim(tx, result.rosterId, result.dropPlayerId)
         const drop = await tx.redraftRosterPlayer.updateMany({
           where: { rosterId: result.rosterId, playerId: result.dropPlayerId, droppedAt: null },
           data: { droppedAt: new Date() },
@@ -870,6 +872,7 @@ export async function addNflRedraftFreeAgent(input: {
   await prisma.$transaction(async (tx) => {
     await assertStealThreeWaiverHoldCleared(tx, season.leagueId, move.addPlayerId)
     if (move.dropPlayerId) {
+      await assertNotReservedByPirateClaim(tx, move.rosterId, move.dropPlayerId)
       const drop = await tx.redraftRosterPlayer.updateMany({
         where: { rosterId: move.rosterId, playerId: move.dropPlayerId, droppedAt: null },
         data: { droppedAt: new Date() },

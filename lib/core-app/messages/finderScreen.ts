@@ -58,6 +58,9 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
       'AllFantasy’s own projection engine for this week, adjusted to this league’s scoring. The tile beside it is the provider’s (Sleeper) projection.',
     afStandardBody:
       'AllFantasy’s own projection engine for this week, standard scoring. What he projects in each of YOUR leagues is the AF column in the table below.',
+    afBaselineLabel: 'AF baseline / game',
+    afBaselineBody: 'AllFantasy season baseline in points per game. This is a general estimate, not a forecast for the next game or a league-scored projection.',
+    perGameSeason: (season) => `Per game · ${season} season`,
     thisLeagueScoring: 'this league’s scoring',
     standardScoring: 'Standard scoring',
     posRank: 'Pos rank',
@@ -158,6 +161,9 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
       'El motor de proyecciones propio de AllFantasy para esta semana, ajustado a la puntuación de esta liga. La casilla de al lado es la proyección del proveedor (Sleeper).',
     afStandardBody:
       'El motor de proyecciones propio de AllFantasy para esta semana, con puntuación estándar. Lo que proyecta en cada una de TUS ligas es la columna AF de la tabla de abajo.',
+    afBaselineLabel: 'Base AF / partido',
+    afBaselineBody: 'Base de temporada de AllFantasy en puntos por partido. Es una estimación general, no un pronóstico del próximo partido ni una proyección con la puntuación de tu liga.',
+    perGameSeason: (season) => `Por partido · temporada ${season}`,
     thisLeagueScoring: 'puntuación de esta liga',
     standardScoring: 'Puntuación estándar',
     posRank: 'Rango pos.',

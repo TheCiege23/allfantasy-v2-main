@@ -215,6 +215,32 @@ function renderModal(extra: Partial<React.ComponentProps<typeof TradeCenterModal
 }
 
 describe('redraft Trade Center modal — Spanish, every step', () => {
+  it.each(['eligible', 'blocked'] as const)('shows the Zombie preview when eligibility is %s', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ snapshot: null, tradeGrade: {
+        gradeScope: 'zombie_future_scoring',
+        zombieEligibility: { status },
+        zombieInventory: status === 'eligible'
+          ? { proposer: { before: 10, after: 32 }, receiver: { before: 32, after: 10 } }
+          : undefined,
+      } }),
+    })))
+    renderModal({ currentWeek: 3, initialReceiverRosterId: 'r2' })
+    await waitFor(() => expect(screen.getByTestId('trade-asset-player-p2')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('trade-asset-player-p1'))
+    fireEvent.click(screen.getByTestId('trade-asset-player-p2'))
+    fireEvent.click(screen.getByTestId('trade-step-next'))
+    if (status === 'eligible') {
+      expect(await screen.findByText('Elegibilidad Zombie actual verificada')).toBeTruthy()
+      expect(screen.getByText('10 → 32')).toBeTruthy()
+      expect(screen.getByText('32 → 10')).toBeTruthy()
+    } else {
+      expect(await screen.findByText('Intercambio Zombie bloqueado')).toBeTruthy()
+      expect(screen.queryByText('10 → 32')).toBeNull()
+    }
+  })
+
   it('partner → assets → review → sent, two teams', async () => {
     renderModal()
     // Step 1.

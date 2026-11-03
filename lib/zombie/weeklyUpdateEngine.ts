@@ -73,7 +73,7 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
 ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
-  const whisperers = z.whispererRecord ? [z.whispererRecord, ...(z.coWhisperers ?? [])] : (z.coWhisperers ?? [])
+  const whisperers = (z.whispererRecord ? [z.whispererRecord, ...(z.coWhisperers ?? [])] : (z.coWhisperers ?? [])).filter(record => !record.wasDefeated)
   const hiddenIds = new Set(!z.whispererIsPublic ? whisperers.map((record) => record.userId) : [])
   const nameForUser = (userId: string) =>
     hiddenIds.has(userId) ? Promise.resolve('Hidden Whisperer') : displayNameForUser(leagueId, userId)
@@ -352,6 +352,7 @@ export function composeWeeklyUpdateBody(d: ZombieWeeklyUpdateDraft): string {
 export async function postWeeklyUpdate(leagueId: string, week: number, draft: ZombieWeeklyUpdateDraft): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (z.correctionHoldFromWeek != null) throw new Error('Weekly reports are held during reviewed stat-correction recovery.')
   const body = composeWeeklyUpdateBody(draft)
   const key = `zombie-weekly:${z.id}:${week}`
   const existing = await prisma.zombieAnnouncement.findUnique({ where: { idempotencyKey: key } })
@@ -423,6 +424,7 @@ export async function postWeeklyUpdate(leagueId: string, week: number, draft: Zo
 /** Cron: post when UTC day/hour matches league schedule and resolution is complete. */
 export async function scheduleWeeklyUpdate(leagueId: string): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
+  if (z?.correctionHoldFromWeek != null) return
   if (!z || z.weeklyUpdateDay == null || z.weeklyUpdateHour == null) return
   const now = new Date()
   if (now.getUTCDay() !== z.weeklyUpdateDay || now.getUTCHours() !== z.weeklyUpdateHour) return

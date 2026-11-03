@@ -22,6 +22,7 @@ export async function lockItemLeague(tx: Db, leagueId: string) {
 /** Require an actual future starter kickoff. A bench player, bye or unknown schedule cannot extend the deadline. */
 export async function assertLastStarterWindow(tx: Db, input: { leagueId: string; userId: string; week: number }) {
   const z = await tx.zombieLeague.findUnique({ where: { leagueId: input.leagueId } })
+  if (z?.correctionHoldFromWeek != null) throw new Error('A stat correction is awaiting commissioner recovery. Item use is held.')
   if (!z || !usesBeta2025Items(z) || !['active', 'in_progress'].includes(z.status) || z.currentWeek !== input.week) throw new Error('This is not the active 2025 NFL Zombie week.')
   const resolution = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: input.week } } })
   if (resolution && resolution.status !== 'pending') throw new Error('This week is resolving, complete or awaiting review.')

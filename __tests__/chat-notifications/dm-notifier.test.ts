@@ -298,7 +298,8 @@ describe('league chat is opt-in', () => {
       category: 'league_chat',
       leagueId: 'L1',
       title: 'DanaDynasty · Pirate League',
-      actionHref: '/league/L1',
+      actionHref: '/league/L1?openChat=league&message=lm1',
+      skipChannels: { email: true, sms: true },
     })
   })
 

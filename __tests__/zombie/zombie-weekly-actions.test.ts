@@ -67,6 +67,7 @@ import { finalizePendingSerumsForWeek, processRevive } from '@/lib/zombie/serumE
 import { processAmbushFromChimmy, validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
 import { postWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
 import { computeInfections } from '@/lib/zombie/ZombieInfectionEngine'
+import * as weekClock from '@/lib/zombie/zombieWeekGameStart'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -148,7 +149,9 @@ describe('Zombie weekly actions', () => {
     expect(outcome.infected).toEqual([])
   })
 
-  it('a Whisperer swap changes both scheduled matchups and spends one ambush', async () => {
+  it('a non-NFL Whisperer swap changes both scheduled matchups and spends one ambush', async () => {
+    vi.spyOn(weekClock, 'trustedZombieWeekStart').mockResolvedValueOnce(new Date(Date.now() + 60_000)).mockResolvedValueOnce(new Date(Date.now() + 60_000))
+    h.zombieLeagueFindUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NBA', season: 2026, status: 'active', currentWeek: 3, experienceMode: 'enhanced' })
     h.getConfig.mockResolvedValue({ ambushRemapMatchup: true, ambushCountPerWeek: 1 })
     h.whispererRecordFindUnique.mockResolvedValue({ id: 'rec', userId: 'whisperer', ambushesRemaining: 2 })
     h.chimmyActionCreate.mockResolvedValue({ id: 'command' })

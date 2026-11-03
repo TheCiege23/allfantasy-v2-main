@@ -13,6 +13,8 @@ export async function acceptedCoOwnerRosterId(leagueId: string, userId: string):
     select: { rosterId: true, acceptedAt: true, rosterOwnerKey: true, claimedOwnerId: true, roster: { select: { leagueId: true, platformUserId: true } } },
   }).catch((error: unknown) => { if (coOwnerTableMissing(error)) return null; throw error })
   if (!row?.acceptedAt || row.roster.leagueId !== leagueId || row.roster.platformUserId !== row.rosterOwnerKey) return null
+  const zombie = await prisma.zombieLeague?.findUnique({ where: { leagueId }, select: { status: true } })
+  if (zombie && !['setup', 'registering'].includes(zombie.status)) return null
   const currentTeam = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: row.rosterId }, select: { claimedByUserId: true } })
   if ((currentTeam?.claimedByUserId ?? null) !== row.claimedOwnerId) return null
   // A user who has since claimed a team cannot manage a second team's roster.

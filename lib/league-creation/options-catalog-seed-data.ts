@@ -48,6 +48,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introPosterUrl: '/images/league-types/redraft.png',
     },
     {
+      id: 'pirate',
+      title: 'Pirate',
+      subtitle: 'Win matchups and steal unprotected players',
+      introVideoUrl: '/media/league-intros/pirate-claim.mp4',
+      introPosterUrl: '/images/league-types/pirate-hero.png',
+    },
+    {
       id: 'dynasty',
       title: 'Dynasty',
       subtitle: 'Keep your core forever',
@@ -132,6 +139,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   sports: ALL_SPORTS,
   allowedSportsByConcept: {
     redraft: ALL_SPORTS,
+    pirate: ['NFL', 'NBA', 'MLB', 'NHL'],
     dynasty: ALL_SPORTS,
     keeper: ALL_SPORTS,
     best_ball: ALL_SPORTS,
@@ -152,6 +160,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   allowedDraftTypesByConcept: {
     // A slow Redraft is a snake draft with a longer pick clock, not a create API draft type.
     redraft: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
+    pirate: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
     dynasty: ['snake', 'linear', 'auction', 'offline', 'auto'],
     keeper: ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto', 'team'],
     best_ball: ['snake', 'linear', 'auction', 'offline', 'auto'],
@@ -175,6 +184,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
       SOCCER: ['soc_points'],
+    },
+    pirate: {
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
+      NBA: ['nba_points'],
+      MLB: ['mlb_points'],
+      NHL: ['nhl_points'],
     },
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
@@ -276,6 +291,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: UNIVERSAL_CREATE_TEAM_COUNTS,
       NCAAB: UNIVERSAL_CREATE_TEAM_COUNTS,
       SOCCER: UNIVERSAL_CREATE_TEAM_COUNTS,
+    },
+    pirate: {
+      NFL: [4, 6, 8, 10, 12, 14, 16],
+      NBA: [4, 6, 8, 10, 12, 14, 16],
+      MLB: [4, 6, 8, 10, 12, 14, 16],
+      NHL: [4, 6, 8, 10, 12, 14, 16],
     },
     dynasty: {
       NFL: [4, 6, 8, 10, 12, 14, 16],

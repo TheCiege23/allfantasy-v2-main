@@ -83,6 +83,40 @@ function normalizeSport(raw: unknown): string {
   return trimmed || 'nfl'
 }
 
+/** Account import lists NFL and NBA; a failed sport is reported while the other remains usable. */
+const SLEEPER_ACCOUNT_DISCOVERY_SPORTS = ['nfl', 'nba'] as const
+
+async function getSleeperLeaguesForDiscovery(userId: string, sport: string, season: string) {
+  if (sport !== 'all') {
+    return { leagues: await getUserLeagues(userId, sport, season), warning: null }
+  }
+
+  const results = await Promise.allSettled(
+    SLEEPER_ACCOUNT_DISCOVERY_SPORTS.map((requestedSport) =>
+      getUserLeagues(userId, requestedSport, season),
+    ),
+  )
+  const leagues: Awaited<ReturnType<typeof getUserLeagues>> = []
+  const failedSports: string[] = []
+  let firstFailure: unknown = null
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') leagues.push(...result.value)
+    else {
+      failedSports.push(SLEEPER_ACCOUNT_DISCOVERY_SPORTS[index].toUpperCase())
+      firstFailure ??= result.reason
+    }
+  })
+  if (failedSports.length === SLEEPER_ACCOUNT_DISCOVERY_SPORTS.length) {
+    throw firstFailure instanceof Error ? firstFailure : new Error('Sleeper league discovery failed.')
+  }
+  return {
+    leagues,
+    warning: failedSports.length
+      ? `Could not check your ${failedSports.join(' and ')} leagues right now. Other leagues are shown; try again to see the rest.`
+      : null,
+  }
+}
+
 
 export async function POST(req: NextRequest) {
   const auth = await requireVerifiedUser()
@@ -401,11 +435,12 @@ export async function POST(req: NextRequest) {
       )
     }
     try {
-      const leagues = await getUserLeagues(profile.sleeperUserId, sport, season)
+      const { leagues, warning } = await getSleeperLeaguesForDiscovery(profile.sleeperUserId, sport, season)
       return NextResponse.json({
         provider,
         sport,
         season,
+        ...(warning ? { warning } : {}),
         account: {
           providerUserId: profile.sleeperUserId,
           accountIdentifier: profile.sleeperUsername ?? profile.sleeperUserId,
@@ -514,11 +549,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const leagues = await getUserLeagues(sleeperUser.user.user_id, sport, season)
+    const { leagues, warning } = await getSleeperLeaguesForDiscovery(sleeperUser.user.user_id, sport, season)
     return NextResponse.json({
       provider,
       sport,
       season,
+      ...(warning ? { warning } : {}),
       account: {
         providerUserId: sleeperUser.user.user_id,
         accountIdentifier: sleeperUser.user.username ?? accountIdentifier,

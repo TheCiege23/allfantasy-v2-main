@@ -56,6 +56,9 @@ export interface WizardFormatOptions {
   salaryCapMode: 'dynasty' | 'bestball'
   /** Guillotine — acknowledge rules summary (full chop settings in league settings) */
   guillotineRulesAcknowledged: boolean
+  pirateProtectionLimit: number
+  pirateClaimHours: number
+  piratePlayoffClaims: boolean
   /** Big Brother — optional subtitle shown on league home */
   bigBrotherSubtitle: string
   /** Big Brother — finale format (final_2 or final_3) */
@@ -107,6 +110,9 @@ export const DEFAULT_WIZARD_FORMAT_OPTIONS: WizardFormatOptions = {
   salaryCapStartupCap: null,
   salaryCapMode: 'dynasty',
   guillotineRulesAcknowledged: false,
+  pirateProtectionLimit: 3,
+  pirateClaimHours: 24,
+  piratePlayoffClaims: false,
   bigBrotherSubtitle: '',
   bigBrotherFinaleFormat: 'final_2',
   bigBrotherJuryMode: 'after_eliminations',
@@ -147,6 +153,12 @@ export function formatOptionsApplyToLeagueType(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {
     creation_format_options_version: 1,
+  }
+
+  if (leagueType === 'pirate') {
+    out.pirate_protection_limit = Math.max(1, Math.min(10, Math.floor(options.pirateProtectionLimit || 3)))
+    out.pirate_claim_hours = Math.max(1, Math.min(72, Math.floor(options.pirateClaimHours || 24)))
+    out.pirate_playoff_claims = options.piratePlayoffClaims === true
   }
 
   if (leagueType === 'survivor') {

@@ -52,6 +52,14 @@ describe('resolveWhispererViewer', () => {
     hm.rosterFindFirst.mockResolvedValueOnce(null)
     expect((await resolveWhispererViewer('league-1', 'user-whisperer')).canSee).toBe(true)
   })
+  it('does not give a defeated Whisperer the current role’s visibility or disguise their Zombie roster', async () => {
+    hm.zombieLeagueFindUnique.mockResolvedValueOnce(league({ whispererRecord: { userId: 'user-former', isPubliclyRevealed: false, wasDefeated: true } }))
+    hm.zombieLeagueTeamFindMany.mockResolvedValueOnce([])
+    const viewer = await resolveWhispererViewer('league-1', 'user-former')
+    expect(viewer.canSee).toBe(false)
+    expect(viewer.identity.userIds.size).toBe(0)
+    expect(viewer.identity.rosterIds.size).toBe(0)
+  })
 
   it('lets the Whisperer see, recognised by roster', async () => {
     hm.zombieLeagueFindUnique.mockResolvedValueOnce(league({ whispererRecord: null }))

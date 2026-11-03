@@ -22,6 +22,7 @@ export async function reviveBetaZombie(leagueId: string, userId: string, week: n
   return itemTransaction(async tx => {
     await lockItemLeague(tx, leagueId)
     const z = await tx.zombieLeague.findUnique({ where: { leagueId } })
+    if (z?.correctionHoldFromWeek != null) return false
     if (!z || !usesBeta2025Items(z) || z.currentWeek !== week || !['active', 'in_progress'].includes(z.status)) return false
     const resolution = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } } })
     if (resolution && resolution.status !== 'pending') return false
@@ -34,6 +35,7 @@ export async function autoReviveBetaZombies(leagueId: string, week: number): Pro
   return itemTransaction(async tx => {
     await lockItemLeague(tx, leagueId)
     const z = await tx.zombieLeague.findUnique({ where: { leagueId } })
+    if (z?.correctionHoldFromWeek != null) return 0
     if (!z || !usesBeta2025Items(z) || z.currentWeek !== week || !['active', 'in_progress'].includes(z.status)) return 0
     const resolution = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } } })
     if (resolution && resolution.status !== 'pending') return 0

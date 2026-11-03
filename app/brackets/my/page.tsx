@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { listMyBrackets, type MyBracketLeague } from "@/lib/playoffs/myBrackets"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import MyBracketsList from "@/components/brackets/MyBracketsList"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 
 export const dynamic = "force-dynamic"
 export const metadata: Metadata = { title: "My Brackets | AllFantasy", robots: { index: false, follow: false } }
@@ -18,5 +19,8 @@ export default async function MyBracketsPage() {
   let failed = false
   try { leagues = await listMyBrackets(userId) }
   catch { failed = true }
-  return <MyBracketsList leagues={leagues} language={language} failed={failed} />
+  return <>
+    <BracketQuickNav current="my" language={language} />
+    <MyBracketsList leagues={leagues} language={language} failed={failed} />
+  </>
 }

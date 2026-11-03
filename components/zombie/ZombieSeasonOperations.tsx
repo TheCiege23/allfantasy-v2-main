@@ -1,0 +1,98 @@
+'use client'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { IPHONE_CHECKS } from '@/lib/zombie/acceptanceChecklist'
+
+type Plan = { blockers: string[]; leagues: Array<{ leagueId: string; name: string; result: { fundedCents: number; feeCents: number; weeklyCents: number; seasonPoolCents: number; owners: Array<{ userId: string; amountCents: number; managedWeeks: number; mustStartGamma: boolean }> } }>; ultimate: { openingCents: number; contributionsCents: number; closingCents: number; awards: Record<string, number>; owners?: Array<{ userId: string; amountCents: number }> } | null }
+type Proposal = { title: string; text: string; proposer: string; secondedBy: string | null; status: string; deadline: string | null; effectiveSeason: number; result?: { yes: number; no: number; abstain: number; passed: boolean } }
+type RecordRow = { id: string; kind: string; payload: Record<string, unknown> }
+type Pack = { scope: string; userId: string; userNames?: Record<string, string>; season: number; canManage: boolean; denominator: string; teams: Array<{ id: string; leagueId: string; userId: string }>; records: RecordRow[] }
+const control = 'min-h-11 rounded-xl border border-emerald-300/25 bg-black/30 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50'
+const usd = (n: number) => (n / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+export function ZombieSeasonOperations({ leagueId }: { leagueId: string }) {
+  const [pack, setPack] = useState<Pack | null>(null), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
+  const [review, setReview] = useState<{ id: string; hash: string; plan: Plan } | null>(null), [note, setNote] = useState(''), [confirmed, setConfirmed] = useState(false)
+  const [prizeMode, setPrizeMode] = useState(''), [opening, setOpening] = useState(''), [title, setTitle] = useState(''), [text, setText] = useState('')
+  const [alphaConfirmed, setAlphaConfirmed] = useState(false), [alphaReference, setAlphaReference] = useState(''), [previousReference, setPreviousReference] = useState('')
+  const [rosterId, setRosterId] = useState(''), [newUserId, setNewUserId] = useState(''), [device, setDevice] = useState(''), [ios, setIos] = useState('')
+  const [checks, setChecks] = useState<Record<string, boolean>>({}), [sports, setSports] = useState<Array<{ sport: string; completedMatchups: number; finalizedPlayerRows: number; savedCalendarGames: number; status: string; configuredBashing: number }>>([])
+  const [acceptWeek, setAcceptWeek] = useState(''), [liveConfirmed, setLiveConfirmed] = useState(false), [calibrationConfirmed, setCalibrationConfirmed] = useState(false)
+  const version = useRef(0)
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const current = version.current, r = await fetch(`/api/zombie/season-operations?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include', signal }), p = await r.json()
+    if (!r.ok) throw new Error(p.error || 'Season operations unavailable')
+    if (!signal?.aborted && version.current === current) setPack(p)
+  }, [leagueId])
+  useEffect(() => {
+    const controller = new AbortController(), n = version.current + 1; version.current = n
+    setPack(null); setReview(null); setMessage(''); setSports([]); setBusy(false); setConfirmed(false)
+    setNote(''); setRosterId(''); setNewUserId(''); setTitle(''); setText(''); setOpening(''); setPrizeMode(''); setAlphaConfirmed(false); setAlphaReference(''); setPreviousReference(''); setLiveConfirmed(false); setCalibrationConfirmed(false)
+    void load(controller.signal).catch(e => { if (!controller.signal.aborted) setMessage(e.message) })
+    return () => { version.current = n + 1; controller.abort() }
+  }, [load])
+  async function action(body: Record<string, unknown>) {
+    if (busy) return
+    setBusy(true); setMessage(''); const n = version.current
+    try {
+      const r = await fetch('/api/zombie/season-operations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId, ...body }) }), p = await r.json()
+      if (version.current !== n) return
+      if (!r.ok) throw new Error(p.error || 'The operation was not saved')
+      if (p.review) { setReview(p.review); setConfirmed(false); setMessage('Review prepared. Check every league, owner share and carryover before approval.') }
+      else { setReview(null); setMessage('Saved. Review the updated record below. External payments and drafts are unchanged.') }
+      await load()
+    } catch (e) { if (version.current === n) setMessage(e instanceof Error ? e.message : 'Connection interrupted; refresh the saved records before retrying') }
+    finally { if (version.current === n) setBusy(false) }
+  }
+  async function inspectSports() {
+    const n = version.current
+    try { const r = await fetch(`/api/zombie/season-operations?leagueId=${encodeURIComponent(leagueId)}&view=sports`, { credentials: 'include' }), p = await r.json(); if (!r.ok) throw new Error(p.error); if (version.current === n) setSports(p.sports) }
+    catch (e) { if (version.current === n) setMessage(e instanceof Error ? e.message : 'Sport evidence unavailable') }
+  }
+  if (!pack) return <section className="rounded-2xl border border-white/10 p-4"><p role="status">{message || 'Loading season operations…'}</p></section>
+  const name = (id: string) => pack.userNames?.[id] || id
+  return <section aria-label="Zombie season operations" className="my-5 space-y-4 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/60 to-[#090c18] p-4 text-white">
+    <header><h2 className="font-black">Season operations</h2><p className="text-sm text-white/65">Season {pack.season} · accounting, universe votes, owner recovery and acceptance.</p></header>
+    {message && <p role="status" aria-live="polite">{message}</p>}
+    {pack.canManage && <details><summary className="min-h-11 cursor-pointer font-bold">Season accounting &amp; Alpha pot</summary><div className="space-y-3 pt-3 text-sm">
+      <p>Uses recorded collected funds, fees and the 2025 winnings ledger. All scheduled weeks must be settled and free of correction holds. This records an allocation; payments stay with your external provider.</p>
+      <label className="block">External weekly prizes<select className={`${control} ml-2`} value={prizeMode} onChange={e => setPrizeMode(e.target.value)}><option value="">Choose if prize records exist</option><option value="included">Already included in weekly winnings</option><option value="separate">Separate prizes deducted from the pot</option></select></label>
+      <label className="block">Opening Alpha pot, first tracked season only (USD)<input type="number" min="0" step="0.01" className={`${control} ml-2`} value={opening} onChange={e => setOpening(e.target.value)} /></label>
+      <label className="block">Reconciliation reference, only when changing a prior approved allocation<input className={`${control} mt-1 w-full`} maxLength={160} value={previousReference} onChange={e => setPreviousReference(e.target.value)} /></label>
+      <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={alphaConfirmed} onChange={e => setAlphaConfirmed(e.target.checked)} />I reconciled the actual $5 contribution for each participating Alpha member.</label><label className="block">Alpha contribution reference<input className={`${control} ml-2`} maxLength={160} value={alphaReference} onChange={e => setAlphaReference(e.target.value)} /></label>
+      <button className={control} disabled={busy} onClick={() => void action({ action: 'preview', funding: { ...(prizeMode ? { externalWeeklyIncludedInLedger: prizeMode === 'included' } : {}), ...(opening !== '' ? { ultimateOpeningCents: Math.round(Number(opening) * 100) } : {}), ultimateContributionsConfirmed: alphaConfirmed, ultimateReference: alphaReference, previousAllocationReference: previousReference } })}>Prepare season allocation</button>
+      {review && <article className="space-y-3 rounded-xl border border-white/15 p-3">
+        {review.plan.blockers.length > 0 && <ul role="alert" className="list-disc pl-5">{review.plan.blockers.map(b => <li key={b}>{b}</li>)}</ul>}
+        {review.plan.leagues.map(l => <div key={l.leagueId}><h3 className="font-bold">{l.name}</h3><p>Collected {usd(l.result.fundedCents)} · fee {usd(l.result.feeCents)} · weekly {usd(l.result.weeklyCents)} · season pool {usd(l.result.seasonPoolCents)}</p><div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><th>Owner account</th><th>Weeks managed</th><th>Allocation</th><th>Next-season placement</th></tr></thead><tbody>{l.result.owners.map((o, i) => <tr key={i}><td className="p-2">{name(o.userId)}</td><td>{o.managedWeeks}</td><td>{usd(o.amountCents)}</td><td>{o.mustStartGamma ? 'Gamma required' : 'Normal placement review'}</td></tr>)}</tbody></table></div></div>)}
+        {review.plan.ultimate && <p>Alpha pot: opening {usd(review.plan.ultimate.openingCents)} + contributions {usd(review.plan.ultimate.contributionsCents)} · carryover {usd(review.plan.ultimate.closingCents)}.</p>}
+        {review.plan.ultimate?.owners?.filter(o => o.amountCents > 0).map((o, i) => <p key={`ultimate-${i}`}>{name(o.userId)} · additional prorated Alpha award {usd(o.amountCents)}</p>)}
+        <label className="block">Review reason<textarea className={`${control} mt-1 w-full`} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label>
+        <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />I reviewed funding, owner history, allocations and carryover.</label>
+        <button className={control} disabled={busy || !confirmed || note.trim().length < 12 || Boolean(review.plan.blockers.length)} onClick={() => void action({ action: 'approve', reviewId: review.id, hash: review.hash, reason: note })}>Approve reviewed allocation</button>
+      </article>}
+      {pack.records.filter(r => r.kind === 'accounting_close').map(r => { const p = r.payload.plan as unknown as Plan; return <article className="rounded-xl border border-emerald-400/30 p-3" key={r.id}><h3 className="font-bold">Approved season allocation</h3>{p.leagues.flatMap(l => l.result.owners.map((o, i) => <p key={`${l.leagueId}-${i}`}>{l.name} · {name(o.userId)}: {usd(o.amountCents)} for {o.managedWeeks} weeks.</p>))}<p>External payments remain to be reconciled with your provider. The approval receipt preserves this reviewed allocation.</p></article> })}
+    </div></details>}
+    {pack.scope.startsWith('u:') && <details><summary className="min-h-11 cursor-pointer font-bold">Universe proposals &amp; votes</summary><div className="space-y-3 pt-3 text-sm"><p>A different owner must second a proposal. Voting lasts 24 hours; 75% of Yes/No votes is required. Abstentions are recorded separately. Passed rule changes apply to the following season.</p>
+      <label className="block">Proposal title<input className={`${control} mt-1 w-full`} maxLength={140} value={title} onChange={e => setTitle(e.target.value)} /></label><label className="block">Proposed rule and reason<textarea className={`${control} mt-1 w-full`} maxLength={4000} value={text} onChange={e => setText(e.target.value)} /></label>
+      <button className={control} disabled={busy || title.trim().length < 5 || text.trim().length < 20} onClick={() => void action({ action: 'propose', input: { title, text, denominator: 'votes_cast' } })}>Propose next-season rule</button>
+      {pack.records.filter(r => r.kind === 'proposal').map(r => { const p = r.payload as unknown as Proposal; return <article key={r.id} className="space-y-2 rounded-xl border border-white/15 p-3"><h3 className="font-bold">{p.title}</h3><p className="whitespace-pre-wrap">{p.text}</p><p>{p.status.replaceAll('_', ' ')} · effective season {p.effectiveSeason}{p.deadline ? ` · closes ${new Date(p.deadline).toLocaleString()}` : ''}</p>
+        {p.status === 'awaiting_second' && p.proposer !== pack.userId && <button className={control} disabled={busy} onClick={() => void action({ action: 'second', input: { proposalId: r.id } })}>Second this proposal</button>}
+        {p.status === 'voting' && <div className="flex flex-wrap gap-2">{(['yes', 'no', 'abstain'] as const).map(choice => <button className={control} key={choice} aria-pressed={pack.records.some(b => b.kind === 'ballot' && b.payload.proposalId === r.id && b.payload.choice === choice)} disabled={busy || Boolean(p.deadline && new Date(p.deadline).getTime() <= Date.now())} onClick={() => void action({ action: 'vote', input: { proposalId: r.id, choice } })}>Vote {choice}{pack.records.some(b => b.kind === 'ballot' && b.payload.proposalId === r.id && b.payload.choice === choice) ? ' · saved' : ''}</button>)}<button className={control} disabled={busy || Boolean(p.deadline && new Date(p.deadline).getTime() > Date.now())} onClick={() => void action({ action: 'finalize', input: { proposalId: r.id } })}>Tally closed vote</button></div>}
+        {p.result && <p>{p.result.yes} Yes · {p.result.no} No · {p.result.abstain} abstentions. {p.result.passed ? 'Passed; commissioner implements the approved next-season rule in its relevant settings.' : 'Did not pass.'}</p>}
+      </article> })}
+    </div></details>}
+    <details><summary className="min-h-11 cursor-pointer font-bold">Owner participation &amp; recovery</summary><div className="space-y-3 pt-3 text-sm">
+      {pack.canManage && <><p>Contact the current owner, allow 48 hours for a response, then review a replacement. Winnings follow recorded weeks managed. Entry after week 9 requires Gamma next season.</p><label className="block">Team<select className={`${control} ml-2`} value={rosterId} onChange={e => setRosterId(e.target.value)}><option value="">Choose team</option>{pack.teams.filter(t => t.leagueId === leagueId).map(t => <option key={t.id} value={t.id}>{t.userId}</option>)}</select></label><label className="block">Contact or replacement reason<textarea className={`${control} mt-1 w-full`} value={note} onChange={e => setNote(e.target.value)} /></label><button className={control} disabled={busy || !rosterId || note.trim().length < 12} onClick={() => void action({ action: 'contact', input: { rosterId, reason: note } })}>Send participation notice</button><label className="block">Registered replacement username or account ID<input className={`${control} mt-1 w-full`} value={newUserId} onChange={e => setNewUserId(e.target.value)} /></label><button className={control} disabled={busy || !rosterId || !newUserId || note.trim().length < 12} onClick={() => void action({ action: 'replace', input: { rosterId, newUserId, reason: note } })}>Review and assign replacement</button></>}
+      {pack.records.filter(r => r.kind === 'owner_contact').map(r => <div className="rounded-xl border border-white/15 p-3" key={r.id}><p>{String(r.payload.status).replaceAll('_', ' ')} · deadline {new Date(String(r.payload.deadline)).toLocaleString()}</p>{r.payload.userId === pack.userId && ['awaiting_response', 'needs_commissioner_review'].includes(String(r.payload.status)) && <button className={control} disabled={busy} onClick={() => void action({ action: 'respond', input: { rosterId: pack.teams.find(t => t.userId === pack.userId && t.leagueId === leagueId)?.id } })}>Confirm I am continuing</button>}</div>)}
+    </div></details>
+    <details><summary className="min-h-11 cursor-pointer font-bold">Manager acceptance rehearsal</summary><div className="space-y-3 pt-3 text-sm"><p>Use separate QA leagues. Consent does not start a draft. A real scoring week and physical iPhone results stay pending until participants record what happened.</p><button className={control} disabled={busy} onClick={() => void action({ action: 'acceptance', input: { type: 'consent', consents: true } })}>I consent to the test week</button><button className={control} disabled={busy} onClick={() => void action({ action: 'acceptance', input: { type: 'consent', consents: false } })}>Withdraw test consent</button>
+      <label className="block">Physical iPhone model<input className={`${control} ml-2`} value={device} onChange={e => setDevice(e.target.value)} /></label><label className="block">iOS version<input className={`${control} ml-2`} value={ios} onChange={e => setIos(e.target.value)} /></label>
+      {IPHONE_CHECKS.map(k => <label key={k} className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={checks[k] === true} onChange={e => setChecks(old => ({ ...old, [k]: e.target.checked }))} />{k.replace(/([A-Z])/g, ' $1')}</label>)}
+      <label className="block">What you tested, including failures<textarea className={`${control} mt-1 w-full`} value={note} onChange={e => setNote(e.target.value)} /></label><button className={control} disabled={busy || device.length < 3 || ios.length < 2 || note.trim().length < 20} onClick={() => void action({ action: 'acceptance', input: { type: 'iphone', device, ios, note, checks: Object.fromEntries(IPHONE_CHECKS.map(k => [k, checks[k] === true])) } })}>Record physical iPhone results</button>
+      {pack.records.filter(r => r.kind === 'consent' || r.kind === 'acceptance').map(r => <p key={r.id}>{r.kind === 'consent' ? `Your test consent: ${r.payload.consents ? 'yes' : 'withdrawn'}` : `${String(r.payload.type).replaceAll('_', ' ')}: ${r.payload.passed ? 'manager reported a pass' : 'issues reported'}`}</p>)}
+      {pack.canManage && <><label className="block">Completed real scoring week<input type="number" min="1" max="52" className={`${control} ml-2`} value={acceptWeek} onChange={e => setAcceptWeek(e.target.value)} /></label>
+        <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={liveConfirmed} onChange={e => setLiveConfirmed(e.target.checked)} />I observed normal ingestion, used no synthetic scores, and reviewed locks, items and the once-only report with consenting managers.</label><button className={control} disabled={busy || !liveConfirmed || !acceptWeek || note.trim().length < 20} onClick={() => void action({ action: 'acceptance', input: { type: 'real_week', week: Number(acceptWeek), note, normalIngestionObserved: true, noSyntheticScores: true, locksAndItemsReviewed: true } })}>Record observed real-manager week</button>
+        <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={calibrationConfirmed} onChange={e => setCalibrationConfirmed(e.target.checked)} />I reviewed this sport’s stored calendar, actual item effects and combat thresholds against the scored matchups.</label><button className={control} disabled={busy || !calibrationConfirmed || note.trim().length < 20} onClick={() => void action({ action: 'acceptance', input: { type: 'sport_calibration', note, providerCalendarReviewed: true, itemEffectsReviewed: true, thresholdsReviewed: true } })}>Record commissioner calibration review</button>
+        <button className={control} disabled={busy} onClick={() => void inspectSports()}>Inspect saved evidence for all seven sports</button><p>Row counts show available evidence. They do not certify complete provider coverage or approved gameplay calibration.</p>{sports.map(s => <p key={s.sport}>{s.sport}: {s.completedMatchups} completed matchups · {s.finalizedPlayerRows} finalized player rows · {s.savedCalendarGames} calendar games · bash threshold {s.configuredBashing} · {s.status.replaceAll('_', ' ')}</p>)}</>}
+    </div></details>
+    <button className="min-h-11 text-sm text-emerald-200 underline" disabled={busy} onClick={() => void load().catch(e => setMessage(e.message))}>Refresh operations</button>
+  </section>
+}

@@ -247,10 +247,13 @@ describe('league type — confirmed or not, and why it matters', () => {
     expect(screen.queryByRole('button', { name: /^Confirm / })).toBeNull()
   })
 
-  it('is the target of every grade’s "Confirm your league type" link', async () => {
+  it('keeps the grade confirmation target visible without opening League details', async () => {
     stubFetch({ canConfirm: true, storedType: 'redraft', confirmation: null })
     const { container } = render(bar())
-    await loadedTypeSelect()
-    expect(container.querySelector('#league-type')).not.toBeNull()
+    const select = await loadedTypeSelect()
+    const target = container.querySelector('#league-type')
+    expect(target).toContainElement(select)
+    expect(target?.closest('details')).toBeNull()
+    expect(screen.getByText('League details').closest('details')).not.toHaveAttribute('open')
   })
 })
