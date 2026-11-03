@@ -78,7 +78,11 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
      * are not on and ranked them up the suggestions (isForeignIdSpace, rosterIdSpace.ts).
      */
     if (isForeignIdSpace(r.league?.platform, r.league?.sport)) continue
-    for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) counts.set(id, (counts.get(id) ?? 0) + 1)
+    const sport = String(r.league?.sport ?? 'NFL').toUpperCase()
+    for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) {
+      const key = `${sport}:${id}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
   }
   return counts
 }
@@ -118,6 +122,7 @@ type IndexedRoster = { platformUserId: string; ids: Set<string> }
 type IndexedLeague = {
   id: string
   name: string
+  sport: string
   /** False when the sampled roster ids do not resolve against our player table. */
   usable: boolean
   yoursIds: Set<string>
@@ -223,6 +228,7 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
     out.push({
       id,
       name: nameById.get(id) ?? 'Untitled league',
+      sport: sportOf.get(id) ?? 'NFL',
       usable: sample.length > 0 && rosterIdCoverage(sample, knownBySport.get(sportOf.get(id) ?? 'NFL') ?? new Set()).usable,
       yoursIds,
       rosters: rs.map((r) => ({ platformUserId: r.platformUserId, ids: allIds((r.playerData ?? {}) as Record<string, unknown>) })),
@@ -271,10 +277,11 @@ export function rosterIndexCacheSize(): number {
   return indexCache.size
 }
 
-export function presenceOf(sleeperId: string | null, index: RosterIndex): SuggestionPresence | null {
+export function presenceOf(sleeperId: string | null, index: RosterIndex, sport = 'NFL'): SuggestionPresence | null {
   if (!sleeperId) return null
   const p: SuggestionPresence = { yours: [], owned: [], free: [], unchecked: 0 }
   for (const league of index.leagues) {
+    if (league.sport !== sport.toUpperCase()) continue
     const holder = league.rosters.find((r) => r.ids.has(sleeperId)) ?? null
     if (holder) {
       if (league.yoursIds.has(holder.platformUserId)) p.yours.push(league.name)
@@ -304,8 +311,8 @@ export function rankSuggestions(rows: PlayerSuggestion[]): PlayerSuggestion[] {
   // A player with a team is active; one without is retired or unsigned. Between
   // otherwise-equal rows the active one is the one being typed for.
   const active = (s: PlayerSuggestion) => (s.team ? 0 : 1)
-  // The finder joins NFL rosters today; a college or NBA row of the same
-  // letters is not what a search box on this screen is for.
+  // Keep the long-standing NFL tie-break for an unfiltered search. A chosen
+  // sport is filtered in the catalog before this ordering runs.
   const nfl = (s: PlayerSuggestion) => (s.sport === 'NFL' ? 0 : 1)
   return [...rows].sort(
     (a, b) =>
@@ -329,7 +336,7 @@ export function foldSamePerson(rows: PlayerSuggestion[]): PlayerSuggestion[] {
   const seen = new Set<string>()
   const out: PlayerSuggestion[] = []
   for (const s of rows) {
-    const key = `${s.name.trim().toLowerCase()}|${positionGroup(s.position)}`
+    const key = `${s.sport}|${s.name.trim().toLowerCase()}|${positionGroup(s.position)}`
     if (seen.has(key)) continue
     seen.add(key)
     out.push(s)
@@ -360,6 +367,7 @@ export function positionGroup(position: string | null | undefined): string {
 
 export async function suggestPlayers(args: {
   query: string
+  sport?: string | null
   userId: string | null
   /** Called at most once a minute per user; the ids of every league they play. */
   loadLeagueIds: () => Promise<string[]>
@@ -373,15 +381,18 @@ export async function suggestPlayers(args: {
   // The global count first (cached ten minutes), so the catalog can read the
   // rostered players ahead of the alphabet — see suggestCatalog's preferIds.
   const counts = await getGlobalRosterCounts()
+  const preferIds = [...new Set([...counts.keys()]
+    .filter((key) => !args.sport || key.startsWith(`${args.sport}:`))
+    .map((key) => key.slice(key.indexOf(':') + 1)))]
   const [matches, index] = await Promise.all([
-    suggestCatalog(q, limit * 3, { preferIds: [...counts.keys()] }),
+    suggestCatalog(q, limit * 3, { preferIds, ...(args.sport ? { sport: args.sport } : {}) }),
     args.userId ? getRosterIndex(args.userId, args.loadLeagueIds) : Promise.resolve(null),
   ])
-  const rows: PlayerSuggestion[] = matches.map((m) => ({
+  const rows: PlayerSuggestion[] = matches.filter((m) => !args.sport || m.sport === args.sport).map((m) => ({
     ...m,
     prefix: isPrefixMatch(q, m.name),
-    presence: index ? presenceOf(m.sleeperId, index) : null,
-    rostered: m.sleeperId ? (counts.get(m.sleeperId) ?? 0) : 0,
+    presence: index ? presenceOf(m.sleeperId, index, m.sport) : null,
+    rostered: m.sleeperId ? (counts.get(`${m.sport}:${m.sleeperId}`) ?? 0) : 0,
   }))
   return foldSamePerson(rankSuggestions(rows)).slice(0, limit)
 }

@@ -147,15 +147,26 @@ describe('suggestPlayers', () => {
     expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
   })
 
-  /* ⚠ ONE ROW PER PERSON: the college row and the second team spelling fold into the rostered NFL row. */
-  it('folds a player’s college row and a second team spelling into one suggestion, NFL first', async () => {
+  /* Source duplicates fold, while the college and NFL catalog entries remain searchable separately. */
+  it('keeps a player’s college row while folding duplicate rows within each sport', async () => {
     mockSearchPlayers.mockResolvedValue([KINCAID_COLLEGE, KINER_A, KINER_B, KINCAID, KINCHENS, KINCHENS_S])
     const got = await suggestPlayers({ query: 'kin', userId: null, loadLeagueIds })
     expect(got.map((s) => `${s.name} · ${s.sport} · ${s.externalId}`)).toEqual([
       'Dalton Kincaid · NFL · ri-1',
       'Corey Kiner · NFL · ri-6',
+      'Dalton Kincaid · NCAAF · cfbd-1',
       'Kamren Kinchens · NFL · ri-2',
     ])
+  })
+
+  it('returns the chosen sport and never uses an NFL league for its roster chip', async () => {
+    const college = { ...KINCAID_COLLEGE, sleeperId: '10236' }
+    mockSearchPlayers.mockResolvedValue([KINCAID, college])
+    const got = await suggestPlayers({ query: 'kinc', sport: 'NCAAF', userId: 'me', loadLeagueIds })
+    expect(got).toHaveLength(1)
+    expect(got[0].sport).toBe('NCAAF')
+    expect(got[0].presence).toEqual({ yours: [], owned: [], free: [], unchecked: 0 })
+    expect(mockSearchPlayers.mock.calls[0][2]).toMatchObject({ sport: 'NCAAF' })
   })
 
   it('keeps two different players who share a name but not a position group', async () => {
@@ -179,7 +190,7 @@ describe('suggestPlayers', () => {
 describe('getGlobalRosterCounts', () => {
   it('serves the stale count at once and refreshes it once behind the request', async () => {
     const first = await getGlobalRosterCounts(0)
-    expect(first.get('10236')).toBe(2)
+    expect(first.get('NFL:10236')).toBe(2)
     expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
 
     // Ten minutes on, the rosters have grown; the caller still gets the old map immediately.
@@ -193,7 +204,7 @@ describe('getGlobalRosterCounts', () => {
 
     await new Promise((r) => setTimeout(r, 0))
     const fresh = await getGlobalRosterCounts(11 * 60_000 + 1)
-    expect(fresh.get('10236')).toBe(3)
+    expect(fresh.get('NFL:10236')).toBe(3)
     expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
   })
 
@@ -277,6 +288,6 @@ describe('suggestions — a foreign-id league', () => {
 
   it('does not count a foreign roster toward how widely he is rostered', async () => {
     const counts = await getGlobalRosterCounts(0)
-    expect(counts.get('10236')).toBe(2)
+    expect(counts.get('NFL:10236')).toBe(2)
   })
 })

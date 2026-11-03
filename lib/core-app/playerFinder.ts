@@ -303,12 +303,12 @@ function slotLabel(key: (typeof SLOT_ORDER)[number]): string {
  * `$queryRaw`, a `::text` cast) silently returns the plan to a sequential scan, and nothing
  * fails — the search just quietly costs a table scan again.
  */
-export async function searchPlayers(query: string, limit = 12): Promise<PlayerMatch[]> {
+export async function searchPlayers(query: string, limit = 12, sport?: string | null): Promise<PlayerMatch[]> {
   const q = query.trim()
   if (q.length < 2) return []
 
   const rows = await prisma.sportsPlayer.findMany({
-    where: { name: { contains: q, mode: 'insensitive' } },
+    where: { name: { contains: q, mode: 'insensitive' }, ...(sport ? { sport } : {}) },
     /*
      * A player can exist under several sources; prefer rows that carry the
      * sleeper id, because those are the ones that can be cross-referenced.
@@ -402,7 +402,7 @@ function collapseCatalog(rows: CatalogRow[], limit: number): PlayerMatch[] {
   for (const r of rows) {
     // Normalised so "Dalton Kincaid / TE / BUF" and "Dalton Kincaid / Tight End
     // / BUF" collapse to one entry instead of looking like two players.
-    const key = `${r.name.trim().toLowerCase()}|${normalizePosition(r.position)}|${teamKey(r.team)}`
+    const key = `${r.sport}|${r.name.trim().toLowerCase()}|${normalizePosition(r.position)}|${teamKey(r.team)}`
     const image = asHeadshotUrl(r.imageUrl)
     const existing = seen.get(key)
     if (!existing) {
@@ -461,6 +461,7 @@ export async function suggestCatalog(
      * behind forty alphabetical Kings the window never reaches.
      */
     preferIds?: readonly string[]
+    sport?: string | null
   } = {},
 ): Promise<PlayerMatch[]> {
   const q = query.trim()
@@ -526,7 +527,10 @@ export async function suggestCatalog(
   ]
   for (const { where, take } of passes) {
     if (out.length >= limit) break
-    const rows = await prisma.sportsPlayer.findMany({ where, orderBy, take, select: CATALOG_SELECT })
+    const rows = await prisma.sportsPlayer.findMany({
+      where: { ...where, ...(opts.sport ? { sport: opts.sport } : {}) },
+      orderBy, take, select: CATALOG_SELECT,
+    })
     add(await withoutDetectablyWrongHeadshots(rows ?? []))
   }
   return out.slice(0, limit)
@@ -911,9 +915,17 @@ export async function getPlayerDetail(
   if (!facts) return null
   const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank } = facts
 
+  // Sleeper ids are reused between sports. Only leagues of this athlete's
+  // sport may participate in roster, impact, and pickup reads.
+  const scopedLeagueIds = userLeagueIds.length > 0
+    ? (await prisma.league.findMany({
+        where: { id: { in: userLeagueIds } },
+        select: { id: true, sport: true },
+      })).filter((league) => String(league.sport ?? 'NFL').toUpperCase() === row.sport).map((league) => league.id)
+    : []
 
   const resolvedSlots = identityResolved
-    ? await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId)
+    ? await resolveLeagueSlots(row.sleeperId!, scopedLeagueIds, userId)
     : null
   const leagues: SectionState<LeagueSlot[]> = !resolvedSlots
     ? {
@@ -933,7 +945,7 @@ export async function getPlayerDetail(
    */
   const impactRows =
     userId && row.sleeperId
-      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: userLeagueIds }).catch(() => null)
+      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: scopedLeagueIds }).catch(() => null)
       : null
 
   const impact: PlayerDetail['impact'] = impactRows
