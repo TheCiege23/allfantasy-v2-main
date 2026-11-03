@@ -106,7 +106,13 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
 
       {days.length ? days.map((day) => (
         <div className="af-cup-day" key={day.key}>
-          <div className="af-cup-day-head"><h3>{day.heading}</h3><span>{day.sub}</span></div>
+          <div className="af-cup-day-head">
+            <h3>{day.heading}</h3>
+            <span>{day.sub}{(() => {
+              const open = day.list.filter((game) => !lockedReasonFor(game))
+              return open.length ? ` · ${open.filter((game) => picks.has(game.id)).length}/${open.length} open picks saved` : ""
+            })()}</span>
+          </div>
           <div className="af-cup-grid">
             {day.list.map((game) => (
               <CupGameCard

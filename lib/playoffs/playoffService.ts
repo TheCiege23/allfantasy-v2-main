@@ -767,17 +767,19 @@ export async function submitPlayoffBracketEntry(input: {
     const rollingCup = entry.challenge.sport === "nba_cup"
     if (!rollingCup) assertBracketOpen(series)
     const guess = input.tiebreakerTotalScore
-    if (!Number.isInteger(guess) || Number(guess) < 0 || Number(guess) > 500) {
+    if ((!rollingCup || guess !== undefined) && (!Number.isInteger(guess) || Number(guess) < 0 || Number(guess) > 500)) {
       throw new Error("Enter a final-game combined score from 0 to 500 to finalize.")
     }
     const championship = series.find((game: any) => game.round === "cup_championship")
     const finalLocked = rollingCup && championship && (championship.status !== "scheduled" || (championship.startsAt && new Date(championship.startsAt).getTime() <= Date.now()))
-    if (finalLocked && Number(guess) !== entry.tiebreakerTotalScore) throw new Error("The championship tiebreaker locked at tipoff.")
+    if (finalLocked && guess !== undefined && guess !== entry.tiebreakerTotalScore) throw new Error("The championship tiebreaker locked at tipoff.")
     // Keep the first Cup submission timestamp: subsequent edits must not invalidate earlier earned picks.
     if (rollingCup) {
       await prisma.$transaction(async (tx) => {
         await (tx as any).playoffBracketEntry.updateMany({ where: { id: entry.id, finalizedAt: null }, data: { finalizedAt: new Date() } })
-        await (tx as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { tiebreakerTotalScore: Number(guess) } })
+        if (guess !== undefined) {
+          await (tx as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { tiebreakerTotalScore: guess } })
+        }
       })
     } else {
       await (prisma as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { finalizedAt: new Date(), tiebreakerTotalScore: Number(guess) } })

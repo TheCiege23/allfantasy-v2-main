@@ -63,7 +63,8 @@ describe("NBA Cup remaining-game board", () => {
   })
   it("explains group-play scoring above both stages using the scorer's points", () => {
     render(<MlbBracketBoard view={view()} onViewChange={() => {}} />)
-    const scoring = screen.getByRole("region", { name: "NBA Cup scoring" })
+    fireEvent.click(screen.getByText("Scoring rules"))
+    const scoring = screen.getByLabelText("NBA Cup scoring")
     expect(within(scoring).getByText(/Each correct Group Play winner earns 1 point/)).toHaveTextContent("Group Play and knockout points both count toward your league and universal standings.")
     const tiles = within(scoring).getByTestId("pb-scoring-tiles")
     expect(Array.from(tiles.children).map((tile) => tile.textContent)).toEqual([
@@ -79,6 +80,8 @@ describe("NBA Cup remaining-game board", () => {
     expect(within(group).getByRole("img", { name: "Boston Celtics" })).toHaveAttribute("src", "https://example.test/bos.png")
     expect(screen.getByText(/Join anytime/)).toBeInTheDocument()
     expect(screen.queryByText(/must be published/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Knockout picks open after Group Play ends/)).toBeVisible()
+    expect(screen.queryByTestId("pb-scroller")).not.toBeInTheDocument()
     expect(screen.queryByTestId("cup-game-1002")).not.toBeInTheDocument()
     expect(within(screen.getByTestId("cup-game-1001")).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
   })
