@@ -68,13 +68,17 @@ export async function bridgeImportedGameLogIds(args: {
     unresolved: ids.filter((id) => !ambiguous.includes(id) && ![...mapping.values()].includes(id)), ambiguous }
 }
 
+function nbaNameKey(name: string): string {
+  return normalizePlayerName(name.normalize('NFKD').replace(/\p{M}/gu, ''))
+}
+
 /** Resolve Sleeper's NBA ids via the provider catalog, never by their numeric value. */
 async function bridgeSleeperNbaIds(ids: string[]) {
   const players = await prisma.sportsPlayer.findMany({
     where: { sport: 'NBA', source: 'sleeper', sleeperId: { in: ids } },
     select: { sleeperId: true, name: true, team: true, dob: true },
   })
-  const names = [...new Set(players.map((player) => normalizePlayerName(player.name)))]
+  const names = [...new Set(players.flatMap((player) => [normalizePlayerName(player.name), nbaNameKey(player.name)]))]
   const candidates = await prisma.playerIdentityMap.findMany({
     where: { sport: 'NBA', normalizedName: { in: names }, rollingInsightsId: { not: null } },
     select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true, dob: true },
@@ -90,10 +94,10 @@ async function bridgeSleeperNbaIds(ids: string[]) {
     }
     const player = sources[0]
     if (!player) continue
-    const name = normalizePlayerName(player.name)
+    const name = nbaNameKey(player.name)
     const team = player.team ? proTeamCode('NBA', player.team) : null
     if (!name) continue
-    const named = candidates.filter((candidate) => candidate.normalizedName === name)
+    const named = candidates.filter((candidate) => nbaNameKey(candidate.canonicalName) === name)
     const byTeam = team ? named.filter((candidate) => proTeamCode('NBA', candidate.currentTeam) === team) : []
     // A free agent or a player whose team changed can still be corroborated by birth date.
     const dob = player.dob?.trim()
