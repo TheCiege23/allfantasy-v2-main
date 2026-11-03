@@ -75,7 +75,7 @@ const EXPECTED: Record<ImportProvider, ImportSupportedSport[]> = {
   sleeper: ['NFL'],
   espn: ['NFL', 'MLB'],
   yahoo: ['NFL'],
-  fantrax: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'],
+  fantrax: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'],
   mfl: ['NFL'],
   fleaflicker: ['NFL'],
 }

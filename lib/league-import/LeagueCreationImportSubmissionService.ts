@@ -3,6 +3,7 @@
  */
 
 import { isImportProviderAvailable } from './provider-ui-config';
+import { parseFantraxLeagueId } from './fantrax/fantraxApi';
 import type { ImportProvider } from './types';
 
 export interface CommissionerAttestation {
@@ -160,9 +161,13 @@ function getImportApiErrorMessage(
  */
 const IMPORT_REQUEST_TIMEOUT_MS = 60_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = IMPORT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), IMPORT_REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -372,6 +377,17 @@ export async function discoverProviderLeagues(
     return { ok: false, error: 'Account identifier is required.' };
   }
 
+  const manualFantraxLookup = provider === 'fantrax' && Boolean(trimmed);
+  if (manualFantraxLookup && !parseFantraxLeagueId(trimmed)) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Paste the Fantrax league URL or the league ID from that URL. Use the Secret ID in Connect Fantrax.',
+    };
+  }
+
+  // Give the Fantrax discovery route time to return its response before aborting.
+  const timeoutMs = manualFantraxLookup ? 95_000 : IMPORT_REQUEST_TIMEOUT_MS;
   try {
     const res = await fetchWithTimeout('/api/leagues/import/discover', {
       method: 'POST',
@@ -382,7 +398,7 @@ export async function discoverProviderLeagues(
         ...(options?.season ? { season: options.season } : {}),
         ...(options?.sport ? { sport: options.sport } : {}),
       }),
-    });
+    }, timeoutMs);
     const data = await readImportResponseBody(res);
     if (!res.ok) {
       return {

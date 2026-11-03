@@ -13,7 +13,7 @@
 
 import type { ImportProvider } from './types';
 
-export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL';
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB';
 
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
@@ -71,7 +71,7 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * (tests/fixtures/fantrax/*-public-2026.json); rosters, minors and IR remain unproven because
    * those leagues had not drafted — contracts/fantrax/GAPS.md F-04.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not
@@ -164,7 +164,7 @@ export type ImportSportCheck =
  * basketball league with football rules.
  */
 /** Every sport AllFantasy runs leagues for. A league in any other sport has nowhere to go. */
-export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'];
+export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'];
 
 /**
  * The looser gate for the live importers that are not held to their `supportedSports` list

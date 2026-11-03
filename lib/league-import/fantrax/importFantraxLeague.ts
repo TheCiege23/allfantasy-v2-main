@@ -190,7 +190,7 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfb, nfl, mlb, nba, nhl, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfb, nfl, mlb, nba, nhl, ncaab, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
@@ -198,13 +198,14 @@ export async function importFantraxLeague(args: {
     getFantraxPlayerIds('MLB'),
     getFantraxPlayerIds('NBA'),
     getFantraxPlayerIds('NHL'),
+    getFantraxPlayerIds('NCAAB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok && !mlb.ok && !nba.ok && !nhl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (!cfb.ok && !nfl.ok && !mlb.ok && !nba.ok && !nhl.ok && !ncaab.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
@@ -227,6 +228,7 @@ export async function importFantraxLeague(args: {
     mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
     nba.ok ? { sport: 'nba' as const, isDevy: false, resolved: resolveRosters(rosters.data, nba.data) } : null,
     nhl.ok ? { sport: 'nhl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nhl.data) } : null,
+    ncaab.ok ? { sport: 'ncaab' as const, isDevy: false, resolved: resolveRosters(rosters.data, ncaab.data) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
 
   /*
@@ -241,7 +243,7 @@ export async function importFantraxLeague(args: {
   const poolIds = rosterPlayers === 0 ? Object.keys(recordOf(info.data.playerInfo)) : []
   const mapFor: Record<string, Record<string, unknown> | null> = {
     cfb: cfb.ok ? cfb.data : null, nfl: nfl.ok ? nfl.data : null, mlb: mlb.ok ? mlb.data : null,
-    nba: nba.ok ? nba.data : null, nhl: nhl.ok ? nhl.data : null,
+    nba: nba.ok ? nba.data : null, nhl: nhl.ok ? nhl.data : null, ncaab: ncaab.ok ? ncaab.data : null,
   }
   const scored = candidates
     .map((c) => ({
@@ -260,7 +262,7 @@ export async function importFantraxLeague(args: {
         ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
         : best && best.named > 0
           ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
-          : "This league's players do not match the college, NFL, MLB, NBA or NHL player lists, so it was not imported. Nothing was saved.",
+          : "This league's players do not match the college football, college basketball, NFL, MLB, NBA or NHL player lists, so it was not imported. Nothing was saved.",
     }
   }
   const resolved = best.resolved
@@ -277,7 +279,7 @@ export async function importFantraxLeague(args: {
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `Only ${named} of ${total} players could be named against the college, NFL, MLB, NBA or NHL player maps. Nothing was imported.`,
+      error: `Only ${named} of ${total} players could be named against the college football, college basketball, NFL, MLB, NBA or NHL player maps. Nothing was imported.`,
     }
   }
 
