@@ -544,7 +544,7 @@ export function readFormatRules(league: {
      */
     futurePicksTradeable = true
     notes.push(
-      'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Zombie teams cannot trade, so the pool of legal partners only ever shrinks.',
+      'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Survivors and Whisperers may trade. Zombies cannot trade; serum revivals can restore eligible partners.',
     )
   } else if (concept === 'devy' || concept === 'c2c') {
     /*

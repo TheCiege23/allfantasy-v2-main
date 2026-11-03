@@ -15,7 +15,11 @@ import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { getSleeperImportPreview } from '@/lib/league-import/sleeper/SleeperImportPreviewService'
-import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
+import {
+  assertImportCommissioner,
+  attestationFromRequestBody,
+  gateAllowsCommissionerConfirm,
+} from '@/lib/league-import/commissionerGate'
 
 function mapImportPreviewErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
@@ -37,7 +41,7 @@ export async function POST(req: NextRequest) {
   let body: {
     provider?: string
     sourceId?: string
-    attestation?: { accepted?: boolean; statement?: string }
+    attestation?: unknown
     /** Opt-in: accept a preview of a league the caller can read but not yet import. */
     allowPreviewOnly?: boolean
   }
@@ -70,9 +74,7 @@ export async function POST(req: NextRequest) {
     appUserId: auth.userId,
     provider,
     sourceLeagueId: sourceId,
-    attestation: body.attestation?.accepted
-      ? { accepted: true, statement: body.attestation.statement }
-      : undefined,
+    attestation: attestationFromRequestBody(body.attestation),
   })
   /*
    * Preview-only (owner decision "A1", 2026-09-12). A public ESPN league reads fine without cookies,
@@ -137,6 +139,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ...result.preview,
     canonical: result.canonicalPreview,
+    /* A Secret-ID Fantrax member: the screen offers "I'm the commissioner" so the commit can say so. */
+    ...(gateAllowsCommissionerConfirm(gate, provider) ? { commissionerConfirmable: true } : {}),
     ...(previewOnly
       ? {
           importable: false,

@@ -770,6 +770,9 @@ export type TradeScope =
   /** `viewerUserId`: whose own AF copy of each league the trades are graded on. */
   | { viewerLeagueIds: string[] | null; viewerUserId?: string | null }
 
+/** A trade row's sport, upper-cased as `SportsPlayer.sport` stores it; `LeagueTrade.sport` defaults to NFL. */
+const tradeSportOf = (r: { sport?: string | null }) => String(r.sport ?? 'nfl').toUpperCase()
+
 export async function loadTrades(sleeperId: string | null, scope: TradeScope): Promise<SectionState<PlayerCardTrade[]>> {
   if (!sleeperId) return unavailable('No Sleeper id on file, so trades cannot be matched to this player.')
 
@@ -806,6 +809,8 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         // For the drafted-pick match the grade makes — see `archivedTradeGrade.ts`.
         partnerRosterId: true,
         history: { select: { sleeperLeagueId: true } },
+        // Each trade's ids are named from its own sport's pool — Sleeper reuses ids across sports.
+        sport: true,
       },
     })
     .catch(() => [])
@@ -832,16 +837,23 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
 
   // Resolve every referenced id to a name in ONE query — an id printed raw
   // ("Traded for 2133") is worse than saying nothing.
-  const referenced = [...new Set(folded.flatMap((r) => [...ids(r.playersGiven), ...ids(r.playersReceived)]))]
+  const referencedBySport = new Map<string, Set<string>>()
+  for (const r of folded) {
+    const bucket = referencedBySport.get(tradeSportOf(r)) ?? new Set<string>()
+    for (const id of [...ids(r.playersGiven), ...ids(r.playersReceived)]) bucket.add(id)
+    referencedBySport.set(tradeSportOf(r), bucket)
+  }
+  const referenced = [...referencedBySport].filter(([, set]) => set.size > 0)
   const named = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: referenced } },
-      distinct: ['sleeperId'],
-      orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
-      select: { sleeperId: true, name: true },
+      where: { OR: referenced.map(([sport, set]) => ({ sport, sleeperId: { in: [...set] } })) },
+      distinct: ['sport', 'sleeperId'],
+      orderBy: [{ sport: 'asc' }, { sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+      select: { sleeperId: true, sport: true, name: true },
     })
     .catch(() => [])
-  const nameOf = new Map(named.flatMap((p) => (p.sleeperId ? [[p.sleeperId, p.name] as const] : [])))
+  const nameBySportId = new Map(named.flatMap((p) => (p.sleeperId ? [[`${String(p.sport).toUpperCase()}:${p.sleeperId}`, p.name] as const] : [])))
+  const nameOf = (sport: string, id: string): string | undefined => nameBySportId.get(`${sport}:${id}`)
 
   // ⚠ `League` keys the provider's id as `platformLeagueId`; only
   // `LeagueTradeHistory` calls it `sleeperLeagueId`. Joining on the name the
@@ -910,7 +922,7 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         afLeagueId,
         platformLeagueId,
         rows: rowsHere,
-        nameOf: (id) => nameOf.get(id)?.trim() || null,
+        nameOf: (id) => nameOf(tradeSportOf(rowsHere[0]), id)?.trim() || null,
       }).catch(() => new Map<string, ArchivedTradeGrade>())
       for (const [tx, g] of graded) gradeByTx.set(tx, g.grade)
     }),
@@ -948,8 +960,8 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
       platform: r.platform,
       leagueName: r.history?.sleeperLeagueId ? (leagueName.get(r.history.sleeperLeagueId) ?? null) : null,
       tradeDate: r.tradeDate ? r.tradeDate.toISOString() : null,
-      acquired: acquiredIds.flatMap((id) => (nameOf.has(id) ? [nameOf.get(id)!] : [])),
-      sent: sentIds.flatMap((id) => (nameOf.has(id) ? [nameOf.get(id)!] : [])),
+      acquired: acquiredIds.flatMap((id) => nameOf(tradeSportOf(r), id) ?? []),
+      sent: sentIds.flatMap((id) => nameOf(tradeSportOf(r), id) ?? []),
       picks: [...pickLabels(r.picksGiven), ...pickLabels(r.picksReceived)],
       grade: !view
         ? null
@@ -1488,7 +1500,11 @@ async function loadLeague(
       if (all.length > 0) {
         const samePos = await prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: all }, position: { equals: position, mode: 'insensitive' } },
+            where: {
+              ...(league.sport ? { sport: league.sport.toUpperCase() } : {}),
+              sleeperId: { in: all },
+              position: { equals: position, mode: 'insensitive' },
+            },
             distinct: ['sleeperId'],
             orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
             select: { sleeperId: true, name: true },

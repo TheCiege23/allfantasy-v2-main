@@ -7,6 +7,13 @@ import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
+import {
+  MULTI_TEAM_GRADE_WITHHELD,
+  isMultiTeamTrade,
+  joinTeamNames,
+  tradeParticipantRosterIds,
+  tradeTeamMoves,
+} from '@/lib/redraft/tradeParticipants'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // first build walks every season's transactions
@@ -41,12 +48,20 @@ export async function GET(req: NextRequest) {
   // Private offers are visible only to their participants. Approved trades are league-visible.
   if (req.nextUrl.searchParams.get('view') === 'proposals') {
     const cursor = req.nextUrl.searchParams.get('cursor')
+    // A multi-team trade's third and fourth teams are in `additionalRosterIds`, a plain id list, so a
+    // private offer is visible to them by roster id (lib/redraft/tradeParticipants.ts). Unreadable
+    // reads as none: the proposer/receiver visibility below is unchanged either way.
+    const myRosterIds = await Promise.resolve()
+      .then(() => prisma.redraftRoster.findMany({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } }))
+      .then(rows => rows.map(r => r.id))
+      .catch((): string[] => [])
     const proposals = await prisma.redraftTradeProposal.findMany({
       where: {
         leagueId: league.id,
         OR: [
           { proposerRoster: { ownerId: userId } },
           { receiverRoster: { ownerId: userId } },
+          ...(myRosterIds.length ? [{ additionalRosterIds: { hasSome: myRosterIds } }] : []),
           { status: { in: ['accepted', 'approved', 'completed', 'executed'] } },
         ],
       },
@@ -55,21 +70,52 @@ export async function GET(req: NextRequest) {
       take: 51,
       select: {
         id: true, status: true, createdAt: true,
+        proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true,
         proposerRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
         receiverRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
-        assets: { select: { playerName: true, assetType: true, pickSeason: true, pickRound: true } },
+        assets: { select: { playerName: true, assetType: true, pickSeason: true, pickRound: true, fromRosterId: true, toRosterId: true } },
         valueSnapshot: { select: { grade: true, confidenceScore: true, payload: true } },
       },
     })
+    const page = proposals.slice(0, 50)
+    const extraTeamIds = [...new Set(page.filter(p => isMultiTeamTrade(p)).flatMap(p => p.additionalRosterIds))]
+    const extraTeams = extraTeamIds.length
+      ? await prisma.redraftRoster.findMany({ where: { id: { in: extraTeamIds } }, select: { id: true, teamName: true, ownerName: true, ownerId: true } })
+      : []
+    const assetLabel = (a: { playerName: string | null; assetType: string; pickSeason: number | null; pickRound: number | null }) =>
+      a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)
     return NextResponse.json({
-      proposals: proposals.slice(0, 50).map(p => {
+      proposals: page.map(p => {
+        if (isMultiTeamTrade(p)) {
+          /*
+           * A 3- or 4-team trade: every team and what each gives and gets. Not graded, ever: the
+           * fairness snapshot compares two sides and is not even written for these.
+           */
+          const team = new Map([
+            [p.proposerRosterId, p.proposerRoster],
+            [p.receiverRosterId, p.receiverRoster],
+            ...extraTeams.map(r => [r.id, r] as const),
+          ])
+          const nameOf = (id: string) => team.get(id)?.teamName || team.get(id)?.ownerName || 'A team'
+          const moves = tradeTeamMoves(p, p.assets)
+          return {
+            id: p.id, status: p.status, createdAt: p.createdAt,
+            title: `${joinTeamNames(moves.map(m => nameOf(m.rosterId)))} (${moves.length}-team trade)`,
+            involvesYou: tradeParticipantRosterIds(p).some(id => team.get(id)?.ownerId === userId),
+            assets: moves.map(m => `${nameOf(m.rosterId)} gets ${m.gets.map(assetLabel).join(', ') || 'nothing'}`),
+            grade: null,
+            explanation: MULTI_TEAM_GRADE_WITHHELD,
+            multiTeam: true as const,
+            teams: moves.map(m => ({ rosterId: m.rosterId, name: nameOf(m.rosterId), gives: m.gives.map(assetLabel), gets: m.gets.map(assetLabel) })),
+          }
+        }
         const payload = p.valueSnapshot?.payload as { grade?: { insufficientData?: boolean; bullets?: string[] } } | null
         const graded = p.valueSnapshot && p.valueSnapshot.confidenceScore >= 60 && payload?.grade?.insufficientData === false
         return {
           id: p.id, status: p.status, createdAt: p.createdAt,
           title: `${p.proposerRoster.teamName || p.proposerRoster.ownerName} → ${p.receiverRoster.teamName || p.receiverRoster.ownerName}`,
           involvesYou: p.proposerRoster.ownerId === userId || p.receiverRoster.ownerId === userId,
-          assets: p.assets.map(a => a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)),
+          assets: p.assets.map(assetLabel),
           grade: graded ? p.valueSnapshot!.grade : null,
           explanation: graded ? (payload?.grade?.bullets ?? []).join(' ') || 'Snapshot of trade fairness when proposed.' : 'Not enough verified valuation data to grade this proposal.',
         }

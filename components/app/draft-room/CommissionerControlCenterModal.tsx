@@ -24,6 +24,7 @@ import { SwapManagerModal } from './SwapManagerModal'
 import { TimerPresetSelect } from '@/components/draft/TimerPresetSelect'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { draftAiSaveMessage, type ChimmySeasonResult } from '@/lib/commissioner-ai-draft-manager/chimmySeason'
 
 const TIMER_MODE_OPTIONS: Array<{ value: TimerMode; label: string }> = [
   { value: 'per_pick', label: 'Per pick' },
@@ -974,7 +975,9 @@ export function CommissionerControlCenterModal({
                       if (res && typeof res === 'object' && 'error' in res && res.error) {
                         setAiMgrMessage(String(res.error))
                       } else {
-                        setAiMgrMessage('Saved.')
+                        // Say whether Chimmy will also run them all season, and why one could not be handed over.
+                        const season = res && typeof res === 'object' && 'chimmySeason' in res ? (res as { chimmySeason?: ChimmySeasonResult[] }).chimmySeason : null
+                        setAiMgrMessage(draftAiSaveMessage(season))
                         void onResync()
                       }
                     } finally {

@@ -101,6 +101,10 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       enabledPremiumAdvancedSettings.map((key) => [key, true]),
     )
   }
+  if (lt === 'zombie') conceptSetup.zombieLeagueCount = state.zombieLeagueCount ?? 1
+  if (lt === 'guillotine' && state.guillotineBestBall === true) {
+    conceptSetup.guillotineBestBall = true
+  }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
@@ -131,7 +135,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     }
     conceptSetup.rookieDraftRounds = d.rookieDraftRounds
     conceptSetup.rookieDraftType = d.rookieDraftType
-    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod
+    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod
     conceptSetup.futurePicksYearsOut = d.futurePickTradeYears
     conceptSetup.regularSeasonWeeks = d.regularSeasonLength
     conceptSetup.playoffTeamCount = d.playoffTeamCount
@@ -390,7 +394,7 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
     payload = buildTournamentPayload(state)
   } else {
     const canonical = buildCanonicalPayload(state)
-    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), acceptWeeklyLineups } } : {}) }
+    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {

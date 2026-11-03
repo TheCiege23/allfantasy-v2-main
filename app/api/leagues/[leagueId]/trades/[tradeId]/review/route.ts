@@ -37,10 +37,10 @@ export async function GET(
   const { leagueId, tradeId } = await ctx.params
   const role = await getLeagueRole(leagueId, userId).catch(() => null)
   if (!isCommissionerRole(role)) {
-    return NextResponse.json({ error: 'Only the commissioner or a co-commissioner can review a trade.' }, { status: 403 })
+    return NextResponse.json({ error: 'Only the commissioner or a co-commissioner can review a trade.', code: 'not_commissioner' }, { status: 403 })
   }
   if (!rateLimit(`trade-review:${userId}`, 30, 60_000).success) {
-    return NextResponse.json({ error: 'Too many reviews at once. Try again shortly.' }, { status: 429 })
+    return NextResponse.json({ error: 'Too many reviews at once. Try again shortly.', code: 'rate_limited' }, { status: 429 })
   }
 
   const kind = req.nextUrl.searchParams.get('kind')
@@ -55,7 +55,7 @@ export async function GET(
   if (!ref) return NextResponse.json({ error: 'kind must be af, redraft or provider' }, { status: 400 })
 
   const result = await reviewStoredTrade({ leagueId, ref, userId }).catch(() => null)
-  if (!result) return NextResponse.json({ error: 'This trade could not be reviewed just now.' }, { status: 500 })
+  if (!result) return NextResponse.json({ error: 'This trade could not be reviewed just now.', code: 'review_failed' }, { status: 500 })
   if (!result.ok) {
     const status = result.refusal.code === 'not_found' ? 404 : result.refusal.code === 'not_member' ? 403 : 422
     return NextResponse.json({ error: result.refusal.reason, code: result.refusal.code }, { status })

@@ -243,6 +243,32 @@ describe('runChimmyToolLoop on Claude', () => {
     expect(await runChimmyToolLoop(base)).toBeNull()
   })
 
+  /*
+   * Every null hands the turn to the push path, which has no tools. Nothing said why, so a PPR answer
+   * in the old five-heading shape could not be traced to a deadline, a refusal or an error (2026-10-31).
+   */
+  it('logs WHY it gave up — a reason code and counters, never the question', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      h.anthropicCreate.mockResolvedValueOnce({ ...answer('partial'), stop_reason: 'refusal' })
+      await runChimmyToolLoop(base)
+      h.anthropicCreate.mockResolvedValue(wantsTools({ id: 't', name: 'get_league_standings' }))
+      await runChimmyToolLoop(base)
+      h.anthropicCreate.mockReset().mockResolvedValueOnce({ ...answer(''), stop_reason: 'end_turn' })
+      await runChimmyToolLoop(base)
+
+      const logged = warn.mock.calls.filter((c) => c[0] === '[chimmy-tool-loop] gave up').map((c) => c[1])
+      expect(logged).toEqual([
+        expect.objectContaining({ provider: 'claude', reason: 'refusal', turn: 1 }),
+        expect.objectContaining({ provider: 'claude', reason: 'turn_ceiling', turn: 4, tools: 'get_league_standings,get_league_standings,get_league_standings' }),
+        expect.objectContaining({ provider: 'claude', reason: 'empty_text', turn: 1 }),
+      ])
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(base.question)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('retries once WITHOUT the fallback beta when the API rejects the request', async () => {
     h.anthropicCreate
       .mockRejectedValueOnce(new (Anthropic as any).BadRequestError('unknown field fallbacks'))

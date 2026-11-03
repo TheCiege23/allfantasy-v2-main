@@ -62,6 +62,12 @@ export type RosterPlayerIdentity = {
    */
   rollingInsightsId: string | null
   cfbdId: string | null
+  /**
+   * The linked row's Sleeper id, on the Fantrax path. NFL identity rows are Sleeper-keyed, so this is
+   * the bridge to an NFL headshot (`SportsPlayer.sleeperId`) and to Sleeper's season stats; it is
+   * null for the college/pro rows, which carry no Sleeper id.
+   */
+  sleeperId: string | null
   /** `SportsPlayer.imageUrl`, on the Sleeper-keyed path only. */
   imageUrl: string | null
 }
@@ -87,6 +93,7 @@ const EMPTY: RosterPlayerIdentity = {
   team: null,
   rollingInsightsId: null,
   cfbdId: null,
+  sleeperId: null,
   imageUrl: null,
 }
 
@@ -108,14 +115,20 @@ function cleanIds(rawIds: readonly unknown[]): string[] {
  * rows means two people until proven otherwise, and refusing costs a gap where guessing costs a
  * wrong name.
  */
-async function resolveFantraxIdentities(
-  sport: string,
+export async function resolveFantraxIdentities(
+  /**
+   * The identity sport. `null` only for a caller that genuinely does not know it (Draft HQ's name
+   * resolver is not handed one): the one-to-one guard below then spans every sport, so an id held in
+   * two sports is refused rather than guessed.
+   */
+  sport: string | null,
   ids: string[],
 ): Promise<Map<string, RosterPlayerIdentity>> {
   const out = new Map<string, RosterPlayerIdentity>()
+  if (ids.length === 0) return out
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { sport, fantraxId: { in: ids } },
+      where: { ...(sport ? { sport } : {}), fantraxId: { in: ids } },
       select: {
         fantraxId: true,
         canonicalName: true,
@@ -123,6 +136,7 @@ async function resolveFantraxIdentities(
         currentTeam: true,
         rollingInsightsId: true,
         cfbdId: true,
+        sleeperId: true,
       },
     })
     .catch(() => [])
@@ -142,6 +156,7 @@ async function resolveFantraxIdentities(
       team: row.currentTeam?.trim() || null,
       rollingInsightsId: row.rollingInsightsId ?? null,
       cfbdId: row.cfbdId ?? null,
+      sleeperId: row.sleeperId?.trim() || null,
       imageUrl: null,
     })
   }

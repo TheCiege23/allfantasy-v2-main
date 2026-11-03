@@ -11,7 +11,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
-import { buildImportedLeagueSettings, republishCanonicalSettingsForRefresh } from '@/lib/league-import/ImportedLeagueCommitService'
+import {
+  buildImportedLeagueSettings,
+  refreshKeepsStoredScoring,
+  republishCanonicalSettingsForRefresh,
+} from '@/lib/league-import/ImportedLeagueCommitService'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 
 function normalized(scoringFormat: string): NormalizedImportResult {
@@ -116,5 +120,56 @@ describe('IMP-02 — refresh republishes canonical settings', () => {
     expect(merged.scoringSettings).toEqual(bundle.settingsSnapshot.scoringSettings)
     expect(merged.rosterSettings).toEqual(bundle.settingsSnapshot.rosterSettings)
     expect(merged.playoffSettings).toEqual(bundle.settingsSnapshot.playoffSettings)
+  })
+})
+
+describe('a refresh with no scoring rules keeps the stored ones', () => {
+  function withRules(): NormalizedImportResult {
+    const n = normalized('ppr')
+    n.source.source_provider = 'fantrax'
+    n.scoring = {
+      scoring_format: 'ppr',
+      rules: [
+        { stat_key: 'rec', points_value: 1 },
+        { stat_key: 'pass_td', points_value: 6 },
+      ],
+    } as NormalizedImportResult['scoring']
+    ;(n.league as Record<string, unknown>).scoring_settings = { rec: 1, pass_td: 6 }
+    return n
+  }
+  function storedFrom(n: NormalizedImportResult): Record<string, unknown> {
+    const bundle = buildCanonicalImportBundle(n)
+    return republishCanonicalSettingsForRefresh({}, buildImportedLeagueSettings(n), bundle)
+  }
+
+  it('does not replace stored rules, raw scoring or preset with an empty read', () => {
+    const stored = storedFrom(withRules())
+    expect((stored.scoringSettings as { rulesDetail: unknown[] }).rulesDetail).toHaveLength(2)
+
+    const empty = normalized('standard')
+    empty.source.source_provider = 'fantrax'
+    empty.scoring = null as unknown as NormalizedImportResult['scoring']
+    const bundle = buildCanonicalImportBundle(empty)
+    expect(refreshKeepsStoredScoring(stored, bundle)).toBe(true)
+
+    const merged = republishCanonicalSettingsForRefresh(stored, buildImportedLeagueSettings(empty), bundle)
+    expect(merged.scoringSettings).toEqual(stored.scoringSettings)
+    expect(merged.scoring_settings).toEqual({ rec: 1, pass_td: 6 })
+    expect((merged.importCanonical as { scoringPresetId: unknown }).scoringPresetId).toBe(
+      (stored.importCanonical as { scoringPresetId: unknown }).scoringPresetId,
+    )
+  })
+
+  it('still replaces stored rules when the refresh carries rules', () => {
+    const stored = storedFrom(withRules())
+    const changed = withRules()
+    changed.scoring!.rules = [{ stat_key: 'rec', points_value: 0.5 }] as NonNullable<
+      NormalizedImportResult['scoring']
+    >['rules']
+    const bundle = buildCanonicalImportBundle(changed)
+    expect(refreshKeepsStoredScoring(stored, bundle)).toBe(false)
+    const merged = republishCanonicalSettingsForRefresh(stored, buildImportedLeagueSettings(changed), bundle)
+    expect(merged.scoringSettings).toEqual(bundle.settingsSnapshot.scoringSettings)
+    expect((merged.scoringSettings as { rulesDetail: unknown[] }).rulesDetail).toHaveLength(1)
   })
 })

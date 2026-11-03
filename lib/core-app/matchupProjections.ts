@@ -246,50 +246,9 @@ export async function loadSideProjections(args: {
    * a bye unless the week's schedule is otherwise complete.
    */
   const canScore = hasScoringRules(scoring)
-  const unavailableBySleeperId = new Map<string, Unavailable>()
-  const atRiskBySleeperId: Record<string, string> = {}
-  if (canScore && lookupIds.length > 0) {
-    const sport = String(league?.sport ?? 'NFL')
-    try {
-      const playerRows = await prisma.sportsPlayer.findMany({
-        // Scoped to the league's sport: Sleeper's NFL and NBA pools reuse the same ids.
-        where: { sport: sport.toUpperCase(), sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
-      })
-      const identities = composePlayerIdentities(playerRows)
-      const playerTeams = new Map([...identities].map(([id, p]) => [id, p.team]))
-      const [statuses, byes] = await Promise.all([
-        // Club and position, so a namesake's "Out" (LB vs WR Justin Jefferson) never zeroes a starter.
-        readInjuryStatusById(
-          sport,
-          namesBySleeperId(playerRows),
-          playerTeams,
-          new Map([...identities].map(([id, p]) => [id, p.position ?? null])),
-        ),
-        getByeWeeks({
-          sport,
-          season,
-          playerTeams,
-          fromWeek: week,
-          horizon: 0,
-        }).catch(() => null),
-      ])
-      for (const [sleeperId, status] of statuses) {
-        if (isRuledOut(status)) unavailableBySleeperId.set(sleeperId, 'out')
-        /*
-         * 🛑 `isAtRisk`, NOT "ANY NON-EMPTY STATUS". "Active" is the feed's second most common
-         * value, and the non-empty test turned it into an amber "ACTI" chip beside nearly every
-         * healthy starter on the matchup board (production, 2026-10-02) — the exact mistake
-         * `isHealthyDesignation` documents.
-         */
-        else if (status && isAtRisk(status)) atRiskBySleeperId[sleeperId] = status.trim()
-      }
-      // A bye is the stronger fact — no game at all — so it wins over any status he also carries.
-      for (const sleeperId of byes?.byWeek.get(week) ?? []) unavailableBySleeperId.set(sleeperId, 'bye')
-    } catch {
-      // Unknown is "available" — the same direction `isRuledOut` takes on a missing status.
-    }
-  }
+  const { unavailableBySleeperId, atRiskBySleeperId } = canScore
+    ? await readPlayerAvailability({ sport: String(league?.sport ?? 'NFL'), season, week, sleeperIds: lookupIds })
+    : { unavailableBySleeperId: new Map<string, Unavailable>(), atRiskBySleeperId: {} as Record<string, string> }
 
   const build = (ids: string[]): SideProjection => {
     const starters: MatchupPlayer[] = []
@@ -577,4 +536,62 @@ export function forecastSidesFor(
     }
   }
   return [side(sides.you, live.team.you), side(sides.opponent, live.team.opponent)]
+}
+
+/**
+ * Who cannot play this week: ruled out (`'out'`) or on a bye (`'bye'`), and who is at risk (Q/D), keyed by
+ * Sleeper id. Shared by the matchup board and the league list's best-ball field (bestBallField.ts), so the two
+ * can never disagree about who is playing.
+ */
+export async function readPlayerAvailability(args: {
+  sport: string
+  season: number
+  week: number
+  sleeperIds: readonly string[]
+}): Promise<{ unavailableBySleeperId: Map<string, Unavailable>; atRiskBySleeperId: Record<string, string> }> {
+  const { sport, season, week, sleeperIds } = args
+  const unavailableBySleeperId = new Map<string, Unavailable>()
+  const atRiskBySleeperId: Record<string, string> = {}
+  if (sleeperIds.length > 0) {
+    try {
+      const playerRows = await prisma.sportsPlayer.findMany({
+        // Scoped to the league's sport: Sleeper's NFL and NBA pools reuse the same ids.
+        where: { sport: sport.toUpperCase(), sleeperId: { in: [...sleeperIds] } },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
+      })
+      const identities = composePlayerIdentities(playerRows)
+      const playerTeams = new Map([...identities].map(([id, p]) => [id, p.team]))
+      const [statuses, byes] = await Promise.all([
+        // Club and position, so a namesake's "Out" (LB vs WR Justin Jefferson) never zeroes a starter.
+        readInjuryStatusById(
+          sport,
+          namesBySleeperId(playerRows),
+          playerTeams,
+          new Map([...identities].map(([id, p]) => [id, p.position ?? null])),
+        ),
+        getByeWeeks({
+          sport,
+          season,
+          playerTeams,
+          fromWeek: week,
+          horizon: 0,
+        }).catch(() => null),
+      ])
+      for (const [sleeperId, status] of statuses) {
+        if (isRuledOut(status)) unavailableBySleeperId.set(sleeperId, 'out')
+        /*
+         * 🛑 `isAtRisk`, NOT "ANY NON-EMPTY STATUS". "Active" is the feed's second most common
+         * value, and the non-empty test turned it into an amber "ACTI" chip beside nearly every
+         * healthy starter on the matchup board (production, 2026-10-02) — the exact mistake
+         * `isHealthyDesignation` documents.
+         */
+        else if (status && isAtRisk(status)) atRiskBySleeperId[sleeperId] = status.trim()
+      }
+      // A bye is the stronger fact — no game at all — so it wins over any status he also carries.
+      for (const sleeperId of byes?.byWeek.get(week) ?? []) unavailableBySleeperId.set(sleeperId, 'bye')
+    } catch {
+      // Unknown is "available" — the same direction `isRuledOut` takes on a missing status.
+    }
+  }
+  return { unavailableBySleeperId, atRiskBySleeperId }
 }

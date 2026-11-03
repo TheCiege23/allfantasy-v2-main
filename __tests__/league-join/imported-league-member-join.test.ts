@@ -18,6 +18,12 @@ const m = vi.hoisted(() => ({
   memberUpsert: vi.fn(async () => ({ id: 'mem-1' })),
   rosterCreate: vi.fn(async () => ({ id: 'roster-new' })),
   claimPlaceholder: vi.fn(async () => ({ claimed: false })),
+  leagueSettings: {} as Record<string, unknown>,
+  paidGeoBlocked: false,
+}))
+vi.mock('@/lib/geo/paidLeagueGeo', () => ({
+  paidLeagueGeoVerdict: vi.fn(async () => ({ blocked: m.paidGeoBlocked, stateCode: 'MT', stateName: 'Montana', reason: 'state' })),
+  paidLeagueGeoMessage: (_v: unknown, context: string) => `Paid leagues aren't available in Montana (${context})`,
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => m.session) }))
@@ -84,7 +90,9 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     redraftLeagueMember: { findUnique: vi.fn(async () => m.existingMember) },
-    league: { findFirst: vi.fn(async () => null) },
+    league: { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => ({ settings: m.leagueSettings })) },
+    // Free league: the paid-league state check (lib/geo/paidLeagueGeo) is not reached.
+    leagueFinance: { findUnique: vi.fn(async () => null) },
   },
 }))
 
@@ -102,6 +110,25 @@ beforeEach(() => {
   m.memberUpsert.mockClear()
   m.rosterCreate.mockClear()
   m.claimPlaceholder.mockClear()
+  m.leagueSettings = {}
+  m.paidGeoBlocked = false
+})
+
+describe('a paid league where paid leagues are restricted', () => {
+  it('is refused before anything is written', async () => {
+    m.leagueSettings = { entryFee: 25 }
+    m.paidGeoBlocked = true
+    const res = await POST(req({ code: 'ABC123' }))
+    expect(res.status).toBe(451)
+    expect((await res.json()).error).toContain('Montana (join)')
+    expect(m.memberCreate).not.toHaveBeenCalled()
+    expect(m.rosterCreate).not.toHaveBeenCalled()
+  })
+
+  it('a free league joins the same as anywhere', async () => {
+    m.paidGeoBlocked = true
+    expect((await POST(req({ code: 'ABC123' }))).status).toBe(200)
+  })
 })
 
 describe('joining an imported league by its code', () => {

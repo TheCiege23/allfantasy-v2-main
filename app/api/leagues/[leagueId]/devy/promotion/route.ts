@@ -13,6 +13,7 @@ import { checkPromotionEligibility, executePromotion } from '@/lib/devy'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { DEVY_LIFECYCLE_STATE } from '@/lib/devy/types'
 import { getPromotionWindowStatus } from '@/lib/devy/lifecycle/DevyLifecycleAutomation'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +119,7 @@ export async function POST(
     where: { leagueId, id: right.rosterId },
     select: { platformUserId: true },
   })
-  const isOwner = roster?.platformUserId === userId
+  const isOwner = roster?.platformUserId === userId || (await acceptedCoOwnerRosterId(leagueId, userId)) === right.rosterId
   if (!commissioner && !isOwner) {
     return NextResponse.json({ error: 'Only the rights holder or commissioner can promote' }, { status: 403 })
   }

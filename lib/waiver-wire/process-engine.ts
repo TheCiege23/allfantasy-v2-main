@@ -29,6 +29,11 @@ import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
+import {
+  isFantraxProspectId,
+  resolveNhlProspectClaimAward,
+  type ProspectFreeAgencyLeague,
+} from './nhlProspectFreeAgency'
 
 /** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
 export type WaiverRunSkipReason = 'league_moves_locked'
@@ -256,6 +261,13 @@ export async function processWaiverClaimsForLeague(
   const { limit: rosterSize, counts: rosterCounts } = rosterLimit
   // An imported roster over the provider's IR spots is reported once per run, never refused.
   const irOverflowReported = new Set<string>()
+  // NHL dynasty `fantrax:` claims only (nhlProspectFreeAgency.ts, AWARD TIME): the league fields the
+  // rule needs, read once and only when such a claim is reached, so every other run reads nothing new.
+  let prospectLeague: Promise<ProspectFreeAgencyLeague | null> | null = null
+  const loadProspectLeague = () =>
+    (prospectLeague ??= (prisma as any).league
+      .findUnique({ where: { id: leagueId }, select: { sport: true, isDynasty: true, leagueType: true } })
+      .catch(() => null) as Promise<ProspectFreeAgencyLeague | null>)
   const resultRows: Array<{
     claimId: string | null
     rosterId: string
@@ -336,7 +348,7 @@ export async function processWaiverClaimsForLeague(
       continue
     }
 
-    const addId = claim.addPlayerId
+    let addId = claim.addPlayerId
     const dropId = claim.dropPlayerId
 
     if (dropHolds.get(String(addId))?.droppedByRosterId === claim.rosterId) {
@@ -352,6 +364,30 @@ export async function processWaiverClaimsForLeague(
           : 'Player no longer available.'
       await pushFail(earlier, { competingRosterId: ownerRosterId })
       continue
+    }
+
+    // A `fantrax:` prospect claim: the submit-time rule again, now (nhlProspectFreeAgency.ts, AWARD
+    // TIME). He may have been linked to an NHL identity since — then he is awarded under his pro id,
+    // or fails if that man is on a roster already. Every other claim skips this block entirely.
+    let prospectAliases: string[] = []
+    let claimedProspectId: string | null = null
+    if (isFantraxProspectId(addId)) {
+      const decision = await resolveNhlProspectClaimAward(
+        prisma as never,
+        await loadProspectLeague(),
+        addId,
+        claim.rosterId,
+        rosteredByPlayer,
+      )
+      if (decision.kind === 'fail') {
+        await pushFail(decision.message, decision.extra)
+        continue
+      }
+      prospectAliases = decision.aliases
+      if (decision.playerId !== addId) {
+        claimedProspectId = addId
+        addId = decision.playerId
+      }
     }
 
     const irOverflow = irOverflowReported.has(claim.rosterId) ? null : importedIrOverflow(roster.playerData, rosterLimit)
@@ -489,6 +525,8 @@ export async function processWaiverClaimsForLeague(
     }
 
     rosteredByPlayer.set(addId, claim.rosterId)
+    // A prospect award: every id he is known by, so a later claim in this run on any of them fails.
+    for (const alias of prospectAliases) rosteredByPlayer.set(alias, claim.rosterId)
     if (dropId) rosteredByPlayer.delete(dropId)
 
     if (newWaiverPriority != null) {
@@ -506,6 +544,8 @@ export async function processWaiverClaimsForLeague(
       priorityAfter: priorityAfter ?? null,
       rosterApplied: true,
       resultType: 'awarded',
+      // Awarded under his pro id: the claim row keeps the `fantrax:` id it was filed with.
+      ...(claimedProspectId ? { metadata: { claimedPlayerId: claimedProspectId } } : {}),
     })
 
     const uid = roster.platformUserId?.trim()

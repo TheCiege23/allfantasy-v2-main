@@ -12,6 +12,7 @@ import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGat
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import type { LeagueTeam } from '@prisma/client'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { TeamLogo } from '@/app/components/TeamLogo'
@@ -1111,7 +1112,9 @@ export function TeamTab({
   const proEnt = useEntitlement('pro_autocoach')
   const gateOptional = useSubscriptionGateOptional()
   const hasProAutoCoach = proEnt.hasAccess('pro_autocoach')
-  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
+  // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to edit.
+  const bestBallGuillotine = isBestBallGuillotine(league)
+  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null) || bestBallGuillotine
 
   const nflRedraftCoreRoster = useMemo(
     () => isNflRedraftCoreDashboardFromUserLeague(league),
@@ -1451,6 +1454,7 @@ const maxWeekMenu = useMemo(() => {
   }, [dbRosterMeta, resolvedSport, week])
 
   const lineupEditable =
+    !bestBallGuillotine &&
     !isSleeper &&
     Boolean(dbRosterMeta) &&
     dbRosterMeta?.canEditLineup !== false &&
@@ -1825,6 +1829,16 @@ const maxWeekMenu = useMemo(() => {
       {payload?.source === 'sleeper' && 'lineupLockHelp' in (payload as object) ? (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
           {(payload as { lineupLockHelp?: string }).lineupLockHelp}
+        </p>
+      ) : null}
+
+      {bestBallGuillotine ? (
+        <p
+          data-testid="team-tab-best-ball-guillotine"
+          className="rounded-lg border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100/90"
+        >
+          Best ball league: your lineup sets itself. After each week your highest scorers fill your starting spots, and
+          that score is what faces the chop.
         </p>
       ) : null}
 

@@ -15,9 +15,9 @@
  */
 import type { OffseasonWaiverRule, PlayoffWaiverRule } from './hub-waiver-options'
 
-export type WaiverSeasonPhase = 'regular' | 'playoffs' | 'offseason'
+export type WaiverSeasonPhase = 'pre_draft' | 'regular' | 'playoffs' | 'offseason'
 
-export type WaiverPhaseCode = 'offseason_closed' | 'offseason_fcfs' | 'playoffs_locked' | 'playoffs_eliminated'
+export type WaiverPhaseCode = 'pre_draft_locked' | 'offseason_closed' | 'offseason_fcfs' | 'playoffs_locked' | 'playoffs_eliminated'
 
 export type WaiverPhasePolicy = {
   phase: WaiverSeasonPhase
@@ -33,6 +33,7 @@ export type WaiverPhasePolicy = {
 
 /** Claim refusals start "Waiver claims are closed", which the claims route maps to WAIVER_CLOSED. */
 export const PHASE_REASONS: Record<WaiverPhaseCode, string> = {
+  pre_draft_locked: 'Waiver claims are closed until the draft is complete; player adds open then too.',
   offseason_closed: 'Waiver claims are closed for the offseason, and so is free agency. Both reopen after next season’s draft.',
   offseason_fcfs: 'Waiver claims are closed for the offseason. Free agents are first come, first served — add a player directly.',
   playoffs_locked: 'Waiver claims are closed: every roster is locked for the playoffs.',
@@ -81,6 +82,7 @@ export function resolveWaiverPhasePolicy(input: {
   eliminated: boolean | null
 }): WaiverPhasePolicy {
   const { phase } = input
+  if (phase === 'pre_draft') return blocked(phase, 'pre_draft_locked')
   if (phase === 'offseason') {
     if (input.dynastyFamily) return { phase, ...OPEN }
     if (input.offseasonRule === 'fcfs') {

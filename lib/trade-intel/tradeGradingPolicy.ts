@@ -272,7 +272,7 @@ export function resolveTradeGradingPolicy(input: {
       ],
       supportingEvidence: [...COMMON_SUPPORTING, 'format_phase'],
       rules: [
-        'If zombie trading is blocked, every participant must be a Survivor or active Whisperer when the matchup is final; otherwise the trade is ineligible.',
+        'Every participant in a Zombie league player trade must be a Survivor or Whisperer at execution time. Zombies cannot trade.',
         'Include serum, weapon, ambush, infection, revival, weekly-money, bashing, and mauling consequences that the league has enabled.',
         'Use the league’s near-free instant replacement market when pricing depth.',
         'Model the chance the trade becomes unavailable after infection and the commissioner-vote reversal risk separately from fairness.',

@@ -12,7 +12,8 @@ vi.mock('@/lib/league-import/sleeper/SleeperImportPreviewService', () => ({
   getSleeperImportPreview: getSleeperImportPreviewMock,
 }))
 
-vi.mock('@/lib/league-import/commissionerGate', () => ({
+vi.mock('@/lib/league-import/commissionerGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/league-import/commissionerGate')>()),
   assertImportCommissioner: assertImportCommissionerMock,
 }))
 

@@ -58,6 +58,9 @@ export function ImportedLeaguePreviewPanel({
         : 'text-amber-500';
   const sourceLabel = provider ? getImportProviderLabel(provider) : preview.source?.source_provider ?? 'Import';
   const managersWithTeamLogos = managers.filter((m) => Boolean(m.teamLogo)).length;
+  /* The reception rate's own label ("Half PPR"); `ppr` alone is the fallback for an older payload. */
+  const receptionLabelRaw = league.settings?.scoringLabel ?? (league.settings?.ppr ? 'PPR' : null);
+  const receptionLabel = receptionLabelRaw === 'Standard' ? null : receptionLabelRaw;
 
   return (
     <Card className="border-cyan-400/25 bg-[#07122d]/80 backdrop-blur-md" data-testid="import-preview-panel">
@@ -148,7 +151,7 @@ export function ImportedLeaguePreviewPanel({
             <span className="text-white/60">Scoring</span>
             <span>
               {[
-                league.settings?.ppr && 'PPR',
+                receptionLabel,
                 league.settings?.superflex && 'Superflex',
                 league.settings?.tep && 'TEP',
               ]

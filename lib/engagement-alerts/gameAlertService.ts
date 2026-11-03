@@ -32,8 +32,16 @@ export type GameAudience = {
 /** Close-game and overtime alerts per person per day, across every sport. */
 export const BROAD_GAME_ALERTS_PER_DAY = 10
 
-/** Emails are for results, not for plays: a "19-yard catch" email read an hour later is noise. */
-const EMAIL_TYPES = new Set(['game_final', 'postgame_recap', 'postseason_clinch'])
+function finalScoreMeta(observation: GameObservation) {
+  const winnerLogo = observation.homeScore != null && observation.awayScore != null && observation.awayScore > observation.homeScore
+    ? observation.awayLogo : observation.homeLogo
+  return {
+    homeTeam: observation.homeTeam, awayTeam: observation.awayTeam,
+    homeScore: observation.homeScore, awayScore: observation.awayScore,
+    homeLogo: observation.homeLogo ?? null, awayLogo: observation.awayLogo ?? null,
+    ...(winnerLogo ? { iconUrl: winnerLogo } : {}),
+  }
+}
 
 function categoryFor(alert: GameAlert): NotificationCategoryId {
   if (alert.type === 'postseason_clinch') return 'breaking_news'
@@ -82,7 +90,9 @@ async function sendStarterAlert(sport: string, observation: GameObservation, ale
   const starters = [...(audience.startersByAthlete?.get(alert.starterAthleteId!) ?? [])]
   const ids = await filterByLiveAlertLevel(starters, 'starter_play', () => true)
   if (!ids.length) return 0
-  const { push, held } = await splitByGameAlertPushBudget(ids, 'major')
+  const { push, held } = sport.toUpperCase() === 'NHL'
+    ? { push: ids, held: [] as string[] }
+    : await splitByGameAlertPushBudget(ids, 'major')
   let delivered = 0, failed = 0
   for (const [userIds, pushBudget] of [[push, 'pushed'], [held, 'held']] as const) {
     if (!userIds.length) continue
@@ -144,8 +154,8 @@ export async function observeGameAlerts(sport: string, observation: GameObservat
         const result = await dispatchNotification({
           userIds: [userId], category: 'matchup_results', type: recap.type, title: recap.title, body: recap.body,
           actionHref: gameDetailHref({ sport, gameId: observation.gameId, espnDetail: true }, '/core/live') ?? `/core/live?sport=${encodeURIComponent(sport)}`,
-          actionLabel: 'Open game', severity: 'medium', dedupePrefix: `${cacheKey}:recap`, skipChannels: { sms: true },
-          meta: { sport, gameId: observation.gameId, eventKey: `${cacheKey}:recap`, pushTag: gamePushTag(sport, observation.gameId), pushTier: 'major', pushBudget: 'pushed' },
+          actionLabel: 'Open game', severity: 'medium', dedupePrefix: `${cacheKey}:recap`, skipChannels: { sms: true, email: true },
+          meta: { sport, gameId: observation.gameId, eventKey: `${cacheKey}:recap`, pushTag: gamePushTag(sport, observation.gameId), pushTier: 'major', pushBudget: 'pushed', ...finalScoreMeta(observation) },
         })
         if (result.failed > 0) throw new Error(`Game recap dispatch failed: ${cacheKey}`)
         sent += result.delivered
@@ -154,7 +164,10 @@ export async function observeGameAlerts(sport: string, observation: GameObservat
       recipients = recipients.filter(id => !recapped.has(id))
     }
     const tier = tierFor(alert)
-    const { push, held } = await splitByGameAlertPushBudget(recipients, tier)
+    // These are the owner's selected game moments: every eligible recipient gets both channels.
+    const { push, held } = alert.type === 'postseason_clinch'
+      ? await splitByGameAlertPushBudget(recipients, tier)
+      : { push: recipients, held: [] as string[] }
     const base = {
       category: categoryFor(alert), type: alert.type, title: alert.title, body: alert.body,
       actionHref: gameDetailHref({ sport, gameId: observation.gameId, espnDetail: true }, '/core/live') ?? `/core/live?sport=${encodeURIComponent(sport)}`,
@@ -165,15 +178,15 @@ export async function observeGameAlerts(sport: string, observation: GameObservat
     const meta = {
       sport, gameId: observation.gameId, eventKey, pushTag: gamePushTag(sport, observation.gameId), triggeredAt: new Date().toISOString(),
       pushTier: tier, ...(alert.imageUrl ? { imageUrl: alert.imageUrl } : {}),
+      ...(alert.type === 'game_final' ? finalScoreMeta(observation) : {}),
       ...(observation.broadcast ? { broadcast: observation.broadcast } : {}),
     }
-    const email = EMAIL_TYPES.has(alert.type)
     let failed = 0
     for (const [ids, pushBudget] of [[push, 'pushed'], [held, 'held']] as const) {
       if (!ids.length) continue
       const result = await dispatchNotification({
         ...base, userIds: ids, meta: { ...meta, pushBudget },
-        skipChannels: { sms: true, ...(email ? {} : { email: true }), ...(pushBudget === 'held' ? { push: true } : {}) },
+        skipChannels: { sms: true, email: true, ...(pushBudget === 'held' ? { push: true } : {}) },
       })
       failed += result.failed
       sent += result.delivered

@@ -35,6 +35,8 @@ import {
 } from '@/lib/core-app/leaguePreferences'
 import { ScopeSwitcher } from '@/components/core-app/ScopeSwitcher'
 import AfCoreShell from '@/components/core-app/AfCoreShell'
+import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
+import { messagesFor } from '@/lib/i18n/messages'
 import LeagueListPreferencesCard from '@/components/settings/LeagueListPreferencesCard'
 
 const L = (id: string, name: string) => ({ id, name })
@@ -179,6 +181,46 @@ describe('the /core rail', () => {
   })
 })
 
+describe('the Updates menu — lineup handoff', () => {
+  const rail = LIST.map((l) => ({ ...l, platform: 'sleeper', mark: 'S' }))
+  const shell = (props: Record<string, unknown> = {}) => (
+    <AfCoreShell active="home" leagues={rail as never} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} {...props}>
+      <div>screen</div>
+    </AfCoreShell>
+  )
+
+  it('is a button to the platform lineup screen when one is known', () => {
+    render(shell({ lineupHandoff: { href: 'https://sleeper.com/leagues/1/team', screen: 'Lineup', platformLabel: 'Sleeper' } }))
+    const btn = screen.getByTestId('updates-lineup-handoff')
+    expect(btn.tagName).toBe('A')
+    expect(btn.getAttribute('href')).toBe('https://sleeper.com/leagues/1/team')
+    // External: new tab, and no opener handed to the provider's page.
+    expect(btn.getAttribute('target')).toBe('_blank')
+    expect(btn.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(btn.textContent).toMatch(/Fix lineup in Sleeper/)
+  })
+
+  it('says "Open league" when only the league page is known (an unverified lineup format)', () => {
+    render(shell({ lineupHandoff: { href: 'https://league.example.test/home', screen: 'League', platformLabel: 'Fantrax' } }))
+    expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
+  })
+
+  it('reads in Spanish from the shell catalog, platform name kept', () => {
+    const es = messagesFor(coreShellMessages, 'es')
+    expect(es.fixLineupIn('Sleeper')).toBe('Arreglar la alineación en Sleeper')
+    expect(es.openLeagueIn('Fantrax')).toBe('Abrir la liga en Fantrax')
+    expect(es.readOnlyChangesIn('ESPN')).toBe('AllFantasy solo lee esta liga: los cambios se hacen en ESPN.')
+    expect(es.platformLineupChanges).toBe('Cambia la alineación en la plataforma de tu liga.')
+    expect(messagesFor(coreShellMessages, 'en').fixLineupIn('Sleeper')).toBe('Fix lineup in Sleeper')
+  })
+
+  it('CONTROL: no handoff keeps the sentence and draws no button', () => {
+    const { container } = render(shell())
+    expect(screen.queryByTestId('updates-lineup-handoff')).toBeNull()
+    expect(container.textContent).toMatch(/Make lineup changes on your league/)
+  })
+})
+
 describe('Settings › Your leagues', () => {
   let posts: Array<{ field: string; leagueIds: string[] }>
   beforeEach(() => {
@@ -230,7 +272,7 @@ describe('Settings › Your leagues', () => {
 
 describe('Settings › Your leagues › Remove', () => {
   let deletes: string[]
-  /** Alpha and Charlie are the viewer's own imports; Bravo and Delta reached them through a claimed team. */
+  /** Alpha and Charlie the route can remove (an import, theirs or a member's); Bravo and Delta it cannot. */
   const stub = (deleteResponse: (id: string) => Response) => {
     deletes = []
     vi.stubGlobal(
@@ -245,7 +287,7 @@ describe('Settings › Your leagues › Remove', () => {
         if (url.startsWith('/api/league/list'))
           return new Response(
             JSON.stringify({
-              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerOwnsRow: l.id === 'a' || l.id === 'c' })),
+              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerCanRemove: l.id === 'a' || l.id === 'c' })),
             }),
           )
         return new Response(JSON.stringify({ favorites: null, hidden: ['a'], order: [] }))
@@ -255,7 +297,7 @@ describe('Settings › Your leagues › Remove', () => {
   const removed = (n: number) => () =>
     new Response(JSON.stringify({ ok: true, removed: { leagueRows: n, sleeperLeagueRows: 0, tournamentRows: 0 } }))
 
-  it('offers Remove only on leagues the viewer imported', async () => {
+  it('offers Remove only on leagues the route can remove', async () => {
     stub(removed(1))
     render(<LeagueListPreferencesCard />)
     await screen.findByTestId('league-list-row-a')
@@ -276,6 +318,15 @@ describe('Settings › Your leagues › Remove', () => {
     await waitFor(() => expect(screen.queryByTestId('league-list-row-a')).toBeNull())
     expect(deletes).toEqual(['a'])
     expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a league someone else imported is removed by the viewer\'s tombstone (memberLeagues)', async () => {
+    stub(() => new Response(JSON.stringify({ ok: true, removed: { leagueRows: 0, sleeperLeagueRows: 0, tournamentRows: 0, memberLeagues: 1 } })))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    await waitFor(() => expect(screen.queryByTestId('league-list-row-c')).toBeNull())
+    expect(deletes).toEqual(['c'])
   })
 
   it('Cancel deletes nothing', async () => {

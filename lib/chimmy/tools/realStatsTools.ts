@@ -43,10 +43,10 @@ export { nameToken }
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type StatsSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type StatsSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 /** Sports whose season totals are read from `fantasy_stat_lines`. NCAAB's are summed from game logs. */
-type StoredTotalsSport = Exclude<StatsSport, 'NCAAB'>
+type StoredTotalsSport = Exclude<StatsSport, 'NCAAB' | 'SOCCER'>
 
 /** Which season-total source each sport reads, and the JSON key its rows carry the name under. */
 const SEASON_SOURCE: Record<StoredTotalsSport, { source: string; nameKey: string; label: string }> = {
@@ -65,11 +65,12 @@ export function normalizeStatsSport(raw: unknown): StatsSport | null {
   if (v === 'NBA' || v === 'BASKETBALL') return 'NBA'
   if (v === 'NHL' || v === 'HOCKEY') return 'NHL'
   if (v === 'NCAAB' || v === 'NCAABB' || v === 'CBB' || v === 'COLLEGEBASKETBALL' || v === 'NCAABASKETBALL' || v === 'NCAAMB') return 'NCAAB'
+  if (v === 'SOCCER' || v === 'EPL' || v === 'PREMIERLEAGUE' || v === 'LALIGA' || v === 'SERIEA') return 'SOCCER'
   return null
 }
 
 function unsupportedSport(raw: unknown): string {
-  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL, college football, MLB, NBA, NHL and college basketball are. Say so plainly; do not give numbers from memory.`
+  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL, college football, MLB, NBA, NHL, college basketball and soccer are. Say so plainly; do not give numbers from memory.`
 }
 
 // ── Season totals ────────────────────────────────────────────────────────────────────────────
@@ -170,6 +171,7 @@ export async function buildPlayerSeasonStatsContext(
   if (!asked) return 'No player name was given, so nothing was looked up. Ask which player they mean.'
   const resolved = normalizeStatsSport(args.sport)
   if (!resolved) return unsupportedSport(args.sport)
+  if (resolved === 'SOCCER') return 'Verified soccer season totals are not stored in this stats source. Use get_player_game_log for sourced per-match box scores; do not sum a partial game-log history into a full-season claim.'
   // 🛑 BEFORE any fantasy_stat_lines read: NCAAB vendor totals are truncated (GAPS N-14).
   if (resolved === 'NCAAB') return buildNcaabSeasonStatsContext({ playerName: asked, season: args.season, now: args.now }, db)
   const sport: StoredTotalsSport = resolved
@@ -292,6 +294,7 @@ export async function buildPlayerGameLogContext(
   const sport = normalizeStatsSport(args.sport)
   if (!sport) return unsupportedSport(args.sport)
   if (sport === 'NCAAF') return buildNcaafGameLogContext(args, db)
+  if (sport === 'SOCCER') return buildDailyGameLogContext('SOCCER', args, db)
   if (isDailyStatsSport(sport)) return buildDailyGameLogContext(sport, args, db)
 
   const token = nameToken(asked)
@@ -544,6 +547,7 @@ export async function buildSeasonLeadersContext(
 ): Promise<string> {
   const resolved = normalizeStatsSport(args.sport)
   if (!resolved) return unsupportedSport(args.sport)
+  if (resolved === 'SOCCER') return 'Verified full-season soccer totals are not stored in this stats source, so a soccer season leaderboard cannot be built. Use sourced per-match logs for individual players.'
   // 🛑 BEFORE any fantasy_stat_lines read: NCAAB vendor totals are truncated (GAPS N-14).
   if (resolved === 'NCAAB') return buildNcaabLeadersContext({ stat: args.stat, season: args.season, limit: args.limit, now: args.now }, db)
   const sport: StoredTotalsSport = resolved

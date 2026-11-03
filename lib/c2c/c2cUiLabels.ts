@@ -15,6 +15,16 @@ export type C2CConfigClient = {
   taxiSlots?: number
   devySlots?: number
   irSlots?: number
+  taxiRookieOnly?: boolean
+  taxiMaxExperienceYears?: number
+  /** ISO string from the API, or null. */
+  taxiLockDeadline?: string | null
+  taxiPointsVisible?: boolean
+  basketballLineupFreq?: string
+  footballCampusLockDay?: string
+  footballCantonLockDay?: string
+  /** From League.settings.c2cTaxiLockMode (GET /api/c2c adds it). */
+  taxiLockMode?: 'preseason' | 'start_of_season' | 'no_limit'
 }
 
 export function c2cSportPairShort(pair: string): { left: string; right: string; label: string } {

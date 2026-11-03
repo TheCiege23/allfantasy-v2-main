@@ -4,7 +4,7 @@
  * Before 2026-09-30 pages carried none of them: any page could be framed
  * (clickjacking) and nothing pinned browsers to HTTPS. Addresses are RFC 5737.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 vi.mock("next-auth/jwt", () => ({ getToken: vi.fn(async () => null) }))
@@ -21,8 +21,21 @@ function from(path: string) {
 beforeEach(() => {
   process.env.NEXTAUTH_SECRET = "test-nextauth-secret-not-a-real-credential"
 })
+afterEach(() => vi.unstubAllEnvs())
 
 describe("baseline security headers", () => {
+  it('suppresses only the report-only policy in development', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    const res = await middleware(from('/api/health'))
+    expect(res.headers.get('content-security-policy-report-only')).toBeNull()
+    expect(res.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
+    expect(res.headers.get('x-frame-options')).toBe('DENY')
+  })
+  it('retains the report-only policy in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const res = await middleware(from('/api/health'))
+    expect(res.headers.get('content-security-policy-report-only')).toContain('report-uri /api/security/csp-report')
+  })
   it.each(["/", "/login", "/blog", "/api/health"])("are set on %s", async (path) => {
     const res = await middleware(from(path))
     expect(res.headers.get("x-frame-options")).toBe("DENY")

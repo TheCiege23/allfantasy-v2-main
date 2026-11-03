@@ -61,7 +61,7 @@ export function DraftIntelQueuePanel({
           queue.map((entry) => (
             <div
               key={`${entry.rank}-${entry.playerName}`}
-              className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(12,24,45,0.7),rgba(6,14,28,0.9))] px-2.5 py-2 transition-all"
+              className="rounded-xl border border-white/10 bg-[#151b2e] px-2.5 py-2 transition-all"
               data-testid={`draft-intel-entry-${entry.rank}`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -80,7 +80,7 @@ export function DraftIntelQueuePanel({
                       {entry.team ? ` · ${entry.team}` : ''}
                     </span>
                     {!entry.isTaken ? (
-                      <span className="rounded border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
+                      <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/85">
                         Assistant guidance
                       </span>
                     ) : null}
@@ -104,7 +104,7 @@ export function DraftIntelQueuePanel({
                     <button
                       type="button"
                       onClick={() => onAddIntelSuggestion(entry)}
-                      className="rounded-md border border-cyan-400/30 bg-cyan-500/12 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/22"
+                      className="rounded-md border border-transparent bg-[#1d2236] px-2 py-0.5 text-[11px] font-semibold text-white/85 hover:bg-[#2a2f45]"
                       data-testid={`draft-intel-add-queue-${entry.rank}`}
                     >
                       + Queue
@@ -158,10 +158,10 @@ export function DraftIntelQueuePanel({
           collapsedSubtitle={collapsedSummary}
           testId="draft-intel-accordion"
         >
-          <div className="rounded-lg border border-white/[0.06] bg-[#101a30]/90 p-2.5">
+          <div className="rounded-lg border border-white/[0.06] bg-[#0d1424] p-2.5">
             <div className="mb-2.5 flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.06] pb-2.5">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/75">AI queue · lookahead</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b91a7]">AI queue · lookahead</p>
                 <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">
                   {headline || (loading ? 'Chimmy is building your queue…' : 'No active lookahead window yet.')}
                 </p>
@@ -198,7 +198,7 @@ export function DraftIntelQueuePanel({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300/80">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8b91a7]">
             AI Queue
           </p>
           <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">

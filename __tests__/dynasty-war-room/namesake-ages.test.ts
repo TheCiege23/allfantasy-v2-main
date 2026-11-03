@@ -58,6 +58,7 @@ vi.mock('@/lib/redraft-war-room/redraftInjuryNews', () => ({
 vi.mock('@/lib/dynasty-war-room/dynastyFreeAgentPool', () => ({
   fetchDynastyValueByKey: vi.fn(async () => new Map()),
   fetchDynastyFreeAgentPool: vi.fn(async () => []),
+  fetchDynastyNhlProspectFreeAgents: vi.fn(async () => null),
   dynastyRosteredKeys: () => new Set(),
 }))
 vi.mock('@/lib/dynasty-core/DynastySettingsService', () => ({

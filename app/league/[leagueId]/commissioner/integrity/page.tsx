@@ -109,6 +109,43 @@ export default function CommissionerIntegrityPage() {
     void load()
   }, [load])
 
+  /*
+   * An alert links to `?flag=<id>`. Once the flags load, open the tab that holds it, scroll it into
+   * view and highlight it, so the commissioner lands on the flag they were told about rather than a
+   * list. Read from `location` rather than `useSearchParams` so the page needs no Suspense boundary.
+   * Runs once per arrival: a later reload after acting on a flag must not yank the scroll back.
+   */
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [coverageOpen, setCoverageOpen] = useState(false)
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSettingsOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [settingsOpen])
+
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [linkHandled, setLinkHandled] = useState(false)
+  useEffect(() => {
+    if (linkHandled || !payload) return
+    setLinkHandled(true)
+    const wanted = new URLSearchParams(window.location.search).get('flag')
+    if (!wanted) return
+    const inOpen = payload.openFlags?.some((f) => f.id === wanted)
+    const inDismissed = payload.recentDismissed?.some((f) => f.id === wanted)
+    if (!inOpen && !inDismissed) {
+      toast.message('That flag is no longer in this list. It may have been reviewed already.')
+      return
+    }
+    setTab(inOpen ? 'open' : 'dismissed')
+    setHighlightId(wanted)
+    requestAnimationFrame(() => {
+      document.getElementById(`integrity-flag-${wanted}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [payload, linkHandled])
+
   const patchFlag = async (flag: IntegrityFlagRow, status: 'dismissed' | 'escalated') => {
     setBusy(true)
     try {
@@ -123,6 +160,28 @@ export default function CommissionerIntegrityPage() {
       const json = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) throw new Error(json.error ?? 'Update failed')
       toast.success(status === 'dismissed' ? 'Dismissed — written to the audit log.' : 'Escalated.')
+      await load()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setSeverity = async (flag: IntegrityFlagRow, severity: 'low' | 'medium' | 'high') => {
+    setBusy(true)
+    try {
+      const res = await fetch(
+        `/api/leagues/${encodeURIComponent(leagueId)}/integrity/flags/${encodeURIComponent(flag.id)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ severity }),
+        },
+      )
+      const json = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'Update failed')
+      toast.success(`Rated ${severity}.`)
       await load()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Update failed')
@@ -184,7 +243,7 @@ export default function CommissionerIntegrityPage() {
   }
 
   return (
-    <div className="af-core af-cm-shell">
+    <div className="af-core af-cm-shell af-cm-integrity">
       <div className="af-cm">
         <header className="af-cm-head">
           <div className="af-cm-head-titles">
@@ -208,6 +267,20 @@ export default function CommissionerIntegrityPage() {
                 No open flags on file
               </span>
             )}
+            {/*
+              Below 1100px the settings rail would otherwise fall to the foot of the page, under
+              every flag. This opens it as a sheet instead; on desktop the rail sits beside the list
+              and this button is hidden.
+            */}
+            <button
+              type="button"
+              className="af-cm-settings-btn"
+              aria-expanded={settingsOpen}
+              aria-controls="integrity-settings"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <span aria-hidden>⚙</span> Settings
+            </button>
             <Link href={`/league/${leagueId}`} className="af-cm-sub">
               ← Back to league
             </Link>
@@ -235,16 +308,30 @@ export default function CommissionerIntegrityPage() {
               </button>
             </div>
 
+            {/*
+              On a phone the coverage detail folds to one tappable line so the first screen shows
+              flags. The disclosure banner above does NOT fold — it is permanent by rule.
+            */}
             {payload?.coverage && (
-              <div className="af-cm-disclosure" data-testid="integrity-coverage" style={{ display: 'block' }}>
-                <strong>Detection coverage</strong>
-                <p>Collusion: {coverageText('collusion', payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
-                <p>Tanking: {coverageText('tanking', payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
-                {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
+              <div className="af-cm-disclosure af-cm-coverage" data-testid="integrity-coverage" style={{ display: 'block' }}>
+                <button
+                  type="button"
+                  className="af-cm-coverage-toggle"
+                  aria-expanded={coverageOpen}
+                  onClick={() => setCoverageOpen((o) => !o)}
+                >
+                  <strong>Detection coverage</strong>
+                  <span aria-hidden>{coverageOpen ? '▴' : '▾'}</span>
+                </button>
+                <div className="af-cm-coverage-body" data-open={coverageOpen ? 'true' : 'false'}>
+                  <p>Collusion: {coverageText('collusion', payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
+                  <p>Tanking: {coverageText('tanking', payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
+                  {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
+                </div>
               </div>
             )}
 
-            <div className="af-cm-flagcard-tags" style={{ marginBottom: 14 }}>
+            <div className="af-cm-flagcard-tags af-cm-tabs" style={{ marginBottom: 14 }}>
               <button
                 type="button"
                 className="af-cm-seg-btn"
@@ -277,9 +364,15 @@ export default function CommissionerIntegrityPage() {
                   <IntegrityFlagCard
                     key={f.id}
                     flag={f}
+                    highlighted={f.id === highlightId}
                     busy={busy}
                     onEscalate={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'escalated') : undefined}
                     onDismiss={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'dismissed') : undefined}
+                    onSetSeverity={
+                      tab === 'open' && payload?.canReview !== false
+                        ? (flag, severity) => void setSeverity(flag, severity)
+                        : undefined
+                    }
                     /*
                      * Messaging is the league chat's job, not a second composer
                      * built here. Routing to it keeps one send path — the same
@@ -302,7 +395,21 @@ export default function CommissionerIntegrityPage() {
             )}
           </main>
 
-          <aside className="af-cm-rail">
+          {settingsOpen ? (
+            <div className="af-cm-sheet-backdrop" aria-hidden onClick={() => setSettingsOpen(false)} />
+          ) : null}
+          <aside
+            id="integrity-settings"
+            className="af-cm-rail"
+            data-open={settingsOpen ? 'true' : 'false'}
+            aria-label="Integrity settings"
+          >
+            <div className="af-cm-sheet-head">
+              <span className="af-cm-sheet-title">Integrity settings</span>
+              <button type="button" className="af-cm-sheet-close" onClick={() => setSettingsOpen(false)}>
+                Done
+              </button>
+            </div>
             {payload?.settings ? (
               <IntegritySettings value={payload.settings} saving={saving} readOnly={payload.canReview === false} onSave={saveSettings} />
             ) : loading ? (

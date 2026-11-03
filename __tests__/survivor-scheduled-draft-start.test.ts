@@ -80,7 +80,8 @@ describe('scheduled Survivor draft start', () => {
     }))
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
-    expect(m.notifyStart).toHaveBeenCalledWith('league-1')
+    // startDraftSession owns the lifecycle alert; this scheduler must not send a second one.
+    expect(m.notifyStart).not.toHaveBeenCalled()
   })
   it('scans Guilly leagues as well as survivor leagues', async () => {
     await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))

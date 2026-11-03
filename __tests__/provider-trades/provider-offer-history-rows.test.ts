@@ -105,6 +105,9 @@ describe('buildProviderOfferHistoryRows', () => {
     })
     expect(rows[0].sent.map((a) => a.label)).toEqual(['2027 round 1 pick', '$40 FAAB'])
     expect(rows[0].sent[0].sublabel).toBe('originally roster 7')
+    // The dynasty pick chip's structured half; a FAAB line carries none.
+    expect(rows[0].sent[0].pick).toEqual({ season: 2027, round: 1, originalRosterId: '7', fromRosterId: '1' })
+    expect(rows[0].sent[1].pick).toBeUndefined()
   })
 
   /**

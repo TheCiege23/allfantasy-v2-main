@@ -51,6 +51,8 @@ const EXACT_ES: Record<string, string> = {
     'ya hay puntos en el marcador, pero los puntos por jugador de esta liga no se han importado, así que no podemos saber cuánto de la proyección de cada titular falta por llegar',
   'no starters on file for one side of this matchup':
     'no hay titulares registrados para uno de los lados de este enfrentamiento',
+  'points projections and win probability are not available for this scoring type, because this league is not won head-to-head on points':
+    'las proyecciones de puntos y la probabilidad de victoria no están disponibles para este tipo de puntuación, porque esta liga no se gana cara a cara por puntos',
   'all starters final — this matchup is tied': 'todos los titulares terminaron — este enfrentamiento está empatado',
   'a win probability needs both lineups priced — and a ratio of current points would not be a probability':
     'una probabilidad de victoria necesita ambas alineaciones valoradas — y una proporción de los puntos actuales no sería una probabilidad',

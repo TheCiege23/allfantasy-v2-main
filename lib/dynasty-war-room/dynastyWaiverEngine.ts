@@ -10,6 +10,7 @@
 
 import { dynastyValue, ageTrajectory, type AgeTrajectory } from './dynastyPlayerValue'
 import { evaluateDynastyTeamNeeds } from './dynastyRosterNeedsEngine'
+import { isNhlProspectWireRow } from '@/lib/waiver-wire/prospectFreeAgentDisplay'
 import type { DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
 export interface DynastyWaiverAdd {
@@ -39,6 +40,21 @@ export interface DynastyWaiverResult {
   riskFlags: string[]
   missingDataFlags: string[]
   needsProviderIntegration: boolean
+  /**
+   * NHL dynasty only: free Fantrax prospects, in the reader's order. No value, ADP or age exists for
+   * them, so they are NOT in `recommendedAdds` and carry no reason: a list, never advice.
+   */
+  unrankedProspects?: DynastyWaiverProspect[]
+  /** How many prospects are free (`total`) and how many `unrankedProspects` holds (`listed`). */
+  prospectList?: { total: number; listed: number }
+}
+
+export interface DynastyWaiverProspect {
+  playerId: string
+  playerName: string
+  position: string
+  /** The NHL club holding his rights, or null when Fantrax lists none ("Unsigned"). */
+  team: string | null
 }
 
 function valueOf(p: DynastyPlayerFact): number | null {
@@ -107,6 +123,8 @@ export function buildDynastyWaiverRecommendations(
     )
   } else {
     recommendedAdds = context.freeAgents
+      // A prospect has no value: ranking him (even last) would read a missing value as advice.
+      .filter((p) => !isNhlProspectWireRow(p))
       .map((p) => ({ p, sv: stashValue(p, context.sport), atNeed: targetSet.has(p.position), traj: ageTrajectory(p.position, p.age, context.sport) }))
       .sort((a, b) => {
         if (a.atNeed !== b.atNeed) return a.atNeed ? -1 : 1
@@ -134,6 +152,11 @@ export function buildDynastyWaiverRecommendations(
     riskFlags.push('Critical starting-slot hole — prioritize a startable add over a stash.')
   }
 
+  // NHL dynasty: free Fantrax prospects, listed (never ranked) after the adds, whatever the ADP pool holds.
+  const unrankedProspects: DynastyWaiverProspect[] = context.freeAgents
+    .filter((p) => isNhlProspectWireRow(p))
+    .map((p) => ({ playerId: p.playerId, playerName: p.playerName, position: p.position, team: p.team }))
+
   return {
     rosterId,
     recommendedAdds,
@@ -142,5 +165,6 @@ export function buildDynastyWaiverRecommendations(
     riskFlags,
     missingDataFlags: [...new Set(missingDataFlags)],
     needsProviderIntegration,
+    ...(context.nhlProspectFreeAgents ? { unrankedProspects, prospectList: context.nhlProspectFreeAgents } : {}),
   }
 }

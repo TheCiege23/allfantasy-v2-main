@@ -20,7 +20,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
-import { tradeReviewMode } from '@/lib/league-rules-explainer/snapshot'
+import { tradeReviewMode, effectiveVetoRule } from '@/lib/league-rules-explainer/snapshot'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export type LeagueTradeReviewMode = 'commissioner' | 'league_vote' | 'instant'
@@ -83,6 +83,6 @@ export async function publishTradeReviewChange(input: {
     leagueId: input.leagueId,
     actorUserId: input.actorUserId,
     section: 'trades',
-    changes: diffRuleSnapshots({ tradeReview: tradeReviewMode(input.settingsBefore) }, { tradeReview: tradeReviewMode(input.settingsAfter) }),
+    changes: diffRuleSnapshots({ tradeReview: tradeReviewMode(input.settingsBefore), vetoThreshold: effectiveVetoRule(input.settingsBefore) }, { tradeReview: tradeReviewMode(input.settingsAfter), vetoThreshold: effectiveVetoRule(input.settingsAfter) }),
   })
 }

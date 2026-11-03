@@ -5,7 +5,7 @@ import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { describeTiebreakRule } from './waiverRuleLabels'
-import { waiverScheduleIsImported } from './waiverRowMeta'
+import { FANTRAX_WAIVER_RULES_UNKNOWN, importedWaiverSettings, waiverScheduleIsImported } from './waiverRowMeta'
 import type { WaiverSchedule } from './waiverRunClock'
 import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
 import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
@@ -124,7 +124,7 @@ export async function resolveWaiverRules(leagueId: string, platform: string): Pr
   tiebreak: SectionState<string>
   claimLimits: SectionState<string>
 }> {
-  const s = await prisma.leagueWaiverSettings.findUnique({
+  const stored = await prisma.leagueWaiverSettings.findUnique({
     where: { leagueId },
     select: {
       waiverType: true,
@@ -165,8 +165,10 @@ export async function resolveWaiverRules(leagueId: string, platform: string): Pr
       'This league’s Sleeper waiver day is not imported in a form we can read, and its waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.',
   }
 
+  /* A Fantrax row is bootstrap defaults only — never the league's rules (waiverRowMeta.ts). */
+  const s = importedWaiverSettings(stored, platform)
   if (!s) {
-    const reason = 'no waiver settings were ingested for this league'
+    const reason = stored ? FANTRAX_WAIVER_RULES_UNKNOWN : 'no waiver settings were ingested for this league'
     return {
       waiverType: { available: false, reason },
       processTime: observedRun ?? (observed === null && !waiverScheduleIsImported(platform) ? notYetObserved : { available: false, reason }),

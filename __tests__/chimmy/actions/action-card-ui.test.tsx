@@ -43,10 +43,34 @@ const TRADE: Card = {
   warnings: [],
 }
 
+const AUTOMATION: Card = {
+  ...LINEUP,
+  actionId: 'a3',
+  kind: 'automation',
+  title: 'Turn on the recommended automations',
+  week: 0,
+  lineup: undefined,
+  automation: { changes: ['Fill empty starting spots before lock', 'Move healthy players off IR'] },
+  warnings: [],
+}
+
 beforeEach(() => resetChimmyActionCardsForTest())
 afterEach(() => cleanup())
 
 describe('ChimmyActionCard', () => {
+  it('lists every automation setting a commissioner card will change, with a save button', () => {
+    render(<ChimmyActionCard card={AUTOMATION} confirm={vi.fn()} />)
+    expect(screen.getByText('Fill empty starting spots before lock')).toBeInTheDocument()
+    expect(screen.getByText('Move healthy players off IR')).toBeInTheDocument()
+    expect(screen.getByText('KBFL · NFL')).toBeInTheDocument()
+    expect(screen.getByTestId('chimmy-action-confirm')).toHaveTextContent('Confirm — save settings')
+  })
+
+  it('reads an automation card off the meta, and drops one with nothing listed', () => {
+    expect(readActionCards({ actionCards: [AUTOMATION] })).toHaveLength(1)
+    expect(readActionCards({ actionCards: [{ ...AUTOMATION, automation: { changes: [] } }] })).toHaveLength(0)
+  })
+
   it('shows what moves where, the league and week, and every warning — and changes nothing on render', () => {
     const confirm = vi.fn()
     render(<ChimmyActionCard card={LINEUP} confirm={confirm} />)

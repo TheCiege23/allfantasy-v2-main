@@ -100,6 +100,9 @@ export async function POST(
     case 'roster-risk':
       return NextResponse.json({ rosterRisk: evaluateRosterRisk(context, rosterId) })
     case 'lineup-safety':
+      if (context.bestBallLineups) {
+        return NextResponse.json({ error: 'This is a best ball league: lineups set themselves.' }, { status: 409 })
+      }
       return NextResponse.json({ lineupSafety: evaluateLineupSafety(context, rosterId) })
     case 'waivers':
       return NextResponse.json({ waivers: buildWaiverRecommendations(context, rosterId) })

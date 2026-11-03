@@ -2,7 +2,8 @@ import { defineMessages } from '@/lib/i18n/messages'
 
 /**
  * Weekly share text (lib/core-app/weeklyShare.ts: rivalryNarrative, weeklySocialPost,
- * commissionerWeekDraft, drawWeeklyShareCard). Not the component catalog in ./weeklySharing.ts.
+ * commissionerWeekDraft, drawWeeklyShareCard) and the workbook's Brief label (weeklyWorkbook.ts).
+ * Not the component catalog in ./weeklySharing.ts.
  * These strings become social posts, commissioner drafts and the share-card image, so every one is
  * the module's previous output byte for byte, in both languages.
  */
@@ -52,6 +53,8 @@ export const weeklyShareTextMessages = defineMessages({
     reviewMyTeam: 'Review my team and its rules',
     cardTagline: 'My week. My leagues. My next decision.',
     cardDisclaimer: 'Estimates, not guarantees. Imported history.',
+    // buildWeeklyWorkbook (lib/core-app/weeklyWorkbook.ts): the Brief sheet's label cell
+    workbookBriefLabel: 'Brief',
   },
   es: {
     record: (wins, losses, ties) => ` Serie importada: ${wins}-${losses}-${ties} (victorias-derrotas-empates).`,
@@ -94,5 +97,6 @@ export const weeklyShareTextMessages = defineMessages({
     reviewMyTeam: 'Revisar mi equipo y sus reglas',
     cardTagline: 'Mi semana. Mis ligas. Mi próxima decisión.',
     cardDisclaimer: 'Estimaciones, no garantías. Historial importado.',
+    workbookBriefLabel: 'Resumen',
   },
 })

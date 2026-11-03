@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const user = await getCurrentUser()
   const result = await loadLeaguePickBoard(leagueId, user?.id ?? null)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
-  return NextResponse.json(result.board ? { board: result.board } : { board: null, reason: result.reason }, {
+  return NextResponse.json(result.board ? { board: result.board, trade: result.trade } : { board: null, reason: result.reason }, {
     headers: { 'Cache-Control': 'private, no-store' },
   })
 }

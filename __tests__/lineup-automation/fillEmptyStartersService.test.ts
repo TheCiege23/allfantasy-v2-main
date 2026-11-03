@@ -6,10 +6,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const m = vi.hoisted(() => {
-  const state = { league: {} as Record<string, unknown>, rosters: [] as Array<Record<string, unknown>> }
+  const state = { league: {} as Record<string, unknown>, rosters: [] as Array<Record<string, unknown>>, cache: new Map<string, { createdAt: Date }>() }
   return {
     state,
     prisma: {
+      sportsDataCache: {
+        findUnique: vi.fn(async ({ where }: { where: { cacheKey: string } }) => state.cache.get(where.cacheKey) ?? null),
+        create: vi.fn(async ({ data }: { data: { cacheKey: string; createdAt: Date } }) => {
+          if (state.cache.has(data.cacheKey)) throw Object.assign(new Error('unique'), { code: 'P2002' })
+          state.cache.set(data.cacheKey, { createdAt: data.createdAt })
+          return data
+        }),
+      },
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async () => state.league) },
       roster: { findMany: vi.fn(async () => state.rosters) },
@@ -59,9 +67,40 @@ beforeEach(() => {
     { id: 'rb', name: 'Bench Back', position: 'RB', projectedPoints: 9, product: { byeWeek: 12 } },
   ])
   m.persist.mockResolvedValue({ ok: true })
+  // The owner was told seven hours ago (./automationHeadsUp.ts), so this run fills.
+  m.state.cache = new Map([['af-heads-up:fill_empty_starters:r1:2026:7', { createdAt: OLD }]])
 })
 
 describe('runFillEmptyStarters', () => {
+  it('first tells the owner what it will fill, and changes nothing', async () => {
+    m.state.cache.clear()
+    const r = await runFillEmptyStarters({ now: NOW })
+    expect(r).toMatchObject({ teams: 1, warned: 1, filled: 0, flagged: 0 })
+    expect(m.persist).not.toHaveBeenCalled()
+    expect(m.notify).toHaveBeenCalledTimes(1)
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['owner'], type: 'fill_empty_starters_heads_up', body: expect.stringContaining('start Bench Back at RB unless you set your lineup yourself') }))
+    // The next run, an hour later, still waits.
+    const again = await runFillEmptyStarters({ now: new Date(NOW.getTime() + 3_600_000) })
+    expect(again).toMatchObject({ warned: 0, filled: 0, skipped: { heads_up_pending: 1 } })
+    expect(m.persist).not.toHaveBeenCalled()
+    // Three hours after the heads-up, it fills.
+    expect(await runFillEmptyStarters({ now: new Date(NOW.getTime() + 3 * 3_600_000) })).toMatchObject({ filled: 1 })
+  })
+
+  it('fills at once without waiting when games are already under way this week', async () => {
+    m.state.cache.clear()
+    m.lock.mockResolvedValue({ locked: false, lockedPlayerIds: ['qb'] })
+    expect(await runFillEmptyStarters({ now: NOW })).toMatchObject({ warned: 0, filled: 1 })
+    expect(m.notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'fill_empty_starters_heads_up' }))
+  })
+
+  it('never fills when the heads-up could not be recorded', async () => {
+    m.state.cache.clear()
+    m.prisma.sportsDataCache.create.mockRejectedValueOnce(new Error('db down'))
+    expect(await runFillEmptyStarters({ now: NOW })).toMatchObject({ warned: 0, filled: 0, skipped: { heads_up_pending: 1 } })
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+
   it('fills the empty spot as a system save, tells the owner, and tells the commissioner about the spot nobody can play', async () => {
     const r = await runFillEmptyStarters({ now: NOW })
     expect(r).toMatchObject({ leagues: 1, teams: 1, filled: 1, flagged: 1, failures: [] })

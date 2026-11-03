@@ -159,7 +159,7 @@ async function expireRedraftProposals(
 ): Promise<number> {
   const pending = await db.redraftTradeProposal.findMany({
     where: { leagueId, status: 'pending', acceptedAt: null },
-    select: { id: true, seasonId: true, proposerRosterId: true, receiverRosterId: true },
+    select: { id: true, seasonId: true, proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true },
   })
   let expired = 0
   for (const proposal of pending) {
@@ -193,7 +193,11 @@ async function expireRedraftProposals(
       // Best-effort, after the commit: the market event and the notice must never undo an expiry.
       await (deps.recordMarketEvent ?? defaultRecordMarketEvent)({ leagueId, seasonId: proposal.seasonId, proposalId: proposal.id }).catch(() => {})
       const owners = await db.redraftRoster
-        .findMany({ where: { id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } }, select: { ownerId: true } })
+        // Every team in the trade hears it — a multi-team trade's extra teams included.
+        .findMany({
+          where: { id: { in: [proposal.proposerRosterId, proposal.receiverRosterId, ...(proposal.additionalRosterIds ?? [])] } },
+          select: { ownerId: true },
+        })
         .catch(() => [])
       const userIds = [...new Set(owners.map((o) => o.ownerId).filter((id) => typeof id === 'string' && id && !id.startsWith('orphan-') && !id.startsWith('open-slot-')))]
       if (userIds.length > 0) {

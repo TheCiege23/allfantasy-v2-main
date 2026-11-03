@@ -30,8 +30,11 @@ import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/re
 import { dynastyValue } from './dynastyPlayerValue'
 import { deriveCatalogStarterRequirements } from './dynastySportCatalog'
 import { loadDynastyPickCapital, type DynastyPickCapital } from './dynastyPickCapital'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { identityNameKey } from '@/lib/redraft/rosterGameLogIdBridge'
 import {
   fetchDynastyFreeAgentPool,
+  fetchDynastyNhlProspectFreeAgents,
   fetchDynastyValueByKey,
   dynastyRosteredKeys,
 } from './dynastyFreeAgentPool'
@@ -111,7 +114,8 @@ export async function buildDynastyWarRoomContext(
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     // `platform` decides where pick capital is read from (see `dynastyPickCapital.ts`).
-    select: { sport: true, season: true, settings: true, isDynasty: true, leagueVariant: true, platform: true },
+    // `leagueType` feeds the NHL prospect rule (`offersNhlProspectFreeAgency`, dynasty family).
+    select: { sport: true, season: true, settings: true, isDynasty: true, leagueType: true, leagueVariant: true, platform: true },
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
 
@@ -256,6 +260,7 @@ export async function buildDynastyWarRoomContext(
     position: string
     team: string | null
     slotType: string
+    lineupSection: 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
   }
   const rawPlayers: RawPlayer[] = []
   for (const r of rosterRows) {
@@ -275,6 +280,7 @@ export async function buildDynastyWarRoomContext(
           position,
           team: team ? team.toUpperCase() : null,
           slotType: sectionSlotType(sec),
+          lineupSection: sec,
         })
       }
     }
@@ -329,6 +335,7 @@ export async function buildDynastyWarRoomContext(
       position: p.position,
       team: p.team,
       slotType: p.slotType,
+      lineupSection: p.lineupSection,
       isStarterSlot: p.slotType === 'starter',
       age,
       dynastyValue: null,
@@ -447,6 +454,26 @@ export async function buildDynastyWarRoomContext(
     }
   })
 
+  /*
+   * NHL DYNASTY ONLY: free Fantrax prospects go AFTER every ADP-ranked free agent, as #3063 lists
+   * them on the league's own free-agent screen. They carry no value or ADP, so the waiver engine and
+   * the prompt never rank or advise them. Every other sport and league type gets null here, and so
+   * does an unreadable stored universe: the pool is then exactly the ADP pool above.
+   */
+  const rosteredIds = new Set<string>(rawPlayers.map((p) => p.playerId))
+  for (const r of rosterRows) for (const id of getRosterPlayerIds(r.playerData)) rosteredIds.add(String(id))
+  const poolNames = new Set<string>()
+  for (const fa of freeAgentRows) {
+    const k = identityNameKey(fa.playerName)
+    if (k) poolNames.add(k)
+  }
+  const prospectFreeAgents = await fetchDynastyNhlProspectFreeAgents(prisma as never, {
+    league: { sport, isDynasty: league.isDynasty, leagueType: league.leagueType },
+    rosteredIds,
+    poolNames,
+  })
+  if (prospectFreeAgents) freeAgents.push(...prospectFreeAgents.prospects)
+
   // --- availability contract ---
   const valuesAvailable = dynastyAdpByKey.size > 0
   const agesAvailable = allRosterPlayers.some((p) => p.age != null) || freeAgents.some((p) => p.age != null)
@@ -476,7 +503,8 @@ export async function buildDynastyWarRoomContext(
         : 'missing',
     news: injuryNews.newsCount > 0 ? 'available' : 'missing',
     projections: 'missing', // dynasty horizon: weekly projections not part of native context
-    freeAgentPool: freeAgents.length > 0 ? 'available' : 'missing',
+    // The RANKED pool: unranked prospects never make waiver adds "available" on their own.
+    freeAgentPool: freeAgentRows.length > 0 ? 'available' : 'missing',
   }
 
   const missingDataFlags: string[] = []
@@ -512,6 +540,7 @@ export async function buildDynastyWarRoomContext(
     isCommissioner: access.isCommissioner,
     teams,
     freeAgents,
+    ...(prospectFreeAgents ? { nhlProspectFreeAgents: prospectFreeAgents.meta } : {}),
     rookieDraftWindows,
     availability,
     freshness: {

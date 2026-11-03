@@ -21,7 +21,7 @@ import { homeBandsMessages } from './messages/homeBands'
  *
  * Anything without parts, or that this does not know, returns null and the caller renders its English as
  * written — a whole English sentence, never half of one. The band's own words (headings, buttons, counts)
- * are inline `es ? … : …` in each band's view, as DashScheduleBandView does. PURE, client-safe.
+ * live in each band's catalog (lib/core-app/messages/dash*.ts). PURE, client-safe.
  */
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
@@ -206,28 +206,9 @@ export function briefTradeSummaryText(parts: BriefTradeParts | null | undefined)
     .join('; ')
 }
 
-/** The brief's alert groups, keyed by notification TYPE (`ALERT_LABELS` in lib/core-app/sinceLastVisit.ts). */
-const ALERT_LABEL_ES: Record<string, string> = {
-  chimmy_alert: 'alertas de Chimmy',
-  player_injury_update: 'novedades de lesiones',
-  player_news_update: 'noticias de jugadores',
-  live_score_swing: 'alertas de partidos en vivo',
-  injury_update: 'novedades de lesiones',
-  breaking_news: 'noticias de última hora',
-  trade_proposed: 'ofertas de intercambio',
-  trade_accepted: 'intercambios aceptados',
-  trade_rejected: 'intercambios rechazados',
-  trade_countered: 'contraofertas',
-  waiver_processed: 'resultados de reclamos',
-  waiver_claim: 'reclamos',
-  draft_pick: 'selecciones del draft',
-  draft_starting: 'drafts que empiezan',
-  lineup_lock: 'bloqueos de alineación',
-  commissioner_action: 'acciones del comisionado',
-}
-
+/** The brief's alert groups, keyed by notification TYPE; the Spanish lives in messages/homeBands.ts. */
 export function alertGroupText(type: string, english: string, language: string): string {
-  return language === 'es' ? (ALERT_LABEL_ES[type] ?? english) : english
+  return messagesFor(homeBandsMessages, language).alertGroup(type, english)
 }
 
 /** The screen a provider handoff opens (`SourceScreen` in lib/league-links/sourceLinkResolver.ts), for its title. */
@@ -248,24 +229,9 @@ export function handoffText(label: string, screen: string, language: string): { 
 
 /* ── Latest league trades ────────────────────────────────────────────────────────────────────── */
 
-/** A trade's status chip. Keyed on the status CODE: a Spanish status agrees with "el intercambio". */
-const TRADE_STATUS_ES: Record<string, string> = {
-  pending: 'Propuesto',
-  awaiting_votes: 'Esperando votos',
-  awaiting_commissioner: coreUiCopy('Commissioner review', 'es'),
-  accepted: 'Aceptado',
-  scheduled: 'Programado',
-  processed: 'Completado',
-  rejected: 'Rechazado',
-  cancelled: 'Cancelado',
-  countered: 'Contraofertado',
-  expired: 'Vencido',
-  vetoed: 'Vetado',
-  reversed: 'Revertido',
-}
-
+/** A trade's status chip, keyed on the status CODE; the Spanish lives in messages/homeBands.ts. */
 export function tradeStatusText(status: string, english: string, language: string): string {
-  return language === 'es' ? (TRADE_STATUS_ES[status] ?? english) : english
+  return messagesFor(homeBandsMessages, language).tradeStatus(status, english)
 }
 
 /** The fixed grade lines `recentTrades.ts` writes when there is no letter to explain. */

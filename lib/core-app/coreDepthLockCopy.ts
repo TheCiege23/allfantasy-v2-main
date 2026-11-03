@@ -1,5 +1,7 @@
-import { freeUntilLabel } from '@/components/launch/launchCopy'
 import type { CoreDepth } from './coreDepthAccess'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreDepthLockMessages, coreDepthLockSubjectMessages } from './messages/coreDepthLock'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * The /core depth paywall's words in the reader's language (2026-10-06): the lock card, its
@@ -16,7 +18,8 @@ import type { CoreDepth } from './coreDepthAccess'
  * Spanish avoids agreeing with the subject: a subject arrives already in Spanish from its caller, and
  * its gender and number are not known here, so the head is "{subject}: parte de AF Pro" rather than a
  * sentence whose verb would have to guess. The "Free until" day comes from the launch countdown's own
- * `freeUntilLabel`, so the lock and the banner name the day the same way.
+ * `freeUntilLabel`, so the lock and the banner name the day the same way. The lock card's words and
+ * the trade-visual subject live in lib/core-app/messages/coreDepthLock.ts.
  *
  * PURE, client- and server-safe (CommissionerHub is a server component).
  */
@@ -25,7 +28,7 @@ export type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
 export function lockLang(language: string | null | undefined): CoreDepthLockLang {
-  return language === 'es' ? 'es' : 'en'
+  return coreLang(language)
 }
 
 export type CoreDepthLockCopy = {
@@ -40,26 +43,8 @@ export type CoreDepthLockCopy = {
   freeUntil: (startsAtIso: string, planName: string) => string
 }
 
-const EN: CoreDepthLockCopy = {
-  head: (subject, plan) => `${subject} ${subject.endsWith('s') ? 'are' : 'is'} part of ${plan}`,
-  headAlt: (subject) => `${subject} ${subject.endsWith('s') ? 'are' : 'is'} not included with your account`,
-  body: 'Your leagues, scores and the basics stay free. Upgrade to see the rest.',
-  bodyAlt: 'Your leagues, scores and the basics are all here.',
-  cta: (plan) => `See ${plan}`,
-  freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'en')} — then ${plan}`,
-}
-
-const ES: CoreDepthLockCopy = {
-  head: (subject, plan) => `${subject}: parte de ${plan}`,
-  headAlt: (subject) => `${subject}: no disponible con tu cuenta`,
-  body: 'Tus ligas, los marcadores y lo básico siguen siendo gratis. Mejora tu plan para ver el resto.',
-  bodyAlt: 'Tus ligas, los marcadores y lo básico están todos aquí.',
-  cta: (plan) => `Ver ${plan}`,
-  freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'es')} — luego, ${plan}`,
-}
-
 export function coreDepthLockCopy(language: string | null | undefined): CoreDepthLockCopy {
-  return lockLang(language) === 'es' ? ES : EN
+  return messagesFor(coreDepthLockMessages, lockLang(language))
 }
 
 /**
@@ -112,5 +97,5 @@ export function lockSubjectText(english: string, language: string | null | undef
 
 /** "Trading for Dalton Kincaid" — Player Finder's trade-visual lock, which names the player. */
 export function tradingForSubject(playerName: string, language: string | null | undefined): string {
-  return lockLang(language) === 'es' ? `Intercambiar por ${playerName}` : `Trading for ${playerName}`
+  return messagesFor(coreDepthLockSubjectMessages, lockLang(language)).tradingFor(playerName)
 }

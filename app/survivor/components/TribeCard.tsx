@@ -14,7 +14,7 @@ export function TribeCard({
   status: 'immune' | 'tribal' | 'neutral'
   memberCount: number
 }) {
-  const accent = tribe.colorHex ?? '#22d3ee'
+  const accent = tribe.colorHex ?? '#f0a35e'
   const tribeIcon = tribe.emoji ?? extractLeadingTribeIcon(tribe.name)
   const tribeName = stripLeadingTribeIcon(tribe.name ?? 'Tribe')
   return (
@@ -23,9 +23,9 @@ export function TribeCard({
       style={{
         boxShadow:
           status === 'immune'
-            ? `0 0 0 1px rgba(0,212,170,0.35), 0 0 24px rgba(0,212,170,0.12)`
+            ? `0 0 0 1px rgba(242,196,107,0.45), 0 0 24px rgba(242,196,107,0.14)`
             : status === 'tribal'
-              ? `0 0 0 1px rgba(255,68,68,0.45), 0 0 28px rgba(255,68,68,0.15)`
+              ? `0 0 0 1px rgba(224,86,59,0.5), 0 0 28px rgba(224,86,59,0.16)`
               : undefined,
       }}
     >
@@ -37,7 +37,7 @@ export function TribeCard({
           {tribe.logoUrl ? <img src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribeName || 'Tribe', tribe.mascot) : ''} width={56} height={56} className="h-14 w-14 max-w-none object-contain" /> : tribeIcon ?? tribeName.slice(0, 1)}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[13px] font-bold uppercase tracking-wider text-[var(--survivor-text-bright)]">
+          <h3 className="sv-h truncate text-[13px] uppercase tracking-[0.12em]">
             {tribeName || 'Tribe'}
           </h3>
           <div className="h-1 w-full rounded-full bg-white/[0.06]">
@@ -52,9 +52,9 @@ export function TribeCard({
       <p className="mt-2 text-[11px] text-[var(--survivor-text-dim)]">{memberCount} members</p>
       <div className="mt-2">
         {status === 'immune' ? (
-          <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">🛡 Immune</span>
+          <span className="sv-immune text-[11px] font-bold uppercase tracking-wide">🛡 Immune</span>
         ) : status === 'tribal' ? (
-          <span className="tribal-dot-pulse text-[11px] font-bold uppercase tracking-wide text-red-400">
+          <span className="tribal-dot-pulse text-[11px] font-bold uppercase tracking-wide text-[#f08a72]">
             🔥 Tribal tonight
           </span>
         ) : (

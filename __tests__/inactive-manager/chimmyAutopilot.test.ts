@@ -72,11 +72,15 @@ describe('setChimmyAutopilot', () => {
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: AUTOPILOT_ON_ACTION, entityId: 'r1', metadata: { rosterId: 'r1', style: 'dynasty_owner' } }))
   })
 
-  it('checks the LEAGUE OWNER\'s AF Commissioner plan and refuses without it', async () => {
+  it('checks the LEAGUE OWNER\'s AF Commissioner plan: without it, Chimmy runs one team free', async () => {
     m.state.ownerHasPlan = false
-    expect(await setChimmyAutopilot('L', 'co-commish', 'r1', 'win_now')).toMatchObject({ ok: false, status: 402 })
+    expect(await setChimmyAutopilot('L', 'co-commish', 'r1', 'win_now')).toMatchObject({ ok: true, style: 'win_now' })
     expect(m.resolveForUser).toHaveBeenCalledWith('league-owner', 'commissioner_chimmy_autopilot')
-    expect(entry('r1')).toBeUndefined()
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now' } })
+    // A second team needs the plan; the free one can still change style or be switched off.
+    expect(await setChimmyAutopilot('L', 'co-commish', 'r2', 'win_now')).toMatchObject({ ok: false, status: 402 })
+    expect(entry('r2')).toBeUndefined()
+    expect(await setChimmyAutopilot('L', 'co-commish', 'r1', 'rebuild')).toMatchObject({ ok: true, style: 'rebuild' })
   })
 
   it('is commissioner-only and rejects an unknown style', async () => {

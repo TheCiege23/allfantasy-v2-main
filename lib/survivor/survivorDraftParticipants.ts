@@ -5,6 +5,17 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { SURVIVOR_POOL_IDOL_ROSTER_ID } from './survivorIdolPoolPlacement'
+import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+
+/**
+ * A Survivor castaway Chimmy runs (lib/inactive-manager, "Chimmy as a manager"): an empty seat has no
+ * account, so the cast row is keyed by the seat's own owner id and named after its team, never after
+ * the placeholder id ("orphan-…") that used to show in tribes, ballots and chat.
+ */
+export function chimmyCastawayName(teamName: string | null | undefined, seatNumber: number): string {
+  const team = (teamName ?? '').trim()
+  return team ? `${team} (Chimmy)` : `Chimmy ${seatNumber}`
+}
 
 export type SurvivorDraftPreparation =
   | { ok: true; alreadyStarted: boolean; draftOrder: string[] }
@@ -52,8 +63,26 @@ export async function prepareSurvivorDraftParticipants(
     select: { id: true, displayName: true, username: true, avatarUrl: true },
   })
   const usersById = new Map(users.map((u) => [u.id, u]))
+  // A seat with no account that Chimmy runs is a real castaway: Chimmy plays it all season.
+  const managed = readManagedLineups(league.settings)
+  const chimmySeats = rosters.filter((r) => !usersById.has(r.platformUserId) && isChimmyRunning(managed, r.id, r.platformUserId))
+  if (chimmySeats.length > 0) {
+    const teams = await db.leagueTeam.findMany({
+      where: { leagueId, externalId: { in: chimmySeats.flatMap((r) => [r.id, r.platformUserId]) } },
+      select: { externalId: true, teamName: true },
+    })
+    const teamName = new Map(teams.map((t) => [t.externalId, t.teamName]))
+    chimmySeats.forEach((r, i) => {
+      usersById.set(r.platformUserId, {
+        id: r.platformUserId,
+        displayName: chimmyCastawayName(teamName.get(r.id) ?? teamName.get(r.platformUserId), i + 1),
+        username: '',
+        avatarUrl: null,
+      })
+    })
+  }
   if (rosters.some((r) => !usersById.has(r.platformUserId))) {
-    return { ok: false, code: 'unclaimed_seats', error: 'Every drafted Survivor team needs an owner. Claim or transfer the remaining open teams, then retry setup.' }
+    return { ok: false, code: 'unclaimed_seats', error: 'Every drafted Survivor team needs an owner. Claim or transfer the remaining open teams, or hand them to Chimmy, then retry setup.' }
   }
   if (settings.commissionerParticipationMode === 'non_participating_host' && rosters.some((r) => r.platformUserId === league.userId)) {
     return { ok: false, code: 'host_owns_team', error: 'The commissioner owns a drafted team but is configured as a non-participating host. Choose participating commissioner or transfer that team before starting Survivor.' }
@@ -111,7 +140,9 @@ export async function prepareSurvivorDraftParticipants(
     await db.survivorPlayer.upsert({
       where: { leagueId_userId: { leagueId, userId: user.id } },
       create: { leagueId, userId: user.id, displayName: user.displayName || user.username || 'Manager', avatarUrl: user.avatarUrl ?? null, redraftRosterId: roster.id, tribeId: tribeId ?? null },
-      update: { redraftRosterId: roster.id, ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}), ...(tribeId ? { tribeId } : {}) },
+      update: { redraftRosterId: roster.id, ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}), ...(tribeId ? { tribeId } : {}),
+        // A Chimmy seat's earlier rows were named after the placeholder id; give it its team name.
+        ...(user.displayName && chimmySeats.some((r) => r.id === roster.id) ? { displayName: user.displayName } : {}) },
     })
   }
   const rosterToUser = new Map(rosters.map((r) => [r.id, r.platformUserId]))

@@ -5,6 +5,7 @@ import { postHostMessage } from './hostEngine'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { shouldBlockTwist } from './twistEngine'
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { readChallengeFaabWeeklyCap } from './survivorChallengeBuilderModel'
 
 export type ChallengeResult = { challengeId: string; winners: string[] }
 
@@ -82,8 +83,14 @@ export async function assertWeeklyChallengeRewardBalance(
   if (draft.affectsImmunity && immunityCount >= 1) {
     return { ok: false, reason: 'No two immunity-granting challenges in the same week.' }
   }
-  if (draft.rewardFaabAmount != null && totalFaab + draft.rewardFaabAmount > 40) {
-    return { ok: false, reason: 'FAAB rewards capped at $40 per challenge week aggregate.' }
+  if (draft.rewardFaabAmount != null) {
+    // The commissioner's weekly cap on challenge FAAB (League.settings.survivorChallengeFaabWeeklyCap),
+    // $40 when unset — the old hard-coded aggregate.
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const cap = readChallengeFaabWeeklyCap(league?.settings)
+    if (totalFaab + draft.rewardFaabAmount > cap) {
+      return { ok: false, reason: `FAAB rewards capped at $${cap} per challenge week aggregate.` }
+    }
   }
 
   if (draft.grantsIdol) {

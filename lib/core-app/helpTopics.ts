@@ -18,6 +18,7 @@ import { OUTLOOK_TOPICS } from './help-topics/outlook'
 import { CAREER_TOPICS } from './help-topics/career'
 import { HOME_TOPICS } from './help-topics/home'
 import { TRADES_TOPICS } from './help-topics/trades'
+import { coreLang } from './messages/coreLocale'
 
 export type HelpText = { title: string; body: string }
 export type HelpTopic = { en: HelpText; es: HelpText }
@@ -53,5 +54,5 @@ export type HelpTopicId = keyof typeof HELP_TOPICS
 /** The topic in the reader's language; anything but Spanish reads English. */
 export function helpTopic(id: HelpTopicId, language: string): HelpText {
   const t: HelpTopic = HELP_TOPICS[id]
-  return language === 'es' ? t.es : t.en
+  return t[coreLang(language)]
 }

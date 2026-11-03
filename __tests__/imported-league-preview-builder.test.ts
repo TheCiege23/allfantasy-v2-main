@@ -170,3 +170,27 @@ describe('buildImportedLeaguePreview coverage narrative', () => {
     expect(preview.dataQuality.coverageNarrative.sentence ?? '').toMatch(/Fleaflicker/i)
   })
 })
+
+/* The preview's scoring follows the reception RATE, with the Sleeper mapper's labels. */
+describe('buildImportedLeaguePreview — reception scoring label', () => {
+  const settingsFor = (league: Record<string, unknown>, scoringFormat: string | null = null) =>
+    buildImportedLeaguePreview(
+      buildBaseNormalized({
+        league: { ...buildBaseNormalized().league, scoring: null as unknown as string, ...league },
+        scoring: { scoring_format: scoringFormat, rules: [] },
+      }),
+    ).league.settings
+
+  it('reads Sleeper’s rec rate: 1 is PPR, 0.5 is Half PPR, 0.25 is "0.25 PPR", 0 is Standard', () => {
+    expect(settingsFor({ scoring_settings: { rec: 1 } })).toMatchObject({ ppr: true, scoringLabel: 'PPR' })
+    expect(settingsFor({ scoring_settings: { rec: 0.5 } })).toMatchObject({ ppr: true, scoringLabel: 'Half PPR' })
+    expect(settingsFor({ scoring_settings: { rec: 0.25 } })).toMatchObject({ ppr: true, scoringLabel: '0.25 PPR' })
+    expect(settingsFor({ scoring_settings: { rec: 0 } })).toMatchObject({ ppr: false, scoringLabel: 'Standard' })
+  })
+
+  it('a provider that states only "half" is Half PPR, not PPR', () => {
+    expect(settingsFor({}, 'half')).toMatchObject({ ppr: true, scoringLabel: 'Half PPR' })
+    expect(settingsFor({}, 'ppr')).toMatchObject({ ppr: true, scoringLabel: 'PPR' })
+    expect(settingsFor({}, 'standard')).toMatchObject({ ppr: false, scoringLabel: 'Standard' })
+  })
+})

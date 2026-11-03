@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -14,11 +15,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
 
   // Check if user is in the league
   const [leagueAsOwner, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    (prisma as any).roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId }, select: { id: true } }),
   ])
 
   if (!leagueAsOwner && !rosterAsMember) {

@@ -22,6 +22,8 @@ export type RosterSettingsInput = {
 export type TradeSettingsInput = {
   tradeReviewType?: string | null
   vetoThreshold?: number | null
+  /** How the veto threshold counts: a number of votes (default) or a percent of the teams. */
+  vetoThresholdMode?: 'count' | 'percent' | null
 }
 
 export type LeagueSettingsPatch = GeneralSettingsInput & RosterSettingsInput & TradeSettingsInput & {

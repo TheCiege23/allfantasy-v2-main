@@ -78,3 +78,66 @@ it('retains an owned reserve name omitted from the current directory on a live r
   expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
   expect(h.updateMany.mock.calls[0][0].data.roster[1]).toMatchObject({ fantraxId: 'unknown-reserve', name: 'Archived Reserve', primaryPosition: 'RB', status: 'RESERVE', team: '' })
 })
+
+/*
+ * A manager renamed their team on Fantrax between two refreshes. The snapshot stores the OLD
+ * name as `userTeam`, and the refresh used to look the team up by that name alone — so it
+ * failed with "no team named …" forever, and the league stopped refreshing.
+ */
+describe('Fantrax refresh after a team rename', () => {
+  const snapshotWithTeamId = {
+    id: 'stable-uuid', appUserId: 'owner', sourceLeagueId: 'vendor-id', season: 2026,
+    userTeam: 'My team',
+    standings: [
+      { team: 'My team', fantraxTeamId: 'team1' },
+      { team: 'Rival', fantraxTeamId: 'team2' },
+    ],
+  }
+
+  it('finds the importer\'s team by its stored Fantrax team id, not the old name', async () => {
+    h.findUnique.mockResolvedValue(snapshotWithTeamId)
+    h.rosters.mockResolvedValue({ ok: true, data: {
+      team1: { teamName: 'Renamed team', rosterItems: [{ id: 'new-qb', position: 'SFX', status: 'ACTIVE' }] },
+      team2: { teamName: 'Rival', rosterItems: [] },
+    } })
+    const outcome = await importFantraxLeague(args)
+    expect(outcome).toMatchObject({ ok: true, teamName: 'Renamed team' })
+    expect(h.updateMany.mock.calls[0][0].data.userTeam).toBe('Renamed team')
+  })
+
+  it('the id wins even when ANOTHER team has since taken the old name', async () => {
+    h.findUnique.mockResolvedValue(snapshotWithTeamId)
+    h.rosters.mockResolvedValue({ ok: true, data: {
+      team1: { teamName: 'Renamed team', rosterItems: [{ id: 'new-qb', position: 'SFX', status: 'ACTIVE' }] },
+      team2: { teamName: 'My team', rosterItems: [] },
+    } })
+    const outcome = await importFantraxLeague(args)
+    expect(outcome).toMatchObject({ ok: true, teamName: 'Renamed team' })
+    expect(h.updateMany.mock.calls[0][0].data.userTeam).toBe('Renamed team')
+  })
+
+  it('an explicit team id from the caller is honoured on a first import too', async () => {
+    h.findUnique.mockResolvedValue(snapshotWithTeamId)
+    h.rosters.mockResolvedValue({ ok: true, data: {
+      team1: { teamName: 'Renamed team', rosterItems: [{ id: 'new-qb', position: 'SFX', status: 'ACTIVE' }] },
+    } })
+    const outcome = await importFantraxLeague({ ...args, teamName: 'Something stale', teamId: 'team1' })
+    expect(outcome).toMatchObject({ ok: true, teamName: 'Renamed team' })
+  })
+
+  it('standings are joined to rosters by team id, so a renamed team keeps its record', async () => {
+    h.findUnique.mockResolvedValue(snapshotWithTeamId)
+    h.rosters.mockResolvedValue({ ok: true, data: {
+      team1: { teamName: 'Renamed team', rosterItems: [{ id: 'new-qb', position: 'SFX', status: 'ACTIVE' }] },
+    } })
+    /* getStandings can carry a different display string than getTeamRosters for the same team. */
+    h.standings.mockResolvedValue({ ok: true, data: [{ teamId: 'team1', teamName: 'Renamed team (7-2)', rank: 1, wins: 7, losses: 2, ties: 0, pointsFor: 900 }] })
+    expect(await importFantraxLeague({ ...args, teamName: 'Renamed team' })).toMatchObject({ ok: true })
+    expect(h.updateMany.mock.calls[0][0].data.standings[0]).toMatchObject({ team: 'Renamed team', rank: 1, wins: 7, fantraxTeamId: 'team1' })
+  })
+
+  it('still falls back to the name when the snapshot carries no team id (CSV-era rows)', async () => {
+    h.findUnique.mockResolvedValue({ ...snapshotWithTeamId, standings: [{ team: 'My team' }] })
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true, teamName: 'My team' })
+  })
+})

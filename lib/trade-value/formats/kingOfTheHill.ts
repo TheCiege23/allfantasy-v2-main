@@ -10,7 +10,7 @@ export const kingOfTheHillModel: FormatValueModel = {
   adjust(input) {
     const giver = object(input.teamState)
     const asset = object(input.assetState)
-    if (giver?.viewerIsKing !== true) return { multiplier: 1, reason: 'This roster does not hold the crown, so the three-player dethroning penalty does not currently expose this asset.' }
+    if (giver?.viewerIsKing !== true) return { multiplier: 1, reason: 'This roster does not hold the crown, so the three-player dethroning penalty does not currently expose this asset.', reasonCode: 'kingOfTheHill.notKing' }
     const lose = probability(giver.weeklyLossProbability)
     const topThree = probability(asset?.topThreeScorerProbability)
     if (lose == null || topThree == null) return null
@@ -18,14 +18,16 @@ export const kingOfTheHillModel: FormatValueModel = {
     return {
       multiplier: 1 - lossRisk,
       reason: `As the current King, this roster has a ${(lossRisk * 100).toFixed(1)}% modeled chance of losing this player through the rule that sends that week's top three scorers to waivers after a loss.`,
+      reasonCode: 'kingOfTheHill.lossRisk',
+      reasonParams: { risk: (lossRisk * 100).toFixed(1) },
     }
   },
   canTrade(input) {
     const state = object(input.teamState)
     const playoffStart = typeof state?.playoffStartWeek === 'number' ? state.playoffStartWeek : null
-    if (playoffStart != null && input.currentWeek != null && input.currentWeek >= playoffStart) return { ok: false, reason: `King of the Hill ends when playoffs start in week ${playoffStart}.` }
+    if (playoffStart != null && input.currentWeek != null && input.currentWeek >= playoffStart) return { ok: false, reason: `King of the Hill ends when playoffs start in week ${playoffStart}.`, reasonCode: 'kingOfTheHill.playoffs', reasonParams: { week: playoffStart } }
     const deadline = input.shape.deadlineWeek
-    if (deadline != null && input.currentWeek != null && input.currentWeek > deadline) return { ok: false, reason: `Trades closed after week ${deadline}.` }
+    if (deadline != null && input.currentWeek != null && input.currentWeek > deadline) return { ok: false, reason: `Trades closed after week ${deadline}.`, reasonCode: 'closedAfter', reasonParams: { week: deadline } }
     return { ok: true }
   },
 }

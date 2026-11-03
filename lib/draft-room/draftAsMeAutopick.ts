@@ -6,6 +6,7 @@ import { buildDraftStyle, pickLikeManager, type DraftStyle } from './draftAsMe'
 import { loadManagerPastPicks } from './managerHistoryReads'
 import { loadDraftPlayerAges } from './draftPlayerAges'
 import { isAutopilotRoster } from '@/lib/live-draft-engine/instantAutopick'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import type { AutopickFallbackPoolEntry } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
 
@@ -48,7 +49,7 @@ export function describeDraftStyle(style: DraftStyle): string {
  */
 export async function draftAsMeEnabledForLeague(leagueId: string, rosterId?: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, settings: true } })
-  if (rosterId && isAutopilotRoster(league?.settings, rosterId)) return true
+  if (rosterId && league && isAutopilotRoster({ af_managed_lineups: await readPlayableChimmyLineups({ id: leagueId, userId: league.userId, settings: league.settings }) }, rosterId)) return true
   if (!league?.userId) return false
   const settings = league.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}
   if (settings[DRAFT_AS_ME_SETTING] === false) return false

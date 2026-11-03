@@ -332,7 +332,7 @@ describe('Source contract — write-side self-heal wired in /api/league/roster',
     const guardIdx = src.indexOf("if (league.platform !== 'sleeper')")
     const healIdx = src.indexOf('syncPostDraftArtifactsIfCompletedThrottled')
     const findFirstMatch = src.match(
-      /const roster = await prisma\.roster\.findFirst\(\{\s+where: \{ leagueId, platformUserId: targetUserId \}/,
+      /const roster = await prisma\.roster\.findFirst\(\{\s+where: coOwnerRosterId \? \{ leagueId, id: coOwnerRosterId \} : \{ leagueId, platformUserId: targetUserId \}/,
     )
     expect(guardIdx).toBeGreaterThan(0)
     expect(healIdx).toBeGreaterThan(guardIdx)

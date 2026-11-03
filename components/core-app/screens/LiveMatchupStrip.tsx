@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
 import type { RailStanding } from '@/lib/core-app/railMatchups'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { liveScoresCopy as lsc } from '@/lib/core-app/liveScoresCopy'
 
 /**
  * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
@@ -31,6 +33,7 @@ export function LiveMatchupStrip({
   /** Your team is out of this elimination league. */
   eliminated?: boolean
 }) {
+  const { language } = useOptionalLanguage()
   const [{ strip, stale }, setState] = useState(() => nextStripState(null, initial))
   const seqRef = useRef(0)
   /* An unavailable strip never becomes a scored one mid-week, so polling it only repeats the reason. */
@@ -105,8 +108,20 @@ export function LiveMatchupStrip({
     )
   }
   const lead = strip.margin > 0 ? 'lead' : strip.margin < 0 ? 'trail' : 'tied'
+  /*
+   * Redraft design board (LiveScores): an eyebrow with a LIVE chip while a starter on either side is on
+   * the field, and the win chance drawn as a bar. Both read only what the strip already carries — no
+   * chip when the lineups could not be tallied, no bar without a model probability or on a final week —
+   * and both are shown under the redraft stamp only (af-core-redraft-live.css).
+   */
+  const anyLive = !strip.isFinal && ((strip.remaining?.you?.live ?? 0) > 0 || (strip.remaining?.opponent?.live ?? 0) > 0)
+  const winPct = strip.pWin != null && !strip.isFinal ? Math.round(strip.pWin * 100) : null
   return (
     <section className="af-live-matchup" aria-label="Your matchup" data-state="scored" data-lead={lead}>
+      <span className="af-live-matchup-eyebrow">
+        <span>{lsc('Your matchup', language)}</span>
+        {anyLive ? <span className="af-live-matchup-live">{lsc('LIVE', language)}</span> : null}
+      </span>
       <div className="af-live-matchup-row">
         <span className="af-live-matchup-team">{strip.you.name}</span>
         {/* `data-side`, not position: the CSS used `:nth-of-type`, which counts every span in the row. */}
@@ -117,6 +132,11 @@ export function LiveMatchupStrip({
         <span className="af-live-matchup-score af-num" data-side="them">{strip.opponent.points.toFixed(1)}</span>
         <span className="af-live-matchup-team">{strip.opponent.name}</span>
       </div>
+      {winPct != null ? (
+        <span className="af-live-matchup-wp" aria-hidden data-testid="live-matchup-wp">
+          <span className="af-live-matchup-wp-you" style={{ width: `${winPct}%` }} />
+        </span>
+      ) : null}
       <p className="af-live-matchup-meta">
         {strip.isFinal ? 'Final' : lead === 'tied' ? 'Tied' : `You ${lead} by ${Math.abs(strip.margin).toFixed(1)}`}
         {strip.pWin != null && !strip.isFinal ? ` · ${Math.round(strip.pWin * 100)}% to win` : ''}
@@ -177,7 +197,9 @@ function StandingStrip({ standing: s, leagueId }: { standing: RailStanding; leag
             : 'Bottom of the league this week'
           : `${s.placesAboveCut} ${s.placesAboveCut === 1 ? 'place' : 'places'} clear of ${cutWord}`}
         {` · cut line ${s.cutLine.toFixed(1)}`}
-        {s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
+        {s.basis === 'best_ball'
+          ? s.provisional ? ' · ranked on projected best-ball finals until the last game is final' : ' · ranked on final best-ball points'
+          : s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
         {' · '}
         <Link href={`/core/standings?league=${encodeURIComponent(leagueId)}`}>See the field</Link>
       </p>

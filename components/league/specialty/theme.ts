@@ -14,6 +14,8 @@ export type SpecialtyFormat =
   | 'koth'
   | 'pirate'
   | 'tournament'
+  /** Dynasty Era (gold on ink). No `/specialty/dynasty/` art package — like `tournament`, theme only. */
+  | 'dynasty'
 
 export interface SpecialtyTheme {
   acc: string
@@ -42,6 +44,7 @@ export const SPECIALTY_THEMES: Record<SpecialtyFormat, SpecialtyTheme> = {
   koth: { acc: '#8b5cf6', acc2: '#f2c94c', accInk: '#fff', disp: 'Cinzel', displayTitle: true },
   pirate: { acc: '#d4a017', acc2: '#ffe08a', accInk: '#1a1204', disp: 'Pirata One', displayTitle: true, bannerPosition: '80% 50%' },
   tournament: { acc: '#e8b84a', acc2: '#ffd98a', accInk: '#1a1204', disp: 'Archivo', displayTitle: false },
+  dynasty: { acc: '#D4A24C', acc2: '#F3D79F', accInk: '#0B0F17', disp: 'Archivo', displayTitle: false },
 }
 
 /** Public art root for a format: `/specialty/<format>/` (banner.svg, emblem.svg, icon-*.svg). */

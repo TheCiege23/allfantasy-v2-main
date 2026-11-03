@@ -6,15 +6,38 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 import type { TraySnap } from '@/lib/draft-room/mobileTraySnap'
 import { DraftMobileTray } from './DraftMobileTray'
+import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import './draft-mobile.css'
+import './draft-desktop.css'
+import './draft-workspace.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
+const DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'
+
+/**
+ * How much of the desktop screen the player pool / queue / chat panel gets.
+ * - `min`: panel hidden, the board fills the screen.
+ * - `half`: board and panel split the screen (default).
+ * - `tall`: the panel takes most of the screen, the board keeps a strip at the top.
+ */
+export type DraftDockSize = 'min' | 'half' | 'tall'
+
+const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
+  min: 'min-h-0 max-h-[unset] flex-1',
+  half: 'max-h-[min(50vh,600px)]',
+  tall: 'max-h-[min(28vh,320px)]',
+}
 
 export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
 export type DraftRoomShellProps = {
-  /** Premium ambient gradient for `/draft/[id]/snake` redraft room. */
-  surfaceVariant?: 'default' | 'redraft_snake'
+  /**
+   * Premium ambient gradient for `/draft/[id]/snake` redraft room. `dynasty` is the dynasty
+   * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.
+   */
+  surfaceVariant?: 'default' | 'redraft_snake' | 'dynasty'
+  /** Reserve usable desktop pool space for drafts with a pick-order board. */
+  playerSpacePriority?: boolean
   topBar: ReactNode
   managerStrip: ReactNode
   auctionStrip?: ReactNode
@@ -69,6 +92,7 @@ const MOBILE_TABS = [
 
 export function DraftRoomShell({
   surfaceVariant = 'default',
+  playerSpacePriority = false,
   topBar,
   managerStrip,
   draftBoard,
@@ -90,20 +114,45 @@ export function DraftRoomShell({
   bottomBar,
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
-  const [bottomDockExpanded, setBottomDockExpanded] = useState(true)
+  const [dockSize, setDockSize] = useState<DraftDockSize>(playerSpacePriority ? 'tall' : 'half')
+  const bottomDockExpanded = dockSize !== 'min'
+  const [boardHidden, setBoardHidden] = useState(false)
+  const boardSize = boardHidden ? 'hidden' : dockSize === 'tall' ? 'compact' : 'balanced'
+  // iOS's keyboard changes the visual viewport independently of layout viewport units.
+  // Keep the bottom navigation above it, without blocking pinch zoom.
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const root = layoutRef.current?.closest<HTMLElement>('[data-testid="draft-room-shell"]')
+    const update = () => {
+      if (viewport.scale === 1 && window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY).matches) {
+        root?.style.setProperty('--draft-visible-height', `${viewport.height}px`)
+      } else root?.style.removeProperty('--draft-visible-height')
+    }
+    update()
+    viewport.addEventListener('resize', update)
+    window.addEventListener('resize', update)
+    return () => {
+      viewport.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+      root?.style.removeProperty('--draft-visible-height')
+    }
+  }, [])
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
   useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 768px)')
-    const closeOnDesktop = () => { if (desktop.matches) setMobileToolsOpen(false) }
-    desktop.addEventListener('change', closeOnDesktop)
-    return () => desktop.removeEventListener('change', closeOnDesktop)
+    const phone = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
+    const closeOnDesktop = () => { if (!phone.matches) setMobileToolsOpen(false) }
+    phone.addEventListener('change', closeOnDesktop)
+    return () => phone.removeEventListener('change', closeOnDesktop)
   }, [])
   const selectMobileTab = (tab: MobileDraftTab) => {
     setMobileToolsOpen(false)
     onMobileTabChange(tab)
   }
-  const allowPremiumDockCollapse = surfaceVariant !== 'redraft_snake'
+  // Every surface can resize the panel. The redraft room used to be locked open, which left
+  // a user with no way to see more of the pool or chat (reported 2026-10-28).
+  const allowPremiumDockCollapse = true
 
   /*
    * Mobile tray — a Sleeper-style bottom sheet over an always-visible board. The sheet mechanics
@@ -125,28 +174,44 @@ export function DraftRoomShell({
   const expandTray = useCallback(() => onMobileTabChange(lastTrayTabRef.current), [onMobileTabChange])
 
   useEffect(() => {
-    if (!allowPremiumDockCollapse) {
-      setBottomDockExpanded(true)
-      return
-    }
     try {
-      const v = window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY)
-      if (v === '0') setBottomDockExpanded(false)
+      const savedBoard = window.localStorage.getItem('af:draft-board-size')
+      const saved = window.localStorage.getItem(DOCK_SIZE_PREF_KEY)
+      if (saved === 'min' || saved === 'half' || saved === 'tall') {
+        setDockSize(saved)
+        setBoardHidden(savedBoard === 'hidden' && saved !== 'min')
+        return
+      }
+      // Older two-state preference: '0' meant collapsed, even with a saved board size.
+      if (window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY) === '0') {
+        setDockSize('min')
+        return
+      }
+      if (savedBoard === 'compact' || savedBoard === 'balanced' || savedBoard === 'hidden') {
+        setDockSize(savedBoard === 'balanced' ? 'half' : 'tall')
+        setBoardHidden(savedBoard === 'hidden')
+      }
     } catch {
       /* ignore */
     }
-  }, [allowPremiumDockCollapse])
+  }, [])
 
-  const persistBottomDock = useCallback((expanded: boolean) => {
-    const nextExpanded = allowPremiumDockCollapse ? expanded : true
-    setBottomDockExpanded(nextExpanded)
-    if (!allowPremiumDockCollapse) return
+  const persistDockSize = useCallback((next: DraftDockSize) => {
+    setDockSize(next)
+    setBoardHidden(false)
     try {
-      window.localStorage.setItem(BOTTOM_DOCK_PREF_KEY, nextExpanded ? '1' : '0')
+      window.localStorage.setItem('af:draft-board-size', next === 'tall' ? 'compact' : 'balanced')
+      window.localStorage.setItem(DOCK_SIZE_PREF_KEY, next)
+      window.localStorage.setItem(BOTTOM_DOCK_PREF_KEY, next === 'min' ? '0' : '1')
     } catch {
       /* ignore */
     }
-  }, [allowPremiumDockCollapse])
+  }, [])
+
+  const persistBottomDock = useCallback(
+    (expanded: boolean) => persistDockSize(expanded ? 'half' : 'min'),
+    [persistDockSize],
+  )
 
   const visibleTabs = MOBILE_TABS.filter(
     (tab) =>
@@ -155,8 +220,8 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = visibleTabs.filter((tab) => ['board', 'players', 'queue', 'chat'].includes(tab.id))
-  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'chat'].includes(tab.id))
+  const primaryMobileTabs = ['players', 'board', 'queue', 'roster', 'chat'].flatMap(id => visibleTabs.filter(tab => tab.id === id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'roster', 'chat'].includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -176,10 +241,19 @@ export function DraftRoomShell({
   const surfaceClass =
     surfaceVariant === 'redraft_snake'
       ? 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-gradient-to-b from-[#0d1530] via-[#0b1224] to-[#070b18] text-white shadow-[inset_0_1px_0_rgba(125,211,252,0.06)]'
-      : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
+      : surfaceVariant === 'dynasty'
+        ? 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--dyn-ink,#0B0F17)] text-white'
+        : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell">
+    <div
+      data-board-size={boardSize}
+      data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
+      className={`draft-touch-room ${surfaceClass}`}
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      data-testid="draft-room-shell"
+      data-dynasty-skin={surfaceVariant === 'dynasty' ? 'true' : undefined}
+    >
       {topBar}
       {managerStrip}
 
@@ -198,6 +272,24 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
+          <div className="draft-board-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0a1425] px-3"
+            data-testid="draft-board-size-controls">
+            <span className="text-sm font-semibold text-slate-200">Draft workspace</span>
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              Board
+              <select aria-label="Draft board size" data-testid="draft-board-size"
+                value={boardSize} onChange={event => {
+                  const value = event.target.value as 'compact' | 'balanced' | 'hidden'
+                  persistDockSize(value === 'balanced' ? 'half' : 'tall')
+                  if (value === 'hidden') {
+                    setBoardHidden(true)
+                    try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
+                  }
+                }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
+                <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>
+              </select>
+            </label>
+          </div>
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
@@ -214,33 +306,75 @@ export function DraftRoomShell({
                * The board now yields space down to a floor instead of starving it.
                */
               'min-h-[160px] overflow-auto overscroll-contain [overflow-anchor:none] border-b',
-              bottomDockExpanded ? 'max-h-[min(60vh,720px)]' : 'min-h-0 max-h-[unset] flex-1',
+              BOARD_ZONE_BY_DOCK_SIZE[dockSize],
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(10,22,44,0.98),rgba(6,12,22,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
-                : 'border-white/[0.06] bg-[#0d1428]',
+                : surfaceVariant === 'dynasty'
+                  ? 'border-[var(--dyn-line,#2A3345)] bg-[var(--dyn-vault,#121826)]'
+                  : 'border-white/[0.06] bg-[#0d1428]',
             )}
             data-testid="draft-premium-board-zone"
             data-dock-expanded={bottomDockExpanded ? 'true' : 'false'}
+            data-dock-size={dockSize}
           >
             {draftBoard}
           </div>
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => persistBottomDock(!bottomDockExpanded)}
-                data-testid="draft-dock-collapse-toggle"
-                data-expanded={bottomDockExpanded ? 'true' : 'false'}
-                aria-expanded={bottomDockExpanded}
-                aria-label={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
-                title={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
-                className="absolute left-1/2 top-0 z-20 inline-flex h-8 w-12 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/15 bg-[#0a1228] text-white/85 shadow-[0_8px_22px_rgba(0,0,0,0.45)] transition hover:border-cyan-400/35 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+              {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
+                  own divider bar; floating across the edge, the panel below clipped it. */}
+              <div
+                role="group"
+                aria-label="Player panel size"
+                className="inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]"
+                data-testid="draft-dock-size-control"
               >
-                <ChevronUp className={cn('h-3 w-3', bottomDockExpanded ? 'opacity-90' : 'opacity-30')} />
-                <ChevronDown className={cn('h-3 w-3 -mt-0.5', bottomDockExpanded ? 'opacity-30' : 'opacity-90')} />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => persistBottomDock(!bottomDockExpanded)}
+                  data-testid="draft-dock-collapse-toggle"
+                  data-expanded={bottomDockExpanded ? 'true' : 'false'}
+                  aria-expanded={bottomDockExpanded}
+                  aria-label={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
+                  title={bottomDockExpanded ? 'Hide the player panel' : 'Show the player panel'}
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'min' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  Board
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistDockSize('half')}
+                  data-testid="draft-dock-size-half"
+                  aria-pressed={dockSize === 'half'}
+                  title="Split the screen between the board and the player panel"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'half' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  Half
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistDockSize('tall')}
+                  data-testid="draft-dock-size-tall"
+                  aria-pressed={dockSize === 'tall'}
+                  title="Give the player pool and chat most of the screen"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'tall' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                  Players
+                </button>
+              </div>
             </div>
           ) : null}
           <div
@@ -364,6 +498,13 @@ export function DraftRoomShell({
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
         data-tray-snap={traySnap}
+        onKeyDown={event => {
+          if (event.key !== 'Escape' || !mobileToolsOpen) return
+          event.preventDefault()
+          event.stopPropagation()
+          setMobileToolsOpen(false)
+          event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus()
+        }}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide
@@ -392,7 +533,8 @@ export function DraftRoomShell({
           onRequestCollapse={collapseTray}
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
-          fullOnInputFocus={mobileTab === 'chat'}
+          fullOnInputFocus
+          preferredOpenSnap={mobileTab === 'players' || mobileTab === 'queue' || mobileTab === 'chat' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -402,7 +544,6 @@ export function DraftRoomShell({
           {secondaryMobileTabs.length > 0 && mobileToolsOpen ? (
             <div
               id="draft-mobile-tools"
-              onKeyDown={(event) => { if (event.key === 'Escape') { setMobileToolsOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus() } }}
               className="max-h-[35dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-[#060d1f] px-2 py-2"
               data-testid="draft-mobile-quick-dock"
             >
@@ -477,18 +618,37 @@ export function DraftRoomShell({
               data-testid="draft-mobile-content"
               data-active-tab={mobileTab}
             >
+              {/*
+                ⚠ THE PLAYERS SHEET MUST GIVE THE PANEL A DEFINITE HEIGHT. PlayerPanel pins its search
+                and filters (`sticky`) and scrolls its own list (`draft-player-list-scroll`). Under an
+                auto-height wrapper its `h-full` resolved to auto, so the panel grew to every row: the
+                header scrolled away with the list, and a touch landing on the list's own
+                `overscroll-contain` scroller (which had nothing to scroll) was swallowed instead of
+                chaining up — reported on Android as "can't scroll the draft board". Every wrapper
+                down to the panel is a full-height flex column so the LIST is the scroller.
+              */}
               {mobileTab === 'players' && (
-                <div className="overflow-hidden" data-testid="draft-mobile-players-sheet">
+                <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="draft-mobile-players-sheet">
                   <div
-                    className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    className="h-full min-h-0 min-w-0 overflow-hidden flex flex-1 flex-col"
                     data-testid="draft-mobile-players-scroll"
                   >
                     {playerPanel}
                   </div>
                 </div>
               )}
-              {mobileTab === 'queue' && queuePanel}
-              {mobileTab === 'chat' && chatPanel}
+              {/* Same definite-height column as the players sheet, so the queue's own list scrolls. */}
+              {mobileTab === 'queue' && (
+                <div className="flex h-full min-h-0 flex-col [&>section]:min-h-0 [&>section]:flex-1" data-testid="draft-mobile-queue-sheet">
+                  {queuePanel}
+                </div>
+              )}
+              {/* Definite height again: the chat fills the tray, so its composer is always on screen. */}
+              {mobileTab === 'chat' && (
+                <div className="flex h-full min-h-0 flex-col [&>*]:min-h-0 [&>*]:flex-1" data-testid="draft-mobile-chat-sheet">
+                  {chatPanel}
+                </div>
+              )}
               {intelPanel && mobileTab === 'intel' && intelPanel}
               {helperPanel && mobileTab === 'helper' && helperPanel}
               {rosterPanel && mobileTab === 'roster' && rosterPanel}

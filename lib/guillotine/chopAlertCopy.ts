@@ -37,18 +37,23 @@ export function chopZoneWarning(args: {
   margin: number | null
   /** A later warning: the team was safer at the first one and has slipped since (./chopAlerts.ts). */
   late?: boolean
+  /** A best ball league (./guillotineBestBall.ts): there is no lineup to check, so the advice differs. */
+  bestBall?: boolean
 }): ChopAlert {
+  const advice = args.bestBall
+    ? 'Your best lineup is picked for you, so the last games are what can save you.'
+    : 'Check your lineup before the last games.'
   if (args.status === 'chopped') {
     return {
       title: args.late ? `🪓 You've dropped into the chop zone — ${args.leagueName}` : `🪓 You're in the chop zone — ${args.leagueName}`,
-      body: `${args.late ? 'Other scores have passed yours. ' : ''}If week ${args.week} ended now, your team would be chopped. Check your lineup before the last games.`,
+      body: `${args.late ? 'Other scores have passed yours. ' : ''}If week ${args.week} ended now, your team would be chopped. ${advice}`,
       severity: 'high',
     }
   }
   const gap = args.margin != null && args.margin > 0 ? ` Only ${points(args.margin)} above the chop line.` : ''
   return {
     title: args.late ? `⚠️ You've slipped into the danger zone — ${args.leagueName}` : `⚠️ You're in the danger zone — ${args.leagueName}`,
-    body: `Your team is ${args.late ? 'now ' : ''}close to the chop in week ${args.week}.${gap} Check your lineup before the last games.`,
+    body: `Your team is ${args.late ? 'now ' : ''}close to the chop in week ${args.week}.${gap} ${advice}`,
     severity: 'medium',
   }
 }

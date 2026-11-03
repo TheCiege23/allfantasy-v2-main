@@ -5,11 +5,17 @@ import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { getCouncilShots } from './survivorShotInTheDark'
 import { afterCouncilRevealed } from './shareCards/hooks'
+import { recapMomentId } from './shareCards/types'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { isCouncilReadComplete } from './survivorRevealGate'
 import { createSurvivorChatMessage } from './survivorChatBridge'
 import { hasIndependentSurvivorHost } from './survivorHostIndependence'
 import { drawSurvivorStones } from './survivorStones'
 import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
+import { chimmyVoteTarget, councilIsMerged } from './chimmyCastawayStrategy'
 
 /**
  * SURVIVOR VOTE TALLY (canonical Phase 3) — deterministic, no fabrication.
@@ -305,11 +311,31 @@ type CastRow = { id: string; voterRosterId: string; targetRosterId: string; targ
  * none. Written as a real ballot (idempotent on the council + voter key) and recorded in the audit,
  * so the read shows it like any other and the commissioner can see it was automatic.
  */
+/**
+ * Castaways Chimmy runs in this league ("Chimmy as a manager"). Best-effort: if the league cannot be
+ * read, nobody counts as Chimmy's and the ordinary auto-cast rule applies.
+ */
+async function chimmyCastaways(leagueId: string, userToRoster: Record<string, string>): Promise<Set<string>> {
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, userId: true } })
+    if (!league) return new Set()
+    const managed = await readPlayableChimmyLineups(league)
+    return new Set(Object.entries(userToRoster).filter(([userId, rosterId]) => isSeatPlaceholderUserId(userId) && isChimmyRunning(managed, rosterId, userId)).map(([userId]) => userId))
+  } catch {
+    return new Set()
+  }
+}
+
 async function autoCastMissingBallots(leagueId: string, ctx: MissingBallotContext, existing: CastRow[], shotUsers: ReadonlySet<string>): Promise<CastRow[]> {
   const { council, settings, eligibility, userToRoster, scopePlayers } = ctx
-  if (settings.nonVoterAutoCast === false) return []
   const voted = new Set(existing.map(row => row.voterRosterId))
-  const missing = eligibility.voterUserIds.filter(userId => !shotUsers.has(userId) && userToRoster[userId] && !voted.has(userToRoster[userId]))
+  const unvoted = eligibility.voterUserIds.filter(userId => !shotUsers.has(userId) && userToRoster[userId] && !voted.has(userToRoster[userId]))
+  if (unvoted.length === 0) return []
+  // Chimmy's castaways always vote, and vote Chimmy's way (chimmyCastawayStrategy.ts): they are players,
+  // not absentees, so the league's auto-cast setting does not silence them. Normally Chimmy has already
+  // voted during the window (chimmyCastaway.ts); this is the fallback if no tick reached it.
+  const chimmy = await chimmyCastaways(leagueId, userToRoster)
+  const missing = settings.nonVoterAutoCast === false ? unvoted.filter(userId => chimmy.has(userId)) : unvoted
   if (missing.length === 0) return []
   const targetIds = [...new Set(missing.flatMap(userId => eligibility.targetsByVoter[userId] ?? []))]
   if (targetIds.length === 0) return []
@@ -321,13 +347,24 @@ async function autoCastMissingBallots(leagueId: string, ctx: MissingBallotContex
   for (const row of rows) if (!score.has(row.userId) || row.isFinalized) score.set(row.userId, row.finalScore)
   if (score.size === 0) return []
   const nameOf = (userId: string) => scopePlayers.find(player => player.userId === userId)?.displayName ?? null
+  const seasonPoints = new Map<string, number>()
+  if (missing.some(userId => chimmy.has(userId))) {
+    const season = (await prisma.survivorWeeklyScore.findMany({
+      where: { leagueId, week: { lte: council.week }, userId: { in: targetIds } },
+      select: { userId: true, week: true, finalScore: true, isFinalized: true },
+    })) ?? []
+    for (const row of season) if (row.isFinalized || row.week === council.week) seasonPoints.set(row.userId, (seasonPoints.get(row.userId) ?? 0) + row.finalScore)
+  }
+  const merged = councilIsMerged(council.phase, council.attendingTribeId)
   const cast: CastRow[] = []
   const now = new Date()
   for (const voterUserId of missing) {
     const targets = (eligibility.targetsByVoter[voterUserId] ?? []).filter(userId => score.has(userId) && userToRoster[userId])
     if (targets.length === 0) continue
     const lowest = Math.min(...targets.map(userId => score.get(userId)!))
-    const target = targets.filter(userId => score.get(userId) === lowest).sort((a, b) => (nameOf(a) ?? a).localeCompare(nameOf(b) ?? b))[0]!
+    const target = chimmy.has(voterUserId)
+      ? chimmyVoteTarget(targets.map(userId => ({ userId, seasonPoints: seasonPoints.get(userId) ?? 0, weekPoints: score.get(userId) ?? 0 })), merged)!
+      : targets.filter(userId => score.get(userId) === lowest).sort((a, b) => (nameOf(a) ?? a).localeCompare(nameOf(b) ?? b))[0]!
     const voterRosterId = userToRoster[voterUserId]!
     const targetRosterId = userToRoster[target]!
     const targetName = nameOf(target)
@@ -342,7 +379,7 @@ async function autoCastMissingBallots(leagueId: string, ctx: MissingBallotContex
       data: {
         leagueId, week: council.week, category: 'tribal', action: 'non_voter_auto_cast', actorUserId: null, targetUserId: voterUserId,
         relatedEntityId: council.id, relatedEntityType: 'council',
-        data: { voterUserId, targetUserId: target, weeklyScore: lowest, reason: 'no ballot by the deadline' },
+        data: { voterUserId, targetUserId: target, weeklyScore: score.get(target) ?? lowest, reason: chimmy.has(voterUserId) ? 'chimmy_strategy' : 'no ballot by the deadline' },
         isVisibleToCommissioner: true, isVisibleToPublic: false,
       },
     })
@@ -379,8 +416,18 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
   const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
   const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : council.tiePhase === 'stones_decided' ? ' The revote and finalized season points were tied, so the stones decided.' : council.tiePhase === 'rocks_decided' ? ' The vote was tied, so the tied managers drew rocks.' : ''}`
   if (channel) {
+    // One message for the whole league: when someone leaves, the verdict carries the week recap card
+    // (who was voted out, the tally, who is left) as its picture. The recap's id is fixed by this
+    // council, and the card route captures it on first view if the hook has not run yet.
+    const votedOff = !council.isTie && Boolean(council.eliminatedUserId || council.eliminatedRosterId)
+    const leagueRow = votedOff ? await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } }) : null
+    const rawSettings = leagueRow?.settings && typeof leagueRow.settings === 'object' && !Array.isArray(leagueRow.settings) ? (leagueRow.settings as Record<string, unknown>) : null
+    const recapCard = votedOff && leagueRow && normalizeSurvivorFoundationSettings(rawSettings).shareCardsEnabled
+      ? { type: 'share_card', momentId: recapMomentId(council.id), momentType: 'recap', week: council.week }
+      : null
     await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}` } })
+      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}`,
+      ...(recapCard ? { cardData: recapCard } : {}) } })
   }
   if (opensRevote) {
     const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000)
@@ -394,7 +441,8 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
     })
     await tx.survivorGameState.updateMany({ where: { leagueId, activeCouncilId: council.id }, data: { activeCouncilId: revote.id, tribalDeadline: deadline, tribalRevealAt: now, needsTribalLock: true } })
     const eligible = await tx.survivorPlayer.findMany({ where: { leagueId, playerState: 'active', ...(council.attendingTribeId ? { tribeId: council.attendingTribeId } : {}) }, select: { userId: true } })
-    for (const player of eligible.filter(player => !council.tiePlayerIds.includes(player.userId))) {
+    // Chimmy's castaways have no account to notify (a notification row needs one); Chimmy votes anyway.
+    for (const player of eligible.filter(player => !council.tiePlayerIds.includes(player.userId) && !isSeatPlaceholderUserId(player.userId))) {
       await tx.platformNotification.create({ data: { userId: player.userId, type: 'survivor:revote_open', title: 'A revote is open', body: 'You have two hours to message @Chimmy. Only tied managers are eligible targets.', severity: 'high', productType: 'sports', meta: { leagueId, councilId: revote.id, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
     }
     await tx.survivorAuditEntry.create({ data: { leagueId, week: council.week, category: 'tribal', action: 'revote_opened', relatedEntityId: revote.id, relatedEntityType: 'council', data: { originalCouncilId: council.id, deadline: deadline.toISOString(), tiedCount: council.tiePlayerIds.length }, isVisibleToCommissioner: true, isVisibleToPublic: true } })

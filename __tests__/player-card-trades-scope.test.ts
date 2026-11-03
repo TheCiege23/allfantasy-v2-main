@@ -99,7 +99,7 @@ describe('loadTrades — every read is scoped', () => {
    */
   it('[control] a Sleeper trade holding the id is listed and its players named', async () => {
     tradeFindMany.mockResolvedValue([trade('t1', 'L1')])
-    playerFindMany.mockResolvedValue([{ sleeperId: '6813', name: 'Real Man' }, { sleeperId: '111', name: 'Wrong Player' }])
+    playerFindMany.mockResolvedValue([{ sleeperId: '6813', sport: 'NFL', name: 'Real Man' }, { sleeperId: '111', sport: 'NFL', name: 'Wrong Player' }])
     const { loadTrades } = await import('@/lib/core-app/playerCard')
     const out = await loadTrades('6813', { leagueId: 'L1' })
     expect(out.available && out.data[0]!.sent).toEqual(['Wrong Player'])
@@ -107,7 +107,7 @@ describe('loadTrades — every read is scoped', () => {
 
   it('🛑 a Fleaflicker trade holding a colliding id is not shown, and names no stranger', async () => {
     tradeFindMany.mockResolvedValue([{ ...trade('t1', 'L1'), platform: 'fleaflicker' }])
-    playerFindMany.mockResolvedValue([{ sleeperId: '6813', name: 'Real Man' }, { sleeperId: '111', name: 'Wrong Player' }])
+    playerFindMany.mockResolvedValue([{ sleeperId: '6813', sport: 'NFL', name: 'Real Man' }, { sleeperId: '111', sport: 'NFL', name: 'Wrong Player' }])
     const { loadTrades } = await import('@/lib/core-app/playerCard')
     const out = await loadTrades('6813', { leagueId: 'L1' })
     expect(out.available).toBe(false)

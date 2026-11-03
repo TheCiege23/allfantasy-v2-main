@@ -1,0 +1,287 @@
+/* Redraft native screens — batch A2 of the redraft visual upgrade (2026-10-31): My team, Matchup,
+ * Players & waivers, Trades, Standings & playoffs and the Players tab, inside the `/league/[id]`
+ * workspace. docs/design/redraft-native-screens.md is the per-screen note.
+ *
+ * ⚠ EVERY RULE HERE IS SCOPED TO `.nl-workspace[data-format=redraft]`, which NativeLeagueWorkspace
+ * stamps only for a native redraft league with a sport theme (lib/league-media/redraftIdentity.ts).
+ * That scope IS the "other formats unchanged" guarantee for everything this file restyles, so a rule
+ * without it is a bug — __tests__/league-media/redraftNativeScreensCss.test.ts refuses one.
+ *
+ * ⚠ COLOURS ARE TOKENS ONLY: the foundation's `--rd-*` (redraft-identity.css) and /core's palette
+ * (af-core.css). No hex, no rgb() — the same test refuses them. A sport colour never appears by name.
+ *
+ * ⚠ native-screens.css stays the base and is not edited for looks: these rules sit on top of it at a
+ * higher specificity (the workspace attribute adds (0,2,0)), so load order does not decide anything.
+ *
+ * ⚠ TWO TOP-LEVEL @media BLOCKS, AT THE END, NEVER NESTED. CLAUDE.md records a 560px block inserted
+ * inside a 780px one in af-matchup.css carrying four rules out of their band with braces still
+ * balanced. The bands match native-screens.css: ≤1199px (tablet) and ≤767px (phone). */
+
+/* ── Shared: head, cards, segmented controls, chips ─────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft] .nls-eyebrow { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-title { font-weight: 800; letter-spacing: -.025em; }
+.nl-workspace[data-format=redraft] .nls-card { border-radius: 14px; }
+.nl-workspace[data-format=redraft] .nls-card[data-tone=accent] { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.nl-workspace[data-format=redraft] .nls-card[data-tone=accent] .nls-label { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-seg { border-radius: 10px; }
+.nl-workspace[data-format=redraft] .nls-seg button { border-radius: 7px; }
+.nl-workspace[data-format=redraft] .nls-seg button[aria-pressed=true],
+.nl-workspace[data-format=redraft] .nls-seg button[aria-selected=true] { background: var(--rd-accent-soft); border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-chip { border-radius: 999px; font: 700 11px/1 var(--nl-mono); letter-spacing: .06em; text-transform: uppercase; }
+.nl-workspace[data-format=redraft] .nls-chip[data-tone=accent] { background: var(--rd-accent-soft); border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-chip[data-tone=good] { background: var(--good-soft); }
+.nl-workspace[data-format=redraft] .nls-chip[data-tone=warn] { background: var(--warn-soft); }
+.nl-workspace[data-format=redraft] .nls-chip[data-tone=bad] { background: var(--bad-soft); }
+.nl-workspace[data-format=redraft] .nls-btn { border-radius: 8px; }
+.nl-workspace[data-format=redraft] .nls-btn[data-variant=primary] { background: var(--rd-accent); border-color: var(--rd-accent); color: var(--rd-accent-ink); }
+.nl-workspace[data-format=redraft] .nls-btn[data-variant=primary]:hover:not(:disabled) { background: var(--rd-accent); }
+.nl-workspace[data-format=redraft] .nls-iconbtn { border-radius: 10px; }
+.nl-workspace[data-format=redraft] .nls-search:focus-visible { outline: 2px solid var(--rd-accent-line); outline-offset: 1px; border-color: var(--rd-accent-line); }
+
+/* Position chips. The tone is per SPORT (lib/league-media/redraftScreens.ts `redraftPositionTone`), set as
+ * `data-rd-pos` by PosPill; each tone is an existing /core token. A light tint of the tone over --surface2
+ * keeps the chip readable on both grounds. */
+.nl-workspace[data-format=redraft] .nls-pos { border-radius: 7px; letter-spacing: .06em; }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos] { --rd-pos: var(--text2); color: var(--rd-pos); border-color: color-mix(in srgb, var(--rd-pos) 42%, transparent); background: color-mix(in srgb, var(--rd-pos) 9%, var(--surface2)); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=red] { --rd-pos: var(--bad); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=green] { --rd-pos: var(--good); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=blue] { --rd-pos: var(--tier-blue-fg); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=amber] { --rd-pos: var(--warn); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=violet] { --rd-pos: var(--p-yahoo-fg); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=slate] { --rd-pos: var(--text2); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=flex] { --rd-pos: var(--rd-accent-text); border-style: dashed; background: var(--surface2); }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=bench] { --rd-pos: var(--muted); background: transparent; }
+.nl-workspace[data-format=redraft] .nls-pos[data-rd-pos=ir] { --rd-pos: var(--bad); background: transparent; }
+
+/* Status badges: injury designation (InjuryFlag) filled, and the bye / off-day / game state badge. */
+.nl-workspace[data-format=redraft] .nls-flag { border-radius: 999px; background: var(--warn-soft); }
+.nl-workspace[data-format=redraft] .nls-flag[data-tone=bad] { background: var(--bad-soft); }
+.nls-rd-badge { display: inline-flex; align-items: center; min-height: 20px; margin-left: 8px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 999px; color: var(--muted); font: 700 11px/1 var(--nl-mono); letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; white-space: nowrap; }
+.nl-workspace[data-format=redraft] .nls-rd-badge[data-tone=off] { border-style: dashed; }
+
+/* Game state on a player line: a dot before the status text, from the feed's own state only. */
+.nl-workspace[data-format=redraft] .nls-player small[data-game]::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--line2); }
+.nl-workspace[data-format=redraft] .nls-player small[data-game=live] { color: var(--rd-accent-text); font-weight: 700; }
+.nl-workspace[data-format=redraft] .nls-player small[data-game=live]::before { background: var(--rd-accent); box-shadow: 0 0 0 3px var(--rd-accent-soft); }
+.nl-workspace[data-format=redraft] .nls-player small[data-game=final]::before { background: var(--muted); }
+.nl-workspace[data-format=redraft] .nls-player[data-side=right] small[data-game]::before { display: none; }
+.nl-workspace[data-format=redraft] .nls-player[data-side=right] small[data-game]::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; vertical-align: 1px; background: var(--line2); }
+.nl-workspace[data-format=redraft] .nls-player[data-side=right] small[data-game=live]::after { background: var(--rd-accent); box-shadow: 0 0 0 3px var(--rd-accent-soft); }
+.nl-workspace[data-format=redraft] .nls-player[data-side=right] small[data-game=final]::after { background: var(--muted); }
+
+/* ── Matchup: the broadcast score bug ──────────────────────────────────────────────────────────── */
+.nls-rd-bug { display: flex; flex-direction: column; gap: 18px; padding: 22px 28px 24px; border: 1px solid var(--rd-accent-line); border-radius: 16px; background: linear-gradient(115deg, var(--rd-accent-soft), var(--surface) 58%); }
+.nls-rd-bug-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--muted); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-rd-bug-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text2); }
+.nls-rd-bug-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.nls-rd-bug-state[data-state=live] { color: var(--rd-accent-text); }
+.nls-rd-bug-state[data-state=live]::before { background: var(--rd-accent); box-shadow: 0 0 0 4px var(--rd-accent-soft); }
+.nls-rd-bug-state[data-state=upcoming]::before { background: transparent; border: 2px solid var(--line2); }
+.nls-rd-bug-main { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 16px; }
+.nls-rd-bug-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.nls-rd-bug-side[data-side=right] { align-items: flex-end; text-align: right; }
+.nls-rd-bug-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nls-rd-bug-side[data-side=right] .nls-rd-bug-name { flex-direction: row-reverse; }
+.nls-rd-bug-name strong { overflow: hidden; color: var(--text); font-size: 17px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.nls-rd-bug-name .nls-avatar { width: 36px; height: 36px; border-width: 1px; font-size: 12px; }
+.nls-rd-bug-side[data-side=left] .nls-avatar { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nls-rd-bug-side[data-side=right] .nls-avatar { border-color: var(--line2); background: var(--surface2); color: var(--text2); }
+.nls-rd-bug-pts { color: var(--text2); font: 800 56px/1 var(--nl-mono); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.nls-rd-bug-pts[data-lead=true] { color: var(--text); }
+.nls-rd-bug-side small { color: var(--muted); font: 12px var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-rd-bug-vs { padding-bottom: 12px; color: var(--faint); font: 700 11px var(--nl-mono); letter-spacing: .12em; text-transform: uppercase; }
+.nls-rd-bug-meter { display: grid; gap: 8px; }
+.nls-rd-bug-meter .nls-probbar { height: 10px; background: var(--rd-track); }
+.nls-rd-bug-meter .nls-probbar > span:first-child { background: var(--rd-accent); }
+.nls-rd-bug-meter .nls-probbar > span:last-child { background: transparent; }
+.nls-rd-bug-meter p { display: flex; justify-content: space-between; gap: 12px; margin: 0; color: var(--text2); font: 12px var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-rd-bug-meter p b { color: var(--rd-accent-text); }
+.nls-rd-bug-overlay { margin: 0; color: var(--warn); font-size: 12px; }
+
+/* Measured across the bands: beside the 360px aside the head-to-head rows leave the player names 114px at
+ * 1440 and 0px at 1200 (the workspace rails take the rest). Redraft gives the rows the full width and puts
+ * the insight + scoreboard two-up below them. */
+.nl-workspace[data-format=redraft] [data-rd-screen=matchup] > .nls-cols { grid-template-columns: minmax(0, 1fr); }
+.nl-workspace[data-format=redraft] [data-rd-screen=matchup] > .nls-cols > .nls-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+/* Starter rows: the slot pill sits on a centre rail, the leader's points carry the sport colour. */
+.nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 52px 52px 52px minmax(0, 1fr); gap: 10px; min-height: 72px; padding: 10px 20px; }
+.nl-workspace[data-format=redraft] .nls-mrow .nls-pts { font-size: 18px; }
+.nl-workspace[data-format=redraft] .nls-mrow .nls-pts[data-pts=good] { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-rows > li:hover { background: color-mix(in srgb, var(--rd-accent) 4%, transparent); }
+.nl-workspace[data-format=redraft] .nls-board > li[data-mine=true] { background: var(--rd-accent-soft); box-shadow: inset 3px 0 0 var(--rd-accent); }
+
+/* ── My team ───────────────────────────────────────────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft] .nls-lockbar { border-radius: 14px; border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.nl-workspace[data-format=redraft] .nls-lockbar[data-tone=locked] { border-color: var(--line2); background: var(--surface); }
+.nl-workspace[data-format=redraft] .nls-lrow[data-moving=true] { background: var(--rd-accent-soft); box-shadow: inset 3px 0 0 var(--rd-accent); }
+/* Measured on the BEFORE captures: the name line is nowrap + ellipsis, so the injury flag, the rank and the
+ * new bye / off-day badge after a long name were cut off ("Riley Valdez PG15…"). Let the line wrap. */
+.nl-workspace[data-format=redraft] .nls-lrow .nls-player strong { overflow: visible; white-space: normal; line-height: 1.35; }
+.nl-workspace[data-format=redraft] .nls-tap[aria-pressed=true] strong { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-stat { border-radius: 10px; }
+.nl-workspace[data-format=redraft] .nls-stat dd { color: var(--text); }
+/* Daily-lineup day picker: a strip of days, today marked in the sport colour. */
+.nl-workspace[data-format=redraft] .nls-daypick .nls-seg { gap: 4px; padding: 5px; background: var(--surface); }
+.nl-workspace[data-format=redraft] .nls-daypick .nls-seg button { min-width: 64px; font-family: var(--nl-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.nl-workspace[data-format=redraft] .nls-daypick .nls-seg button[aria-pressed=true] { background: var(--rd-accent); border-color: var(--rd-accent); color: var(--rd-accent-ink); }
+
+/* ── Players & waivers ─────────────────────────────────────────────────────────────────────────── */
+/* Measured on the BEFORE captures: beside the 360px aside, the six-column player table is wider than its
+ * card at 1440 and at 390, and the card clips it — the projection and the Add / Claim button were cut off.
+ * Redraft gives the table the full width (the claims follow it, two-up) and lets it scroll as a last resort. */
+.nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-cols { grid-template-columns: minmax(0, 1fr); }
+.nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.nl-workspace[data-format=redraft] [data-rd-screen=waivers] section[aria-label=Players] { position: relative; overflow-x: auto; }
+/* The player column takes what is left and ellipsizes the name, so Proj and Add / Claim always fit.
+ * (position: relative above also keeps the table's absolutely-positioned .nls-sr label inside the card —
+ * without it that 1px label escaped and gave the whole phone page a horizontal scroll.) */
+.nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-table td[data-align=left]:first-child { width: 100%; max-width: 0; }
+.nls-rd-wire { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--rd-accent-line); border-radius: 14px; background: var(--rd-surface-elev); }
+.nls-rd-wire > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px 20px; border-left: 1px solid var(--line); }
+.nls-rd-wire > div:first-child { border-left: 0; }
+.nls-rd-wire dt { color: var(--faint); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-rd-wire dd { margin: 0; color: var(--text); font-size: 16px; font-weight: 700; }
+.nls-rd-wire dd small { color: var(--muted); font: 12px var(--nl-mono); font-weight: 500; }
+.nls-rd-wire .nls-rd-faab { font: 800 26px/1 var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-rd-meter { position: relative; height: 6px; overflow: hidden; border-radius: 999px; background: var(--rd-track); }
+.nls-rd-meter > i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--rd-accent); }
+.nl-workspace[data-format=redraft] .nls-table th { color: var(--faint); }
+.nl-workspace[data-format=redraft] .nls-table tbody tr:hover td { background: color-mix(in srgb, var(--rd-accent) 4%, transparent); }
+.nl-workspace[data-format=redraft] .nls-claim { border-radius: 12px; background: var(--surface2); }
+.nl-workspace[data-format=redraft] .nls-claim-order { display: grid; place-items: center; width: 24px; height: 24px; margin-top: 8px; padding: 0; border-radius: 50%; background: var(--rd-accent); color: var(--rd-accent-ink); font-size: 12px; }
+.nl-workspace[data-format=redraft] .nls-claim .nls-chip { margin-top: 8px; }
+.nl-workspace[data-format=redraft] .nls-bid input { border-radius: 8px; }
+.nl-workspace[data-format=redraft] .nls-bid input:focus-visible { outline: 2px solid var(--rd-accent-line); }
+.nl-workspace[data-format=redraft] .nls-feed b { color: var(--rd-accent-text); }
+
+/* ── Trades ────────────────────────────────────────────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft] .nls-rd-offer { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
+.nl-workspace[data-format=redraft] .nls-rd-offer[data-rd-state=review] { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 5%, var(--surface)); }
+.nl-workspace[data-format=redraft] .nls-offer-head strong { font-weight: 800; }
+.nls-rd-grade { display: inline-grid; place-items: center; min-width: 52px; height: 44px; margin-left: auto; padding: 0 10px; border: 1px solid var(--line2); border-radius: 10px; background: var(--surface2); font: 800 22px/1 var(--nl-mono); }
+.nls-rd-grade[data-pts=good] { border-color: color-mix(in srgb, var(--good) 45%, transparent); color: var(--good); background: var(--good-soft); }
+.nls-rd-grade[data-pts=warn] { border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn); background: var(--warn-soft); }
+.nls-rd-grade[data-pts=bad] { border-color: color-mix(in srgb, var(--bad) 45%, transparent); color: var(--bad); background: var(--bad-soft); }
+.nls-rd-grade-label { color: var(--muted); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .08em; text-align: right; text-transform: uppercase; }
+.nl-workspace[data-format=redraft] .nls-givegets > div { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.nl-workspace[data-format=redraft] .nls-givegets > div:last-child { border-color: var(--rd-accent-line); }
+.nl-workspace[data-format=redraft] .nls-givegets > div:last-child .nls-label { color: var(--rd-accent-text); }
+.nls-rd-deadline { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 20px; border: 1px solid var(--rd-accent-line); border-radius: 14px; background: var(--rd-surface-elev); color: var(--text2); font-size: 14px; }
+.nls-rd-deadline[data-state=passed] { border-color: var(--line2); background: var(--surface); }
+.nls-rd-deadline[data-state=final] { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 5%, var(--surface)); }
+.nls-rd-deadline strong { color: var(--text); font: 700 14px var(--nl-mono); letter-spacing: .02em; }
+.nls-rd-deadline .nls-rd-meter { flex: 1 1 160px; max-width: 320px; }
+.nl-workspace[data-format=redraft] .nls-list > li.nls-toolbar { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+
+/* ── Standings & playoffs: the playoff line and the bracket ────────────────────────────────────── */
+/* The same clipping the waiver table had (measured on the BEFORE captures): beside the aside, PA, streak and
+ * the odds column were cut off at 1440 and W–L wrapped onto two lines. Full width, team names ellipsize. */
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols { grid-template-columns: minmax(0, 1fr); }
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols > .nls-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols > section { position: relative; overflow-x: auto; }
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-table td { white-space: nowrap; }
+.nl-workspace[data-format=redraft] .nls-table tr[data-viewer=true] td { background: var(--rd-accent-soft); }
+.nl-workspace[data-format=redraft] .nls-table tr[data-viewer=true] td:first-child { box-shadow: inset 3px 0 0 var(--rd-accent); }
+.nl-workspace[data-format=redraft] .nls-table tr[data-cut=true] td { border-top: 2px solid var(--rd-accent); }
+.nl-workspace[data-format=redraft] .nls-table tr[data-rd-out=true] td { color: var(--muted); }
+.nl-workspace[data-format=redraft] .nls-table tr[data-rd-out=true] .nls-team strong { color: var(--text2); }
+.nls-rd-cutrow td { padding: 0 !important; border-top: 0 !important; }
+.nls-rd-cutrow span { display: flex; align-items: center; gap: 10px; padding: 6px 28px 4px; color: var(--rd-accent-text); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-rd-cutrow span::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: var(--rd-accent); }
+.nl-workspace[data-format=redraft] .nls-oddsbar > span:first-child { background: var(--rd-track); }
+.nl-workspace[data-format=redraft] .nls-oddsbar[data-tone=accent] i { background: var(--rd-accent) !important; }
+.nl-workspace[data-format=redraft] .nls-oddsbar[data-tone=accent] b { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .nls-big-odds b { color: var(--rd-accent-text); }
+.nls-rd-race { margin-left: 8px; }
+.nls-rd-bracket { display: grid; grid-auto-columns: minmax(132px, 1fr); grid-auto-flow: column; gap: 12px; padding: 18px 20px 22px; overflow-x: auto; }
+.nls-rd-round { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.nls-rd-round h4 { margin: 0 0 2px; color: var(--faint); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-rd-round ol { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.nls-rd-game { overflow: hidden; border: 1px solid var(--line2); border-radius: 12px; background: var(--surface2); }
+.nls-rd-game[data-viewer=true] { border-color: var(--rd-accent-line); box-shadow: inset 3px 0 0 var(--rd-accent); }
+.nls-rd-game[data-state=live] { border-color: var(--rd-accent-line); }
+.nls-rd-slot { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 40px; padding: 0 10px; color: var(--text); font-size: 13px; }
+.nls-rd-slot + .nls-rd-slot { border-top: 1px solid var(--line); }
+.nls-rd-slot span:first-child { color: var(--faint); font: 700 11px var(--nl-mono); }
+.nls-rd-slot strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.nls-rd-slot b { font: 700 13px var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-rd-slot[data-won=true] strong, .nls-rd-slot[data-won=true] b { color: var(--rd-accent-text); }
+.nls-rd-slot[data-tbd=true] strong { color: var(--muted); font-weight: 500; }
+/* `.nls-rd-game` before the class: `.nls-card p` (0,1,1) would otherwise set it at body size. */
+.nls-rd-game .nls-rd-game-bye { margin: 0; padding: 0 12px 10px; color: var(--muted); font: 11px/1.3 var(--nl-mono); letter-spacing: .06em; text-transform: uppercase; }
+
+/* ── Players tab (app/league/[leagueId]/tabs/PlayersTab.tsx) ───────────────────────────────────────
+ * That tab is Tailwind with a fixed dark palette, so in light mode it rendered white text on a page
+ * ground. These hooks (`rdp-*` classes beside its Tailwind) re-point it at /core's tokens. */
+.nl-workspace[data-format=redraft] .rdp { color: var(--text); }
+.nl-workspace[data-format=redraft] .rdp-bar { border-color: var(--line); background: var(--bg); }
+.nl-workspace[data-format=redraft] .rdp-sub,
+.nl-workspace[data-format=redraft] .rdp-posbtn,
+.nl-workspace[data-format=redraft] .rdp-toggle { min-height: 36px; border-color: var(--line2); background: var(--surface); color: var(--text2); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-sub[aria-pressed=true],
+.nl-workspace[data-format=redraft] .rdp-posbtn[aria-pressed=true],
+.nl-workspace[data-format=redraft] .rdp-toggle[aria-pressed=true] { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .rdp-toggle span { border-color: var(--line2); }
+.nl-workspace[data-format=redraft] .rdp-toggle[aria-pressed=true] span { border-color: var(--rd-accent); background: var(--rd-accent); color: var(--rd-accent-ink); }
+.nl-workspace[data-format=redraft] .rdp-input { min-height: 40px; border-color: var(--line2); background: var(--surface2); color: var(--text); font-size: 13px; }
+.nl-workspace[data-format=redraft] .rdp-input::placeholder { color: var(--faint); }
+.nl-workspace[data-format=redraft] .rdp-seg { border-color: var(--line2); background: var(--surface2); }
+.nl-workspace[data-format=redraft] .rdp-seg button { min-height: 32px; color: var(--muted); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-seg button[aria-pressed=true] { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .rdp-select { min-height: 32px; border-color: var(--line2); background: var(--surface2); color: var(--text); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-note { color: var(--muted); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-note span { color: var(--text2); }
+.nl-workspace[data-format=redraft] .rdp-compare { border-color: var(--line); background: var(--surface); }
+.nl-workspace[data-format=redraft] .rdp-compare > p { color: var(--faint); }
+.nl-workspace[data-format=redraft] .rdp-thead { border-color: var(--line); background: var(--bg); color: var(--faint); }
+.nl-workspace[data-format=redraft] .rdp-thead > div { color: var(--faint); }
+.nl-workspace[data-format=redraft] .rdp-thead .rdp-pts { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .rdp-rows > * { border-color: var(--line); }
+.nl-workspace[data-format=redraft] .rdp-row { min-height: 52px; }
+.nl-workspace[data-format=redraft] .rdp-row:hover { background: color-mix(in srgb, var(--rd-accent) 4%, transparent); }
+.nl-workspace[data-format=redraft] .rdp-name { color: var(--text); font-size: 14px; }
+.nl-workspace[data-format=redraft] .rdp-meta,
+.nl-workspace[data-format=redraft] .rdp-meta span { color: var(--muted); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-meta .nls-pos { min-width: 40px; height: 22px; font-size: 11px; }
+.nl-workspace[data-format=redraft] .rdp-pts-cell,
+.nl-workspace[data-format=redraft] .rdp-pts-cell * { color: var(--text); font-size: 13px; }
+.nl-workspace[data-format=redraft] .rdp-stat { color: var(--muted); font-size: 12px; }
+.nl-workspace[data-format=redraft] .rdp-watch { border-color: var(--line2); color: var(--muted); }
+.nl-workspace[data-format=redraft] .rdp-watch[aria-pressed=true] { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft] .rdp-empty { color: var(--muted); }
+
+@media (max-width: 1199px) {
+  .nls-rd-wire { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nls-rd-wire > div:nth-child(3) { border-left: 0; }
+  .nls-rd-wire > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+
+@media (max-width: 767px) {
+  /* The redraft row rule above out-specifies native-screens.css's phone row, so the phone row is restated here. */
+  .nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 44px 44px 44px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 12px; }
+  .nl-workspace[data-format=redraft] .nls-mrow .nls-pts { font-size: 15px; }
+  .nls-rd-bug { gap: 14px; padding: 16px; }
+  .nls-rd-bug-main { gap: 8px; }
+  .nls-rd-bug-name strong { font-size: 14px; }
+  .nls-rd-bug-name .nls-avatar { display: none; }
+  .nls-rd-bug-pts { font-size: 38px; }
+  .nls-rd-bug-vs { padding-bottom: 8px; }
+  .nls-rd-bug-meter p { flex-direction: column; gap: 4px; }
+  .nls-rd-wire > div { padding: 14px 16px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-aside { display: flex; align-items: stretch; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=matchup] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-pcell { gap: 8px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-pcell > :first-child:not(.nls-pos) { display: none; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-pcell [data-watch] { min-width: 36px; }
+  .nls-rd-wire .nls-rd-faab { font-size: 22px; }
+  .nls-rd-cutrow span { padding: 6px 14px 4px; }
+  .nls-rd-bracket { grid-auto-columns: minmax(220px, 82%); padding: 16px 14px 18px; scroll-snap-type: x mandatory; }
+  .nls-rd-round { scroll-snap-align: start; }
+  .nls-rd-deadline { padding: 12px 16px; }
+  .nls-rd-grade { margin-left: 0; }
+  .nl-workspace[data-format=redraft] .nls-daypick .nls-seg button { min-width: 58px; }
+  .nl-workspace[data-format=redraft] .rdp-sub,
+  .nl-workspace[data-format=redraft] .rdp-posbtn,
+  .nl-workspace[data-format=redraft] .rdp-toggle { min-height: 44px; }
+}

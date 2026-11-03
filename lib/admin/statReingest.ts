@@ -263,6 +263,7 @@ type SeasonRow = {
     bestBallMode: boolean | null
     leagueVariant: string | null
     leagueType: string | null
+    guillotineMode?: boolean | null
   } | null
 }
 
@@ -575,7 +576,7 @@ export async function runStatReingest(
         sport: true,
         status: true,
         currentWeek: true,
-        league: { select: { platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true } },
+        league: { select: { platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true } },
       },
     })) as SeasonRow | null
     if (!season) throw new StatReingestError('No redraft season found for that leagueId.', 404)

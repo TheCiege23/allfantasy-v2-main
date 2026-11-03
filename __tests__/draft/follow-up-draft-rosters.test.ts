@@ -89,6 +89,16 @@ describe('a follow-up draft adds to rosters', () => {
     expect((twice.lineup_sections as { bench: unknown[] }).bench).toHaveLength(3)
   })
 
+  it('adds a rookie to the bench even when the live snapshot already recorded the pick', () => {
+    const rookie = { playerId: 'rk1', playerName: 'Rookie One', position: 'RB', team: 'NYG' }
+    const live = { ...lastYear, draftPicks: [...lastYear.draftPicks, rookie] }
+    const once = addFollowUpDraftPlayers(live, [rookie], template as never)
+    expect((once.draftPicks as unknown[])).toHaveLength(4)
+    expect((once.lineup_sections as { bench: Array<{ id: string }> }).bench.map(row => row.id)).toEqual(['r2', 'rk1'])
+    const twice = addFollowUpDraftPlayers(once, [rookie], template as never)
+    expect((twice.lineup_sections as { bench: unknown[] }).bench).toHaveLength(2)
+  })
+
   it('finalizing a rookie draft goes through the add path, not the replace path', async () => {
     m.sessionFindFirst.mockResolvedValue({
       id: 'draft-2',

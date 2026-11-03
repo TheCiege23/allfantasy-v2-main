@@ -3,7 +3,7 @@ import { messagesFor } from '@/lib/i18n/messages'
 
 export type LineupVerification = { checkedAt: string; week: number | null; source: 'Sleeper'; slots: string[] }
 
-export function verificationAge(checkedAt: string, now: number, language: 'en' | 'es' = 'en'): string {
+export function verificationAge(checkedAt: string, now: number, language: string | null | undefined = 'en'): string {
   const m = messagesFor(lineupVerificationMessages, language)
   const age = now - Date.parse(checkedAt)
   if (!Number.isFinite(age) || age < -60000) return m.timeUnavailable

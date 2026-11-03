@@ -249,7 +249,9 @@ export async function loadCommissionerHealthDecisionSlice(
 
     // Safe to assert: the line above verified it. The loader filters on this flag.
     const minimal = [{ id: leagueId, isCommissioner: true } as unknown as UserLeague]
-    const snapshots = await getCommissionerHubHealthForUser(userId, minimal)
+    // `dynastySignals`: a dynasty league's pick balance and taxi findings ride in `alerts`, so the
+    // decision below — and the line Chimmy reads — carries them. A no-op for every other league.
+    const snapshots = await getCommissionerHubHealthForUser(userId, minimal, { dynastySignals: true })
     const snapshot = snapshots.find((s) => s?.leagueId === leagueId) ?? null
 
     if (!snapshot) {

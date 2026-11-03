@@ -38,6 +38,7 @@ const SETTINGS_KEYS = [
   "leagueChatThreadId",
   "tradeReviewType",
   "vetoThreshold",
+  "vetoThresholdMode",
   "benchSize",
   "rosterPositions",
 ] as const
@@ -116,7 +117,7 @@ export async function updateLeagueSettings(
     settingsUpdates.benchSize !== undefined
 
   await writeLeagueWithTradeReview(leagueId, updates, tradeReview)
-  if (tradeReview) {
+  if (tradeReview || patch.vetoThreshold !== undefined || patch.vetoThresholdMode !== undefined) {
     await publishTradeReviewChange({ leagueId, actorUserId, settingsBefore, settingsAfter: updates.settings as Record<string, unknown> })
   }
   if (rosterOrTemplateTouched) {

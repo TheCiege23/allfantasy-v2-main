@@ -112,6 +112,7 @@ function ncaafPreset(
         'tournament',
         'devy',
         'c2c',
+        'zombie',
         'salary_cap',
         'big_brother',
       ].includes(ctx.leagueType),

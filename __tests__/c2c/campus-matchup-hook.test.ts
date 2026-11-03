@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * matchup scorer the live sync and the week seal both run — and to a bye team's median score.
  */
 
-const { db, campusPointsForMatchup } = vi.hoisted(() => ({
+const { db, campusPointsForMatchup, campusBasketballPointsForMatchup } = vi.hoisted(() => ({
   db: {
     league: { findFirst: vi.fn() },
     redraftMatchup: { findFirst: vi.fn(), update: vi.fn() },
@@ -16,18 +16,20 @@ const { db, campusPointsForMatchup } = vi.hoisted(() => ({
     afRosterLineupAssignment: { findMany: vi.fn() },
   },
   campusPointsForMatchup: vi.fn(),
+  campusBasketballPointsForMatchup: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/c2c/campusScoring', async () => ({
   campusPointsForMatchup,
-  isFootballC2CLeague: (await vi.importActual<typeof import('@/lib/c2c/campusLineup')>('@/lib/c2c/campusLineup')).isFootballC2CLeague,
+  campusBasketballPointsForMatchup,
+  campusSport: (await vi.importActual<typeof import('@/lib/c2c/campusLineup')>('@/lib/c2c/campusLineup')).campusSport,
 }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({ leagueUsesDevyEngine: vi.fn(async () => false), calculateOfficialTeamScore: vi.fn() }))
 vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: vi.fn(async () => false), updateC2CMatchupScores: vi.fn() }))
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: {} }))
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
-import { updateMatchupScores } from '@/lib/redraft/scoringEngine'
+import { scoreRosterForWeek, updateMatchupScores } from '@/lib/redraft/scoringEngine'
 
 const CAMPUS = {
   cfbWeeks: [2],
@@ -65,15 +67,53 @@ describe('campus points in the matchup score', () => {
   })
 
   it('any other league is never asked', async () => {
-    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NBA' }]) {
+    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NHL' }, { sport: 'NBA', platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))
       await updateMatchupScores('m1')
     }
     expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    expect(campusBasketballPointsForMatchup).not.toHaveBeenCalled()
     for (const [call] of db.redraftMatchup.update.mock.calls) {
       expect(call.data.homeScore).toBe(call.data.awayScore)
       expect(call.data.lineupSnapshots.redraftScoring.campus).toBeUndefined()
     }
+  })
+
+  it('a native NBA C2C league adds its college basketball campus points, by the week’s dates', async () => {
+    const hoops = {
+      window: { start: '2026-11-02T00:00:00.000Z', end: '2026-11-09T00:00:00.000Z' },
+      home: { points: 31.25, players: [{ playerId: 'c1', points: 31.25 }] },
+      away: { points: 0, players: [] },
+    }
+    campusBasketballPointsForMatchup.mockResolvedValue(hoops)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    await updateMatchupScores('m1')
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    expect(campusBasketballPointsForMatchup).toHaveBeenCalledWith(db, { season: 2026, week: 3, homeRosterId: 'H', awayRosterId: 'A' })
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(data.homeScore).toBe(Math.round((data.awayScore + 31.25) * 100) / 100)
+    expect(data.lineupSnapshots.redraftScoring.campus).toEqual(hoops)
+    expect(data.status).toBe('active')
+    expect(data.lineupSnapshots.redraftScoring.campusPending).toBe(true)
+  })
+
+  it('keeps NBA campus byes and playoff roster scores provisional without complete college evidence', async () => {
+    const hoops = { window: null, home: { points: 0, players: [{ playerId: 'c1', points: 0 }] }, away: { points: 0, players: [] } }
+    campusBasketballPointsForMatchup.mockResolvedValue(hoops)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA', medianGame: true }))
+    db.redraftMatchup.findFirst.mockResolvedValue({ id: 'bye', leagueId: 'L1', seasonId: 's1', week: 3, homeRosterId: 'H', awayRosterId: null, homeRoster: {}, lineupSnapshots: null })
+    await updateMatchupScores('bye')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data).toMatchObject({ status: 'active', lineupSnapshots: { redraftScoring: { campusPending: true } } })
+    const result = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(result.allFinal).toBe(false)
+    expect(result.missingPlayerIds).toContain('campus-evidence-pending')
+  })
+
+  it('does not hold an NBA league with no campus lineup', async () => {
+    campusBasketballPointsForMatchup.mockResolvedValue(null)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    await updateMatchupScores('m1')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data.status).toBe('final')
   })
 
   it('a bye team’s median score counts its campus starters', async () => {

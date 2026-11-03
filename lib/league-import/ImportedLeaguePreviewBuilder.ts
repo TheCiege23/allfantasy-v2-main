@@ -14,6 +14,7 @@ import {
 } from './importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getPrimaryLogoUrlForTeam, getTeamByAbbreviation } from '@/lib/sport-teams/SportTeamMetadataRegistry'
+import { receptionScoringLabel } from './receptionScoringLabel'
 import {
   getFormatIntroMetadata,
   mapImportedLeagueToFormat,
@@ -32,6 +33,8 @@ export interface ImportPreviewLeague {
   seasonPhase?: 'pre_draft' | 'offseason' | null
   settings: {
     ppr?: boolean
+    /** "PPR", "Half PPR", "0.25 PPR" or "Standard" — the reception rate, as the Sleeper mapper labels it. */
+    scoringLabel?: string
     superflex?: boolean
     tep?: boolean
     rosterPositions?: string[]
@@ -295,13 +298,17 @@ function buildDataQuality(normalized: NormalizedImportResult): ImportPreviewData
 export function buildImportedLeaguePreview(normalized: NormalizedImportResult): ImportPreviewResponse {
   const leagueSettings = normalized.league as Record<string, unknown>
   const rosterPositions = (leagueSettings.roster_positions as string[]) ?? []
+  /*
+   * The reception RATE, not a yes/no: `'half'` used to read as 1, and the preview then showed a
+   * half-PPR league as "PPR". `ppr` stays a boolean for existing readers; `scoringLabel` names the rate
+   * with the Sleeper mapper's labels.
+   */
+  const rateOf = (format: unknown) => (format === 'ppr' ? 1 : format === 'half' ? 0.5 : null)
   const ppr =
     (leagueSettings.scoring_settings as Record<string, number>)?.rec ??
-    (normalized.scoring?.scoring_format === 'ppr' || normalized.scoring?.scoring_format === 'half'
-      ? 1
-      : normalized.league.scoring === 'ppr' || normalized.league.scoring === 'half'
-        ? 1
-        : 0)
+    rateOf(normalized.scoring?.scoring_format) ??
+    rateOf(normalized.league.scoring) ??
+    0
   const superflex = rosterPositions.filter((p: string) => p === 'SUPER_FLEX').length > 0
   const tep = (leagueSettings.scoring_settings as Record<string, number>)?.bonus_rec_te ?? 0
 
@@ -324,6 +331,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
       : null,
     settings: {
       ppr: ppr > 0,
+      scoringLabel: receptionScoringLabel(ppr) ?? 'Standard',
       superflex,
       tep: tep > 0,
       rosterPositions: rosterPositions.length ? rosterPositions : undefined,

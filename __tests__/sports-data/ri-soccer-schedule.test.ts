@@ -25,6 +25,10 @@ import {
   resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
 import { relabelDailySportWeeks } from '@/lib/season-week/sportWeekSignal'
+import { deriveVerifiedSoccerCalendar } from '@/lib/sports-data/verifiedSoccerCalendar'
+import { clearVerifiedSoccerGameweeks } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
+import { canRunSeasonForSport } from '@/lib/sport-scope'
 
 const LEAGUES = ['EPL', 'LALIGA', 'SERIEA'] as const
 const fixture = (league: string) =>
@@ -78,6 +82,7 @@ describe('syncRiSeasonSchedule — SOCCER is three schedules, all or nothing', (
     const r = await syncRiSeasonSchedule({ sport: 'SOCCER', season: 2026, db: db as never })
     expect(h.riFetchRows.mock.calls.map((c) => (c[1] as { league?: string }).league)).toEqual(['EPL', 'LALIGA', 'SERIEA'])
     expect(r.games).toBe(398 + 397 + 384)
+    expect((store.get('SOCCER:rischedule:2026:calendar') as { starts: string[] }).starts).toHaveLength(38)
     // 22 Aug 2026: EPL, La Liga and Serie A all played.
     const day = store.get('SOCCER:rischedule:2026:2026-08-22') as { games: Array<{ gameId: string }> }
     const ids = new Set(day.games.map((g) => g.gameId))
@@ -110,6 +115,32 @@ describe('syncRiSeasonSchedule — SOCCER is three schedules, all or nothing', (
     await syncRiSeasonSchedule({ sport: 'NCAAB', season: 2026, db: memoryCache().db as never })
     expect(h.riFetchRows).toHaveBeenCalledTimes(1)
     expect((h.riFetchRows.mock.calls[0]![1] as { league?: string }).league).toBeUndefined()
+  })
+})
+
+describe('future soccer calendar certification', () => {
+  it('activates a complete next-season schedule after a restart and refuses a partial league', async () => {
+    const shifted = new Map(LEAGUES.map((league) => [league, parseRiScheduleSeason(ROWS[league]).map((game) => ({
+      ...game, day: new Date(Date.parse(`${game.day}T00:00:00Z`) + 364 * 86_400_000).toISOString().slice(0, 10),
+    }))]))
+    const starts = deriveVerifiedSoccerCalendar(2027, shifted)
+    expect(starts).toHaveLength(38)
+    expect(deriveVerifiedSoccerCalendar(2027, new Map([['EPL', shifted.get('EPL')!]]))).toBeNull()
+    const regularEpl = shifted.get('EPL')!.find((game) => game.seasonType === 'regular' && !game.replacedBy)!
+    const overfull = new Map(shifted)
+    overfull.set('EPL', [...shifted.get('EPL')!, { ...regularEpl, gameId: 'extra-regular-game' }])
+    expect(deriveVerifiedSoccerCalendar(2027, overfull)).toBeNull()
+    const { store, db } = memoryCache()
+    store.set('SOCCER:rischedule:2027:calendar', { season: 2027, starts })
+    try {
+      expect(canRunSeasonForSport('SOCCER', 2027)).toBe(false)
+      const resolved = await ensureDailySportSeasonStart('SOCCER', 2027, { db: db as never })
+      expect(resolved.source).toBe('schedule')
+      expect(canRunSeasonForSport('SOCCER', 2027)).toBe(true)
+      expect(resolveDailySportWeekWindow('SOCCER', 2027, 38)?.start.toISOString().slice(0, 10)).toBe(starts![37])
+    } finally {
+      clearVerifiedSoccerGameweeks()
+    }
   })
 })
 

@@ -45,6 +45,8 @@ import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/r
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
+import { enrichOfficialNhlGameWinningGoals } from "@/lib/nhl-scoring/officialGameWinningGoalsIngest"
+import { enrichOfficialNhlGoalieGameStats } from "@/lib/nhl-scoring/officialGoalieGameStatsIngest"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -146,7 +148,12 @@ async function handle(req: NextRequest) {
       if (fromDate || toDate || budget.exhausted() || !candidates.includes(sport)) return
       try {
         // Baseball is a calendar-year season. College basketball and soccer span two years.
-        const season = sport === "MLB" ? new Date().getUTCFullYear() : currentScheduleSeason()
+        const now = new Date()
+        // Soccer's next season can be published in June. Verify it before August so its
+        // 38 gameweeks are ready when dynasty leagues roll forward.
+        const season = sport === "MLB" ? now.getUTCFullYear()
+          : sport === "SOCCER" ? now.getUTCFullYear() - (now.getUTCMonth() < 5 ? 1 : 0)
+            : currentScheduleSeason()
         const result = await syncRiSeasonSchedule({ sport, season, db: prisma as never })
         schedule = { ...(schedule ?? {}), [sport]: result }
       } catch (err) {
@@ -159,6 +166,9 @@ async function handle(req: NextRequest) {
     await syncSchedule("MLB")
     // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
     await syncSchedule("NCAAB")
+    // Three verified soccer slates define future gameweeks and keep the current
+    // finalizer complete. Fetch them before the stat sweep spends the budget.
+    await syncSchedule("SOCCER")
 
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
@@ -172,10 +182,45 @@ async function handle(req: NextRequest) {
         perSport[s] = await ingestRollingInsightsGameLogs({
           sport: s,
           dates,
+          persistSchedule: s === "NHL",
           shouldStop: () => budget.exhausted(),
         })
       } catch (err) {
         perSport[s] = { error: String(err).slice(0, 200) }
+      }
+
+      if (s === "NHL" && !budget.exhausted()) {
+        try {
+          // Two fresh dates plus one rotating older date cover late official
+          // corrections without consuming another cron slot or full-season scan.
+          const older = recentDates(14).slice(3)
+          const bonusDates = fromDate && toDate ? dates : [
+            ...dates.slice(0, 2), older[Math.floor(Date.now() / 86_400_000) % older.length]!,
+          ]
+          const bonus = await enrichOfficialNhlGameWinningGoals({ dates: bonusDates,
+            shouldStop: () => budget.remainingMs() < 50_000 })
+          const result = perSport[s] as Record<string, unknown>
+          result.officialGameWinningGoals = bonus
+          if (bonus.errors.length) result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            ...bonus.errors.map((error) => `official game-winning goals: ${error}`),
+          ]
+          if (budget.remainingMs() >= 50_000) {
+            const goalie = await enrichOfficialNhlGoalieGameStats({ dates: bonusDates,
+              shouldStop: () => budget.remainingMs() < 45_000 })
+            result.officialGoalieGameStats = goalie
+            if (goalie.errors.length) result.errors = [
+              ...((result.errors as string[] | undefined) ?? []),
+              ...goalie.errors.map((error) => `official goalie game stats: ${error}`),
+            ]
+          }
+        } catch (err) {
+          const result = perSport[s] as Record<string, unknown>
+          result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            `official NHL enrichment: ${String(err).slice(0, 180)}`,
+          ]
+        }
       }
 
       /*
@@ -239,20 +284,6 @@ async function handle(req: NextRequest) {
       }
     }
 
-    /*
-     * THE NCAAB SEASON SCHEDULE, for the week finalizer (lib/sports-data/riSeasonSchedule.ts):
-     * every SportsGame schedule for college basketball is incomplete, so a week there cannot be
-     * judged "all games final". One RI call per scheduled run; skipped for an explicit date-range
-     * backfill. It runs before the stat sweep can exhaust the budget. Folded into this daily RI pass rather than a new route or
-     * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
-     * publishes it — writes nothing and is simply reported.
-     *
-     * SOCCER rides the same pass (three calls: EPL, La Liga, Serie A — all or nothing, see
-     * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
-     * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
-     */
-    await syncSchedule("SOCCER")
-
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
       0,
@@ -268,14 +299,19 @@ async function handle(req: NextRequest) {
      * Recorded even when every sport is deferred for budget: a deferral proves the job woke up,
      * which is the whole claim a heartbeat makes.
      */
+    const importErrors = Object.entries(perSport).flatMap(([sport, value]) => {
+      const result = value as { error?: string; errors?: string[] }
+      return [
+        ...(result.error ? [`${sport}: ${result.error}`] : []),
+        ...(result.errors ?? []).map((error) => `${sport}: ${error}`),
+      ]
+    })
     await recordSyncJobRun(
       { jobName: JOB_MULTI_SPORT, jobScope: candidates.join(","), trigger: "cron" },
       {
         rowsWritten: written,
         rowsSkipped: deferred.length,
-        errors: Object.entries(perSport)
-          .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
-          .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+        errors: importErrors,
         metadata: {
           days,
           deferredSports: deferred,
@@ -295,7 +331,7 @@ async function handle(req: NextRequest) {
     )
 
     return NextResponse.json({
-      ok: true,
+      ok: importErrors.length === 0,
       mode: "multiSport",
       provider: "rolling_insights",
       written,

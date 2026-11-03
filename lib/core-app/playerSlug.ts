@@ -35,7 +35,8 @@
 /** Sports that can appear in a slug. Mirrors KNOWN_SPORTS in playerRef.ts. */
 const SPORTS = ['nfl', 'ncaaf', 'nba', 'ncaab', 'mlb', 'nhl', 'soccer'] as const
 
-export type PlayerSlugParts = { sport: string; sleeperId: string }
+export type PlayerSlugParts = { sport: string; sleeperId: string; source?: never; externalId?: never } |
+  { sport: string; source: string; externalId: string; sleeperId?: never }
 
 /**
  * Kebab a display name into URL-safe ASCII.
@@ -68,16 +69,30 @@ export function kebabName(name: string): string {
 export function playerSlug(input: {
   name: string
   sport: string
-  sleeperId: string | null | undefined
+  sleeperId?: string | null
+  source?: string | null
+  externalId?: string | null
 }): string | null {
-  const sleeperId = input.sleeperId?.trim()
-  if (!sleeperId) return null
-
   const sport = input.sport?.trim().toLowerCase()
   if (!sport || !(SPORTS as readonly string[]).includes(sport)) return null
 
   const name = kebabName(input.name ?? '')
   if (!name) return null
+
+  // Preserve all existing NFL URLs. Other sports need the full provider namespace:
+  // the same external id can describe two different athletes in one sport.
+  if (sport !== 'nfl' && input.source && input.externalId) {
+    const source = input.source.trim().toLowerCase()
+    const externalId = input.externalId.trim()
+    if (!/^[a-z0-9_-]+$/.test(source) || !externalId) return null
+    const bytes = new TextEncoder().encode(`${source}:${externalId}`)
+    if (bytes.length > 120) return null
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    return `${name}-${sport}-x${hex}`
+  }
+
+  const sleeperId = input.sleeperId?.trim()
+  if (!sleeperId || sport !== 'nfl') return null
 
   /*
    * sleeperId is not always numeric - team defences are stored as `TB`, `SF` and
@@ -114,6 +129,17 @@ export function parsePlayerSlug(raw: string): PlayerSlugParts | null {
   if (!id || !/^[a-z0-9]+$/.test(id)) return null
   if (!sport || !(SPORTS as readonly string[]).includes(sport)) return null
 
+  if (sport !== 'nfl') {
+    if (!/^x(?:[0-9a-f]{2})+$/.test(id) || id.length > 241) return null
+    try {
+      const bytes = new Uint8Array(id.slice(1).match(/.{2}/g)!.map((pair) => parseInt(pair, 16)))
+      const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+      const cut = decoded.indexOf(':')
+      if (cut < 1 || !/^[a-z0-9_-]+$/.test(decoded.slice(0, cut)) || !decoded.slice(cut + 1)) return null
+      return { sport: sport.toUpperCase(), source: decoded.slice(0, cut), externalId: decoded.slice(cut + 1) }
+    } catch { return null }
+  }
+
   return { sport: sport.toUpperCase(), sleeperId: id }
 }
 
@@ -121,7 +147,9 @@ export function parsePlayerSlug(raw: string): PlayerSlugParts | null {
 export function playerPath(input: {
   name: string
   sport: string
-  sleeperId: string | null | undefined
+  sleeperId?: string | null
+  source?: string | null
+  externalId?: string | null
 }): string | null {
   const slug = playerSlug(input)
   return slug ? `/players/${slug}` : null

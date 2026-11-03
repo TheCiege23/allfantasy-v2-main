@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { weeklySharingMessages } from '@/lib/core-app/messages/weeklySharing'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 import type { WeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { commissionerWeekDraft, drawWeeklyShareCard, rivalryNarrative, weeklySocialPost, weeklyCardScenarios, WEEK_PUBLIC_URL, WEEK_SOCIALS, type WeekSocial } from '@/lib/core-app/weeklyShare'
@@ -17,7 +18,7 @@ function download(blob: Blob, filename: string) {
   link.href = url; link.download = filename; link.click(); setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
 export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: WeeklyPlayoffPath | null }) {
-  const {language} = useOptionalLanguage(); const es = language === 'es'
+  const {language} = useOptionalLanguage(); const es = spanishFlag(language)
   const m = useMessages(weeklySharingMessages)
   const [platform,setPlatform] = useState<WeekSocial>('X')
   const [status,setStatus] = useState(''); const [busy,setBusy] = useState(false)

@@ -8,6 +8,9 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
 import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import { navLabel } from '@/lib/core-app/navLabels'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { leagueTabsMessages } from '@/lib/core-app/messages/leagueTabs'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -56,12 +59,12 @@ export type LeagueTabsProps = {
 }
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
-const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
-  { key: '', label: navLabel('overview'), labelEs: 'Resumen' },
-  { key: 'my-team', label: navLabel('my-team'), labelEs: 'Equipo' },
-  { key: 'matchup', label: navLabel('matchup'), labelEs: 'Partido' },
-  { key: 'players', label: navLabel('players', 'short'), labelEs: 'Jugad.' },
-  { key: 'moves', label: navLabel('moves'), labelEs: 'Movimientos' },
+const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
+  { key: '', label: navLabel('overview') },
+  { key: 'my-team', label: navLabel('my-team') },
+  { key: 'matchup', label: navLabel('matchup') },
+  { key: 'players', label: navLabel('players', 'short') },
+  { key: 'moves', label: navLabel('moves') },
 ]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
@@ -100,6 +103,7 @@ export function LeagueTabs({
 }: LeagueTabsProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(leagueTabsMessages)
   const q = `?league=${encodeURIComponent(leagueId)}`
   const moreRef = useRef<HTMLDetailsElement>(null)
   /*
@@ -128,7 +132,7 @@ export function LeagueTabs({
   const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform }, language)
 
   return (
-    <nav className="af-lt" aria-label={language === 'es' ? `Secciones de ${leagueName}` : `${leagueName} views`}>
+    <nav className="af-lt" aria-label={m.navAria(leagueName)}>
       {/*
         Warms My team and Matchup once the screen you asked for has landed.
 
@@ -140,7 +144,7 @@ export function LeagueTabs({
       */}
       <div className="af-lt-workspace">
         <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)}>
-          {language === 'es' ? 'Abrir liga' : 'Open League'} <span aria-hidden>↗</span>
+          {m.openLeague} <span aria-hidden>↗</span>
         </Link>
         <span>{leagueWorkspaceMode(platform, language).description}</span>
       </div>
@@ -174,9 +178,9 @@ export function LeagueTabs({
         const restActiveTab = rest.find((t) => t.key === activeKey)
         return (
           <div className="af-lt-compact" data-compact={compact}>
-            <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</LeagueTabsScroller>
+            <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, m.compactTab(t.key, t.label)))}</LeagueTabsScroller>
             {tab('live', copy(navLabel('live', 'short')))}
-            {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{language === 'es' ? 'Comisionado' : 'Commissioner'}</Link>}
+            {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{m.commissioner}</Link>}
             {rest.length ? (
               <details className="af-lt-more" ref={moreRef}>
                 {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
@@ -235,8 +239,8 @@ export function describeHiddenTabs({
   platform?: string | null
 }, language = 'en'): string[] {
   const notes: string[] = []
-  const es = language === 'es'
-  const label = (platform ?? '').trim() || (es ? 'esta plataforma' : 'this platform')
+  const m = messagesFor(leagueTabsMessages, language)
+  const label = (platform ?? '').trim() || m.thisPlatform
 
   /*
    * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
@@ -245,15 +249,13 @@ export function describeHiddenTabs({
    * scored" there states a fact we do not have.
    */
   if (hasScoredWeek === false) {
-    notes.push(
-      es ? 'Enfrentamiento, Tu semana, Clasificación y Pronóstico se abren cuando esta liga tenga una semana puntuada.' : 'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
-    )
+    notes.push(m.noScoredWeek)
   }
   if (!tradeSupported) {
-    notes.push(es ? `Aún no pudimos importar el historial de intercambios de ${label} para esta liga; la vista de Intercambios no está disponible.` : `We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
+    notes.push(m.noTrades(label))
   }
   if (!draftSupported) {
-    notes.push(es ? `Aún no pudimos importar los resultados del draft de ${label} para esta liga; la vista de Draft HQ no está disponible.` : `We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
+    notes.push(m.noDraft(label))
   }
   return notes
 }

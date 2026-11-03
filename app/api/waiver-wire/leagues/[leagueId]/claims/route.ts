@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -54,6 +55,8 @@ function waiverClaimError(message: string, status: number) {
 async function resolveClaimRoster(leagueId: string, userId: string) {
   const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (direct) return direct
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  if (coOwnerRosterId) return prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId } })
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
   if (league?.leagueVariant !== 'survivor_guillotine') return null
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
@@ -310,7 +313,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       message.includes("starter is locked") ||
       message.includes("bench player is locked") ||
       message.includes("All roster moves are locked") ||
-      message.includes("Weekly drop limit")
+      message.includes("Weekly drop limit") ||
+      // NHL dynasty prospects (lib/waiver-wire/nhlProspectFreeAgency.ts): a refused id is a 400, not a 500.
+      message.includes("is unavailable") ||
+      message.includes("already on another roster")
     ) {
       return waiverClaimError(message, 400)
     }

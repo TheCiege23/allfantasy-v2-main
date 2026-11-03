@@ -26,6 +26,7 @@ import { appendEvent } from './GuillotineEventLog'
 import { loadChopPreview } from './chopPreviewLoad'
 import type { ChopPreview } from './chopPreview'
 import { chopResultAlert, chopZoneWarning } from './chopAlertCopy'
+import { readGuillotineBestBall } from './guillotineBestBall'
 
 /** The warning goes out inside the last day before the week's final game starts. */
 export const CHOP_ZONE_WARNING_LEAD_MS = 24 * 60 * 60 * 1000
@@ -53,6 +54,12 @@ async function usersByRoster(leagueId: string, rosterIds: readonly string[]): Pr
     if (userIds[0]) out.set(r.id, userIds[0])
   }
   return out
+}
+
+/** A best ball Guilly league (./guillotineBestBall.ts): its warnings carry no lineup advice. */
+async function leagueSetsLineups(leagueId: string): Promise<boolean> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  return readGuillotineBestBall(league?.settings)
 }
 
 async function leagueName(leagueId: string): Promise<string> {
@@ -102,7 +109,9 @@ export async function sendChopResultAlerts(
   ] as const) {
     if (userIds.length === 0) continue
     const alert = chopResultAlert({ leagueName: name, week: input.week, choppedNames, youWereChopped, rosterReleaseTiming: input.rosterReleaseTiming })
-    await dispatch({ ...common, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
+    // A survivor goes straight to the released players (the home's chop moment), where the bids are.
+    const link = youWereChopped ? {} : { actionHref: `/league/${input.leagueId}#guillotine-chop`, actionLabel: 'See the players' }
+    await dispatch({ ...common, ...link, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
   }
   return { chopped: choppedUsers.size, survived: survivors.length }
 }
@@ -239,6 +248,7 @@ export async function sendChopZoneWarnings(
 
   const owners = await usersByRoster(input.leagueId, targets.map((t) => t.row.rosterId))
   const name = await leagueName(input.leagueId)
+  const bestBall = await leagueSetsLineups(input.leagueId).catch(() => false)
   // Recorded before sending: a second replica (or a crash mid-loop) must not send these levels again.
   await appendEvent(input.leagueId, WARNING_EVENT, {
     key,
@@ -253,7 +263,7 @@ export async function sendChopZoneWarnings(
   for (const { row, level, late } of targets) {
     const userId = owners.get(row.rosterId)
     if (!userId) continue
-    const alert = chopZoneWarning({ leagueName: name, week: input.week, status: level, margin: row.margin, late })
+    const alert = chopZoneWarning({ leagueName: name, week: input.week, status: level, margin: row.margin, late, bestBall })
     try {
       await dispatch({
         userIds: [userId],
@@ -263,7 +273,7 @@ export async function sendChopZoneWarnings(
         body: alert.body,
         severity: alert.severity,
         actionHref: `/league/${input.leagueId}`,
-        actionLabel: 'Set lineup',
+        actionLabel: bestBall ? 'Open league' : 'Set lineup',
         leagueId: input.leagueId,
         meta: { guillotineWeek: input.week, points: row.points, margin: row.margin, late },
         // Per level: a danger warning and a later chop-zone one are two alerts, not one deduped away.

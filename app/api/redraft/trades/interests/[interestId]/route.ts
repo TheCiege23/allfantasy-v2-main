@@ -11,17 +11,17 @@ export const dynamic = 'force-dynamic'
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ interestId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const { interestId } = await ctx.params
   const interest = await prisma.redraftTradeInterest.findUnique({ where: { id: interestId } })
-  if (!interest) return NextResponse.json({ error: 'Interest not found' }, { status: 404 })
+  if (!interest) return NextResponse.json({ error: 'Interest not found', code: 'interest_not_found' }, { status: 404 })
 
   const gate = await assertLeagueMember(interest.leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const caller = await resolveCallerContext(interest.leagueId, userId)
-  if (!caller.rosterId) return NextResponse.json({ error: 'You do not have a roster in this league' }, { status: 403 })
+  if (!caller.rosterId) return NextResponse.json({ error: 'You do not have a roster in this league', code: 'no_roster' }, { status: 403 })
 
   try {
     await deactivateInterest(interestId, caller.rosterId)
@@ -36,7 +36,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ interes
     }
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof TradeBlockValidationError) return NextResponse.json({ error: e.message }, { status: 403 })
-    return NextResponse.json({ error: 'Failed to remove interest' }, { status: 400 })
+    if (e instanceof TradeBlockValidationError) return NextResponse.json({ error: e.message, code: e.code }, { status: 403 })
+    return NextResponse.json({ error: 'Failed to remove interest', code: 'interest_remove_failed' }, { status: 400 })
   }
 }

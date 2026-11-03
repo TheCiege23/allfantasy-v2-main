@@ -10,12 +10,13 @@ import { COMMS_OPEN_EVENT } from './comms/commsEvents'
 import './commissioner-weekly-plan.css'
 import WeeklyTaskFollowthrough from './WeeklyTaskFollowthrough'
 import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 
 type PlanProps = { leagueId: string; data?: WeeklyBlueprint; announcement?: string }
 export default function CommissionerWeeklyPlan(props: PlanProps) { return <CommissionerWeeklyEditor key={props.leagueId} {...props} /> }
 function CommissionerWeeklyEditor({ leagueId, data, announcement = '' }: PlanProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const es = spanishFlag(language)
   const m = useMessages(coreTriageMessages)
   const [issueId,setIssueId] = useState<string | null>(null)
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [dueAt, setDueAt] = useState('')

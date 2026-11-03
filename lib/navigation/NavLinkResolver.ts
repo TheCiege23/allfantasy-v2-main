@@ -16,6 +16,7 @@ export const PRIMARY_NAV_ITEMS: NavLinkItem[] = [
   { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
   { href: "/ai/tools", label: "Intelligence Hub" },
+  { href: "/clubhouse", label: "Clubhouse" },
   { href: "/core/rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },
   { href: "/messages", label: "Messages" },
@@ -60,7 +61,8 @@ export const PRIMARY_NAV_GROUPS: NavGroup[] = [
       // "My Leagues" (incl. every imported league) lives on the dashboard rail —
       // named here so imported leagues are one obvious click from anywhere.
       { href: "/dashboard", label: "My Leagues" },
-      { href: "/discover/leagues", label: "Find Leagues" },
+      // /find-league is the rank-matched search; /discover/leagues is the per-sport browse.
+      { href: "/find-league", label: "Find a League" },
       { href: "/core/rankings", label: "Rankings" },
       { href: "/war-room", label: "AF Legacy" },
     ],
@@ -72,6 +74,7 @@ export const PRIMARY_NAV_GROUPS: NavGroup[] = [
       { href: "/core/commissioner", label: "Commissioner Hub" },
       { href: "/manager-hub", label: "Manager Hub" },
       { href: "/ai/tools", label: "Intelligence Hub" },
+      { href: "/clubhouse", label: "Clubhouse" },
     ],
   },
   {

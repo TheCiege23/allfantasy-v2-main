@@ -28,4 +28,13 @@ describe('native reset attempt archive', () => {
     expect(db.event.mock.invocationCallOrder[0]).toBeLessThan(db.remove.mock.invocationCallOrder[0])
     expect(db.update.mock.calls[0][0].data).toMatchObject({ status: 'pre_draft', startedAt: null, completedAt: null, overnightFrozenPickSeconds: null, timerEndAt: null })
   })
+  it('preserves converted rookie auction rights across a draft reset', async () => {
+    db.update.mockClear()
+    const rookieAuction = { policy: 'budget', budgetPerTeam: 200, valuesByRound: { '1': 25 }, trades: [{ round: 1, originalRosterId: 'a', newRosterId: 'b' }] }
+    db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'in_progress', draftType: 'auction', draftModeLabel: 'rookie', auctionState: { rookieAuction, currentBid: 10 } })
+    db.picks.mockResolvedValue([])
+    expect(await resetDraftSession('l')).toBe(true)
+    expect(db.update.mock.calls[0][0].data.auctionState).toEqual({ rookieAuction })
+  })
+
 })

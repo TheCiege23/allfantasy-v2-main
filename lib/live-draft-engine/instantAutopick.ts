@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning, readManagedLineups, type ManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 
 /**
  * Teams whose live-draft picks are made AS SOON AS they are on the clock, not when the clock runs out
@@ -20,9 +21,17 @@ import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
  */
 export type InstantAutopickReason = 'autopilot' | 'autopick_me'
 
-/** Pure: is this roster Chimmy-run in these league settings? */
-export function isAutopilotRoster(leagueSettings: unknown, rosterId: string): boolean {
-  return Boolean(readManagedLineups(leagueSettings)[rosterId]?.autopilot)
+/**
+ * Pure: is this roster Chimmy-run in these league settings? With `currentOwnerId`, a team that has
+ * changed hands since Chimmy was switched on is NOT: its new manager picks for themselves, even in
+ * the minutes before the hourly sweep clears the entry.
+ */
+export function isAutopilotRoster(leagueSettings: unknown, rosterId: string, currentOwnerId?: string | null): boolean {
+  return isAutopilotIn(readManagedLineups(leagueSettings), rosterId, currentOwnerId)
+}
+
+function isAutopilotIn(managed: ManagedLineups, rosterId: string, currentOwnerId?: string | null): boolean {
+  return currentOwnerId === undefined ? Boolean(managed[rosterId]?.autopilot) : isChimmyRunning(managed, rosterId, currentOwnerId)
 }
 
 export async function instantAutopickReason(args: {
@@ -36,9 +45,11 @@ export async function instantAutopickReason(args: {
     args.leagueSettings !== undefined
       ? args.leagueSettings
       : (await prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } }))?.settings
-  if (isAutopilotRoster(settings, args.rosterId)) return 'autopilot'
-
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true } })
+  // Only a team Chimmy PLAYS picks instantly: without the owner's plan, that is the free team alone.
+  const playable = await readPlayableChimmyLineups({ id: args.leagueId, settings })
+  if (isAutopilotIn(playable, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
+
   const userId = String(roster?.platformUserId ?? '')
   if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return null
   const pref = await prisma.liveDraftAutopickPreference.findUnique({

@@ -25,7 +25,8 @@ import { unnamedTeamLabel } from './activity'
 import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
 import { messagesFor } from '@/lib/i18n/messages'
 
-export type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes'
+/** The last three are dynasty leagues only (./dynastyHealthFlags.ts). */
+export type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes' | 'picks' | 'rookie_order' | 'taxi'
 
 export type HealthFlagAction = { label: string; href: string; external: boolean }
 

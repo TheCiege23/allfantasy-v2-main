@@ -5,6 +5,10 @@ import { defineMessages } from '@/lib/i18n/messages'
  * band printed before the move, byte for byte, in both languages — this is a relocation, not a rewrite.
  * A play rebuilt from `actionParts` and a betting line rebuilt from `oddsParts` still go through
  * `homeBandsCopy`; only the band's own fixed words live here.
+ *
+ * `playHeadline`, `gameSub` and `odds` are handed the loader's English and return it unchanged in
+ * English; Spanish uses the rebuild the view hands alongside it, and keeps the English whole when
+ * there is none.
  */
 export const dashGameDayBandMessages = defineMessages({
   en: {
@@ -22,6 +26,9 @@ export const dashGameDayBandMessages = defineMessages({
     at: 'at',
     startsIn: 'Starts in',
     liveScoring: 'Live scoring →',
+    playHeadline: (headline: string, _player: string, _action: string | null): string => headline,
+    gameSub: (sub: string, _sport: string, _week: number | null): string => sub,
+    odds: (odds: string, _rebuilt: string | null): string => odds,
   },
   es: {
     title: 'Día de partido',
@@ -38,5 +45,10 @@ export const dashGameDayBandMessages = defineMessages({
     at: 'en',
     startsIn: 'Empieza en',
     liveScoring: 'Puntuación en vivo →',
+    playHeadline: (headline, player, action) => (action ? `${player} ${action}` : headline),
+    gameSub: (_sub, sport, week) => [sport, week != null ? `Semana ${week}` : null].filter(Boolean).join(' · '),
+    odds: (odds, rebuilt) => rebuilt ?? odds,
   },
 })
+
+export type DashGameDayBandMessages = typeof dashGameDayBandMessages.en

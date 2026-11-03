@@ -99,7 +99,10 @@ export function RecommendedMoves({
         </ul>
       )}
 
-      <p className="af-pf-readonly-note">{msg.movesReadOnly}</p>
+      <p className="af-pf-readonly-note">
+        {moves.some((move) => move.parts?.kind === 'claim' && move.scoring === 'league')
+          ? msg.movesLeagueClaimsReadOnly : msg.movesReadOnly}
+      </p>
     </section>
   )
 }

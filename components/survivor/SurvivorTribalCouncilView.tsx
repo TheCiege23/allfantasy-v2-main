@@ -36,6 +36,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
   const [shotConfirm, setShotConfirm] = useState(false)
   const [shotError, setShotError] = useState<string | null>(null)
   const [outCardOpen, setOutCardOpen] = useState(false)
+  const [recapOpen, setRecapOpen] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -179,6 +180,16 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
             <p className="text-sm text-white/70">Want to share your exit? Only you can see this.</p>
             <button type="button" onClick={() => setOutCardOpen(true)} className="min-h-[44px] rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-200">Make a share card</button>
           </section>)}
+
+      {/* The league's week recap: names nobody, so every member may share it once the read is done.
+          Opt-in like the out card: nothing about share cards is fetched until the button is pressed. */}
+      {council?.isRevealed && council.revealComplete !== false && (
+        <div data-testid="survivor-council-recap-share">
+          {recapOpen
+            ? <SurvivorShareCardsButton leagueId={leagueId} type="recap" week={council.week} label="Share this week’s recap" autoOpen />
+            : <button type="button" onClick={() => setRecapOpen(true)} className="min-h-[44px] rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-300/10">Share this week’s recap</button>}
+        </div>
+      )}
 
       {/* Weekly necklace: top score in each tribe headed to Tribal Council */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

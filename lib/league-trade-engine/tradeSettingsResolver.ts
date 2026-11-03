@@ -6,12 +6,17 @@ import type { League } from '@prisma/client'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import type { TradeReviewType } from '@/lib/league-trade-engine/types'
 import { deadlinePassed, readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { tradeReviewMode as chosenTradeReviewMode } from '@/lib/league-rules-explainer/snapshot'
+import { readVetoRule, type VetoRule } from './vetoRule'
 
 export type ResolvedLeagueTradeSettings = {
   tradeReviewMode: TradeReviewType
   tradeDeadlineWeek: number | null
   tradeReviewHours: number
-  vetoThresholdPercent: number
+  /** The league's veto rule (./vetoRule.ts): a vote count by default, or a percent of the teams. */
+  vetoRule: VetoRule
+  /** The percent, when the rule is a percent; null for a vote count. Stored on each new trade. */
+  vetoThresholdPercent: number | null
   processingDelayHours: number
   tradesAllowed: boolean
   faabTradingAllowed: boolean
@@ -36,8 +41,19 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   const cr = (snap?.conceptRules ?? {}) as { extensions?: Record<string, unknown> }
   const ext = cr.extensions ?? {}
 
+  /*
+   * 🛑 THE TRADE REVIEW CHOSEN AT CREATION WAS IGNORED HERE. League creation stores the commissioner's
+   * choice as `settings.trade_review_mode` (the key the rules popup reads), while
+   * `commissionerSettings.tradeReviewMode` keeps the format's default — so a league created as
+   * "League vote" or "Instant" got commissioner review on the main trades screen, whatever the popup
+   * said. The chosen key wins now (owner's decision, 2026-10-29); every save since #2907 writes both
+   * keys the same, so for those leagues nothing moves.
+   */
   const rawMode = String(
-    comm.tradeReviewMode ?? (league as { tradeReviewMode?: string }).tradeReviewMode ?? 'commissioner',
+    chosenTradeReviewMode((league.settings ?? {}) as Record<string, unknown>) ??
+      comm.tradeReviewMode ??
+      (league as { tradeReviewMode?: string }).tradeReviewMode ??
+      'commissioner',
   ).toLowerCase()
 
   let tradeReviewMode: TradeReviewType = 'commissioner'
@@ -52,10 +68,8 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
 
   const tradeReviewHours = num(comm.tradeReviewHours ?? league.tradeReviewHours, 48)
 
-  const vetoThresholdPercent = Math.min(
-    100,
-    Math.max(1, num(comm.vetoThresholdPercent ?? ext.vetoThresholdPercent, 50)),
-  )
+  const vetoRule = readVetoRule(league.settings, ext.vetoThresholdPercent)
+  const vetoThresholdPercent = vetoRule.mode === 'percent' ? vetoRule.value : null
 
   const processingDelayHours = Math.max(
     0,
@@ -116,6 +130,7 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     tradeReviewMode,
     tradeDeadlineWeek,
     tradeReviewHours,
+    vetoRule,
     vetoThresholdPercent,
     processingDelayHours,
     tradesAllowed,

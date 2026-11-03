@@ -9,7 +9,12 @@
  * Client-safe: no server imports, so the card component can import the display types.
  */
 
-export type ChimmyActionKind = 'lineup' | 'trade'
+export type ChimmyActionKind = 'lineup' | 'trade' | 'automation'
+
+/** A league automation change a commissioner asked Chimmy for (phase 12, 2026-10-29). */
+export type AutomationChangeSpec =
+  | { type: 'preset'; preset: 'recommended' | 'run_it' | 'hands_on' }
+  | { type: 'handover'; rule: { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null }
 
 /** One lineup move, by player id. `to` is where the player ends up. */
 export type LineupMoveSpec = {
@@ -49,6 +54,16 @@ export type ChimmyActionSpec =
       week: number
       season: number
       assets: TradeAssetSpec[]
+    }
+  | {
+      kind: 'automation'
+      change: AutomationChangeSpec
+      /**
+       * The keys of what the card showed would change. The confirm recomputes the change against the
+       * league as it is then and refuses if the list differs, so a card never saves something the
+       * commissioner was not shown.
+       */
+      expectedKeys: string[]
     }
 
 /** The signed payload. `exp` is epoch seconds. */
@@ -93,6 +108,10 @@ export type ChimmyActionCard = {
     youGet: ActionCardPlayer[]
     /** How this league reviews trades once accepted — "commissioner review", "league vote"… */
     reviewNote: string | null
+  }
+  automation?: {
+    /** Each setting that will change, in plain words. */
+    changes: string[]
   }
   /** Plain-language caveats. Always rendered; never hidden behind a toggle. */
   warnings: string[]

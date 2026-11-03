@@ -48,6 +48,9 @@ type Marker = {
   resumeFrom?: number
   lastAttemptAt?: string
   lastError?: string | null
+  seeded?: number
+  fetched?: number
+  errors?: number
 }
 
 export type NcaabDevyPoolResult =
@@ -91,7 +94,10 @@ export async function ingestNcaabDevyPoolIfDue(input: { deadlineAt: number }): P
   if (marker.lastError && ageMs(marker.lastAttemptAt, now) < FAILURE_BACKOFF_MS) {
     return { skipped: 'retry backoff', lastRunAt }
   }
-  if (resumeFrom === 0 && ageMs(lastRunAt, now) < WEEK_MS) {
+  // Older versions stamped a success even when every provider row was rejected. Retry that
+  // marker instead of claiming a healthy pool for a week.
+  const priorAllRejected = marker.seeded === 0 && (marker.fetched ?? 0) > 0 && (marker.errors ?? 0) > 0
+  if (resumeFrom === 0 && !priorAllRejected && ageMs(lastRunAt, now) < WEEK_MS) {
     return { skipped: 'weekly cadence', lastRunAt }
   }
 
@@ -106,13 +112,14 @@ export async function ingestNcaabDevyPoolIfDue(input: { deadlineAt: number }): P
       : resumeFrom > 0 && (seed.fetched ?? 0) <= resumeFrom
         ? `provider returned ${seed.fetched ?? 0} rows, fewer than the resume offset ${resumeFrom}`
         : null
-  if (!seed.fetched || truncated) {
-    const lastError = (truncated ?? seed.errors[0] ?? 'no rows').slice(0, 160)
+  const allRejected = seed.fetched && seed.seeded === 0 && seed.errors.length > 0
+  if (!seed.fetched || truncated || allRejected) {
+    const lastError = (truncated ?? (allRejected ? `all processed rows were rejected (${seed.errors.length} errors)` : seed.errors[0]) ?? 'no rows').slice(0, 160)
     // Keep `at` as it was: a failed fetch finished nothing. A list shorter than the resume offset
     // cannot be resumed into, so the next attempt starts the pass over.
     await writeMarker({ at: lastRunAt, resumeFrom: truncated && resumeFrom > 0 ? 0 : resumeFrom, lastAttemptAt: attemptAt, lastError })
     throw new Error(
-      truncated
+      truncated || allRejected
         ? `NCAAB players: refresh not completed (${lastError})`
         : `NCAAB players: provider chain returned no rows (${lastError})`,
     )

@@ -5,6 +5,24 @@ import { defineMessages } from '@/lib/i18n/messages'
  * one the module wrote before the move, byte for byte, in both languages — a relocation, not a rewrite.
  * `waiverType*` are the waiver-type labels that were the `WAIVER_TYPE_LABEL` / `_ES` tables.
  */
+
+/*
+ * The shared outcome labels (`waiver-outcome-labels`) serve the waivers history, notifications and
+ * exports in English. The hub's panel words the same codes in the reader's language here, so that
+ * module's other callers are untouched. A code with no entry keeps the shared English label.
+ */
+const OUTCOME_LABEL_ES: Record<string, string> = {
+  won: 'Concedida',
+  lost_priority: 'Perdida: prioridad',
+  lost_tiebreaker: 'Perdida: desempate',
+  insufficient_faab: 'No concedida: FAAB',
+  invalid_due_to_roster: 'Bloqueada: plantilla',
+  player_no_longer_available: 'No concedida: jugador ya fichado',
+  blocked_by_lineup_lock: 'Bloqueada: alineación cerrada',
+  blocked_by_ir_taxi_devy_violation: 'Bloqueada: IR / taxi / devy',
+  failed: 'No concedida',
+}
+
 export const commissionerWaiversMessages = defineMessages({
   en: {
     resultWon: 'Won',
@@ -25,6 +43,10 @@ export const commissionerWaiversMessages = defineMessages({
     waiverTypeFcfs: 'First come, first served',
     waiverTypeStandard: 'Standard priority',
     waiverTypeOff: 'No waivers',
+    /** A run result by outcome code: the shared English label (`formatWaiverOutcomeLabel`), handed in. */
+    outcomeLabel: (_code: string, english: string): string => english,
+    /** The run times' Intl locale ("Sun 1 PM ET"). */
+    runSlotLocale: 'en-US',
   },
   es: {
     resultWon: 'Ganada',
@@ -46,5 +68,7 @@ export const commissionerWaiversMessages = defineMessages({
     waiverTypeFcfs: 'Por orden de llegada',
     waiverTypeStandard: 'Prioridad estándar',
     waiverTypeOff: 'Sin agentes libres en espera',
+    outcomeLabel: (code, english) => (code && OUTCOME_LABEL_ES[code] ? OUTCOME_LABEL_ES[code]! : english),
+    runSlotLocale: 'es-US',
   },
 })

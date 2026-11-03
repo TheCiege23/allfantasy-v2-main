@@ -22,6 +22,7 @@ import {
   SettingsRadioGroup,
   controlClass,
 } from './settings-ui'
+import { ImportedKeeperGrid } from '@/components/import-assist/ImportedKeeperGrid'
 
 /** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
 const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
@@ -89,6 +90,7 @@ export function LeagueSettingsPanel({
   const [keeperMinRoundsHeld, setKeeperMinRoundsHeld] = useState(initialData.keeperMinRoundsHeld ?? 0)
   const [keeperDeadlineLocal, setKeeperDeadlineLocal] = useState('')
   const [keeperConflictRule, setKeeperConflictRule] = useState(initialData.keeperConflictRule ?? 'player_chooses')
+  const [keeperMissedDeadlineRule, setKeeperMissedDeadlineRule] = useState(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
   const [keeperWaiverRound, setKeeperWaiverRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
   const [keeperMinCostRound, setKeeperMinCostRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_min_cost_round))
 
@@ -121,6 +123,7 @@ export function LeagueSettingsPanel({
     setKeeperWaiverAllowed(initialData.keeperWaiverAllowed ?? true)
     setKeeperMinRoundsHeld(initialData.keeperMinRoundsHeld ?? 0)
     setKeeperConflictRule(initialData.keeperConflictRule ?? 'player_chooses')
+    setKeeperMissedDeadlineRule(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
     setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
     setKeeperMinCostRound(roundOrNull(settingsSnapshot.keeper_min_cost_round))
     if (initialData.keeperSelectionDeadline) {
@@ -682,6 +685,32 @@ export function LeagueSettingsPanel({
           </div>
 
           <div>
+            <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-missed-deadline">A team that misses the deadline</label>
+            <select
+              id="kp-missed-deadline"
+              data-testid="kp-missed-deadline"
+              className="w-full max-w-md rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+              disabled={disabled}
+              value={keeperMissedDeadlineRule}
+              onChange={(e) => {
+                const v = e.target.value
+                setKeeperMissedDeadlineRule(v)
+                void save({ keeperMissedDeadlineRule: v })
+              }}
+            >
+              <option value="auto_no_keepers">Keeps nobody</option>
+              <option value="auto_best_value" disabled={!hasAfCommissionerSub && keeperMissedDeadlineRule !== 'auto_best_value'}>
+                AF keeps their best-value players{hasAfCommissionerSub ? '' : ' · AF Commissioner'}
+              </option>
+            </select>
+            <p className="mt-1 text-[11px] text-white/40">
+              {keeperMissedDeadlineRule === 'auto_best_value'
+                ? 'For a team that submits nothing, AF keeps the eligible players whose market value beats the pick they cost by the most, up to the keeper limit — never someone worth less than his pick. A team that chose to keep nobody is left alone. NFL leagues; other sports keep nobody.'
+                : 'A team that submits nothing by the deadline keeps no one.'}
+            </p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-[11px] text-white/45">Minimum rounds held</label>
             <select
               className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
@@ -700,6 +729,8 @@ export function LeagueSettingsPanel({
               ))}
             </select>
           </div>
+
+          <ImportedKeeperGrid leagueId={leagueId} />
 
           {subHint ? (
             <PremiumGate

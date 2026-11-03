@@ -331,8 +331,8 @@ test.describe("@db @mobile authenticated phone contract", () => {
     await expect(page.locator(".af-topbar")).toBeVisible({ timeout: 30_000 })
     await expect(page.locator(".af-sk-block")).toHaveCount(0, { timeout: 30_000 })
 
-    // The standard shell opens it from the floating handle; league-first from the header switcher.
-    await page.locator(".af-rail-handle:visible, .af-lf-switch:visible").first().click()
+    // The standard shell opens it from the bar's Leagues tab; league-first from the header switcher.
+    await page.locator('[data-testid="af-tabbar-leagues"]:visible, .af-lf-switch:visible').first().click()
     const rail = page.locator(".af-rail")
     await expect(rail).toBeVisible()
     await expect(page.locator(".af-rail-scroll .af-rail-tile").first(), "the tray opened with no leagues in it").toBeVisible()

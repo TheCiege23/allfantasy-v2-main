@@ -6,6 +6,7 @@
  * - NFL, NHL, NBA, MLB, NCAA Basketball (NCAAB), NCAA Football (NCAAF), Soccer
  */
 import type { LeagueSport } from '@prisma/client'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 
 /**
  * All supported league sports (values match Prisma `LeagueSport`).
@@ -68,10 +69,8 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  * own headers say "Read/write NBA scoring configuration from League.settings
  * JSON". They define what a stat is worth; they do not fetch stat lines.
  *
- * ⚠ AND THE WEEK RESOLVER IS BROADER THAN THIS LIST, WHICH IS NOT A CONTRADICTION.
- * `lib/season-week` can place a week for NFL, NCAAF and SOCCER from the schedule
- * feed. Knowing WHICH week it is does not help when nothing can score that week,
- * so the narrower capability is the one that governs here.
+ * A week signal alone does not certify a season. The stat sync, complete slate,
+ * lineup lock, playoff bracket and rollover must also agree on that week.
  *
  * WHAT NHL NEEDED, AND WHAT THE NEXT SPORT WILL (measured 2026-09-24, not assumed):
  *   1. a stat path — `player_game_stats` held 733 NHL rows across 693 players;
@@ -141,13 +140,29 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  * capable-testdb.ts): an NCAAF league created and drafted at week 5 starts at week 5; the schedule
  * and playoff runtimes resolve it; `advance_week` — the roller's path — is refused by the unplayed
  * week (INCOMPLETE_WEEK), not by the sport. With this line reverted all three said not_nfl_redraft.
+ *
+ * SOCCER (2026-27): 38 curated gameweek windows skip international breaks; the Rolling Insights
+ * cache has the complete three-league schedule, its club IDs match all 60 scheduled clubs in the
+ * player pool, and lineup locks read those same windows and IDs. The generic redraft playoff shape
+ * now fits soccer. A 4-team draft-to-renewal simulation exercises all regular weeks and the bracket.
+ * A later season has no verified calendar yet: its window resolver returns null rather than treating
+ * an international break as a scoring week. Add its complete schedule-derived calendar before play.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF', 'SOCCER']
 
-/** Whether a league in this sport can run a season to completion today. */
-export function canRunSeasonForSport(sport: string | null | undefined): boolean {
+/** Whether the sport's season has a verified scoring calendar today. */
+export function canRunSeasonForSport(sport: string | null | undefined, season?: number | null): boolean {
   if (sport == null) return false
-  return (SEASON_CAPABLE_SPORTS as readonly string[]).includes(String(sport).toUpperCase())
+  const key = String(sport).toUpperCase()
+  if (!(SEASON_CAPABLE_SPORTS as readonly string[]).includes(key)) return false
+  if (key !== 'SOCCER') return true
+  // The current soccer season begins in August. During January–June the season key
+  // is still last year. Future years stay disabled until their 38 verified windows exist.
+  const now = new Date()
+  const currentSeason = now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
+  const year = season ?? currentSeason
+  return resolveDailySportWeekWindow('SOCCER', year, 1) != null &&
+    resolveDailySportWeekWindow('SOCCER', year, 38) != null
 }
 
 /** IDP create-flow draft types (pick-order + execution modes). */

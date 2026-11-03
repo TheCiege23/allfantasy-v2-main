@@ -49,7 +49,12 @@ export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockPr
       className={cn(
         'flex flex-col border-t border-slate-700 bg-slate-950/50 transition-all duration-300 ease-out',
         /* h-full: the panel inside fills the dock, so its list scrolls and the box stays in view. */
-        expanded ? 'h-full min-h-[200px] flex-1' : 'h-12'
+        /*
+         * ⚠ BELOW md THE DOCK IS ALWAYS OPEN. It sits under the phone's Chat TAB, so the collapse bar
+         * only cost ~44px — and a collapse saved on a laptop (localStorage) would otherwise leave the
+         * phone's Chat tab empty with the bar to reopen it hidden.
+         */
+        expanded ? 'h-full min-h-0 flex-1 md:min-h-[200px]' : 'h-12 max-md:h-full max-md:min-h-0 max-md:flex-1'
       )}
     >
       {/*
@@ -69,7 +74,7 @@ export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockPr
             : 'h-full px-4 py-3 text-sm',
           'font-semibold text-white',
           'hover:bg-slate-800/30 transition-colors',
-          'border-b border-slate-700',
+          'border-b border-slate-700 max-md:hidden',
           expanded ? 'bg-slate-900/50' : 'bg-slate-900/80'
         )}
       >
@@ -85,11 +90,9 @@ export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockPr
       </button>
 
       {/* Chat Content */}
-      {expanded ? (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <DraftChatPanel {...chatProps} />
-        </div>
-      ) : null}
+      <div className={cn('flex-1 min-h-0 overflow-hidden', !expanded && 'hidden max-md:block')}>
+        <DraftChatPanel {...chatProps} />
+      </div>
     </div>
   )
 }

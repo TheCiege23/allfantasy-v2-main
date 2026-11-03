@@ -86,7 +86,8 @@ const moreButton = (c: HTMLElement) =>
     (b) => b.textContent?.includes('More'),
   )!
 const moreSheet = (c: HTMLElement) => c.querySelector('#af-mobile-more')
-const railHandle = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('.af-rail-handle')!
+/* The phone opens the league tray from the bar's Leagues tab (the floating pill is gone). */
+const railHandle = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
 const railOpen = (c: HTMLElement) =>
   c.querySelector('.af-shell')?.getAttribute('data-rail-open') === 'true'
 

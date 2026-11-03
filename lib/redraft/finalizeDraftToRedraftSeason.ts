@@ -1,3 +1,4 @@
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
@@ -11,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
@@ -175,6 +177,7 @@ export async function ensureRedraftSeason(leagueId: string) {
       playoffTeams: true,
       playoffWeeksPerRound: true,
       leagueType: true,
+      leagueVariant: true,
       dynastyConfig: { select: { regularSeasonWeeks: true } },
       bbContestId: true,
       bestBallMode: true,
@@ -200,7 +203,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
@@ -397,11 +400,13 @@ export async function ensureScheduleForNewSeason(params: {
   // round-robin schedule is reproducible across runs.
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: params.seasonId },
-    select: { id: true },
+    select: { id: true, ownerId: true },
     orderBy: { id: 'asc' },
   })
 
   if (rosters.length < 2) return
+  // The commissioner's divisions (best-effort: a failed read schedules without them, as before).
+  const divisions = await loadSeasonRosterDivisions(params.leagueId, rosters)
 
   /*
    * A late start schedules only the weeks left: a full round-robin generated for that many weeks and
@@ -415,7 +420,11 @@ export async function ensureScheduleForNewSeason(params: {
     startWeek > 1 ? weeksLeft : params.totalWeeks,
     startWeek > 1 ? weeksLeft + 1 : params.playoffStartWeek,
     params.sport,
-    { medianGame: params.medianGame },
+    {
+      medianGame: params.medianGame,
+      divisionByRoster: divisions?.byRoster ?? null,
+      divisionRivalsTwice: divisions?.rivalsTwice === true,
+    },
   ).map((slot) => ({ ...slot, week: slot.week + startWeek - 1 }))
 
   const rows = slots

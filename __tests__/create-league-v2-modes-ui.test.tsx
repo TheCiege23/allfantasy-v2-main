@@ -11,6 +11,7 @@ vi.mock('next-auth/react', () => ({
 }))
 
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({
+  useOptionalLanguage: () => ({ language: 'en' }),
   useLanguage: () => ({
     t: (key: string) => key,
     tInterpolate: (key: string) => key,
@@ -61,6 +62,12 @@ const accent = {
 } as const
 
 describe('create-league-v2 creation modes UI', () => {
+  it('reviews the Zombie league count and total manager seats', () => {
+    render(<CreateLeagueReviewStep state={state({ leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 })} accent={accent} />)
+    expect(screen.getByText('6 leagues · shared rules and settings')).toBeInTheDocument()
+    expect(screen.getByText('20 managers per league · 120 roster seats in total')).toBeInTheDocument()
+  })
+
   it('quick mode renders compact form and hides advanced sections', () => {
     render(
       <CreateLeagueUnifiedForm

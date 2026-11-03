@@ -95,3 +95,31 @@ describe('ImportV4 — ESPN gate error hint', () => {
     })
   })
 })
+
+describe('ImportV4 — ESPN empty league ID error', () => {
+  it('clears the empty-field error when a league ID is typed, before another submit', async () => {
+    stubEspnStatus(false)
+    render(<ImportV4 defaultProvider="espn" />)
+
+    fireEvent.click(screen.getByTestId('import-discovery-find'))
+    expect((await screen.findByRole('alert')).textContent).toMatch('Enter a league ID to continue.')
+
+    fireEvent.change(screen.getByTestId('import-discovery-account'), { target: { value: '12345' } })
+    expect(screen.queryByText('Enter a league ID to continue.')).toBeNull()
+    expect(fetchImportPreview).not.toHaveBeenCalled()
+  })
+
+  it('keeps a server reason when the league ID is edited', async () => {
+    stubEspnStatus(false)
+    fetchImportPreview.mockResolvedValue({ ok: false, error: PRIVATE_REASON, status: 403, code: 'NOT_COMMISSIONER' })
+    render(<ImportV4 defaultProvider="espn" />)
+
+    const input = screen.getByTestId('import-discovery-account')
+    fireEvent.change(input, { target: { value: '12345' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(screen.getByText(PRIVATE_REASON)).toBeTruthy())
+
+    fireEvent.change(input, { target: { value: '123456' } })
+    expect(screen.getByText(PRIVATE_REASON)).toBeTruthy()
+  })
+})

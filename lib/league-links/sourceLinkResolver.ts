@@ -8,8 +8,8 @@
  * Guarantees:
  *  - **Server-safe + pure.** It constructs URLs from canonical stored fields ONLY and NEVER calls a
  *    provider API — so it is safe to run during render (page rendering must never wait on a provider).
- *  - **Never invents a route.** Only the launch providers with a VERIFIED league-page format
- *    (Sleeper / ESPN / Yahoo) build a direct league URL; every other provider falls back to its approved
+ *  - **Never invents a route.** Only providers with a VERIFIED league-page format (Sleeper / ESPN /
+ *    Yahoo / Fantrax) build a direct league URL; every other provider falls back to its approved
  *    HTTPS homepage. If a league id is missing/blank, it also falls back to the homepage.
  *  - **Security.** Every returned href is validated against a per-provider EXACT-hostname HTTPS allowlist
  *    (rejects `http:`, `javascript:`/`data:`/`file:`, subdomain look-alikes, and open-redirects). A
@@ -19,6 +19,7 @@
  *  - Sleeper: https://sleeper.com/leagues/{leagueId}/league
  *  - ESPN:    https://fantasy.espn.com/football/league?leagueId={leagueId}[&seasonId={year}]
  *  - Yahoo:   https://football.fantasysports.yahoo.com/f1/{leagueId}   (f1 = NFL; AF imports are NFL)
+ *  - Fantrax: https://www.fantrax.com/fantasy/league/{leagueId}/home   (league page only)
  */
 
 export type SourcePlatform = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker'
@@ -107,8 +108,11 @@ interface ProviderConfig {
   homepage: string
   /** EXACT hostnames permitted for this provider (no subdomain wildcards). */
   allowedHosts: readonly string[]
-  /** Verified league-page builder — launch providers only. Absent ⇒ homepage fallback. */
-  buildLeagueUrl?: (leagueId: string, season?: string) => string
+  /**
+   * Verified league-page builder. Absent ⇒ homepage fallback. Returns null when the stored id is
+   * not one this provider's URL can carry (e.g. AllFantasy's own Fantrax snapshot uuid) ⇒ homepage.
+   */
+  buildLeagueUrl?: (leagueId: string, season?: string) => string | null
   /** Screen formats beyond the league page. See SourceScreenFormat for the verified gate. */
   screens?: Partial<Record<Exclude<SourceScreen, 'league'>, SourceScreenFormat>>
 }
@@ -135,6 +139,26 @@ export function normalizeYahooTeamId(raw: string | null | undefined): string | n
   const fromKey = s.match(/\.t\.(\d+)/)
   if (fromKey) return fromKey[1]
   return /^\d+$/.test(s) ? s : null
+}
+
+/**
+ * A Fantrax league id from whatever is stored for the league: a bare id (`v2kzedypmm8jp61b`), the
+ * live-import source input (`fantrax-league:<id>|<team>`), or a pasted league URL. Same id rule as
+ * `parseFantraxLeagueId` (lib/league-import/fantrax/fantraxApi.ts), restated here because this module
+ * is client-safe and that one is not.
+ *
+ * ⚠ AN ALLFANTASY UUID IS NOT A FANTRAX ID. `League.platformLeagueId` for a Fantrax league is our own
+ * FantraxLeague row id (`3f0c2a1e-…`); its hyphens fail the alphanumeric rule, so it yields null and
+ * the caller falls back to the homepage instead of building a league URL that 404s.
+ */
+export function normalizeFantraxLeagueId(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim()
+  if (!s) return null
+  const fromInput = s.match(/^fantrax-league:([^|]+)\|/i)
+  if (fromInput) return normalizeFantraxLeagueId(fromInput[1])
+  const fromUrl = s.match(/fantrax\.com\/(?:fantasy\/)?league\/([A-Za-z0-9]+)/)
+  if (fromUrl) return fromUrl[1]
+  return /^[A-Za-z0-9]{8,32}$/.test(s) ? s : null
 }
 
 /** ESPN and Sleeper ids are bare integers; anything else is not an id we can put in a URL. */
@@ -255,8 +279,8 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
     },
   },
   // Homepage-fallback providers: the architecture supports them, but a reliable per-league deep link is
-  // not derivable from stored fields alone (MFL needs a per-league server subdomain + year; Fantrax uses
-  // opaque league slugs; Fleaflicker import is not enabled). Documented as a follow-up.
+  // not derivable from stored fields alone (MFL needs a per-league server subdomain + year; Fleaflicker
+  // import is not enabled). Documented as a follow-up. Fantrax (below) has a league page only.
   mfl: {
     key: 'mfl',
     label: 'MyFantasyLeague',
@@ -268,6 +292,33 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
     label: 'Fantrax',
     homepage: 'https://www.fantrax.com',
     allowedHosts: ['www.fantrax.com', 'fantrax.com'],
+    /*
+     * VERIFIED: the league page people copy their id from — `fantrax.com/fantasy/league/<id>/home`,
+     * captured from a real address bar on league v2kzedypmm8jp61b (see `parseFantraxLeagueId` and the
+     * import field help). The id is the opaque slug itself; case is preserved because Fantrax ids are
+     * case-sensitive. League page only — no lineup/waivers/trade screen format is verified.
+     */
+    // Built on the approved homepage above rather than a second literal: it is the same site, and the
+    // DB-first guard already documents this file's www.fantrax.com hits as link hrefs, not feed calls.
+    buildLeagueUrl: (id) => {
+      const fx = normalizeFantraxLeagueId(id)
+      return fx ? `${PROVIDERS.fantrax.homepage}/fantasy/league/${encodeURIComponent(fx)}/home` : null
+    },
+    screens: {
+      /*
+       * UNVERIFIED — a `candidate` only, never a destination, so a "Fix lineup" button keeps landing
+       * on the league page above. Flip `verified` in the same change that records the league and the
+       * signed-in account it was opened on and landed on that account's own lineup (VERIFIED_SCREENS
+       * is pinned by a test, which fails if this flips without that record).
+       */
+      lineup: {
+        verified: false,
+        build: ({ leagueId }) => {
+          const fx = normalizeFantraxLeagueId(leagueId)
+          return fx ? `${PROVIDERS.fantrax.homepage}/fantasy/league/${encodeURIComponent(fx)}/team/roster` : null
+        },
+      },
+    },
   },
   fleaflicker: {
     key: 'fleaflicker',
@@ -390,7 +441,7 @@ export function resolveSourceLink(ctx: SourceLinkContext): SourceLink | null {
   // 2) Constructed league page (launch providers with a verified format + a real league id).
   if (leagueId && cfg.buildLeagueUrl) {
     const built = cfg.buildLeagueUrl(leagueId, season)
-    if (isSafeProviderUrl(built, cfg.allowedHosts)) {
+    if (built && isSafeProviderUrl(built, cfg.allowedHosts)) {
       return makeLink(cfg, built, 'league', ctx.action, leagueName)
     }
   }

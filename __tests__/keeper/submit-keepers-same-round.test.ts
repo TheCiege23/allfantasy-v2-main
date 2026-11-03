@@ -8,18 +8,24 @@ const m = vi.hoisted(() => ({
   recordUpsert: vi.fn(),
   recordDeleteMany: vi.fn(),
   sessionUpdateMany: vi.fn(),
+  sessionFindFirst: vi.fn(async () => ({ status: 'open' })),
+  executeRaw: vi.fn(async () => 1),
+  auditCreate: vi.fn(async () => ({})),
 }))
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const db = {
     league: { findFirst: m.leagueFindFirst },
     redraftRoster: { findFirst: m.rosterFindFirst },
     keeperEligibility: { findMany: m.eligFindMany },
     draftSession: { findFirst: m.draftFindFirst },
     keeperRecord: { upsert: m.recordUpsert, deleteMany: m.recordDeleteMany },
-    keeperSelectionSession: { updateMany: m.sessionUpdateMany },
-  },
-}))
+    keeperSelectionSession: { updateMany: m.sessionUpdateMany, findFirst: m.sessionFindFirst },
+    leagueAuditLog: { create: m.auditCreate },
+    $executeRaw: m.executeRaw,
+  }
+  return { prisma: { ...db, $transaction: vi.fn(async (action) => action(db)) } }
+})
 
 import { submitKeeperSelections } from '@/lib/keeper/selectionEngine'
 
@@ -35,7 +41,11 @@ function setup(rule: string) {
   m.sessionUpdateMany.mockResolvedValue({ count: 1 })
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  m.sessionFindFirst.mockResolvedValue({ status: 'open' })
+  m.auditCreate.mockResolvedValue({})
+})
 
 describe('submitKeeperSelections — two keepers costing the same round', () => {
   it('lose the round before: both are kept, the second one costs (and forfeits) round 4', async () => {
@@ -65,5 +75,36 @@ describe('submitKeeperSelections — two keepers costing the same round', () => 
     setup('reject_both')
     await submitKeeperSelections('R', 'L', 'S', ['a', 'b', 'c'])
     expect(m.recordDeleteMany).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('submitKeeperSelections — choosing to keep nobody', () => {
+  it('leaves a marker so the missed-deadline rule never treats the choice as silence', async () => {
+    setup('player_chooses')
+    await submitKeeperSelections('R', 'L', 'S', [])
+    expect(m.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ leagueId: 'L', actionType: 'keeper_submitted_none', entityId: 'S', metadata: { rosterId: 'R' } }) })
+  })
+  it('a normal submission leaves no marker', async () => {
+    setup('player_chooses')
+    await submitKeeperSelections('R', 'L', 'S', ['c'])
+    expect(m.auditCreate).not.toHaveBeenCalled()
+  })
+  it('does not accept an empty choice if its marker cannot be persisted', async () => {
+    setup('player_chooses')
+    m.auditCreate.mockRejectedValueOnce(new Error('write failed'))
+    await expect(submitKeeperSelections('R', 'L', 'S', [])).rejects.toThrow('write failed')
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled()
+  })
+  it('does not write an empty marker for a roster outside the requested season', async () => {
+    setup('player_chooses')
+    m.rosterFindFirst.mockResolvedValueOnce(null)
+    await expect(submitKeeperSelections('R', 'L', 'wrong', [])).rejects.toThrow('Roster not found')
+    expect(m.auditCreate).not.toHaveBeenCalled()
+  })
+  it('refuses a submission after the session is locked', async () => {
+    setup('player_chooses')
+    m.sessionFindFirst.mockResolvedValueOnce({ status: 'locked' })
+    await expect(submitKeeperSelections('R', 'L', 'S', ['c'])).rejects.toThrow('closed')
+    expect(m.recordUpsert).not.toHaveBeenCalled()
   })
 })

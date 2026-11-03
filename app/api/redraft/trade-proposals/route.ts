@@ -1,3 +1,4 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -15,6 +16,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createZombieNativeItemGrader } from '@/lib/decision-os/trade/zombieNativeItemGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -25,6 +27,12 @@ import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/pari
 import { createTradeOsLoaders } from '@/lib/decision-os/trade-os'
 import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
+import {
+  MULTI_TEAM_CAP_LEAGUE_REFUSAL,
+  normalizeAdditionalRosterIds,
+  tradeParticipantRosterIds,
+  uninvolvedTradeParticipants,
+} from '@/lib/redraft/tradeParticipants'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,8 +54,43 @@ function afterRedraftProposalCreated(input: {
   proposerUserId: string
   receiverUserId: string | null | undefined
   proposerName: string
+  /**
+   * Multi-team trades: the owners of the teams beyond the receiver. Each gets the same notice. The DM
+   * card is a two-manager card in a two-person thread, so a multi-team offer posts no DM.
+   */
+  additionalUserIds?: Array<string | null | undefined>
+  teamCount?: number
 }): void {
   const receiverUserId = input.receiverUserId
+  if ((input.teamCount ?? 2) > 2) {
+    const userIds = [...new Set([receiverUserId, ...(input.additionalUserIds ?? [])])].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0 && id !== input.proposerUserId,
+    )
+    if (userIds.length === 0) return
+    try {
+      void import('@/lib/notifications/NotificationDispatcher')
+        .then(({ dispatchNotification }) =>
+          dispatchNotification({
+            userIds,
+            category: 'trade_proposals',
+            productType: 'app',
+            type: 'trade_proposed',
+            title: 'New trade offer',
+            body: `${input.proposerName} sent you a ${input.teamCount}-team trade offer. Every team has to accept it. Open it to accept or decline.`,
+            actionHref: `/league/${encodeURIComponent(input.leagueId)}?view=trades`,
+            actionLabel: 'View Trade',
+            leagueId: input.leagueId,
+            severity: 'medium',
+            dedupePrefix: `redraft_trade:${input.proposalId}:proposed`,
+            meta: { leagueId: input.leagueId, tradeProposalId: input.proposalId, pushTag: `trade-offer-${input.proposalId}` },
+          }).catch(() => null),
+        )
+        .catch(() => undefined)
+    } catch {
+      /* never reaches the proposal response */
+    }
+    return
+  }
   if (!receiverUserId || receiverUserId === input.proposerUserId) return
   try {
     void Promise.all([
@@ -137,17 +180,31 @@ export async function GET(req: NextRequest) {
   // Built only when some proposal has assets to grade — a list with nothing to price reads no chart.
   let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
   const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+  let zombieItemGraderPromise: ReturnType<typeof createZombieNativeItemGrader> | null = null
+  const zombieItemGrader = () => (zombieItemGraderPromise ??= createZombieNativeItemGrader(leagueId))
   const graded = await Promise.all(
     proposals.map(async (p) => {
       const assets = Array.isArray(p.assets) ? p.assets : []
+      // A grade is one side against the other. A multi-team trade has no single other side, so it is
+      // not graded rather than graded wrong; the screen says grades are shown for two-team trades.
+      if (Array.isArray(p.additionalRosterIds) && p.additionalRosterIds.length > 0) {
+        return {
+          ...p,
+          tradeGrade: { grade: null, partnerGrade: null, gradeWithheld: 'Grades are shown for two-team trades.', receiptId: null },
+        }
+      }
       const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
       const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
-      const grade = assets.length === 0
+      const grade = assets.some(a => a.assetType === 'zombie_item')
+        ? await zombieItemGrader().then(g => g.grade(p)).catch(() => ({ graded: false as const, reason: 'Zombie item values could not be loaded just now.', basis: null }))
+        : assets.length === 0
         ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
         : await Promise.resolve()
             .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
             .catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.', basis: null }))
-      const receiptId = await receiptIdForGrade({
+      const hasZombieItems = assets.some(a => a.assetType === 'zombie_item')
+      // The generic receipt asset union has no item kind. Do not save these item lines as players.
+      const receiptId = hasZombieItems ? null : await receiptIdForGrade({
         surface: 'redraft-trade-list',
         leagueId,
         userId,
@@ -160,10 +217,17 @@ export async function GET(req: NextRequest) {
       return {
         ...p,
         tradeGrade: {
-          grade: grade.graded ? grade.letter : null,
-          partnerGrade: grade.graded ? grade.partnerLetter : null,
-          gradeWithheld: grade.graded ? null : grade.reason,
+          grade: hasZombieItems ? null : grade.graded ? grade.letter : null,
+          partnerGrade: hasZombieItems ? null : grade.graded ? grade.partnerLetter : null,
+          gradeWithheld: hasZombieItems && grade.graded
+            ? 'The future scoring estimate does not yet include infection, revival, loot, or cash payout outcomes.'
+            : grade.graded ? null : grade.reason,
           receiptId,
+          ...(hasZombieItems ? {
+            gradeScope: 'zombie_future_scoring' as const,
+            giveValue: grade.graded ? grade.giveValue : null,
+            getValue: grade.graded ? grade.getValue : null,
+          } : {}),
         },
       }
     }),
@@ -182,6 +246,8 @@ export async function POST(req: NextRequest) {
     seasonId?: string
     proposerRosterId?: string
     receiverRosterId?: string
+    /** Multi-team trades: up to two more teams (four in all). Omitted for a two-team trade. */
+    additionalRosterIds?: unknown
     reason?: string
     expiresInHours?: number
     assets?: TradeAssetInput[]
@@ -208,6 +274,11 @@ export async function POST(req: NextRequest) {
   if (proposerRosterId === receiverRosterId) {
     return NextResponse.json({ error: 'Rosters must be different' }, { status: 400 })
   }
+  // Multi-team trades (lib/redraft/tradeParticipants.ts). A two-team request supplies none and is unchanged.
+  const additional = normalizeAdditionalRosterIds(body.additionalRosterIds, proposerRosterId, receiverRosterId)
+  if (!additional.ok) return NextResponse.json({ error: additional.error }, { status: 400 })
+  const additionalRosterIds = additional.ids
+  const multiTeam = additionalRosterIds.length > 0
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
@@ -222,16 +293,29 @@ export async function POST(req: NextRequest) {
   if (!proposer || !receiver) {
     return NextResponse.json({ error: 'Roster not found for season' }, { status: 404 })
   }
-  if (proposer.ownerId !== userId) {
+  // Every extra team must be in the same league and season.
+  const additionalRosters = multiTeam
+    ? await prisma.redraftRoster.findMany({ where: { id: { in: additionalRosterIds }, seasonId, leagueId } })
+    : []
+  if (additionalRosters.length !== additionalRosterIds.length) {
+    return NextResponse.json({ error: 'Roster not found for season' }, { status: 404 })
+  }
+  if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
   // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.
+  // In a multi-team trade that holds for every team the offer is made to.
   const { isOwnerOnAutopilot } = await import('@/lib/inactive-manager/inactiveManagerService')
-  if (await isOwnerOnAutopilot(leagueId, receiver.ownerId).catch(() => false)) {
-    return NextResponse.json(
-      { error: 'Chimmy is running this team while its manager is away, and it is not taking trade offers.', code: 'RECEIVER_ON_AUTOPILOT' },
-      { status: 409 },
-    )
+  for (const party of [receiver, ...additionalRosters]) {
+    if (await isOwnerOnAutopilot(leagueId, party.ownerId).catch(() => false)) {
+      return NextResponse.json(
+        { error: 'Chimmy is running this team while its manager is away, and it is not taking trade offers.', code: 'RECEIVER_ON_AUTOPILOT' },
+        { status: 409 },
+      )
+    }
+  }
+  if (multiTeam && (await prisma.iDPCapConfig.findUnique({ where: { leagueId }, select: { id: true } }))) {
+    return NextResponse.json({ error: MULTI_TEAM_CAP_LEAGUE_REFUSAL, code: 'MULTI_TEAM_CAP_LEAGUE' }, { status: 409 })
   }
 
   const { vetoMode, vetoThreshold } = await resolveRedraftTradeGovernance(prisma, leagueId)
@@ -258,7 +342,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'At least one valid asset is required' }, { status: 400 })
   }
 
-  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration'])
+  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration', 'zombie_item'])
+  // Proposer and receiver for a two-team trade — exactly the pair this always checked.
+  const participantRosterIds = tradeParticipantRosterIds({ proposerRosterId, receiverRosterId, additionalRosterIds })
   for (const asset of assets) {
     if (!allowedAssetTypes.has(asset.assetType!)) {
       return NextResponse.json({ error: `Invalid assetType: ${asset.assetType}` }, { status: 400 })
@@ -266,12 +352,20 @@ export async function POST(req: NextRequest) {
     const fromRosterId = asset.fromRosterId!
     const toRosterId = asset.toRosterId!
     if (
-      ![proposerRosterId, receiverRosterId].includes(fromRosterId) ||
-      ![proposerRosterId, receiverRosterId].includes(toRosterId) ||
+      !participantRosterIds.includes(fromRosterId) ||
+      !participantRosterIds.includes(toRosterId) ||
       fromRosterId === toRosterId
     ) {
       return NextResponse.json({ error: 'Asset roster direction is invalid' }, { status: 400 })
     }
+  }
+  // Every team in a multi-team trade must send or receive something — a team that does neither is
+  // not in the trade. (A two-team trade always passes: every asset moves between its only two teams.)
+  if (multiTeam && uninvolvedTradeParticipants(participantRosterIds, assets as Array<{ fromRosterId: string; toRosterId: string }>).length > 0) {
+    return NextResponse.json(
+      { error: 'Every team in a multi-team trade must send or receive at least one asset.', code: 'TEAM_NOT_IN_TRADE' },
+      { status: 400 },
+    )
   }
 
   // Ownership, FAAB, duplicates, locks, roster limits, deadline — checked now, not at settlement days later.
@@ -281,6 +375,7 @@ export async function POST(req: NextRequest) {
     seasonId,
     proposerRosterId,
     receiverRosterId,
+    ...(multiTeam ? { additionalRosterIds } : {}),
     assets: assets.map((asset) => ({
       fromRosterId: asset.fromRosterId!,
       toRosterId: asset.toRosterId!,
@@ -317,6 +412,7 @@ export async function POST(req: NextRequest) {
         seasonId,
         proposerRosterId,
         receiverRosterId,
+        ...(multiTeam ? { additionalRosterIds } : {}),
         vetoMode,
         vetoThreshold,
         reason: body.reason?.trim() || null,
@@ -348,7 +444,10 @@ export async function POST(req: NextRequest) {
 
   // T2: capture the immutable deterministic value snapshot at proposal time. Best-effort — a
   // valuation issue must never block trade creation, but it is expected to succeed.
-  if (created?.id) {
+  // ⚠ Two-team only: the snapshot prices a proposer side against a receiver side, and a multi-team
+  // trade has no single other side, so a snapshot of it would be a confident wrong number. The
+  // Decision OS evaluation below reads the snapshot, so it is skipped with it.
+  if (created?.id && !multiTeam && !assets.some(a => a.assetType === 'zombie_item')) {
     try {
       await captureRedraftTradeValueSnapshot({
         proposalId: created.id,
@@ -390,7 +489,7 @@ export async function POST(req: NextRequest) {
         leagueId,
         userId,
         source: 'redraft_trade_proposal',
-        payload: { proposalId: created.id, assetCount: assets.length, vetoMode },
+        payload: { proposalId: created.id, assetCount: assets.length, vetoMode, ...(multiTeam ? { teamCount: participantRosterIds.length } : {}) },
       }),
     )
   }
@@ -402,6 +501,9 @@ export async function POST(req: NextRequest) {
       proposerUserId: userId,
       receiverUserId: receiver.ownerId,
       proposerName: safeDisplayName([proposer.teamName, proposer.ownerName], 'A league mate'),
+      ...(multiTeam
+        ? { additionalUserIds: additionalRosters.map((r) => r.ownerId), teamCount: participantRosterIds.length }
+        : {}),
     })
   }
 

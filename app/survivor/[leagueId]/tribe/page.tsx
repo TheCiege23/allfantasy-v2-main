@@ -67,17 +67,17 @@ export default function SurvivorTribePage() {
             />
           ) : <div
             className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-black text-black/80"
-            style={{ backgroundColor: tribe?.colorHex ?? '#22d3ee' }}
+            style={{ backgroundColor: tribe?.colorHex ?? '#f0a35e' }}
           >
             {(tribe?.name ?? 'T').slice(0, 1)}
           </div>}
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-text-dim)]">Your tribe</p>
+            <p className="sv-kicker text-[11px]">Your tribe</p>
             <h1
-              className="text-2xl font-black uppercase tracking-wide text-white"
+              className="sv-h text-2xl uppercase tracking-[0.1em] md:text-3xl"
               style={{ color: tribe?.colorHex ? undefined : undefined }}
             >
-              <span style={{ color: tribe?.colorHex ?? '#e2e8f0' }}>{tribe?.name ?? 'Tribe'}</span>
+              <span style={{ color: tribe?.colorHex ?? 'var(--survivor-gold)' }}>{tribe?.name ?? 'Tribe'}</span>
             </h1>
             <p className="mt-1 text-[12px] text-[var(--survivor-text-medium)]">
               {roster.length} members · {tribeStatusLabel}
@@ -89,18 +89,18 @@ export default function SurvivorTribePage() {
           <p className="text-[11px] text-[var(--survivor-text-dim)]">Weekly tribe score (syncs with league scoring)</p>
           {opponent ? (
             <p className="mt-2 text-[12px] text-white/55">
-              vs {opponent.name ?? 'Opponent'}: <span className="font-mono text-sky-200">—</span>
+              vs {opponent.name ?? 'Opponent'}: <span className="sv-score font-mono">—</span>
             </p>
           ) : null}
         </div>
       </header>
 
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-sky-500 to-orange-400" />
+        <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-[#e8c98e] to-[#f0a35e]" />
       </div>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">Roster</h2>
+        <h2 className="sv-kicker mb-3 text-[12px]">Roster</h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {roster.map((p) => (
             <TribeMemberCard
@@ -112,7 +112,7 @@ export default function SurvivorTribePage() {
               statusVariant={memberVariant(p, Boolean(councilOpen))}
               ringClass={
                 p.hasImmunityThisWeek
-                  ? 'ring-cyan-400/50'
+                  ? 'ring-[#f2c46b]/50'
                   : councilOpen && p.playerState === 'active' && !p.hasImmunityThisWeek
                     ? 'ring-red-500/35'
                     : 'ring-white/10'
@@ -123,13 +123,13 @@ export default function SurvivorTribePage() {
         </div>
       </section>
 
-      <section className="mt-8 survivor-panel p-4">
+      <section className="mt-8 survivor-panel rounded-2xl p-4">
         <button
           type="button"
           className="flex w-full items-center justify-between text-left"
           aria-expanded={false}
         >
-          <span className="text-[12px] font-bold uppercase tracking-wider text-white/70">Tribe challenge history</span>
+          <span className="sv-kicker text-[12px]">Tribe challenge history</span>
           <span className="text-white/35">▼</span>
         </button>
         <p className="mt-2 text-[12px] text-white/45">Last three weeks will appear here as the season logs results.</p>
@@ -137,7 +137,7 @@ export default function SurvivorTribePage() {
 
       <Link
         href={`${base}/chat`}
-        className="fixed bottom-20 right-4 z-30 flex h-14 min-h-[56px] items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/15 px-5 text-[13px] font-semibold text-sky-100 shadow-lg md:bottom-8 md:right-8"
+        className="fixed bottom-20 right-4 z-30 flex h-14 min-h-[56px] items-center gap-2 rounded-full bg-[var(--survivor-torch)] px-5 text-[13px] font-semibold text-[#1a0f05] shadow-[0_10px_30px_rgba(0,0,0,0.45)] hover:bg-[#f4b47a] md:bottom-8 md:right-8"
       >
         💬 Tribe Chat
       </Link>

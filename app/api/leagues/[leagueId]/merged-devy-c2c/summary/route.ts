@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 /**
  * GET: Merged Devy / C2C league summary for Overview/C2C Home. PROMPT 2/6.
  */
@@ -73,9 +74,10 @@ export async function GET(
 }
 
 async function buildC2CHomeBlock(leagueId: string, userId: string) {
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const [league, roster, events, standings] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, season: true, leagueSize: true } }),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId }, select: { id: true } }),
     prisma.devyLifecycleEvent.findMany({
       where: { leagueId },
       orderBy: { createdAt: 'desc' },

@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest) {
     mappingId?: string
     kind?: 'player' | 'manager'
     internalPlayerId?: string
+    internalPlayerName?: string
     internalUserId?: string
     internalUsername?: string
     action?: 'confirm' | 'reject'
@@ -45,6 +46,9 @@ export async function PATCH(req: NextRequest) {
   const mappingId = body.mappingId?.trim()
   if (!sessionId || !mappingId || !body.action) {
     return NextResponse.json({ error: 'sessionId, mappingId, action required' }, { status: 400 })
+  }
+  if (body.action !== 'confirm' && body.action !== 'reject') {
+    return NextResponse.json({ error: 'action must be confirm or reject' }, { status: 400 })
   }
 
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
@@ -78,6 +82,9 @@ export async function PATCH(req: NextRequest) {
     data: {
       isConfirmedByCommissioner: body.action === 'confirm',
       internalPlayerId: body.internalPlayerId ?? undefined,
+      // A commissioner who picks a different player (e.g. Chimmy's suggestion) sends its name too,
+      // so the row and the audit show who it now points at instead of the old match's name.
+      internalPlayerName: body.internalPlayerId ? (body.internalPlayerName ?? null) : undefined,
       requiresReview: body.action === 'reject',
     },
   })

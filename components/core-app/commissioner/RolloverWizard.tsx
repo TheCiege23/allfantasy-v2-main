@@ -5,6 +5,7 @@ import BroadcastModal from '@/components/commish/BroadcastModal'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { leagueSettingsHomeHref } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { RolloverStepKey, RolloverStepState } from '@/lib/season-rollover/rolloverWizard'
 import type { RolloverView } from '@/lib/season-rollover/rolloverService'
@@ -213,7 +214,7 @@ export function RolloverWizard({ leagueId }: { leagueId: string }) {
     }
   }
 
-  const announcement = view.extras ? view.extras.announcement[language === 'es' ? 'es' : 'en'] : ''
+  const announcement = view.extras ? view.extras.announcement[coreLang(language)] : ''
 
   return (
     <section id="ch-rollover" className="af-card af-ch-section" aria-labelledby="ch-rollover-h" data-testid="rollover-wizard">

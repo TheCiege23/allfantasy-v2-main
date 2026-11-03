@@ -17,6 +17,7 @@
  * not take.
  */
 import { leagueSettingsHomeHref } from '@/lib/league-settings-home/settingsEntryRouting'
+import { joinTeamNames, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 import type { WorkspaceTaskCandidate } from './taskSources'
 
 const HOUR_MS = 60 * 60 * 1000
@@ -171,7 +172,7 @@ export async function readCommissionerFeatureTasks(leagueId: string, now: Date):
     readStatCorrections(leagueId),
     prisma.redraftTradeProposal.findMany({
       where: { leagueId, status: 'pending', vetoMode: 'commissioner', acceptedAt: { not: null }, expiresAt: { not: null } },
-      select: { id: true, expiresAt: true, proposerRosterId: true, receiverRosterId: true },
+      select: { id: true, expiresAt: true, proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true },
     }),
     readInactiveManagerView(leagueId),
     readPayoutOvercommitment(leagueId),
@@ -194,7 +195,8 @@ export async function readCommissionerFeatureTasks(leagueId: string, now: Date):
       : null,
   )
 
-  const rosterIds = [...new Set(proposals.flatMap((p) => [p.proposerRosterId, p.receiverRosterId]))]
+  // Every team in the trade (lib/redraft/tradeParticipants.ts): a multi-team trade names all of them.
+  const rosterIds = [...new Set(proposals.flatMap((p) => tradeParticipantRosterIds(p)))]
   const rosters = rosterIds.length
     ? await prisma.redraftRoster.findMany({ where: { id: { in: rosterIds } }, select: { id: true, teamName: true, ownerName: true } })
     : []
@@ -204,7 +206,7 @@ export async function readCommissionerFeatureTasks(leagueId: string, now: Date):
   }
   const trades = detectTradesInReview(
     leagueId,
-    proposals.map((p) => ({ id: p.id, endsAt: p.expiresAt!, teams: `${name(p.proposerRosterId)} and ${name(p.receiverRosterId)}` })),
+    proposals.map((p) => ({ id: p.id, endsAt: p.expiresAt!, teams: joinTeamNames(tradeParticipantRosterIds(p).map(name)) })),
     now,
   )
 

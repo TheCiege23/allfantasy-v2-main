@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.zombie-staging-cron"
+  },
+  "deploy": {
+    "startCommand": "node zombie-staging-cron.mjs",
+    "cronSchedule": "15 */6 * * *",
+    "restartPolicyType": "NEVER",
+    "numReplicas": 1
+  }
+}

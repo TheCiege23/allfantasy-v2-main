@@ -12,8 +12,11 @@
  * unchanged until its entries are added here.
  *
  * `__tests__/core-app/commissioner-hub-copy.test.tsx` parses every hub component and fails on raw
- * English in JSX, and on any prose literal without Spanish. PURE and client-safe: no imports.
+ * English in JSX, and on any prose literal without Spanish. PURE and client-safe: its one import is
+ * the EN/ES locale catalog.
  */
+
+import { coreLocale } from './messages/coreLocale'
 
 const ES: Record<string, string> = {
   // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
@@ -60,6 +63,11 @@ const ES: Record<string, string> = {
   'Audit log': 'Registro de cambios',
   'Commissioner intelligence': 'Inteligencia del comisionado',
   'Trades and draft archive': 'Intercambios y archivo de drafts',
+  'Weighted lottery history': 'Historial de la lotería ponderada',
+  'Lottery history is temporarily unavailable.': 'El historial de lotería no está disponible temporalmente.',
+  Pick: 'Selección',
+  'Recorded AllFantasy draws; older or imported results may be missing.': 'Sorteos registrados por AllFantasy; pueden faltar resultados antiguos o importados.',
+  'odds at pick 1': 'probabilidad de la primera selección',
   'Step-by-step guides': 'Guías paso a paso',
   'This week’s lineups, projected': 'Alineaciones proyectadas de esta semana',
   'nothing here changes a standing or a ruling.': 'nada de esto cambia una clasificación ni una decisión.',
@@ -488,5 +496,5 @@ export function hubCopy(english: string | null | undefined, language: string): s
 
 /** The locale dates on the hub are formatted in. */
 export function hubDateLocale(language: string): string {
-  return language === 'es' ? 'es-US' : 'en-US'
+  return coreLocale(language).usLocale
 }

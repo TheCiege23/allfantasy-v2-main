@@ -11,6 +11,8 @@ import { requireCommissionerRole } from '@/lib/league/permissions'
 import { ensureUserCareerTier, clampCareerTier, getCareerTierName } from '@/lib/ranking/tier-visibility'
 import { RANK_LEVELS } from '@/lib/rank/levels'
 import type { Prisma } from '@prisma/client'
+import { countSeatsHeldByPeople } from '@/lib/league/leagueSeats'
+import { isFantasyLeagueDiscoverable } from '@/lib/public-discovery/DiscoveryQueryLayer'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,16 +38,18 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const [listing, league] = await Promise.all([
+  const [listing, league, seatsHeld] = await Promise.all([
     prisma.findLeagueListing.findFirst({
       where: { leagueId, rosterId: RECRUITMENT_ROSTER_ID, isActive: true },
       select: { id: true, updatedAt: true },
     }),
     prisma.league.findFirst({
       where: { id: leagueId },
-      select: { settings: true },
+      select: { settings: true, leagueSize: true },
     }),
+    countSeatsHeldByPeople(prisma as unknown as Prisma.TransactionClient, leagueId),
   ])
+  const leagueSize = Math.max(0, Number(league?.leagueSize ?? 0) || 0)
 
   const settings = toSettingsRecord(league?.settings)
   const inviteCode = String(settings.inviteCode ?? '').trim()
@@ -53,11 +57,20 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const careerTier = typeof tierRaw === 'number' && Number.isFinite(tierRaw) ? clampCareerTier(tierRaw) : null
 
   return NextResponse.json({
-    listed: Boolean(listing),
+    // What discovery actually shows, not whether a listing row exists: discovery reads the
+    // league's own settings (isFantasyLeagueDiscoverable), and a league created Public in the
+    // wizard is listed without ever having a row here.
+    listed: isFantasyLeagueDiscoverable(settings),
+    listingRowActive: Boolean(listing),
     careerTier,
     careerTierName: careerTier != null ? getCareerTierName(careerTier) : null,
     inviteReady: inviteCode.length > 0,
     updatedAt: listing?.updatedAt?.toISOString() ?? null,
+    // What a commissioner needs to decide whether to list: seats held by real people (not
+    // rosters — a native league has one roster per seat from creation) against the size.
+    leagueSize,
+    seatsHeld,
+    openSeats: Math.max(0, leagueSize - seatsHeld),
   })
 }
 
@@ -169,7 +182,18 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ leagueI
     select: { settings: true },
   })
   const prev = toSettingsRecord(league?.settings)
-  const merged = { ...prev, leagueFinderDelistedAt: new Date().toISOString() }
+  /*
+   * ⚠ UNLISTING USED TO LEAVE THE LEAGUE LISTED. It only deactivated the listing row, which
+   * discovery never reads; discovery reads `league_privacy_visibility` / `publicDashboard`, and
+   * POST had set both. So "Remove from league finder" changed nothing anyone could see.
+   * Both are turned off here, because either one alone keeps the league discoverable.
+   */
+  const merged = {
+    ...prev,
+    league_privacy_visibility: 'private',
+    publicDashboard: false,
+    leagueFinderDelistedAt: new Date().toISOString(),
+  }
   await prisma.league.update({
     where: { id: leagueId },
     data: { settings: merged as Prisma.InputJsonValue },

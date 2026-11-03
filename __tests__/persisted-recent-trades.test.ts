@@ -54,3 +54,19 @@ it('names an ESPN trade player through the identity map, and never shows a raw p
   expect(unnamed.name).not.toContain('999')
   expect(unnamed.gradeAs).toBeNull()
 })
+
+/* A Sleeper id names a different person in each sport: an NFL trade must read the NFL row only. */
+it('names a Sleeper NFL trade player from the NFL row, never another sport’s row with the same Sleeper id', async () => {
+  h.players.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+    [
+      { sport: 'NFL', sleeperId: 'p', name: 'Player One', position: 'QB' },
+      { sport: 'NBA', sleeperId: 'p', name: 'Hoops Impostor', position: 'PG' },
+    ]
+      .filter((r) => where.sport == null || r.sport === where.sport)
+      .map(({ sleeperId, name, position }) => ({ sleeperId, name, position })),
+  )
+  const row = { platform: 'sleeper', sport: 'nfl', transactionId: 'x', tradeDate: new Date('2026-09-27T12:00:00Z'), playersReceived: ['p'], picksReceived: [] }
+  h.trades.mockResolvedValue([{ ...row, history: { sleeperLeagueId: 'src', sleeperUsername: 'other1' } }])
+  const trades = await persistedRecentTrades([{ id: 'af', name: 'League', platformLeagueId: 'src', platform: 'sleeper' }], new Date('2026-09-26'))
+  expect(trades[0].sides[0].received[0]).toMatchObject({ name: 'Player One', position: 'QB' })
+})

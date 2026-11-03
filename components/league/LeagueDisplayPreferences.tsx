@@ -18,9 +18,9 @@ export function LeagueSection({ id, children }: { id: LeagueSectionId; children:
 }
 
 export function CustomizeLeagueLink({ returnTo, className }: { returnTo: string; className?: string }) {
-  const { language } = useOptionalLanguage()
+  const { t } = useOptionalLanguage()
   return <Link href={`/settings?tab=leagues&returnTo=${encodeURIComponent(returnTo)}`}
     className={className} style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
-    {language === 'es' ? 'Personalizar página' : 'Customize page'}
+    {t('league.customizePage')}
   </Link>
 }

@@ -1,3 +1,5 @@
+import { parseRookieAuctionSettings, ROOKIE_AUCTION_SETTINGS_KEY } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * GET: Effective dynasty settings + presets (roster, scoring, playoff).
  * PUT: Update dynasty config and optional League.settings (roster_format_type, scoring_format_type, playoff, regular_season_weeks).
@@ -41,6 +43,7 @@ import {
 import { effectiveDynastyRules, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { NATIVE_PICK_YEARS_MAX, NATIVE_PICK_YEARS_MIN } from '@/lib/league-trade-engine/nativePickYears'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
@@ -55,6 +58,10 @@ export const dynamic = 'force-dynamic'
 
 /** The taxi fields the rules popup shows (lib/league-rules-explainer/load.ts). */
 const TAXI_CARD_FIELDS = ['taxiSlots', 'taxiEligibilityYears', 'taxiDeadlineWeek'] as const
+
+function isPickYearsValue(v: unknown): boolean {
+  return typeof v === 'number' && Number.isInteger(v) && v >= NATIVE_PICK_YEARS_MIN && v <= NATIVE_PICK_YEARS_MAX
+}
 
 export async function GET(
   _req: NextRequest,
@@ -92,9 +99,7 @@ export async function GET(
 
   const rookiePickOrderMethods = [
     ...ROOKIE_PICK_ORDER_METHODS,
-    ...(lotteryEligibility.eligible
-      ? [{ value: 'weighted_lottery', label: '🎱 Weighted Lottery (NBA-style, year 2+)' }]
-      : []),
+    ...(isDynasty ? [{ value: 'weighted_lottery', label: 'Weighted lottery (future rookie drafts)' }] : []),
   ]
 
   return NextResponse.json({
@@ -191,7 +196,21 @@ export async function PUT(
     )
   }
 
+  // Seasons ahead a pick can be traded: the trade engine clamps to 1-5, so anything else is refused
+  // rather than stored as a number the league never runs.
+  if (body.futurePicksYearsOut != null && !isPickYearsValue(body.futurePicksYearsOut)) {
+    return NextResponse.json(
+      { error: `Future picks can be traded ${NATIVE_PICK_YEARS_MIN} to ${NATIVE_PICK_YEARS_MAX} seasons ahead.` },
+      { status: 400 },
+    )
+  }
+
   const settingsPatch: Record<string, unknown> = {}
+  if (body.rookieAuction !== undefined) {
+    const parsed = parseRookieAuctionSettings(body.rookieAuction)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    settingsPatch[ROOKIE_AUCTION_SETTINGS_KEY] = parsed.value
+  }
   if (body.roster_format_type != null) settingsPatch.roster_format_type = String(body.roster_format_type)
   if (body.scoring_format_type != null) settingsPatch.scoring_format_type = String(body.scoring_format_type)
   if (body.playoff_team_count != null) settingsPatch.playoff_team_count = Number(body.playoff_team_count)
@@ -278,14 +297,14 @@ export async function PUT(
     const method = String(body.rookiePickOrderMethod)
     if (method === 'weighted_lottery') {
       const el = await checkDynastyLotteryEligibility(leagueId)
-      if (!el.eligible) {
+      if (!el.eligible && !el.isStartupLeague) {
         return NextResponse.json({ error: el.reason }, { status: 400 })
       }
       await setDraftOrderModeAndLotteryConfig(leagueId, {
-        draftOrderMode: 'weighted_lottery',
+        ...(el.eligible ? { draftOrderMode: 'weighted_lottery' as const } : {}),
         lotteryConfig: { enabled: true },
       })
-    } else if (priorDynasty?.rookiePickOrderMethod === 'weighted_lottery' && method !== 'weighted_lottery') {
+    } else if (isWeightedRookieLottery(priorDynasty?.rookiePickOrderMethod) && method !== 'weighted_lottery') {
       await setDraftOrderModeAndLotteryConfig(leagueId, { draftOrderMode: 'randomize' })
     }
   }

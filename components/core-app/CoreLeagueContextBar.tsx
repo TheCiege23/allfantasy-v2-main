@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
@@ -18,8 +19,7 @@ import {
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
+import { leagueConceptText } from '@/lib/core-app/shellCopy'
 import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueContextBarMessages } from '@/lib/core-app/messages/leagueContextBar'
@@ -31,11 +31,8 @@ import '@/components/core-app/af-league-tabs.css'
  */
 function useBarCopy() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const surfaceLabel = (surface: CoreSurfaceKey) => {
-    const english = CORE_SURFACE_LABELS[surface]
-    return es ? (SURFACE_LABEL_ES[english] ?? coreUiCopy(english, language)) : english
-  }
+  const m = useMessages(leagueContextBarMessages)
+  const surfaceLabel = (surface: CoreSurfaceKey) => m.surfaceLabel(CORE_SURFACE_LABELS[surface])
   const concept = (label: string) => leagueConceptText(label, language)
   return { language, surfaceLabel, concept }
 }
@@ -153,6 +150,7 @@ export default function CoreLeagueContextBar({
 }: CoreLeagueContextBarProps) {
   const { language, surfaceLabel, concept } = useBarCopy()
   const m = useMessages(leagueContextBarMessages)
+  const router = useRouter()
   const selectId = useId()
   const baseSelectId = useId()
   const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
@@ -227,6 +225,7 @@ export default function CoreLeagueContextBar({
       if (!response.ok) throw new Error('save failed')
       setConfirmed(true)
       setTypeStatus('saved')
+      router.refresh()
       window.setTimeout(() => setTypeStatus('ready'), 2400)
     } catch {
       setLeagueType(previous.leagueType)
@@ -313,8 +312,10 @@ export default function CoreLeagueContextBar({
         <span className="af-lctx-chip" data-tone="chimmy">
           Chimmy · {surfaceLabel(surface)}
         </span>
-        {/* `#league-type`: every trade grade's "Confirm your league type" link lands here. */}
-        <div className="af-lctx-type" id="league-type" data-confirmed={confirmed ? 'true' : 'false'}>
+      </div></details>
+
+      {/* Keep the grading control visible; grade links target this anchor directly. */}
+      <div className="af-lctx-type" id="league-type" data-confirmed={confirmed ? 'true' : 'false'}>
           <label htmlFor={selectId}>{m.leagueType}</label>
           {canConfirm ? (
             <select
@@ -389,8 +390,7 @@ export default function CoreLeagueContextBar({
                       ? m.notConfirmed
                       : ''}
           </small>
-        </div>
-      </div></details>
+      </div>
 
       {recommendationSlot !== undefined ? (
         recommendationSlot

@@ -8,6 +8,7 @@
  * NOT weekly projections or redraft short-season logic. No network/AI calls here.
  */
 
+import { isNhlProspectWireRow } from '@/lib/waiver-wire/prospectFreeAgentDisplay'
 import type { DynastyWarRoomContext } from './types'
 import type { DynastyNeedsResult } from './dynastyRosterNeedsEngine'
 import type { DynastyDirectionResult } from './dynastyTeamDirectionEngine'
@@ -70,12 +71,26 @@ export function buildDynastyWarRoomPrompt(inputs: DynastyWarRoomPromptInputs): s
     `Freshness: generated=${context.freshness.generatedAt} valuesAsOf=${context.freshness.valuesAsOf ?? 'n/a'} injuriesAsOf=${context.freshness.injuriesAsOf ?? 'n/a'}`,
   )
 
-  if (context.freeAgents.length > 0) {
+  // NHL dynasty prospects are in `freeAgents` but are not ADP-ranked: they never enter this list.
+  const rankedFreeAgents = context.freeAgents.filter((fa) => !isNhlProspectWireRow(fa))
+  if (rankedFreeAgents.length > 0) {
     lines.push('')
-    lines.push(`=== TOP FREE AGENTS (dynasty-ADP-ranked, ${context.freeAgents.length} available) ===`)
-    for (const fa of context.freeAgents.slice(0, 12)) {
+    lines.push(`=== TOP FREE AGENTS (dynasty-ADP-ranked, ${rankedFreeAgents.length} available) ===`)
+    for (const fa of rankedFreeAgents.slice(0, 12)) {
       lines.push(`  ${fa.playerName} ${fa.position}${fa.adp != null ? ` (ADP ${fa.adp})` : ''}${fa.age != null ? `, age ${fa.age}` : ''}`)
     }
+  }
+  // Chimmy and the ask get an unranked COUNT only, as #3063 gave Chimmy: no names, no ranking.
+  const prospectTotal = context.nhlProspectFreeAgents?.total ?? 0
+  if (prospectTotal > 0) {
+    lines.push('')
+    lines.push(
+      [
+        `NHL PROSPECTS: ${prospectTotal} Fantrax NHL prospects (AHL, junior or unsigned players who are on no NHL roster in our data) are also free in this league.`,
+        'They have no value, ADP, projection, age or draft year, so they are NOT ranked above and you must give no value- or projection-based advice about them.',
+        'If asked, say they are listed in the War Room waiver tool and in the free-agent list, each marked "Prospect", and that he scores zero until he plays NHL games.',
+      ].join(' '),
+    )
   }
 
   const userTeam = context.teams.find((t) => t.isUserTeam)

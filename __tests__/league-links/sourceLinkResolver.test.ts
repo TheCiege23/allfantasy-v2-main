@@ -157,3 +157,45 @@ describe('resolveSourceLink — never fetches a provider during resolution', () 
     expect(spy).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * "Open in Fantrax" used to land on fantrax.com's homepage for every league. Fantrax's league
+ * page format is the one this repo already tells people to copy their id from
+ * (fantrax.com/fantasy/league/<id>/home — lib/league-import/fantrax/fantraxApi.ts
+ * parseFantraxLeagueId, captured from a real address bar on league v2kzedypmm8jp61b).
+ */
+describe('resolveSourceLink — Fantrax league page', () => {
+  /* The league page: https, Fantrax's own host, /fantasy/league/<id>/home. */
+  const expectLeaguePage = (href: string) => {
+    const u = new URL(href)
+    expect(u.protocol).toBe('https:')
+    expect(u.hostname).toBe('www.fantrax.com')
+    expect(u.pathname).toBe('/fantasy/league/v2kzedypmm8jp61b/home')
+  }
+
+  it('builds the league page from a real Fantrax league id', () => {
+    const link = resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'v2kzedypmm8jp61b', leagueName: 'Cream Bowl' })!
+    expectLeaguePage(link.href)
+    expect(link.destinationType).toBe('league')
+    expect(link.isFallback).toBe(false)
+    expect(isSafeProviderUrl(link.href, ['www.fantrax.com', 'fantrax.com'])).toBe(true)
+  })
+  it('reads the id out of the live-import source input and a pasted URL', () => {
+    expectLeaguePage(resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'fantrax-league:v2kzedypmm8jp61b|My Team' })!.href)
+    /* As pasted from the address bar, minus the scheme — the same form parseFantraxLeagueId's test uses. */
+    expectLeaguePage(resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'fantrax.com/fantasy/league/v2kzedypmm8jp61b/standings' })!.href)
+  })
+  it('never builds a league URL out of AllFantasy\'s own snapshot uuid — homepage instead', () => {
+    const link = resolveSourceLink({ platform: 'fantrax', sourceLeagueId: '3f0c2a1e-9b7d-4c55-8a1e-2b4f6d8e0c11' })!
+    expect(link.destinationType).toBe('homepage')
+    expect(link.isFallback).toBe(true)
+    expect(new URL(link.href).pathname).toBe('/')
+  })
+  it('falls back to the homepage only when there is no id', () => {
+    for (const id of [undefined, null, '', '  ']) {
+      const link = resolveSourceLink({ platform: 'fantrax', sourceLeagueId: id })!
+      expect(link.destinationType).toBe('homepage')
+      expect(new URL(link.href).hostname).toBe('www.fantrax.com')
+    }
+  })
+})

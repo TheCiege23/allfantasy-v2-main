@@ -12,7 +12,7 @@ import { HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import type { HelpTopicId } from '@/lib/core-app/helpTopics'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { hubCopy, hubTab, hubText, themeCopyEs } from '@/lib/core-app/formatHubCopy'
+import { hubCopy, hubTab, hubText, themeCopyFor } from '@/lib/core-app/formatHubCopy'
 
 /**
  * What each format's card meter measures — one "?" beside the leagues heading, never one per card.
@@ -186,9 +186,10 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
   const c = (english: string) => hubCopy(english, language)
   const base = THEMES[data.format]
   // Spanish overlays the themed copy; media, glyph and canCreate stay from THEMES.
+  const themeCopy = themeCopyFor(language)
   const theme: Theme =
-    language === 'es'
-      ? { ...base, ...themeCopyEs(availableImportPlatformsPhrase())[data.format], tab: hubTab(data.format, base.tab, language) }
+    themeCopy
+      ? { ...base, ...themeCopy(availableImportPlatformsPhrase())[data.format], tab: hubTab(data.format, base.tab, language) }
       : base
   const [connectOpen, setConnectOpen] = useState(false)
   const [tradesTab, setTradesTab] = useState<'pending' | 'completed'>('pending')

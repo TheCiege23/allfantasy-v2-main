@@ -228,7 +228,11 @@ const LANDINGS: readonly PlatformLanding[] = [
       'Copy the code from your league URL — fantrax.com/fantasy/league/THIS-PART/home.',
       'Choose Fantrax on the connect screen and paste it in.',
       'Pick which team in that league is yours.',
-      'Your read-only copy is built: rosters, matchups, scoring settings and past seasons.',
+      /*
+       * ⚠ NOT "and past seasons". A league-id import reads the CURRENT season only; earlier seasons
+       * appear only from a CSV export uploaded separately (the FAQ below says so).
+       */
+      'Your read-only copy of the current season is built: rosters, matchups and scoring settings.',
     ],
     faq: [
       {

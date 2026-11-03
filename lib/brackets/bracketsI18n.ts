@@ -249,7 +249,7 @@ const EN: BracketsDictionary = {
 
   "brk.hub.sports.title": "Sports",
   "brk.hub.sports.subtitle":
-    "MLB and NHL brackets are open now. The College Football Playoff and NFL Playoffs are up next.",
+    "Every open tournament below takes new pools. The current one is listed first.",
   "brk.hub.sports.statusLive": "Live now",
   "brk.hub.sports.statusComingSoon": "Coming soon",
   "brk.hub.sports.openCta": "Open hub",
@@ -264,7 +264,7 @@ const EN: BracketsDictionary = {
     "Stanley Cup bracket pool. Pick every series.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Wild Card to Super Bowl bracket pool. Opens in January.",
+    "Wild Card to Super Bowl bracket pool. Create one now; picks open when the field is set in January.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Pick every postseason series, Wild Card to World Series.",
@@ -493,7 +493,7 @@ const ES: BracketsDictionary = {
 
   "brk.hub.sports.title": "Deportes",
   "brk.hub.sports.subtitle":
-    "Los brackets de MLB y NHL ya están abiertos. A continuación: el Playoff de fútbol americano universitario y los Playoffs de la NFL.",
+    "Todos los torneos abiertos aceptan nuevos grupos. El torneo actual aparece primero.",
   "brk.hub.sports.statusLive": "En vivo",
   "brk.hub.sports.statusComingSoon": "Próximamente",
   "brk.hub.sports.openCta": "Abrir hub",
@@ -508,7 +508,7 @@ const ES: BracketsDictionary = {
     "Grupo de bracket de la Copa Stanley. Elige cada serie.",
   "brk.hub.sports.sport.nflPlayoffs": "Playoffs NFL",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Grupo de bracket del Wild Card al Super Bowl. Abre en enero.",
+    "Grupo de bracket del Wild Card al Super Bowl. Créalo ya; las selecciones abren cuando se define el cuadro en enero.",
   "brk.hub.sports.sport.mlbPostseason": "Postemporada MLB",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Elige cada serie de la postemporada, del Wild Card a la Serie Mundial.",
@@ -739,7 +739,7 @@ const ZH: BracketsDictionary = {
 
   "brk.hub.sports.title": "支援的賽事",
   "brk.hub.sports.subtitle":
-    "MLB 與 NHL 對戰表現已開放。接下來是大學美式足球季後賽與 NFL 季後賽。",
+    "下方所有開放中的賽事都可建立新的對戰表群組。目前進行中的賽事排在最前面。",
   "brk.hub.sports.statusLive": "進行中",
   "brk.hub.sports.statusComingSoon": "即將推出",
   "brk.hub.sports.openCta": "開啟主頁",
@@ -754,7 +754,7 @@ const ZH: BracketsDictionary = {
     "史丹利盃對戰群組。預測每一輪系列賽。",
   "brk.hub.sports.sport.nflPlayoffs": "NFL 季後賽",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "從外卡賽到超級盃的對戰群組。1 月開放。",
+    "從外卡賽到超級盃的對戰群組。現在即可建立；1 月確定參賽隊伍後開放選擇。",
   "brk.hub.sports.sport.mlbPostseason": "MLB 季後賽",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "預測每一輪季後賽系列賽，從外卡賽到世界大賽。",
@@ -986,7 +986,7 @@ const FIL: BracketsDictionary = {
 
   "brk.hub.sports.title": "Mga sport",
   "brk.hub.sports.subtitle":
-    "Bukas na ang MLB at NHL brackets. Susunod ang College Football Playoff at NFL Playoffs.",
+    "Tumatanggap ng bagong pool ang bawat bukas na torneo sa ibaba. Nauuna ang kasalukuyang torneo.",
   "brk.hub.sports.statusLive": "Live na",
   "brk.hub.sports.statusComingSoon": "Malapit na",
   "brk.hub.sports.openCta": "Buksan ang hub",
@@ -1001,7 +1001,7 @@ const FIL: BracketsDictionary = {
     "Bracket pool ng Stanley Cup. Piliin ang bawat serye.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Bracket pool mula Wild Card hanggang Super Bowl. Magbubukas sa Enero.",
+    "Bracket pool mula Wild Card hanggang Super Bowl. Gumawa na ngayon; magbubukas ang picks kapag naitakda ang field sa Enero.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Piliin ang bawat serye ng postseason, mula Wild Card hanggang World Series.",
@@ -1234,7 +1234,7 @@ const VI: BracketsDictionary = {
 
   "brk.hub.sports.title": "Các môn",
   "brk.hub.sports.subtitle":
-    "Bracket MLB và NHL đã mở. Tiếp theo là College Football Playoff và NFL Playoffs.",
+    "Mọi giải đấu đang mở bên dưới đều nhận nhóm mới. Giải đấu hiện tại được xếp đầu tiên.",
   "brk.hub.sports.statusLive": "Đang mở",
   "brk.hub.sports.statusComingSoon": "Sắp ra mắt",
   "brk.hub.sports.openCta": "Mở hub",
@@ -1249,7 +1249,7 @@ const VI: BracketsDictionary = {
     "Nhóm bracket Stanley Cup. Dự đoán từng loạt đấu.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Nhóm bracket từ Wild Card đến Super Bowl. Mở vào tháng 1.",
+    "Nhóm bracket từ Wild Card đến Super Bowl. Tạo ngay; lựa chọn mở khi danh sách đội được xác định vào tháng 1.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Dự đoán từng loạt đấu hậu mùa giải, từ Wild Card đến World Series.",

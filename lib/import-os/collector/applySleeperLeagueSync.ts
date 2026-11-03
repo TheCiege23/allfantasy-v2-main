@@ -30,6 +30,7 @@ import {
   buildTier0LeagueColumnPatch,
   buildImportedLeagueSettings,
   persistTradedPicks,
+  refreshKeepsStoredScoring,
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
@@ -173,7 +174,10 @@ async function applyLeagueState(
   try {
     const bundle = buildCanonicalImportBundle(normalized)
     mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
-    refreshedScoringPresetId = bundle.scoringPresetId
+    /* A refresh that kept the stored scoring keeps the stored preset too, instead of a guess. */
+    refreshedScoringPresetId = refreshKeepsStoredScoring(existingSettings, bundle)
+      ? undefined
+      : bundle.scoringPresetId
   } catch (e) {
     mergedSettings = { ...existingSettings, ...freshSettings }
     out.notes.push(

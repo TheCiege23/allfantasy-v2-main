@@ -7,6 +7,9 @@ const getLeagueRosterConfigMock = vi.fn()
 const getServiceMock = vi.fn()
 const isSupportedMock = vi.fn()
 const leagueFindUniqueMock = vi.fn()
+const publishRuleChangesMock = vi.fn()
+
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: publishRuleChangesMock }))
 
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
@@ -89,5 +92,14 @@ describe('/api/commissioner/leagues/[leagueId]/roster-settings/reset-default rou
     expect(body.ok).toBe(true)
     expect(body.config).toBeTruthy()
     expect(body.unifiedConfig).toBeTruthy()
+  })
+
+  it('publishes the actual roster change when resetting to default', async () => {
+    const getConfig = vi.fn().mockResolvedValueOnce({ slots: { QB: 2 } }).mockResolvedValue({ slots: { QB: 1 } })
+    getServiceMock.mockReturnValue({ getConfig })
+    const { POST } = await import('../app/api/commissioner/leagues/[leagueId]/roster-settings/reset-default/route')
+    const res = await POST(new Request('http://localhost', { method: 'POST' }) as any, { params: Promise.resolve({ leagueId: 'l1' }) })
+    expect(res.status).toBe(200)
+    expect(publishRuleChangesMock).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'l1', changes: expect.arrayContaining([expect.objectContaining({ key: 'rosterSlots' })]) }))
   })
 })

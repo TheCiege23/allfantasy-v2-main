@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateDraftUISettings } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { applyChimmyAutopilot } from '@/lib/inactive-manager/inactiveManagerService'
 
 type SessionWithUser = { user?: { id?: string; email?: string | null } } | null
 
@@ -70,10 +71,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     orphanDrafterMode: 'ai',
   })
 
+  // The seat is empty now; Chimmy drafts it and runs it for the season (lib/inactive-manager), until a
+  // real manager takes it. Handed over AFTER the seat is emptied, so it is stamped with the empty seat as
+  // its owner and is not mistaken for a team that changed hands.
+  const chimmy = await applyChimmyAutopilot(params.leagueId, userId, roster.id, undefined)
+
   return NextResponse.json({
     status: 'ok',
     rosterId: roster.id,
     orphanPlatformUserId: orphanId,
     aiManagerEnabled: true,
+    chimmyManages: chimmy.ok,
+    ...(chimmy.ok ? {} : { chimmyError: chimmy.error }),
   })
 }

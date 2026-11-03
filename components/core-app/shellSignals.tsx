@@ -38,6 +38,9 @@ export type ShellUrgencyBadges = {
   trades?: number | null
   draftHq?: number | null
   sync?: number | null
+  /** The leagues behind `myTeam` and `trades` — the league list flags each one (urgencyBadges.ts). */
+  lineupLeagueIds?: string[] | null
+  offerLeagueIds?: string[]
 } | null
 
 export type ShellSignals = {

@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 
 function getDevBypassUserId(): string | null {
   if (process.env.NODE_ENV === 'production') return null
@@ -61,6 +62,7 @@ export async function canAccessLeagueDraft(leagueId: string, userId: string | un
     select: { id: true },
   })
   if (team) return true
+  if (await acceptedCoOwnerRosterId(leagueId, userId)) return true
   return (await getDevBypassFallbackRosterId(leagueId, userId)) != null
 }
 
@@ -80,6 +82,7 @@ export async function canSubmitPickForRoster(
   })
   if (!roster) return false
   if (roster.platformUserId === userId) return true
+  if (await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)) return true
 
   const devFallbackRosterId = await getDevBypassFallbackRosterId(leagueId, userId)
   if (devFallbackRosterId && devFallbackRosterId === rosterId) return true
@@ -101,6 +104,8 @@ export async function getCurrentUserRosterIdForLeague(
     select: { id: true },
   })
   if (roster) return roster.id
+  const coOwnedRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  if (coOwnedRosterId) return coOwnedRosterId
   return getDevBypassFallbackRosterId(leagueId, userId)
 }
 
@@ -119,5 +124,5 @@ export async function canSubmitDispersalPickForUser(
     select: { id: true, platformUserId: true },
   })
   if (!roster) return false
-  return roster.platformUserId === userId
+  return roster.platformUserId === userId || await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)
 }

@@ -17,6 +17,7 @@ import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntim
 export type ScheduleRuntimeValidationIssue = {
   code:
     | 'DIVISION_SCHEDULE_PRESENT'
+    | 'DIVISION_REMATCHES_INCOMPLETE'
     | 'ODD_TEAM_BYES_ASSIGNED'
     | 'REGULAR_SEASON_WEEKS_INVALID'
     | 'SCHEDULE_NOT_GENERATED'
@@ -164,6 +165,8 @@ type BuildScheduleInput = {
   medianGame?: boolean | null
   /** `settings.median_game_in_playoffs`; off unless the commissioner turned it on. */
   medianInPlayoffs?: boolean | null
+  /** `division_config.rivalsTwice`, used only when no schedule is persisted yet (the preview). */
+  divisionRivalsTwice?: boolean | null
 } & ScheduleRuntimeShapeOverrides
 
 const BYE_ID = '__BYE__'
@@ -309,10 +312,78 @@ function orderRoundsForDivisions(rounds: RoundSlot[][], teams: ScheduleRuntimeTe
     .map((entry) => entry.slots)
 }
 
+/**
+ * "Play division rivals twice": one round per week in which every division plays its own round robin
+ * again, home and away swapped from the first meeting. A team its division leaves idle that week (an
+ * odd-sized division's bye, or a smaller division that has finished) plays an idle team from ANOTHER
+ * division; with an odd number of teams one idle team takes the league bye. Teams with no division are
+ * idle every rematch week.
+ */
+function buildDivisionRematchRounds(teams: ScheduleRuntimeTeamInput[], firstMeetings: RoundSlot[][]): RoundSlot[][] {
+  const groups = new Map<string, ScheduleRuntimeTeamInput[]>()
+  for (const team of teams) {
+    if (!team.divisionId) continue
+    groups.set(team.divisionId, [...(groups.get(team.divisionId) ?? []), team])
+  }
+  if (groups.size === 0) return []
+  // Who hosted each division pairing first, so the rematch can swap it.
+  const firstHome = new Map<string, string>()
+  for (const round of firstMeetings) {
+    for (const slot of round) {
+      if (slot.type === 'regular' && divisionGame(slot)) firstHome.set([slot.home.rosterId, slot.away.rosterId].sort().join('|'), slot.home.rosterId)
+    }
+  }
+  const perDivision = [...groups.values()].map((members) => (members.length >= 2 ? buildRoundRobinRounds(members) : []))
+  const roundCount = Math.max(0, ...perDivision.map((rounds) => rounds.length))
+  const rematch: RoundSlot[][] = []
+  for (let r = 0; r < roundCount; r += 1) {
+    const slots: RoundSlot[] = []
+    const busy = new Set<string>()
+    for (const rounds of perDivision) {
+      for (const slot of rounds[r] ?? []) {
+        if (slot.type !== 'regular') continue
+        const hostedFirst = firstHome.get([slot.home.rosterId, slot.away.rosterId].sort().join('|'))
+        const swap = hostedFirst ? hostedFirst === slot.home.rosterId : false
+        slots.push({ type: 'regular', home: swap ? slot.away : slot.home, away: swap ? slot.home : slot.away })
+        busy.add(slot.home.rosterId)
+        busy.add(slot.away.rosterId)
+      }
+    }
+    // Idle teams, paired across divisions: always take one from the division with the most idle teams.
+    const idle = new Map<string, ScheduleRuntimeTeamInput[]>()
+    for (const team of teams) {
+      if (busy.has(team.rosterId)) continue
+      const key = team.divisionId ?? `__none__:${team.rosterId}`
+      idle.set(key, [...(idle.get(key) ?? []), team])
+    }
+    const pick = (exclude?: string): [string, ScheduleRuntimeTeamInput] | null => {
+      let best: string | null = null
+      for (const [key, list] of idle) {
+        if (key === exclude || list.length === 0) continue
+        if (best === null || list.length > idle.get(best)!.length) best = key
+      }
+      if (best === null) return null
+      return [best, idle.get(best)!.shift()!]
+    }
+    let remaining = [...idle.values()].reduce((n, list) => n + list.length, 0)
+    while (remaining >= 2) {
+      const first = pick()!
+      const second = pick(first[0]) ?? pick()!
+      slots.push({ type: 'regular', home: first[1], away: second[1] })
+      remaining -= 2
+    }
+    if (remaining === 1) slots.push({ type: 'bye', team: pick()![1] })
+    rematch.push(slots)
+  }
+  return rematch
+}
+
 export function generateCanonicalRegularSeasonSchedule(input: {
   rules: CanonicalLeagueRules
   teams: ScheduleRuntimeTeamInput[]
   now?: Date
+  /** `division_config.rivalsTwice`: add a second meeting with every division rival after the round robin. */
+  divisionRivalsTwice?: boolean | null
 } & ScheduleRuntimeShapeOverrides): {
   matchups: CanonicalScheduleRuntimeMatchup[]
   regularSeasonWeeks: number
@@ -347,7 +418,16 @@ export function generateCanonicalRegularSeasonSchedule(input: {
     })
   }
 
-  const rounds = orderRoundsForDivisions(buildRoundRobinRounds(teams), teams)
+  const firstMeetings = orderRoundsForDivisions(buildRoundRobinRounds(teams), teams)
+  const rematchRounds = input.divisionRivalsTwice ? buildDivisionRematchRounds(teams, firstMeetings) : []
+  const rounds = [...firstMeetings, ...rematchRounds]
+  if (rematchRounds.length > 0 && regularSeasonWeeks < rounds.length) {
+    validationIssues.push({
+      code: 'DIVISION_REMATCHES_INCOMPLETE',
+      severity: 'warning',
+      message: `Playing division rivals twice needs ${rounds.length} regular-season weeks (${firstMeetings.length} for everyone once, ${rematchRounds.length} for the rematches); this season has ${regularSeasonWeeks}, so ${Math.min(rematchRounds.length, rounds.length - regularSeasonWeeks)} rematch week(s) will not be played.`,
+    })
+  }
   if (!rounds.length) {
     validationIssues.push({
       code: 'SCHEDULE_NOT_GENERATED',
@@ -773,6 +853,7 @@ export function buildCanonicalScheduleRuntimeState(input: BuildScheduleInput): C
         playoffStartWeek: input.playoffStartWeek,
         regularSeasonWeeks: input.regularSeasonWeeks,
         now: input.now,
+        divisionRivalsTwice: input.divisionRivalsTwice,
       })
   const resolvedShape = generatedSchedule
     ? { regularSeasonWeeks: generatedSchedule.regularSeasonWeeks, playoffStartWeek: generatedSchedule.playoffStartWeek, issues: [] as ScheduleRuntimeValidationIssue[] }

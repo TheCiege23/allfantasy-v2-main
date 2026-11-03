@@ -34,6 +34,7 @@ interface DivisionConfig {
   teamAssignments: Record<string, number>
   aiNamingEnabled: boolean
   playoffRule?: DivisionPlayoffRule
+  rivalsTwice?: boolean
   lastUpdatedAt: string | null
   lastUpdatedBy: string | null
 }
@@ -81,6 +82,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
   const [teamAssignments, setTeamAssignments] = useState<Record<string, number>>({})
   const [aiNamingEnabled, setAiNamingEnabled] = useState(false)
   const [playoffRule, setPlayoffRule] = useState<DivisionPlayoffRule>(DEFAULT_DIVISION_PLAYOFF_RULE)
+  const [rivalsTwice, setRivalsTwice] = useState(false)
   const [teams, setTeams] = useState<TeamSlot[]>([])
   const [aiGenerating, setAiGenerating] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -106,6 +108,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         setTeamAssignments(cfg.teamAssignments)
         setAiNamingEnabled(cfg.aiNamingEnabled)
         setPlayoffRule(cfg.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
+        setRivalsTwice(cfg.rivalsTwice === true)
         setTeams((data.teams ?? []).filter((team: TeamSlot & { lifecycleState?: string }) => team.lifecycleState !== 'ARCHIVED'))
         setSavedConfig(cfg)
       })
@@ -168,7 +171,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/division-settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled, ...(isSurvivor ? {} : { playoffRule }) }),
+        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled, ...(isSurvivor ? {} : { playoffRule, rivalsTwice }) }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('leagueSettings.saveFailed')); return }
@@ -177,7 +180,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setSaving(false) }
-  }, [leagueId, count, names, teamAssignments, aiNamingEnabled, playoffRule, isSurvivor])
+  }, [leagueId, count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, isSurvivor])
 
   const resetToSaved = useCallback(() => {
     if (savedConfig) {
@@ -186,6 +189,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       setTeamAssignments(savedConfig.teamAssignments)
       setAiNamingEnabled(savedConfig.aiNamingEnabled)
       setPlayoffRule(savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
+      setRivalsTwice(savedConfig.rivalsTwice === true)
     }
   }, [savedConfig])
 
@@ -196,7 +200,8 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       || JSON.stringify(teamAssignments) !== JSON.stringify(savedConfig.teamAssignments)
       || aiNamingEnabled !== savedConfig.aiNamingEnabled
       || playoffRule !== (savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
-  }, [count, names, teamAssignments, aiNamingEnabled, playoffRule, savedConfig])
+      || rivalsTwice !== (savedConfig.rivalsTwice === true)
+  }, [count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, savedConfig])
 
   // Group teams by division
   const teamsByDivision = useMemo(() => {
@@ -321,7 +326,20 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
               <option key={rule} value={rule}>{t(`division.playoffRule.${rule}`)}</option>
             ))}
           </select>
-          <p className="text-[11px] text-white/30">{t('division.scheduleNote')}</p>
+          <label className="flex items-start gap-2 pt-1 text-sm text-white/80">
+            <input
+              type="checkbox"
+              data-testid="division-rivals-twice"
+              checked={rivalsTwice}
+              disabled={!isCommissioner}
+              onChange={(e) => setRivalsTwice(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-cyan-400 disabled:opacity-50"
+            />
+            <span>{t('division.rivalsTwice')}</span>
+          </label>
+          <p data-testid="division-schedule-note" className="text-[11px] text-white/30">
+            {t(rivalsTwice ? 'division.scheduleNote.twice' : 'division.scheduleNote.once')}
+          </p>
         </div>
       )}
 

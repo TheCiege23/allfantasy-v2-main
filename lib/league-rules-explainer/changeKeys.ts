@@ -11,6 +11,8 @@ import type { RuleChange, RuleKey, RuleSnapshot } from './types'
  */
 export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'teamCount',
+  'feederScoring', 'feederRosterSize', 'feederBenchSize', 'feederWaiverType',
+  'feederFaabBudget', 'feederFaabReset', 'feederTradeDeadline', 'feederTradeLockHours',
   'scoringMode',
   'scoringPreset',
   'categoryRecordMode',
@@ -26,6 +28,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'tradeDeadlineWeek',
   'tradeDeadlineAt',
   'tradeReview',
+  'vetoThreshold',
   'tradeReviewHours',
   'waiverType',
   'waiverBudget',
@@ -52,6 +55,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'pickTrading',
   'pickTradeDeadline',
   'pickTerms',
+  'pickTradeYears',
   'taxiSlots',
   'taxiEligibilityYears',
   'taxiDeadlineWeek',
@@ -76,6 +80,9 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'draftStartAt',
   'draftAutostart',
   'draftOrphanPicks',
+  // Devy / C2C college rounds of the main draft (./loadDraftRules.ts).
+  'draftDevyRounds',
+  'draftCollegeRounds',
 ]
 
 const CHANGEABLE = new Set<string>(CHANGEABLE_RULE_KEYS)

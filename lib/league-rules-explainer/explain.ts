@@ -29,6 +29,12 @@ const plural = (k: string, n: number, vars: Record<string, RuleVar> = {}): RuleT
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isPosInt = (v: unknown): v is number => isNum(v) && Number.isInteger(v) && v > 0
+const isVetoRule = (v: unknown): v is { mode: 'count' | 'percent'; value: number } => {
+  if (!v || typeof v !== 'object') return false
+  const rule = v as { mode?: unknown; value?: unknown }
+  return (rule.mode === 'count' || rule.mode === 'percent') && isPosInt(rule.value) && (rule.mode !== 'percent' || rule.value <= 100)
+}
+const vetoRuleText = (v: unknown): RuleText | null => isVetoRule(v) ? v.mode === 'percent' ? text('v.vetoPercent', { n: v.value }) : plural('v.vetoVotes', v.value) : null
 
 /* ------------------------------------------------------------------ vocabularies */
 
@@ -37,6 +43,7 @@ const TRADE_REVIEWS = new Set(['commissioner', 'league_vote', 'instant', 'none']
 const SCORING_MODES = new Set(['points', 'h2h_category', 'roto'])
 const RECORD_MODES = new Set(['each', 'most'])
 const LINEUP_MODES = new Set(['daily', 'weekly'])
+const LINEUP_LOCKS = new Set(['per_player', 'first_game', 'manual'])
 const ENDGAMES = new Set(['last_team_standing', 'final_four', 'final_three', 'final_two'])
 const ENDGAME_TEAMS: Record<string, number> = { final_four: 4, final_three: 3, final_two: 2 }
 const RELEASES = new Set(['immediate', 'next_waiver_run'])
@@ -45,7 +52,7 @@ const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
 const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery', 'live', 'auto_worst_to_first', 'auto_reverse_max_pf'])
-const DRAFT_TYPES = new Set(['linear', 'snake'])
+const DRAFT_TYPES = new Set(['linear', 'snake', 'auction'])
 /** The main draft (./loadDraftRules.ts). */
 const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
 const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
@@ -151,6 +158,9 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
         return text('v.off')
       case 'draftStartAt':
         return text('v.notScheduled')
+      case 'draftDevyRounds':
+      case 'draftCollegeRounds':
+        return text('v.off')
       default:
         return null
     }
@@ -164,6 +174,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isNum(value) && value >= 0 && Number.isInteger(value) ? text('v.count', { n: value }) : null
     case 'playoffStartWeek':
     case 'tradeDeadlineWeek':
+    case 'feederTradeDeadline':
     case 'chopStartWeek':
     case 'chopEndWeek':
       return isPosInt(value) ? week(value) : null
@@ -171,10 +182,12 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'championshipLength':
       return isPosInt(value) ? plural('v.weeks', value) : null
     case 'tradeReviewHours':
+    case 'feederTradeLockHours':
     case 'waiverHours':
     case 'statCorrectionHours':
       return isNum(value) && value >= 0 ? plural('v.hours', value) : null
     case 'waiverBudget':
+    case 'feederFaabBudget':
     case 'waiverMinBid':
       return isNum(value) && value >= 0 ? money(value) : null
     case 'dangerMarginPoints':
@@ -182,13 +195,17 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'waiverProcessHour':
       return isNum(value) && Number.isInteger(value) && value >= 0 && value <= 23 ? text('v.hourOfDay', { h: value }) : null
     case 'medianGame':
+    case 'feederFaabReset':
     case 'thirdPlaceGame':
     case 'pickTrading':
     case 'pickTerms':
       return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
     case 'keeperCount':
+    case 'feederRosterSize':
+    case 'feederBenchSize':
       return isNum(value) && Number.isInteger(value) && value >= 0 ? plural('v.players', value) : null
     case 'keeperMaxYears':
+    case 'pickTradeYears':
     case 'taxiMaxYears':
     case 'taxiEligibilityYears':
       return isPosInt(value) ? plural('v.seasons', value) : null
@@ -205,7 +222,10 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'tradeDeadlineAt':
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'waiverType':
+    case 'feederWaiverType':
       return typeof value === 'string' && WAIVER_TYPES.has(value) ? text(`waiverType.${value}`) : null
+    case 'vetoThreshold':
+      return vetoRuleText(value)
     case 'tradeReview':
       return typeof value === 'string' && TRADE_REVIEWS.has(value) ? text(`tradeReview.${value}`) : null
     case 'scoringMode':
@@ -213,6 +233,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'categoryRecordMode':
       return typeof value === 'string' && RECORD_MODES.has(value) ? text(`recordMode.${value}`) : null
     case 'scoringPreset':
+    case 'feederScoring':
       return typeof value === 'string' && presetKnown(value) ? text(`preset.${value}`) : null
     case 'lineupMode':
       return typeof value === 'string' && LINEUP_MODES.has(value) ? text(`lineupMode.${value}`) : null
@@ -284,6 +305,12 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'draftOrphanPicks':
       return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
+    case 'draftDevyRounds':
+    case 'draftCollegeRounds': {
+      const rounds = roundsOf(value)
+      if (!rounds) return null
+      return rounds.length ? plural('v.collegeRounds', rounds.length, { rounds: roundList(rounds) }) : text('v.collegeRounds.none')
+    }
     case 'rookieDraftLottery': {
       const l = lotteryOf(value)
       if (!l) return null
@@ -441,6 +468,7 @@ function tradeLines(s: RuleSnapshot): RuleLine[] {
       deadlineAt ? text('trades.deadlineAt', { date: { date: deadlineAt } }) : isPosInt(s.tradeDeadlineWeek) ? text('trades.deadlineWeek', { week: s.tradeDeadlineWeek }) : text('trades.noDeadline'),
     ),
     line('trades-review', review ? text(`trades.review.${review}`) : null),
+    line('trades-veto-threshold', review === 'league_vote' && isVetoRule(s.vetoThreshold) ? (s.vetoThreshold.mode === 'percent' ? text('trades.vetoPercent', { n: s.vetoThreshold.value }) : plural('trades.vetoVotes', s.vetoThreshold.value)) : null),
     line(
       'trades-review-hours',
       (review === 'commissioner' || review === 'league_vote') && isNum(s.tradeReviewHours) && s.tradeReviewHours > 0 ? plural('trades.reviewHours', s.tradeReviewHours) : null,
@@ -489,13 +517,14 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
     line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
+    line('guillotine-best-ball', s.bestBallLineups === true ? text('guillotine.bestBall') : null),
   ])
 }
 
 function keeperLines(s: RuleSnapshot): RuleLine[] {
   const cost = s.keeperCost && KEEPER_COSTS.has(s.keeperCost) ? s.keeperCost : null
   return compact([
-    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount > 0 ? plural('keeper.count', s.keeperCount) : null),
+    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount >= 0 ? plural('keeper.count', s.keeperCount) : null),
     line('keeper-cost', cost ? text(`keeper.cost.${cost}`) : null),
     line('keeper-years', isPosInt(s.keeperMaxYears) ? plural('keeper.maxYears', s.keeperMaxYears) : null),
   ])
@@ -514,9 +543,9 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
       'dynasty-taxi-stealing',
       slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
     ),
-    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? text(`dynasty.order.${s.rookieDraftOrder}`) : null),
+    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? (s.rookieDraftType === 'auction' ? text(s.rookieDraftOrder === 'weighted_lottery' ? 'dynasty.auction.weightedOrder' : 'dynasty.auction.order') : text(`dynasty.order.${s.rookieDraftOrder}`)) : null),
     // The lottery's own settings, only while it is what orders the rookie draft.
-    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null),
+    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null, s.rookieDraftType === 'auction'),
     line(
       'dynasty-rookie-rounds',
       isPosInt(s.rookieDraftRounds)
@@ -528,14 +557,49 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
   ])
 }
 
-function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> {
+function lotteryLines(l: RookieDraftLotteryRule | null, auction = false): Array<RuleLine | null> {
   if (!l) return []
   return [
-    line('dynasty-lottery-draw', lotteryDraw(l)),
+    line('dynasty-lottery-draw', auction ? text('dynasty.auction.draw', { pool: lotteryPool('v.lottery.pool', l), n: l.picks }) : lotteryDraw(l)),
     line('dynasty-lottery-odds', text(`dynasty.lottery.odds.${l.odds}`)),
-    line('dynasty-lottery-rest', text(`dynasty.lottery.rest.${l.rest}`)),
+    line('dynasty-lottery-rest', text(`${auction ? 'dynasty.auction.rest' : 'dynasty.lottery.rest'}.${l.rest}`)),
     line('dynasty-lottery-tiebreak', l.tiebreak ? text(`dynasty.lottery.tiebreak.${l.tiebreak}`) : null),
   ]
+}
+
+/** A stored college-round list this module can state: whole rounds, sorted, no repeats — else null. */
+function roundsOf(value: unknown): number[] | null {
+  if (!Array.isArray(value) || !value.every(isPosInt)) return null
+  return [...new Set(value)].sort((a, b) => a - b)
+}
+
+/** [1, 2, 3, 4, 7, 9, 10] -> "1–4, 7, 9 and 10" (a run of three or more reads as a range). */
+function roundList(rounds: number[]): RuleVar {
+  const items: RuleVar[] = []
+  for (let i = 0; i < rounds.length; ) {
+    let j = i
+    while (j + 1 < rounds.length && rounds[j + 1] === rounds[j]! + 1) j++
+    if (j - i >= 2) items.push(text('v.roundRange', { from: rounds[i]!, to: rounds[j]! }))
+    else for (let k = i; k <= j; k++) items.push(rounds[k]!)
+    i = j + 1
+  }
+  return { list: items }
+}
+
+/**
+ * The devy / college rounds of the main draft, as the pick check enforces them (RuleSnapshot
+ * `draftDevyRounds` / `draftCollegeRounds`): which rounds take only college players, that every other
+ * round refuses them, or — with the rule on and no round listed — that no college player can be
+ * picked. A round list that covers the whole draft says so.
+ */
+function collegeRoundsLine(s: RuleSnapshot): RuleText | null {
+  const kind = s.draftCollegeRounds != null ? 'collegeRounds' : s.draftDevyRounds != null ? 'devyRounds' : null
+  if (!kind) return null
+  const rounds = roundsOf(kind === 'collegeRounds' ? s.draftCollegeRounds : s.draftDevyRounds)
+  if (!rounds) return null
+  if (!rounds.length) return text(`draft.${kind}.none`)
+  if (isPosInt(s.draftRounds) && rounds.length === s.draftRounds && rounds[rounds.length - 1] === s.draftRounds) return text(`draft.${kind}.all`)
+  return plural(`draft.${kind}`, rounds.length, { rounds: roundList(rounds) })
 }
 
 /**
@@ -556,6 +620,7 @@ function draftLines(s: RuleSnapshot): RuleLine[] {
     line('draft-status', status === 'completed' ? text('draft.completed') : status === 'in_progress' ? text('draft.inProgress') : null),
     line('draft-type', type && isPosInt(s.draftRounds) ? plural(`draft.type.${type}`, s.draftRounds) : null),
     line('draft-3rr', type === 'snake' && s.draftThirdRoundReversal === true ? text('draft.thirdRoundReversal') : null),
+    line('draft-college-rounds', type === 'snake' || type === 'linear' ? collegeRoundsLine(s) : null),
     line(
       'draft-auction',
       type === 'auction' && isPosInt(s.draftAuctionBudget) && isPosInt(s.draftAuctionMinBid)
@@ -584,6 +649,7 @@ function pickLines(s: RuleSnapshot): RuleLine[] {
   const pd = s.pickTradeDeadline
   return compact([
     line('trades-picks', text('trades.picks.on')),
+    line('trades-pick-years', isPosInt(s.pickTradeYears) ? plural('trades.pickYears', s.pickTradeYears) : null),
     line('trades-pick-deadline', pd === 'open' ? text('trades.pickDeadline.open') : isPosInt(pd) ? text('trades.pickDeadline.week', { week: pd }) : null),
     line('trades-pick-terms', s.pickTerms === true ? text('trades.pickTerms') : null),
   ])
@@ -598,6 +664,18 @@ function overviewFormat(s: RuleSnapshot): RuleText | null {
 function overviewImported(s: RuleSnapshot): RuleText | null {
   if (!s.importedFrom) return null
   return PLATFORMS.has(s.importedFrom) ? text('overview.imported', { platform: text(`platform.${s.importedFrom}`) }) : text('overview.importedGeneric')
+}
+
+const FEEDER_KEYS: RuleKey[] = [
+  'feederScoring', 'feederRosterSize', 'feederBenchSize', 'feederWaiverType',
+  'feederFaabBudget', 'feederFaabReset', 'feederTradeDeadline', 'feederTradeLockHours',
+]
+
+function feederLines(s: RuleSnapshot): RuleLine[] {
+  return FEEDER_KEYS.flatMap((key) => {
+    const value = describeValue(key, s[key], s)
+    return value ? [{ id: key, text: text('feeder.entry', { label: text(`label.${key}`), value }) }] : []
+  })
 }
 
 /**
@@ -619,13 +697,22 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-format', overviewFormat(s)),
     line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
-  const lineups =
-    !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
+  // A best ball Guilly league sets no lineup: one line saying so, and no lineup mode or lock to explain.
+  const autoLineups = !imported && format === 'guillotine' && s.bestBallLineups === true
+  const lineups: RuleLine[] = autoLineups
+    ? [{ id: 'lineups-best-ball', text: text('lineups.bestBall') }]
+    : !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
+  // When a weekly lineup locks. Every football league gets this line too, which had none.
+  // Daily lineups carry no lock here: the lock reads as 'daily' and their own line explains it.
+  if (!autoLineups && !imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
+    lineups.push({ id: 'lineups-lock', text: text(`lineups.lock.${s.lineupLock}`) })
+  }
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
+    ...(s.concept === 'tournament' && !imported ? [{ id: 'feeder' as const, title: text('section.feeder'), lines: feederLines(s) }] : []),
     ...(format === 'guillotine' && !imported ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },
@@ -701,6 +788,8 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return after === 'top_scorer' ? text('guillotine.immunity') : after === 'off' ? text('change.immunity.off') : null
     case 'endgame':
       return after === 'last_team_standing' ? text('guillotine.endgame.last') : typeof after === 'string' && ENDGAME_TEAMS[after] ? text('guillotine.endgame.final', { n: ENDGAME_TEAMS[after]! }) : null
+    case 'vetoThreshold':
+      return isVetoRule(after) ? (after.mode === 'percent' ? text('trades.vetoPercent', { n: after.value }) : plural('trades.vetoVotes', after.value)) : null
     case 'tradeReview':
       return typeof after === 'string' && TRADE_REVIEWS.has(after) ? text(`trades.review.${after}`) : null
     case 'thirdPlaceGame':
@@ -715,6 +804,8 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'boolean' ? text(after ? 'trades.picks.on' : 'trades.picks.off') : null
     case 'pickTerms':
       return typeof after === 'boolean' ? text(after ? 'trades.pickTerms' : 'change.pickTerms.off') : null
+    case 'pickTradeYears':
+      return isPosInt(after) ? plural('trades.pickYears', after) : null
     case 'pickTradeDeadline':
       return after === 'open' ? text('trades.pickDeadline.open') : after === 'same' ? text('change.pickDeadline.same') : isPosInt(after) ? text('trades.pickDeadline.week', { week: after }) : null
     case 'taxiSlots':
@@ -759,6 +850,13 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return after === true ? text('change.autostart.on') : after === false ? text('change.autostart.off') : null
     case 'draftOrphanPicks':
       return typeof after === 'string' && ORPHAN_DRAFTERS.has(after) ? text(`draft.orphan.${after}`) : after == null ? text('change.orphan.off') : null
+    case 'draftDevyRounds':
+    case 'draftCollegeRounds': {
+      if (after == null) return text('change.collegeRounds.off')
+      const rounds = roundsOf(after)
+      if (!rounds) return null
+      return rounds.length ? plural('change.collegeRounds.set', rounds.length, { rounds: roundList(rounds) }) : text('change.collegeRounds.none')
+    }
     default:
       return null
   }

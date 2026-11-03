@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { describePickTerms, type PickTerms } from '@/lib/league-trade-engine/pickTerms'
 import type { PickTermsView } from '@/lib/league-trade-engine/pickTermsService'
 
@@ -41,7 +42,7 @@ export function PickTermsEditor(props: {
 }) {
   const { language, t } = useOptionalLanguage()
   const tx = (key: string) => t(K + key)
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = coreLang(language)
   const { view, picks, value, onChange } = props
   if (!view.active || picks.length === 0) return null
 

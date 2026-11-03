@@ -135,6 +135,14 @@ export async function buildZombieAIContext(args: {
     weaponBalanceByRoster[r.id] = ledgerRows.filter((l) => l.rosterId === r.id && l.resourceType === 'weapon').reduce((s, l) => s + l.balance, 0)
   }
 
+  if (sport === 'NFL' && await prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } })) {
+    const nativeTeams = await prisma.zombieLeagueTeam.findMany({ where: { leagueId }, include: { items: { where: { isUsed: false, isExpired: false }, select: { itemType: true } } } })
+    for (const team of nativeTeams) {
+      serumBalanceByRoster[team.rosterId] = team.items.filter(i => i.itemType.includes('serum')).length
+      weaponBalanceByRoster[team.rosterId] = team.items.filter(i => i.itemType.startsWith('weapon_')).length
+    }
+  }
+
   let myResources = { serums: 0, weapons: 0, ambush: 0 }
   if (myRosterId) {
     myResources = {

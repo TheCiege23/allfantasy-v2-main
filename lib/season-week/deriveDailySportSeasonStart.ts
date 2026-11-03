@@ -53,6 +53,7 @@ import {
   estimateDailySportSeasonStart,
   isCuratedDailySportSeason,
   recordDerivedDailySportSeasonStart,
+  recordVerifiedSoccerGameweeks,
   resolveDailySportSeasonStart,
 } from './dailySportSeasonStarts'
 
@@ -211,6 +212,27 @@ export async function ensureDailySportSeasonStart(
   if (!Number.isInteger(year)) return { opener: null, source: 'unknown', estimated: false, detail: 'no season' }
   if (isCuratedDailySportSeason(key, year)) {
     return { opener: resolveDailySportSeasonStart(key, year)!, source: 'curated', estimated: false, detail: 'dailySportSeasonStarts.ts' }
+  }
+
+  if (key === 'SOCCER') {
+    const already = resolveDailySportSeasonStart(key, year)
+    if (already) return { opener: already, source: 'schedule', estimated: false, detail: 'verified three-league gameweek calendar' }
+    const cacheKey = `${key}:${year}`
+    const now = (deps.now ?? new Date()).getTime()
+    const hit = checked.get(cacheKey)
+    if (hit && now - hit.at < RECHECK_MS) return hit.result
+    const row = await deps.db.sportsDataCache.findUnique({ where: { cacheKey: `SOCCER:rischedule:${year}:calendar` } })
+    const data = row?.data && typeof row.data === 'object' && !Array.isArray(row.data)
+      ? row.data as Record<string, unknown> : null
+    const starts = data?.season === year && Array.isArray(data.starts) && data.starts.every((v) => typeof v === 'string')
+      ? data.starts as string[] : null
+    const valid = starts && recordVerifiedSoccerGameweeks(year, starts)
+    const opener = valid ? resolveDailySportSeasonStart(key, year) : null
+    const result: DailySportSeasonStartResolution = opener
+      ? { opener, source: 'schedule', estimated: false, detail: 'verified three-league gameweek calendar' }
+      : { opener: null, source: 'unknown', estimated: false, detail: 'no complete 38-gameweek soccer calendar is stored' }
+    checked.set(cacheKey, { at: now, result })
+    return result
   }
 
   const cacheKey = `${key}:${year}`

@@ -20,6 +20,10 @@ export const dashScheduleBandMessages = defineMessages({
     noSchedule: (withoutSchedule: number) =>
       `no schedule yet for your other ${withoutSchedule} ${withoutSchedule === 1 ? 'league' : 'leagues'}`,
     openYourWeek: 'Open your week',
+    /** An opponent: shared `rosterLabel` in English; Spanish words the same fallbacks itself. */
+    opponent: (label: string, _realName: string | null, _rosterId: string): string => label,
+    /** "synced 4m ago": the page's label as written; Spanish rewords it around the translated age. */
+    synced: (label: string, _age: string): string => label,
   },
   es: {
     week: (week) => `Semana ${week}`,
@@ -33,5 +37,9 @@ export const dashScheduleBandMessages = defineMessages({
     noSchedule: (withoutSchedule) =>
       withoutSchedule === 1 ? 'aún sin calendario para tu otra liga' : `aún sin calendario para tus otras ${withoutSchedule} ligas`,
     openYourWeek: 'Abrir tu semana',
+    opponent: (_label, realName, rosterId) => realName ?? (rosterId ? `Equipo ${rosterId}` : 'Rival'),
+    synced: (_label, age) => `sincronizado ${age}`,
   },
 })
+
+export type DashScheduleBandMessages = typeof dashScheduleBandMessages.en

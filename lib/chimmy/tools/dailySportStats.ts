@@ -32,10 +32,10 @@ import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/stats
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 /** The daily sports whose season totals come from Rolling Insights `fantasy_stat_lines`. */
-export type RiSeasonSport = Exclude<DailySport, 'NCAAB'>
+export type RiSeasonSport = Exclude<DailySport, 'NCAAB' | 'SOCCER'>
 
 /**
  * ⚠ NCAAB IS A DAILY SPORT FOR GAME LOGS AND STANDINGS, BUT NOT FOR SEASON TOTALS. Its vendor
@@ -225,7 +225,7 @@ export function renderDailySeasonBlock(sport: DailySport, block: unknown): strin
   if (sport === 'MLB') return mlbSeason(b)
   if (sport === 'NBA') return nbaSeason(b)
   // NCAAB totals are summed from game logs (collegeBasketballStats.ts); a vendor block is never rendered.
-  if (sport === 'NCAAB') return []
+  if (sport === 'NCAAB' || sport === 'SOCCER') return []
   return nhlSeason(b)
 }
 
@@ -314,12 +314,27 @@ function nhlGame(group: string, s: Record<string, unknown>, payload: Record<stri
   return parts.join(', ')
 }
 
+function soccerGame(group: string, s: Record<string, unknown>): string | null {
+  if (group !== 'fielders' && group !== 'goalkeepers') return null
+  const pairs = [
+    ['goals', 'goals'], ['assists', 'assists'], ['shots_on_goal', 'shots on target'],
+    ['shots_attempted', 'shots'], ['saves', 'saves'], ['clean_sheets', 'clean sheets'],
+    ['yellow_cards', 'yellow cards'], ['red_cards', 'red cards'], ['minutes_played', 'minutes'],
+  ] as const
+  const parts = pairs.flatMap(([key, label]) => {
+    const value = num(s[key])
+    return value == null ? [] : [`${fmt(value)} ${label}`]
+  })
+  return parts.length ? `${group === 'goalkeepers' ? 'Goalkeeper' : 'Fielder'} ${parts.join(', ')}` : null
+}
+
 function renderGameGroup(sport: DailySport, row: DailyGameRow): string | null {
   const map = rec(row.map)
   const stats = rec(map.stats)
   const payload = rec(row.payload)
   const group = String(map.group ?? row.gameId.split(':')[1] ?? 'all')
   if (sport === 'MLB') return group === 'pitching' ? mlbPitchingGame(stats, payload) : mlbBattingGame(stats)
+  if (sport === 'SOCCER') return soccerGame(group, stats)
   // NCAAB's box has NBA's shape (fixtures/live.NCAABB.json); its minutes arrive as "20", not "MM:SS".
   if (sport === 'NBA' || sport === 'NCAAB') return nbaGame(stats, payload)
   return nhlGame(group, stats, payload)
@@ -375,6 +390,12 @@ export async function buildDailyGameLogContext(
 
   const requestedSeason = typeof args.season === 'number' && Number.isFinite(args.season) ? Math.floor(args.season) : null
   const lastN = Math.min(10, Math.max(1, typeof args.lastN === 'number' && Number.isFinite(args.lastN) ? Math.floor(args.lastN) : 5))
+  const opener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason) : null
+  const calendarYearSubset = requestedSeason != null && sport !== 'MLB' && !opener
+  const nextOpener = requestedSeason != null && sport !== 'MLB' ? resolveDailySportSeasonStart(sport, requestedSeason + 1) : null
+  // For a future opener not yet recorded, stop before the next league season could begin.
+  // This is a conservative search boundary, not a claimed schedule date.
+  const nextBoundary = opener ? nextOpener ?? `${requestedSeason! + 1}-${sport === 'SOCCER' ? '07' : '09'}-01T00:00:00Z` : null
 
   const [rows, sportLatestRows] = await Promise.all([
     db.$queryRaw<DailyGameRow[]>(Prisma.sql`
@@ -382,7 +403,8 @@ export async function buildDailyGameLogContext(
              normalized_stat_map AS map, stat_payload AS payload
       FROM player_game_stats
       WHERE "sportType" = ${sport} AND "playerId" = ${player.id}
-        ${requestedSeason != null ? Prisma.sql`AND season = ${requestedSeason}` : Prisma.empty}
+        ${opener && nextBoundary ? Prisma.sql`AND game_date >= ${new Date(opener)} AND game_date < ${new Date(nextBoundary)}` :
+          requestedSeason != null ? Prisma.sql`AND season = ${requestedSeason}` : Prisma.empty}
       ORDER BY game_date DESC NULLS LAST, "gameId" ASC
       LIMIT ${lastN * 2 + 40}`),
     db.$queryRaw<Array<{ latest: Date | null }>>(Prisma.sql`
@@ -412,14 +434,18 @@ export async function buildDailyGameLogContext(
   }
 
   const header = `${player.canonicalName} (${player.position ?? '?'}, ${player.currentTeam ?? 'FA'}) — ${sport} per-game box-score lines from Rolling Insights, newest first:`
+  const subsetNote = calendarYearSubset
+    ? `The ${dailySeasonLabel(sport, requestedSeason!)} season opener is not recorded. These are only stored games tagged year ${requestedSeason}; they may omit games from the rest of that season.` : null
   if (games.length === 0) {
     return [
       header,
-      `- No ${requestedSeason != null ? `${dailySeasonLabel(sport, requestedSeason)} ` : ''}regular-season or playoff game lines are stored for him.${preseason ? ` (${preseason} preseason line(s) are stored and deliberately not shown — preseason is not the season.)` : ''} Do NOT report zeros or give lines from memory; offer his season totals (get_player_season_stats) instead.`,
-    ].join('\n')
+      subsetNote,
+      `- No ${requestedSeason != null ? `${dailySeasonLabel(sport, requestedSeason)} ` : ''}regular-season or playoff game lines are stored for him.${preseason ? ` (${preseason} preseason line(s) are stored and deliberately not shown — preseason is not the season.)` : ''} Do NOT report zeros or give lines from memory.${sport === 'SOCCER' ? '' : ' Offer his season totals (get_player_season_stats) instead.'}`,
+    ].filter(Boolean).join('\n')
   }
 
   const lines: string[] = []
+  if (subsetNote) lines.push(subsetNote)
   const newest = latest(games[0].rows.map((r) => r.gameDate))
   const sportLatest = sportLatestRows[0]?.latest ?? null
   if (requestedSeason == null && newest && sportLatest && new Date(sportLatest).getTime() - newest.getTime() > 3 * 86_400_000) {

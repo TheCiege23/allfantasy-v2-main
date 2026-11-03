@@ -530,7 +530,7 @@ export async function executeLeagueSettingsPatch(
     const k = Number(body.keeperCount)
     if (!Number.isFinite(k) || k < 0 || k > 10) return jsonError('keeperCount must be 0–10', 400)
   }
-  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule })
+  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule, keeperMissedDeadlineRule: league.keeperMissedDeadlineRule })
   if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
   const teamCount = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
@@ -1567,6 +1567,12 @@ export async function executeLeagueSettingsPatch(
       section: patchOptions?.section ?? null,
     },
   })
+
+  if (body.draftDateUtc !== undefined && patchOptions?.source !== 'tournament' &&
+      updated?.draftDateUtc && updated.draftDateUtc.getTime() !== league.leagueSettings?.draftDateUtc?.getTime()) {
+    const { notifyDraftTimeSet } = await import('@/lib/draft-notifications')
+    await notifyDraftTimeSet(leagueId, updated.draftDateUtc).catch((e) => console.error('[league/settings] draft time notification failed', e))
+  }
 
   return NextResponse.json({
     success: true,

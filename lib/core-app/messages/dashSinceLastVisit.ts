@@ -10,6 +10,8 @@ export const dashSinceLastVisitMessages = defineMessages({
   en: {
     title: 'Since your last visit',
     lastWeek: 'last 7 days',
+    /** A span of time, "5m" / "5 min" — fed to `since` and `reaches`. */
+    span: (n: number, unit: 'm' | 'h' | 'd'): string => `${n}${unit}`,
     since: (span: string) => `since ${span} ago`,
     reaches: (span: string) => `reaches ${span} further back`,
     noDesignation: 'no designation',
@@ -29,10 +31,13 @@ export const dashSinceLastVisitMessages = defineMessages({
     openAlerts: 'Open alerts',
     comparisonPending:
       'Injury and standings changes appear from your next visit — this is the first time we have a picture to compare against.',
+    /** A trade's summary: the loader's English, or (Spanish) its rebuild from `parts` when there is one. */
+    tradeSummary: (summary: string, _rebuilt: string | null): string => summary,
   },
   es: {
     title: 'Desde tu última visita',
     lastWeek: 'últimos 7 días',
+    span: (n, unit) => `${n} ${unit === 'm' ? 'min' : unit}`,
     since: (span) => `desde hace ${span}`,
     reaches: (span) => `llega ${span} más atrás`,
     noDesignation: 'sin designación',
@@ -52,5 +57,6 @@ export const dashSinceLastVisitMessages = defineMessages({
     openAlerts: 'Abrir alertas',
     comparisonPending:
       'Los cambios de lesiones y clasificaciones aparecen desde tu próxima visita: es la primera vez que tenemos una referencia con la que comparar.',
+    tradeSummary: (summary, rebuilt) => rebuilt ?? summary,
   },
 })

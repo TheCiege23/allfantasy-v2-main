@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   syncRuns: [] as Array<{ ctx: SyncCtx; outcome: Record<string, unknown> | null }>,
   teamsCalls: [] as string[],
   playersCalls: [] as string[],
+  rosterCalls: [] as string[],
   /** Sports allowed to start before the budget reads exhausted. */
   sportsBeforeExhausted: Infinity,
   /** The previous fire's heartbeat row, as `readLastSixSportDeferral` finds it. */
@@ -49,8 +50,8 @@ vi.mock('@/lib/api-sports', () => ({
   getAPISportsDiagnostics: vi.fn(() => ({})),
 }))
 vi.mock('@/lib/sports-data/theSportsDbIngest', () => ({
-  LEAGUES: {},
-  ingestRosters: vi.fn(),
+  LEAGUES: Object.fromEntries(['NFL','NBA','NHL','MLB','SOCCER','NCAAF','NCAAB'].map(s => [s, { hasPlayers: !['NCAAF','NCAAB'].includes(s) }])),
+  ingestRosters: vi.fn(async (sport: string) => { h.rosterCalls.push(sport); return { teams: 1, players: 1, skippedNoPlayers: 0, coachesDropped: 0, deferredTeams: 0 } }),
   ingestSchedule: vi.fn(),
   ingestTeams: vi.fn(),
 }))
@@ -89,6 +90,7 @@ beforeEach(() => {
   h.syncRuns.length = 0
   h.teamsCalls.length = 0
   h.playersCalls.length = 0
+  h.rosterCalls.length = 0
   h.sportsBeforeExhausted = Infinity
   h.lastRun = null
   h.lastRunQueries.length = 0
@@ -146,5 +148,21 @@ describe('import-schedules ?riProfiles=1', () => {
     expect(h.lastRunQueries[0]).toMatchObject({
       where: { jobName: 'cron-import-schedules-ri-profiles', completedAt: { not: null }, jobScope: { contains: ',' } },
     })
+  })
+})
+
+describe('scoped roster mode', () => {
+  it('refreshes only the requested roster and skips all profile sweeps', async () => {
+    const { GET } = await import('@/app/api/cron/import-schedules/route')
+    const response = await GET(new Request('http://localhost/api/cron/import-schedules?rosters=1&rosterSports=NBA') as never)
+    expect(response.status).toBe(200)
+    expect(h.rosterCalls).toEqual(['NBA'])
+    expect(h.playersCalls).toEqual([]); expect(h.teamsCalls).toEqual([])
+  })
+  it('rejects sports without roster support before any ingestion', async () => {
+    const { GET } = await import('@/app/api/cron/import-schedules/route')
+    const response = await GET(new Request('http://localhost/api/cron/import-schedules?rosters=1&rosterSports=NBA,NCAAF') as never)
+    expect(response.status).toBe(400)
+    expect(h.rosterCalls).toEqual([])
   })
 })

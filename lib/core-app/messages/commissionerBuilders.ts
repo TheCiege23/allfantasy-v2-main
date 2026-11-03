@@ -103,6 +103,31 @@ export const commissionerBuildersMessages = defineMessages({
     formatFourHorsemenDetail: 'Review the configured rules before making a commissioner ruling.',
     formatFourHorsemenAction: 'Open settings',
 
+    // formatCards.ts — the dynasty card (2026-10-31). Every value is read from the league's saved settings.
+    formatDynastyTitle: 'Dynasty settings',
+    formatDynastyDetail: 'The rules that carry this league from one season to the next.',
+    formatDynastyEmpty: 'No dynasty settings are saved for this league yet. Review them before the rookie draft.',
+    formatDynastyAction: 'Open dynasty settings',
+    formatDynastyRosterLabel: 'Roster',
+    formatDynastyRosterValue: (n: number): string => `${n} ${n === 1 ? 'spot' : 'spots'}`,
+    formatDynastyTaxiLabel: 'Taxi squad',
+    formatDynastyDevyLabel: 'Devy slots',
+    formatDynastySlotsValue: (n: number): string => `${n} ${n === 1 ? 'slot' : 'slots'}`,
+    formatDynastyRookieLabel: 'Rookie draft',
+    formatDynastyRookieValue: (rounds: number, type: 'linear' | 'snake' | null): string =>
+      `${rounds} ${rounds === 1 ? 'round' : 'rounds'}${type === 'linear' ? ' · linear' : type === 'snake' ? ' · snake' : ''}`,
+    formatDynastyPickYearsLabel: 'Pick trading',
+    formatDynastyPickYearsValue: (years: number): string => `${years} ${years === 1 ? 'season' : 'seasons'} out`,
+    formatDynastyRolloverLabel: 'Rollover',
+    formatDynastyRolloverDue: (season: number): string => `Due · the ${season} season is over`,
+    formatDynastyRolloverStarted: (season: number): string => `Done · ${season} is under way`,
+    formatDynastyRolloverInSeason: (season: number): string => `Not yet · ${season} is in progress`,
+    formatDynastyLinkRoster: 'Roster settings',
+    formatDynastyLinkDraft: 'Draft settings',
+    formatDynastyLinkTrades: 'Trade settings',
+    formatDynastyLinkRollover: 'Open the rollover',
+    formatDynastyPicksAria: (rounds: number): string => `${rounds} rookie draft ${rounds === 1 ? 'round' : 'rounds'}`,
+
     // reports.ts.
     reportsActivityUnread: 'League activity couldn’t be read just now.',
 
@@ -194,6 +219,30 @@ export const commissionerBuildersMessages = defineMessages({
     formatFourHorsemenTitle: 'Reglas de Four Horsemen',
     formatFourHorsemenDetail: 'Revisa las reglas configuradas antes de tomar una decisión como comisionado.',
     formatFourHorsemenAction: 'Abrir la configuración',
+
+    formatDynastyTitle: 'Configuración dynasty',
+    formatDynastyDetail: 'Las reglas que llevan esta liga de una temporada a la siguiente.',
+    formatDynastyEmpty: 'Esta liga aún no tiene configuración dynasty guardada. Revísala antes del draft de novatos.',
+    formatDynastyAction: 'Abrir la configuración dynasty',
+    formatDynastyRosterLabel: 'Plantilla',
+    formatDynastyRosterValue: (n) => `${n} ${n === 1 ? 'puesto' : 'puestos'}`,
+    formatDynastyTaxiLabel: 'Escuadra taxi',
+    formatDynastyDevyLabel: 'Puestos devy',
+    formatDynastySlotsValue: (n) => `${n} ${n === 1 ? 'puesto' : 'puestos'}`,
+    formatDynastyRookieLabel: 'Draft de novatos',
+    formatDynastyRookieValue: (rounds, type) =>
+      `${rounds} ${rounds === 1 ? 'ronda' : 'rondas'}${type === 'linear' ? ' · lineal' : type === 'snake' ? ' · serpiente' : ''}`,
+    formatDynastyPickYearsLabel: 'Intercambio de selecciones',
+    formatDynastyPickYearsValue: (years) => `${years} ${years === 1 ? 'temporada' : 'temporadas'} a futuro`,
+    formatDynastyRolloverLabel: 'Cambio de temporada',
+    formatDynastyRolloverDue: (season) => `Pendiente · la temporada ${season} terminó`,
+    formatDynastyRolloverStarted: (season) => `Hecho · ${season} ya está en marcha`,
+    formatDynastyRolloverInSeason: (season) => `Aún no · ${season} está en curso`,
+    formatDynastyLinkRoster: 'Configuración de plantilla',
+    formatDynastyLinkDraft: 'Configuración del draft',
+    formatDynastyLinkTrades: 'Configuración de intercambios',
+    formatDynastyLinkRollover: 'Abrir el cambio de temporada',
+    formatDynastyPicksAria: (rounds) => `${rounds} ${rounds === 1 ? 'ronda' : 'rondas'} del draft de novatos`,
 
     reportsActivityUnread: 'No se pudo leer la actividad de la liga en este momento.',
 

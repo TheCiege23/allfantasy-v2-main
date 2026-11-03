@@ -27,6 +27,7 @@
 
 import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
+import { coreLocale } from '../messages/coreLocale'
 
 export type ChartBar = {
   label: string
@@ -82,7 +83,7 @@ export function fantasyWeekStart(at: Date): Date {
 }
 
 function shortDate(d: Date, language = 'en'): string {
-  return d.toLocaleDateString(language === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return d.toLocaleDateString(coreLocale(language).usLocale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 export function weeklyBuckets(rows: ActivityRow[], now: Date, weeks: number): Array<{ start: Date; rows: ActivityRow[] }> {

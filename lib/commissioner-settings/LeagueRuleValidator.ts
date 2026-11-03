@@ -75,10 +75,20 @@ export function validateTradeSettings(patch: LeagueSettingsPatch): ValidationRes
       return { valid: false, error: "Trade review type must be one of: none, commissioner, league_vote, instant" }
     }
   }
+  if (patch.vetoThresholdMode !== undefined && patch.vetoThresholdMode != null) {
+    if (patch.vetoThresholdMode !== "count" && patch.vetoThresholdMode !== "percent") {
+      return { valid: false, error: "Veto threshold must be counted as votes (count) or a percent of teams (percent)" }
+    }
+  }
   if (patch.vetoThreshold !== undefined && patch.vetoThreshold != null) {
     const n = Number(patch.vetoThreshold)
-    if (!Number.isInteger(n) || n < 0 || n > 100) {
-      return { valid: false, error: "Veto threshold must be 0–100" }
+    // A number of votes (the default) is 1–30; a percent of the league's teams is 1–100. 0 still clears it.
+    const max = patch.vetoThresholdMode === "count" ? 30 : 100
+    if (!Number.isInteger(n) || n < 0 || n > max) {
+      return {
+        valid: false,
+        error: patch.vetoThresholdMode === "count" ? "Veto votes must be 0–30" : "Veto threshold must be 0–100",
+      }
     }
   }
   return { valid: true }

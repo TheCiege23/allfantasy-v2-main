@@ -27,6 +27,7 @@
  */
 import type { ChimmyContextProvider, ChimmyContextRequest, LeagueOfficeContextSlice, ProviderResult } from '@/lib/chimmy-context/types'
 import { buildLeagueOfficeSummary, type LeagueOfficeInput } from '@/lib/chimmy-context/leagueOfficeSummary'
+import { joinTeamNames, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 
 const isoMinute = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`
 
@@ -75,7 +76,7 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
           where: { leagueId, status: 'pending', acceptedAt: { not: null }, vetoMode: { in: ['commissioner', 'league_vote'] } },
           select: {
             id: true, status: true, vetoMode: true, vetoThreshold: true, acceptedAt: true, expiresAt: true,
-            proposerRosterId: true, receiverRosterId: true, votes: { select: { vote: true } },
+            proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true, votes: { select: { vote: true } },
           },
           orderBy: { expiresAt: 'asc' },
           take: 10,
@@ -100,16 +101,18 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
           }
         : null
 
+      // Every team in the trade, so a member on the third or fourth team of a multi-team trade sees it too
+      // and it is described with every team (lib/redraft/tradeParticipants.ts). Two teams: the old pair.
       const visible = proposals.filter(
-        (p) => commissioner || p.vetoMode === 'league_vote' || (myRedraftTeam && [p.proposerRosterId, p.receiverRosterId].includes(myRedraftTeam.id)),
+        (p) => commissioner || p.vetoMode === 'league_vote' || (myRedraftTeam && tradeParticipantRosterIds(p).includes(myRedraftTeam.id)),
       )
-      const ids = [...new Set(visible.flatMap((p) => [p.proposerRosterId, p.receiverRosterId]))]
+      const ids = [...new Set(visible.flatMap((p) => tradeParticipantRosterIds(p)))]
       const names = ids.length
         ? new Map((await prisma.redraftRoster.findMany({ where: { id: { in: ids } }, select: { id: true, teamName: true, ownerName: true } })).map((r) => [r.id, r.teamName?.trim() || r.ownerName || 'a team']))
         : new Map<string, string>()
       const now = Date.now()
       const trades = visible.map((p) => ({
-        teams: `${names.get(p.proposerRosterId) ?? 'a team'} and ${names.get(p.receiverRosterId) ?? 'a team'}`,
+        teams: joinTeamNames(tradeParticipantRosterIds(p).map((id) => names.get(id) ?? 'a team')),
         explainer: explainTradeReview(p, now, isoMinute).en,
       }))
 

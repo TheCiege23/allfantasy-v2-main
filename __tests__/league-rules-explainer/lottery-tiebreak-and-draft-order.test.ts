@@ -176,6 +176,15 @@ beforeEach(() => {
 })
 
 describe('the Draft section says how the order is really seated', () => {
+  it('reads a keeper league limit from the current draft, including zero', async () => {
+    m.state.league = baseLeague({ leagueType: 'keeper' })
+    m.state.session = { ...m.state.session, keeperConfig: { maxKeepers: 3 } }
+    expect((await loadDraftRules('L')).keeperCount).toBe(3)
+    m.state.session = { ...m.state.session, keeperConfig: { maxKeepers: 0 } }
+    expect((await loadDraftRules('L')).keeperCount).toBe(0)
+    m.state.session = { ...m.state.session, keeperConfig: {} }
+    expect((await loadDraftRules('L')).keeperCount).toBeUndefined()
+  })
   it('(a) redraft, draft_order_mode weighted_lottery: no lottery runs — the commissioner’s order', async () => {
     m.state.league = baseLeague({})
     const r = await loadDraftRules('L')

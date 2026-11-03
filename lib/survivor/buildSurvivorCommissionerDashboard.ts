@@ -1,4 +1,5 @@
 import 'server-only'
+import { tribalVotesDueFromSettings } from './survivorCeremonySchedule'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -58,7 +59,7 @@ export type SurvivorCommissionerDashboardResult =
         immunePlayerId: string | null
         tribalDeadline: string | null
       } | null
-      config: Awaited<ReturnType<typeof getSurvivorConfig>>
+      config: Awaited<ReturnType<typeof getSurvivorConfig>> & { tribalVotesDue?: ReturnType<typeof tribalVotesDueFromSettings> }
       week: number
       tribes: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number] & {
         emoji: ReturnType<typeof extractLeadingTribeIcon>
@@ -284,7 +285,8 @@ export async function buildSurvivorCommissionerDashboard(
           tribalDeadline: gs.tribalDeadline?.toISOString() ?? null,
         }
       : null,
-    config,
+    // When votes are really due: the settings screen's vote day/time, as the scheduler reads it.
+    config: { ...config, tribalVotesDue: tribalVotesDueFromSettings(savedSettings) },
     week,
     tribes,
     tribeRedraw,

@@ -6,6 +6,12 @@
  * - claims: a Locked day refuses claims with a clear message.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// These tests isolate their own waiver/lifecycle behavior; the pre-draft policy has its own route tests.
+vi.mock('@/lib/waiver-wire/season-phase-gate', () => ({
+  loadWaiverPhasePolicy: async () => ({ phase: 'regular', claimsAllowed: true, immediateAddsAllowed: true, firstComeAdds: false, code: null, reason: null }),
+  loadWaiverRunPhaseGate: async () => () => null,
+}))
+
 
 const m = vi.hoisted(() => ({
   prisma: {

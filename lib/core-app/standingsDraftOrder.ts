@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { buildEligibleTeamsWithOdds, selectEligibleTeams, type StandingsRow } from '@/lib/draft-lottery/standingsForLottery'
 import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
@@ -15,10 +14,11 @@ import { formatRecord, type StandingsBoard } from './standingsModel'
  * only for a league that states a standings rule, read in this order:
  *
  *   1. `settings.draft_order_mode === 'weighted_lottery'` — the lottery's own config and odds;
- *   2. `settings.rookie_draft_order.enabled` — worst record first, or fewest points first;
- *   3. a `DynastyLeagueConfig` row — its `rookiePickOrderMethod`.
+ *   2. `settings.rookie_draft_order.enabled` — worst record first, or fewest points first.
  *
- * Anything else is null and the section is not drawn.
+ * Anything else is null and the section is not drawn. A `DynastyLeagueConfig` method alone is NOT a
+ * standings rule any more: standings seat the rookie draft only under the automatic order, an AF
+ * Commissioner setting that is off by default (lib/rookie-order/automaticRookieOrder.ts).
  *
  * ⚠ THE LOTTERY ODDS ARE THE LOTTERY'S OWN ARITHMETIC (`buildEligibleTeamsWithOdds`), fed this table's
  * order instead of `LeagueTeam`'s stored rank — so the preview and a real run weigh the same way. A
@@ -68,14 +68,6 @@ export async function readDraftOrderRule(league: { id: string; settings: unknown
     return rookie.mode === 'reverse_max_pf' ? { kind: 'lowest_points' } : { kind: 'reverse_standings' }
   }
 
-  const dynasty = await prisma.dynastyLeagueConfig
-    .findUnique({ where: { leagueId: league.id }, select: { rookiePickOrderMethod: true } })
-    .catch(() => null)
-  if (dynasty) {
-    if (dynasty.rookiePickOrderMethod === 'max_pf') return { kind: 'lowest_points' }
-    if (dynasty.rookiePickOrderMethod === 'reverse_standings') return { kind: 'reverse_standings' }
-  }
-  /* An unrecognised method is not guessed at. */
   return null
 }
 

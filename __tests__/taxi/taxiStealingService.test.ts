@@ -223,6 +223,14 @@ describe('the views', () => {
     expect(await readTaxiStealView('L', 'stranger')).toEqual({ ok: false, status: 403 })
   })
 
+  it('lists each team’s taxi count for a commissioner only — the settings page’s over-the-limit warning', async () => {
+    const asComm = await readTaxiStealView('L', 'comm')
+    const asB = await readTaxiStealView('L', 'userB')
+    if (!asComm.ok || !asComm.view.supported || !asB.ok || !asB.view.supported) throw new Error('expected a view')
+    expect(asComm.view.taxiHeld).toEqual([{ teamName: 'Alpha', count: 2 }, { teamName: 'Bravo', count: 0 }, { teamName: 'Charlie', count: 1 }])
+    expect(asB.view.taxiHeld).toEqual([])
+  })
+
   it('Commish OS lists open claims, elevated once one is past its window; Chimmy knows the rule and the claims', async () => {
     expect(await readTaxiStealTasks('L', T0)).toEqual([])
     expect(await readTaxiStealingForChimmy('L')).toContain('Taxi stealing is on')

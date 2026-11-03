@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { CUSTOM_KINDS, CUSTOM_MAX, LABEL_MAX, type CustomKind } from '@/lib/deadline-autopilot/autopilot'
 import type { AutopilotView } from '@/lib/deadline-autopilot/autopilotService'
 
@@ -164,7 +165,7 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
               <div className="af-ch-recipe-body">
                 <p className="af-ch-recipe-label">{d.kind === 'keeper' && d.targeted ? m.autopilotKeeperDeadline : d.label}</p>
                 <p className="af-ch-recipe-meta">
-                  {new Date(d.at).toLocaleString(language === 'es' ? 'es' : 'en', { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
+                  {new Date(d.at).toLocaleString(coreLang(language), { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
                   {d.targeted ? m.autopilotStillToSubmit(d.recipients) : m.autopilotManagers(d.recipients)}
                   {d.lastSent ? m.autopilotLastReminder(d.lastSent) : ''}
                 </p>

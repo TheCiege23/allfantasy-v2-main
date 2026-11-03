@@ -219,6 +219,22 @@ describe('a row the model refuses keeps its place, after every row with odds', (
   })
 })
 
+describe('oddsByLeague — every league with odds, for the league list (2026-10-30)', () => {
+  it('names every league with live odds, beyond the five-row columns, and leaves out results and refusals', async () => {
+    Object.assign(PLAYERS, { p1: [10, 'KC'], q1: [5, 'KC'], x: [10, 'CIN'], y: [10, 'MIA'], n1: [10, 'SF'], m1: [5, 'SF'] })
+    for (let i = 0; i < 7; i++) league(`fav${i}`, ['p1'], ['q1'])
+    const plid = league('F', ['x'], ['y'], [40, 20])
+    db.scores = [{ leagueId: plid, seasonYear: 2026, week: 4, playerId: 'x', points: 40 }, { leagueId: plid, seasonYear: 2026, week: 4, playerId: 'y', points: 20 }]
+    league('noAttrib', ['n1'], ['m1'], [50, 0])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leading.length).toBe(5)
+    expect(Object.keys(pulse.oddsByLeague ?? {}).sort()).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => `fav${i}`))
+    for (const p of Object.values(pulse.oddsByLeague ?? {})) expect(p).toBeGreaterThan(0.5)
+    /* The board's own number, not a second model. */
+    expect(pulse.oddsByLeague?.fav0).toBe(pulse.leading.find((r) => r.leagueId === 'fav0')?.pWin)
+  })
+})
+
 describe('expected wins and closest games', () => {
   it('sums the odds into an expected record', async () => {
     Object.assign(PLAYERS, { a: [20, 'KC'], b: [20, 'SF'], c: [20, 'KC'], d: [20, 'SF'] })

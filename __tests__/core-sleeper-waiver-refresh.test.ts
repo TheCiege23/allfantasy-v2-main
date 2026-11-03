@@ -8,6 +8,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: h }))
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   buildTier0LeagueColumnPatch: () => ({}), buildImportedLeagueSettings: () => ({}),
   republishCanonicalSettingsForRefresh: (_bundle: unknown, _existing: unknown, fresh: unknown) => fresh,
+  refreshKeepsStoredScoring: () => false,
   persistTradedPicks: vi.fn(),
 }))
 vi.mock('@/lib/league-import/canonicalImportNormalizer', () => ({ buildCanonicalImportBundle: () => ({}) }))

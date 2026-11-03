@@ -8,6 +8,7 @@
  * that rule now lives here and both use it.
  */
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 
 /**
  * Latest scored period, else the configured first chop week, else 1 — plus when that latest score
@@ -35,5 +36,5 @@ export async function findViewerRosterId(leagueId: string, userId: string): Prom
   const row = await prisma.roster
     .findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
     .catch(() => null)
-  return row?.id ?? null
+  return row?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 }

@@ -44,7 +44,6 @@ const DATA_TYPE_PATH: Record<string, string> = {
   standings: 'standings',
   projections: 'projections',
   rankings: 'rankings',
-  adp: 'adp',
   roster: 'rosters',
 }
 
@@ -194,7 +193,6 @@ function buildRestPathCandidates(
       scores: [`live/${today}/${soccerCode}`, `live/${yesterday}/${soccerCode}`],
       standings: [`standings/${year}/${soccerCode}`],
       projections: [`player-stats/${year}/${soccerCode}`],
-      adp: [`adp/${soccerCode}`],
       rosters: [`depth-charts/${soccerCode}`],
     }
 
@@ -215,7 +213,6 @@ function buildRestPathCandidates(
       scores: [`live/${today}/${soccerCode}`, `live/${yesterday}/${soccerCode}`],
       standings: [`standings/${year}/${soccerCode}`],
       projections: [`player-stats/${year}/${soccerCode}`],
-      adp: [`adp/${soccerCode}`],
       rosters: [`depth-charts/${soccerCode}`],
     }
 
@@ -257,14 +254,6 @@ function buildRestPathCandidates(
     ],
     /** Historical production — the projection engine's base. Confirmed 2182 NFL rows for 2025. */
     player_stats: [`player-stats/${year}/${sportCode}`, `player-stats/${sportCode}`],
-    adp: [
-      `adp/${sportCode}`,
-      `adp/${year}/${sportCode}`,
-      `average-draft-position/${sportCode}`,
-      `average-draft-position/${year}/${sportCode}`,
-      `player-adp/${sportCode}`,
-      `draft-adp/${sportCode}`,
-    ],
     scores: [`live/${today}/${sportCode}`, `live/${yesterday}/${sportCode}`],
     schedule: [
       `schedule-season/${year}/${sportCode}`,
@@ -560,6 +549,12 @@ async function getClientCredentialsAccessToken(baseUrl: string): Promise<string>
  * Always returns { data, fromCache: false, error? }.
  */
 export async function rollingInsightsProvider(params: ApiFetchParams): Promise<ChainFetchResult> {
+  // contracts/rolling-insights/GAPS.md: ADP is WONTFIX; the vendor does not supply it.
+  // Never spend the REST candidate budget guessing valuation endpoints during a refresh.
+  if (String(params.dataType).toLowerCase() === 'adp') return {
+    data: null, error: 'Rolling Insights does not supply observed draft ADP', fromCache: false,
+    source: 'rolling_insights', latency: 0,
+  }
   const config = getRollingInsightsConfigFromEnv()
   if (!config) {
     console.error('[rolling-insights] credentials not configured')

@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -12,7 +13,7 @@ import { resolveRenewDraftOrderMode } from '@/lib/redraft/offseason/renewRedraft
 import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { diffRuleSnapshots } from './changeKeys'
-import { draftRulesFromInputs, dynastyRulesFromConfig, resolveRulesFormat, rookieDraftLotteryRule } from './snapshot'
+import { draftRulesFromInputs, dynastyRulesFromConfig, resolveRulesConcept, resolveRulesFormat, rookieDraftLotteryRule } from './snapshot'
 import type { RuleChange, RuleSnapshot } from './types'
 
 /**
@@ -38,7 +39,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       where: { id: leagueId },
       select: {
         platform: true, sport: true, leagueType: true, isDynasty: true, survivorMode: true,
-        guillotineMode: true, leagueVariant: true, settings: true,
+        guillotineMode: true, bestBallMode: true, leagueVariant: true, settings: true,
         dynastyConfig: { select: { rookiePickOrderMethod: true } },
       },
     }),
@@ -47,7 +48,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         status: true, draftType: true, rounds: true, timerSeconds: true, thirdRoundReversal: true,
-        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true,
+        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true, devyConfig: true, c2cConfig: true, keeperConfig: true,
       },
     }),
     prisma.leagueSettings.findUnique({
@@ -93,7 +94,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
         // and a `weighted_lottery` with no lottery behind it both seat what `manual` does.
         (rawMode === 'randomize' || rawMode === 'manual' || rawMode === 'weighted_lottery' ? 'manual' : null)
 
-  return draftRulesFromInputs({
+  const rules = draftRulesFromInputs({
     sessionLabel: session?.draftModeLabel ?? null,
     sessionStatus: session?.status ?? null,
     draftType,
@@ -113,7 +114,29 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
     autostart: ls?.autostart === true || startsAtScheduledTimeRegardlessOfAutostart(league),
     orphanEnabled: ui.orphanTeamAiManagerEnabled === true,
     orphanMode: ui.orphanDrafterMode ?? null,
+    // The college rounds the pick check enforces, from the session only: no other store reaches it
+    // (getOrCreateDraftSession creates a session without them; the room's devy / C2C controls and the
+    // draft settings save write them onto the session).
+    collegeRounds: { applies: isDevyOrC2CLeague(league), devy: session?.devyConfig ?? null, c2c: session?.c2cConfig ?? null },
   })
+  // The keeper editor and selection validator use the current draft session's config.
+  // A missing or malformed value leaves the league-level setting as the fallback.
+  const keeper = session?.keeperConfig
+  if (resolveRulesFormat(league) === 'keeper' && keeper && typeof keeper === 'object' && !Array.isArray(keeper)) {
+    const count = (keeper as Record<string, unknown>).maxKeepers
+    if (typeof count === 'number' && Number.isInteger(count) && count >= 0) rules.keeperCount = count
+  }
+  return rules
+}
+
+/**
+ * A league whose draft can carry college rounds: the dynasty family (devy, C2C, and a dynasty league
+ * that turned devy rounds on when it was created — createCanonicalLeagueInTransaction), or a league
+ * named devy / C2C in another format (a devy best ball league). Anything else never states them.
+ */
+function isDevyOrC2CLeague(league: Parameters<typeof resolveRulesFormat>[0]): boolean {
+  const concept = resolveRulesConcept(league)
+  return resolveRulesFormat(league) === 'dynasty' || concept === 'devy' || concept === 'c2c'
 }
 
 /**
@@ -136,7 +159,7 @@ async function lotterySeatsDraftOrder(
   league: { isDynasty: boolean; leagueVariant: string | null; dynastyConfig?: { rookiePickOrderMethod: string | null } | null },
 ): Promise<boolean> {
   if (!isDynastyLeagueRow(league)) return false
-  if (league.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return false
+  if (!isWeightedRookieLottery(league.dynastyConfig?.rookiePickOrderMethod)) return false
   return (await checkDynastyLotteryEligibility(leagueId)).eligible
 }
 

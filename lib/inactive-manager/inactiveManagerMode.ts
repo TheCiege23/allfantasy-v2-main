@@ -145,6 +145,61 @@ export function suggestInactiveTeams(rows: readonly SuggestionInput[], managed: 
   return rows.filter((r) => r.status === 'inactive' && !managed[r.rosterId]).map((r) => r.rosterId)
 }
 
+/**
+ * Chimmy as a manager (owner decision 2026-10-31): a commissioner can hand up to this many teams in a
+ * league to Chimmy — empty seats or absent managers' teams, in any league or draft type AllFantasy
+ * runs. Chimmy drafts for them (instantly; in an auction it nominates and bids) and runs them for the
+ * season, until a real manager takes the team.
+ */
+export const CHIMMY_MANAGER_LIMIT = 4
+
+/**
+ * Teams Chimmy runs in a league whose owner has no AF Commissioner plan: a taste of Chimmy as a
+ * manager. The plan raises it to `CHIMMY_MANAGER_LIMIT`.
+ */
+export const CHIMMY_FREE_TEAMS = 1
+
+/**
+ * Pure: the team(s) Chimmy runs for free — the earliest switched on, so a league that loses its plan
+ * keeps the team it handed Chimmy first rather than an arbitrary one.
+ */
+export function freeChimmyRosterIds(managed: ManagedLineups, free = CHIMMY_FREE_TEAMS): string[] {
+  return autopilotRosterIds(managed)
+    .sort((a, b) => (managed[a].autopilot!.since).localeCompare(managed[b].autopilot!.since) || a.localeCompare(b))
+    .slice(0, free)
+}
+
+/**
+ * Pure: the managed map Chimmy actually PLAYS from. With the plan, every team Chimmy runs; without it,
+ * only the free team(s) keep their autopilot — the others stay switched on (the commissioner's choice
+ * is kept for when the plan returns) but Chimmy neither drafts, votes, plays Exile nor makes moves for
+ * them. Lineup management without autopilot is untouched: that has always been free.
+ */
+export function playableManagedLineups(managed: ManagedLineups, entitled: boolean, free = CHIMMY_FREE_TEAMS): ManagedLineups {
+  if (entitled) return managed
+  const keep = new Set(freeChimmyRosterIds(managed, free))
+  return Object.fromEntries(Object.entries(managed).map(([id, entry]) => {
+    if (!entry.autopilot || keep.has(id)) return [id, entry]
+    const { autopilot: _paused, ...rest } = entry
+    return [id, rest]
+  }))
+}
+
+/** Pure: would giving `rosterId` to Chimmy take the league past the limit? */
+export function chimmyManagerLimitReached(managed: ManagedLineups, rosterId: string, limit = CHIMMY_MANAGER_LIMIT): boolean {
+  if (managed[rosterId]?.autopilot) return false
+  return autopilotRosterIds(managed).length >= limit
+}
+
+/**
+ * Pure: is Chimmy running this roster for its CURRENT owner? An entry switched on before the team
+ * changed hands speaks for nobody: the new manager runs it, even before the hourly sweep clears it.
+ */
+export function isChimmyRunning(managed: ManagedLineups, rosterId: string, currentOwnerId: string | null | undefined): boolean {
+  const entry = managed[rosterId]
+  return Boolean(entry?.autopilot) && managedForOwner(entry!, currentOwnerId) !== 'new_owner'
+}
+
 /** Roster ids Chimmy runs on autopilot in this league. */
 export function autopilotRosterIds(managed: ManagedLineups): string[] {
   return Object.entries(managed).flatMap(([id, m]) => (m.autopilot ? [id] : []))

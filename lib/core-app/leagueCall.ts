@@ -4,6 +4,8 @@ import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import { playerLock, type Kickoffs } from './swapLegality'
 import type { MoveTone } from './playerMoves'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { messagesFor } from '@/lib/i18n/messages'
+import { leagueCallsMessages } from './messages/leagueCalls'
 
 /**
  * One start/sit call per league for the player on the card (Phase 3, 2026-09-27).
@@ -163,18 +165,11 @@ export function leagueCall(args: {
  * In the reader's language: it lands in the composer, where he reads it before sending.
  */
 export function chimmyAsk(call: LeagueCall, playerName: string, language: string = 'en'): string {
-  if (language === 'es') {
-    if (call.kind === 'hold' && call.swap) {
-      return `En ${call.leagueName}: ${playerName} es dudoso. ¿Lo mantengo o alineo a ${call.swap.startName}?`
-    }
-    return call.swap
-      ? `En ${call.leagueName}: ¿debería ${call.kind === 'start' ? `alinear a ${playerName} por delante de ${call.swap.benchName}` : `sentar a ${playerName} y alinear a ${call.swap.startName}`} esta semana?`
-      : `En ${call.leagueName}: ¿qué debería hacer con ${playerName} esta semana?`
-  }
-  if (call.kind === 'hold' && call.swap) {
-    return `In ${call.leagueName}: ${playerName} is questionable — should I keep him in or start ${call.swap.startName}?`
-  }
+  const m = messagesFor(leagueCallsMessages, language)
+  if (call.kind === 'hold' && call.swap) return m.askHold(call.leagueName, playerName, call.swap.startName)
   return call.swap
-    ? `In ${call.leagueName}: should I ${call.kind === 'start' ? `start ${playerName} over ${call.swap.benchName}` : `bench ${playerName} for ${call.swap.startName}`} this week?`
-    : `In ${call.leagueName}: what should I do with ${playerName} this week?`
+    ? call.kind === 'start'
+      ? m.askStart(call.leagueName, playerName, call.swap.benchName)
+      : m.askBench(call.leagueName, playerName, call.swap.startName)
+    : m.askOpen(call.leagueName, playerName)
 }

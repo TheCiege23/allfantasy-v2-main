@@ -83,7 +83,7 @@ describe('the league rail', () => {
   it('the projection tooltip, both re-scored and generic-PPR forms', () => {
     const [mine, theirs] = sides(renderShell('es'))
     expect(mine).toBe(
-      'Proyección base semanal — Sleeper (SLPR): proyección de Sleeper con 9 de 9 titulares, recalculada con la configuración de esta liga · AF: motor de AllFantasy con 8 de 9 titulares · el marcador en vivo se muestra aparte',
+      'Proyección base semanal — proyección de Sleeper con 9 de 9 titulares, recalculada con la configuración de esta liga · el marcador en vivo se muestra aparte',
     )
     expect(theirs).toContain(', PPR genérico porque no se pudo recalcular con la puntuación de esta liga')
     for (const en of ['Weekly', 'starters', 're-scored', 'shown separately']) expect(mine + theirs).not.toContain(en)
@@ -92,7 +92,7 @@ describe('the league rail', () => {
   it('CONTROL — English tooltip unchanged', () => {
     const [mine, theirs] = sides(renderShell('en'))
     expect(mine).toBe(
-      'Weekly baseline projection — Sleeper (SLPR): Sleeper’s projection from 9 of 9 starters, re-scored with this league’s settings · AF: AllFantasy engine from 8 of 9 starters · live score is shown separately',
+      'Weekly baseline projection — Sleeper’s projection from 9 of 9 starters, re-scored with this league’s settings · live score is shown separately',
     )
     expect(theirs).toContain(', generic PPR because this league’s scoring could not be re-scored')
   })
@@ -149,20 +149,20 @@ describe('the expanded rail, every row shape', () => {
   it('reads Spanish — standing, freshness, labels, the no-schedule line and the profile tile', () => {
     const t = shellText('es')
     expect(t).not.toContain('antigüedad desconocida')
-    for (const es of ['#10 de 15', '+3.2 sobre el corte', '2 puestos de margen', 'por proyección', 'PTS',
+    for (const es of ['#10 de 15', '+3.2 sobre el corte', '2 puestos de margen', 'por proyección', 'proy', 'VS',
       'ESPN no devolvió un calendario de enfrentamientos para esta liga',
-      'Proyección del motor de AllFantasy', 'Tu cuenta', 'Perfil y ajustes', 'Saltar al contenido', '3 ligas']) {
+      'Tu cuenta', 'Perfil y ajustes', 'Saltar al contenido', '3 ligas']) {
       expect(t, es).toContain(es)
     }
     // The shell's own English as a word list a reviewer can extend. League names are not shell words.
-    const ENGLISH = /\b(of 15|over the cut|places? clear|on projection|on points|SCORE|did not return|sync age unknown|last import|Your account|Profile & settings|Skip to content|AllFantasy home|Sections|leagues|Weekly baseline|your career here|re-scored|starters)\b/
+    const ENGLISH = /\b(of 15|over the cut|places? clear|on projection|on points|SCORE|proj|did not return|sync age unknown|last import|Your account|Profile & settings|Skip to content|AllFantasy home|Sections|leagues|Weekly baseline|your career here|re-scored|starters)\b/
     expect(t.replace(/Dynasty Dragons|Office Redraft|Elimination Station/g, '')).not.toMatch(ENGLISH)
   })
 
   it('CONTROL — the same shell in English keeps every English word', () => {
     const t = shellText('en')
     expect(t).not.toContain('sync age unknown')
-    for (const en of ['10th', ' of 15', '+3.2 over the cut', '2 places clear', 'on projection', 'SCORE',
+    for (const en of ['10th', ' of 15', '+3.2 over the cut', '2 places clear', 'on projection', 'proj', 'VS',
       'Matchup unavailable from ESPN', 'Your account', 'Profile & settings', 'Skip to content', '3 leagues']) {
       expect(t, en).toContain(en)
     }

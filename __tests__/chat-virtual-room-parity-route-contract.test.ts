@@ -32,6 +32,9 @@ vi.mock('@/lib/chat-core', () => ({
   getLeagueIdFromVirtualRoom: (threadId: string) => threadId.replace(/^league:/, ''),
 }))
 
+// Unpinning is commissioner-only now; who that is has its own suite (league-chat-pin-permissions).
+vi.mock('@/lib/commissioner/broadcastAccess', () => ({ leagueChatModerator: vi.fn(async () => ({ platform: 'sleeper' })) }))
+
 vi.mock('@/lib/platform/chat-service', () => ({
   addReactionToMessage: vi.fn(),
   removeReactionFromMessage: vi.fn(),

@@ -129,7 +129,6 @@ export function DashTradeBandView({
 }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(dashTradeBandMessages)
-  const es = language === 'es'
   const title = m.title
 
   return (
@@ -163,7 +162,7 @@ export function DashTradeBandView({
                   .map((s) => ({
                     key: String(s.rosterId),
                     name: s.name,
-                    text: es ? (gradeReasonText(s.gradeReason, s.gradeParts) ?? s.gradeReason) : s.gradeReason,
+                    text: m.gradeReason(s.gradeReason, gradeReasonText(s.gradeReason, s.gradeParts)),
                   }))
                   .filter((r) => r.text)
               : []

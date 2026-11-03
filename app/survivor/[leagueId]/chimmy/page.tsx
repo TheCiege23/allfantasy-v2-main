@@ -39,11 +39,11 @@ export default function SurvivorChimmyPage() {
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <header className="flex items-center gap-3 survivor-panel rounded-2xl p-4">
-        <div className="torch-pulse flex h-11 w-11 items-center justify-center rounded-full bg-violet-600/40 text-xl">
+        <div className="torch-pulse flex h-11 w-11 items-center justify-center rounded-full bg-[var(--sv-accent-soft)] text-xl text-[var(--survivor-torch)] ring-1 ring-[rgba(240,163,94,0.34)]">
           @
         </div>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-violet-200">@Chimmy Private</p>
+          <p className="sv-kicker text-[12px]">@Chimmy Private</p>
           <p className="text-[13px] text-white/55">Private ballots and power actions appear only from DB state.</p>
         </div>
       </header>
@@ -89,7 +89,7 @@ export default function SurvivorChimmyPage() {
 
         {leagueId && ctx.season?.userState ? <ConfessionalCard leagueId={leagueId} /> : null}
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[12px] text-amber-100">
+        <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-[12px] text-white/70">
           Forbidden hidden information stays redacted for players and playing commissioners.
         </div>
       </div>

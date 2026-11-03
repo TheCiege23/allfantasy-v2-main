@@ -87,6 +87,7 @@ export type PricingV4Props = {
   packs: PricingPack[]
   /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */
   savingsHeadline: string | null
+  signedIn?: boolean
 }
 
 type Interval = 'month' | 'year'
@@ -182,7 +183,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
 ]
 
-export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
+export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: PricingV4Props) {
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
@@ -281,17 +282,19 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         The wordmark is the way home, matching the auth screens.
       */}
       <nav className="af-pr-nav" aria-label="Main">
-        <Link href="/" className="af-pr-brand">
+        <Link href={signedIn ? '/core' : '/'} className="af-pr-brand">
           <Shield />
           <span className="af-pr-wordmark">Pricing</span>
         </Link>
         <div className="af-pr-nav-right">
-          <Link href="/login" className="af-pr-nav-link">
-            Sign in
-          </Link>
-          <Link href="/signup" className="af-pr-nav-cta">
-            Start free
-          </Link>
+          {signedIn ? (
+            <Link href="/core" className="af-pr-nav-cta">Back to app</Link>
+          ) : !signedIn ? (
+            <>
+              <Link href="/login" className="af-pr-nav-link">Sign in</Link>
+              <Link href="/signup" className="af-pr-nav-cta">Start free</Link>
+            </>
+          ) : null}
         </div>
       </nav>
 
@@ -363,9 +366,11 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             <span className="af-pr-amount">$0</span>
           </div>
           <p className="af-pr-per">free forever</p>
-          <a href="/signup" className="af-pr-cta af-pr-cta--ghost">
-            Create an account
-          </a>
+          {signedIn ? (
+            <Link href="/core" className="af-pr-cta af-pr-cta--ghost">Go to my leagues</Link>
+          ) : !signedIn ? (
+            <Link href="/signup" className="af-pr-cta af-pr-cta--ghost">Create an account</Link>
+          ) : null}
           <hr className="af-pr-rule" />
           <ul className="af-pr-features">
             {FREE_INCLUDES.map((f) => (
@@ -560,9 +565,11 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           Checkout is handled by Stripe — we never see your card details. League dues and payouts
           are handled on FanCred, separately from your AllFantasy subscription.
         </p>}
-        <Link href="/signup" className="af-pr-foot-cta">
-          Start free
-        </Link>
+        {signedIn ? (
+          <Link href="/core" className="af-pr-foot-cta">Back to app</Link>
+        ) : !signedIn ? (
+          <Link href="/signup" className="af-pr-foot-cta">Start free</Link>
+        ) : null}
       </footer>
     </div>
   )

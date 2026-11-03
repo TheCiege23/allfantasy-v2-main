@@ -115,6 +115,8 @@ const prismaMock = {
 const txMock = { ...prismaMock, __isTransactionClient: true }
 prismaMock.$transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(txMock))
 
+vi.mock('@/lib/team-coowners/access', () => ({ acceptedCoOwnerRosterId: vi.fn(async () => null), isAcceptedCoOwnerForRedraftRoster: vi.fn(async () => false) }))
+
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
 }))

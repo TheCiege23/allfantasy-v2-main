@@ -75,11 +75,13 @@ beforeEach(() => {
 })
 
 describe('isGuillotineTradeLeague', () => {
-  it('takes an NBA Guilly league, by type or variant — not another sport, and not survivor_guillotine', () => {
+  it('takes a supported Guilly sport by type or variant, but not survivor_guillotine', () => {
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'nba', leagueType: 'redraft', leagueVariant: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'NFL', leagueType: 'guillotine' })).toBe(true)
-    expect(isGuillotineTradeLeague({ sport: 'NHL', leagueType: 'guillotine' })).toBe(false)
+    expect(isGuillotineTradeLeague({ sport: 'NHL', leagueType: 'guillotine' })).toBe(true)
+    expect(isGuillotineTradeLeague({ sport: 'MLB', leagueType: 'guillotine' })).toBe(true)
+    expect(isGuillotineTradeLeague({ sport: 'NCAAF', leagueType: 'guillotine' })).toBe(false)
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'survivor_guillotine' })).toBe(false)
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'redraft' })).toBe(false)
   })

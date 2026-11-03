@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tabs/settings/components'
 import { ZombiePaymentTrackerGrid } from '@/app/zombie/components/commissioner/ZombiePaymentTrackerGrid'
+import { ZombieExternalPayoutPanel } from '@/app/zombie/components/commissioner/ZombieExternalPayoutPanel'
 import { ZombiePayoutMatrixPanel } from '@/app/zombie/components/commissioner/ZombiePayoutMatrixPanel'
 
 type Prefs = {
@@ -17,6 +18,9 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
   const [paid, setPaid] = useState(false)
   const [buyIn, setBuyIn] = useState<number>(0)
   const [prefs, setPrefs] = useState<Prefs>({})
+  const [currencyLabel, setCurrencyLabel] = useState('Outbreak Points')
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
   const [sport, setSport] = useState('NFL')
   const [tierLabel, setTierLabel] = useState<string | null>(null)
 
@@ -30,6 +34,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
           isPaid?: boolean
           buyInAmount?: number | null
           commissionerUiPrefs?: unknown
+          freeRewardConfig?: { currencyLabel?: string | null } | null
           sport?: string
           level?: { tierLabel?: string | null } | null
         }
@@ -38,6 +43,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
       if (L) {
         setPaid(Boolean(L.isPaid))
         setBuyIn(typeof L.buyInAmount === 'number' ? L.buyInAmount : 0)
+        setCurrencyLabel(L.freeRewardConfig?.currencyLabel || 'Outbreak Points')
         if (typeof L.sport === 'string') setSport(L.sport)
         const tl = L.level && typeof L.level === 'object' ? L.level.tierLabel : null
         setTierLabel(typeof tl === 'string' ? tl : null)
@@ -61,12 +67,24 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
   }, [load])
 
   const saveZombie = async (patch: Record<string, unknown>) => {
-    await fetch('/api/zombie/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ leagueId, ...patch }),
-    }).catch(() => {})
+    setSaving(true)
+    setMessage('')
+    try {
+      const res = await fetch('/api/zombie/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ leagueId, ...patch }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(data.error || 'Settings could not be saved.')
+      setMessage('Settings saved.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Settings could not be saved.')
+      void load()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const savePrefs = async (next: Prefs) => {
@@ -91,6 +109,9 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
       <p className="text-[11px] text-[#9fe89a]/90">
         Payment mode is configured here — not during league creation. Free leagues hide payouts and payment tracking.
       </p>
+      <p role="status" aria-live="polite" className="min-h-[20px] text-[11px] text-amber-200">
+        {saving ? 'Saving…' : message}
+      </p>
       {loading ? (
         <p className="text-white/45">Loading…</p>
       ) : (
@@ -103,9 +124,13 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                 <select
                   className="rounded-lg border border-white/15 bg-[#050a18] px-2 py-1.5 text-white disabled:opacity-50"
                   value={paid ? 'paid' : 'free'}
-                  disabled={d}
+                  disabled={d || saving}
                   onChange={(e) => {
                     const next = e.target.value === 'paid'
+                    if (next && buyIn <= 0) {
+                      setMessage('Enter a buy-in greater than zero before switching to Paid.')
+                      return
+                    }
                     setPaid(next)
                     void saveZombie({ isPaid: next, buyInAmount: buyIn })
                   }}
@@ -116,12 +141,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                 </select>
               }
             />
-          </SettingsSection>
-
-          {paid ? (
-            <>
-              <SettingsSection id="zm-buyin" title="Buy-in & links">
-                <SettingsRow
+            <SettingsRow
                   label="Buy-in ($)"
                   control={
                     <Input
@@ -130,10 +150,17 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                       className="w-32"
                       value={buyIn}
                       onChange={(e) => setBuyIn(Number(e.target.value) || 0)}
-                      onBlur={() => void saveZombie({ buyInAmount: buyIn, isPaid: true })}
+                      min={0.01}
+                      step={0.01}
+                      onBlur={() => { if (paid) void saveZombie({ buyInAmount: buyIn }) }}
                     />
                   }
                 />
+          </SettingsSection>
+
+          {paid ? (
+            <>
+              <SettingsSection id="zm-buyin" title="Buy-in & links">
                 <SettingsRow
                   label="Primary button"
                   control={
@@ -207,13 +234,22 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                 canEdit={canEdit}
                 isPaid={paid}
               />
+              <ZombieExternalPayoutPanel leagueId={leagueId} canEdit={canEdit} />
               <ZombiePaymentTrackerGrid leagueId={leagueId} canEdit={canEdit} />
             </>
           ) : (
             <SettingsSection id="zm-free" title="Free mode">
               <SettingsRow
                 label="Cosmetic currency label"
-                control={<Input defaultValue="Outbreak Points" disabled={d} />}
+                control={
+                  <Input
+                    value={currencyLabel}
+                    disabled={d || saving}
+                    maxLength={40}
+                    onChange={(e) => setCurrencyLabel(e.target.value)}
+                    onBlur={() => void saveZombie({ currencyLabel: currencyLabel.trim() || 'Outbreak Points' })}
+                  />
+                }
               />
             </SettingsSection>
           )}

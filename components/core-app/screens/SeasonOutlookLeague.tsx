@@ -27,6 +27,7 @@ import { outlookText, seasonOutlookSentence } from '@/lib/core-app/outlookSpanis
 import { seasonOutlookLeagueMessages } from '@/lib/core-app/messages/seasonOutlookLeague'
 import '@/components/core-app/af-season-outlook-league.css'
 import '@/components/core-app/af-outlook.css'
+import '@/components/core-app/af-core-redraft-standings.css'
 
 /**
  * Screen 38a·5 — Season Outlook, scoped to one league.

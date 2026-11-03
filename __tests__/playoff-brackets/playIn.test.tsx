@@ -186,7 +186,12 @@ describe('the bracket card', () => {
     expect(section.textContent).toContain('Play-in for the last spot')
     expect(section.textContent).toContain('Play-in: #6 v #7')
     expect(section.textContent).toContain('Play-in in week 15 · final in week 18')
+    expect(screen.getByTestId('playoff-play-in-1-check').getAttribute('data-selection-check')).toBe('off')
     fireEvent.click(screen.getByTestId('playoff-play-in-1'))
+    // The sr-only radio is the state; the card now draws a tick for it too.
+    expect((screen.getByTestId('playoff-play-in-1') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByTestId('playoff-play-in-1-check').getAttribute('data-selection-check')).toBe('on')
+    expect(screen.getByTestId('playoff-play-in-2-check').getAttribute('data-selection-check')).toBe('off')
     fireEvent.click(screen.getByText('Save bracket format'))
     await screen.findByText('Bracket format saved')
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ playoffTeams: 7, byePlan: [2, 2, 1, 1, 1, 0, 0] })

@@ -66,6 +66,13 @@ export const BEST_BALL_REASON =
   'Best Ball win probability needs a full-roster outcome model; a probability from one projected optimal lineup would overstate certainty.'
 export const STATES_UNKNOWN_REASON =
   'Some starter game states are unavailable, so remaining points and win probability cannot be verified.'
+/**
+ * Category and roto leagues are not won by out-scoring one opponent in fantasy points, so a points
+ * projection and a head-to-head win chance describe nothing there. The format is read by
+ * `weeklyFormat` (weeklyCapabilities.ts), the same rule the week board and Season Outlook apply.
+ */
+export const SCORING_TYPE_REASON =
+  'points projections and win probability are not available for this scoring type, because this league is not won head-to-head on points'
 export const UNATTRIBUTED_REASON =
   "points are already on the board, but this league's per-player scores have not been imported, so we cannot tell how much of each starter's projection is still to come"
 

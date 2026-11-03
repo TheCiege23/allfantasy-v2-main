@@ -104,6 +104,7 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
       reason:
         'This team is out of the Eliminator, so its weekly scores no longer count toward that ' +
         'side pot. Weekly floor stops mattering; only the championship does.',
+      reasonCode: 'fourHorsemen.eliminatorOut',
     }
   }
   const strikes = state.eliminatorStrikes
@@ -118,6 +119,7 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
         `Three Eliminator strikes — one more low week and this team is out of the $50 side pot. ` +
         `A safe weekly floor is worth more than a boom/bust ceiling right now, which is the ` +
         `opposite of what the championship rewards.`,
+      reasonCode: 'fourHorsemen.eliminatorLastStrike',
     }
   }
   return {
@@ -125,6 +127,8 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
     reason:
       `${strikes} Eliminator strike${strikes === 1 ? '' : 's'} — ${remaining} from elimination. ` +
       `Weekly floor is starting to matter alongside season totals.`,
+    reasonCode: strikes === 1 ? 'fourHorsemen.eliminatorStrike' : 'fourHorsemen.eliminatorStrikes',
+    reasonParams: { strikes, remaining },
   }
 }
 
@@ -150,6 +154,8 @@ export const fourHorsemenModel: FormatValueModel = {
           `${stash} free taxi/IR slots and ${input.shape.benchSlots ?? '—'} bench spots mean ` +
           `holding a ${exp}-year player costs this roster nothing. Cheap to stash, so worth ` +
           `slightly more here than in a league where he occupies a contributor's seat.`,
+        reasonCode: 'fourHorsemen.stash',
+        reasonParams: { stash, bench: input.shape.benchSlots ?? '—', years: exp ?? '' },
       }
     }
 
@@ -174,6 +180,8 @@ export const fourHorsemenModel: FormatValueModel = {
           `Trades are closed after week ${input.shape.deadlineWeek} in this league (rules §9: ` +
           `"Trades are prohibited from after 13 through 17"). They reopen the day after the ` +
           `championship game.`,
+        reasonCode: 'fourHorsemen.closed',
+        reasonParams: { week: input.shape.deadlineWeek ?? '' },
       }
     }
     return { ok: true }

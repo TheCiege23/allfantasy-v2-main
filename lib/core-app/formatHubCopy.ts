@@ -1,4 +1,7 @@
 import type { HubFormat } from '@/lib/core-app/formatHubs'
+import { messagesFor } from '@/lib/i18n/messages'
+import { formatHubMessages } from './messages/formatHub'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * Spanish for the multi-league format hubs (FormatHub, HubSwitcher) and the connected-franchise
@@ -10,8 +13,6 @@ import type { HubFormat } from '@/lib/core-app/formatHubs'
  * covered here; that needs the loader to take a language.
  */
 
-const es = (language: string | null | undefined) => language === 'es'
-
 export const HUB_TABS_ES: Record<HubFormat, string> = {
   zombie: 'Zombie',
   tournament: 'Torneo',
@@ -21,8 +22,11 @@ export const HUB_TABS_ES: Record<HubFormat, string> = {
   efl: 'Dinastía EFL',
 }
 
+/** Tab names by language; English (and every language without a table) keeps the name it was given. */
+const HUB_TABS_BY_LANG: Partial<Record<'en' | 'es', Record<HubFormat, string>>> = { es: HUB_TABS_ES }
+
 export function hubTab(format: HubFormat, english: string, language: string | null | undefined): string {
-  return es(language) ? HUB_TABS_ES[format] : english
+  return HUB_TABS_BY_LANG[coreLang(language)]?.[format] ?? english
 }
 
 /** The themed copy per format, keyed by the English `Theme` field names. */
@@ -37,6 +41,11 @@ export type ThemeCopy = {
   broadcastLabel: string
   emptyTitle: string
   foot: string
+}
+
+/** The themed-copy overlay for a language, or null where the English `Theme` stands as written. */
+export function themeCopyFor(language: string | null | undefined): ((platformsPhrase: string) => Record<HubFormat, ThemeCopy>) | null {
+  return THEME_COPY_BY_LANG[coreLang(language)] ?? null
 }
 
 export function themeCopyEs(platformsPhrase: string): Record<HubFormat, ThemeCopy> {
@@ -165,62 +174,58 @@ const UI_ES: Record<string, string> = {
   'Hub home': 'Inicio del centro',
 }
 
+const UI_BY_LANG: Partial<Record<'en' | 'es', Record<string, string>>> = { es: UI_ES }
+
 export function hubCopy(english: string, language: string | null | undefined): string {
-  return es(language) ? (UI_ES[english] ?? english) : english
+  return UI_BY_LANG[coreLang(language)]?.[english] ?? english
 }
 
-/** Sentences with a value in them. */
+/** Sentences with a value in them — the words live in lib/core-app/messages/formatHub.ts. */
+const hub = (language: string | null | undefined) => messagesFor(formatHubMessages, language)
+
 export const hubText = {
   connectBody(tab: string, canCreate: boolean, language: string | null | undefined): string {
-    return es(language)
-      ? `Este centro reúne cada liga ${tab} en la que ya estás. Para agregar una, impórtala desde la plataforma donde está${canCreate ? ', o crea una nueva en AllFantasy' : ''}. Nada cambia en la plataforma original.`
-      : `This hub gathers every ${tab} league you’re already in. To add one, import it from the platform it lives on${canCreate ? ', or start a new one on AllFantasy' : ''}. Nothing changes on the original platform.`
+    return hub(language).connectBody(tab, canCreate)
   },
   importFrom(platforms: string, language: string | null | undefined): string {
-    return es(language) ? `Importar desde ${platforms}` : `Import from ${platforms}`
+    return hub(language).importFrom(platforms)
   },
   appearsWhen(tab: string, language: string | null | undefined): string {
-    return es(language)
-      ? `Aparece aquí en cuanto se reconoce como una liga ${tab}.`
-      : `It appears here as soon as it is recognised as a ${tab} league.`
+    return hub(language).appearsWhen(tab)
   },
   startOn(tab: string, language: string | null | undefined): string {
-    return es(language) ? `Crear una liga ${tab} en AllFantasy` : `Start a ${tab} league on AllFantasy`
+    return hub(language).startOn(tab)
   },
   pickFormat(tab: string, language: string | null | undefined): string {
-    return es(language) ? `Elige el formato ${tab} al crear la liga.` : `Pick the ${tab} format in league creation.`
+    return hub(language).pickFormat(tab)
   },
   atAGlance(tab: string, language: string | null | undefined): string {
-    return es(language) ? `${tab} de un vistazo` : `${tab} at a glance`
+    return hub(language).atAGlance(tab)
   },
   across(n: number, language: string | null | undefined): string {
-    return es(language) ? `En tus ${n} ${n === 1 ? 'liga' : 'ligas'}` : `Across your ${n} ${n === 1 ? 'league' : 'leagues'}`
+    return hub(language).across(n)
   },
   leaguesYouPlay(tab: string, language: string | null | undefined): string {
-    return es(language) ? `Ligas ${tab} en las que juegas` : `${tab} leagues you play in`
+    return hub(language).leaguesYouPlay(tab)
   },
   comparison(tab: string, language: string | null | undefined): string {
-    return es(language) ? `Comparación de ligas ${tab}` : `${tab} league comparison`
+    return hub(language).comparison(tab)
   },
   leagueTools(name: string, language: string | null | undefined): string {
-    return es(language) ? `Herramientas de ${name}` : `${name} tools`
+    return hub(language).leagueTools(name)
   },
   showing(shown: number, total: number, language: string | null | undefined): string {
-    return es(language)
-      ? `Se muestran ${shown} de ${total}. Todas las ligas están en `
-      : `Showing ${shown} of ${total}. Every league is in `
+    return hub(language).showing(shown, total)
   },
   fillsIn(tab: string, language: string | null | undefined): string {
-    return es(language)
-      ? `Este centro se completa solo en cuanto una de tus ligas sea una liga ${tab}, importada o creada.`
-      : `This hub fills in by itself the moment one of your leagues is a ${tab} league — imported or created.`
+    return hub(language).fillsIn(tab)
   },
   scopeAria(franchise: string, language: string | null | undefined): string {
-    return es(language) ? `Alcance de la herramienta: ${franchise}` : `${franchise} tool scope`
+    return hub(language).scopeAria(franchise)
   },
   askAllPrefill(franchise: string, decision: string, language: string | null | undefined): string {
-    return es(language)
-      ? `Usa cada plantilla seleccionada de ${franchise} para ayudarme con esta decisión (${decision}).`
-      : `Use every selected roster in ${franchise} to help with this ${decision} decision.`
+    return hub(language).askAllPrefill(franchise, decision)
   },
 }
+
+const THEME_COPY_BY_LANG: Partial<Record<'en' | 'es', (platformsPhrase: string) => Record<HubFormat, ThemeCopy>>> = { es: themeCopyEs }

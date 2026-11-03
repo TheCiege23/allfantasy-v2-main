@@ -308,6 +308,15 @@ describe('/core home: only viewers without a plan, only before launch', () => {
 })
 
 describe('pricing surfaces read the offer from their layout', () => {
+  it('keeps signed-in users in the app instead of showing sign-in and sign-up prompts', () => {
+    render(<PricingV4 plans={[]} packs={[]} savingsHeadline={null} signedIn />)
+    expect(screen.getAllByRole('link', { name: 'Back to app' }).every((link) => link.getAttribute('href') === '/core')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Go to my leagues' }).getAttribute('href')).toBe('/core')
+    expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Start free' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Create an account' })).toBeNull()
+  })
+
   const offer: LaunchOfferView = { startsAt: LAUNCH, prelaunch: true, founding: { audience: 'member', label: null } }
 
   it('/pricing: the strip sits above the plans when the layout provides an offer, and is absent without one', () => {

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
@@ -15,6 +16,7 @@ import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
+import type { FinderSport } from '@/lib/core-app/finderSports'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
 import { GameDayBanner, type GameDayLeague } from '@/components/core-app/player-finder/GameDayBanner'
@@ -150,6 +152,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 export type PlayerFinderProps = {
   query: string
+  sport?: FinderSport | null
   matches: PlayerMatch[]
   detail: PlayerDetail | null
   leagueCount: number
@@ -422,6 +425,7 @@ function rowAction(r: LeagueRow, last: string, t: FinderCopy, language: string):
 
 export function PlayerFinder({
   query,
+  sport = null,
   matches,
   detail,
   leagueCount,
@@ -469,6 +473,7 @@ export function PlayerFinder({
     !signedIn ? t.signInReason : why((state as { reason: string }).reason)
 
   const leagueParam = selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''
+  const sportParam = sport ? `&sport=${sport}` : ''
 
   // ── Derived, once, from the loaders' output ──────────────────────────────
   /*
@@ -492,12 +497,12 @@ export function PlayerFinder({
   const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId, detail.player.source) : null
   const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId, compare.player.source) : null
   const vsHref = (ref: string) =>
-    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${leagueParam}` : null
+    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${sportParam}${leagueParam}` : null
   const swapHref =
     detailRef && compareRef && compare
-      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${leagueParam}`
+      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}`
       : '/core/players'
-  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${leagueParam}` : '/core/players'
+  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}` : '/core/players'
 
   /** The trade visual's opening package, for the pitch on the trade-window card. */
   const pitchPackage: PitchPackage =
@@ -505,7 +510,7 @@ export function PlayerFinder({
       ? { give: tradeVisual.data.recommended.give.map((a) => a.name), fairness: tradeVisual.data.recommended.fairness }
       : null
   const allLeaguesHref = detail
-    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}`
+    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}`
     : '/core/players'
 
   const impactRows: LeagueImpact[] = (detail?.impact.available ? detail.impact.data : []).filter((i) =>
@@ -610,7 +615,7 @@ export function PlayerFinder({
       : []
   const stripLeagueHref = (leagueId: string) =>
     detail
-      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}&league=${encodeURIComponent(leagueId)}`
+      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}&league=${encodeURIComponent(leagueId)}`
       : '/core/players'
 
   /*
@@ -688,7 +693,7 @@ export function PlayerFinder({
           layered on top (2026-09-05). See PlayerSearchBox for the rate-limit
           behaviour and why the form never depends on the suggestions.
         */}
-        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
+        <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
 
         {/*
           ── Matches ─────────────────────────────────────────────────
@@ -719,7 +724,7 @@ export function PlayerFinder({
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
                       // sports and opened whichever athlete came back first.
-                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                       className="af-pf-match"
                       data-active={
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
@@ -743,6 +748,7 @@ export function PlayerFinder({
                           ) : (
                             t.noPosition
                           )}
+                          {m.sport !== 'NFL' ? ` · ${m.sport}` : ''}
                         </span>
                       </span>
                     </Link>
@@ -815,7 +821,7 @@ export function PlayerFinder({
             {otherMatches.slice(0, 4).map((m) => (
               <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
                 <Link
-                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                   className="af-chip af-pf-other"
                 >
                   {m.name}
@@ -1038,7 +1044,7 @@ export function PlayerFinder({
             {detailRef ? (
               <div className="af-pf-compare-entry">
                 <span className="af-label">{t.compareWith}</span>
-                <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
+                <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
               </div>
             ) : null}
 
@@ -1054,7 +1060,7 @@ export function PlayerFinder({
                 In league mode both tiles switch to the league's own scoring
                 (Guap, 2026-09-02). Standard scoring is the cross-league number.
               */}
-              {leagueProj ? (
+              {detail.player.sport !== 'NFL' && !leagueProj ? null : leagueProj ? (
                 <StatTile
                   label={leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek}
                   state={leagueProj}
@@ -1080,7 +1086,7 @@ export function PlayerFinder({
                 this league's scoring; across leagues it is the engine's standard-scoring number, like
                 the tile beside it.
               */}
-              {detail.afProjection ? (
+              {detail.player.sport === 'NFL' && detail.afProjection ? (
                 <StatTile
                   label={detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj}
                   state={detail.afProjection}
@@ -1088,6 +1094,17 @@ export function PlayerFinder({
                   tone="good"
                   tip={{ title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody }}
                   help={detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined}
+                  why={why}
+                />
+              ) : null}
+              {detail.player.sport !== 'NFL' && detail.afBaseline ? (
+                <StatTile
+                  label={t.afBaselineLabel}
+                  state={detail.afBaseline}
+                  value={detail.afBaseline.available ? detail.afBaseline.data.pointsPerGame.toFixed(1) : null}
+                  tone="good"
+                  tip={{ title: t.afBaselineLabel, body: t.afBaselineBody }}
+                  help={detail.afBaseline.available ? t.perGameSeason(detail.afBaseline.data.season) : undefined}
                   why={why}
                 />
               ) : null}
@@ -1239,7 +1256,7 @@ export function PlayerFinder({
                   </Link>
                 </>
               ) : detail.leagues.available ? (
-                shownRows.length === 0 ? (
+                shownRows.length === 0 && unmatched.length > 0 ? null : shownRows.length === 0 ? (
                   <p className="af-pf-unavailable">
                     {leagueRows.length > 0 ? t.notOnYourRosters : leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
@@ -1408,7 +1425,7 @@ export function PlayerFinder({
                 <DepthChartBackups
                   data={depthChart}
                   playerName={detail.player.name}
-                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
+                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${sportParam}${leagueParam}`}
                 />
               </PhoneFold>
             ) : null}

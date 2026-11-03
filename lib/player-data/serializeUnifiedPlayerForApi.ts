@@ -35,6 +35,11 @@ export type UnifiedPlayerWireDto = {
    * (lib/waiver-wire/dropped-player-waivers.ts). Absent for every other player and surface.
    */
   onWaiversUntil?: string | null
+  /**
+   * Waiver wire, NHL dynasty only: a Fantrax-only prospect (`lib/waiver-wire/nhlProspectFreeAgency.ts`),
+   * id `fantrax:<id>`, with no projection, ADP or rank. Absent for every other player.
+   */
+  prospectSource?: 'fantrax'
   name: string
   position: string | null
   team: string | null

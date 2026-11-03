@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -11,6 +12,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import { prisma } from '@/lib/prisma'
 import { validateAiActionExecution } from '@/lib/ai/action-validation'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import { applyStarterSwap } from '@/lib/roster/starterSwap'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -117,12 +119,13 @@ export async function POST(req: NextRequest) {
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
+  const coOwnerRosterId = memberRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
   const canActAsCommissioner = league.userId === userId
-  if (!memberRoster && !canActAsCommissioner) {
+  if (!memberRoster && !coOwnerRosterId && !canActAsCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? null
+  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? coOwnerRosterId ?? null
   if (!targetRosterId && canActAsCommissioner) {
     const firstRoster = await (prisma as any).roster.findFirst({
       where: { leagueId },
@@ -135,7 +138,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (!canActAsCommissioner && memberRoster && targetRosterId !== memberRoster.id) {
+  if (!canActAsCommissioner && targetRosterId !== (memberRoster?.id ?? coOwnerRosterId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -243,10 +246,11 @@ export async function POST(req: NextRequest) {
     source: 'user_save',
     skipLockCheck: false,
     expectedStarters: Array.isArray(body.expectedStarters) ? body.expectedStarters.map(String) : undefined,
+    expectedLineupVersion: typeof body.expectedLineupVersion === 'string' && body.expectedLineupVersion ? body.expectedLineupVersion : undefined,
   })
 
   if (!persisted.ok) {
-    return NextResponse.json({ error: persisted.error }, { status: persisted.status ?? 400 })
+    return NextResponse.json({ error: persisted.error, ...(persisted.code ? { code: persisted.code } : {}) }, { status: persisted.status ?? 400 })
   }
 
   const prevStarters = extractStarterIds({}, currentRoster.playerData)
@@ -303,6 +307,8 @@ export async function POST(req: NextRequest) {
     ok: true,
     rosterId: targetRosterId,
     writeAuthority,
+    // The version the next save from this screen is built on, so a second move needs no reload first.
+    lineupVersion: lineupVersionOf(nextPlayerData),
     ...(sportsDataDecision ? { sportsDataDecision } : {}),
   })
 }

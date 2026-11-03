@@ -318,6 +318,26 @@ describe('getSeasonOutlook', () => {
     expect(out.leagues[0].milestones?.totalGames).toBe(6)
   })
 
+  /*
+   * `WeeklyMatchup.win` is not a result. Rows written before the Sleeper fix store a roster with no
+   * opponent as `win = 1` with `pointsAgainst = 0`. Here roster 5's week-1 game is such a row (its own
+   * matchupId, no partner): it has no head-to-head result, so the record is 1-0-1, not 2-0-1.
+   */
+  it('reads the normal record from paired scores: 2-0-1 with the tie counted', async () => {
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues[0].you).toMatchObject({ wins: 2, losses: 0, ties: 1 })
+  })
+
+  it('never counts an unpaired row stored as win = 1 as a head-to-head win', async () => {
+    for (const r of h.matchups) {
+      if (r.week !== 1) continue
+      if (r.rosterId === '5') Object.assign(r, { matchupId: 99, pointsAgainst: 0, win: 1 })
+      if (r.rosterId === '4') Object.assign(r, { matchupId: 98, pointsAgainst: 0, win: 1 })
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues[0].you).toMatchObject({ wins: 1, losses: 0, ties: 1 })
+  })
+
   it('withholds a league with too few modelled teams, and says why', async () => {
     h.matchups = h.matchups.filter((r) => (r.week as number) > 3)
     const out = await getSeasonOutlook('me', [LEAGUE])

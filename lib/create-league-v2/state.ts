@@ -46,7 +46,7 @@ export type SoccerPipeline = 'mls' | 'euro'
 export type LeaguePrivacy = 'public' | 'private'
 
 export type DynastyDraftMode = 'scheduled' | 'offline'
-export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'commissioner'
+export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'weighted_lottery' | 'commissioner'
 export type DynastyVisibility = 'public' | 'private'
 export type DynastyMonetization = 'free' | 'paid'
 
@@ -93,7 +93,7 @@ export interface DynastySetupState {
   taxiAllowNonRookies: boolean
   taxiAllowMoveOutAfterDeadline: boolean
   rookieDraftRounds: number
-  rookieDraftType: 'linear' | 'snake'
+  rookieDraftType: 'linear' | 'snake' | 'auction'
   rookieDraftOrderMethod: DynastyRookieOrderMethod
   futurePickTradeYears: number
   /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */
@@ -153,6 +153,7 @@ export interface CreateLeagueV2State {
   /** Stable id from `lib/league-creation-preset/scoring-presets` */
   scoringPresetId: string
   teamCount: number
+  zombieLeagueCount?: number
   /** Tournament-only: total managers across all feeder leagues. Must be one of TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED on the server. */
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
@@ -175,6 +176,8 @@ export interface CreateLeagueV2State {
   privacy: LeaguePrivacy
   /** Every team also plays the week's median score (`League.medianGame`). */
   medianGame: boolean
+  /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  guillotineBestBall: boolean
   draftDate: string
   draftTime: string
   /**
@@ -353,6 +356,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   soccerPipeline: null,
   scoringPresetId: '',
   teamCount: 12,
+  zombieLeagueCount: 1,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
@@ -366,6 +370,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   description: '',
   privacy: 'private',
   medianGame: false,
+  guillotineBestBall: false,
   draftDate: '',
   draftTime: '',
   draftScheduleLater: false,

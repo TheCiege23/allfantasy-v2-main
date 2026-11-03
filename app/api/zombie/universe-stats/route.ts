@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { resolveZombieUniverseAccess } from '@/lib/zombie/zombieUniverseAccess'
 import { executePromotionRelegation } from '@/lib/zombie/universeStatEngine'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +15,10 @@ export async function GET(req: Request) {
   const universeId = searchParams?.get('universeId')
   const filterUserId = searchParams?.get('userId')
   if (!universeId) return NextResponse.json({ error: 'universeId required' }, { status: 400 })
+
+  const access = await resolveZombieUniverseAccess(universeId, session.user.id)
+  if (!access.exists) return NextResponse.json({ error: 'Universe not found' }, { status: 404 })
+  if (!access.isOwner) return NextResponse.json({ error: 'Use the universe standings for member-visible results.' }, { status: 403 })
 
   if (filterUserId) {
     const rows = await prisma.zombieUniverseStat.findMany({
@@ -45,15 +49,24 @@ export async function POST(req: Request) {
   if (action !== 'execute_movement' || !universeId)
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
 
-  const u = await prisma.zombieUniverse.findUnique({
-    where: { id: universeId },
-    include: { leagues: { take: 1 } },
-  })
-  if (!u?.leagues[0]) return NextResponse.json({ error: 'Universe has no leagues' }, { status: 400 })
-
-  await requireCommissionerOnly(u.leagues[0].leagueId, userId)
-
-  await executePromotionRelegation(universeId, season)
-  return NextResponse.json({ ok: true })
+  const access = await resolveZombieUniverseAccess(universeId, userId)
+  if (!access.exists) return NextResponse.json({ error: 'Universe not found' }, { status: 404 })
+  if (!access.isOwner) return NextResponse.json({ error: 'Only the universe commissioner can record movement.' }, { status: 403 })
+  if (!Number.isInteger(season) || season < 2000 || season > 2200) return NextResponse.json({ error: 'Invalid season' }, { status: 400 })
+  try {
+    const result = await executePromotionRelegation(universeId, season, userId)
+    return NextResponse.json({ ok: true, ...result })
+  } catch (error) {
+    const code = error instanceof Error ? error.message : ''
+    const errors: Record<string, string> = {
+      MOVEMENT_MANUAL_REVIEW_REQUIRED: 'This universe requires manual movement review.',
+      MOVEMENT_SEASONS_INCOMPLETE: 'Every linked league must finish this season before movement is recorded.',
+      MOVEMENT_RECONCILIATION_REQUIRED: 'Resolve weekly score corrections before recording movement.',
+      MOVEMENT_LEGACY_REVIEW_REQUIRED: 'Existing movement records need commissioner review.',
+      MOVEMENT_MEMBERSHIP_AMBIGUOUS: 'A manager has multiple or unidentified seats. Review universe membership.',
+      MOVEMENT_STANDINGS_INCOMPLETE: 'Complete standings are required for every manager.',
+      MOVEMENT_OWNER_REQUIRED: 'Only the universe commissioner can record movement.',
+    }
+    return NextResponse.json({ error: errors[code] ?? 'Movement could not be recorded. Refresh and retry.' }, { status: 409 })
+  }
 }
-

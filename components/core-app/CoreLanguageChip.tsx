@@ -2,6 +2,8 @@
 
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useSelectLanguage } from '@/components/i18n/LanguageToggle'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreLanguageChipMessages } from '@/lib/core-app/messages/coreLanguageChip'
 import { getLanguageDisplayName, SELECTABLE_LANGUAGES } from '@/lib/i18n/constants'
 
 /**
@@ -17,15 +19,13 @@ import { getLanguageDisplayName, SELECTABLE_LANGUAGES } from '@/lib/i18n/constan
  */
 export function CoreLanguageChip({ className }: { className?: string }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(coreLanguageChipMessages)
   const selectLanguage = useSelectLanguage()
   const options = SELECTABLE_LANGUAGES
   const at = options.indexOf(language)
   const next = options[(at + 1) % options.length] ?? options[0]
   const current = getLanguageDisplayName(language)
-  const label =
-    language === 'es'
-      ? `Idioma: ${current}. Cambiar a ${getLanguageDisplayName(next)}`
-      : `Language: ${current}. Switch to ${getLanguageDisplayName(next)}`
+  const label = m.label(current, getLanguageDisplayName(next))
 
   if (options.length < 2) return null
 

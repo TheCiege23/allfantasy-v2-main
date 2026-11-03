@@ -1,3 +1,4 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -77,10 +78,24 @@ async function proposalAccess(proposalId: string, userId: string) {
       seasonId: true,
       proposerRosterId: true,
       receiverRosterId: true,
+      additionalRosterIds: true,
       status: true,
     },
   })
   if (!proposal) return { ok: false as const, status: 404 as const, error: 'Proposal not found' }
+  /*
+   * 🛑 THIS RUNTIME IS TWO-TEAM. Its accept settles on the receiver's word alone and its execution moves
+   * assets between proposer and receiver only, so a multi-team proposal acted on here would skip the
+   * other teams' acceptance. Multi-team trades are created, accepted, reviewed and settled through the
+   * Trade Center routes (`/api/redraft/trade-proposals`, `/api/redraft/trade-votes`), and refused here.
+   */
+  if (Array.isArray(proposal.additionalRosterIds) && proposal.additionalRosterIds.length > 0) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      error: 'This is a multi-team trade. Open it in the Trade Center to act on it.',
+    }
+  }
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: proposal.seasonId, id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
     select: { id: true, ownerId: true },
@@ -91,8 +106,8 @@ async function proposalAccess(proposalId: string, userId: string) {
     ok: true as const,
     proposal,
     isCommissioner: commissioner.ok,
-    isProposer: owners.get(proposal.proposerRosterId) === userId,
-    isReceiver: owners.get(proposal.receiverRosterId) === userId,
+    isProposer: owners.get(proposal.proposerRosterId) === userId || await isAcceptedCoOwnerForRedraftRoster(proposal.leagueId, proposal.proposerRosterId, userId),
+    isReceiver: owners.get(proposal.receiverRosterId) === userId || await isAcceptedCoOwnerForRedraftRoster(proposal.leagueId, proposal.receiverRosterId, userId),
   }
 }
 
@@ -112,7 +127,7 @@ async function rosterOwnerAccess(input: {
     select: { id: true, ownerId: true, seasonId: true, leagueId: true },
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
-  if (roster.ownerId === input.userId) return { ok: true as const, roster, isCommissioner: false }
+  if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
   const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }

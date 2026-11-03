@@ -29,6 +29,13 @@ import { prisma } from '@/lib/prisma'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import {
+  MULTI_TEAM_TRADE_EXPIRED_TITLE,
+  multiTeamTradeExpiredBody,
+  notifyMultiTeamTradeOutcome,
+} from '@/lib/redraft/multiTeamTradeNotices'
+import { isMultiTeamTrade } from '@/lib/redraft/tradeParticipants'
 
 /** Default cap per run. The host cron has a 60s budget and its own waiver work to do. */
 export const DEFAULT_TRADE_EXPIRY_LIMIT = 25
@@ -61,7 +68,15 @@ export async function expireDueRedraftTradeProposals(opts?: {
     where: { status: 'pending', acceptedAt: null, expiresAt: { lt: now } },
     orderBy: { expiresAt: 'asc' },
     take: limit,
-    select: { id: true, leagueId: true, seasonId: true, proposerRosterId: true },
+    select: {
+      id: true,
+      leagueId: true,
+      seasonId: true,
+      proposerRosterId: true,
+      receiverRosterId: true,
+      additionalRosterIds: true,
+      acceptedRosterIds: true,
+    },
   })
 
   const result: RedraftTradeExpirySweepResult = { due: due.length, expired: 0, skipped: 0, failures: [] }
@@ -94,6 +109,25 @@ export async function expireDueRedraftTradeProposals(opts?: {
         continue
       }
       result.expired += 1
+
+      /*
+       * 🛑 TELL THE TEAMS, EXACTLY AS THE LAZY EXPIRY IN app/api/redraft/trade-votes DOES — before the
+       * market and learning events, so neither failing can leave a dead offer unannounced.
+       *   two teams    the DM offer card's `expired` line, which both managers see in their thread
+       *   multi-team   one in-app notice to every team, every team named, under the SAME event key
+       *                (`expired` → `redraft_trade:<id>:expired`), so a click and a sweep are one notice
+       * No actor: the schedule expired it, nobody chose to. Both calls are best-effort and never reject.
+       * The proposer's `trade_expired` learning event below is unchanged; it is a record, not a notice.
+       */
+      queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'expired' })
+      if (isMultiTeamTrade(proposal)) {
+        await notifyMultiTeamTradeOutcome({
+          proposal,
+          key: 'expired',
+          title: MULTI_TEAM_TRADE_EXPIRED_TITLE,
+          body: ({ teams }) => multiTeamTradeExpiredBody(teams),
+        })
+      }
 
       await recordRedraftTradeMarketEvent({
         leagueId: proposal.leagueId,

@@ -11,6 +11,7 @@ import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryC
 import { effectiveDynastyRules, waiverRulesFromEffective, normalizeRosterSlots, rookieDraftLotteryRule, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import { loadDraftRulesSafe } from './loadDraftRules'
+import { feederSettingsSnapshot } from '@/lib/tournament/feederLeagueSettings'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
 
 /**
@@ -35,7 +36,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     // The rookie draft's order, rounds and type, also on the dynasty config.
     snapshot.format === 'dynasty' && !snapshot.importedFrom
       ? prisma.dynastyLeagueConfig
-          .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true } })
+          .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true, futurePicksYearsOut: true } })
           .then((c) => {
             // The order the draft engine seats from (the live or automatic order when one is on).
             const rules = effectiveDynastyRules(c, row.settings)
@@ -54,6 +55,11 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   if (waivers) Object.assign(snapshot, waiverRulesFromEffective(waivers))
   if (rookieDraft) Object.assign(snapshot, rookieDraft)
   if (draft) Object.assign(snapshot, draft)
+
+  if (snapshot.concept === 'tournament' && !snapshot.importedFrom) {
+    const feeder = await (async () => prisma.legacyTournamentLeague.findUnique({ where: { leagueId }, select: { id: true } }))().catch(() => null)
+    if (feeder) Object.assign(snapshot, feederSettingsSnapshot(row.settings))
+  }
 
   if (taxi) Object.assign(snapshot, taxiRulesFromEffective(taxi))
 

@@ -4,6 +4,7 @@
  */
 
 import { nativeGuillotineState } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -142,9 +143,12 @@ export async function upsertGuillotineConfig(
 ): Promise<GuillotineConfig | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true },
+    select: { sport: true, platform: true },
   })
   if (!league) return null
+  // 🛑 No config row for an imported league: that row is what lets the chop engine run on it
+  // (./importedLeagueGuard.ts). Its rules live on the provider.
+  if (!isNativePlatform(league.platform)) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
   const defaultEnd = DEFAULT_END_WEEK_BY_SPORT[sport] ?? 18
 

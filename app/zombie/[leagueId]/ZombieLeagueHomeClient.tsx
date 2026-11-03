@@ -24,6 +24,7 @@ import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import { ZombieEventFeed } from '@/app/zombie/components/ZombieEventFeed'
 import { ZombieHordeBar } from '@/app/zombie/components/ZombieHordeBar'
 import { ZombieWhispererCard } from '@/app/zombie/components/ZombieWhispererCard'
+import { ZombieWinCards } from '@/app/zombie/components/ZombieWinCards'
 import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost'
 import { ZombieCommandHero } from '@/components/zombie/ZombieCommandHero'
 import { type ZombieDangerLevel } from '@/components/zombie/ZombieDangerMeter'
@@ -34,6 +35,8 @@ import { getFanCredPublicUrl } from '@/lib/legal/fancredPublicUrl'
 import { zombieRoleAccentClasses } from '@/lib/zombie/zombie-visual-system'
 import { ZombieIntroModal } from '@/components/zombie/ZombieIntroModal'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
+import { ZombieRoleActions } from '@/components/zombie/ZombieRoleActions'
+import { ZombieSeasonOperations } from '@/components/zombie/ZombieSeasonOperations'
 
 const LEAGUE_SAFE_URL = 'https://www.leaguesafe.com'
 
@@ -59,6 +62,7 @@ type Pack = {
     logoUrl?: string | null
     currentWeek: number
     isPaid: boolean
+    experienceMode?: 'simple' | 'enhanced'
     potTotal: number
     whispererIsPublic: boolean
     universeId: string | null
@@ -79,7 +83,9 @@ type Pack = {
       horde?: number
     } | null
     teams: TeamRow[]
+    coWhisperers?: Array<{ userId?: string | null; displayName: string | null; ambushesRemaining: number; isPubliclyRevealed: boolean }>
     whispererRecord: {
+      userId?: string | null
       displayName: string
       ambushesRemaining: number
       isPubliclyRevealed: boolean
@@ -95,6 +101,8 @@ type Pack = {
     latestResolution?: {
       status?: string | null
       resolvedAt?: string | null
+      requiresStatCorrection?: boolean
+      week?: number
     } | null
     topPerformers?: TeamRow[]
     dangerZone?: TeamRow[]
@@ -103,6 +111,7 @@ type Pack = {
     recentMaulings?: Array<{ id: string }>
     backgroundTheme?: string | null
   }
+  winCards?: Array<{ role: string; winnerName: string; opponentName: string; winnerScore: number | null; opponentScore: number | null; week: number | null }>
   hordeSize: number
   survivorCount: number
   myTeam: TeamRow | null
@@ -150,13 +159,14 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
   const [data, setData] = useState<Pack | null>(null)
   const [anims, setAnims] = useState<FeedAnimation[]>([])
   const [showIntroVideo, setShowIntroVideo] = useState(false)
+  const [roleRefresh, setRoleRefresh] = useState(0)
 
   useEffect(() => {
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Pack | null) => setData(d))
       .catch(() => setData(null))
-  }, [leagueId])
+  }, [leagueId, roleRefresh])
 
   useEffect(() => {
     if (data?.league?.backgroundTheme && userId) {
@@ -205,7 +215,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
   const z = data.league
   const my = data.myTeam
   const displayName = teamName(my)
-  const whispererRevealed = z.whispererIsPublic && (z.whispererRecord?.isPubliclyRevealed ?? true)
+  const whispererRevealed = (z.whispererIsPublic && (z.whispererRecord?.isPubliclyRevealed ?? true)) || z.whispererRecord?.userId === userId
   const lastUpdate = z.announcements.find((a) => a.type === 'weekly_update' || a.type === 'weekly_recap')
   const hordeCount = z.counts?.horde ?? data.hordeSize
   const survivorCount = z.counts?.alive ?? data.survivorCount
@@ -249,27 +259,31 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
         kind="serum"
         data-testid="zombie-quick-serum"
       />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/items`}
-        label="Weapons lab"
-        icon={Swords}
-        kind="weapon"
-        data-testid="zombie-quick-weapon"
-      />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/items`}
-        label="Bombs & overrides"
-        icon={Bomb}
-        kind="bomb"
-        data-testid="zombie-quick-bomb"
-      />
-      <ZombieQuickAction
-        href={`/zombie/${leagueId}/matchups`}
-        label="Ambush & matchups"
-        icon={Crosshair}
-        kind="ambush"
-        data-testid="zombie-quick-ambush"
-      />
+      {z.experienceMode !== 'simple' && (
+        <>
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/items`}
+          label="Weapons lab"
+          icon={Swords}
+          kind="weapon"
+          data-testid="zombie-quick-weapon"
+        />
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/items`}
+          label="Bombs & overrides"
+          icon={Bomb}
+          kind="bomb"
+          data-testid="zombie-quick-bomb"
+        />
+        <ZombieQuickAction
+          href={`/zombie/${leagueId}/matchups`}
+          label="Ambush & matchups"
+          icon={Crosshair}
+          kind="ambush"
+          data-testid="zombie-quick-ambush"
+        />
+        </>
+      )}
       {z.universeId ? (
         <ZombieQuickAction
           href={`/app/zombie-universe/${z.universeId}`}
@@ -317,6 +331,8 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
         }}
       >
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 lg:px-6">
+        <ZombieRoleActions leagueId={leagueId} onChanged={() => setRoleRefresh(n => n + 1)} />
+        <ZombieSeasonOperations leagueId={leagueId} />
         <ZombieCommandHero
           leagueName={z.name}
           logoUrl={z.logoUrl}
@@ -332,16 +348,29 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
           riskScore={my?.riskScore}
           dangerLevel={myDanger}
           whispererPanel={
-            <ZombieWhispererCard
-              revealed={whispererRevealed}
-              displayName={z.whispererRecord?.displayName}
-              ambushesRemaining={z.whispererRecord?.ambushesRemaining ?? 0}
-              hordeSize={hordeCount}
-            />
+            <div className="space-y-3">
+              <ZombieWhispererCard
+                revealed={whispererRevealed}
+                displayName={z.whispererRecord?.displayName}
+                ambushesRemaining={z.whispererRecord?.ambushesRemaining ?? 0}
+                hordeSize={hordeCount}
+              />
+              {(z.coWhisperers ?? []).map((record, index) => (
+                <ZombieWhispererCard
+                  key={index}
+                  revealed={(z.whispererIsPublic && record.isPubliclyRevealed) || record.userId === userId}
+                  displayName={record.displayName ?? undefined}
+                  ambushesRemaining={record.ambushesRemaining}
+                  hordeSize={hordeCount}
+                />
+              ))}
+            </div>
           }
           quickActions={quickActions}
           sceneThemeId={zombieThemeForLeague(data?.league?.backgroundTheme, leagueId)}
         />
+
+        <ZombieWinCards cards={data.winCards ?? []} />
 
         <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
           <section className="space-y-4">
@@ -489,6 +518,11 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                     No weekly recap has been posted yet. The home screen is still tracking live events below.
                   </p>
                 )}
+                {z.latestResolution?.requiresStatCorrection ? (
+                  <div role="status" className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-950/40 px-4 py-3 text-sm text-amber-100">
+                    Week {z.latestResolution.week ?? z.currentWeek} has a score correction under review. Role, item, and winnings changes remain on the original result until reconciliation is complete.
+                  </div>
+                ) : null}
                 {z.latestResolution?.status ? (
                   <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-white/60">
                     Latest resolution status: <span className="capitalize text-white/85">{z.latestResolution.status}</span>

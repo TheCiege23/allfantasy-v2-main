@@ -203,7 +203,7 @@ export default function LeagueDownsizePage() {
       </div>
 
       {previewRows.length > 0 ? (
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 text-xs text-cyan-100/90">
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 text-xs text-[var(--badge-text-cyan)]">
           <p className="font-semibold text-cyan-200/90">Preview</p>
           <ul className="mt-2 space-y-1">
             {previewRows.map((row) => (
@@ -217,7 +217,7 @@ export default function LeagueDownsizePage() {
         type="button"
         disabled={busy || dissolvedCount === 0 || selected.length !== dissolvedCount}
         onClick={() => void apply()}
-        className="w-full rounded-xl border border-cyan-400/35 bg-cyan-500/15 py-3 text-sm font-bold text-cyan-100 disabled:opacity-40"
+        className="w-full rounded-xl border border-cyan-400/35 bg-cyan-500/15 py-3 text-sm font-bold text-[var(--badge-text-cyan)] disabled:opacity-40"
       >
         {busy ? 'Applying…' : 'Apply downsizing →'}
       </button>

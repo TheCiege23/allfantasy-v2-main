@@ -7,6 +7,8 @@ import { parseLiveMatchups, summarizeLiveScores } from '@/lib/core-app/liveRailS
 import { managerArtUrl } from '@/lib/core-app/leagueArt'
 import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
 import { getNativeRailMatchups } from '@/lib/core-app/nativeRailMatchups'
+import { eliminationFormat } from '@/lib/core-app/railMatchupMode'
+import { readEliminationField } from '@/lib/core-app/railMatchups'
 
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Never accept a client-supplied platform ID or roster ownership assertion.
     const owned = await prisma.leagueTeam.findMany({
       where: { leagueId: { in: ids }, claimedByUserId: session.user.id },
-      select: { externalId: true, league: { select: { id: true, platform: true, platformLeagueId: true, guillotineMode: true } } },
+      select: { externalId: true, league: { select: { id: true, platform: true, platformLeagueId: true, guillotineMode: true, leagueType: true, settings: true } } },
     })
     const authorized = owned.filter(team => team.league?.platform?.toLowerCase() === 'sleeper')
     /*
@@ -65,7 +67,24 @@ export async function GET(request: NextRequest) {
           const metadata = await sleeperRailFeed(`league/${league.platformLeagueId}`, 3_600_000) as { season?: string; sport?: string } | null
           if (metadata?.sport !== 'nfl' || Number(metadata.season) !== current.season) throw new Error('Not a current NFL league')
           const rows = parseLiveMatchups(await sleeperRailFeed(`league/${league.platformLeagueId}/matchups/${current.week}`, 20_000))
-          const scores = rows && summarizeLiveScores(rows, String(team.externalId))
+          /*
+           * An elimination league ranks the LIVE field: the same rule (eliminationFormat) and the same
+           * chopped set (choppedBefore over the stored weeks) as the server-rendered row, which this
+           * refresh overlays. `guillotineMode` alone is false on every imported guillotine league.
+           */
+          const elimination = eliminationFormat(league) != null
+          const field = elimination
+            ? await readEliminationField(league.platformLeagueId, current.season, current.week).catch(() => null)
+            : null
+          const scores = rows && summarizeLiveScores(rows, String(team.externalId), {
+            out: field?.out,
+            weeksLeft: field?.weeksLeft ?? null,
+            elimination,
+            nameOf: (rosterId) => {
+              const named = teams.find(row => row.leagueId === league.id && row.externalId === rosterId)
+              return rosterLabel([named?.teamName, named?.ownerName], rosterId)
+            },
+          })
           if (!scores) throw new Error('Matchup unavailable')
           const mine = teams.find(row => row.leagueId === league.id && row.externalId === team.externalId)
           const other = teams.find(row => row.leagueId === league.id && row.externalId === scores.opponentRosterId)
@@ -82,7 +101,7 @@ export async function GET(request: NextRequest) {
             yourAvatarUrl: managerArtUrl({ avatarUrl: mine?.avatarUrl, platform: 'sleeper' }),
             opponentTeam: scores.opponentRosterId ? rosterLabel([other?.teamName, other?.ownerName], scores.opponentRosterId) : null,
             opponentAvatarUrl: managerArtUrl({ avatarUrl: other?.avatarUrl, platform: 'sleeper' }),
-            standing: scores.standing ? { ...scores.standing, elimination: league.guillotineMode } : null,
+            standing: scores.standing ? { ...scores.standing, elimination: elimination || league.guillotineMode } : null,
           }
         } catch { unavailable.push(league.id) }
       }))

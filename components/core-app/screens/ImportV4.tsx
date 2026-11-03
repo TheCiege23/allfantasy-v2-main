@@ -222,6 +222,11 @@ type Phase =
       claimTeamId: string | null
       /* `dataQuality.coverageSummary` — every bucket, for the compact "what comes across" list. */
       coverageRows: PreviewCoverageRow[]
+      /*
+       * The server proved membership but the provider reports no commissioner (Fantrax with a
+       * Secret ID). Ticking "I'm the commissioner" sets `attested`, and the commit then records it.
+       */
+      canConfirmCommissioner: boolean
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -419,6 +424,9 @@ const FIELD_BY_PROVIDER: Partial<
  */
 const MFL_KEY_HREF = '/settings?tab=connected'
 
+/** Set when Connect is pressed on an empty field; typing into the field makes it obsolete. */
+const EMPTY_LEAGUE_ID_ERROR = 'Enter a league ID to continue.'
+
 const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   fantrax: 'League ID · pick your team',
   /* No account, no cookie, no key — the only tile here that needs nothing first. */
@@ -480,7 +488,7 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
     /* No setup words here: an empty Sleeper result is usually a typo, and a
        "connect your accounts" link would send someone to fix what is not broken. */
     return (
-      'No NFL leagues came back for that Sleeper username this season. Check the ' +
+      'No NFL or NBA leagues came back for that Sleeper username this season. Check the ' +
       'spelling, or leave it blank to use the Sleeper account on your profile.'
     )
   }
@@ -778,9 +786,8 @@ const TRACKED_SPORTS = ['nfl', 'nba', 'nhl', 'mlb'] as const
 /**
  * `sport` is a required field on league_connected, but DiscoveredLeague.sport is
  * an optional free string echoed back by the provider. Falling back to 'nfl' is
- * not a guess: both discovery calls in this file request `{ sport: 'nfl' }`
- * explicitly, so an unset or unrecognised value on a row we asked for as NFL is
- * a missing echo, not a different sport.
+ * only a fallback for providers that omit sport on the response. Sleeper discovery
+ * requests NFL and NBA, and its rows carry the actual provider sport.
  */
 function toSport(raw: string | undefined): Sport {
   const value = (raw ?? '').trim().toLowerCase()
@@ -968,7 +975,7 @@ export function ImportV4({
       setHandleLinkedElsewhere(false)
       setPhase({ k: 'discovering' })
       const seq = ++discoverSeq.current
-      const res = await discoverProviderLeagues(provider, identifier, { sport: 'nfl' })
+      const res = await discoverProviderLeagues(provider, identifier, { sport: provider === 'sleeper' ? 'all' : 'nfl' })
       if (seq !== discoverSeq.current) return
       if (!res.ok && res.verificationRequired) {
         setVerifyGate({ k: 'discover', identifier })
@@ -1020,6 +1027,7 @@ export function ImportV4({
         leagues?: DiscoveredLeague[]
         accountLabel?: string
         handleLinkedElsewhere?: boolean
+        warning?: string
       }
       const found = payload?.leagues ?? []
       setLeagues(found)
@@ -1039,7 +1047,8 @@ export function ImportV4({
        * so it has no answer to report. Speaking there would greet someone with an
        * error for a screen they had only just opened.
        */
-      if (found.length === 0) setError(emptyDiscoveryMessage(provider))
+      if (payload?.warning) setError(payload.warning)
+      else if (found.length === 0) setError(emptyDiscoveryMessage(provider))
       setPhase({ k: 'idle' })
     },
     [provider, yahooConnected]
@@ -1058,7 +1067,7 @@ export function ImportV4({
     if (!supportsImportProviderDiscovery(provider)) return
     let cancelled = false
     const seq = discoverSeq.current
-    void discoverProviderLeagues(provider, '', { sport: 'nfl' }).then((res) => {
+    void discoverProviderLeagues(provider, '', { sport: provider === 'sleeper' ? 'all' : 'nfl' }).then((res) => {
       // An explicit lookup started since then owns the screen now.
       if (cancelled || seq !== discoverSeq.current) return
       /*
@@ -1072,7 +1081,8 @@ export function ImportV4({
         return
       }
       if (!res.ok) return
-      const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
+      const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string; warning?: string }
+      if (payload?.warning) setError(payload.warning)
       if (!payload?.leagues?.length) return
       setLeagues(payload.leagues)
       setExcluded(defaultExclusionsFor(payload.leagues))
@@ -1181,6 +1191,7 @@ export function ImportV4({
         importable?: boolean
         importBlockedReason?: unknown
         managers?: unknown
+        commissionerConfirmable?: unknown
       }
       trackImportGateResult({
         provider,
@@ -1198,6 +1209,7 @@ export function ImportV4({
         teams: teams.length > 0 ? teams : null,
         claimTeamId: null,
         coverageRows: readPreviewCoverageRows(payload?.dataQuality?.coverageSummary),
+        canConfirmCommissioner: payload?.commissionerConfirmable === true,
         // Only an explicit `false` blocks. A missing field is an ordinary, importable preview.
         importBlockedReason:
           payload?.importable === false
@@ -1979,7 +1991,7 @@ export function ImportV4({
         }
         if (canDiscover) void runDiscover(typed)
         else if (typed) void runPreview(typed)
-        else setError('Enter a league ID to continue.')
+        else setError(EMPTY_LEAGUE_ID_ERROR)
       }}
     >
       {/*
@@ -2395,7 +2407,10 @@ export function ImportV4({
                     placeholder={field.placeholder}
                     value={account}
                     data-testid="import-discovery-account"
-                    onChange={(e) => setAccount(e.target.value)}
+                    onChange={(e) => {
+                      setAccount(e.target.value)
+                      setError((prev) => (prev === EMPTY_LEAGUE_ID_ERROR ? null : prev))
+                    }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter') return
                       e.preventDefault()
@@ -3014,6 +3029,25 @@ export function ImportV4({
             <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
               {phase.importBlockedReason}
             </p>
+          ) : null}
+          {/*
+            ── Are you the commissioner? ───────────────────────────────────────────
+            Only when the server says it cannot tell (Fantrax reports no commissioner). Unticked by
+            default: most people importing are members, and a member is never asked to claim more.
+          */}
+          {phase.canConfirmCommissioner && !phase.importBlockedReason ? (
+            <label className="af-im-field-help" data-testid="import-preview-commissioner">
+              <input
+                type="checkbox"
+                checked={phase.attested}
+                onChange={(e) => {
+                  const attested = e.target.checked
+                  setPhase((prev) => (prev.k === 'preview' ? { ...prev, attested } : prev))
+                }}
+              />{' '}
+              I&rsquo;m the commissioner of this league on {providerLabel}. You&rsquo;ll get the
+              commissioner tools here.
+            </label>
           ) : null}
           <div className="af-im-actions">
             <button

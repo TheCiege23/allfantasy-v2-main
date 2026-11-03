@@ -6,6 +6,10 @@ import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKey
 import { gradePicks, type GradablePick } from './gradeDraftPicks'
 import type { DraftReportPayload, DraftReportSeason } from './draftReportService'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
+import {
+  normalizeIdentitySport,
+  resolveFantraxIdentities,
+} from '@/lib/player-identity/resolveRosterPlayerIdentities'
 
 /**
  * Grade a draft we imported, from rows we already hold.
@@ -152,13 +156,47 @@ async function resolveSleeperIds(
   return out
 }
 
-/** Provider player id -> a displayable name, for the steal/bust lines. */
-async function resolveNames(providerPlayerIds: string[]): Promise<Map<string, string>> {
+/**
+ * Fantrax draft player ids -> Sleeper ids and names, through `PlayerIdentityMap.fantraxId`.
+ *
+ * 🛑 BOTH LOOKUPS ABOVE MISSED FANTRAX ENTIRELY: `resolveSleeperIds` answers only Sleeper and ESPN,
+ * and `resolveNames` reads `PlayerProviderIdentity`, which nothing fills for Fantrax — and which is
+ * keyed without a provider, so a Fantrax id could only ever have matched another provider's player.
+ * The registry is scoped by sport and refuses any id two rows share (`resolveFantraxIdentities`).
+ * NFL rows carry the Sleeper id the season board is keyed on; other sports name only.
+ */
+async function resolveFantraxDraftPlayers(
+  sport: string,
+  providerPlayerIds: string[],
+): Promise<[Map<string, string>, Map<string, string>]> {
+  const sleeperIds = new Map<string, string>()
+  const names = new Map<string, string>()
+  const identities = await resolveFantraxIdentities(sport, providerPlayerIds).catch(() => new Map())
+  for (const [id, identity] of identities) {
+    if (identity.sleeperId) sleeperIds.set(id, identity.sleeperId)
+    if (identity.name) names.set(id, identity.name)
+  }
+  return [sleeperIds, names]
+}
+
+/**
+ * Provider player id -> a displayable name, for the steal/bust lines.
+ *
+ * ⚠ SCOPED TO THE PROVIDER THAT ISSUED THE ID, AND THE LEAGUE'S SPORT. This read matched
+ * `providerPlayerId` alone, which is the exact hole `draftHq.resolvePlayerNames` documents: 12,074
+ * provider ids appear under two or more providers and 16,710 under two or more sports, so an ESPN
+ * pick could be named after a college basketball player. Same filter as that resolver.
+ */
+async function resolveNames(platform: string, sport: string, providerPlayerIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>()
-  if (providerPlayerIds.length === 0) return out
+  if (providerPlayerIds.length === 0 || !platform) return out
   const rows = await prisma.playerProviderIdentity
     .findMany({
-      where: { providerPlayerId: { in: providerPlayerIds } },
+      where: {
+        provider: platform,
+        providerPlayerId: { in: providerPlayerIds },
+        sportKey: { equals: sport, mode: 'insensitive' as const },
+      },
       select: { providerPlayerId: true, displayName: true },
     })
     .catch(() => [])
@@ -181,13 +219,19 @@ export async function buildImportedDraftReport(
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, platform: true, settings: true, leagueType: true },
+      select: { id: true, platform: true, sport: true, settings: true, leagueType: true },
     })
     .catch(() => null)
   if (!league) return null
 
   const platform = String(league.platform ?? '').toLowerCase()
   const missing: string[] = []
+  /*
+   * ⚠ THE SEASON BOARD BELOW IS SLEEPER'S NFL STATS. Grading a baseball or hockey draft against it
+   * could only ever produce nothing — or, through a mis-link, a football player's points. A league
+   * with no sport on file is treated as NFL, which is the column's default.
+   */
+  const identitySport = normalizeIdentitySport(String(league.sport ?? 'NFL'))
 
   const facts = await prisma.draftFact
     .findMany({
@@ -225,6 +269,10 @@ export async function buildImportedDraftReport(
   for (const season of seasons) {
     const rows = facts.filter((f) => f.season === season)
     const complete = season < currentYear
+    if (identitySport !== 'NFL') {
+      missing.push(`${season}: draft grades use NFL season stats; none are available for ${identitySport}`)
+      continue
+    }
     const board = await getSeasonStatsBoard(String(season), complete)
     if (!board) {
       missing.push(`${season}: season stats`)
@@ -232,10 +280,12 @@ export async function buildImportedDraftReport(
     }
 
     const providerIds = [...new Set(rows.map((r) => r.playerId).filter(Boolean))]
-    const [sleeperIds, names] = await Promise.all([
-      resolveSleeperIds(platform, providerIds),
-      resolveNames(providerIds),
-    ])
+    const [sleeperIds, names] = platform === 'fantrax'
+      ? await resolveFantraxDraftPlayers(identitySport, providerIds)
+      : await Promise.all([
+          resolveSleeperIds(platform, providerIds),
+          resolveNames(platform, identitySport, providerIds),
+        ])
     const unresolved = providerIds.filter((id) => !sleeperIds.has(id)).length
     if (unresolved > 0) {
       missing.push(`${season}: ${unresolved} of ${providerIds.length} players not yet linked`)

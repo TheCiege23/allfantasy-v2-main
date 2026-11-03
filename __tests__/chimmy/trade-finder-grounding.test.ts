@@ -243,3 +243,91 @@ describe('readTradeFinderPosition', () => {
     expect(readTradeFinderPosition(3)).toBeNull()
   })
 })
+
+/*
+ * "find me 3 win now trades using my draft picks and a lesser player" (owner's Versuz league,
+ * 2026-10-31) came back as dynasty-value player swaps with no pick, each a step down THIS season.
+ * Here the league is dynasty: the finder prices on the dynasty chart, and a win-now ask also reads
+ * the redraft chart (NOW below; a player it omits is worth the same on both).
+ */
+describe('buildTradeFinder — win now and draft picks', () => {
+  const DYNASTY_LEAGUE = { ...LEAGUE, leagueType: 'dynasty' }
+  const NOW: Record<string, number> = { rb3: 2000, te2: 1500, rb7: 5500, wr4: 5200, te3: 2500, rb5: 4600 }
+  const chart = (mode: 'dynasty' | 'redraft') => ({
+    ...VALUES,
+    mode,
+    bySleeperId: Object.fromEntries(
+      P.map(([id, name, position, value]) => [
+        id,
+        { name, sleeperId: id, position, value: mode === 'redraft' ? (NOW[id] ?? value) : value, overallRank: null, trend30Day: null },
+      ]),
+    ),
+    pickBySlot: {},
+    pickByRound: mode === 'dynasty' ? { '2026:1': 9999, '2027:1': 2500, '2027:2': 1200, '2027:3': 600, '2028:1': 2400, '2028:2': 1100, '2029:1': 2300 } : {},
+  })
+
+  beforeEach(() => {
+    h.leagueFindUnique.mockResolvedValue(DYNASTY_LEAGUE)
+    h.getMarketValues.mockImplementation(async (ctx: { variant: { dynasty: boolean } }) => chart(ctx.variant.dynasty ? 'dynasty' : 'redraft'))
+  })
+
+  it('a win-now ask returns only packages that raise this season’s value, never the dynasty-only swap', async () => {
+    const r = await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now' })
+    if (r.status !== 'ready') throw new Error(r.reason)
+    expect(r.ideas.length).toBeGreaterThan(0)
+    for (const idea of r.ideas) {
+      expect(idea.nowGet!).toBeGreaterThan(idea.nowGive!)
+      expect(idea.fairness).not.toBe('lopsided')
+    }
+    expect(r.asked).toMatchObject({ goal: 'win_now', picks: false })
+  })
+
+  /*
+   * The case that pins the filter: shopping Bijan (8,000 both charts) for win now. LaPorta is 6,500 —
+   * inside the fairness band, so the dynasty search would offer him — and a step down this season.
+   * Nothing in the league beats Bijan this season, so the honest answer is none. (Verified red with
+   * the `nowGain <= 0` filter removed; the test above stays green without it, because ranking alone
+   * keeps upgrades on top there.)
+   */
+  it('never offers a current-season downgrade, and says so when nothing is an upgrade', async () => {
+    const r = await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now', tradeAway: 'Bijan Robinson' })
+    if (r.status !== 'ready') throw new Error(r.reason)
+    expect(r.ideas).toEqual([])
+    expect(r.noIdeasReason).toMatch(/raise your current-season value/)
+  })
+
+  it('with picks offered, adds one of the user’s next two seasons of picks and says ownership is assumed', async () => {
+    const r = await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now', includePicks: true })
+    if (r.status !== 'ready') throw new Error(r.reason)
+    const picks = r.ideas.flatMap((i) => i.give.filter((a) => a.position === 'PICK'))
+    expect(picks.length).toBeGreaterThan(0)
+    // 2026 is this season's (already drafted) and 2029 is past the two-season horizon.
+    for (const p of picks) expect(p.name).toMatch(/^(2027|2028) (1st|2nd|3rd)$/)
+    expect(r.pickNote).toMatch(/assumes you still own that pick/)
+    for (const idea of r.ideas) expect(idea.giveTotal).toBe(idea.give.reduce((s, a) => s + (a.value ?? 0), 0))
+  })
+
+  it('says picks cannot be priced in a league with no pick market, and still answers with players', async () => {
+    h.leagueFindUnique.mockResolvedValue(LEAGUE)
+    h.getMarketValues.mockResolvedValue(VALUES)
+    const r = await buildTradeFinder({ leagueId: 'L1', userId: 'me', includePicks: true })
+    if (r.status !== 'ready') throw new Error(r.reason)
+    expect(r.pickNote).toMatch(/no market price/)
+    expect(r.ideas.flatMap((i) => i.give).some((a) => a.position === 'PICK')).toBe(false)
+    expect(r.ideas.length).toBeGreaterThan(0)
+  })
+
+  it('refuses a win-now search rather than ranking on the dynasty chart when no current-season values load', async () => {
+    h.getMarketValues.mockImplementation(async (ctx: { variant: { dynasty: boolean } }) => (ctx.variant.dynasty ? chart('dynasty') : null))
+    const r = await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now' })
+    expect(r).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/current-season values/) })
+  })
+
+  it('tells the model the goal, this season’s values and the pick caveat', async () => {
+    const block = renderTradeFinderBlock(await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now', includePicks: true }))
+    expect(block).toContain('Asked for: WIN NOW.')
+    expect(block).toMatch(/This season \(redraft chart\): you give [\d,]+, you get [\d,]+/)
+    expect(block).toMatch(/Draft picks: offered by the user — .*assumes you still own that pick/)
+    expect(block).toMatch(/grade that version with evaluate_trade/)
+  })
+})

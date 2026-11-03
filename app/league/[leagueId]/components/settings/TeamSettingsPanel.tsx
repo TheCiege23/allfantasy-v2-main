@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { UserMinus, UserPlus, X, Search } from 'lucide-react'
 import { toast } from 'sonner'
+import { TeamCoOwnerPanel } from './TeamCoOwnerPanel'
 import { SettingsPanelHeading, SettingsSectionLabel, controlClassSm } from './settings-ui'
 
 interface TeamRow {
@@ -394,6 +395,8 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
                           Paste an image link. Leave blank to use the team initial.
                         </span>
                       </label>
+
+                      {canEdit && team.rosterId && <TeamCoOwnerPanel leagueId={leagueId} rosterId={team.rosterId} />}
 
                       {/* Owner assignment */}
                       {canEdit ? (

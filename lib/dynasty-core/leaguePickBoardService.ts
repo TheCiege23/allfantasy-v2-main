@@ -19,9 +19,12 @@ import { hasSyncedProviderPicks, loadImportedFuturePicks } from '@/lib/league-tr
 import { buildLeaguePickBoard, type BoardPickInput, type LeaguePickBoard } from './leaguePickBoard'
 
 export type LeaguePickBoardResult =
-  | { ok: true; board: LeaguePickBoard }
+  | { ok: true; board: LeaguePickBoard; trade: PickBoardTradeContext }
   | { ok: true; board: null; reason: 'no_picks_tracked' }
   | { ok: false; status: 401 | 403 | 404; error: string }
+
+/** What the "Propose a pick trade" entry needs to open the league's own trade builder honestly. */
+export type PickBoardTradeContext = { platform: string | null; sport: string | null }
 
 export async function loadLeaguePickBoard(leagueId: string, userId: string | null | undefined): Promise<LeaguePickBoardResult> {
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' }
@@ -30,7 +33,7 @@ export async function loadLeaguePickBoard(leagueId: string, userId: string | nul
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { platform: true, leagueType: true, isDynasty: true, leagueVariant: true, season: true, settings: true },
+    select: { platform: true, sport: true, leagueType: true, isDynasty: true, leagueVariant: true, season: true, settings: true },
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
 
@@ -48,12 +51,13 @@ export async function loadLeaguePickBoard(leagueId: string, userId: string | nul
     return { rosterId: r.id, name: team?.teamName?.trim() || team?.ownerName?.trim() || `Team ${i + 1}` }
   })
   const viewerRosterId = rosters.find((r) => r.platformUserId === userId)?.id ?? null
+  const trade: PickBoardTradeContext = { platform: league.platform ?? null, sport: league.sport != null ? String(league.sport) : null }
 
   if (isNativeFuturePickLeague(league)) {
     const inv = await loadNativeFuturePicks(leagueId)
     if (!inv) return { ok: true, board: null, reason: 'no_picks_tracked' }
     const picks: BoardPickInput[] = inv.picks.map((p) => ({ season: p.season, round: p.round, ownerRosterId: p.ownerTeamId, originalRosterId: p.originalTeamId }))
-    return { ok: true, board: buildLeaguePickBoard({ teams: boardTeams, picks, seasons: inv.seasons, rounds: inv.rounds, coverage: 'complete', viewerRosterId }) }
+    return { ok: true, board: buildLeaguePickBoard({ teams: boardTeams, picks, seasons: inv.seasons, rounds: inv.rounds, coverage: 'complete', viewerRosterId }), trade }
   }
 
   if (hasSyncedProviderPicks(league.platform)) {
@@ -79,6 +83,7 @@ export async function loadLeaguePickBoard(leagueId: string, userId: string | nul
     return {
       ok: true,
       board: buildLeaguePickBoard({ teams: boardTeams, picks, seasons, rounds: imported.coverage === 'complete' ? rounds : null, coverage: imported.coverage, viewerRosterId }),
+      trade,
     }
   }
 

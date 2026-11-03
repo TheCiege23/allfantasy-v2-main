@@ -18,8 +18,10 @@ describe('AutoBenchByeToggle', () => {
     render(<AutoBenchByeToggle leagueId="L1" />)
     const box = (await screen.findByRole('checkbox')) as HTMLInputElement
     expect(box.checked).toBe(false)
+    expect(screen.getByText('Off')).toBeTruthy()
     fireEvent.click(box)
     await waitFor(() => expect(box.checked).toBe(true))
+    expect(screen.getByText('On')).toBeTruthy()
     const put = fetchMock.mock.calls.find((c) => c[1]?.method === 'PUT')!
     expect(put[0]).toBe('/api/league/auto-bench-bye')
     expect(JSON.parse(String(put[1]!.body))).toEqual({ leagueId: 'L1', on: true })

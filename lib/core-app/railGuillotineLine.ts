@@ -43,8 +43,11 @@ export type RailGuillotineLine = {
    * chop zone, and the number is how far BELOW the first safe score you are. Null when unranked.
    */
   chopMargin: number | null
-  /** What the rank is measured from — the projection until most of the field has played. */
-  basis: 'points' | 'projected' | null
+  /**
+   * What the rank is measured from — the projection until most of the field has played. The standing's own
+   * type, so it can carry `best_ball`, though a native league's line never passes best-ball finals today.
+   */
+  basis: RailStanding['basis'] | null
   /** `GuillotineLeagueConfig.eliminationStartWeek`. */
   firstChopWeek: number | null
   /** The week your team was chopped, when it was. */

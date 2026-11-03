@@ -19,6 +19,10 @@ import { openDraftFromEmbeddedLeague } from '@/lib/dashboard/dashboard-draft-ove
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo } from '@/lib/league/ncaaf-beta-guard'
 import { NcaafBetaDataBanner } from '@/components/NcaafBetaDataBanner'
 import { DraftPremiumShells } from '@/components/redraft-premium'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { RedraftDraftBoard } from '@/components/league/native/redraft/RedraftDraftBoard'
+import { RedraftDraftGrades } from '@/components/league/native/redraft/RedraftDraftGrades'
+import '@/components/league/native/redraft-home.css'
 
 export type DraftTabProps = {
   league: UserLeague
@@ -478,9 +482,16 @@ export function DraftTab({
   }, [cap, isCommissioner, isOwner, league.id])
 
   const ncaafBetaInfo = getNcaafBetaBannerInfo(getNcaafBetaStatus(league))
+  /*
+   * Redraft identity (batch A1): Draft HQ for a native redraft league draws its board in the season-race
+   * tokens and adds the persisted post-draft grades once the draft is complete. Draft mode only — the
+   * League tab (`mode="league"`) and every other format keep the card below unchanged.
+   */
+  const redraft = !isLeagueHome ? resolveRedraftIdentity(league) : null
+  const redraftSeason = league.season != null && String(league.season).trim() ? String(league.season) : null
 
   return (
-    <div className={isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}>
+    <div className={`${isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}${redraft ? ' rdh-draft' : ''}`}>
       {ncaafBetaInfo ? <NcaafBetaDataBanner info={ncaafBetaInfo} /> : null}
       {/*
         ⚠ UNMOUNTED DELIBERATELY — THIS RENDERED A FABRICATED BOARD TO PEOPLE MID-DRAFT.
@@ -539,7 +550,32 @@ export function DraftTab({
         </section>
       ) : null}
 
-      {!isLeagueHome ? (
+      {redraft ? (
+        <RedraftDraftBoard
+          phase={draftCompleted ? 'done' : liveDraft ? 'live' : 'pre'}
+          sportLabel={redraft.sportLabel}
+          scoringLabel={typeof league.scoring === 'string' && league.scoring.trim() ? league.scoring.replace(/_/g, ' ') : 'Redraft'}
+          draftDateLabel={draftDateLabel}
+          timer={timer}
+          hasDraftTime={hasDraftTime}
+          filled={filled}
+          cap={cap}
+          isFull={isFull}
+          draftTypeLabel={draftTypeLabel}
+          pickTimerLabel={pickTimerLabel}
+          sleeperDraftId={sleeperDraftId ? String(sleeperDraftId) : null}
+          canSetDraftTime={canSetDraftTime}
+          canEnterDraftRoom={canEnterDraftRoom}
+          onDraftRoom={() => void handleDraftRoom()}
+          onSettings={openSettingsDraft}
+          onMock={() => void handleMockDrafts()}
+        />
+      ) : null}
+      {redraft && draftCompleted && redraftSeason ? (
+        <RedraftDraftGrades leagueId={league.id} season={redraftSeason} teams={displayTeams} userTeamId={null} />
+      ) : null}
+
+      {!isLeagueHome && !redraft ? (
       <section
         className="relative overflow-hidden rounded-[22px] text-white shadow-lg shadow-black/30"
         style={{

@@ -1,3 +1,4 @@
+import type { RookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 /**
  * [NEW] lib/dynasty-core/types.ts
  * DTOs and shapes for Dynasty settings (roster, scoring, playoff, rookie draft).
@@ -67,6 +68,7 @@ export interface DynastySettingsEffectiveDto {
   playoffTeamCount: number
   playoffStructure: Record<string, unknown>
   regularSeasonWeeks: number
+  rookieAuction: RookieAuctionSettings
   /** From DynastyLeagueConfig or defaults */
   rookiePickOrderMethod: string
   useMaxPfForNonPlayoff: boolean

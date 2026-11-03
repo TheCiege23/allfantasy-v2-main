@@ -37,8 +37,16 @@ export function ZombieBashingCard({
   const at = (v: number) => `${Math.min(100, (v / scale) * 100)}%`
   const head = m.outcome ? HEADLINE[m.outcome.kind] : null
 
+  const money = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
   let caption: string
-  if (m.final && m.transfer && loser && winner) {
+  if (m.final && m.winningsHidden) {
+    caption = 'Final. Winnings details are private.'
+  } else if (m.final && m.winningsPolicy === 'beta_2025') {
+    caption = m.transfer && loser && winner
+      ? `${loser.name} transfers ${money(m.transfer.amount)} accumulated winnings to ${winner.name}.${m.winAward ? ` Survivor win award: ${money(m.winAward)}.` : ''}`
+      : m.winAward ? `Final. Survivor win award: ${money(m.winAward)}.`
+      : !m.leader ? 'Final. A tie moves no winnings.' : 'Final. No winnings were taken.'
+  } else if (m.final && m.transfer && loser && winner) {
     caption =
       m.outcome?.kind === 'infection'
         ? `${loser.name} turned — their whole week (${fmt(m.transfer.amount)}) goes to ${winner.name}.`

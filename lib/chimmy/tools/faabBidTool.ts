@@ -138,7 +138,7 @@ export async function computeFaabBidPlan(leagueId: string, userId: string): Prom
   const rostered = new Set(rows.rosters.flatMap((r) => tradeRosterPlayerIds(r)))
   const candidateIds = Object.keys(values.bySleeperId).filter((id) => !rostered.has(id))
   const myIds = tradeRosterPlayerIds(myRoster)
-  const byId = await readTradePlayerRows([...new Set([...myIds, ...candidateIds])])
+  const byId = await readTradePlayerRows([...new Set([...myIds, ...candidateIds])], league.sport)
   const leagueScoring = marketContext.scoring.settings
   const myPlayers = toDiscoveryPlayers(myRoster, byId, values, leagueScoring)
   const pool = faabPoolFor({ candidateIds, byId, values, leagueScoring, myPlayers, leagueSettings: league.settings })

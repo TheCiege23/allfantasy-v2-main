@@ -31,6 +31,17 @@ const FOOTBALL_REDRAFT_CORE_SPORTS = new Set(['NFL', 'NCAAF'])
 export function isNflRedraftCoreDashboardLeague(league: NflRedraftCoreLeagueShape): boolean {
   const sport = normalizeToSupportedSport(String(league.sport)) ?? DEFAULT_SPORT
   if (!FOOTBALL_REDRAFT_CORE_SPORTS.has(sport)) return false
+  return isRedraftFormatLeague(league)
+}
+
+/**
+ * The format half of the gate above, for every sport: `leagueType` is literally `redraft` (an
+ * absent type is NOT read as redraft), and no dynasty / best ball / guillotine / keeper flag or
+ * specialty variant is set. Split out so the redraft visual identity
+ * (lib/league-media/redraftIdentity.ts) classifies a league by the SAME rule as the redraft shell
+ * rather than a second copy of it.
+ */
+export function isRedraftFormatLeague(league: Omit<NflRedraftCoreLeagueShape, 'sport'>): boolean {
   if (league.isDynasty) return false
   if (league.bestBallMode) return false
   if (league.guillotineMode) return false

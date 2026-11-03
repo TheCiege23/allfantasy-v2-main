@@ -11,7 +11,9 @@ export const maxDuration = 60
 /**
  * POST /api/survivor/token-pool/resolve
  * Resolves token pool picks for a given league/week against game results.
- * Called by cron or commissioner manually.
+ * Called by cron or commissioner manually. LEGACY entry point: it now settles the side-game Token
+ * Pool (the commissioner's settle override) plus any unresolved pre-bridge history row; picks also
+ * settle on their own from our stored finals in the season runner.
  */
 export async function POST(req: NextRequest) {
   const cronOk = requireCronAuth(req)
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'results required' }, { status: 400 })
   }
 
+  let actorUserId: string | null = null
   if (!cronOk) {
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
@@ -47,8 +50,11 @@ export async function POST(req: NextRequest) {
     if (!gate.ok) {
       return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
     }
+    actorUserId = userId
   }
 
-  const outcomes = await resolveTokenPoolPicks(leagueId, week, results)
+  // Bridged onto the side-game Token Pool (lib/survivor/tokenPoolEngine.ts): one Token Pool truth,
+  // one token balance. The response shape is unchanged.
+  const outcomes = await resolveTokenPoolPicks(leagueId, week, results, { by: cronOk ? 'auto' : 'commissioner', actorUserId })
   return NextResponse.json({ ok: true, resolved: outcomes.length, outcomes })
 }

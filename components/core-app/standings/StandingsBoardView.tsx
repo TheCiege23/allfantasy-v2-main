@@ -31,6 +31,10 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { standingsBoardCopy } from '@/lib/core-app/standingsUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { messagesFor } from '@/lib/i18n/messages'
+import { useMessages } from '@/components/i18n/useMessages'
+import { standingsBoardMessages } from '@/lib/core-app/messages/standingsScreen'
+import { redraftRaceTag } from '@/lib/core-app/redraftCoreRace'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -132,8 +136,10 @@ function ZoneChip({ team }: { team: BoardTeam }) {
   }
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
+  /* The proven race tag (lib/core-app/redraftCoreRace.ts) — styled only in a redraft league's shell. */
+  const race = redraftRaceTag(team)
   return (
-    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined}>
+    <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined} data-race={race ?? undefined}>
       <span aria-hidden>{clinched ? '✓' : zone.icon}</span>
       {coreUiCopy(clinched ?? zone.label, language)}
     </span>
@@ -174,13 +180,13 @@ export function Move({ value }: { value: number | null }) {
 }
 
 function Form({ form }: { form: BoardTeam['form'] }) {
-  const language = useOptionalLanguage().language
+  const m = useMessages(standingsBoardMessages)
   if (form.length === 0) return <span className="af-stb-muted">—</span>
   return (
-    <span className="af-stb-form" aria-label={language === 'es' ? `Últimos ${form.length}: ${form.map((r) => r === 'W' ? 'victoria' : r === 'L' ? 'derrota' : 'empate').join(', ')}` : `Last ${form.length}: ${form.join(' ')}`}>
+    <span className="af-stb-form" aria-label={m.formLabel(form)}>
       {form.map((r, i) => (
         <i key={i} data-r={r} aria-hidden>
-          {language === 'es' ? r === 'W' ? 'G' : r === 'L' ? 'P' : 'E' : r}
+          {m.resultLetter(r)}
         </i>
       ))}
     </span>
@@ -220,6 +226,20 @@ function boardStatus(t: BoardTeam): 'clinched' | 'eliminated' | null {
   return t.zone === 'eliminated' ? 'eliminated' : null
 }
 
+/** "+124.6" / "−38.2" — points for minus points against; a dash without head-to-head games. */
+function diffText(t: BoardTeam): string {
+  if (t.pointsAgainst == null) return '—'
+  const d = t.pointsFor - t.pointsAgainst
+  const abs = Math.abs(d).toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return d > 0 ? `+${abs}` : d < 0 ? `−${abs}` : abs
+}
+
+function diffTone(t: BoardTeam): 'good' | 'bad' | undefined {
+  if (t.pointsAgainst == null) return undefined
+  const d = t.pointsFor - t.pointsAgainst
+  return d > 0 ? 'good' : d < 0 ? 'bad' : undefined
+}
+
 /** The same thresholds the cross-league standings board colours its odds by. */
 function oddsTone(pct: number): 'good' | 'warn' | 'bad' {
   if (pct >= 60) return 'good'
@@ -257,34 +277,31 @@ function sosTone(rank: number, of: number): 'hard' | 'easy' | undefined {
 }
 
 function sosTitle(o: StandingsOdds['byRoster'][string], odds: StandingsOdds, language = 'en'): string {
-  const es = language === 'es'
-  if (o.sosRank == null) return es ? 'No quedan rivales modelados que clasificar' : 'No modelled opponents left to rank'
+  const m = messagesFor(standingsBoardMessages, language)
+  if (o.sosRank == null) return m.sosNoneLeft
   const avg =
     o.sosOpponentMu != null && odds.leagueMu != null
-      ? es
-        ? ` Los rivales restantes promedian ${o.sosOpponentMu.toFixed(1)} por semana; la liga promedia ${odds.leagueMu.toFixed(1)}.`
-        : ` Opponents left average ${o.sosOpponentMu.toFixed(1)} a week; the league averages ${odds.leagueMu.toFixed(1)}.`
+      ? m.sosAverages(o.sosOpponentMu.toFixed(1), odds.leagueMu.toFixed(1))
       : ''
-  return es
-    ? `${o.sosRank}.º calendario restante más difícil de ${odds.sosRanked}.${avg}`
-    : `${ordinal(o.sosRank)}-hardest remaining schedule of ${odds.sosRanked}.${avg}`
+  return m.sosTitle(o.sosRank, ordinal(o.sosRank), odds.sosRanked, avg)
 }
 
 function SosCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
   const language = useOptionalLanguage().language
-  const es = language === 'es'
+  const m = useMessages(standingsBoardMessages)
   const o = odds.byRoster[team.rosterId]
   if (!o || o.sosRank == null) return <span className="af-stb-muted">—</span>
   return (
     <span className="af-stb-sos af-num" data-tone={sosTone(o.sosRank, odds.sosRanked)} title={sosTitle(o, odds, language)}>
-      {es ? `${o.sosRank}.º` : ordinal(o.sosRank)}
-      <span className="af-sr">{es ? ` más difícil de ${odds.sosRanked}` : ` hardest of ${odds.sosRanked}`}</span>
+      {m.rankPlace(o.sosRank, ordinal(o.sosRank))}
+      <span className="af-sr">{` ${m.hardestOf(odds.sosRanked)}`}</span>
     </span>
   )
 }
 
 function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, number> }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(standingsBoardMessages)
   const n = team.next
   if (!n) return <span className="af-stb-muted">—</span>
   const seed = seedOf.get(n.opponentId)
@@ -294,7 +311,7 @@ function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, numbe
         <span className="af-stb-live">{coreUiCopy('Live', language)}</span>
       ) : (
         <span className="af-stb-muted af-num">
-          {language === 'es' ? 'Sem' : 'Wk'} {n.week}
+          {m.weekAbbrev} {n.week}
         </span>
       )}
       <span className="af-stb-nextname" title={n.opponentName}>
@@ -374,13 +391,14 @@ function groupTeams(teams: BoardTeam[], board: StandingsBoard, division: string)
 /** "W3" — a streak in the form the Last 5 column already speaks. */
 function StreakCell({ team }: { team: BoardTeam }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(standingsBoardMessages)
   const s = team.streak
   if (!s) return <span className="af-stb-muted">—</span>
   const word = s.result === 'W' ? 'won' : s.result === 'L' ? 'lost' : 'tied'
   /* One sentence, translated once: the tooltip and the screen-reader copy say the same thing. */
   const said = coreUiCopy(`${word.charAt(0).toUpperCase()}${word.slice(1)} the last ${s.length}`, language)
   /* The letter follows the Last 5 column's own Spanish (G/P/E). */
-  const letter = language === 'es' ? (s.result === 'W' ? 'G' : s.result === 'L' ? 'P' : 'E') : s.result
+  const letter = m.resultLetter(s.result)
   return (
     <span className="af-stb-streak af-num" data-r={s.result} title={said}>
       {letter}
@@ -414,7 +432,7 @@ function SortTh({
   children: React.ReactNode
 }) {
   const language = useOptionalLanguage().language
-  const es = language === 'es'
+  const m = useMessages(standingsBoardMessages)
   const active = sort.key === sortKey
   const nextDir = active ? (sort.dir === 'asc' ? 'desc' : 'asc') : SORT_DEFAULT_DIR[sortKey]
   return (
@@ -429,11 +447,7 @@ function SortTh({
         data-active={active || undefined}
         title={title ? coreUiCopy(title, language) : undefined}
         onClick={() => onSort(sortKey)}
-        aria-label={
-          es
-            ? `${coreUiCopy(label, language)}: ordenar ${nextDir === 'asc' ? 'ascendente' : 'descendente'}`
-            : `${label}: sort ${nextDir === 'asc' ? 'ascending' : 'descending'}`
-        }
+        aria-label={m.sortLabel(label, coreUiCopy(label, language), nextDir)}
       >
         {children}
         <span className="af-stb-sortmark" aria-hidden>
@@ -461,6 +475,7 @@ function OfficialTable({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
   const zoneOf = useZoneOf()
   /* An elimination league has no bye or playoff line to draw. */
   const noLines = useContext(EliminationContext) != null
@@ -475,10 +490,10 @@ function OfficialTable({
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
-  /* W-L, Pct, GB, PA, Last 5 and Streak come with head-to-head; PF and Move are always there. */
+  /* W-L, Pct, GB, PA, Diff, Last 5 and Streak come with head-to-head; PF, Move and AF are always there. */
   const cols =
-    3 +
-    (h2h ? 6 : 0) +
+    4 +
+    (h2h ? 7 : 0) +
     (hasSplit ? 2 : 0) +
     (odds ? 2 : 0) +
     (hasNext ? 1 : 0) +
@@ -506,7 +521,7 @@ function OfficialTable({
             {h2h ? (
               <>
                 <th scope="col" className="af-stb-n">
-                  <abbr title={copy('Wins-losses-ties')}>{language === 'es' ? 'G-P' : 'W-L'}</abbr>
+                  <abbr title={copy('Wins-losses-ties')}>{m.winLossAbbrev}</abbr>
                 </th>
                 {hasSplit ? (
                   <>
@@ -522,7 +537,7 @@ function OfficialTable({
                   Pct
                 </SortTh>
                 <th scope="col" className="af-stb-n">
-                  <abbr title={language === 'es' ? `Partidos detrás del último puesto de playoffs (${field}); + indica ventaja` : `Games behind the last playoff spot (${ordinal(field)}); + means ahead of it`}>GB</abbr>
+                  <abbr title={m.gamesBackTitle(field, ordinal(field))}>GB</abbr>
                 </th>
               </>
             ) : null}
@@ -552,8 +567,17 @@ function OfficialTable({
                 PA
               </SortTh>
             ) : null}
+            {h2h ? (
+              <th scope="col" className="af-stb-n">
+                <abbr title={m.diffTitle}>{m.diffAbbrev}</abbr>
+              </th>
+            ) : null}
             <th scope="col" className="af-stb-n">
               {copy('Move')}
+            </th>
+            {/* AF Power beside the table's own order, so "where am I" and "how good am I" share a row. */}
+            <th scope="col" className="af-stb-n">
+              <abbr title={m.powerColTitle}>{m.powerColAbbrev}</abbr>
             </th>
             {h2h ? (
               <>
@@ -616,7 +640,7 @@ function OfficialTable({
                   <tr data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)}>
                     <td className="af-stb-sticky af-stb-sticky-rank af-num">{t.seed}</td>
                     <th scope="row" className="af-stb-sticky af-stb-sticky-team">
-                      <TeamCell team={t} showTiebreak tiebreakText={language === 'es' ? spanishTiebreak(board, t) : null} />
+                      <TeamCell team={t} showTiebreak tiebreakText={t.tiebreak ? m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t)) : null} />
                     </th>
                     <td>
                       <ZoneChip team={t} />
@@ -646,8 +670,19 @@ function OfficialTable({
                     ) : null}
                     <td className="af-stb-n af-num">{pts(t.pointsFor)}</td>
                     {h2h ? <td className="af-stb-n af-num">{pts(t.pointsAgainst)}</td> : null}
+                    {h2h ? (
+                      <td className="af-stb-n af-num af-stb-diff" data-tone={diffTone(t)}>
+                        {diffText(t)}
+                      </td>
+                    ) : null}
                     <td className="af-stb-n">
                       <Move value={t.seedMove} />
+                    </td>
+                    <td className="af-stb-n">
+                      <span className="af-stb-afrank">
+                        <span className="af-num">{t.powerRank}</span>
+                        <Move value={t.powerMove} />
+                      </span>
                     </td>
                     {h2h ? (
                       <>
@@ -720,13 +755,8 @@ function FragmentRows({
 
 /** The bye or playoff line's words — one source, so the table and the list cannot disagree. */
 function lineLabel(line: 'bye' | 'playoff', board: StandingsBoard, byes: number, field: number, language: string): string {
-  return language === 'es'
-    ? line === 'bye'
-      ? `Línea de descanso en primera ronda: los primeros ${byes}`
-      : `Línea de playoffs: clasifican los primeros ${field}${board.rules.playoffTeamsSource === 'assumed' ? ' (estimado: la liga no publica cuántos equipos clasifican)' : ''}`
-    : line === 'bye'
-      ? `First-round bye line — top ${byes}`
-      : `Playoff line — top ${field} make it${board.rules.playoffTeamsSource === 'assumed' ? ' (assumed: the league does not report its playoff size)' : ''}`
+  const m = messagesFor(standingsBoardMessages, language)
+  return line === 'bye' ? m.byeLine(byes) : m.playoffLine(field, board.rules.playoffTeamsSource === 'assumed')
 }
 
 /** "92%" — a lineup's points as a share of the best it could have set. */
@@ -891,6 +921,7 @@ function Cards({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
   const zoneOf = useZoneOf()
   const noLines = useContext(EliminationContext) != null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
@@ -1075,7 +1106,7 @@ function Cards({
                               <dd>
                                 <SosCell team={t} odds={odds} />{' '}
                                 <span className="af-stb-muted">
-                                  {language === 'es' ? `más difícil de ${odds.sosRanked}` : `hardest of ${odds.sosRanked}`}
+                                  {m.hardestOf(odds.sosRanked)}
                                 </span>
                               </dd>
                             </div>
@@ -1093,13 +1124,11 @@ function Cards({
                         </div>
                       ) : null}
                     </dl>
-                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{language === 'es' ? spanishTiebreak(board, t) ?? t.tiebreak : t.tiebreak}</p> : null}
+                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t))}</p> : null}
                     {view === 'official' && t.projected ? (
                       <p className="af-stb-cardproj">
                         <span className="af-stb-projtag">{copy('Model')}</span>{' '}
-                        {language === 'es'
-                          ? `Resultado proyectado ${formatRecord(t.projected)}, puesto ${t.projected.seed}; una estimación, no un resultado.`
-                          : `Projected finish ${formatRecord(t.projected)}, ${ordinal(t.projected.seed)} — an expectation, not a result.`}
+                        {m.projectedFinish(formatRecord(t.projected), t.projected.seed, ordinal(t.projected.seed))}
                       </p>
                     ) : null}
                     </details>
@@ -1129,8 +1158,8 @@ function Cards({
  */
 function HeadToHeadGrid({ board }: { board: StandingsBoard }) {
   const language = useOptionalLanguage().language
-  const es = language === 'es'
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
   const teams = board.teams
   const met = teams.some((a) => teams.some((b) => (board.h2h[a.rosterId]?.[b.rosterId] ?? null) != null))
   if (!met) return null
@@ -1140,9 +1169,7 @@ function HeadToHeadGrid({ board }: { board: StandingsBoard }) {
         {copy('Head to head')}
       </h3>
       <p className="af-stb-small">
-        {es
-          ? `Lee cada fila de izquierda a derecha: el récord de ese equipo contra el de cada columna. Solo partidos cara a cara${board.medianGames ? '; los partidos contra la mediana no tienen rival' : ''}.`
-          : `Read across: each row’s record against the team in that column. Head-to-head games only${board.medianGames ? ' — median games have no opponent' : ''}.`}
+        {m.h2hIntro(Boolean(board.medianGames))}
       </p>
       <div className="af-stb-scroll" role="region" aria-label={copy('Head-to-head records')} tabIndex={0}>
         <table className="af-stb-table af-stb-h2h">
@@ -1182,7 +1209,7 @@ function HeadToHeadGrid({ board }: { board: StandingsBoard }) {
                     <td key={c.rosterId} className="af-stb-h2h-cell af-num" data-res={res}>
                       {rec ? formatRecord(rec) : <span className="af-stb-muted">–</span>}
                       <span className="af-sr">
-                        {rec ? (es ? ` contra ${c.name}` : ` against ${c.name}`) : es ? ` — no ha jugado contra ${c.name}` : ` — has not played ${c.name}`}
+                        {rec ? m.h2hAgainst(c.name) : m.h2hNotPlayed(c.name)}
                       </span>
                     </td>
                   )
@@ -1300,6 +1327,7 @@ function spanishTiebreak(board: StandingsBoard, team: BoardTeam): string | null 
 function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewKey }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
   const teams = board.teams
   const you = teams.find((t) => t.isYou) ?? null
   const defaults = (() => {
@@ -1320,13 +1348,18 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
   if (ta && tb && ta.rosterId !== tb.rosterId) {
     if (view === 'power') {
       const [up, low] = ta.powerRank < tb.powerRank ? [ta, tb] : [tb, ta]
-      answer = language === 'es'
-        ? up.powerScore !== low.powerScore
-          ? `${up.name} tiene ${up.powerScore.toFixed(1)} puntos de rendimiento frente a ${low.powerScore.toFixed(1)} de ${low.name}: récord contra todos ${formatRecord(up.allPlay)} frente a ${formatRecord(low.allPlay)}${board.weeks.length >= 4 ? ', con más peso para las últimas tres semanas' : ''}.`
-          : `${up.name} y ${low.name} tienen la misma puntuación de rendimiento; ${up.name} va delante por puntos a favor (${pts(up.pointsFor)} frente a ${pts(low.pointsFor)}).`
-        : up.powerScore !== low.powerScore
-          ? `${up.name} scores ${up.powerScore.toFixed(1)} to ${low.powerScore.toFixed(1)}: all-play ${formatRecord(up.allPlay)} against ${formatRecord(low.allPlay)}${board.weeks.length >= 4 ? ', with the last three weeks weighted' : ''}.`
-          : `${up.name} and ${low.name} have the same power score; ${up.name} is ahead on points for (${pts(up.pointsFor)} to ${pts(low.pointsFor)}).`
+      answer = m.powerWhy({
+        up: up.name,
+        low: low.name,
+        upScore: up.powerScore.toFixed(1),
+        lowScore: low.powerScore.toFixed(1),
+        upAllPlay: formatRecord(up.allPlay),
+        lowAllPlay: formatRecord(low.allPlay),
+        upPoints: pts(up.pointsFor),
+        lowPoints: pts(low.pointsFor),
+        scoresDiffer: up.powerScore !== low.powerScore,
+        weighted: board.weeks.length >= 4,
+      })
     } else {
       const [up, low] = ta.seed < tb.seed ? [ta, tb] : [tb, ta]
       const explanation = explainOrder(up, low, {
@@ -1338,9 +1371,15 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
         platformLabel: board.rules.platformLabel,
         platformOrder: board.platformOrder,
       })
-      answer = language === 'es'
-        ? `${up.name} ocupa el puesto ${up.seed} y ${low.name} el ${low.seed}. ${spanishOrderReason(up, low, board)}`
-        : `${up.name} is ${ordinal(up.seed)}, ${low.name} ${ordinal(low.seed)}. ${explanation}`
+      answer = m.officialWhy({
+        up: up.name,
+        low: low.name,
+        upSeed: up.seed,
+        lowSeed: low.seed,
+        upOrd: ordinal(up.seed),
+        lowOrd: ordinal(low.seed),
+        reason: m.orderReason(explanation, () => spanishOrderReason(up, low, board)),
+      })
     }
   }
   return (
@@ -1378,6 +1417,117 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
   )
 }
 
+/**
+ * The playoff picture (2026-11 redesign): the field if the season ended today, and the race for the
+ * last spot. Everything is read off the table — seeds, records, games back, and Season Outlook's odds
+ * when the page has them.
+ *
+ * ⚠ NO PAIRINGS. Whether the bracket reseeds, and who meets whom, is the league's setting, and /core does
+ * not have it for an imported league. Drawing "3 v 6" would be a bracket we made up, so the field is shown
+ * as byes and first-round teams, and the note says pairings are not drawn.
+ */
+function PlayoffPicture({
+  board,
+  odds,
+  field,
+  byes,
+}: {
+  board: StandingsBoard
+  odds: StandingsOdds | null
+  field: number
+  byes: number
+}) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
+  const bySeed = [...board.teams].sort((a, b) => a.seed - b.seed)
+  const inField = bySeed.slice(0, field)
+  const byeTeams = inField.slice(0, byes)
+  const roundOne = inField.slice(byes)
+  const holding = bySeed[field - 1] ?? null
+  /* The chasers: up to three teams below the line who have not been eliminated. */
+  const chasing = bySeed.slice(field).filter((t) => t.zone !== 'eliminated').slice(0, 3)
+
+  const seedCard = (t: BoardTeam) => (
+    <li key={t.rosterId} className="af-stb-seedcard" data-you={t.isYou ? 'true' : undefined} data-bye={t.seed <= byes ? 'true' : undefined}>
+      <span className="af-stb-seedno af-num" aria-label={m.seedLabel(t.seed)}>
+        {t.seed}
+      </span>
+      <span className="af-stb-seedname">
+        {t.name}
+        {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+      </span>
+      <span className="af-stb-seedrec af-num">{formatRecord(t.record)}</span>
+      {t.clinched ? <ZoneChip team={t} /> : null}
+    </li>
+  )
+
+  const raceRow = (t: BoardTeam, role: 'holding' | 'chasing') => {
+    const o = odds?.byRoster[t.rosterId] ?? null
+    const gb = t.gamesBack
+    return (
+      <li key={t.rosterId} className="af-stb-racerow" data-role={role} data-you={t.isYou ? 'true' : undefined}>
+        <span className="af-stb-seedno af-num">{t.seed}</span>
+        <span className="af-stb-racename">
+          {t.name}
+          {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+          <span className="af-stb-racemeta af-num">
+            {formatRecord(t.record)}
+            {role === 'chasing' && gb != null
+              ? ` · ${gb === 0 ? m.raceLevel : m.raceGamesBack(gamesBackText(gb))}`
+              : ''}
+          </span>
+        </span>
+        {o ? (
+          <span className="af-stb-raceodds" aria-label={m.raceOdds}>
+            <OddsCell team={t} odds={odds!} />
+          </span>
+        ) : null}
+      </li>
+    )
+  }
+
+  return (
+    <section className="af-stb-picture" aria-label={m.playoffPicture} data-testid="standings-playoff-picture">
+      <div className="af-stb-field">
+        {byeTeams.length > 0 ? (
+          <div className="af-stb-fieldcol">
+            <h3 className="af-label">{m.byeSeeds(byeTeams.length)}</h3>
+            <ol className="af-stb-seedlist">
+              {byeTeams.map(seedCard)}
+            </ol>
+          </div>
+        ) : null}
+        <div className="af-stb-fieldcol">
+          <h3 className="af-label">{m.playingRoundOne}</h3>
+          <ol className="af-stb-seedlist">
+            {roundOne.map(seedCard)}
+          </ol>
+        </div>
+      </div>
+      <p className="af-stb-small">{m.pictureNote(board.rules.playoffTeamsSource === 'assumed')}</p>
+
+      <div className="af-stb-race" data-testid="standings-race">
+        <h3 className="af-label">{m.raceTitle}</h3>
+        {holding && chasing.length > 0 ? (
+          <>
+            <p className="af-stb-racehead">{m.raceHolding}</p>
+            <ul className="af-stb-racelist">
+              {raceRow(holding, 'holding')}
+            </ul>
+            <p className="af-stb-racehead">{m.raceChasing}</p>
+            <ul className="af-stb-racelist">
+              {chasing.map((t) => raceRow(t, 'chasing'))}
+            </ul>
+          </>
+        ) : (
+          <p className="af-stb-small">{m.raceNone}</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function StandingsBoardView({
   board: finalBoard,
   initial,
@@ -1402,6 +1552,7 @@ export function StandingsBoardView({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = useMessages(standingsBoardMessages)
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
     initial.division === 'all' || initial.division === 'group' || finalBoard.divisions.some((d) => d.key === initial.division)
@@ -1492,7 +1643,7 @@ export function StandingsBoardView({
         ? sort
         : DEFAULT_STANDINGS_SORT
       : DEFAULT_STANDINGS_SORT
-  const resorted = view === 'official' && (sortable.key !== 'seed' || sortable.dir !== 'asc')
+  const resorted = view !== 'power' && (sortable.key !== 'seed' || sortable.dir !== 'asc')
 
   const sorted = useMemo(
     () =>
@@ -1503,13 +1654,20 @@ export function StandingsBoardView({
   )
   const groups = groupTeams(sorted, board, division)
   /* The bye and playoff lines only mean something between rows in table order. */
-  const plain = view === 'official' && !resorted && groups.length === 1 && groups[0].key === 'all'
+  const plain = view !== 'power' && !resorted && groups.length === 1 && groups[0].key === 'all'
   const focusIds =
     division !== 'all' && division !== 'group' ? new Set(board.teams.filter((t) => t.division?.key === division).map((t) => t.rosterId)) : null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const withheld = board.projectionWithheld
   const you = board.teams.find((t) => t.isYou) ?? null
+  /*
+   * The playoff picture needs a playoff line to draw: head-to-head results, no elimination format, and
+   * at least one team on each side of the line. Anywhere else the option is not offered, and a URL asking
+   * for it falls back to the table.
+   */
+  const canPicture = board.hasHeadToHead && !elimination && field >= 2 && board.teams.length > field
+  const picture = view === 'playoffs' && canPicture
   const SORT_LABEL: Record<StandingsSortKey, string> = {
     seed: 'position',
     pct: 'winning percentage',
@@ -1526,12 +1684,17 @@ export function StandingsBoardView({
     <div className="af-stb" ref={containerRef}>
       <div className="af-stb-controls" role="group" aria-label={copy('Standings view')}>
         <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
-          <button type="button" role="radio" aria-checked={view === 'official'} onClick={() => setView('official')}>
+          <button type="button" role="radio" aria-checked={view === 'official' || (view === 'playoffs' && !canPicture)} onClick={() => setView('official')}>
             {copy('League table')}
           </button>
           <button type="button" role="radio" aria-checked={view === 'power'} onClick={() => setView('power')}>
             {copy('AF Power')}
           </button>
+          {canPicture ? (
+            <button type="button" role="radio" aria-checked={view === 'playoffs'} onClick={() => setView('playoffs')}>
+              {m.playoffPicture}
+            </button>
+          ) : null}
         </div>
         {live ? (
           <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which results')}>
@@ -1568,9 +1731,9 @@ export function StandingsBoardView({
       </div>
 
       <div className="af-stb-kind" data-view={view}>
-        {view === 'official' ? (
+        {view !== 'power' ? (
           <p>
-            <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : language === 'es' ? `Tabla de ${board.rules.platformLabel}.` : `${board.rules.platformLabel}’s table.`}</strong>{' '}
+            <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : m.platformTable(board.rules.platformLabel)}</strong>{' '}
             {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}{' '}
             <TopicTip topic="standingsColumns" />
           </p>
@@ -1596,7 +1759,7 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {view === 'official' && elimination ? (
+      {view !== 'power' && elimination ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           <li data-zone="playoff">
             <span aria-hidden>●</span> {copy('Safe — not in the bottom three this week')}
@@ -1608,7 +1771,7 @@ export function StandingsBoardView({
             <span aria-hidden>✕</span> {copy('Eliminated — already chopped')}
           </li>
         </ul>
-      ) : view === 'official' ? (
+      ) : view !== 'power' ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           {byes > 0 ? (
             <li data-zone="bye">
@@ -1635,7 +1798,7 @@ export function StandingsBoardView({
         </ul>
       ) : null}
 
-      {resorted ? (
+      {resorted && !picture ? (
         <p className="af-stb-sorted" role="status">
           Sorted by {SORT_LABEL[sortable.key]}
           {sortable.key === 'seed' ? ', last first' : ''}. The playoff line shows only in table order.{' '}
@@ -1645,9 +1808,11 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {layout === 'cards' ? (
-        <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} plain={plain} />
-      ) : view === 'official' ? (
+      {picture ? (
+        <PlayoffPicture board={board} odds={odds} field={field} byes={byes} />
+      ) : layout === 'cards' ? (
+        <Cards board={board} groups={groups} view={view === 'power' ? 'power' : 'official'} odds={odds} efficiency={efficiency} plain={plain} />
+      ) : view !== 'power' ? (
         <>
           <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.')}</p>
           <OfficialTable board={board} groups={groups} plain={plain} odds={odds} sort={sortable} onSort={chooseSort} />
@@ -1659,55 +1824,33 @@ export function StandingsBoardView({
         </>
       )}
 
-      {layout === 'table' && you ? <PinnedYou team={you} view={view} odds={odds} containerRef={containerRef} /> : null}
+      {layout === 'table' && you && !picture ? (
+        <PinnedYou team={you} view={view === 'power' ? 'power' : 'official'} odds={odds} containerRef={containerRef} />
+      ) : null}
 
       {/*
         The method, one tap away rather than five paragraphs under the table. Nothing is cut: every
         sentence that was here still is, and stays in the DOM for search and screen readers.
       */}
       <details className="af-stb-notes af-stb-how">
-        <summary>{language === 'es' ? 'Cómo funciona esta tabla' : 'How this table works'}</summary>
-        {view === 'official' ? (
+        <summary>{m.howTitle}</summary>
+        {view !== 'power' ? (
           <>
             <p>{explanation.record}</p>
             <p>{explanation.order}</p>
             <p>
-              {language === 'es'
-                ? `${board.rules.playoffTeamsSource === 'league' ? `Según las reglas de la liga, clasifican los primeros ${field}${byes > 0 ? ` y los primeros ${byes} descansan en la primera ronda` : ''}.` : `La liga no publica cuántos equipos clasifican; la línea supone ${field}.`} Clasificado y eliminado son estados seguros: un récord empatado cuenta contra el equipo porque los puntos de desempate aún pueden cambiar.`
-                : `${board.rules.playoffTeamsSource === 'league' ? `Top ${field} make the playoffs, per the league's settings${byes > 0 ? `; the top ${byes} get a first-round bye` : ''}.` : `The league does not report its playoff size, so the line assumes ${field}.`} Clinched and eliminated are certainties: a level record counts against the team, because a points tiebreak can still move.`}
+              {m.howPlayoffs({ fromLeague: board.rules.playoffTeamsSource === 'league', field, byes })}
             </p>
             {board.showPaths ? (
               <p>
-                {language === 'es' ? (
-                  <>
-                    Números mágicos: <strong>C</strong> son las victorias que faltan para asegurar plaza de playoffs y <strong>E</strong> las
-                    derrotas que acaban con las opciones, pase lo que pase en los demás partidos; la ayuda de otros resultados solo puede bajarlos.
-                  </>
-                ) : (
-                  <>
-                    Magic numbers: <strong>C</strong> is how many more wins guarantee a playoff spot, <strong>E</strong> how many more
-                    losses end the chase — each whatever every other game does, so help from elsewhere can only lower them.
-                  </>
-                )}
+                {m.magicLead}<strong>C</strong>{m.magicMid}<strong>E</strong>{m.magicTail}
               </p>
             ) : null}
             {odds ? (
               <p>
-                {language === 'es' ? (
-                  <>
-                    El % de playoffs y la dificultad del calendario vienen de la simulación del resto de la temporada de{' '}
-                    <Link href={odds.href}>Proyección de temporada</Link> ({odds.iterations.toLocaleString('es-ES')} simulaciones), que
-                    ordena por victorias y luego por puntos a favor. «Dentro» y «Fuera» solo aparecen cuando la propia aritmética de esta
-                    tabla lo ha decidido.
-                  </>
-                ) : (
-                  <>
-                    Playoff % and schedule strength come from{' '}
-                    <Link href={odds.href}>Season Outlook</Link>’s simulation of the rest of the season ({odds.iterations.toLocaleString('en-US')}{' '}
-                    runs), which seeds on wins then points for. “In” and “Out” are printed only where this table’s own arithmetic has
-                    settled it.
-                  </>
-                )}
+                {m.oddsLead}{' '}
+                <Link href={odds.href}>{m.oddsLink}</Link>
+                {m.oddsTail(odds.iterations.toLocaleString(m.numberLocale))}
               </p>
             ) : null}
             <p className="af-stb-projnote">
@@ -1717,9 +1860,7 @@ export function StandingsBoardView({
         ) : (
           <>
             <p>
-              {language === 'es'
-                ? `Las victorias esperadas miden, cada semana, a qué parte de la liga superó un equipo. La suerte es la diferencia entre las victorias reales y las esperadas${board.medianGames ? '; no incluye partidos contra la mediana' : ''}.`
-                : `Expected wins count, each week, the share of the league a team outscored. Luck is actual head-to-head wins minus expected wins${board.medianGames ? ' (median games are not part of it)' : ''}.`}
+              {m.luckNote(Boolean(board.medianGames))}
             </p>
             {efficiency ? <p>{efficiency.basis}</p> : null}
           </>

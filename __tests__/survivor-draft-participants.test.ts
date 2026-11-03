@@ -6,7 +6,7 @@ const rosters = Array.from({ length: 16 }, (_, i) => ({ id: `roster-${i}`, platf
 const users = rosters.map((r, i) => ({ id: r.platformUserId, displayName: `Manager ${i}`, username: `manager${i}` }))
 const db = {
   league: { findUnique: vi.fn() }, draftSession: { findFirst: vi.fn() }, survivorGameState: { findUnique: vi.fn() },
-  roster: { findMany: vi.fn() }, appUser: { findMany: vi.fn() },
+  roster: { findMany: vi.fn() }, appUser: { findMany: vi.fn() }, leagueTeam: { findMany: vi.fn() },
   survivorPlayer: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   survivorTribe: { findMany: vi.fn() }, survivorIdol: { count: vi.fn() }, survivorAuditEntry: { findFirst: vi.fn() },
 }
@@ -50,6 +50,26 @@ describe('Survivor drafted cast reconciliation', () => {
     expect(await prepare()).toMatchObject({ ok: false, code: 'unclaimed_seats' })
     expect(db.survivorPlayer.upsert).not.toHaveBeenCalled()
     expect(db.survivorPlayer.deleteMany).not.toHaveBeenCalled()
+  })
+  it('casts an empty seat Chimmy runs, named after its team, and still refuses an empty seat nobody runs', async () => {
+    const chimmy = (id: string) => ({ since: 's', byUserId: 'c', ownerUserId: `orphan-${id}`, autopilot: { style: 'dynasty_owner', since: 's', byUserId: 'c' } })
+    const seats = rosters.map((r, i) => (i >= 14 ? { id: r.id, platformUserId: `orphan-${r.id}` } : r))
+    db.roster.findMany.mockResolvedValue(seats)
+    db.draftSession.findFirst.mockResolvedValue({ id: 'draft', status: 'completed', sessionKind: 'live', teamCount: 16,
+      slotOrder: seats.map((r, i) => ({ slot: i + 1, rosterId: r.id })) })
+    db.appUser.findMany.mockResolvedValue(users.slice(0, 14))
+    db.leagueTeam.findMany.mockResolvedValue([{ externalId: 'roster-14', teamName: 'Sharks' }])
+    db.league.findUnique.mockResolvedValue({ userId: 'user-0', platform: 'allfantasy', survivorMode: true,
+      settings: { defaultTeamCount: 16, commissionerParticipationMode: 'participating_player', af_managed_lineups: { 'roster-14': chimmy('roster-14'), 'roster-15': chimmy('roster-15') } } })
+    expect((await prepare()).ok).toBe(true)
+    const created = db.survivorPlayer.upsert.mock.calls.map(([args]) => args.create)
+    expect(created.find((c) => c.userId === 'orphan-roster-14')).toMatchObject({ displayName: 'Sharks (Chimmy)', redraftRosterId: 'roster-14' })
+    expect(created.find((c) => c.userId === 'orphan-roster-15')).toMatchObject({ displayName: 'Chimmy 2', redraftRosterId: 'roster-15' })
+    // CONTROL: without Chimmy on the seats, an empty seat still blocks setup.
+    vi.clearAllMocks()
+    db.league.findUnique.mockResolvedValue({ userId: 'user-0', platform: 'allfantasy', survivorMode: true, settings: { defaultTeamCount: 16, commissionerParticipationMode: 'participating_player' } })
+    expect(await prepare()).toMatchObject({ ok: false, code: 'unclaimed_seats' })
+    expect(db.survivorPlayer.upsert).not.toHaveBeenCalled()
   })
   it('blocks a drafted commissioner configured as a non-participating host', async () => {
     db.league.findUnique.mockResolvedValue({ userId: 'user-0', platform: 'allfantasy', survivorMode: true, settings: {} })

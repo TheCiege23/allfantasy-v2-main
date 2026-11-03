@@ -6,6 +6,7 @@ import { InfoTip } from '@/components/core-app/InfoTip';
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient';
 import { useMessages } from '@/components/i18n/useMessages';
 import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens';
+import { coreLang } from '@/lib/core-app/messages/coreLocale';
 import type { ArchiveChoice } from '@/lib/draft-archive/catalog';
 import type { ArchiveDetail } from '@/lib/draft-archive/detail';
 import { DraftHistoryReview } from './DraftHistoryReview';
@@ -78,7 +79,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      <p>{m.archiveResultsToDateGrade}<small>{detail.analysis.resultsToDate.coveredPicks}/{detail.analysis.totalPicks} {m.archiveVerifiedSelections}</small></p>
     </div>
    </section>}
-   {[[m.archiveDraftTimeSnapshot, detail.snapshot], [m.archiveClockTimeline, detail.events], [m.archiveCommissionerCorrections, detail.corrections], [m.archiveTradePackages, detail.trades], [m.archiveExecutedTradesDuring, detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index])}</summary><DraftRecordView value={data} language={language === 'es' ? 'es' : 'en'}/></details>)}
+   {[[m.archiveDraftTimeSnapshot, detail.snapshot], [m.archiveClockTimeline, detail.events], [m.archiveCommissionerCorrections, detail.corrections], [m.archiveTradePackages, detail.trades], [m.archiveExecutedTradesDuring, detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index])}</summary><DraftRecordView value={data} language={coreLang(language)}/></details>)}
    <nav aria-label={m.archiveTimelinePages}>
     {timelinePage > 1 && <Link href={timelineHref(timelinePage - 1)}>{m.archiveNewerRecords}</Link>}
     <span>{m.archiveTimelinePage} {timelinePage}</span>

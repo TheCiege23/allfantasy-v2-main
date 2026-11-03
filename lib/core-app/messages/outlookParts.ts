@@ -1,4 +1,7 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import { ageLabel, ordinal } from '@/lib/core-app/outlookCopy'
+import { ordinalEs } from '@/lib/core-app/outlookSpanish'
+import { ageText } from '@/lib/core-app/shellCopy'
 
 /**
  * Season Outlook parts (components/core-app/outlook/OutlookParts.tsx). Every string is the one the
@@ -100,6 +103,10 @@ export const outlookPartsMessages = defineMessages({
     lastRun: 'Last run',
     reused: ' — reused, because nothing it reads has changed since',
     notModelled: 'Not modelled, or missing',
+    // Formatting
+    numberLocale: 'en-US',
+    seedOrdinal: (n: number): string => ordinal(n),
+    lastRunAge: (computedAt: string, nowMs: number): string => ageLabel(computedAt, nowMs),
   },
   es: {
     likelyRange: 'Rango probable',
@@ -189,5 +196,11 @@ export const outlookPartsMessages = defineMessages({
     lastRun: 'Última ejecución',
     reused: ': reutilizada, porque nada de lo que lee ha cambiado desde entonces',
     notModelled: 'No modelado o faltante',
+    numberLocale: 'es-ES',
+    seedOrdinal: (n) => ordinalEs(n),
+    lastRunAge: (computedAt, nowMs) => {
+      const age = ageLabel(computedAt, nowMs)
+      return age === 'unknown' ? 'desconocida' : ageText(age, 'es')
+    },
   },
 })

@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
-import { suggestionChip, suggestionFact, suggestionTone } from '@/lib/core-app/suggestionChip'
+import { suggestionChip, suggestionFact, suggestionTone, type SuggestionFact } from '@/lib/core-app/suggestionChip'
 import { searchBoxCopy, suggestionChipText } from '@/lib/core-app/finderSearchCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SuggestionPresence } from '@/lib/core-app/playerSuggest'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
+import { FINDER_SPORTS, type FinderSport } from '@/lib/core-app/finderSports'
 
 /**
  * The Player Finder's search box, with suggestions as you type.
@@ -38,6 +39,9 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
  * `useOptionalLanguage` (finderSearchCopy.ts), which starts at English on server and client alike.
  */
 
+/** Languages whose chips are rebuilt from the fact; every other language keeps `suggestionChip`'s English. */
+const CHIP_TEXT: Partial<Record<string, (fact: SuggestionFact) => string>> = { es: suggestionChipText }
+
 export type SearchHit = {
   /** SportsPlayer.externalId, when the API is new enough to send it; the link degrades to a name search without it. */
   externalId?: string | null
@@ -57,16 +61,17 @@ const DEBOUNCE_MS = 300
 const MIN_CHARS = 2
 const LIMIT = 8
 
-function hitHref(h: SearchHit, leagueParam: string, compareWith: string | null | undefined, query: string): string {
+function hitHref(h: SearchHit, leagueParam: string, compareWith: string | null | undefined, query: string, sport: FinderSport | null): string {
   const ref = h.externalId ? playerRef(h.sport, h.externalId, h.source) : null
+  const sportParam = sport ? `&sport=${sport}` : ''
   if (compareWith) {
     // A second name beside the first: the open player stays, the hit becomes `vs`.
     const vs = ref ? `&vs=${encodeURIComponent(ref)}` : ''
-    return `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(compareWith)}${vs}${leagueParam}`
+    return `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(compareWith)}${vs}${sportParam}${leagueParam}`
   }
   const q = `q=${encodeURIComponent(h.name)}`
   const player = ref ? `&player=${encodeURIComponent(ref)}` : ''
-  return `/core/players?${q}${player}${leagueParam}`
+  return `/core/players?${q}${player}${sportParam}${leagueParam}`
 }
 
 /**
@@ -97,12 +102,14 @@ export function PlayerSearchBox({
   query,
   selectedLeagueId,
   signedIn,
+  sport: initialSport = null,
   variant = 'search',
   compareWith = null,
 }: {
   query: string
   selectedLeagueId: string | null
   signedIn: boolean
+  sport?: FinderSport | null
   /**
    * `compare`: the box picks a SECOND player beside the one already open —
    * every hit links to `?player=<compareWith>&vs=<hit>`, the input starts
@@ -117,6 +124,8 @@ export function PlayerSearchBox({
   const { language } = useOptionalLanguage()
   const t = searchBoxCopy(language)
   const [value, setValue] = useState(compare ? '' : query)
+  const [sport, setSport] = useState<FinderSport | null>(initialSport)
+  useEffect(() => setSport(initialSport), [initialSport])
   /*
    * ⚠ THE PAGE ARRIVES WITH ITS OWN QUERY IN THE BOX, AND THAT IS NOT A REQUEST
    * FOR SUGGESTIONS. Fetching on mount opened the list over the match card on
@@ -141,7 +150,8 @@ export function PlayerSearchBox({
       setActive(-1)
       return
     }
-    const cached = cache.current.get(term.toLowerCase())
+    const cacheKey = `${sport ?? 'ALL'}:${term.toLowerCase()}`
+    const cached = cache.current.get(cacheKey)
     if (cached) {
       setHits(cached)
       setOpen(cached.length > 0)
@@ -153,7 +163,7 @@ export function PlayerSearchBox({
     const ctl = new AbortController()
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/core/players/suggest?q=${encodeURIComponent(term)}&limit=${LIMIT}`, { signal: ctl.signal })
+        const res = await fetch(`/api/core/players/suggest?q=${encodeURIComponent(term)}&limit=${LIMIT}${sport ? `&sport=${sport}` : ''}`, { signal: ctl.signal })
         if (res.status === 429) {
           const retry = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
           cooldownUntil.current = Date.now() + (Number.isFinite(retry) ? retry : 30) * 1000
@@ -164,7 +174,7 @@ export function PlayerSearchBox({
         if (!res.ok) return
         const data = (await res.json()) as unknown
         const rows = dedupe(Array.isArray(data) ? (data as SearchHit[]) : [])
-        cache.current.set(term.toLowerCase(), rows)
+        cache.current.set(cacheKey, rows)
         setHits(rows)
         setOpen(rows.length > 0)
         setActive(-1)
@@ -176,11 +186,11 @@ export function PlayerSearchBox({
       clearTimeout(t)
       ctl.abort()
     }
-  }, [term, typed])
+  }, [term, typed, sport])
 
   const hrefs = useMemo(
-    () => hits.map((h) => hitHref(h, leagueParam, compare ? compareWith : null, query)),
-    [hits, leagueParam, compare, compareWith, query],
+    () => hits.map((h) => hitHref(h, leagueParam, compare ? compareWith : null, query, sport)),
+    [hits, leagueParam, compare, compareWith, query, sport],
   )
   // Two boxes can share a screen (the search rail and the compare card); their listboxes must not share an id.
   const listId = compare ? 'af-pf-suggest-vs' : 'af-pf-suggest'
@@ -214,6 +224,24 @@ export function PlayerSearchBox({
     >
       {/* Keeps the held league in context across a new search. */}
       {selectedLeagueId ? <input type="hidden" name="league" value={selectedLeagueId} /> : null}
+      <label className="af-pf-sport-label">
+        <span>{t.sportLabel}</span>
+        <select
+          name="sport"
+          aria-label={t.sportLabel}
+          value={sport ?? ''}
+          onChange={(e) => {
+            setSport((e.target.value || null) as FinderSport | null)
+            setTyped(true)
+            setHits([])
+            setOpen(false)
+            setActive(-1)
+          }}
+        >
+          <option value="">{t.allSports}</option>
+          {FINDER_SPORTS.map((candidate) => <option key={candidate} value={candidate}>{candidate === 'SOCCER' ? t.soccer : candidate}</option>)}
+        </select>
+      </label>
       <div className="af-pf-search-field">
         <label className="af-search af-pf-search">
           <span className="af-search-icon" aria-hidden>
@@ -267,8 +295,9 @@ export function PlayerSearchBox({
                     </span>
                     {/* Where he is in your leagues — its own line, so a long name never has to make room for it. */}
                     {(() => {
-                      const fact = language === 'es' ? suggestionFact(h.presence) : null
-                      const chip = fact ? { text: suggestionChipText(fact), tone: suggestionTone(fact) } : suggestionChip(h.presence)
+                      const chipText = CHIP_TEXT[language]
+                      const fact = chipText ? suggestionFact(h.presence) : null
+                      const chip = fact && chipText ? { text: chipText(fact), tone: suggestionTone(fact) } : suggestionChip(h.presence)
                       return chip ? (
                         <span className="af-chip af-pf-suggest-chip" data-tone={chip.tone}>
                           {chip.text}

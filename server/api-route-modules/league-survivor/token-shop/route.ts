@@ -1,27 +1,32 @@
 /**
  * GET /api/leagues/[leagueId]/survivor/token-shop
- * Returns the token shop catalog: only advantages that are built and deliver something.
+ * The token shop catalog: only items the commissioner has put on sale, at their prices
+ * (`League.settings.survivorSideGames.tokenShopItems`), plus the caller's own token balance.
  *
- * 🛑 NONE DOES YET (2026-10-27). `buy_clue` was listed as available and `tokens/spend` charged for it,
- * but nothing ever sent a clue: the tokens left and nothing arrived. Those tokens are the same
- * balance a manager on Exile needs to come back. So every item is pending until it delivers, and
- * the shop lists nothing a manager can spend on.
+ * 🛑 THE SHOP USED TO LIST NOTHING (2026-10-27): `buy_clue` was charged for and never delivered,
+ * and those tokens are the same balance a manager on Exile needs to come back. Every item now sold
+ * is a reward-API prize (an advantage, a free trade, a steal blocker, FAAB, points), bought through
+ * POST /api/survivor/side-games `shop_buy`, which takes the tokens and delivers in the same request
+ * (or, for a buyer still on Exile, the moment they are back on the island). Defaults sell nothing.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
+import { readSurvivorSideGameSettings } from '@/lib/survivor/survivorSideGameSettings'
 
 export const dynamic = 'force-dynamic'
 
-const TOKEN_SHOP_CATALOG = [
-  { id: 'buy_clue', label: 'Idol Clue', cost: 2, status: 'pending', description: 'Receive a clue to a hidden idol location.' },
-  { id: 'buy_extra_vote', label: 'Extra Vote', cost: 4, status: 'pending', description: 'Cast an additional vote at tribal council. (Phase 3)' },
-  { id: 'buy_vote_steal', label: 'Vote Steal', cost: 5, status: 'pending', description: 'Take another player\'s vote for one council. (Phase 3)' },
-  { id: 'buy_waiver_priority_boost', label: 'Waiver Priority Boost', cost: 3, status: 'pending', description: 'Jump to priority waiver pick for one week. (Phase 3)' },
-  { id: 'buy_protection', label: 'Challenge Protection', cost: 6, status: 'pending', description: 'Sit out a challenge without penalty. (Phase 3)' },
-]
+const LABELS: Record<string, { en: string; es: string }> = {
+  extra_vote: { en: 'Extra Vote', es: 'Voto extra' },
+  vote_steal: { en: 'Vote Steal', es: 'Robo de voto' },
+  vote_shield: { en: 'Vote Shield', es: 'Escudo de voto' },
+  free_trade_token: { en: 'Free Trade', es: 'Intercambio libre' },
+  steal_blocker: { en: 'Steal Blocker', es: 'Bloqueador de robos' },
+  faab: { en: 'FAAB', es: 'FAAB' },
+  score_bonus: { en: 'Bonus points', es: 'Puntos extra' },
+}
 
 export async function GET(
   req: NextRequest,
@@ -35,16 +40,26 @@ export async function GET(
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status ?? 403 })
 
-  const player = await prisma.survivorPlayer.findFirst({
-    where: { leagueId, userId },
-    select: { tokenBalance: true },
-  })
+  const [player, league] = await Promise.all([
+    prisma.survivorPlayer.findFirst({ where: { leagueId, userId }, select: { tokenBalance: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } }),
+  ])
+  const settings = readSurvivorSideGameSettings(league?.settings)
+  const es = String(league?.language ?? '').toLowerCase().startsWith('es')
+  const catalog = settings.tokenShopEnabled
+    ? settings.tokenShopItems.filter((item) => item.enabled).map((item) => {
+      const label = LABELS[item.kind === 'advantage' ? item.powerType : item.kind] ?? { en: item.id, es: item.id }
+      const amount = item.kind === 'faab' ? ` $${item.amount}` : item.kind === 'score_bonus' ? ` +${item.amount}` : ''
+      return { id: item.id, kind: item.kind, label: `${es ? label.es : label.en}${amount}`, cost: item.cost, status: 'available' as const }
+    })
+    : []
 
   return NextResponse.json({
-    // Unbuilt items are hidden, not shown as for sale.
-    catalog: TOKEN_SHOP_CATALOG.filter(item => item.status === 'available'),
+    catalog,
     balance: player?.tokenBalance ?? 0,
-    shopStatus: 'pending',
-    shopNote: 'The token shop opens once its advantages are built. Nothing can be bought yet.',
+    shopStatus: settings.tokenShopEnabled && catalog.length ? 'open' : 'closed',
+    shopNote: settings.tokenShopEnabled && catalog.length
+      ? (es ? 'Gasta tus fichas en ventajas. Comprar las descuenta de las fichas que necesitas para volver.' : 'Spend tokens on advantages. Buying spends tokens you may need to return.')
+      : (es ? 'La tienda de fichas está cerrada.' : 'The token shop is closed.'),
   })
 }

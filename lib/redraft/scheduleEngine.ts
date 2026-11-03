@@ -39,7 +39,16 @@ export function generateSchedule(
   totalWeeks: number,
   playoffStartWeek: number,
   sport: string,
-  options?: { medianGame?: boolean },
+  options?: {
+    medianGame?: boolean
+    /**
+     * The commissioner's divisions (`loadSeasonRosterDivisions(...).byRoster`, keyed by season roster
+     * id). Absent or empty means no divisions, and the schedule is exactly what it was before.
+     */
+    divisionByRoster?: ReadonlyMap<string, { key: string; name: string }> | null
+    /** `division_config.rivalsTwice`: every division rival is played a second time. */
+    divisionRivalsTwice?: boolean
+  },
 ): { week: number; home: string; away: string | null; type: string; sport: string }[] {
   const medianGame = options?.medianGame ?? false
   const regularEnd = Math.min(totalWeeks, Math.max(1, playoffStartWeek - 1))
@@ -49,7 +58,11 @@ export function generateSchedule(
 
   const generated = generateCanonicalRegularSeasonSchedule({
     rules: buildScheduleOnlyRules({ sport, regularSeasonWeeks: regularEnd, playoffStartWeek }),
-    teams: rosters.map((roster) => ({ rosterId: roster.id })),
+    teams: rosters.map((roster) => {
+      const division = options?.divisionByRoster?.get(roster.id)
+      return division ? { rosterId: roster.id, divisionId: division.key, divisionName: division.name } : { rosterId: roster.id }
+    }),
+    divisionRivalsTwice: options?.divisionRivalsTwice === true,
     totalWeeks,
     playoffStartWeek,
     regularSeasonWeeks: regularEnd,

@@ -285,6 +285,7 @@ export function RosterComplianceSettingsPanel({
         debouncedSave={debouncedSave}
         dynasty={dynastySettings.snapshot}
         saveDynasty={dynastySettings.put}
+        leagueId={params?.leagueId ?? null}
       />
     </div>
   )

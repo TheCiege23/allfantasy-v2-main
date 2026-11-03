@@ -52,7 +52,8 @@ function topAsset(p: ExplanationPacket): TradeVerdict['reasons'][number] | null 
   }
 }
 
-const FLAG_WORDS: Record<string, string> = {
+/** Exported so a test can pin the Trade Center's copy of these words (`tradeCenter.reviewText.flag.*`) to them. */
+export const FLAG_WORDS: Record<string, string> = {
   heavily_lopsided: 'a heavily lopsided value gap',
   tanking_signal: 'a possible tanking signal',
   rebuild_signal: 'a rebuild — lineup strength traded for future value',

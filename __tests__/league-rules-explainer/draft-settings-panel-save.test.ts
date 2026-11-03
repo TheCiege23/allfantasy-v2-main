@@ -10,6 +10,7 @@ import { createMockNextRequest } from '../helpers/createMockNextRequest'
 const m = vi.hoisted(() => ({
   reads: [] as Array<Record<string, unknown> | null>,
   lotteryReads: [] as Array<Record<string, unknown> | null>,
+  leagueSettings: {} as Record<string, unknown>,
   publish: vi.fn(async (_input: unknown) => undefined),
   variant: { config: { timer_seconds: 90, rounds: 15, draft_type: 'snake' }, draftUISettings: { timerMode: 'per_pick', orphanDrafterMode: 'cpu', orphanTeamAiManagerEnabled: false }, leagueSize: 12, sessionVariant: null },
 }))
@@ -21,7 +22,7 @@ vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(asy
 vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentDraft: vi.fn(async () => false), SEASON_DRAFT_MUTATION_BLOCKED: 'blocked' }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: vi.fn(async () => ({ leagueType: 'redraft', timezone: 'UTC', leagueSize: 12, settings: {} })) },
+    league: { findUnique: vi.fn(async () => ({ leagueType: 'redraft', timezone: 'UTC', leagueSize: 12, settings: m.leagueSettings })) },
     draftSession: { findFirst: vi.fn(async () => ({ id: 'S', status: 'pre_draft', teamCount: 12 })) },
     leagueSettings: { upsert: vi.fn(async () => ({ draftDateUtc: null })) },
     leagueTeam: { findMany: vi.fn(async () => []) },
@@ -68,6 +69,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.reads = []
   m.lotteryReads = []
+  m.leagueSettings = {}
 })
 
 const lottery = (over: Record<string, unknown> = {}) => ({
@@ -104,6 +106,18 @@ describe('PATCH /draft/settings (Settings › Draft)', () => {
       expect.objectContaining({
         changes: [{ key: 'rookieDraftLottery', before: lottery().rookieDraftLottery, after: lottery({ picks: 4 }).rookieDraftLottery }],
       }),
+    )
+  })
+
+  it('a devy / C2C rounds save (sessionVariant) publishes its college rounds on the same one card', async () => {
+    // The draft settings validator wants a devy league's slots before it accepts devy rounds.
+    m.leagueSettings = { league_type: 'dynasty', league_variant: 'devy_dynasty', devy_slots: 6 }
+    m.reads = [draft({ draftDevyRounds: [11, 12], draftCollegeRounds: null }), draft({ draftDevyRounds: [10, 11, 12], draftCollegeRounds: null })]
+    const res = await patch({ sessionVariant: { devyConfig: { enabled: true, devyRounds: [10, 11, 12] } } })
+    expect(res.status).toBe(200)
+    expect(m.publish).toHaveBeenCalledTimes(1)
+    expect(m.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ section: 'draft', changes: [{ key: 'draftDevyRounds', before: [11, 12], after: [10, 11, 12] }] }),
     )
   })
 

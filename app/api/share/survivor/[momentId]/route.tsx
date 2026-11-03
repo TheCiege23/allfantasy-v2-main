@@ -9,7 +9,8 @@ import {
 } from '@/lib/survivor/shareCards/momentAccess'
 import { getShareMoment, readShareCardsEnabled } from '@/lib/survivor/shareCards/momentStore'
 import { renderShareCard } from '@/lib/survivor/shareCards/renderCard'
-import { parseShareCardFormat } from '@/lib/survivor/shareCards/types'
+import { councilIdOfRecapMoment, parseShareCardFormat } from '@/lib/survivor/shareCards/types'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +30,18 @@ type Ctx = { params: Promise<{ momentId: string }> }
 export async function GET(req: Request, ctx: Ctx) {
   const { momentId } = await ctx.params
   const format = parseShareCardFormat(new URL(req.url).searchParams.get('f'))
-  const moment = await getShareMoment(momentId)
+  let moment = await getShareMoment(momentId)
+  // The Torch Ceremony post names the week recap by its council before the capture hook may have run.
+  // Capture it now (idempotent, and gated on the read being complete, so nothing leaks early).
+  const recapCouncilId = moment ? null : councilIdOfRecapMoment(momentId)
+  if (recapCouncilId) {
+    const council = await prisma.survivorTribalCouncil.findUnique({ where: { id: recapCouncilId }, select: { leagueId: true } }).catch(() => null)
+    if (council) {
+      const { captureCouncilShareMoments } = await import('@/lib/survivor/shareCards/momentCapture')
+      await captureCouncilShareMoments(council.leagueId, recapCouncilId, { notify: false }).catch(() => 0)
+      moment = await getShareMoment(momentId)
+    }
+  }
   const enabled = moment ? await readShareCardsEnabled(moment.leagueId) : false
 
   let viewer = { userId: null as string | null, isLeagueMember: false }

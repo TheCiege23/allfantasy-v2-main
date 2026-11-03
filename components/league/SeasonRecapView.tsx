@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { enEsLanguage } from '@/lib/i18n/bilingual'
 import type { SeasonRecap, RecapGameAward, RecapTeamLine } from '@/lib/season-recap/computeSeasonRecap'
 import type { SeasonRecapWriteupView } from '@/lib/season-recap/seasonRecapAiService'
 import { seasonRecapCardHref, type SeasonRecapCardAward } from '@/lib/share/seasonRecapCard'
@@ -167,7 +168,7 @@ function Writeup(props: {
 
 export function SeasonRecapView({ leagueId, season }: Props) {
   const { tInterpolate: t, language } = useOptionalLanguage()
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = enEsLanguage(language)
   const [recap, setRecap] = useState<SeasonRecap | null>(null)
   const [writeup, setWriteup] = useState<SeasonRecapWriteupView | null>(null)
   const [writeState, setWriteState] = useState<WriteupState>({ busy: false, error: null })

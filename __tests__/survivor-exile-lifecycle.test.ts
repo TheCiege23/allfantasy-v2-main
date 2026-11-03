@@ -110,6 +110,15 @@ describe('voted-out manager moves to Exile', () => {
     expect(m.db.survivorPlayer.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerState: 'exile', canAccessExileChat: true, canAccessTribeChat: false }) }))
     expect(m.db.exileIsland.upsert).toHaveBeenCalledOnce()
   })
+  it('takes the manager out of their tribe chat and their tribe, and into the Exile chat', async () => {
+    m.db.survivorChatChannel.findMany.mockResolvedValue([{ id: 'tribe-chat', memberUserIds: ['a', 'b', 'c'] }])
+    m.db.survivorChatChannel.findFirst.mockResolvedValue({ id: 'exile-chat', memberUserIds: ['x'] })
+    const result = await resolveElimination('league', 'council')
+    expect(result).toMatchObject({ ok: true, removedFromChats: 1 })
+    expect(m.db.survivorChatChannel.update).toHaveBeenCalledWith({ where: { id: 'tribe-chat' }, data: { memberUserIds: ['a', 'c'] } })
+    expect(m.db.survivorTribeMember.deleteMany).toHaveBeenCalledWith({ where: { rosterId: 'legacy-b', tribe: { leagueId: 'league' } } })
+    expect(m.db.survivorChatChannel.update).toHaveBeenCalledWith({ where: { id: 'exile-chat' }, data: { memberUserIds: { push: 'b' } } })
+  })
   it('queues one spoiler-safe elimination alert for the league', async () => {
     await resolveElimination('league', 'council')
     expect(m.db.survivorNotification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'elimination', recipientRole: 'all', isSpoilerSafe: false }) }))

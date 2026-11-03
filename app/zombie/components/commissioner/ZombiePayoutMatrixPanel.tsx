@@ -32,6 +32,8 @@ export function ZombiePayoutMatrixPanel({
   const d = !canEdit || !isPaid
   const [loading, setLoading] = useState(true)
   const [cfg, setCfg] = useState<PaidConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,13 +52,24 @@ export function ZombiePayoutMatrixPanel({
   }, [load])
 
   const save = async (patch: Record<string, unknown>) => {
-    await fetch('/api/zombie/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ leagueId, ...patch }),
-    }).catch(() => {})
-    void load()
+    setSaving(true)
+    setMessage('')
+    try {
+      const res = await fetch('/api/zombie/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ leagueId, ...patch }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(data.error || 'Payout settings could not be saved.')
+      setMessage('Payout settings saved.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Payout settings could not be saved.')
+    } finally {
+      setSaving(false)
+      void load()
+    }
   }
 
   const applyTierDefaults = () => {
@@ -83,11 +96,12 @@ export function ZombiePayoutMatrixPanel({
 
   return (
     <SettingsSection id="zm-payout-matrix" title="Weekly & season payout split">
+      <p role="status" aria-live="polite" className="mb-2 text-[11px] text-amber-200">{saving ? 'Saving…' : message}</p>
       <p className="mb-3 text-[11px] leading-relaxed text-white/45">{describePayoutTierContext(sport)}</p>
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={d}
+          disabled={d || saving}
           className="rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/15 disabled:opacity-40"
           onClick={() => applyTierDefaults()}
           data-testid="zombie-payout-tier-defaults"

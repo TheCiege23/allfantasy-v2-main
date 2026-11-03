@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
   const { leagueId } = await params
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
 
   const body = await req.json().catch(() => ({}))
   const aiValidation = validateAiActionExecution({ body, action: 'apply_lineup', leagueId })
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
     select: { id: true, playerData: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })

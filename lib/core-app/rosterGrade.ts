@@ -118,6 +118,9 @@ export async function getRosterGrade(args: {
     (r) => r.league?.sport,
   )
 
+  // FantasyCalc snapshots here are NFL prices. Sleeper NBA can reuse the same numeric IDs.
+  if (rosters.some((roster) => roster.league?.sport?.toUpperCase() === 'NBA')) return null
+
   // Two teams is not a league to be ranked within.
   if (rosters.length < 3) return null
 

@@ -118,7 +118,7 @@ export function explainTradeReview(
       endsAt,
       votes,
       en: 'The review window has ended with no veto. The trade is going through within the hour.',
-      es: 'La ventana de revisión terminó sin veto. El traspaso se procesa en menos de una hora.',
+      es: 'La ventana de revisión terminó sin veto. El intercambio se procesa en menos de una hora.',
     }
   }
 

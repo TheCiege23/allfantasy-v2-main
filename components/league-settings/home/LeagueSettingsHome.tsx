@@ -3,6 +3,8 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-admin.css'
 import './league-settings-home.css'
+// Redraft-only rules, all scoped under the workspace's data-format=redraft stamp (A5).
+import './redraft-settings.css'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronRight, Copy } from 'lucide-react'
@@ -13,6 +15,7 @@ import {
   type SettingsSubPageId,
 } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
+import type { RedraftSettingsView } from '@/lib/league-media/redraftSettings'
 
 export type SettingsSubPageRender = {
   title: string
@@ -100,6 +103,11 @@ export type LeagueSettingsHomeProps = {
   initialSubPage?: SettingsSubPageId | null
   /** Drawn above the sections (the pre-draft setup card); given a way to open a sub-page. */
   header?: (openSubPage: (id: SettingsSubPageId) => void) => ReactNode
+  /**
+   * Native redraft leagues only (lib/league-media/redraftSettings.ts): each season section gets a
+   * "when" eyebrow and a timeline stage. Null or absent renders the default page unchanged.
+   */
+  redraft?: RedraftSettingsView | null
 }
 
 /**
@@ -116,6 +124,7 @@ export function LeagueSettingsHome({
   onSubPageClosed,
   initialSubPage = null,
   header,
+  redraft = null,
 }: LeagueSettingsHomeProps) {
   const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
   const listScroll = useRef(0)
@@ -142,7 +151,7 @@ export function LeagueSettingsHome({
 
   if (open && sub) {
     return (
-      <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open}>
+      <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open} data-rd-settings={redraft ? 'true' : undefined} data-rd-sport={redraft?.sport}>
         <SettingsHeader title={sub.title} onBack={closeSubPage} backLabel="Back to league settings" />
         <div className="lsh-column">
           {/* af-league-admin maps the older editors' fixed colours onto the theme (league-admin.css). */}
@@ -157,7 +166,7 @@ export function LeagueSettingsHome({
   }
 
   return (
-    <div className="af-core lsh-root" data-testid="league-settings-home">
+    <div className="af-core lsh-root" data-testid="league-settings-home" data-rd-settings={redraft ? 'true' : undefined} data-rd-sport={redraft?.sport}>
       <SettingsHeader title="League Settings" onBack={onExit} backLabel="Back to league" />
       <div className="lsh-column">
         {leagueName ? <p className="lsh-subtitle">{leagueName}</p> : null}
@@ -167,8 +176,11 @@ export function LeagueSettingsHome({
           </p>
         ) : null}
         {header?.(openSubPage)}
-        {sections.map((section) => (
-          <section key={section.id} className="lsh-section" aria-labelledby={`lsh-section-${section.id}`} data-testid={`lsh-section-${section.id}`}>
+        {sections.map((section) => {
+          const rd = redraft?.sections[section.id]
+          return (
+          <section key={section.id} className="lsh-section" aria-labelledby={`lsh-section-${section.id}`} data-testid={`lsh-section-${section.id}`} data-rd-stage={rd?.stage}>
+            {rd ? <p className="lsh-rd-when" data-testid={`lsh-rd-when-${section.id}`}>{rd.when}</p> : null}
             <h2 id={`lsh-section-${section.id}`}>{section.title}</h2>
             <ul className="lsh-list">
               {section.rows.map((row) => (
@@ -178,7 +190,8 @@ export function LeagueSettingsHome({
               ))}
             </ul>
           </section>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

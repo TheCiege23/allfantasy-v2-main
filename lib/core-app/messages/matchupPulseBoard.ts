@@ -22,6 +22,8 @@ export const matchupPulseBoardMessages = defineMessages({
     tipClosest: 'Closest games: the near coin-flips not already in the five on each side.',
     gapNotStarted: (n: number) => `${n} ${n === 1 ? 'has' : 'have'} not started yet`,
     gapElimination: (n: number) => `${n} ${n === 1 ? 'is a Guilly league' : 'are Guilly leagues'}, scored against the whole field`,
+    gapScoringType: (n: number) =>
+      `${n} ${n === 1 ? 'uses' : 'use'} category or roto scoring — points margins and odds are not available for this scoring type`,
     gapNoSchedule: (n: number) => `${n} carry no schedule`,
     gapNoOpponent: (n: number) => `${n} have no game this week`,
     gapUnpriceable: (n: number) => `${n} could not be scored or priced`,
@@ -52,6 +54,8 @@ export const matchupPulseBoardMessages = defineMessages({
     tipClosest: 'Partidos más reñidos: los casi empates que no están ya entre los cinco de cada lado.',
     gapNotStarted: (n) => `${n} aún sin comenzar`,
     gapElimination: (n) => `${n} de eliminación (Guilly), contra toda la liga`,
+    gapScoringType: (n) =>
+      `${n} con puntuación por categorías o rotisserie — los márgenes y las probabilidades por puntos no están disponibles para este tipo de puntuación`,
     gapNoSchedule: (n) => `${n} sin calendario`,
     gapNoOpponent: (n) => `${n} sin partido esta semana`,
     gapUnpriceable: (n) => `${n} sin puntuación o proyección`,

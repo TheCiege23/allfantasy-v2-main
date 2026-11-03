@@ -1,9 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { dashDraftsBandMessages } from '@/lib/core-app/messages/dashDraftsBand'
 import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
@@ -28,17 +26,12 @@ export type DraftsBandCard = {
   clockMs: number | null
 }
 
-/** Draft statuses the shared table does not hold; the rest go through `coreUiCopy` ("paused", "in progress"). */
-const STATUS_ES: Record<string, string> = { drafting: 'en curso', live: 'en vivo' }
-
 type DraftsMessages = typeof dashDraftsBandMessages.en
 
-function statusText(raw: string, es: boolean, m: DraftsMessages): string {
+function statusText(raw: string, m: DraftsMessages): string {
   const s = raw.trim().replace(/_/g, ' ')
   if (s.length === 0) return m.live
-  if (!es) return s.toUpperCase()
-  const key = s.toLowerCase()
-  return (STATUS_ES[key] ?? coreUiCopy(key, 'es')).toUpperCase()
+  return m.status(s)
 }
 
 /** Coarse pick-clock label. Server paint only — the page does not tick, so seconds would be precisely stale. */
@@ -53,8 +46,6 @@ function pickClockText(ms: number, m: DraftsMessages): string {
 }
 
 export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount: number; visible: DraftsBandCard[]; overflow: number }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const m = useMessages(dashDraftsBandMessages)
 
   return (
@@ -84,7 +75,7 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
                   )}
                 </span>
                 <h3 className="af-drafts-name">{row.leagueName}</h3>
-                <span className="af-drafts-state af-num">{statusText(row.rawStatus, es, m)}</span>
+                <span className="af-drafts-state af-num">{statusText(row.rawStatus, m)}</span>
               </div>
 
               <p className="af-drafts-meta af-num">

@@ -200,6 +200,8 @@ async function resolveGrades(
   viewerPlatformUserId: string | null,
   /** The viewer, recorded on each grade's receipt. */
   userId: string | null = null,
+  /** The league's sport, so a Sleeper id is named from its own sport's pool. */
+  sport: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -294,7 +296,8 @@ async function resolveGrades(
     ids.size > 0
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: [...ids] } },
+            // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
+            where: { ...(sport ? { sport: sport.toUpperCase() } : {}), sleeperId: { in: [...ids] } },
             select: { sleeperId: true, name: true, position: true },
           })
           .catch(() => [] as Array<{ sleeperId: string; name: string; position: string | null }>)
@@ -716,6 +719,7 @@ export async function getTradesData(
       league.platformLeagueId ?? null,
       myTeam?.platformUserId?.trim() || null,
       userId,
+      league.sport ?? null,
     )
     const current = sleeperHistory
       ? await getSleeperTradeHistory(
@@ -901,7 +905,7 @@ export async function getTradesData(
   const namedRows = allTradeIds.length
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: allTradeIds } },
+          where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: allTradeIds } },
           distinct: ['sleeperId'],
           orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
           select: { sleeperId: true, name: true, position: true, team: true },

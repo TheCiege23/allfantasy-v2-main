@@ -14,7 +14,7 @@ import {
 } from '@/lib/league-trade-engine/leagueTradeReviewSetting'
 
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
-const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
+const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'vetoThresholdMode', 'benchSize', 'rosterPositions'] as const
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
   }
 
   const updated = await writeLeagueWithTradeReview(leagueId, updates, tradeReview, { id: true, name: true, settings: true, updatedAt: true })
-  if (tradeReview) {
+  if (tradeReview || body?.vetoThreshold !== undefined || body?.vetoThresholdMode !== undefined) {
     await publishTradeReviewChange({ leagueId, actorUserId: userId, settingsBefore, settingsAfter: updates.settings as Record<string, unknown> })
   }
   return NextResponse.json(withClientLeagueSettings(updated))

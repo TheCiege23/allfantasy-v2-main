@@ -40,6 +40,9 @@
  * Pure and client-safe.
  */
 
+import { messagesFor } from '@/lib/i18n/messages'
+import { appLinkHintMessages } from './messages/appLinkHint'
+
 export const APP_LINKS_MEASURED_ON = '2026-09-06'
 
 export type AppLinkLanding = 'app' | 'web' | 'unknown'
@@ -101,16 +104,8 @@ export function appLinkHint(
   const landing = appLinkLanding(platform, screen, os)
   if (!landing) return null
   const name = LABEL[platformKey(platform)!] ?? platform
-  if (language === 'es') {
-    if (landing === 'app') return `Se abre en la app de ${name} si la tienes instalada`
-    if (landing === 'unknown') return `Puede abrirse en la app de ${name}`
-    return os === 'ios' && platformKey(platform) === 'sleeper'
-      ? `Abre ${name} en la web: su app no acepta enlaces de ligas en iPhone`
-      : `Abre ${name} en la web`
-  }
-  if (landing === 'app') return `Opens in the ${name} app when it’s installed`
-  if (landing === 'unknown') return `May open the ${name} app`
-  return os === 'ios' && platformKey(platform) === 'sleeper'
-    ? `Opens ${name} on the web — its app does not take league links on iPhone`
-    : `Opens ${name} on the web`
+  const m = messagesFor(appLinkHintMessages, language)
+  if (landing === 'app') return m.opensInApp(name)
+  if (landing === 'unknown') return m.mayOpenApp(name)
+  return os === 'ios' && platformKey(platform) === 'sleeper' ? m.webSleeperIos(name) : m.web(name)
 }

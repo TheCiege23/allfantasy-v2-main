@@ -351,6 +351,21 @@ const NBA_LIKE: DraftStatColumnDef[] = [
   col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
 ]
 
+
+const NBA_OBSERVED: DraftStatColumnDef[] = [
+  col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
+  col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
+  col('mpg', 'MPG', 'number', 'offense', ['minutesPerGame', 'minutes_per_game', 'mpg']),
+  col('ast', 'APG', 'number', 'offense', ['assistsPerGame', 'assists_per_game']),
+  col('stl', 'SPG', 'number', 'offense', ['stealsPerGame', 'steals_per_game']),
+  col('blk', 'BPG', 'number', 'offense', ['blocksPerGame', 'blocks_per_game']),
+  col('fg3m', '3PM/G', 'number', 'offense', ['threePointersMadePerGame']),
+  col('fg_pct', 'FG%', 'percent', 'offense', ['fieldGoalPercentage']),
+  col('ft_pct', 'FT%', 'percent', 'offense', ['freeThrowPercentage']),
+  col('gp', 'GP', 'number', 'offense', ['gamesPlayed']),
+  col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
+]
+
 /*
  * MLB / NHL Proj/G is the AF projection PER GAME (`AFProjectionSnapshot.afProjection`, DraftKings-style
  * scoring). No season total exists for these sports — `rosProjection` is on an NFL week horizon — so
@@ -504,6 +519,7 @@ export function getDraftStatColumnsForSport(
       return [...NCAAFB_OFFENSE]
     }
     case 'NBA':
+      return [...NBA_OBSERVED]
     case 'NCAAB':
       return [...NBA_LIKE]
     case 'MLB':

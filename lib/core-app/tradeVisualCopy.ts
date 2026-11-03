@@ -2,6 +2,20 @@ import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
 export const tradeVisualSpanish: Record<string,string> = {
+  // The calculator trade builder (2026-10-31).
+  "Search your players, picks or FAAB":"Busca tus jugadores, selecciones o FAAB",
+  "Search their players or picks":"Busca sus jugadores o selecciones",
+  "Grade with AF":"Calificar con AF",
+  "Grade again":"Calificar de nuevo",
+  "Grading…":"Calificando…",
+  "Even trade":"Intercambio equilibrado",
+  "Leans your way":"Favorece a tu equipo",
+  "You're paying more":"Estás pagando más",
+  "Trade ideas":"Ideas de intercambio",
+  "Who has what you need":"Quién tiene lo que necesitas",
+  "Offers, drafts and alerts":"Ofertas, borradores y alertas",
+  "waiting on you":"esperan tu respuesta",
+  "Inbox, saved drafts, screenshot import":"Bandeja, borradores guardados, importar captura",
   "Account history could not be verified. Retry when connected.":"No se pudo verificar el historial de la cuenta. Reintenta cuando tengas conexión.",
   "The saved comparison could not be verified. Retry when connected.":"No se pudo verificar la comparación guardada. Reintenta cuando tengas conexión.",
   "The removal could not be verified. Retry when connected.":"No se pudo verificar la eliminación. Reintenta cuando tengas conexión.",
@@ -176,6 +190,33 @@ export const tradeVisualSpanish: Record<string,string> = {
   'No round on file, so the pick curve cannot place it':'No hay ronda registrada, así que la curva de selecciones no puede ubicarla',
   'Priced when you analyze the trade':'Se valora al analizar el intercambio',
   "Not on today's market board — the only value on file is an old snapshot, which is not today's market":'No está en el mercado de hoy: el único valor registrado es una instantánea antigua, que no es el mercado actual',
+  // The native redraft Trade Center (lib/i18n/trade-center-server-text.ts), 2026-10-31.
+  "This proposal could not be read again to find its season.":"No se pudo volver a leer esta propuesta para saber su temporada.",
+  "This league's completed trades have not been graded yet.":"Los intercambios completados de esta liga todavía no están calificados.",
+  "No manager activity has been recorded for this league.":"No hay actividad de mánagers registrada en esta liga.",
+  "No manager activity has been imported for this league.":"No se ha importado actividad de mánagers de esta liga.",
+  "Native leagues read the commissioner hub’s activity instead.":"Las ligas nativas leen la actividad del panel del comisionado.",
+  "Trade history could not be read.":"No se pudo leer el historial de intercambios.",
+  "Manager activity could not be read.":"No se pudo leer la actividad de los mánagers.",
+  "The standings could not be read.":"No se pudo leer la clasificación.",
+  "Standings are read from the season forecast in an imported league.":"En una liga importada, la clasificación se lee del pronóstico de la temporada.",
+  "This league has no season on record.":"Esta liga no tiene ninguna temporada registrada.",
+  "This league’s playoff size is not set, so who is out of the race cannot be told.":"Esta liga no tiene definido cuántos equipos van a playoffs, así que no se puede saber quién está fuera de la lucha.",
+  "The standings are too short to place a playoff line.":"La clasificación es demasiado corta para situar la línea de playoffs.",
+  "Lineup effect is only measured while a trade is still pending.":"El efecto en la alineación solo se mide mientras el intercambio sigue pendiente.",
+  "The lineup effect could not be computed for this league.":"No se pudo calcular el efecto en la alineación en esta liga.",
+  "The league could not be read.":"No se pudo leer la liga.",
+  "The league season could not be read.":"No se pudo leer la temporada de la liga.",
+  "No season forecast has been run for this league.":"Todavía no se ha hecho un pronóstico de temporada para esta liga.",
+  "The season forecast has no playoff odds for both teams.":"El pronóstico de la temporada no tiene probabilidades de playoffs para los dos equipos.",
+  "The standings have no row for both teams.":"La clasificación no tiene fila para los dos equipos.",
+  "The managers behind these teams could not be identified.":"No se pudo identificar a los mánagers de estos equipos.",
+  "Manager Classes could not be read.":"No se pudieron leer las Clases de los mánagers.",
+  "League settings are unavailable, so this league trade cannot be graded.":"La configuración de la liga no está disponible, así que este intercambio de liga no se puede calificar.",
+  "only two-team trades are graded":"solo se califican los intercambios entre dos equipos",
+  "FAAB in this trade is not priced on the league chart":"el FAAB de este intercambio no tiene precio en la tabla de la liga",
+  "Draft picks are not priced in a Guilly league — every roster is gone by next season. This deal is not graded.":"Las selecciones del draft no se valoran en una liga Guilly: ninguna plantilla sigue en la próxima temporada. Este intercambio no se califica.",
+  "No live team’s FAAB balance is on file, so FAAB in this deal cannot be priced. This deal is not graded.":"No hay registrado el saldo de FAAB de ningún equipo vivo, así que el FAAB de este intercambio no se puede valorar. Este intercambio no se califica.",
 }
 
 /** Templates use {n} slots. Captured player/team names are preserved, never machine-translated. */
@@ -232,6 +273,12 @@ const templates: Array<[string,string]> = [
   ['No values on file for {0} players','No hay valores registrados de jugadores de {0}'],
   ['Not on today\'s market board — the only value on file is from a {0} snapshot, which is not today\'s market','No está en el mercado de hoy: el único valor registrado es de una instantánea del {0}, que no es el mercado actual'],
   ['{0}\'s roster','Plantilla de {0}'],
+  // The commissioner review's unread facts and a placeholder-priced grade (trade-center-server-text.ts), 2026-10-31.
+  ["Completed trades are only held for Sleeper leagues; this league is on {0}.","Los intercambios completados solo se guardan para las ligas de Sleeper; esta liga está en {0}."],
+  ["This league's activity was last imported {0} days ago, so a quiet manager can't be told from a stale import.","La actividad de esta liga se importó por última vez hace {0} días, así que no se puede distinguir a un mánager inactivo de una importación desactualizada."],
+  ["The latest season forecast is from week {0}; it is too old to say who is eliminated in week {1}.","El pronóstico más reciente es de la semana {0}; es demasiado antiguo para saber quién está eliminado en la semana {1}."],
+  ["The schedule for week {0} (the trade deadline) is not loaded, so the deadline has no time.","El calendario de la semana {0} (la de la fecha límite de intercambios) no está cargado, así que la fecha límite no tiene hora."],
+  ["{0} is priced from a placeholder, not a real value.","{0} está valorado con un valor provisional, no con uno real."],
 ]
 const escape = (text:string)=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
 const compiled=templates.map(([en,es])=>({regex:new RegExp('^'+en.split(/\{\d+\}/).map(escape).join('([\\s\\S]*?)')+'$'),es,slots:[...en.matchAll(/\{(\d+)\}/g)].map(m=>Number(m[1]))}))

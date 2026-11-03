@@ -54,12 +54,14 @@ function moveTextEs(move: ChimmyMove, leagueName: string): MoveText | null {
   }
 }
 
+/** Languages that rebuild a move from its parts; every other language keeps the composer's English. */
+const MOVE_TEXT: Partial<Record<string, (move: ChimmyMove, leagueName: string) => MoveText | null>> = { es: moveTextEs }
+
 export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagueName: string }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(chimmyMovesCardMessages)
-  /* Spanish rebuilds a move from its parts; every other language keeps the composer's English. */
   const textOf = (move: ChimmyMove): MoveText =>
-    (language === 'es' ? moveTextEs(move, leagueName) : null) ?? {
+    MOVE_TEXT[language]?.(move, leagueName) ?? {
       title: move.title,
       detail: move.detail,
       actionLabel: move.actionLabel,

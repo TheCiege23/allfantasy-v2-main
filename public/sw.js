@@ -1,9 +1,16 @@
 const APP_NAME = 'AllFantasy';
-const CACHE_VER = 'v1.0.7';
+const CACHE_VER = 'v1.0.8';
 const CACHE_STATIC = `${APP_NAME}-static-${CACHE_VER}`;
 const CACHE_PAGES = `${APP_NAME}-pages-${CACHE_VER}`;
 const CACHE_IMAGES = `${APP_NAME}-images-${CACHE_VER}`;
-const ALL_CACHES = [CACHE_STATIC, CACHE_PAGES, CACHE_IMAGES];
+/*
+ * Lineup snapshots written BY THE PAGE (lib/pwa/offlineLineupSnapshots.ts), read here to build the
+ * offline fallback. Unversioned on purpose and listed in ALL_CACHES, or `activate` would delete the
+ * reader's saved lineups on every worker update. The `-pages-` prefix is what sign-out purges.
+ * Must equal OFFLINE_LINEUP_CACHE there; __tests__/pwa-offline-lineups.test.ts pins the two.
+ */
+const CACHE_OFFLINE_LINEUPS = `${APP_NAME}-pages-offline-lineups`;
+const ALL_CACHES = [CACHE_STATIC, CACHE_PAGES, CACHE_IMAGES, CACHE_OFFLINE_LINEUPS];
 
 /*
  * ⚠ EVERY ENTRY HERE IS FETCHED ON EVERY INSTALL, AND THREE OF THE ORIGINAL
@@ -160,6 +167,8 @@ async function networkFirstWithOfflineFallback(event) {
     // launch could otherwise replay that page after the VPN is disconnected.
     return await fetch(request);
   } catch {
+    const lineups = await offlineLineupsPage();
+    if (lineups) return lineups;
     const offline = await caches.match('/offline');
     return offline || new Response(
       `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline - AllFantasy</title></head>
@@ -170,6 +179,94 @@ async function networkFirstWithOfflineFallback(event) {
        </body></html>`,
       { status: 200, headers: { 'Content-Type': 'text/html' } }
     );
+  }
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+/*
+ * The offline fallback when the reader has saved lineups: built here from the snapshots, so it needs
+ * no cached page and no app JavaScript, and works on a cold launch with no network at all. Every
+ * value is escaped — names come from provider data, and this HTML is not rendered by React.
+ *
+ * Returns null (so the caller falls back to /offline) when there is nothing usable or anything at
+ * all goes wrong: a broken offline page is worse than the plain one.
+ */
+async function offlineLineupsPage() {
+  try {
+    const cache = await caches.open(CACHE_OFFLINE_LINEUPS);
+    const keys = await cache.keys();
+    const snapshots = [];
+    for (const key of keys) {
+      // Same cache also holds the lineup editor's data and queued offline edits; only snapshots render here.
+      if (!new URL(key.url).pathname.startsWith('/__offline/lineups/')) continue;
+      try {
+        const res = await cache.match(key);
+        const s = res ? await res.json() : null;
+        if (s && s.v === 1 && Array.isArray(s.starters) && Array.isArray(s.bench)) snapshots.push(s);
+      } catch {
+        // skip one unreadable record, keep the rest
+      }
+    }
+    if (!snapshots.length) return null;
+    snapshots.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+
+    const rows = (label, list) => (Array.isArray(list) && list.length ? `
+      <h3>${escapeHtml(label)}</h3>
+      <ul>${list.map((r) => `
+        <li><span class="pill">${escapeHtml(r.slot)}</span><span class="who">${r.name
+          ? `<strong>${escapeHtml(r.name)}${r.injury && !/^(healthy|active|none)$/i.test(r.injury) ? ` <em>${escapeHtml(r.injury)}</em>` : ''}</strong><small>${escapeHtml([r.position, r.team, r.game].filter(Boolean).join(' · '))}</small>`
+          : '<small>Empty</small>'}</span></li>`).join('')}
+      </ul>` : '');
+
+    const cards = snapshots.map((s) => {
+      const d = new Date(s.savedAt);
+      const when = Number.isFinite(d.getTime())
+        ? d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+        : 'an unknown time';
+      return `
+      <section class="card">
+        <p class="eyebrow">${escapeHtml(s.leagueName)}${s.week ? ` · Week ${escapeHtml(s.week)}` : ''}</p>
+        <h2>${escapeHtml(s.teamName)}</h2>
+        <p class="age">Last updated ${escapeHtml(when)}</p>
+        ${rows('Starters', s.starters)}${rows('Bench', s.bench)}${rows('Injured reserve', s.ir)}${rows('Taxi squad', s.taxi)}
+      </section>`;
+    }).join('');
+
+    return new Response(
+      `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Offline lineups - AllFantasy</title>
+      <style>
+        body{margin:0;background:#020617;color:#fff;font-family:system-ui,sans-serif;padding:16px}
+        main{max-width:640px;margin:0 auto}
+        .bar{display:flex;gap:12px;align-items:center;justify-content:space-between;background:#1e293b;border-radius:12px;padding:12px 14px;margin-bottom:16px}
+        .bar p{margin:0;color:rgba(255,255,255,.75);font-size:14px}
+        button{padding:10px 18px;background:#06b6d4;border:none;border-radius:8px;color:#000;font-weight:700;font-size:14px;cursor:pointer;flex:none}
+        .card{background:#0f172a;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;margin-bottom:16px}
+        .eyebrow{margin:0;color:rgba(255,255,255,.55);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+        h2{margin:4px 0 2px;font-size:20px} .age{margin:0 0 8px;color:#fbbf24;font-size:13px}
+        h3{margin:14px 0 6px;font-size:12px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.05em}
+        ul{list-style:none;margin:0;padding:0}
+        li{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)}
+        .pill{min-width:44px;text-align:center;font-size:12px;font-weight:700;background:rgba(6,182,212,.15);color:#67e8f9;border-radius:6px;padding:3px 6px}
+        .who{display:flex;flex-direction:column;min-width:0} small{color:rgba(255,255,255,.55);font-size:12px}
+        em{font-style:normal;color:#f87171;font-size:12px}
+      </style></head>
+      <body><main>
+        <div class="bar"><p>You're offline. These are your lineups from your last visit. Changes are off until you reconnect.</p>
+          <button onclick="location.reload()">Retry</button></div>
+        ${cards}
+      </main>
+      <script>window.addEventListener('online',function(){location.reload()})</script>
+      </body></html>`,
+      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    );
+  } catch {
+    return null;
   }
 }
 

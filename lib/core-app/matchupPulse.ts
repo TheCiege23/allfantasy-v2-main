@@ -21,6 +21,7 @@ import { leagueWeekProgress } from './leagueWeekProgress'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { eliminationFormat } from './railMatchupMode'
+import { weeklyFormat } from './weeklyCapabilities'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { EMPTY_SLOT, forecastMatchup, type ForecastSide } from './matchupForecast'
 import { loadUnavailableBySport } from './unavailableStarters'
@@ -202,6 +203,13 @@ export type MatchupPulse = {
    * idle board notices kickoff without polling for it.
    */
   nextKickoffAt?: string | null
+  /**
+   * Your win probability in EVERY league that has one, by league id — the league list draws it as a
+   * bar under each matchup. `leading` and `trailing` stop at five, so they cannot answer for the
+   * whole list. A finished game's certain 1 or 0 is left out: it is a result, not odds. Optional so
+   * a cached pulse from before this field still reads.
+   */
+  oddsByLeague?: Record<string, number>
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
     /**
@@ -210,6 +218,12 @@ export type MatchupPulse = {
      * `eliminationFormat`. Optional so a cached pulse from before this field still reads.
      */
     elimination?: number
+    /**
+     * A categories or roto league (`weeklyFormat`, the rule the week board and Season Outlook apply):
+     * not won on fantasy points, so a points margin and a points win probability rank nothing there.
+     * Optional so a cached pulse from before this field still reads.
+     */
+    scoringType?: number
     /** No `WeeklyMatchup` rows at all — the league has never been synced for a schedule. */
     noSchedule: number
     /** A week on file, but this roster has no game in it (bye, or unpaired). */
@@ -334,7 +348,7 @@ const EMPTY_PULSE: MatchupPulse = {
   expectedWins: null,
   withOdds: 0,
   closest: [],
-  notRanked: { elimination: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
+  notRanked: { elimination: 0, scoringType: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
 export async function getMatchupPulse(
@@ -577,7 +591,7 @@ export async function getMatchupPulse(
   }
 
   const pending: Pending[] = []
-  const notRanked = { elimination: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 }
+  const notRanked = { elimination: 0, scoringType: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 }
 
   for (const c of mine) {
     const l = c.league!
@@ -587,6 +601,12 @@ export async function getMatchupPulse(
      */
     if (eliminationFormat(l)) {
       notRanked.elimination++
+      continue
+    }
+    /* Categories / roto: this board's margin and odds are fantasy points, which these leagues are not won on. */
+    const format = weeklyFormat(l)
+    if (format === 'categories' || format === 'roto') {
+      notRanked.scoringType++
       continue
     }
     const plid = l.platformLeagueId as string
@@ -1187,6 +1207,11 @@ export async function getMatchupPulse(
     closest,
     liveNow,
     nextKickoffAt: (nextKickoff as Date | null)?.toISOString() ?? null,
+    oddsByLeague: Object.fromEntries(
+      ranked
+        .filter((r): r is PulseRow & { pWin: number } => r.pWin != null && !r.final && r.pWin > 0 && r.pWin < 1)
+        .map((r) => [r.leagueId, r.pWin]),
+    ),
     notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
 }

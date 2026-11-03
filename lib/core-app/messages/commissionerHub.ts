@@ -6,6 +6,20 @@ import { defineMessages } from '@/lib/i18n/messages'
  * reasons. Every string is the one the loader wrote before the move, byte for byte, in both
  * languages — this is a relocation, not a rewrite.
  */
+
+/** The health score's status code, worded: "at_risk" → "At risk". Spanish has its own words for the known five. */
+function titleStatus(status: string): string {
+  const s = status.replace(/_/g, ' ').toLowerCase()
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+const STATUS_ES: Record<string, string> = {
+  excellent: 'Excelente',
+  healthy: 'Saludable',
+  watch: 'En observación',
+  at_risk: 'En riesgo',
+  critical: 'Crítica',
+}
+
 export const commissionerHubMessages = defineMessages({
   en: {
     // Access rows — fallbacks that stand in for a name.
@@ -79,6 +93,11 @@ export const commissionerHubMessages = defineMessages({
     playoffsDefaults: 'this league’s playoff format was never ingested — the stored values are schema defaults, not its real settings',
     playoffsTop: (teams: number) => `Top ${teams}`,
     playoffsFrom: (start: number) => `from Week ${start}`,
+
+    // The settings row's waiver type (the loader's table entry for this language, else the kind as
+    // stored) and the health tile's status.
+    waiverTypeLabel: (kind: string, english: string | undefined, _translation: string | undefined): string => english ?? kind,
+    healthStatus: (status: string): string => titleStatus(status),
   },
   es: {
     you: 'Tú',
@@ -148,5 +167,8 @@ export const commissionerHubMessages = defineMessages({
       'el formato de playoffs de esta liga nunca se importó: los valores guardados son los predeterminados, no su configuración real',
     playoffsTop: (teams) => `Los ${teams} mejores`,
     playoffsFrom: (start) => `desde la semana ${start}`,
+
+    waiverTypeLabel: (kind, _english, translation) => translation ?? kind,
+    healthStatus: (status) => STATUS_ES[status.toLowerCase()] || titleStatus(status),
   },
 })

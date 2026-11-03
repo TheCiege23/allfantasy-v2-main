@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { ChecklistItem, ChecklistStatus } from '@/lib/commissioner/weeklyChecklist'
 import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
 type View = { applies: false } | { applies: true; week: number; items: ChecklistItem[] }
@@ -17,7 +18,7 @@ const MARK: Record<ChecklistStatus, string> = { done: '✓', todo: '!', heads_up
  */
 export function WeeklyChecklist({ leagueId, language = 'en' }: { leagueId: string; language?: string }) {
   const m = messagesFor(commissionerScreensMessages, language)
-  const pick = language === 'es' ? 'es' : 'en'
+  const pick = coreLang(language)
   const [view, setView] = useState<View | null>(null)
   const [failed, setFailed] = useState(false)
 

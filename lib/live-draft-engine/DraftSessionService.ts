@@ -1,3 +1,4 @@
+import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
@@ -525,10 +526,11 @@ export async function buildSessionSnapshot(
       budgets: getBudgetsFromSession(session),
       auctionState,
       minBidIncrement: config.minBidIncrement,
-      nominationOrder: slotOrder,
+      nominationOrder: auctionState.nominationOrder?.length ? auctionState.nominationOrder : slotOrder,
     }
+    const nominationOrder = auction.nominationOrder
     const auctionNominator =
-      slotOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, slotOrder.length)) + Math.max(1, slotOrder.length)) % Math.max(1, slotOrder.length)]
+      nominationOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, nominationOrder.length)) + Math.max(1, nominationOrder.length)) % Math.max(1, nominationOrder.length)]
     if (auctionNominator) {
       const overall = resolveNextOpenPickOverall(progressPicks, totalPicks) ?? picksCount + 1
       const round = Math.ceil(overall / teamCount)
@@ -655,19 +657,25 @@ export async function buildSessionSnapshot(
 
 export type StartDraftSessionResult =
   | { ok: true }
-  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
+  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE' | 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
   const started = await startDraftSessionCore(leagueId)
   // A forfeited pick at the very top of the board is skipped before anyone is put on the clock for it
   // (./forfeitedPickSkips.ts); every later one is skipped as picks are made.
   if (started.ok) {
+    await import('@/lib/draft-notifications')
+      .then(m => m.notifyDraftLifecycle(leagueId, 'draft_started'))
+      .catch((err) => console.error('[draft] start notification failed', err))
     await import('./forfeitedPickSkips')
       .then(async ({ skipForfeitedPicksOnClock }) => {
         const { submitPick } = await import('./PickSubmissionService')
         return skipForfeitedPicksOnClock(leagueId, submitPick)
       })
       .catch((err) => console.error('[draft] forfeited pick skip at start failed', err))
+    await import('@/lib/draft-notifications')
+      .then(m => m.notifyOnTheClockAfterPick(leagueId))
+      .catch((err) => console.error('[draft] first pick notification failed', err))
   }
   return started
 }
@@ -689,6 +697,9 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
 
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
+
+  const renewalSeats=await zombieRenewalDraftReadiness(prisma,leagueId,session.teamCount,seasonSettings)
+  if(!renewalSeats.ready) return {ok:false,reason:'ZOMBIE_RENEWAL_SEATS_INCOMPLETE',error:renewalSeats.error}
 
   const { getSurvivorDraftStartReadiness } = await import('@/lib/survivor/survivorDraftStartReadiness')
   const cast = await getSurvivorDraftStartReadiness(leagueId, session)
@@ -712,7 +723,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
     where: { id: session.id, status: 'pre_draft', version: session.version },
     data: {
       ...(ls
-        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
         : {}),
       startedAt: startedAtNow,
       version: { increment: 1 },
@@ -734,8 +745,13 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
   })
 
   if (session.draftType === 'auction') {
-    const { initializeAuctionForSession } = await import('./auction/AuctionEngine')
-    await initializeAuctionForSession(leagueId)
+    const { buildInitialAuctionSessionUpdate } = await import('./auction/AuctionEngine')
+    let auctionStart: Awaited<ReturnType<typeof buildInitialAuctionSessionUpdate>>
+    try {
+      auctionStart = await buildInitialAuctionSessionUpdate(leagueId, session)
+    } catch (error) {
+      return { ok: false, reason: 'session_not_ready', error: error instanceof Error ? error.message : 'Auction settings are unavailable.' }
+    }
     try {
       const { isSalaryCapLeague } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
       const { initializeStartupLedgers } = await import('@/lib/salary-cap/AuctionStartupService')
@@ -747,7 +763,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
     if (!(await startClaimedSession(session, {
-      status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
+      ...auctionStart, status: 'in_progress', overnightFrozenPickSeconds: null,
       startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
     }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
     await ensureDraftingLifecycleForActiveSession(leagueId)
@@ -786,7 +802,10 @@ async function startClaimedSession(
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {
   const tournamentResult = await controlSeasonDraft(leagueId, 'pause', pausedByUserId)
-  if (tournamentResult !== null) return tournamentResult
+  if (tournamentResult !== null) {
+    if (tournamentResult) await import('@/lib/draft-notifications').then(m => m.notifyDraftPaused(leagueId)).catch(err => console.error('[draft] pause notification failed', err))
+    return tournamentResult
+  }
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'in_progress') return false
@@ -809,12 +828,16 @@ export async function pauseDraftSession(leagueId: string, pausedByUserId?: strin
     logStructured('warn', 'draft_session_service', 'control_lock_contended', { leagueId, action: 'pause' })
     return false
   }
+  if (lockResult.value) await import('@/lib/draft-notifications').then(m => m.notifyDraftPaused(leagueId)).catch(err => console.error('[draft] pause notification failed', err))
   return lockResult.value
 }
 
 export async function resumeDraftSession(leagueId: string): Promise<boolean> {
   const tournamentResult = await controlSeasonDraft(leagueId, 'resume')
-  if (tournamentResult !== null) return tournamentResult
+  if (tournamentResult !== null) {
+    if (tournamentResult) await import('@/lib/draft-notifications').then(m => m.notifyDraftResumed(leagueId)).catch(err => console.error('[draft] resume notification failed', err))
+    return tournamentResult
+  }
   const lockResult = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'paused') return false
@@ -863,6 +886,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
     logStructured('warn', 'draft_session_service', 'control_lock_contended', { leagueId, action: 'resume' })
     return false
   }
+  if (lockResult.value) await import('@/lib/draft-notifications').then(m => m.notifyDraftResumed(leagueId)).catch(err => console.error('[draft] resume notification failed', err))
   return lockResult.value
 }
 
@@ -1184,8 +1208,12 @@ export async function swapDraftManagers(
 }
 
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
+  const beforeCompletion = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true } })
   const seasonCompleted = await completeSeasonDraft(leagueId)
-  if (seasonCompleted !== null) return seasonCompleted
+  if (seasonCompleted !== null) {
+    if (seasonCompleted && beforeCompletion?.status !== 'completed') await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', beforeCompletion?.id)).catch(err => console.error('[draft] completion notification failed', err))
+    return seasonCompleted
+  }
   const outcome = await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session) return { ok: false as const, transitioned: false as const, lifecycle: null }
@@ -1259,6 +1287,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
   }
 
   if (outcome.transitioned) {
+    await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', outcome.sessionId)).catch(err => console.error('[draft] completion notification failed', err))
     // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
     // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
     // still emitted from the Redraft path for the season-specific payload.
@@ -1311,6 +1340,9 @@ export async function resetDraftSession(
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   if (session.status === COMPLETED_DRAFT_SESSION_STATUS && !options?.allowCompleted) return false
+  const auctionState = session.auctionState && typeof session.auctionState === 'object' && !Array.isArray(session.auctionState)
+    ? session.auctionState as Record<string, unknown> : null
+  const rookieAuction = session.draftModeLabel === 'rookie' && session.draftType === 'auction' ? auctionState?.rookieAuction : null
   const outcome = await prisma.$transaction(async (tx) => {
     const archivedPicks = await tx.draftPick.findMany({where:{sessionId:session.id},orderBy:{overall:'asc'}})
     await recordArchiveEvent(tx, session, 'reset_draft', {priorSession:session, archivedPicks})
@@ -1328,7 +1360,7 @@ export async function resetDraftSession(
         timerEndAt: null,
         pausedRemainingSeconds: null,
         auctionBudgets: Prisma.JsonNull,
-        auctionState: Prisma.JsonNull,
+        auctionState: rookieAuction ? ({ rookieAuction } as Prisma.InputJsonValue) : Prisma.JsonNull,
         version: { increment: 1 },
         updatedAt: new Date(),
       },

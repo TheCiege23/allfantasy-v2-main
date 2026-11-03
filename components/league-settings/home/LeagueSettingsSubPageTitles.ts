@@ -15,6 +15,8 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   'pirate-rules': 'Pirate rules',
   playoffs: 'Playoff settings',
   members: 'Managers',
+  'team-settings': 'Team settings',
+  'previous-leagues': 'Previous Leagues',
   'co-commissioners': 'Co-commissioners',
   divisions: 'Divisions',
   ai: 'League AI',

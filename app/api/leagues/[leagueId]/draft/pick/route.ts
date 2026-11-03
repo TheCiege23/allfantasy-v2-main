@@ -273,7 +273,7 @@ export const POST = withTimedRoute('draft_pick', async (
     )
     .catch(() => {})
 
-  void notifyOnTheClockAfterPick(leagueId)
+  await notifyOnTheClockAfterPick(leagueId)
   void notifyDraftIntelPickConfirmation(leagueId, effectiveRosterId, String(playerName).trim()).catch(() => {})
 
   try {

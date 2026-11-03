@@ -21,7 +21,9 @@
  * old resolution. A template with one seat dropped is a smaller lineup that looks like a real one; so
  * is one whose bench size is guessed. That is also why a pair-shaped list with no bench entry is null:
  * MFL stores starters and taxi only (lib/league/rosterLimit.ts), so its bench size is unknown.
- * Fleaflicker and Fantrax football store no positions at all (2026-10-27: 1 league each).
+ * Fleaflicker and Fantrax football store no positions at all (2026-10-27: 1 league each). Fantrax
+ * NFL/NCAAF/MLB imports store `SLOT:COUNT` pairs from 2026-10-29 (`mapFantraxLineupSlots`); a
+ * snapshot imported before then stores none until it is refreshed.
  *
  * Pure: the non-football slot catalogs are passed in, so this module imports nothing at runtime.
  */

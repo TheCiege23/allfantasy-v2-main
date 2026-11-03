@@ -5,6 +5,7 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
 import { isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -328,6 +329,7 @@ export async function buildAvailablePlayersContext(
         sport: true,
         platform: true,
         isDynasty: true,
+        leagueType: true,
         scoring: true,
         settings: true,
         _count: { select: { teams: true } },
@@ -387,6 +389,8 @@ export async function buildAvailablePlayersContext(
         sport: String(league.sport),
         leagueId,
         rostered: rostered.ids,
+        // NHL dynasty: Fantrax prospects are free agents too, named as such and never ranked.
+        ...(isDynastyFamilyLeague(league) ? { dynasty: true } : {}),
       })
     } catch {
       return `Player values are only published for NFL, and the ${league.sport} player pool could not be ranked just now for "${leagueName}". Say that plainly; do not name anyone.`

@@ -1,0 +1,47 @@
+/* Redraft identity on the /core shell (batch CORE-1, 2026-10-31).
+ *
+ * The tokens are NOT here. AfCoreShell stamps `data-format="redraft"` + `data-sport` on its root for a
+ * native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts), and
+ * components/league/native/redraft-identity.css — the foundation file, matched through
+ * `.af-core:is(.nl-workspace,.af-shell)` — defines every `--rd-*` token and re-points /core's own
+ * `--accent`, `--accent-ink`, `--accent-soft`, `--accent-line` and `--hero`. That alone moves the
+ * sidebar's active item (and its inset rail mark), the phone tab bar, the More sheet, the expanded
+ * rail's active tile, focus rings and primary buttons onto the sport colour, because af-core-shell.css
+ * already draws every one of those from `--accent*`.
+ *
+ * This file holds only what the shell needs beyond the token swap: the art's sizing (the shell grows
+ * with its page, the workspace does not), and a sport line on the chrome that does not read an accent
+ * token today — the top bar's divider and the league switcher.
+ *
+ * ⚠ NO HEX HERE. Every colour is a `--rd-*` token, so light / dark / AF follow the foundation's
+ * measured values (__tests__/league-media/redraftIdentityContrast.test.ts) with nothing to re-measure.
+ *
+ * ⚠ SPECIFICITY. `.af-core.af-shell[data-format=redraft][data-sport]` is (0,4,0): it beats
+ * af-core-shell.css's `.af-core.af-shell { background-image: none }` (0,2,0) and matches the
+ * foundation block it refines, which loads first (AfCoreShell imports it before this file).
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, NOT NESTED IN ANYTHING (CLAUDE.md, af-matchup.css 2026-08-30). */
+
+/* The workspace root is one viewport tall, so `cover` sizes the art to the screen. The shell is as
+ * tall as its page, and `cover` would blow the art up to the whole document — on a long Standings
+ * page the yard lines become a few strokes across a metre of scroll. Size the art layer to the first
+ * viewport instead; below it the page ground is plain --bg, which is what the contrast test measures
+ * anyway. */
+.af-core.af-shell[data-format=redraft][data-sport]{background-size:auto,100% 100vh;background-size:auto,100% 100dvh;background-position:0 0,center top}
+
+/* Top bar: the divider carries the sport, so the league you are in is named by colour on every screen. */
+.af-core.af-shell[data-format=redraft] .af-topbar{border-bottom-color:var(--rd-accent-line)}
+
+/* League switcher: the trigger is framed in the sport line. Its text stays --text/--muted: the trigger
+ * sits on --chip, which the contrast test does not measure the accent against. */
+.af-core.af-shell[data-format=redraft] .af-scope-btn{border-color:var(--rd-accent-line)}
+
+/* Sidebar: a sport rule down the nav column's edge, beside the active item's inset mark. */
+.af-core.af-shell[data-format=redraft] .af-nav{border-right-color:var(--rd-accent-line)}
+
+@media (max-width:720px){
+  /* Phone: the nav column is a top strip here (af-core-shell.css), so its rule moves to the bottom
+   * edge; the tab bar takes a sport line on its top edge. */
+  .af-core.af-shell[data-format=redraft] .af-nav{border-bottom-color:var(--rd-accent-line)}
+  .af-core.af-shell[data-format=redraft] .af-tabbar{border-top-color:var(--rd-accent-line)}
+}

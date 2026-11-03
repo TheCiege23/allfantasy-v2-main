@@ -14,6 +14,8 @@ import { ZombieUniverseMap } from '@/components/league/specialty/zombie/ZombieUn
 import { ZombieInfectionNight } from '@/components/league/specialty/zombie/ZombieInfectionNight'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
 import { daysUntilResolution } from '@/lib/zombie/zombieHomeView'
+import { ZombieRoleActions } from './ZombieRoleActions'
+import { ZombieSeasonOperations } from './ZombieSeasonOperations'
 
 /*
  * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
@@ -44,7 +46,7 @@ const pct = (share: number) => `${Math.round(share * 100)}%`
 function statusLine(summary: ZombieSummary, chip: ZombieChipStatus | null, turned: number, total: number): string {
   const lg = summary.league
   const tally = `${turned} of ${total} ${turned === 1 ? 'has' : 'have'} turned.`
-  if (lg && lg.currentWeek === 0) return 'The draft comes first. Everyone starts as a Survivor — except one.'
+  if (lg && lg.currentWeek === 0) return 'The draft comes first. Most managers start as Survivors; the Whisperers lead the outbreak.'
   const prefix = `Week ${summary.week} · `
   switch (chip) {
     case 'survivor':
@@ -204,7 +206,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         ].filter((c): c is string => Boolean(c))}
         title={lg?.name || 'The Outbreak'}
         headline={statusLine(summary, myChip, turned, total)}
-        blurb={`Every league has one Whisperer. Lose to the Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn. Serums cure, weapons are earned by big weeks, and the universe standings decide who moves up a level next season.`}
+        blurb={`Whisperers lead the outbreak. Lose to a Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn. Serums cure, weapons are earned by big weeks, and league standings track the outbreak.`}
         actions={[
           { label: 'My matchup', onClick: scrollToMatchup, primary: true },
           { label: 'Infection night', onClick: () => setView('infection'), testId: 'zombie-open-infection-night' },
@@ -222,12 +224,14 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           </div>
         }
       />
+      <ZombieRoleActions leagueId={leagueId} onChanged={() => { void load() }} />
+      <ZombieSeasonOperations leagueId={leagueId} />
       <nav className="flex flex-wrap gap-2" aria-label="Zombie league">
         {[
           ['Matchups', `${hub}/matchups`],
           ['Items', `${hub}/items`],
           ['Rules', `${hub}/rules`],
-          ['Chat', `/league/${leagueId}?tab=Chat`],
+          ['Chat', `/league/${encodeURIComponent(leagueId)}?view=league_chat`],
         ].map(([label, href]) => (
           <Link
             key={label}
@@ -440,9 +444,11 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
             <ol className="mt-3 space-y-2.5 text-[13px] leading-snug text-white/80">
               {[
-                'Everyone starts as a Survivor — except one secret Whisperer.',
+                'Managers start as Survivors or Whisperers.',
                 `Lose to the Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn into a Zombie.`,
-                rules
+                rules?.winningsPolicy === 'beta_2025'
+                  ? 'Survivor wins earn 2, 4 or 6 winnings units by opponent. Loot is taken from accumulated winnings.'
+                  : rules
                   ? `You bank your score every week as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${fmt(rules.maulingMargin)}+ and ${pct(rules.maulShare)} of it goes, by ${fmt(rules.bashingMargin)}+ and ${pct(rules.bashShare)}.`
                   : 'You bank your score every week as Outbreak Points.',
                 `A serum registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`,

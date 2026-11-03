@@ -7,6 +7,25 @@ import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draf
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import { buildDraftBoard, cellForSlot } from '@/lib/draft-board/draftBoardGrid'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { DraftBoardCell } from '@/components/app/draft-room/DraftBoardCell'
+
+function StoredPick({ cell, round, slot, overall, label, column }: {
+  cell?: BoardCell; round: number; slot: number; overall: number; label: string; column?: BoardColumn
+}) {
+  return <>
+    <DraftBoardCell isEmpty={!cell?.playerName} isCurrentPick={cell?.isOnTheClock}
+      pickHighlight={cell?.isYours ? 'user' : 'none'}
+      pick={{ overall, round, slot, pickLabel: label, playerName: cell?.playerName ?? null,
+        position: cell?.position ?? null, team: null, byeWeek: null, displayName: cell?.ownerName ?? null,
+        ownerRosterId: cell?.rosterId ?? column?.rosterId ?? null }} />
+    {cell && draftAfText(cell.af) ? <span className="block px-1 text-[11px] text-white/70" title={draftAfTitle(cell.af)}>
+      {draftAfText(cell.af)}
+    </span> : null}
+    {cell && column && cell.rosterId !== column.rosterId ? (
+      <span className="block px-1 text-[11px] text-white/70">Traded · {cell.ownerName ?? cell.rosterId}</span>
+    ) : null}
+  </>
+}
 
 /**
  * The per-league draft board, clock and queue.
@@ -71,21 +90,22 @@ export function Board({ columns, cells, rounds, draftType, thirdRoundReversal }:
 }) {
   const byOverall = new Map(cells.map((c) => [c.overall, c]))
   if (!['snake', 'linear'].includes(draftType.toLowerCase())) {
-    return <ol>{cells.map((cell) => <li key={cell.overall}>
-      {cell.label} · {cell.playerName} · {cell.ownerName ?? cell.rosterId}
+    return <ol className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">{cells.map((cell) => <li key={cell.overall}>
+      <span className="text-[11px] text-white/65">{cell.ownerName ?? cell.rosterId}</span>
+      <StoredPick cell={cell} round={cell.round} slot={cell.originalSlot} overall={cell.overall} label={cell.label} />
     </li>)}</ol>
   }
   const teamCount = Math.max(0, ...columns.map((column) => column.slot))
   const rows = buildDraftBoard({ rounds, teamCount, kind: draftType.toLowerCase() as 'snake' | 'linear', thirdRoundReversal })
 
   return (
-    <div className="af-wr-board-scroll">
-      <table className="af-wr-board">
+    <div className="min-w-0 overflow-x-auto rounded-xl bg-[#0d1424] p-1">
+      <table className="min-w-full border-separate border-spacing-[2px]">
         <thead>
           <tr>
             <th className="af-label af-wr-board-corner">Rd</th>
             {columns.map((c) => (
-              <th key={c.rosterId} className="af-wr-board-head" data-yours={c.isYours}>
+              <th key={c.rosterId} className="min-w-[84px] bg-[#0d1424] px-1 py-2 text-[11px] text-white/80" data-yours={c.isYours}>
                 <span className="af-wr-board-team">{c.displayName}</span>
               </th>
             ))}
@@ -103,32 +123,12 @@ export function Board({ columns, cells, rounds, draftType, thirdRoundReversal }:
                 return (
                   <td
                     key={col.rosterId}
-                    className="af-wr-cell"
+                    className="min-w-[84px] p-0 align-top"
                     data-yours={cell?.isYours ?? col.isYours}
                     data-empty={!cell}
                   >
-                    {cell ? (
-                      <>
-                        <span className="af-wr-cell-label af-num">{cell.label}</span>
-                        <span className="af-wr-cell-name">{cell.playerName}</span>
-                        {cell.position ? (
-                          <span className="af-wr-cell-pos af-num">{cell.position}</span>
-                        ) : null}
-                        {/* AllFantasy's own projection for the pick; season total on hover. */}
-                        {draftAfText(cell.af) ? (
-                          <span className="af-wr-cell-af af-num" title={draftAfTitle(cell.af)}>
-                            {draftAfText(cell.af)}
-                          </span>
-                        ) : null}
-                        {cell.rosterId !== col.rosterId ? (
-                          <span className="af-wr-cell-pos">Traded · {cell.ownerName ?? cell.rosterId}</span>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="af-wr-cell-empty">
-                        {slotCell?.label ?? '—'}
-                      </span>
-                    )}
+                    {slotCell ? <StoredPick cell={cell} round={row.round} slot={col.slot}
+                      overall={slotCell.overall} label={slotCell.label} column={col} /> : null}
                   </td>
                 )
               })}

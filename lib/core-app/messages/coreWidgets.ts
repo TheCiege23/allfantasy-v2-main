@@ -25,6 +25,7 @@ export const coreWidgetsMessages = defineMessages({
     xPostWatch: 'Watch on X',
     // screens/DashUserOsView
     userOsAria: 'Your team intelligence',
+    userOsYourTeam: 'Your team',
     userOsOpenDecide: 'Open Decide',
     // screens/MyLeaguesV4
     myLeaguesDashboard: 'League dashboard',
@@ -65,6 +66,7 @@ export const coreWidgetsMessages = defineMessages({
     xPostError: 'Esta publicación no se puede mostrar aquí.',
     xPostWatch: 'Ver en X',
     userOsAria: 'Inteligencia de tu equipo',
+    userOsYourTeam: 'Tu equipo',
     userOsOpenDecide: 'Abrir Decidir',
     myLeaguesDashboard: 'Panel de la liga',
     myLeaguesOpenHub: 'Abrir centro compartido →',

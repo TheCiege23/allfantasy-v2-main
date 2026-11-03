@@ -5,7 +5,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { ageText } from '@/lib/core-app/shellCopy'
-import { dashScheduleBandMessages } from '@/lib/core-app/messages/dashScheduleBand'
+import { dashScheduleBandMessages, type DashScheduleBandMessages } from '@/lib/core-app/messages/dashScheduleBand'
 import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
 
 /**
@@ -42,23 +42,18 @@ export type ScheduleBandViewProps = {
 }
 
 /** Never invent a manager. An unnamed roster says which roster it is. */
-function opponentLabel(o: ScheduleBandCard['opponent'], es: boolean): string {
-  if (!es) return rosterLabel([o.name], o.rosterId)
-  const real = realManagerName(o.name)
-  if (real) return real
-  const id = String(o.rosterId ?? '').trim()
-  return id ? `Equipo ${id}` : 'Rival'
+function opponentLabel(o: ScheduleBandCard['opponent'], t: DashScheduleBandMessages): string {
+  return t.opponent(rosterLabel([o.name], o.rosterId), realManagerName(o.name), String(o.rosterId ?? '').trim())
 }
 
 /** "4m ago" (the page passes describeAge's label) or "synced 4m ago" — the age through shellCopy's `ageText`. */
-function syncText(label: string, language: string): string {
+function syncText(label: string, language: string, t: DashScheduleBandMessages): string {
   const m = label.match(/^synced (.+)$/)
-  return m ? (language === 'es' ? `sincronizado ${ageText(m[1]!, language)}` : label) : ageText(label, language)
+  return m ? t.synced(label, ageText(m[1]!, language)) : ageText(label, language)
 }
 
 export function DashScheduleBandView({ week, kickoff, total, visible, overflow, withoutSchedule, syncLabel }: ScheduleBandViewProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const t = useMessages(dashScheduleBandMessages)
   const weekLabel = week != null ? t.week(week) : t.thisWeek
 
@@ -87,7 +82,7 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
           <Link key={m.key} className="af-sched-card" href={m.href}>
             <span className="af-sched-league">{m.leagueName}</span>
             <span className="af-sched-vs">
-              vs <b>{opponentLabel(m.opponent, es)}</b>
+              vs <b>{opponentLabel(m.opponent, t)}</b>
             </span>
             <span className="af-sched-plat af-num">
               {/*
@@ -113,7 +108,7 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
            * than as a claim that the other 55 have no games.
            */
           withoutSchedule > 0 ? t.noSchedule(withoutSchedule) : null,
-          syncLabel ? syncText(syncLabel, language) : null,
+          syncLabel ? syncText(syncLabel, language, t) : null,
         ]
           .filter(Boolean)
           .join(' · ')}

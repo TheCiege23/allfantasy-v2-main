@@ -21,6 +21,8 @@ import {
   Minimize2,
   Lock,
 } from 'lucide-react'
+import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
+import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { getPositionFilterOptionsForSport } from '@/lib/draft-room'
 
 interface DraftRoomProps {
@@ -176,7 +178,6 @@ export default function DraftRoom(props: DraftRoomProps) {
   const [sleeperImportResult, setSleeperImportResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const settingsRef = useRef<HTMLDivElement>(null)
-  const boardScrollRef = useRef<HTMLDivElement>(null)
   const lastTradeProposalPick = useRef<number>(0)
 
   const slots = rosterSlots && rosterSlots.length > 0 ? rosterSlots : DEFAULT_ROSTER_SLOTS
@@ -196,13 +197,9 @@ export default function DraftRoom(props: DraftRoomProps) {
   }, [managers])
 
   const getPickManager = useCallback((overall: number): { managerId: string; managerName: string; slot: number } => {
-    const round = Math.ceil(overall / teamCount)
-    let slotInRound = ((overall - 1) % teamCount)
-    const isSnakeRound = draftFormat === 'snake' && round % 2 === 0
-    const is3rrRound = enable3RR && round >= 3 && round % 2 === 1
-    if (isSnakeRound || is3rrRound) {
-      slotInRound = teamCount - 1 - slotInRound
-    }
+    const slotInRound = getSlotInRoundForOverall({
+      overall, teamCount, draftType: draftFormat, thirdRoundReversal: enable3RR && draftFormat === 'snake',
+    }) - 1
     const mgr = sortedManagers[slotInRound]
     return {
       managerId: mgr?.id || '',
@@ -789,226 +786,33 @@ export default function DraftRoom(props: DraftRoomProps) {
     </div>
   )
 
-  const mobileDraftBoard = (
-    <div className="flex-1 overflow-auto" style={{ minHeight: 0, background: '#1a1d26' }}>
-      <div className="px-2 py-2 space-y-3">
-        {Array.from({ length: draftRounds }, (_, roundIdx) => {
-          const round = roundIdx + 1
-          return (
-            <div key={round}>
-              <div className="flex items-center gap-2 mb-1.5 px-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Round {round}</span>
-                <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-              </div>
-              <div className="space-y-1">
-                {Array.from({ length: teamCount }, (_, colIdx) => {
-                  let actualCol = colIdx
-                  const isSnakeRd = draftFormat === 'snake' && round % 2 === 0
-                  const is3rrRd = enable3RR && round >= 3 && round % 2 === 1
-                  if (isSnakeRd || is3rrRd) {
-                    actualCol = teamCount - 1 - colIdx
-                  }
-                  const overall = (round - 1) * teamCount + colIdx + 1
-                  const pickLabel = `${round}.${(colIdx + 1).toString().padStart(2, '0')}`
-                  const mgr = sortedManagers[actualCol]
-                  const pick = draftPicks.find(p => p.round === round && (p.slot === actualCol + 1 || p.slot === actualCol))
-                  const isCurrent = overall === currentOverall && isDraftStarted && !draftComplete
-
-                  const tp = tradedPicks?.find(t => t.round === round && (
-                    String(t.originalRosterId) === mgr?.id ||
-                    t.previousOwner === mgr?.displayName
-                  ))
-
-                  return (
-                    <div
-                      key={`m-${round}-${colIdx}`}
-                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
-                      style={{
-                        background: isCurrent
-                          ? 'rgba(14,165,233,0.15)'
-                          : pick
-                            ? 'rgba(255,255,255,0.04)'
-                            : 'rgba(255,255,255,0.02)',
-                        border: isCurrent ? '1px solid rgba(14,165,233,0.3)' : '1px solid rgba(255,255,255,0.04)',
-                      }}
-                    >
-                      <div className="w-8 shrink-0 text-center">
-                        <span className="text-[11px] font-bold" style={{ color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.3)' }}>
-                          {pickLabel}
-                        </span>
-                      </div>
-                      <div className="shrink-0">
-                        {mgr?.avatar ? (
-                          <img src={mgr.avatar} alt="" className="w-7 h-7 rounded-full" />
-                        ) : (
-                          <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
-                            style={{
-                              background: isCurrent ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.1)',
-                              color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.5)',
-                            }}
-                          >
-                            {mgr?.displayName?.charAt(0)?.toUpperCase() || '?'}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-medium truncate" style={{ color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.5)' }}>
-                            {mgr?.displayName || `Team ${actualCol + 1}`}
-                          </span>
-                          {isCurrent && (
-                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
-                              OTC
-                            </span>
-                          )}
-                          {tp && (
-                            <span className="text-[11px] shrink-0" style={{ color: '#f59e0b' }}>via {tp.newOwner || '?'}</span>
-                          )}
-                        </div>
-                        {pick ? (
-                          <span className="text-[12px] font-semibold text-white truncate block">{pick.playerName}</span>
-                        ) : isCurrent ? (
-                          <span className="text-[11px] font-medium block" style={{ color: '#0ea5e9' }}>On the clock...</span>
-                        ) : (
-                          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.15)' }}>—</span>
-                        )}
-                      </div>
-                      {pick && (
-                        <span
-                          className="text-[11px] font-bold px-2 py-0.5 rounded shrink-0"
-                          style={{ background: POS_BG[pick.position], color: POS_TEXT[pick.position] }}
-                        >
-                          {pick.position}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-
-  const draftBoard = (
-    <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-      <div ref={boardScrollRef} className="overflow-auto h-full" style={{ background: '#1a1d26' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: `48px repeat(${teamCount}, minmax(100px, 1fr))`, minWidth: `${48 + teamCount * 100}px` }}>
-          <div className="sticky left-0 z-10" style={{ background: '#1a1d26' }} />
-          {sortedManagers.map((mgr, colIdx) => {
-            const isOTC = currentPickInfo?.slot === colIdx && isDraftStarted && !draftComplete
-            return (
-              <div
-                key={mgr.id}
-                className="px-1.5 py-2 text-center border-b"
-                style={{
-                  background: isOTC ? 'rgba(14,165,233,0.12)' : '#1e2130',
-                  borderColor: 'rgba(255,255,255,0.06)',
-                  borderLeft: '1px solid rgba(255,255,255,0.04)',
-                }}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  {mgr.avatar ? (
-                    <img src={mgr.avatar} alt="" className="w-6 h-6 rounded-full" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: isOTC ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.1)', color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.5)' }}>
-                      {mgr.displayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <span className="text-[11px] font-medium truncate w-full" style={{ color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.6)' }}>
-                    {mgr.displayName}
-                  </span>
-                  {isOTC && (
-                    <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
-                      OTC
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-
-          {Array.from({ length: draftRounds }, (_, roundIdx) => {
-            const round = roundIdx + 1
-            return (
-              <React.Fragment key={round}>
-                <div
-                  className="sticky left-0 z-10 flex items-center justify-center text-[11px] font-bold border-b"
-                  style={{ background: '#1a1d26', color: 'rgba(255,255,255,0.35)', borderColor: 'rgba(255,255,255,0.06)' }}
-                >
-                  R{round}
-                </div>
-                {Array.from({ length: teamCount }, (_, colIdx) => {
-                  let actualCol = colIdx
-                  const isSnakeRd = draftFormat === 'snake' && round % 2 === 0
-                  const is3rrRd = enable3RR && round >= 3 && round % 2 === 1
-                  if (isSnakeRd || is3rrRd) {
-                    actualCol = teamCount - 1 - colIdx
-                  }
-                  const overall = (round - 1) * teamCount + colIdx + 1
-                  const pickLabel = `${round}.${(colIdx + 1).toString().padStart(2, '0')}`
-                  const mgr = sortedManagers[actualCol]
-                  const pick = draftPicks.find(p => p.round === round && (p.slot === actualCol + 1 || p.slot === actualCol))
-                  const isCurrent = overall === currentOverall && isDraftStarted && !draftComplete
-                  const posColor = pick ? (POS_DOT[pick.position] || 'rgba(255,255,255,0.3)') : undefined
-
-                  return (
-                    <div
-                      key={`${round}-${colIdx}`}
-                      className="px-1.5 py-1.5 border-b min-h-[44px] flex flex-col justify-center"
-                      style={{
-                        background: isCurrent
-                          ? 'rgba(14,165,233,0.12)'
-                          : pick
-                            ? 'rgba(255,255,255,0.02)'
-                            : 'transparent',
-                        borderColor: 'rgba(255,255,255,0.04)',
-                        borderLeft: '1px solid rgba(255,255,255,0.04)',
-                        boxShadow: isCurrent ? 'inset 0 0 0 1px rgba(14,165,233,0.3)' : undefined,
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                          {pickLabel}
-                          {(() => {
-                            const colMgr = sortedManagers[actualCol]
-                            const tp = tradedPicks?.find(t => t.round === round && (
-                              String(t.originalRosterId) === colMgr?.id ||
-                              t.previousOwner === colMgr?.displayName
-                            ))
-                            return tp ? (
-                              <span className="text-[11px] block" style={{ color: '#f59e0b' }}>
-                                via {tp.newOwner || '?'}
-                              </span>
-                            ) : null
-                          })()}
-                        </span>
-                        {pick && (
-                          <span className="text-[11px] font-semibold px-1 rounded" style={{ background: POS_BG[pick.position], color: POS_TEXT[pick.position] }}>
-                            {pick.position}
-                          </span>
-                        )}
-                      </div>
-                      {pick ? (
-                        <span className="text-[11px] font-medium text-white truncate mt-0.5">{pick.playerName}</span>
-                      ) : isCurrent ? (
-                        <span className="text-[11px] font-medium mt-0.5" style={{ color: '#0ea5e9' }}>
-                          On the clock...
-                        </span>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </React.Fragment>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+  const boardTeams = Array.from({ length: teamCount }, (_, index) => {
+    const manager = sortedManagers[index]
+    return { id: manager?.id || String(index + 1), slot: index + 1,
+      name: manager?.displayName || ('Team ' + (index + 1)), avatarUrl: manager?.avatar,
+      isUser: manager?.displayName === username }
+  })
+  const boardPicks = draftPicks.map((pick) => {
+    const seat = getPickManager(pick.overall)
+    const owner = sortedManagers.find((manager) => manager.displayName === pick.manager)
+    return { ...pick, slot: seat.slot + 1, rosterId: owner?.id || seat.managerId,
+      originalRosterId: seat.managerId,
+      team: availablePlayers.find((player) => player.name === pick.playerName)?.team ?? null }
+  })
+  // Preserve imported ownership for future picks as well as completed selections.
+  for (const trade of tradedPicks ?? []) {
+    const original = boardTeams.find((team) => team.id === String(trade.originalRosterId) || team.name === trade.previousOwner)
+    const owner = boardTeams.find((team) => team.name === trade.newOwner)
+    if (!original || !owner || original.id === owner.id || boardPicks.some((pick) => pick.round === trade.round && pick.slot === original.slot)) continue
+    boardPicks.push({ overall: 0, round: trade.round, slot: original.slot, rosterId: owner.id,
+      originalRosterId: original.id, manager: owner.name, playerName: '', position: '', pickedAt: '', team: null })
+  }
+  const sharedBoard = <DraftBoardPreview teams={boardTeams} picks={boardPicks}
+    teamCount={teamCount} rounds={draftRounds} sport={props.sport ?? 'NFL'} draftType={draftFormat}
+    thirdRoundReversal={enable3RR && draftFormat === 'snake'}
+    currentOverall={isDraftStarted && !draftComplete ? currentOverall : null} />
+  const mobileDraftBoard = <div className="min-h-0 flex-1 overflow-auto">{sharedBoard}</div>
+  const draftBoard = <div className="min-h-0 flex-1 overflow-auto">{sharedBoard}</div>
 
   const playerListPanel = (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#22252e' }}>

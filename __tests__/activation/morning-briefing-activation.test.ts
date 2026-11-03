@@ -4,6 +4,10 @@ import { NextRequest } from 'next/server'
 const h = vi.hoisted(() => ({ run: vi.fn(), confirm: vi.fn(), record: vi.fn() }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// Find a League saved-search alerts ride this route too (their own suite: find-league-step3); nothing is due here.
+vi.mock('@/lib/public-discovery/runSavedSearchAlerts', () => ({
+  runSavedSearchAlerts: vi.fn(async () => ({ due: 0, checked: 0, alerted: 0, errors: [], budgetExhausted: false })),
+}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/resend-client', () => ({ sendTemplatedEmail: vi.fn() }))
 vi.mock('@/lib/dashboard-intel/commandCenterService', () => ({ getCommandCenter: vi.fn() }))

@@ -11,13 +11,13 @@ export function LineupVerification({ verification }: { verification: Verificatio
   const [refreshing, startRefresh] = useTransition()
   const [now, setNow] = useState<number | null>(null)
   /* Every sentence here was English under a Spanish screen (language audit, 2026-10-03). */
-  const es = useOptionalLanguage().language === 'es'
+  const { language } = useOptionalLanguage()
   const m = useMessages(coreTriageMessages)
   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer) }, [verification?.checkedAt])
   const stale = verification && now != null && now - Date.parse(verification.checkedAt) >= 300000
   return <section aria-label={m.verifySection} className="af-frame af-lv">
     <strong className="af-lv-title">Sleeper{verification?.week != null ? ` · ${m.verifyWeek} ${verification.week}` : ''}</strong>
-    <p role="status" className="af-lv-status">{verification ? <><time dateTime={verification.checkedAt} title={verification.checkedAt}>{now == null ? m.verifyChecked : verificationAge(verification.checkedAt, now, es ? 'es' : 'en')}</time>{stale ? m.verifyStale : m.verifyFresh}</> : m.verifyNone}</p>
+    <p role="status" className="af-lv-status">{verification ? <><time dateTime={verification.checkedAt} title={verification.checkedAt}>{now == null ? m.verifyChecked : verificationAge(verification.checkedAt, now, language)}</time>{stale ? m.verifyStale : m.verifyFresh}</> : m.verifyNone}</p>
     <p className="af-lv-note">{m.verifyNote}</p>
     <button type="button" className="af-btn af-lv-refresh" disabled={refreshing} onClick={() => startRefresh(() => router.refresh())}>{refreshing ? m.verifyChecking : m.verifyRefresh}</button>
   </section>

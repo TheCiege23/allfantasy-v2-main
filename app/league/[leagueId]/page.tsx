@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { LeagueDisplayPreferences } from '@/components/league/LeagueDisplayPreferences'
 import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
 import { getServerSession } from 'next-auth'
@@ -24,8 +25,13 @@ import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import { getRailRecords } from '@/lib/core-app/railRecords'
+import { readUrgencyLeagueIds } from '@/lib/core-app/urgencyBadges'
+import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -281,7 +287,8 @@ export default async function LeaguePage(
         }
 
       const isOwner = league.userId === userId
-        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? null
+        const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? (coOwnerRosterId ? league.teams.find((t) => t.externalId === coOwnerRosterId) : null) ?? null
 
       if (!isOwner && !userTeam) {
               // Not a member — show explicit join/request state instead of opaque redirect.
@@ -295,7 +302,7 @@ export default async function LeaguePage(
 
       const seasonYear = league.season ?? new Date().getFullYear()
 
-      const [role, allLeagues, dbUser, userProfile, leagueSeasonRow, leagueDashboard] =
+      const [role, rawAllLeagues, dbUser, userProfile, leagueSeasonRow, leagueDashboard] =
               await Promise.all([
                         getLeagueRole(leagueId, userId).catch((err) => {
                                     console.error('[league page] getLeagueRole failed', { leagueId, userId, err })
@@ -346,6 +353,15 @@ export default async function LeaguePage(
                         }),
                       ])
 
+      // The league page powers the mobile switcher and the right rail. Use the same
+      // provider/season identity as /core so an older import is not shown as another league.
+      // Never group by name: separate AF leagues and separate Fantrax teams can share one.
+      const seriesMap = await loadLeagueSeriesMap(rawAllLeagues.map((l) => l.id))
+      const allLeagues = collapseLeagueSeasons(rawAllLeagues, seriesMap, (a, b) => {
+        const own = Number(b.userId === userId) - Number(a.userId === userId)
+        return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
+      }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+
       const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
         const isHeadCommissioner = role === 'commissioner'
         /*
@@ -386,7 +402,14 @@ export default async function LeaguePage(
           }),
         ]),
       )
-      const [draftSetupSession, railMatchups] = await Promise.all([
+      /*
+       * The id the header's "Open in <platform>" link is built from. For Fantrax, `platformLeagueId` is
+       * our own snapshot uuid, so the link fell back to the Fantrax homepage; this is Fantrax's real
+       * league id (null for a CSV-era row: the homepage, as before). Every other platform: unchanged.
+       * DB read only (no query at all for a non-Fantrax league), never throws.
+       */
+      const sourceLinkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
+      const [draftSetupSession, railMatchups, railRecords, railPrefs, railNeeds] = await Promise.all([
         prisma.draftSession.findFirst({
           where: { leagueId },
           orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -403,9 +426,28 @@ export default async function LeaguePage(
           console.error('[league page] rail matchups failed', { userId, err })
           return null
         }),
+        /*
+         * The rail's "6-3 · 2nd" line and the account's favorites and order — the same reads /core's
+         * rail makes (railRecords.ts, leaguePreferencesStore.ts). Each degrades to nothing: no line,
+         * no pinned section, the list in its own order.
+         */
+        getRailRecords(userId, allLeagues.map((l) => l.id)).catch(() => ({})),
+        getLeaguePreferences(userId).catch(() => null),
+        /*
+         * What needs you per league — the /core tab badges' own cached facts (urgencyBadges.ts), read
+         * without recomputing them. Feeds the rail's "Fix lineup" / "Trade offer" flags and its Needs
+         * action chip; stale or unreadable is nothing flagged.
+         */
+        readUrgencyLeagueIds(userId).catch(() => null),
       ])
       const leagueRail = {
         matchups: railMatchups?.byLeague ?? {},
+        records: railRecords,
+        favoriteIds: railPrefs?.favorites ?? [],
+        order: railPrefs?.order ?? [],
+        hiddenIds: railPrefs?.hidden ?? [],
+        lineupLeagueIds: railNeeds?.lineupLeagueIds ?? [],
+        offerLeagueIds: railNeeds?.offerLeagueIds ?? [],
         // /core's crest rule: commissioner logo, else Sleeper avatar, else the league type's own artwork.
         imageUrls: Object.fromEntries(
           allLeagues.map((l) => [
@@ -428,6 +470,7 @@ export default async function LeaguePage(
             isHeadCommissioner={isHeadCommissioner}
             allLeagues={allLeagues}
             leagueRail={leagueRail}
+            sourceLinkLeagueId={sourceLinkLeagueId}
             userId={userId}
             userName={session.user.name ?? session.user.email ?? 'Manager'}
             userImage={userImage}

@@ -30,6 +30,8 @@ import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
 import { SetupDecisionsCard } from './SetupDecisionsCard'
+import { buildRedraftSettingsView } from '@/lib/league-media/redraftSettings'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 // The editors carry most of the old settings tree; load them only when a row is opened.
 const LeagueSettingsSubPageBody = dynamic(() => import('./LeagueSettingsSubPageBody'), {
@@ -71,6 +73,7 @@ export function LeagueSettingsHomeContainer({
   const guillotine = isGuillotineSettingsLeague(league)
   const [reloadKey, setReloadKey] = useState(0)
   const [rosterSlots, setRosterSlots] = useState<Record<string, number> | null>(null)
+  const [savedScoringLabel, setSavedScoringLabel] = useState<string | null>(null)
   const [draft, setDraft] = useState<SettingsHomeDraft | null>(null)
   const [hasAfCommissionerSub, setHasAfCommissionerSub] = useState(Boolean(ctx.hasAfCommissionerSub))
   const [guillotineState, setGuillotineState] = useState<SettingsHomeGuillotine | null>(null)
@@ -84,6 +87,13 @@ export function LeagueSettingsHomeContainer({
       const slots = (d?.config as Json | undefined)?.slots
       setRosterSlots(slots && typeof slots === 'object' ? (slots as Record<string, number>) : {})
     })
+    if (String(league.sport).toUpperCase() === 'NFL') {
+      void getJson(`/api/commissioner/leagues/${id}/nfl-scoring`, ac.signal).then(d => {
+        if (!ac.signal.aborted && typeof (d?.config as Json | undefined)?.presetLabel === 'string') {
+          setSavedScoringLabel((d!.config as Json).presetLabel as string)
+        }
+      })
+    }
     void getJson(`/api/leagues/${id}/draft/settings`, ac.signal).then((d) => {
       if (ac.signal.aborted) return
       const cfg = (d?.config as Json | undefined) ?? {}
@@ -113,7 +123,18 @@ export function LeagueSettingsHomeContainer({
       })
     }
     return () => ac.abort()
-  }, [leagueId, guillotine, reloadKey])
+  }, [leagueId, guillotine, reloadKey, league.sport])
+
+  useEffect(() => {
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ leagueId?: string; scoringLabel?: string }>).detail
+      if (detail?.leagueId !== leagueId) return
+      if (detail.scoringLabel) setSavedScoringLabel(detail.scoringLabel)
+      setReloadKey(k => k + 1)
+    }
+    window.addEventListener('af:league-settings-saved', onSaved)
+    return () => window.removeEventListener('af:league-settings-saved', onSaved)
+  }, [leagueId])
 
   // Values saved this page-session (autosaving tabs record them) win over the stale page props.
   const effectiveLeague = useMemo(
@@ -137,20 +158,20 @@ export function LeagueSettingsHomeContainer({
       canEdit: ctx.isCommissioner,
       formatLabel: getLeagueTypeMedia(conceptKey).label,
       scoringLabel:
-        (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
+        savedScoringLabel ?? (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
       rosterSlots,
       draft,
       guillotine: guillotineState,
       pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, pirateRules])
+  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 
   const renderSubPage = useCallback(
     (id: SettingsSubPageId): SettingsSubPageRender | null => {
-      if (!ctx.isCommissioner) return null
+      if (!ctx.isCommissioner && id !== 'previous-leagues') return null
       if (id === 'survivor-tribes') {
         return {
           title: SUB_PAGE_TITLES[id],
@@ -224,6 +245,23 @@ export function LeagueSettingsHomeContainer({
   )
 
   const phase = nativeLeaguePhase(ctx.displayLeague)
+  const { language } = useOptionalLanguage()
+  // Redraft identity (A5): the same league object the workspace root stamps `data-format="redraft"` from,
+  // with this page's saved overrides for the weeks. Null for every other league type → default page.
+  const redraft = useMemo(
+    () =>
+      buildRedraftSettingsView(
+        {
+          ...ctx.displayLeague,
+          playoffStartWeek: effectiveLeague.playoffStartWeek ?? ctx.displayLeague.playoffStartWeek ?? null,
+          tradeDeadlineWeek: effectiveLeague.tradeDeadlineWeek ?? ctx.displayLeague.tradeDeadlineWeek ?? null,
+          settings: effectiveLeague.settings ?? ctx.displayLeague.settings,
+        },
+        phase,
+        language,
+      ),
+    [ctx.displayLeague, effectiveLeague, phase, language],
+  )
   // Before the draft, the commissioner is walked through the five settings that matter most.
   const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
   const header =
@@ -250,6 +288,7 @@ export function LeagueSettingsHomeContainer({
         }}
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
         header={header}
+        redraft={redraft}
       />
     )
   }
@@ -264,6 +303,7 @@ export function LeagueSettingsHomeContainer({
       onSubPageClosed={() => setReloadKey((k) => k + 1)}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
+      redraft={redraft}
     />
   )
 }

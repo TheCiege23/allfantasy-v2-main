@@ -30,6 +30,7 @@ import { startersOnBye } from '@/lib/league/native/lineupMoves'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { autoBenchByeLeagueBlock } from './autoBenchByeService'
+import { HEADS_UP_MS, headsUpDecision, headsUpKey } from './automationHeadsUp'
 import { FILL_EMPTY_STARTERS_IDLE_MS, FILL_EMPTY_STARTERS_KEY, emptyStarterSlots, fillEmptyStartersOn, planFillEmptyStarters } from './fillEmptyStarters'
 
 export const FILL_EMPTY_STARTERS_ACTION = 'fill_empty_starters.applied'
@@ -39,6 +40,8 @@ const settingsObject = (s: unknown): Record<string, unknown> => (s && typeof s =
 export type FillEmptyStartersRunResult = {
   leagues: number
   teams: number
+  /** Owners told what will be filled (./automationHeadsUp.ts); filled on a later run. */
+  warned: number
   filled: number
   flagged: number
   skipped: Record<string, number>
@@ -49,7 +52,7 @@ export type FillEmptyStartersRunResult = {
 export async function runFillEmptyStarters(opts?: { limit?: number; deadline?: number; now?: Date }): Promise<FillEmptyStartersRunResult> {
   const now = opts?.now ?? new Date()
   const deadline = opts?.deadline ?? Date.now() + 25_000
-  const result: FillEmptyStartersRunResult = { leagues: 0, teams: 0, filled: 0, flagged: 0, skipped: {}, failures: [] }
+  const result: FillEmptyStartersRunResult = { leagues: 0, teams: 0, warned: 0, filled: 0, flagged: 0, skipped: {}, failures: [] }
   const skip = (reason: string) => (result.skipped[reason] = (result.skipped[reason] ?? 0) + 1)
   // The order changes every hour, so a run cut short by its deadline does not starve the same leagues.
   const hourKey = now.toISOString().slice(0, 13)
@@ -79,6 +82,7 @@ export async function runFillEmptyStarters(opts?: { limit?: number; deadline?: n
         try {
           const outcome = await fillOneTeam({ league, week, season, slots, roster, managed: Boolean(managed[roster.id]), now })
           if (outcome === 'filled') result.filled += 1
+          else if (outcome === 'warned') result.warned += 1
           else if (outcome === 'flagged') result.flagged += 1
           else if (outcome === 'filled_and_flagged') {
             result.filled += 1
@@ -105,7 +109,7 @@ async function fillOneTeam(args: {
   roster: { id: string; platformUserId: string | null; playerData: unknown; updatedAt: Date }
   managed: boolean
   now: Date
-}): Promise<'filled' | 'flagged' | 'filled_and_flagged' | string> {
+}): Promise<'filled' | 'flagged' | 'filled_and_flagged' | 'warned' | string> {
   const { league, week, season, slots, roster, now } = args
   const leagueId = league.id
   if (args.managed) return 'managed_by_autopilot'
@@ -144,8 +148,36 @@ async function fillOneTeam(args: {
 
   let filled = false
   if (plan.kind === 'set') {
-    const pd = settingsObject(roster.playerData)
     const said = plan.changes.map((c) => `${names[c.in] ?? c.in} at ${c.slot}`)
+    // Tell the owner first, and fill on a later run (./automationHeadsUp.ts).
+    const key = headsUpKey('fill_empty_starters', roster.id, season, week)
+    const warned = await prisma.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { createdAt: true } }).catch(() => null)
+    const decision = headsUpDecision({ warnedAt: warned?.createdAt ?? null, now, gamesUnderway: lock.lockedPlayerIds.length > 0 })
+    if (decision === 'wait') return 'heads_up_pending'
+    if (decision === 'warn') {
+      const created = await prisma.sportsDataCache
+        .create({ data: { cacheKey: key, createdAt: now, expiresAt: new Date(now.getTime() + 14 * 86_400_000), data: { rosterId: roster.id, season, week, planned: plan.changes } } })
+        .then(() => true)
+        .catch(() => false)
+      // A concurrent run already warned (or the store is down): never fill on a warning nobody recorded.
+      if (!created) return 'heads_up_pending'
+      const hours = Math.round(HEADS_UP_MS / 3_600_000)
+      await dispatchNotification({
+        userIds: [roster.platformUserId],
+        category: 'autocoach',
+        type: 'fill_empty_starters_heads_up',
+        title: `Empty starting spot · ${league.name ?? 'your league'}`,
+        body: `Your lineup has an empty starting spot. In about ${hours} hours AllFantasy will start ${said.join('; ')} unless you set your lineup yourself.`,
+        severity: 'low',
+        leagueId,
+        actionHref: `/league/${leagueId}?tab=team`,
+        actionLabel: 'Set lineup',
+        dedupePrefix: key,
+        meta: { leagueId, rosterId: roster.id, week },
+      }).catch(() => {})
+      return 'warned'
+    }
+    const pd = settingsObject(roster.playerData)
     const auditId = `fill-empty-starters:${JSON.stringify([leagueId, roster.id, season, week, plan.changes.map((c) => c.in)])}`
     const saved = await persistRosterLineupWithEngine({
       leagueId,

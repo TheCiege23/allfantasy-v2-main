@@ -7,6 +7,7 @@ import { logAction } from '@/server/services/auditService'
 import { verifyChimmyActionToken } from './actionToken'
 import { executeLineupAction } from './lineupAction'
 import { executeTradeAction } from './tradeAction'
+import { executeAutomationAction } from './automationAction'
 import type { ChimmyActionConfirmResult } from './types'
 
 /**
@@ -123,6 +124,17 @@ export async function confirmChimmyAction(args: { token: unknown; userId: string
         metadata: { source: 'chimmy_action_confirm', actionId: payload.actionId, week: payload.spec.week, season: payload.spec.season },
       }).catch(() => null)
       return { ok: true, status: 'executed', kind: 'lineup', message: r.message }
+    }
+
+    if (payload.spec.kind === 'automation') {
+      const r = await executeAutomationAction(payload, args.userId)
+      if (!r.ok) {
+        await writeOutcome(key, { ...base, status: 'refused', message: r.message, at: new Date().toISOString() })
+        return { ok: false, status: 'refused', kind: 'automation', message: r.message }
+      }
+      await writeOutcome(key, { ...base, status: 'executed', message: r.message, at: new Date().toISOString() })
+      // The services log their own audit row (automation_preset.applied / inactive_auto_handover.set).
+      return { ok: true, status: 'executed', kind: 'automation', message: r.message }
     }
 
     const r = await executeTradeAction(payload, args.userId)

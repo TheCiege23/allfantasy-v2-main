@@ -13,12 +13,18 @@
  *
  * At least one tribe always attends: immunity never covers every active tribe. The pure helpers
  * at the top are what the tests exercise; the loader at the bottom is the one callers use.
+ *
+ * Ties on the tribe total break on tribe id (reproducible) unless the commissioner chose a key
+ * position (`survivorWeeklyPrizes.tribeTieBreakPosition`, e.g. QB — the original league's rule):
+ * then the tribe with the higher-scoring starter at that position wins the tie, and only an exact
+ * tie there falls back to the id. The position scores are loaded only when totals actually tie.
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 import { getWeeklyEffectState } from './SurvivorEffectEngine'
+import { readSurvivorWeeklyPrizes } from './survivorWeeklyPrizes'
 import { normalizeSurvivorFoundationSettings, type SurvivorFoundationSettings } from './normalizeSurvivorSettings'
 
 type Db = Prisma.TransactionClient | PrismaClient
@@ -39,9 +45,31 @@ export function tribeTotals(scores: readonly TribeScoreRow[]): Map<string, numbe
   return totals
 }
 
-/** Highest total first; an exact tie breaks on tribe id so the pick is reproducible. */
-export function rankTribesByTotal(totals: ReadonlyMap<string, number>): string[] {
-  return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tribeId]) => tribeId)
+/**
+ * Per-tribe tie-break values (the best starter score at the commissioner's key position). Higher
+ * wins a tie; a tribe missing from the map ranks below every tribe in it.
+ */
+export type TribeTieBreak = ReadonlyMap<string, number>
+
+const tieValue = (tieBreak: TribeTieBreak | null | undefined, tribeId: string) => tieBreak?.get(tribeId) ?? -Infinity
+
+/** Highest total first; an exact tie breaks on the key-position score (when set), then tribe id. */
+export function rankTribesByTotal(totals: ReadonlyMap<string, number>, tieBreak?: TribeTieBreak | null): string[] {
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1] || tieValue(tieBreak, b[0]) - tieValue(tieBreak, a[0]) || a[0].localeCompare(b[0]))
+    .map(([tribeId]) => tribeId)
+}
+
+/** Whether any two of these tribes have the same counted total. */
+export function hasTribeTotalTie(totals: ReadonlyMap<string, number>, tribeIds?: readonly string[]): boolean {
+  const scope = tribeIds ? [...new Set(tribeIds)].filter((id) => totals.has(id)) : [...totals.keys()]
+  const seen = new Set<number>()
+  for (const id of scope) {
+    const total = totals.get(id)!
+    if (seen.has(total)) return true
+    seen.add(total)
+  }
+  return false
 }
 
 export interface PickImmuneTribesInput {
@@ -57,6 +85,11 @@ export interface PickImmuneTribesInput {
    * top tribe, so the totals only decide the second safe tribe under the two-highest rule.
    */
   scoreImmuneTribeId?: string | null
+  /**
+   * The key-position tie-break. When given, the totals decide outright and the score sync's pick
+   * (which breaks ties on id) is ignored — otherwise it would overrule the commissioner's rule.
+   */
+  tieBreak?: TribeTieBreak | null
 }
 
 /**
@@ -68,7 +101,7 @@ export function pickImmuneTribeIds(input: PickImmuneTribesInput): string[] {
   if (active.size < 2) return []
   const limit = active.size - 1
   const wanted = input.twoHighest && active.size >= 3 ? 2 : 1
-  const ranked = rankTribesByTotal(input.totals).filter((tribeId) => active.has(tribeId))
+  const ranked = rankTribesByTotal(input.totals, input.tieBreak).filter((tribeId) => active.has(tribeId))
   const immune: string[] = []
   const add = (tribeId: string | null | undefined) => {
     if (tribeId && active.has(tribeId) && !immune.includes(tribeId)) immune.push(tribeId)
@@ -76,7 +109,8 @@ export function pickImmuneTribeIds(input: PickImmuneTribesInput): string[] {
   const rankOf = (tribeId: string) => (ranked.includes(tribeId) ? ranked.indexOf(tribeId) : Number.MAX_SAFE_INTEGER)
   for (const tribeId of [...new Set(input.rewardTribeIds ?? [])].sort((a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b))) add(tribeId)
   const scoreBased: string[] = []
-  if (input.scoreImmuneTribeId && active.has(input.scoreImmuneTribeId)) scoreBased.push(input.scoreImmuneTribeId)
+  const syncPickCounts = !(input.tieBreak && input.tieBreak.size > 0 && input.totals.size > 0)
+  if (syncPickCounts && input.scoreImmuneTribeId && active.has(input.scoreImmuneTribeId)) scoreBased.push(input.scoreImmuneTribeId)
   for (const tribeId of ranked) {
     if (scoreBased.length >= wanted) break
     if (!scoreBased.includes(tribeId)) scoreBased.push(tribeId)
@@ -89,6 +123,8 @@ export interface PickAttendingTribeInput {
   totals: ReadonlyMap<string, number>
   tribeIds: readonly string[]
   immuneTribeIds: readonly string[]
+  /** Key-position tie-break: on equal totals the tribe with the LOWER key-position score attends. */
+  tieBreak?: TribeTieBreak | null
 }
 
 /**
@@ -102,7 +138,7 @@ export function pickAttendingTribeId(input: PickAttendingTribeInput): string | n
   if (candidates.length === 0) return null
   const scored = candidates
     .filter((tribeId) => input.totals.has(tribeId))
-    .sort((a, b) => input.totals.get(a)! - input.totals.get(b)! || a.localeCompare(b))
+    .sort((a, b) => input.totals.get(a)! - input.totals.get(b)! || tieValue(input.tieBreak, a) - tieValue(input.tieBreak, b) || a.localeCompare(b))
   if (scored.length) return scored[0]!
   return [...candidates].sort((a, b) => a.localeCompare(b))[0]!
 }
@@ -112,6 +148,8 @@ export interface WeekImmunityResolution {
   attendingTribeId: string | null
   rewardTribeIds: string[]
   totals: Map<string, number>
+  /** The key-position tie-break used this week (null when totals did not tie or no position is set). */
+  tieBreak: Map<string, number> | null
 }
 
 export interface ResolveWeekImmunityOptions {
@@ -122,6 +160,40 @@ export interface ResolveWeekImmunityOptions {
   tribeIds?: readonly string[]
   scoreImmuneTribeId?: string | null
   db?: Db
+  /**
+   * The commissioner's key position for ties ('none' = tribe id). Read from League.settings when
+   * omitted — and only when the totals actually tie.
+   */
+  tieBreakPosition?: string | null
+  /** Test seam: the per-tribe best score at `position`. Defaults to survivorTribeTieBreak.ts. */
+  loadTieBreak?: (leagueId: string, week: number, position: string, tribeIds: readonly string[]) => Promise<Map<string, number>>
+}
+
+/**
+ * The key-position tie-break for this week, or null. Best-effort: a failed load (or an unset
+ * position) is today's tie-break on tribe id, never an error.
+ */
+export async function loadWeekTieBreak(
+  leagueId: string,
+  week: number,
+  totals: ReadonlyMap<string, number>,
+  tribeIds: readonly string[],
+  opts: Pick<ResolveWeekImmunityOptions, 'db' | 'tieBreakPosition' | 'loadTieBreak'> = {},
+): Promise<Map<string, number> | null> {
+  if (!hasTribeTotalTie(totals, tribeIds)) return null
+  try {
+    let position = opts.tieBreakPosition
+    if (position === undefined) {
+      const league = await (opts.db ?? prisma).league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      position = readSurvivorWeeklyPrizes(league?.settings).tribeTieBreakPosition
+    }
+    if (!position || position === 'none') return null
+    const load = opts.loadTieBreak ?? (async (...args: Parameters<NonNullable<ResolveWeekImmunityOptions['loadTieBreak']>>) => (await import('./survivorTribeTieBreak')).loadTribePositionLeaderScores(...args))
+    const map = await load(leagueId, week, position, tribeIds)
+    return map.size ? map : null
+  } catch {
+    return null
+  }
 }
 
 /** Challenge-won tribe immunity for the week. Empty when the audit cannot be read. */
@@ -159,12 +231,14 @@ export async function resolveWeekImmuneTribeIds(
   }
   const totals = tribeTotals(scores)
   const rewardTribeIds = await loadRewardImmuneTribeIds(leagueId, week)
+  const tieBreak = await loadWeekTieBreak(leagueId, week, totals, tribeIds, opts)
   const immuneTribeIds = pickImmuneTribeIds({
     totals,
     tribeIds,
     twoHighest: settings.twoHighestTribesImmune,
     rewardTribeIds,
     scoreImmuneTribeId: opts.scoreImmuneTribeId ?? null,
+    tieBreak,
   })
-  return { immuneTribeIds, attendingTribeId: pickAttendingTribeId({ totals, tribeIds, immuneTribeIds }), rewardTribeIds, totals }
+  return { immuneTribeIds, attendingTribeId: pickAttendingTribeId({ totals, tribeIds, immuneTribeIds, tieBreak }), rewardTribeIds, totals, tieBreak }
 }

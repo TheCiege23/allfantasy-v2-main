@@ -78,6 +78,33 @@ describe('CampusLineupPanel', () => {
     expect(screen.getByText('Lineups are locked right now.')).toBeTruthy()
   })
 
+  it('an NBA C2C team sees the dates whose college basketball games count, and basketball seats', () => {
+    lang.language = 'en'
+    const hoops: CampusLineupView = {
+      sport: 'basketball',
+      seats: ['G', 'C'],
+      starterIds: [],
+      players: [
+        { id: 'g1', name: 'Campus Guard', position: 'PG', team: 'Duke' },
+        { id: 'w1', name: 'Campus Wing', position: 'SF', team: 'UNC' },
+      ],
+      cfbWeeks: [],
+      nflWeek: 6,
+      window: { start: '2026-11-24T00:00:00.000Z', end: '2026-12-01T00:00:00.000Z' },
+    }
+    const { unmount } = render(<CampusLineupPanel view={hoops} editable saving={false} onChange={vi.fn()} />)
+    expect(screen.getByText('Counts college games from Nov 24 to Nov 30.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Start Campus Guard' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Start Campus Wing' }) as HTMLButtonElement).disabled).toBe(true) // no F or FLEX seat
+    unmount()
+    lang.language = 'es'
+    const { unmount: u2 } = render(<CampusLineupPanel view={hoops} editable saving={false} onChange={vi.fn()} />)
+    expect(screen.getByText(/Cuenta los partidos universitarios del 24 nov/)).toBeTruthy()
+    u2()
+    render(<CampusLineupPanel view={{ ...hoops, window: null }} editable saving={false} onChange={vi.fn()} />)
+    expect(screen.getByText(CAMPUS_COPY.noDates.es)).toBeTruthy()
+  })
+
   it('after the college season it says campus starters score 0', () => {
     lang.language = 'en'
     render(<CampusLineupPanel view={{ ...VIEW, cfbWeeks: [] }} editable saving={false} onChange={vi.fn()} />)
@@ -135,6 +162,7 @@ describe('loadCampusLineupView', () => {
 
   it('a native football C2C team gets its seats, college players, campus starters and this week’s college weeks', async () => {
     expect(await loadCampusLineupView(db as never, { league, playerData, redraftRosterId: 'R1' })).toEqual({
+      sport: 'football',
       seats: ['QB', 'FLEX'],
       starterIds: ['qb1'],
       players: [{ id: 'qb1', name: 'Campus QB', position: 'QB', team: 'Vanderbilt' }],
@@ -144,7 +172,7 @@ describe('loadCampusLineupView', () => {
   })
 
   it('null for every other league', async () => {
-    for (const over of [{ leagueVariant: 'devy_dynasty' }, { sport: 'NBA' }, { platform: 'sleeper' }]) {
+    for (const over of [{ leagueVariant: 'devy_dynasty' }, { sport: 'NHL' }, { platform: 'sleeper' }]) {
       expect(await loadCampusLineupView(db as never, { league: { ...league, ...over }, playerData, redraftRosterId: 'R1' })).toBeNull()
     }
     expect(await loadCampusLineupView(db as never, { league, playerData, redraftRosterId: null })).toBeNull()

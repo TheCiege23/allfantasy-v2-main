@@ -27,6 +27,8 @@ import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { isPaidLeagueSettings } from '@/lib/league/paidLeague'
+import { paidLeagueGeoMessage, paidLeagueGeoVerdict } from '@/lib/geo/paidLeagueGeo'
 import {
   CLAIM_REFUSAL_MESSAGE,
   listClaimableSleeperTeams,
@@ -159,6 +161,27 @@ export async function POST(req: NextRequest) {
    * measures volume, not skill, and gating on it is what the owner ruled out. Only an OPEN join
    * — this league publishes its code — can be refused; a private league's code is an invitation.
    */
+  /*
+   * Paid leagues are restricted in some states (lib/geo/restrictedStates). Find a League already
+   * hides them there; this is the gate for a code that arrives some other way. Paid means the
+   * settings say so or league finance does — either is enough.
+   */
+  const [paidSettings, paidFinance] = await Promise.all([
+    prisma.league.findUnique({ where: { id: result.leagueId }, select: { settings: true } }),
+    prisma.leagueFinance.findUnique({ where: { leagueId: result.leagueId }, select: { isPaidLeague: true, entryFeeCents: true } }),
+  ])
+  const isPaidLeague =
+    isPaidLeagueSettings(paidSettings?.settings) || Boolean(paidFinance?.isPaidLeague && paidFinance.entryFeeCents > 0)
+  if (isPaidLeague) {
+    const paidGeo = await paidLeagueGeoVerdict(req, userId)
+    if (paidGeo.blocked) {
+      return NextResponse.json(
+        { error: paidLeagueGeoMessage(paidGeo, 'join'), code: 'PAID_GEO_BLOCKED' },
+        { status: 451 },
+      )
+    }
+  }
+
   const divisionGate = await evaluateJoinDivisionGate({
     userId,
     leagueId: result.leagueId,

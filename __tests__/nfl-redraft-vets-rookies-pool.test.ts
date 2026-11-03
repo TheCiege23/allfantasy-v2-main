@@ -105,7 +105,8 @@ describe('PlayerPanel exposes both Rookies-Only and Vets-Only filters', () => {
   })
 
   it('declares state for both toggles', () => {
-    expect(src).toMatch(/const \[rookiesOnly, setRookiesOnly\] = useState\(false\)/)
+    expect(src).toMatch(/const \[rookiesOnly, setRookiesOnly\] = useState\(defaultRookiesOnly\)/)
+    expect(src).toMatch(/defaultRookiesOnly = false,/)
     expect(src).toMatch(/const \[vetsOnly, setVetsOnly\] = useState\(false\)/)
   })
 

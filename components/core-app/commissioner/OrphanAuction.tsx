@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { OrphanAuctionView } from '@/lib/orphan-auction/orphanAuctionService'
 import { CLOSE_AFTER_HOURS, DEFAULT_CLOSE_AFTER_HOURS, DEFAULT_MIN_BID } from '@/lib/orphan-auction/orphanAuction'
 
@@ -23,7 +24,7 @@ export function OrphanAuction({ leagueId }: { leagueId: string }) {
   const [minBid, setMinBid] = useState<number>(DEFAULT_MIN_BID)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const when = (iso: string) => new Date(iso).toLocaleString(language === 'es' ? 'es-US' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const when = (iso: string) => new Date(iso).toLocaleString(coreLocale(language).usLocale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   const load = useCallback(async () => {
     try {

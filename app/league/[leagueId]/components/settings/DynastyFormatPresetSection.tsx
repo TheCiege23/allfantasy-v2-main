@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { DYNASTY_FORMAT_UI_COPY, dynastyFormatLang, dynastySportPresetCopy } from '@/lib/i18n/dynasty-format-copy'
 import type { DynastySettingsSnapshot } from './useDynastySettingsSnapshot'
@@ -28,12 +28,15 @@ export function DynastyFormatPresetSection({
   const presets = dynasty?.presets?.sportFormats ?? []
   const current = dynasty?.sportFormatPreset?.current ?? null
   const editable = Boolean(dynasty?.sportFormatPreset?.editable) && canEdit
-  const [choice, setChoice] = useState<string>(current ?? presets[0]?.id ?? '')
+  const firstId = presets[0]?.id ?? ''
+  const [selection, setSelection] = useState<{ current: string | null; firstId: string; choice: string } | null>(null)
+  // Derive the initial choice during render so a late initialization effect cannot
+  // overwrite a manager's selection immediately after settings finish loading.
+  const choice = selection?.current === current && selection.firstId === firstId
+    ? selection.choice
+    : current ?? firstId
   const [state, setState] = useState<'idle' | 'applying' | 'applied' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
-
-  const firstId = presets[0]?.id ?? ''
-  useEffect(() => { setChoice(current ?? firstId) }, [current, firstId])
 
   if (presets.length === 0) return null
 
@@ -62,7 +65,7 @@ export function DynastyFormatPresetSection({
           className={controlClassSm}
           disabled={!editable || state === 'applying'}
           value={choice}
-          onChange={(e) => { setChoice(e.target.value); setState('idle') }}
+          onChange={(e) => { setSelection({ current, firstId, choice: e.target.value }); setState('idle') }}
           data-testid="dynasty-format-preset-select"
         >
           {presets.map((p) => (

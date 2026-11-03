@@ -25,6 +25,8 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'pirate-rules',
   'playoffs',
   'members',
+  'team-settings',
+  'previous-leagues',
   'co-commissioners',
   'divisions',
   'ai',

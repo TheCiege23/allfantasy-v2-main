@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
+import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -71,6 +72,10 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           <h4 className="text-[12px] font-bold uppercase tracking-wide text-white/55">Devy HQ</h4>
           <DevyLeagueSettingsHub ctx={ctx} />
         </div>
+      ) : null}
+
+      {canEdit && flags.variant === 'merged_devy_c2c' ? (
+        <MergedDevyC2CCommissionerSettings leagueId={leagueId} />
       ) : null}
 
       {flags.bestBall ? (

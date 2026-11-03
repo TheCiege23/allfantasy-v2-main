@@ -9,7 +9,20 @@ import { prisma } from '@/lib/prisma'
 export const INTEREST_TYPES = ['player_interest', 'position_need', 'package_interest', 'faab_interest', 'pick_interest'] as const
 export type InterestType = (typeof INTEREST_TYPES)[number]
 
-export class TradeBlockValidationError extends Error {}
+/**
+ * A refusal a manager can read. `code` is stable, so a client can say it in the reader's language
+ * (`tradeCenter.serverError.<code>`); `message` stays the English the routes always sent.
+ */
+export class TradeBlockValidationError extends Error {
+  constructor(
+    message: string,
+    readonly code: TradeBlockErrorCode,
+  ) {
+    super(message)
+  }
+}
+
+export type TradeBlockErrorCode = 'not_owned' | 'item_not_found' | 'own_items_only' | 'interest_not_found' | 'own_interests_only'
 
 /** Resolve the caller's league context: current season, their own roster (if any), commissioner flag. */
 export async function resolveCallerContext(
@@ -50,7 +63,7 @@ export interface UpsertBlockInput {
 
 export async function upsertTradeBlockItem(input: UpsertBlockInput) {
   if (!(await rosterOwnsPlayer(input.rosterId, input.playerId))) {
-    throw new TradeBlockValidationError('Cannot list a player you do not own on the trade block')
+    throw new TradeBlockValidationError('Cannot list a player you do not own on the trade block', 'not_owned')
   }
   const data = {
     playerName: input.playerName,
@@ -73,8 +86,8 @@ export async function upsertTradeBlockItem(input: UpsertBlockInput) {
 
 export async function deactivateTradeBlockItem(itemId: string, rosterId: string) {
   const item = await prisma.redraftTradeBlockItem.findUnique({ where: { id: itemId } })
-  if (!item) throw new TradeBlockValidationError('Trade block item not found')
-  if (item.rosterId !== rosterId) throw new TradeBlockValidationError('You can only remove your own trade block items')
+  if (!item) throw new TradeBlockValidationError('Trade block item not found', 'item_not_found')
+  if (item.rosterId !== rosterId) throw new TradeBlockValidationError('You can only remove your own trade block items', 'own_items_only')
   return prisma.redraftTradeBlockItem.update({ where: { id: itemId }, data: { status: 'inactive' } })
 }
 
@@ -126,8 +139,8 @@ export async function upsertInterest(input: UpsertInterestInput) {
 
 export async function deactivateInterest(interestId: string, fromRosterId: string) {
   const row = await prisma.redraftTradeInterest.findUnique({ where: { id: interestId } })
-  if (!row) throw new TradeBlockValidationError('Interest not found')
-  if (row.fromRosterId !== fromRosterId) throw new TradeBlockValidationError('You can only remove your own interests')
+  if (!row) throw new TradeBlockValidationError('Interest not found', 'interest_not_found')
+  if (row.fromRosterId !== fromRosterId) throw new TradeBlockValidationError('You can only remove your own interests', 'own_interests_only')
   return prisma.redraftTradeInterest.update({ where: { id: interestId }, data: { status: 'inactive' } })
 }
 

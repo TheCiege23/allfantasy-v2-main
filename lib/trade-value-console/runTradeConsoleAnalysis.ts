@@ -47,6 +47,7 @@ import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrad
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
+import { createZombieGrader } from '@/lib/decision-os/trade/zombieGrader'
 import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
@@ -418,8 +419,17 @@ export async function runTradeConsoleAnalysis(
           league: { id: input.leagueId.trim(), settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
         })
       : null
+  const zombieGrader =
+    leagueRow && consoleLeagueType && input.leagueId
+      ? createZombieGrader({
+          leagueType: consoleLeagueType.type,
+          dynastyBase: leagueSnapshot?.isDynasty ?? false,
+          league: { id: input.leagueId.trim(), settings: leagueRow.settings,
+            leagueSize: leagueRow.leagueSize ?? null, sport: String(effectiveSport) },
+        })
+      : null
   const sportPointsGrader =
-    collegeView || guillotineGrader
+    collegeView || guillotineGrader || zombieGrader
       ? null
       : createSportPointsGrader({
           sport: effectiveSport,
@@ -441,13 +451,15 @@ export async function runTradeConsoleAnalysis(
   if (sportView) applyCollegeGrade(leagueGrade, sportView)
   const guillotineView = guillotineGrader ? await guillotineGrader.grade(input.sideGive, input.sideGet) : null
   if (guillotineView) applyCollegeGrade(leagueGrade, guillotineView)
+  const zombieView = zombieGrader ? await zombieGrader.grade(input.sideGive, input.sideGet) : null
+  if (zombieView) applyCollegeGrade(leagueGrade, zombieView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
   const grade = consoleLeagueType
-    ? { ...(collegeView ?? sportView ?? guillotineView ?? graded.grade), leagueType: consoleLeagueType }
+    ? { ...(collegeView ?? guillotineView ?? zombieView ?? sportView ?? graded.grade), leagueType: consoleLeagueType }
     : sportView ?? graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
@@ -787,6 +799,9 @@ export async function runTradeConsoleAnalysis(
       // A counter in a college league is graded on the same basis as the deal it counters.
       const collegeCounter = collegeGrader ? await collegeGrader.grade(counterGive, counterGet) : null
       if (collegeCounter) return collegeCounter
+      if (guillotineGrader) return guillotineGrader.grade(counterGive, counterGet)
+      if (zombieGrader) return zombieGrader.grade(counterGive, counterGet)
+      if (sportPointsGrader) return sportPointsGrader.grade(counterGive, counterGet)
       const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,

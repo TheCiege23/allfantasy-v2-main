@@ -7,6 +7,7 @@
 import type { LeagueSettingsValidationResult } from './types'
 import { DYNASTY_SUPPORTED_TEAM_SIZES } from '@/lib/dynasty-core/constants'
 import {
+  getLeagueFormatDefinition,
   isDraftTypeAllowedForFormat,
   isLeagueFormatAllowedForSport,
   resolveLeagueFormat,
@@ -40,6 +41,24 @@ function readNumberFrom(input: Record<string, unknown>, keys: string[]): number 
 }
 
 /**
+ * A draft type in the league format's own vocabulary. The devy and C2C formats list theirs as
+ * specialty ids (`devy_snake` / `devy_linear` / `devy_auction`, `c2c_*` — lib/draft-types/
+ * draftTypeRegistry.ts), but a saved league's draft config carries the ENGINE core (`snake` /
+ * `linear` / `auction` — DraftRoomConfigResolver's normalizeDraftRuntimeType), and the base ids map
+ * into the format's contract (docs/devy-defaults-nfl-ncaaf-audit.md, "Draft Types";
+ * normalizeDevyDraftType / normalizeC2CDraftType). Without this, every Settings › Draft save on a
+ * devy or C2C league failed with "snake draft is not valid for devy leagues".
+ */
+function draftTypeForFormatCheck(leagueType: string, draftType: string): string {
+  const d = draftType.trim().toLowerCase()
+  const format = getLeagueFormatDefinition(leagueType).id
+  if ((format === 'devy' || format === 'c2c') && (d === 'snake' || d === 'linear' || d === 'auction')) {
+    return `${format}_${d}`
+  }
+  return d
+}
+
+/**
  * Validate league/draft settings. Returns errors that block save; warnings are advisory.
  */
 export function validateLeagueSettings(input: LeagueSettingsInput): LeagueSettingsValidationResult {
@@ -55,7 +74,7 @@ export function validateLeagueSettings(input: LeagueSettingsInput): LeagueSettin
     errors.push(`${leagueType} leagues are not available for ${sport}.`)
   }
 
-  if (leagueType && draftType && !isDraftTypeAllowedForFormat(sport, leagueType, draftType)) {
+  if (leagueType && draftType && !isDraftTypeAllowedForFormat(sport, leagueType, draftTypeForFormatCheck(leagueType, String(draftType)))) {
     errors.push(`${draftType} draft is not valid for ${leagueType} leagues.`)
   }
 

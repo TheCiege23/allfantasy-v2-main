@@ -9,6 +9,7 @@ import { getCommandCenter, type CommandCenterPayload } from '@/lib/dashboard-int
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runActivationReminder, type ActivationReminderRun } from '@/lib/onboarding-retention/runActivationReminder'
 import { runConfirmEmailReminder } from '@/lib/onboarding-retention/runConfirmEmailReminder'
+import { runSavedSearchAlerts, type SavedSearchAlertsRun } from '@/lib/public-discovery/runSavedSearchAlerts'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -41,6 +42,42 @@ export const maxDuration = 300
  * The two never write to one person on one morning: one needs a confirmed address, the other an
  * unconfirmed one.
  */
+/*
+ * FOURTH: FIND A LEAGUE SAVED-SEARCH ALERTS (2026-11-01).
+ * lib/public-discovery/runSavedSearchAlerts.ts — re-runs each search a player saved and sends one
+ * IN-APP notification when new leagues match. No email, and it only reaches people who asked by
+ * saving a search, so it needs no rollout flag. Same reason for riding here as the reminders: the
+ * cron registry is at its ceiling and this is daily. Its own `cron-find-league-saved-searches`
+ * heartbeat, written only when a search was due; `?savedSearches=off` skips it.
+ */
+async function savedSearchPhase(mode: string): Promise<SavedSearchAlertsRun | { ran: false; reason: 'off' | 'error'; error?: string }> {
+  if (mode === 'off') return { ran: false, reason: 'off' }
+  const started = Date.now()
+  try {
+    const run = await runSavedSearchAlerts({ baseUrl: getBaseUrl(), budgetMs: 60_000 })
+    // Like the reminders' heartbeats, written only when there was something to check.
+    if (run.due === 0) return run
+    await recordSyncJobRun(
+      { jobName: 'cron-find-league-saved-searches', trigger: 'cron' },
+      {
+        rowsRead: run.due,
+        rowsWritten: run.alerted,
+        rowsSkipped: run.due - run.checked,
+        errors: run.errors,
+        status: run.errors.length > 0 ? 'partial' : 'success',
+        metadata: { checked: run.checked, budgetExhausted: run.budgetExhausted },
+      },
+      Date.now() - started,
+    )
+    return run
+  } catch (err) {
+    // Never allowed to fail the briefing it rides on.
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/morning-briefing] saved-search alerts failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
 type ActivationReport = ActivationReminderRun | { ran: false; reason: 'disabled' | 'off' | 'error'; error?: string }
 
 async function reminderPhase(
@@ -251,6 +288,8 @@ export async function GET(req: NextRequest) {
     const reminderMode = (new URL(req.url).searchParams.get('activationReminder') ?? '').trim().toLowerCase()
     const activationReminder = await reminderPhase(reminderMode, 'cron-activation-reminder', runActivationReminder)
     const confirmEmailReminder = await reminderPhase(reminderMode, 'cron-confirm-email-reminder', runConfirmEmailReminder)
+    const savedSearchMode = (new URL(req.url).searchParams.get('savedSearches') ?? '').trim().toLowerCase()
+    const savedSearches = await savedSearchPhase(savedSearchMode)
 
     // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
     // A reminder's report is added only once it does something: while they are disabled (the
@@ -259,6 +298,8 @@ export async function GET(req: NextRequest) {
     const reminderReport = {
       ...(isDisabled(activationReminder) ? {} : { activationReminder }),
       ...(isDisabled(confirmEmailReminder) ? {} : { confirmEmailReminder }),
+      // Only once there is something to say, so a day with no saved searches leaves the body as it was.
+      ...('due' in savedSearches && savedSearches.due === 0 ? {} : { savedSearches }),
     }
     if (!outcome.enabled) {
       return NextResponse.json({

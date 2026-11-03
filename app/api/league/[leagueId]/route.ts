@@ -4,12 +4,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordLeagueTombstone } from "@/lib/league-delete/leagueTombstones";
+import { resolveLeagueMembership } from "@/lib/league-access";
+import { isImportedPlatform, isNativePlatform } from "@/lib/league/isNativeLeague";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Remove a league from the signed-in user's dashboard (deletes the user's `League` or `SleeperLeague` row).
+ * Remove a league from the signed-in user's dashboard. Imported `League` rows may be
+ * shared through team or manager claims, so they are hidden for this account with a
+ * tombstone rather than deleted. Standalone `SleeperLeague` rows remain account-owned.
  * Does not delete the league on Sleeper or other external platforms.
  *
  * ⚠ ALSO WRITES A TOMBSTONE, and the delete is not complete without it. This is
@@ -18,7 +22,7 @@ export const runtime = "nodejs";
  * The tombstone is that distinction — see lib/league-delete/leagueTombstones.ts.
  */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ leagueId: string }> }
 ) {
   try {
@@ -36,10 +40,34 @@ export async function DELETE(
       return NextResponse.json({ error: "leagueId required" }, { status: 400 });
     }
 
+    if (new URL(req.url).searchParams.get('permanent') === '1') {
+      const target = await prisma.league.findUnique({
+        where: { id }, select: { id: true, userId: true, platform: true, name: true },
+      });
+      if (!target) return NextResponse.json({ error: 'League not found' }, { status: 404 });
+      if (target.userId !== userId) return NextResponse.json({ error: 'Only the league owner can delete the league' }, { status: 403 });
+      if (!isNativePlatform(target.platform)) return NextResponse.json({ error: 'Imported leagues must be removed on their host platform' }, { status: 400 });
+      const body = await req.json().catch(() => null) as { leagueName?: unknown } | null;
+      if (body?.leagueName !== (target.name || id)) return NextResponse.json({ error: 'Enter the exact league name to confirm' }, { status: 400 });
+      const tournamentLink = await prisma.legacyTournamentLeague.findUnique({ where: { leagueId: id }, select: { id: true } });
+      if (tournamentLink) return NextResponse.json({ error: 'Delete tournament feeder leagues through the tournament' }, { status: 409 });
+      await prisma.$transaction(async (tx) => {
+        // Claims have a restrictive foreign key, so remove them within the same transaction.
+        await tx.leagueManagerClaim.deleteMany({ where: { leagueId: id } });
+        const removed = await tx.league.deleteMany({ where: { id, userId, platform: target.platform, name: target.name } });
+        if (removed.count !== 1) throw new Error('League changed during deletion');
+      });
+      return NextResponse.json({ ok: true, deletedLeague: true });
+    }
+
     const league = await prisma.league.findFirst({
       where: { id, userId },
       select: { id: true, platform: true, platformLeagueId: true, name: true },
     });
+
+    if (league && isNativePlatform(league.platform)) {
+      return NextResponse.json({ error: 'Delete native leagues from commissioner settings with name confirmation' }, { status: 409 });
+    }
 
     const sleeperLeague = await prisma.sleeperLeague.findFirst({
       where: { id, userId },
@@ -51,7 +79,63 @@ export async function DELETE(
       select: { id: true },
     });
 
+    if (league && isImportedPlatform(league.platform)) {
+      if (!league.platformLeagueId) {
+        return NextResponse.json({ error: 'Imported league has no provider ID to remove from this account' }, { status: 409 });
+      }
+      const tombstoned = await recordLeagueTombstone({
+        userId,
+        platform: String(league.platform),
+        platformLeagueId: league.platformLeagueId,
+        leagueName: league.name ?? null,
+      });
+      return NextResponse.json({
+        ok: true,
+        tombstoned,
+        removed: {
+          leagueRows: 0,
+          sleeperLeagueRows: 0,
+          tournamentRows: 0,
+          memberLeagues: tombstoned ? 1 : 0,
+        },
+      });
+    }
+
     if (!league && !sleeperLeague && !tournament) {
+      /*
+       * A league someone ELSE imported, reached through a claimed team or roster. There is no
+       * row of ours to delete, and the league is shared, so nothing is deleted or unclaimed:
+       * the viewer's tombstone alone takes it off their list (getDashboardLeagueListForUser
+       * drops a non-owned imported league it matches). Production 2026-10-30: a tester's two
+       * Sleeper leagues belonged to a DELETED account, so this route answered "0 removed"
+       * forever and the leagues could only be hidden. Native leagues are not offered here:
+       * leaving an AllFantasy league is a commissioner matter, not a list preference.
+       */
+      const memberLeague = await prisma.league.findUnique({
+        where: { id },
+        select: { platform: true, platformLeagueId: true, name: true },
+      });
+      if (memberLeague && isImportedPlatform(memberLeague.platform) && memberLeague.platformLeagueId) {
+        const membership = await resolveLeagueMembership(id, userId);
+        if (membership.ok) {
+          const tombstoned = await recordLeagueTombstone({
+            userId,
+            platform: String(memberLeague.platform),
+            platformLeagueId: memberLeague.platformLeagueId,
+            leagueName: memberLeague.name ?? null,
+          });
+          return NextResponse.json({
+            ok: true,
+            tombstoned,
+            removed: {
+              leagueRows: 0,
+              sleeperLeagueRows: 0,
+              tournamentRows: 0,
+              memberLeagues: tombstoned ? 1 : 0,
+            },
+          });
+        }
+      }
       return NextResponse.json({
         ok: true,
         removed: {

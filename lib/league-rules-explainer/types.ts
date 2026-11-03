@@ -54,6 +54,15 @@ export type RuleSnapshot = {
    */
   importedFrom?: string | null
   teamCount?: number | null
+  /** Values saved by the tournament feeder settings editor, shown separately from league rules. */
+  feederScoring?: string | null
+  feederRosterSize?: number | null
+  feederBenchSize?: number | null
+  feederWaiverType?: string | null
+  feederFaabBudget?: number | null
+  feederFaabReset?: boolean | null
+  feederTradeDeadline?: number | null
+  feederTradeLockHours?: number | null
   /** `settings.scoring_mode`: points, h2h_category or roto. */
   scoringMode?: string | null
   /** `League.scoring` (e.g. ppr, half_ppr, standard). */
@@ -80,6 +89,7 @@ export type RuleSnapshot = {
   /** ISO timestamp of a time-of-day trade deadline (`settings.trade_deadline_at`). */
   tradeDeadlineAt?: string | null
   tradeReview?: string | null
+  vetoThreshold?: { mode: 'count' | 'percent'; value: number } | null
   tradeReviewHours?: number | null
   waiverType?: string | null
   waiverBudget?: number | null
@@ -90,6 +100,12 @@ export type RuleSnapshot = {
   waiverProcessHour?: number | null
   /** NBA / NHL only. */
   lineupMode?: 'daily' | 'weekly' | null
+  /**
+   * When a weekly lineup locks, as the lock enforces it (`readLineupLockSettings`): each player at his
+   * team's first game of the week, the whole lineup at the week's first game, or by the commissioner.
+   * Null for daily lineups (their own line says it) and where no lock is enforced (soccer).
+   */
+  lineupLock?: 'per_player' | 'first_game' | 'manual' | null
   teamsPerChop?: number | null
   chopStartWeek?: number | null
   chopEndWeek?: number | null
@@ -105,6 +121,8 @@ export type RuleSnapshot = {
   faabOnChop?: string | null
   /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
   blindAuction?: boolean | null
+  /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  bestBallLineups?: boolean | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null
@@ -129,6 +147,8 @@ export type RuleSnapshot = {
   /** Dynasty: how the rookie draft order is set (`DynastyLeagueConfig.rookiePickOrderMethod`; read path). */
   rookieDraftOrder?: string | null
   rookieDraftRounds?: number | null
+  /** Dynasty on AllFantasy: seasons ahead a pick can be traded (`DynastyLeagueConfig.futurePicksYearsOut`, 1-5). */
+  pickTradeYears?: number | null
   /** `linear` | `snake`. */
   rookieDraftType?: string | null
   /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */
@@ -172,6 +192,19 @@ export type RuleSnapshot = {
   draftAutostart?: boolean | null
   /** Who drafts for a team without a manager: `ai` (Chimmy), `cpu`; null = nobody (off). */
   draftOrphanPicks?: string | null
+  /*
+   * Devy / C2C leagues: the rounds of the main draft set aside for college players, as the pick check
+   * enforces them (lib/live-draft-engine/PickValidation.ts, from `DraftSession.devyConfig` /
+   * `c2cConfig`). In a listed round only a college player can be picked; in every other round a
+   * college player is refused. `[]` = the rule is on with no listed round, so no college player can be
+   * picked at all. Null = no such rule (off, an auction, no session, or not a devy / C2C league). At
+   * most one of the two is set: the engine checks the C2C rounds instead of the devy rounds when both
+   * are on.
+   */
+  /** A devy league's devy rounds (`devyConfig.devyRounds`). */
+  draftDevyRounds?: number[] | null
+  /** A C2C league's college rounds (`c2cConfig.collegeRounds`). */
+  draftCollegeRounds?: number[] | null
 }
 
 export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
@@ -224,7 +257,7 @@ export type RuleText = { k: string; vars?: Record<string, RuleVar> }
 
 export type RuleLine = { id: string; text: RuleText }
 
-export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft'
+export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft' | 'feeder'
 
 export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
 

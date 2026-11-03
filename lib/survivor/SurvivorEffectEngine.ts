@@ -8,6 +8,25 @@ import { getTribeForRoster } from './SurvivorTribeService'
 import { runShuffle } from './SurvivorTribeShuffleEngine'
 import { stealPlayerForSurvivor, swapStarterForSurvivor } from './SurvivorRosterMutationEngine'
 import type { SurvivorChallengeType } from './types'
+import { applySurvivorReward } from './survivorRewardEngine'
+import { SURVIVOR_REWARD_TYPES, type SurvivorRewardSpec } from './survivorRewardModel'
+
+/**
+ * THE Survivor reward API (survivorRewardEngine.ts): every feature that pays a prize — challenge
+ * builder, Auction Week, Survivor Pool, Exile side games, weekly tribe prizes, the commissioner —
+ * calls `applySurvivorReward`. See survivorRewardModel.ts for the reward types and their rules.
+ */
+export {
+  applySurvivorReward,
+  applyDueDeferredSurvivorRewards,
+  chooseSurvivorRewardTarget,
+  getSurvivorTradeTokens,
+  listSurvivorRewards,
+  redeemSurvivorTradeToken,
+  reverseSurvivorReward,
+  type ApplySurvivorRewardResult,
+} from './survivorRewardEngine'
+export type { ApplySurvivorRewardInput, SurvivorRewardRecord, SurvivorRewardSpec, SurvivorRewardStatus, SurvivorRewardType } from './survivorRewardModel'
 
 const EFFECT_EVENT_TYPES = ['challenge_reward_awarded', 'idol_effect_applied'] as const
 
@@ -63,6 +82,8 @@ interface SurvivorResolvedRewardInput {
   tribeId?: string | null
   amount?: number | null
   powerType?: string | null
+  /** The reward's own JSON (for the newer reward types, which carry more than an amount). */
+  raw?: Prisma.JsonObject | null
 }
 
 function asJsonObject(value: unknown): Prisma.JsonObject | null {
@@ -165,6 +186,7 @@ function normalizeChallengeRewards(
           readNumber(config, 'scoreBoost') ??
           rowAmount,
         powerType: readString(rewardJson, 'powerType') ?? readString(config, 'powerType'),
+        raw: rewardJson,
       }
     })
   return normalizedRewards.filter((reward): reward is SurvivorResolvedRewardInput => Boolean(reward?.rewardType))
@@ -174,6 +196,57 @@ async function resolveRewardRosterTargets(reward: SurvivorResolvedRewardInput): 
   if (reward.rosterId) return [reward.rosterId]
   if (reward.tribeId) return getTribeMemberRosterIds(reward.tribeId)
   return []
+}
+
+/** Reward types a challenge result may name that only the reward engine (applySurvivorReward) pays. */
+const CHALLENGE_ENGINE_REWARD_TYPES = new Set<string>(SURVIVOR_REWARD_TYPES.filter((type) => type !== 'advantage'))
+/** Older challenge reward names that still apply here, mapped onto the reward engine when deferred. */
+const LEGACY_DEFERRABLE: Record<string, 'faab_grant' | 'score_bonus' | 'advantage' | undefined> = {
+  faab: 'faab_grant',
+  score_boost: 'score_bonus',
+  advantage: 'advantage',
+}
+
+/** `deferToWeek: N`, or `deferred: true` (= next week), on a challenge reward. */
+function challengeDeferWeek(raw: Prisma.JsonObject | null, week: number): number | null {
+  const explicit = readNumber(raw, 'deferToWeek')
+  if (explicit != null && Number.isInteger(explicit) && explicit > week) return explicit
+  return raw?.deferred === true ? week + 1 : null
+}
+
+function challengeRewardSpec(reward: SurvivorResolvedRewardInput, rosterId: string | null): SurvivorRewardSpec | null {
+  const raw = reward.raw ?? null
+  const amount = reward.amount ?? 0
+  const type = LEGACY_DEFERRABLE[reward.rewardType] ?? reward.rewardType
+  const targetRosterId = readString(raw, 'targetRosterId')
+  switch (type) {
+    case 'score_bonus':
+    case 'score_penalty':
+      return rosterId ? { type, rosterId, points: amount } : null
+    case 'faab_grant':
+    case 'faab_penalty':
+      return rosterId ? { type, rosterId, amount } : null
+    case 'faab_transfer': {
+      const fromTribeId = readString(raw, 'fromTribeId')
+      const toTribeId = reward.tribeId ?? readString(raw, 'toTribeId')
+      const basis = readString(raw, 'basis') === 'total' ? 'total' : 'per_member'
+      return fromTribeId && toTribeId ? { type, fromTribeId, toTribeId, amount, basis } : null
+    }
+    case 'tribemate_points':
+      return rosterId ? { type, chooserRosterId: rosterId, points: amount, targetRosterId } : null
+    case 'free_trade_token':
+      return rosterId ? { type, rosterId, samePositionOnly: raw?.samePositionOnly !== false } : null
+    case 'steal_blocker':
+      return rosterId ? { type, rosterId } : null
+    case 'steal':
+      return rosterId ? { type, thiefRosterId: rosterId, what: readString(raw, 'what') === 'points' ? 'points' : 'faab', amount, targetRosterId } : null
+    case 'advantage': {
+      const powerType = reward.powerType ?? 'extra_vote'
+      return rosterId && (powerType === 'extra_vote' || powerType === 'vote_shield' || powerType === 'vote_steal') ? { type, rosterId, powerType } : null
+    }
+    default:
+      return null
+  }
 }
 
 type FaabCredit = { credited: boolean; detail: Record<string, unknown> }
@@ -256,6 +329,32 @@ export async function applyChallengeRewards(
   const applied: SurvivorAppliedEffect[] = []
   for (let index = 0; index < rewards.length; index++) {
     const reward = rewards[index]
+    // The newer reward types (and any reward marked deferred) go through the one reward API.
+    const deferToWeek = challengeDeferWeek(reward.raw ?? null, challenge.week)
+    if (CHALLENGE_ENGINE_REWARD_TYPES.has(reward.rewardType) || (deferToWeek != null && LEGACY_DEFERRABLE[reward.rewardType])) {
+      const targets: Array<string | null> = reward.rewardType === 'faab_transfer' ? [null] : await resolveRewardRosterTargets(reward)
+      for (const rosterId of targets) {
+        const spec = challengeRewardSpec(reward, rosterId)
+        if (!spec) continue
+        const result = await applySurvivorReward({
+          leagueId: challenge.leagueId,
+          idempotencyKey: `challenge:${challenge.id}:${index}:${rosterId ?? reward.tribeId ?? 'tribe'}`,
+          source: { kind: 'challenge', id: challenge.id },
+          week: challenge.week,
+          reward: spec,
+          deferToWeek,
+        })
+        applied.push({
+          rewardType: spec.type,
+          week: challenge.week,
+          rosterId,
+          tribeId: reward.tribeId ?? null,
+          amount: reward.amount ?? null,
+          appliedMode: result.ok && result.status === 'applied' ? 'full' : 'record_only',
+        })
+      }
+      continue
+    }
     if (reward.rewardType === 'tribe_immunity') {
       if (!reward.tribeId) continue
       await appendEffectAudit(challenge.leagueId, 'challenge_reward_awarded', {

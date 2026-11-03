@@ -41,6 +41,8 @@ export const weeklyBlueprintMessages = defineMessages({
     sportPlanBlurb:
       'Sport alone does not establish the format. Confirm points, categories, roto and lock rules in each league. Game-volume, category and limit forecasts require verified data.',
     loadingLocalTime: 'Loading local time…',
+    /** The locale the game and calculation times are formatted in. */
+    timeLocale: 'en',
     playoffPath: 'Your playoff path',
     estimatedProbability: 'estimated probability',
     statusClinched: 'Clinched under the modeled rules.',
@@ -66,6 +68,10 @@ export const weeklyBlueprintMessages = defineMessages({
     modelUnavailable: 'Playoff modeling is unavailable for this format or data. Review your league standings and rules.',
     historyUnavailable: 'Probability history is unavailable; the current calculation remains visible.',
     viewFullScenarios: 'View full scenarios',
+    howCalculated: 'How this is calculated',
+    howCalculatedBody: 'Remaining-schedule simulation using scoring history. This is not a guarantee.',
+    simulations: 'simulations',
+    lastCalculated: 'Last calculated',
   },
   es: {
     askPrefill: 'Explica los riesgos y las opciones de esta semana. Verifica las reglas y los plazos; no supongas datos que falten.',
@@ -102,6 +108,7 @@ export const weeklyBlueprintMessages = defineMessages({
     sportPlanBlurb:
       'El deporte no confirma el formato. Comprueba puntos, categorías, roto y reglas de bloqueo en cada liga. Los pronósticos de volumen, categorías y límites solo se muestran cuando hay datos verificados.',
     loadingLocalTime: 'Cargando hora local…',
+    timeLocale: 'es',
     playoffPath: 'Tu camino a los playoffs',
     estimatedProbability: 'probabilidad estimada',
     statusClinched: 'Clasificación asegurada según las reglas modeladas.',
@@ -127,5 +134,9 @@ export const weeklyBlueprintMessages = defineMessages({
     modelUnavailable: 'El modelo de playoffs no está disponible para este formato o estos datos. Revisa la clasificación y las reglas de tu liga.',
     historyUnavailable: 'El historial de probabilidades no está disponible; el cálculo actual sigue visible.',
     viewFullScenarios: 'Ver los escenarios completos',
+    howCalculated: 'Cómo se calcula',
+    howCalculatedBody: 'Simulación del calendario restante con el historial de puntuación. No es una garantía.',
+    simulations: 'simulaciones',
+    lastCalculated: 'Último cálculo',
   },
 })

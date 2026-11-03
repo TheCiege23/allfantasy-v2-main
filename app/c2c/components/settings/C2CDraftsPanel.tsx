@@ -1,32 +1,49 @@
 'use client'
 
-import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { LegacySettingsEditor, type LegacySectionDef } from '@/components/legacy-specialty-settings/LegacySettingsEditor'
+import { C2C_DRAFT_FORMATS } from '@/lib/legacy-specialty-settings/legacySettingsSpec'
+import { asC2C, asRecord, type LegacyC2CPanelProps } from './legacyC2CPanelProps'
 
-export function C2CDraftsPanel({ config }: { config: C2CConfigClient | null }) {
-  if (!config) return <p className="px-6 py-8 text-[13px] text-white/45">Loading…</p>
+const formatOptions = C2C_DRAFT_FORMATS.map((v) => ({ value: v, labelKey: `legacyC2c.opt.draft.${v}` }))
 
+const SECTIONS: LegacySectionDef[] = [
+  {
+    titleKey: 'legacyC2c.drafts.title',
+    fields: [
+      {
+        key: 'startupDraftFormat',
+        labelKey: 'legacyC2c.field.startupDraftFormat',
+        kind: 'enum',
+        options: formatOptions,
+        fallback: 'split_campus_canton',
+        helpKey: 'legacyC2c.help.startupDraftFormat',
+      },
+      {
+        key: 'futureDraftFormat',
+        labelKey: 'legacyC2c.field.futureDraftFormat',
+        kind: 'enum',
+        options: formatOptions,
+        fallback: 'combined',
+        helpKey: 'legacyC2c.help.futureDraftFormat',
+      },
+    ],
+  },
+]
+
+export function C2CDraftsPanel({ config, leagueId, canEdit = false, onSaved }: LegacyC2CPanelProps) {
+  const { t } = useOptionalLanguage()
   return (
-    <div className="space-y-4 px-6 py-6 text-[13px] text-white/80" data-testid="c2c-drafts-panel">
-      <div>
-        <p className="text-[11px] font-bold uppercase text-white/45">Startup format</p>
-        <p className="mt-1 rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[12px] text-white/65">
-          {config.startupDraftFormat ?? 'split_campus_canton'}
-        </p>
-      </div>
-      <div>
-        <p className="text-[11px] font-bold uppercase text-white/45">Future format</p>
-        <p className="mt-1 rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[12px] text-white/65">
-          {config.futureDraftFormat ?? 'combined'}
-        </p>
-      </div>
-      <label className="block">
-        <span className="text-[11px] text-white/45">Clock (sec / side)</span>
-        <input type="number" defaultValue={90} className="mt-1 w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2" disabled />
-      </label>
-      <label className="flex items-center gap-2 text-[12px]">
-        <input type="checkbox" defaultChecked disabled />
-        Pick trading (campus + canton)
-      </label>
-    </div>
+    <LegacySettingsEditor
+      testId="c2c-drafts-panel"
+      leagueId={leagueId}
+      canEdit={canEdit}
+      config={asRecord(config)}
+      saveUrl="/api/c2c/settings"
+      responseKey="c2c"
+      sections={SECTIONS}
+      onSaved={onSaved ? (r) => onSaved(asC2C(r)) : undefined}
+      footer={<p className="text-[12px] text-white/60">{t('legacySettings.clockNote')}</p>}
+    />
   )
 }

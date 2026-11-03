@@ -31,7 +31,15 @@ vi.mock('@/lib/side-contests/sideContestsService', () => ({ readSideContestsView
 vi.mock('@/lib/league/execute-league-settings-patch', () => ({ executeLeagueSettingsPatch: m.patch }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'u1' } }) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: lang.language }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', async () => {
+  // The real catalog, so the card's keys resolve exactly as in the app.
+  const { translations: dict } = await import('@/lib/i18n/translations')
+  const { interpolateTemplate } = await import('@/lib/i18n/interpolate')
+  const t = (k: string) => dict[lang.language]?.[k] ?? dict.en[k] ?? k
+  return {
+    useOptionalLanguage: () => ({ language: lang.language, t, tInterpolate: (k: string, v: Record<string, string | number> = {}) => interpolateTemplate(t(k), v) }),
+  }
+})
 
 import {
   EMPTY_PAYOUT_PLAN,

@@ -86,6 +86,7 @@ export async function GET(
     select: {
       userId: true, season: true, sport: true, isDynasty: true,
       leagueVariant: true, status: true, settings: true, scoring: true,
+      zombieLeague: { select: { universeId: true } },
       name: true, leagueSize: true,
       lifecycleState: true, lifecycleMetadata: true,
       teams: {
@@ -204,6 +205,9 @@ export async function GET(
     }),
     lifecycleState: league.lifecycleState,
     tournamentFeeder,
+    zombieRenewal: league.zombieLeague || league.leagueVariant === 'zombie' ? {
+      renewFromHubPath: league.zombieLeague?.universeId ? '/zombie/universe/' + league.zombieLeague.universeId : '/league/' + leagueId + '/zombie-commissioner',
+    } : null,
     draftTeams,
     draftOrderModes: RENEW_DRAFT_ORDER_MODES,
     defaultDraftOrder: resolveRenewDraftOrderMode(savedDraftOrderMethod) ?? 'standings',
@@ -241,6 +245,13 @@ export async function POST(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
+  if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
+    error: 'zombie_season_renewal_required',
+    message: 'Use Zombie season renewal to preserve role, item, prize and movement history.',
+    renewFromHubPath: zombie?.universeId ? '/zombie/universe/' + zombie.universeId : '/league/' + leagueId + '/zombie-commissioner',
+  }, { status: 409 })
+
   /*
    * 🛑 AN IMPORTED LEAGUE IS RENEWED ON ITS PLATFORM. Writing `season + 1` here left the row pointing at
    * last season's provider league, and every sync then refused it for a season mismatch. A Sleeper

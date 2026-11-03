@@ -30,12 +30,33 @@ export function waiverScheduleIsImported(platform: string | null | undefined): b
   return String(platform ?? '').trim().toLowerCase() !== 'sleeper'
 }
 
+/**
+ * Platforms whose import carries NO waiver settings at all.
+ *
+ * 🛑 FANTRAX: `FantraxLeagueMapper` writes `waiver_type: undefined` and `faab_budget: null` — the API
+ * calls the import makes return no waiver rules — so the league's `LeagueWaiverSettings` row is filled
+ * ENTIRELY by `bootstrapLeagueWaiverSettings`' sport defaults. Every field in it (type, budget, day,
+ * time, tiebreak) is a value AllFantasy made up, and showing it reads as the league's real rules.
+ */
+const NO_IMPORTED_WAIVER_RULES = new Set(['fantrax'])
+
+/** The waiver rules the screens may show for this league: the stored row, or null when it can only be defaults. */
+export function importedWaiverSettings<T>(row: T | null | undefined, platform: string | null | undefined): T | null {
+  if (NO_IMPORTED_WAIVER_RULES.has(String(platform ?? '').trim().toLowerCase())) return null
+  return row ?? null
+}
+
+/** The reader-facing reason a league's waiver rules are unknown, when its platform sends none. */
+export const FANTRAX_WAIVER_RULES_UNKNOWN =
+  'Fantrax does not send its waiver settings to AllFantasy, so this league’s waiver rules are unknown — check them on Fantrax.'
+
 /** "Wednesday 09:00 UTC", when the league publishes a processing day and time we actually imported. */
 export function runsAtLabel(
   w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,
   platform: string | null | undefined,
 ): string | null {
   if (!waiverScheduleIsImported(platform)) return null
+  if (!importedWaiverSettings(w, platform)) return null
   return w && w.processingDayOfWeek != null && w.processingDayOfWeek >= 0 && w.processingDayOfWeek <= 6 && w.processingTimeUtc?.trim()
     ? `${DAY_LABEL[w.processingDayOfWeek]} ${w.processingTimeUtc.trim()} UTC`
     : null

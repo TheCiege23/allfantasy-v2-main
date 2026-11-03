@@ -42,6 +42,9 @@ function assetLabel(a: LedgerOffer['assets'][number]): LeagueTradeAsset {
       sublabel: a.pickOriginalRosterId ? `originally roster ${a.pickOriginalRosterId}` : null,
       headshotUrl: null,
       accent: 'blue',
+      ...(Number.isInteger(a.pickRound) && (a.pickRound ?? 0) > 0
+        ? { pick: { season: Number.isInteger(a.pickSeason) ? a.pickSeason : null, round: a.pickRound!, originalRosterId: a.pickOriginalRosterId ?? null, fromRosterId: a.fromRosterId ?? null } }
+        : {}),
     }
   }
   /*

@@ -18,7 +18,8 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async (args: { select?: unknown }) => (args.select ? { platform: state.platform, settings: state.settings } : { ...state.league, settings: state.settings, platform: state.platform })) },
-      roster: { findFirst: vi.fn() },
+      roster: { findFirst: vi.fn(), findMany: vi.fn(async () => [] as Array<{ id: string; platformUserId: string | null }>) },
+      survivorNotification: { findMany: vi.fn(async () => [] as Array<{ title: string; body: string; createdAt: Date }>) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -27,8 +28,14 @@ const m = vi.hoisted(() => {
     players: vi.fn(),
     persist: vi.fn(),
     template: vi.fn(async () => ({ slots: [] })),
+    notify: vi.fn(async () => ({})),
+    welcome: vi.fn(),
   }
 })
+const forcedBench = vi.hoisted(() => ({ list: vi.fn(async () => [] as unknown[]) }))
+vi.mock('@/lib/survivor/survivorRewardEngine', () => ({ listSurvivorRewards: forcedBench.list }))
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+vi.mock('@/lib/inactive-manager/welcomeBackService', () => ({ buildWelcomeBack: m.welcome }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: m.elevated }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
@@ -115,7 +122,23 @@ describe('the owner coming back', () => {
     m.state.settings = { af_managed_lineups: { r1: { since: 'x', byUserId: 'c' }, r2: { since: 'x', byUserId: 'c' } } }
     expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
     expect(Object.keys(managedMap())).toEqual(['r2'])
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup' } }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup', since: 'x', autopilot: false } }))
+  })
+
+  it('sends one welcome-back notice with what was done while they were away', async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c', autopilot: { style: 'balanced', since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } } }
+    m.welcome.mockResolvedValue({ lineupChanges: 3, claims: 1, en: { headline: 'Welcome back. In the 28 days you were away, Chimmy autopilot set your lineup 3 times and made 1 waiver claim.' } })
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.welcome).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', rosterId: 'r1', since: new Date('2026-10-01T00:00:00.000Z'), autopilot: true }))
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['owner'], type: 'inactive_manager_welcome_back', body: expect.stringContaining('set your lineup 3 times') }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, metadata: expect.objectContaining({ since: '2026-10-01T00:00:00.000Z', autopilot: true }) }))
+  })
+
+  it("never fails the owner's return when the notice cannot be built", async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } }
+    m.welcome.mockRejectedValue(new Error('db down'))
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.notify).not.toHaveBeenCalled()
   })
 
   it('does nothing for a team that is not managed', async () => {
@@ -133,8 +156,29 @@ describe('the view', () => {
       { rosterId: 'r2', teamName: 'B', managerName: 'b', status: 'inactive', lastActionAt: null },
       { rosterId: 'r3', teamName: 'C', managerName: 'c', status: 'active', lastActionAt: null },
     ] })
+    m.prisma.roster.findMany.mockResolvedValueOnce([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }, { id: 'r3', platformUserId: 'orphan-r3' }])
     const view = await readInactiveManagerView('L')
     expect(view.teams.map((t) => [t.rosterId, t.suggested, Boolean(t.managed)])).toEqual([['r1', true, false], ['r2', false, true], ['r3', false, false]])
+    // Chimmy as a manager: empty seats are marked, and the commissioner sees the limit.
+    expect(view.teams.map((t) => t.emptySeat)).toEqual([false, false, true])
+    expect(view.chimmyLimit).toBe(4)
+    expect(view.chimmyFreeTeams).toBe(1)
+    expect(view.chimmyReports).toEqual([])
+  })
+
+  it('shows the commissioner the Chimmy reports already sent, newest first', async () => {
+    m.health.mockResolvedValue({ rows: [] })
+    m.prisma.survivorNotification.findMany.mockResolvedValueOnce([
+      { title: "Chimmy's week 6", body: 'Here is what Chimmy did.\nTeam 9 (Chimmy): still in the game.', createdAt: new Date('2026-10-20T12:00:00Z') },
+    ])
+    const view = await readInactiveManagerView('L')
+    expect(view.chimmyReports).toEqual([{ title: "Chimmy's week 6", body: 'Here is what Chimmy did.\nTeam 9 (Chimmy): still in the game.', sentAt: '2026-10-20T12:00:00.000Z' }])
+    expect(m.prisma.survivorNotification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'L', type: 'commissioner_chimmy_weekly_report' }, orderBy: { createdAt: 'desc' }, take: 8,
+    }))
+    // A read failure never breaks the Chimmy section.
+    m.prisma.survivorNotification.findMany.mockRejectedValueOnce(new Error('down'))
+    expect((await readInactiveManagerView('L')).chimmyReports).toEqual([])
   })
 })
 
@@ -211,5 +255,25 @@ describe('the hourly run', () => {
   it('records a failure for one team and carries on', async () => {
     m.players.mockRejectedValueOnce(new Error('db down'))
     expect((await runInactiveManagerLineups()).failures).toEqual([{ leagueId: 'L', rosterId: 'r1', error: 'db down' }])
+  })
+})
+
+describe('Survivor forced bench (Chimmy respects it)', () => {
+  beforeEach(() => {
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 'x', byUserId: 'c' } } }
+    // rb-good would start over rb-out on projection; the forced bench on rb-good keeps him out.
+    forcedBench.list.mockResolvedValue([{ spec: { type: 'forced_bench', chooserRosterId: 'r9', targetRosterId: 'r1', playerId: 'rb-good' }, status: 'applied', applyWeek: 7 }])
+  })
+
+  it('a Survivor league: the benched player is never put in the lineup', async () => {
+    m.state.league = { ...m.state.league, survivorMode: true }
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 0, unchanged: 1 })
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('a league that is not Survivor never reads the ledger and plays as before', async () => {
+    m.state.league = { ...m.state.league, survivorMode: false }
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 1 })
+    expect(forcedBench.list).not.toHaveBeenCalled()
   })
 })

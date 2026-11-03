@@ -52,12 +52,13 @@ describe('scheduled redraft draft start', () => {
     m.notifyStart.mockResolvedValue(undefined)
   })
 
-  it('starts a due scheduled redraft draft once, through the manual start path, and notifies the league', async () => {
+  it('starts a due scheduled redraft draft once, through the manual start path, without a duplicate notice', async () => {
     expect(await startScheduledRedraftDrafts(NOW)).toMatchObject({ scanned: 1, started: 1, errors: [] })
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
     expect(m.start).toHaveBeenCalledWith('league-1')
-    expect(m.notifyStart).toHaveBeenCalledWith('league-1')
+    // startDraftSession owns the lifecycle alert for manual and scheduled starts.
+    expect(m.notifyStart).not.toHaveBeenCalled()
   })
 
   it('scans redraft leagues in NFL, NBA, NHL and MLB whose draft time has passed, whatever the Autostart toggle says', async () => {

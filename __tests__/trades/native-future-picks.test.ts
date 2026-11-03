@@ -52,6 +52,7 @@ function fakeDb(opts: {
   const inSeason = (w: { pickSeason?: number | { in: number[] } }, r: Row) =>
     w.pickSeason == null || (typeof w.pickSeason === 'number' ? r.pickSeason === w.pickSeason : w.pickSeason.in.includes(r.pickSeason))
   const db = {
+    $executeRaw: vi.fn(async () => 1),
     salaryCapLeagueConfig: { findUnique: vi.fn(async () => null) },
     league: {
       findUnique: vi.fn(async () => ({
@@ -222,8 +223,8 @@ describe('settling a trade', () => {
       assets: [{ itemType: 'rookie_pick', itemReference: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b', metadata: { pickTerms: terms } }],
       tradeId: 'trade-1',
     })
-    expect(executeRaw).toHaveBeenCalledTimes(1)
-    const values = (executeRaw.mock.calls[0] as unknown[]).slice(1)
+    expect(executeRaw).toHaveBeenCalledTimes(2)
+    const values = (executeRaw.mock.calls[1] as unknown[]).slice(1)
     expect(values).toContain('fdp:2027:1:R-a')
     expect(JSON.parse(values.find((v) => typeof v === 'string' && v.startsWith('{')) as string)).toMatchObject({ terms, tradeId: 'trade-1', result: null })
   })

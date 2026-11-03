@@ -1,4 +1,5 @@
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
+import { IMPORTED_CHOP_REASON } from '@/lib/guillotine/importedLeagueGuard'
 import { planEliminateRoster } from '@/lib/specialty-automation/actionPlans'
 import type { HandlerContext, HandlerResult } from '@/lib/specialty-automation/types'
 
@@ -33,6 +34,16 @@ export async function runGuillotineHandler(ctx: HandlerContext): Promise<Handler
     skipChat: true,
     skipRosterRelease: false,
   })
+
+  if (chop?.reason === IMPORTED_CHOP_REASON) {
+    return {
+      summary: 'Guilly automation skipped: an imported league is chopped by its provider.',
+      actions: [],
+      events: [],
+      skipped: true,
+      skipReason: 'imported_league',
+    }
+  }
 
   if (!chop) {
     return {

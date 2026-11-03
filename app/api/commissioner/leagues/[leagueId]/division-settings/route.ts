@@ -141,6 +141,9 @@ export async function PUT(
   if (body.playoffRule !== undefined && !(DIVISION_PLAYOFF_RULES as readonly unknown[]).includes(body.playoffRule)) {
     return NextResponse.json({ error: 'Unknown division playoff rule.', code: 'BAD_PLAYOFF_RULE' }, { status: 400 })
   }
+  if (body.rivalsTwice !== undefined && typeof body.rivalsTwice !== 'boolean') {
+    return NextResponse.json({ error: '"Play division rivals twice" must be on or off.', code: 'BAD_RIVALS_TWICE' }, { status: 400 })
+  }
   const count: number = typeof body.count === 'number' ? body.count : existing.count
   const names: string[] = Array.isArray(body.names)
     ? body.names.map((n: unknown) => String(n ?? '').trim().slice(0, DIVISION_NAME_MAX))
@@ -157,13 +160,15 @@ export async function PUT(
   }
   const aiNamingEnabled = typeof body.aiNamingEnabled === 'boolean' ? body.aiNamingEnabled : existing.aiNamingEnabled
   const playoffRule: DivisionPlayoffRule = body.playoffRule !== undefined ? body.playoffRule : existing.playoffRule
+  // Survivor tribes are not schedule divisions, so the rematch setting never applies to them.
+  const rivalsTwice = isSurvivor ? false : typeof body.rivalsTwice === 'boolean' ? body.rivalsTwice : existing.rivalsTwice
 
   // If count changed, reset names to defaults if names array doesn't match
   const finalNames = names.length === count ? names : defaultNames(count, isSurvivor)
 
   if (!isSurvivor) {
     const check = validateDivisionSetup(
-      { count, names: finalNames, teamAssignments: count === 0 ? {} : teamAssignments, playoffRule },
+      { count, names: finalNames, teamAssignments: count === 0 ? {} : teamAssignments, playoffRule, rivalsTwice },
       currentTeamIds,
     )
     if (!check.ok) return NextResponse.json({ error: check.error, code: check.code }, { status: 400 })
@@ -175,6 +180,7 @@ export async function PUT(
     teamAssignments: count === 0 ? {} : teamAssignments,
     aiNamingEnabled,
     playoffRule,
+    rivalsTwice,
     lastUpdatedAt: new Date().toISOString(),
     lastUpdatedBy: session.user.id,
   }
@@ -205,6 +211,10 @@ export async function PUT(
     const label = (r: DivisionPlayoffRule) =>
       r === 'top_seeds' ? 'Division winners take the top seeds' : r === 'guaranteed' ? 'Division winners guaranteed a spot, seeded by record' : 'No playoff advantage'
     changes.push({ field: 'Division playoff rule', oldValue: label(existing.playoffRule), newValue: label(updatedConfig.playoffRule) })
+  }
+  if (existing.rivalsTwice !== updatedConfig.rivalsTwice && updatedConfig.count > 0 && !isSurvivor) {
+    const label = (on: boolean) => (on ? 'Division rivals played twice' : 'Division rivals played once')
+    changes.push({ field: 'Division schedule', oldValue: label(existing.rivalsTwice), newValue: label(updatedConfig.rivalsTwice) })
   }
   if (changes.length > 0) {
     await notifyCommissionerChange(leagueId, session.user.id, isSurvivor ? 'Tribe Settings' : 'Division Settings', changes).catch(() => {})

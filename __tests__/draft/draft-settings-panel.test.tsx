@@ -16,7 +16,7 @@ import { DraftSettingsCommissionerPanel } from '@/components/league-settings/Dra
 
 type Call = { url: string; method: string; body: any }
 
-function stub(settings: Record<string, unknown>) {
+function stub(settings: Record<string, unknown>, randomize: Record<string, unknown> = {}) {
   const calls: Call[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const u = String(url)
@@ -24,9 +24,9 @@ function stub(settings: Record<string, unknown>) {
     if (u.includes('rookie-draft-order')) return { ok: false, status: 400, json: async () => ({ error: 'not dynasty' }) }
     if (u.includes('/randomize-order')) {
       return { ok: true, status: 200, json: async () => ({ ok: true, times: 7, teams: [
-        { position: 1, teamName: 'Bees', ownerName: 'Lee', avatarUrl: null, isEmpty: false },
-        { position: 2, teamName: 'Aces', ownerName: 'Pat', avatarUrl: null, isEmpty: false },
-      ] }) }
+        { position: 1, teamId: 't2', teamName: 'Bees', ownerName: 'Lee', avatarUrl: null, isEmpty: false },
+        { position: 2, teamId: 't1', teamName: 'Aces', ownerName: 'Pat', avatarUrl: null, isEmpty: false },
+      ], ...randomize }) }
     }
     if (u.includes('/draft/settings') && init?.method === 'PATCH') return { ok: true, status: 200, json: async () => ({ ok: true, config: { rounds: 14 } }) }
     if (u.includes('/draft/settings')) return { ok: true, status: 200, json: async () => settings }
@@ -39,8 +39,8 @@ const BASE = {
   isCommissioner: true,
   config: { draft_type: 'snake', rounds: 15, timer_seconds: 90 },
   teams: [
-    { position: 1, teamName: 'Aces', ownerName: 'Pat', avatarUrl: null, isEmpty: false },
-    { position: 2, teamName: 'Bees', ownerName: 'Lee', avatarUrl: null, isEmpty: false },
+    { position: 1, teamId: 't1', teamName: 'Aces', ownerName: 'Pat', avatarUrl: null, isEmpty: false },
+    { position: 2, teamId: 't2', teamName: 'Bees', ownerName: 'Lee', avatarUrl: null, isEmpty: false },
   ],
   computedRounds: { rounds: 14, rosterSpots: 14, countsTaxiAndDevy: false },
 }
@@ -63,11 +63,20 @@ describe('DraftSettingsCommissionerPanel', () => {
     // Keepers block is gone.
     expect(r.queryByText(/Set Players|Keepers/)).toBeNull()
 
-    // Randomize = one shuffle, no dialog.
+    // Every hour 1–24 is listed, but the ones beyond the standard list are locked to the plan.
+    const timer = r.container.querySelectorAll('select')[1] as HTMLSelectElement
+    const opt = (sec: number) => timer.querySelector(`option[value="${sec}"]`) as HTMLOptionElement | null
+    expect(opt(10800)?.disabled).toBe(true)
+    expect(opt(10800)?.textContent).toBe('3 Hours · AF Commissioner')
+    expect(opt(86400)?.disabled).toBe(true)
+    expect(opt(7200)?.disabled).toBe(false)
+    expect(r.getByTestId('draft-hourly-locked').textContent).toMatch(/AF Commissioner or AF Supreme/)
+
+    // Randomize = one shuffle; no count or chosen-by controls without the plan.
+    expect(r.queryByTestId('draft-randomize-controls')).toBeNull()
     fireEvent.click(r.getByRole('button', { name: /Randomize/ }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/randomize-order'))).toBe(true))
     expect(calls.find((c) => c.url.includes('/randomize-order'))!.body).toEqual({ times: 1 })
-    expect(r.queryByRole('dialog')).toBeNull()
 
     // Save sends the computed rounds, not the stale saved 15.
     fireEvent.click(r.getByText('Save Draft Settings'))
@@ -97,24 +106,67 @@ describe('DraftSettingsCommissionerPanel', () => {
     expect(r.queryByTestId('draft-pause-window')).toBeNull()
     expect(r.getByRole('switch', { name: 'Slow Draft Auto-Pause' }).getAttribute('aria-checked')).toBe('false')
 
-    // Randomize opens the dialog; an out-of-range count is refused client-side.
-    fireEvent.click(r.getByRole('button', { name: /^Randomize$/ }))
-    const dialog = await r.findByRole('dialog')
-    const input = dialog.querySelector('input')!
-    fireEvent.change(input, { target: { value: '101' } })
-    fireEvent.click(dialog.querySelectorAll('button')[1]!)
-    await r.findByText('Enter a whole number from 1 to 100.')
-    fireEvent.change(input, { target: { value: '7' } })
-    fireEvent.click(dialog.querySelectorAll('button')[1]!)
+    // Every hour is selectable with the plan.
+    expect((timer.querySelector('option[value="10800"]') as HTMLOptionElement).disabled).toBe(false)
+    expect(r.queryByTestId('draft-hourly-locked')).toBeNull()
+
+    // Randomize: the count and who chose it come from dropdowns, not a typed number.
+    fireEvent.change(r.getByLabelText('Number of randomizes'), { target: { value: '7' } })
+    fireEvent.change(r.getByLabelText('Number chosen by'), { target: { value: 't2' } })
+    fireEvent.click(r.getByRole('button', { name: 'Randomize 7×' }))
     await r.findByText('Randomized 7 times — posted to league chat.')
-    expect(calls.find((c) => c.url.includes('/randomize-order'))!.body).toEqual({ times: 7 })
+    expect(calls.find((c) => c.url.includes('/randomize-order'))!.body).toEqual({ times: 7, chosenByTeamId: 't2' })
   })
+
+  it('shows every shuffle the server made, then lands on the saved order', async () => {
+    stub({ ...BASE, hasAfCommissionerSub: true }, {
+      times: 3,
+      stepTeams: [
+        { teamName: 'Aces', ownerName: 'Pat', avatarUrl: null },
+        { teamName: 'Bees', ownerName: 'Lee', avatarUrl: null },
+      ],
+      steps: [[1, 0], [0, 1], [1, 0]],
+    })
+    const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
+    await r.findByLabelText('Number of randomizes')
+    fireEvent.change(r.getByLabelText('Number of randomizes'), { target: { value: '3' } })
+    fireEvent.click(r.getByRole('button', { name: 'Randomize 3×' }))
+    // Each pass is on screen in turn, with its place in the run and a log line.
+    await r.findByText('Shuffle 1 of 3')
+    expect(r.getByText('Shuffle 1: Bees picks first')).toBeTruthy()
+    await r.findByText('Shuffle 2 of 3', undefined, { timeout: 3000 })
+    expect(r.getByText('Shuffle 2: Aces picks first')).toBeTruthy()
+    await r.findByText('Shuffle 3 of 3', undefined, { timeout: 3000 })
+    // Then the progress goes and the saved order is the one listed.
+    await r.findByText('Randomized 3 times — posted to league chat.', undefined, { timeout: 3000 })
+    expect(r.queryByTestId('draft-randomize-progress')).toBeNull()
+    expect(r.getAllByText('Shuffle 3: Bees picks first').length).toBe(1)
+  }, 10000)
 
   it('empty schedule looks tappable: placeholders, not a blank box', async () => {
     stub({ ...BASE, hasAfCommissionerSub: false })
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
-    await r.findByText('Pick a date')
+    await r.findByPlaceholderText('MM/DD/YYYY')
     expect(r.getByText('Pick a time')).toBeTruthy()
+    expect(r.getByRole('button', { name: 'Open calendar' })).toBeTruthy()
+  })
+
+  it('the draft date can be typed, and a date that does not exist is refused', async () => {
+    const calls = stub({ ...BASE, hasAfCommissionerSub: false })
+    const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
+    const date = await r.findByLabelText('Date')
+    fireEvent.change(date, { target: { value: '02/30/2027' } })
+    fireEvent.blur(date)
+    await r.findByText('Enter a real date, like MM/DD/YYYY.')
+    fireEvent.change(date, { target: { value: '8/29/2027' } })
+    fireEvent.blur(date)
+    await waitFor(() => expect(r.queryByText('Enter a real date, like MM/DD/YYYY.')).toBeNull())
+    // The calendar's own input follows the typed date.
+    expect((r.container.querySelector('input[type="date"]') as HTMLInputElement).value).toBe('2027-08-29')
+    expect((date as HTMLInputElement).value).toBe('08/29/2027')
+    fireEvent.click(r.getByText('Save Draft Settings'))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true))
+    expect(calls.find((c) => c.method === 'PATCH')!.body.draftDate).toMatch(/^2027-08-(29|30)T/)
   })
 
   it('Fill with CI has an explanation bubble, and nothing in the panel says "AI"', async () => {

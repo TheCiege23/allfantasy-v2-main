@@ -6,12 +6,14 @@ import { prisma } from '@/lib/prisma'
 import { closeExpiredExileRosters, finalizeExileRosterResults, getExileWaivers, mutateExileRoster } from '@/lib/survivor/exileRosterService'
 import { scoreExileWeek } from '@/lib/survivor/exileEngine'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
+import { LIVE_SCORE_SOURCES } from '@/lib/scores/liveSourceSelection'
 
 const RUN = process.env.RUN_SURVIVOR_EXILE_DB_IT === '1'
 const prefix = `exile-it-${randomUUID().slice(0, 8)}`
 const leagues: string[] = []
 const players: string[] = []
 const games: string[] = []
+const dailyGames: string[] = []
 const userId = `${prefix}-owner`
 let safeTarget = false
 const require = createRequire(import.meta.url)
@@ -35,6 +37,7 @@ describe.runIf(RUN)('Exile persisted roster isolation and weekly release', () =>
     await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { in: players } } })
     await prisma.player.deleteMany({ where: { id: { in: players } } })
     await prisma.gameSchedule.deleteMany({ where: { id: { in: games } } })
+    await prisma.sportsGame.deleteMany({ where: { id: { in: dailyGames } } })
     await prisma.appUser.deleteMany({ where: { id: userId } })
     await prisma.$disconnect()
   })
@@ -59,6 +62,11 @@ describe.runIf(RUN)('Exile persisted roster isolation and weekly release', () =>
       const gameId = `${leagueId}-game`
       await prisma.gameSchedule.create({ data: { id: gameId, season: 2026, weekOrRound: week, externalId: gameId, sportType: sport, homeTeam: team, awayTeam: 'OTHER', startTime: kickoff, status: 'scheduled' } })
       games.push(gameId)
+      // A daily sport's games live in SportsGame, which its lineups lock on; GameSchedule holds NFL only.
+      if (sport !== 'NFL') {
+        await prisma.sportsGame.create({ data: { id: gameId, sport, externalId: gameId, homeTeam: team, awayTeam: 'OTHER', startTime: kickoff, status: 'scheduled', season: 2026, seasonType: 'regular', source: LIVE_SCORE_SOURCES[0], expiresAt: new Date(kickoff.getTime() + 30 * 86400000) } })
+        dailyGames.push(gameId)
+      }
       const attempts = await Promise.allSettled(['a', 'b'].map(suffix => mutateExileRoster({ leagueId, userId: `${prefix}-${sport}-${suffix}`, week, playerId: ids[0], action: 'claim' }, now)))
       expect(attempts.filter(a => a.status === 'fulfilled')).toHaveLength(1)
       expect(attempts.filter(a => a.status === 'rejected')).toHaveLength(1)

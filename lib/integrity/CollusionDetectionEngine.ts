@@ -44,8 +44,8 @@ type TradeAsset = { name: string; position: string; estimatedValue: number }
 
 export type CollusionEvidence = {
   tradeTransactionId: string
-  team1: { rosterId: string; teamName: string }
-  team2: { rosterId: string; teamName: string }
+  team1: { rosterId: string; teamName: string; managerName?: string }
+  team2: { rosterId: string; teamName: string; managerName?: string }
   assetsTeam1Gave: TradeAsset[]
   assetsTeam2Gave: TradeAsset[]
   team1TotalValue: number
@@ -98,7 +98,8 @@ function topSeverity(checks: readonly Pick<ReviewCheck, "severity">[]): ReviewSe
 
 /** The evidence the integrity flag card renders, taken from the review and its receipt — nothing estimated. */
 export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredTradeReview, { ok: true }>): CollusionEvidence {
-  const { receipt, review, sides, sideNames, facts } = r
+  const { receipt, review, sides, sideNames, sideManagers, facts } = r
+  const manager = (i: 0 | 1) => (sideManagers?.[i] ? { managerName: sideManagers[i]! } : {})
   const positionOf = (name: string) => {
     for (const s of sides) for (const g of s.gives) if (g.kind === "player" && g.name === name) return g.position ?? "UNK"
     return "UNK"
@@ -117,8 +118,8 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
   const eliminated = (pct: number) => pct < ELIMINATED_PLAYOFF_PCT
   return {
     tradeTransactionId,
-    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0] },
-    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1] },
+    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0], ...manager(0) },
+    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1], ...manager(1) },
     // Side A gives what the receipt calls `give`; side B gives what side A gets.
     assetsTeam1Gave: lines("give"),
     assetsTeam2Gave: lines("get"),

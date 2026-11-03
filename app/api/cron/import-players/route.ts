@@ -119,6 +119,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
    * remainder, so its own per-feed cadence gating is what limits work, which is
    * what that gating was written to do.
    */
+  const sleeperRowsOnly = url.searchParams.get("sleeperRows") === "1"
   const intelOnly = url.searchParams.get("intel") === "1"
 
   const sports = sportParam
@@ -159,6 +160,15 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       })
     }
 
+    if (sleeperRowsOnly) {
+      const sport = sports?.length === 1 ? sports[0] : undefined
+      if (intelOnly || (sport !== 'NFL' && sport !== 'NBA')) {
+        return NextResponse.json({ ok: false, error: 'sleeperRows requires a single sport (NFL or NBA) and cannot combine with intel.' }, { status: 400 })
+      }
+      const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+      const result = await refreshSleeperPlayerRows({ sport, limit: sport === 'NBA' ? 600 : 1500, isExhausted: () => budget.exhausted() })
+      return NextResponse.json({ ok: !result.feedUnavailable, sleeperRows: result, durationMs: Date.now() - startedAt })
+    }
     if (intelOnly) {
       /*
        * Heartbeat, not a table probe — and the distinction is the whole point.
@@ -355,10 +365,11 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           'skipped' in r
             ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
             : {
-                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0),
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0),
                 warnings: [
                   ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
                   ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
+                  ...(r.rosters && (r.rosters.rosterSnapshotsRejected ?? 0) > 0 ? [`${r.rosters.rosterSnapshotsRejected} roster snapshots rejected`] : []),
                 ],
                 metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
               },
@@ -787,6 +798,24 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
      * A phase, not the job: bounded per run, stalest first, and dropped whole when
      * the budget is gone.
      */
+    let sleeperNbaRows: unknown = { skipped: true }
+    if (!dryRun && (!sports || sports.includes('NBA'))) {
+      if (budget.exhausted()) {
+        deferredPhases.push('sleeperNbaRows')
+      } else {
+        try {
+          const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+          sleeperNbaRows = await refreshSleeperPlayerRows({
+            sport: 'NBA',
+            limit: 600,
+            isExhausted: () => budget.exhausted(),
+          })
+        } catch (error) {
+          sleeperNbaRows = { error: error instanceof Error ? error.message.slice(0, 160) : 'Sleeper NBA refresh failed' }
+        }
+      }
+    }
+
     let sleeperRows: unknown = { skipped: true }
     if (!dryRun && wantsNfl && budget.exhausted()) {
       deferredPhases.push('sleeperRows')
@@ -971,6 +1000,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntelSources,
       devyIntel,
       sleeperRows,
+      sleeperNbaRows,
       canonicalBirthdays,
       espnIdentities,
       identityBridge,

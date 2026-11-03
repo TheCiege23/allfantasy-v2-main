@@ -83,8 +83,8 @@ export type LeagueImpact = {
   isStarting: boolean
   afPoints: SectionState<{
     points: number
-    matchedKeys: number
-    scoredKeys: number
+    matchedKeys: number | null
+    scoredKeys: number | null
   }>
   replacements: SectionState<ReplacementOption[]>
   /**
@@ -259,7 +259,8 @@ export async function getPlayerImpact(
     ]
     const [players, projections, injuries] = await Promise.all([
       prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: rosterIds } },
+        // Scoped to this league's sport: Sleeper numbers its NFL and NBA pools independently.
+        where: { ...(sport ? { sport: sport.toUpperCase() } : {}), sleeperId: { in: rosterIds } },
         select: { sleeperId: true, name: true, position: true, team: true },
       }),
       prisma.fantasyProjection.findMany({

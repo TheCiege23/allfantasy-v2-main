@@ -435,7 +435,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // differs from seven-day arithmetic. The finalizer reads the same function.
     // A season past the curated table (dynasty year 2+) is primed from the labelled schedule first.
     if (!params.seasonStartUtc) await ensureDailySportSeasonStart(sport, seasonYear, { db: prisma as never })
-    const window = params.seasonStartUtc
+    const window = params.seasonStartUtc && sport !== 'SOCCER'
       ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
       : resolveDailySportWeekWindow(sport, seasonYear, week)
     if (!window) {

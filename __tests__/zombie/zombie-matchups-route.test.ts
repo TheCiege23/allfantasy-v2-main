@@ -23,7 +23,7 @@ vi.mock('@/lib/zombie/whispererViewer', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     zombieLeague: { findUnique: vi.fn(async () => ({ id: 'z1', season: 2026, sport: 'NBA', currentWeek: 2 })) },
-    zombieWeeklyResolution: { findUnique: vi.fn(async () => null) },
+    zombieWeeklyResolution: { findUnique: vi.fn(async () => ({ status: 'complete', settlementSnapshot: null })) },
     roster: {
       findMany: vi.fn(async () => [
         { id: 'R-me', platformUserId: 'user-me', playerData: null, redraftRoster: null },

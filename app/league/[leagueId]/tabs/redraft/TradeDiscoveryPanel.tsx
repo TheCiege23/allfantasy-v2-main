@@ -7,6 +7,9 @@ import {
   type TradePartnerMatch,
   type TradePackageSuggestion,
 } from '@/lib/redraft/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tOr } from '@/lib/i18n/tInterpolate'
+import { matchReasonsText, serverErrorText } from '@/lib/i18n/trade-center-server-text'
 
 function flag(f: string) {
   return f.toLowerCase().replace(/_/g, ' ')
@@ -26,6 +29,10 @@ export function TradeDiscoveryPanel({
   myRosterId: string
   onBuildProposal: (partnerRosterId: string) => void
 }) {
+  const { t, tInterpolate, language } = useOptionalLanguage()
+  // Codes with copy translate; an unknown one keeps its old readable form rather than a raw key.
+  const flagLabel = (f: string) => tOr(t, `tradeCenter.discovery.flag.${f}`, flag(f))
+  const fairnessLabel = (band: string) => tOr(t, `tradeCenter.discovery.fairness.${band.replace(/ /g, '_')}`, band)
   const [open, setOpen] = useState(false)
   const [partners, setPartners] = useState<TradePartnerMatch[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -41,11 +48,11 @@ export function TradeDiscoveryPanel({
       const res = await fetchTradeDiscovery({ leagueId, rosterId: myRosterId })
       setPartners(res.partners)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load trade discovery')
+      setError(e instanceof Error ? serverErrorText(e as Error & { code?: string | null }, e.message, t, language) : t('tradeCenter.discovery.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [leagueId, myRosterId])
+  }, [leagueId, myRosterId, t, language])
 
   const loadPackages = useCallback(
     async (partnerRosterId: string) => {
@@ -75,14 +82,14 @@ export function TradeDiscoveryPanel({
         }}
         className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-[#ffd7e5]"
       >
-        <span>Find a Trade — best partners &amp; package ideas</span>
+        <span>{t('tradeCenter.discovery.toggle')}</span>
         <span className="text-[#ffb8d1]/70">{open ? '▾' : '▸'}</span>
       </button>
 
       {open ? (
         <div className="space-y-2 border-t border-[#ff9ec0]/15 px-3 py-2 text-[11px]">
           {loading ? (
-            <p className="text-white/50">Finding partners…</p>
+            <p className="text-white/50">{t('tradeCenter.discovery.finding')}</p>
           ) : error ? (
             <p className="text-rose-300">{error}</p>
           ) : partners && partners.length ? (
@@ -90,18 +97,18 @@ export function TradeDiscoveryPanel({
               <div key={p.rosterId} className="rounded border border-white/10 bg-black/20 p-2" data-testid="discovery-partner-card">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-white">{p.teamName}</span>
-                  <span className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] text-[#ffd7e5]">Match {p.matchScore}</span>
+                  <span className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] text-[#ffd7e5]">{tInterpolate('tradeCenter.discovery.match', { score: p.matchScore })}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                   {p.partnerNeeds.map((n) => (
-                    <span key={`n${n}`} className="rounded bg-amber-400/10 px-1.5 py-0.5 text-amber-200/80">needs {n}</span>
+                    <span key={`n${n}`} className="rounded bg-amber-400/10 px-1.5 py-0.5 text-amber-200/80">{tInterpolate('tradeCenter.discovery.needs', { position: n })}</span>
                   ))}
                   {p.partnerSurpluses.map((s) => (
-                    <span key={`s${s}`} className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-emerald-200/80">has {s}</span>
+                    <span key={`s${s}`} className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-emerald-200/80">{tInterpolate('tradeCenter.discovery.has', { position: s })}</span>
                   ))}
                 </div>
                 <ul className="mt-1 space-y-0.5 text-[11px] text-white/60">
-                  {p.matchReasons.slice(0, 2).map((r, i) => (
+                  {matchReasonsText(p, t, language).slice(0, 2).map((r, i) => (
                     <li key={i}>• {r}</li>
                   ))}
                 </ul>
@@ -112,7 +119,7 @@ export function TradeDiscoveryPanel({
                     onClick={() => void loadPackages(p.rosterId)}
                     className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/80"
                   >
-                    Package ideas
+                    {t('tradeCenter.discovery.packageIdeas')}
                   </button>
                   <button
                     type="button"
@@ -120,14 +127,14 @@ export function TradeDiscoveryPanel({
                     onClick={() => onBuildProposal(p.rosterId)}
                     className="rounded bg-[#ff3d81]/85 px-2 py-1 text-[11px] font-semibold text-black"
                   >
-                    Build proposal
+                    {t('tradeCenter.discovery.buildProposal')}
                   </button>
                 </div>
 
                 {pkgFor === p.rosterId ? (
                   <div className="mt-1.5 border-t border-white/10 pt-1.5" data-testid="discovery-packages">
                     {pkgLoading ? (
-                      <p className="text-white/45">Generating packages…</p>
+                      <p className="text-white/45">{t('tradeCenter.discovery.generating')}</p>
                     ) : packages.length ? (
                       packages.map((pkg) => (
                         <div key={pkg.packageId} className="mb-1 text-[11px] text-white/70">
@@ -136,23 +143,23 @@ export function TradeDiscoveryPanel({
                             {' → '}
                             {pkg.receiveAssets.map((a) => a.playerName).join(' + ')}
                           </span>
-                          <span className="ml-2 text-white/45">[{pkg.fairnessBand}]</span>
+                          <span className="ml-2 text-white/45">[{fairnessLabel(pkg.fairnessBand)}]</span>
                           {pkg.warningFlags.length ? (
-                            <span className="ml-1 text-amber-200/70">{pkg.warningFlags.map(flag).join(', ')}</span>
+                            <span className="ml-1 text-amber-200/70">{pkg.warningFlags.map(flagLabel).join(', ')}</span>
                           ) : null}
                         </div>
                       ))
                     ) : (
-                      <p className="text-white/45">No clean package ideas yet — try building manually.</p>
+                      <p className="text-white/45">{t('tradeCenter.discovery.noPackages')}</p>
                     )}
                   </div>
                 ) : null}
               </div>
             ))
           ) : (
-            <p className="text-white/45">No trade partners surfaced yet.</p>
+            <p className="text-white/45">{t('tradeCenter.discovery.noPartners')}</p>
           )}
-          <p className="text-[11px] text-white/35">Suggestions only. You always review and send the trade. No values are changed.</p>
+          <p className="text-[11px] text-white/35">{t('tradeCenter.discovery.footer')}</p>
         </div>
       ) : null}
     </div>

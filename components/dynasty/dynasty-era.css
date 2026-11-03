@@ -1,0 +1,42 @@
+/*
+ * Dynasty Era surface classes — gold on ink. Used only by dynasty-only surfaces (DynastyHome, the
+ * dynasty War Room panel), so nothing here can reach a non-dynasty league.
+ *
+ * Every colour reads the token contract defined on `.nl-workspace[data-dynasty-background=true]`
+ * (components/league/native/native-league.css) WITH its fallback, so these surfaces look the same
+ * inside that workspace and outside it (the legacy shell, a test page).
+ */
+.dyn-era{color:var(--dyn-text,#E8ECF2)}
+.dyn-era-rule{border-color:var(--dyn-rail,#1C2333)}
+.dyn-era-muted{color:var(--dyn-faint,#9AA4B2)}
+.dyn-era-text2{color:var(--dyn-text2,#C3CAD5)}
+
+/* Sub-tab pills: quiet rail by default, gold-outlined when active. */
+.dyn-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--dyn-line,#2A3345);background:var(--dyn-vault,#121826);color:var(--dyn-text2,#C3CAD5);transition:color .15s,border-color .15s,background-color .15s}
+.dyn-pill:hover{color:var(--dyn-text,#E8ECF2);border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 45%,var(--dyn-line,#2A3345))}
+.dyn-pill[aria-pressed=true]{border-color:var(--dyn-gold,#D4A24C);color:var(--dyn-gold-soft,#F3D79F);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 12%,var(--dyn-vault,#121826))}
+.dyn-pill:focus-visible,.dyn-action:focus-visible{outline:2px solid var(--dyn-gold,#D4A24C);outline-offset:2px}
+
+/* Cards and wells. */
+.dyn-card{border:1px solid var(--dyn-rail,#1C2333);background:var(--dyn-vault,#121826)}
+.dyn-well{border:1px solid var(--dyn-rail,#1C2333);background:var(--dyn-ink,#0B0F17)}
+.dyn-panel{border:1px solid color-mix(in srgb,var(--dyn-gold,#D4A24C) 22%,transparent);background:var(--dyn-vault,#121826)}
+
+/* Badges. Gold-soft is the default dynasty badge; teal = an action/incoming; dashed = traded away. */
+.dyn-badge-gold{background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-badge-teal{background:color-mix(in srgb,var(--dyn-teal,#2DD4BF) 14%,transparent);color:#7FE9D8}
+.dyn-badge-out{border:1px dashed var(--dyn-line,#2A3345);color:var(--dyn-faint,#9AA4B2)}
+/* Pick chips: first-rounders outlined in gold, later rounds in the line colour. */
+.dyn-chip{border:1px solid var(--dyn-line,#2A3345);color:var(--dyn-text2,#C3CAD5)}
+.dyn-chip-r1{border:1px solid var(--dyn-gold,#D4A24C);color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-gold-icon{color:var(--dyn-gold,#D4A24C)}
+.dyn-gold-text{color:var(--dyn-gold-soft,#F3D79F)}
+
+/* War Room tool buttons and inputs. */
+.dyn-action{border:1px solid var(--dyn-line,#2A3345);background:var(--dyn-vault,#121826);color:var(--dyn-text,#E8ECF2)}
+.dyn-action:hover:not(:disabled){border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 55%,transparent);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 10%,var(--dyn-vault,#121826))}
+.dyn-input{border:1px solid var(--dyn-line,#2A3345);background:var(--dyn-ink,#0B0F17);color:var(--dyn-text,#E8ECF2)}
+.dyn-input:focus{outline:none;border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 60%,transparent)}
+.dyn-input::placeholder{color:var(--dyn-faint,#9AA4B2)}
+
+@media (prefers-reduced-motion:reduce){.dyn-pill{transition:none}}

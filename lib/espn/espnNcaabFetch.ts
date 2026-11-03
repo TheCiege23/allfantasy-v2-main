@@ -78,15 +78,16 @@ export function parseEspnNcaabTeams(body: unknown): EspnNcaabTeam[] {
 }
 
 /** Pure: `teams/{id}/roster` body -> season year + athletes. */
-export function parseEspnNcaabRoster(body: unknown): { seasonYear: number | null; athletes: EspnNcaabAthlete[] } {
+export function parseEspnNcaabRoster(body: unknown): { seasonYear: number | null; athletes: EspnNcaabAthlete[]; rejectedCount: number } {
   const b = body as { season?: { year?: unknown }; athletes?: unknown[] }
   const seasonYear = typeof b?.season?.year === 'number' ? b.season.year : null
   const athletes: EspnNcaabAthlete[] = []
+  let rejectedCount = 0
   for (const raw of Array.isArray(b?.athletes) ? b.athletes : []) {
     const a = raw as Record<string, unknown>
     const id = str(a?.id)
     const fullName = str(a?.fullName) ?? str(a?.displayName)
-    if (!id || !fullName) continue
+    if (!id || !fullName) { rejectedCount++; continue }
     athletes.push({
       id,
       fullName,
@@ -95,7 +96,7 @@ export function parseEspnNcaabRoster(body: unknown): { seasonYear: number | null
       headshotUrl: str((a.headshot as { href?: unknown } | undefined)?.href),
     })
   }
-  return { seasonYear, athletes }
+  return { seasonYear, athletes, rejectedCount }
 }
 
 async function getJson(url: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<unknown> {
@@ -119,7 +120,7 @@ export async function fetchEspnNcaabTeams(
 export async function fetchEspnNcaabRoster(
   espnTeamId: string,
   opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
-): Promise<{ seasonYear: number | null; athletes: EspnNcaabAthlete[] }> {
+): Promise<{ seasonYear: number | null; athletes: EspnNcaabAthlete[]; rejectedCount: number }> {
   if (!/^\d+$/.test(espnTeamId)) throw new Error(`not an ESPN team id: ${espnTeamId}`)
   const url = espnSiteApiUrl(`${NCAAB_PATH}/teams/${espnTeamId}/roster`)
   return parseEspnNcaabRoster(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS))

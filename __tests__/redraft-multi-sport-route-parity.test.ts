@@ -22,7 +22,10 @@ const prismaMock = {
   },
   redraftSeason: {
     findFirst: vi.fn(),
+    count: vi.fn(async () => 0),
   },
+  leagueWaiverSettings: { findUnique: vi.fn(async () => null) },
+  draftSession: { findFirst: vi.fn(async () => ({ status: 'completed' })) },
   redraftWaiverClaim: {
     findMany: vi.fn(),
     create: vi.fn(),
@@ -97,6 +100,7 @@ vi.mock('@/lib/adminAuth', () => ({
 describe('Redraft multi-sport route parity', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.league.findUnique.mockResolvedValue({ lifecycleState: 'in_season', platform: 'manual', leagueType: 'redraft', isDynasty: false, lockAllMoves: false })
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
     assertLeagueMemberMock.mockResolvedValue({ ok: true, status: 200 })
     leagueUsesDevyEngineMock.mockResolvedValue(false)

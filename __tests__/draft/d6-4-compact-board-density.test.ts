@@ -114,26 +114,25 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 // 6. DraftBoardCell height — tighter tiles
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — tile height (56px readability redesign, supersedes Commit 21)', () => {
-  // Commit 21 shrank tiles to 42/44px; at that height and an 88px column the player name
-  // truncated to a few characters and the team/bye line clipped. Tiles are now 56/60px.
-  it('cell base height is h-[56px]', () => {
-    expect(cellSrc).toMatch(/flex h-\[56px\] min-h-\[56px\]/)
+describe('DraftBoardCell — Sleeper-style tiles (2026-10-28)', () => {
+  // Matched to Sleeper's board at the user's request: short, wide, flat tiles across the full
+  // width, solid position colours once filled. (A square-tile version shipped first and was
+  // replaced the same day.)
+  it('tiles are short and wide: a fixed 50px height, full column width', () => {
+    expect(cellSrc).toMatch(/flex h-\[50px\] w-full flex-col/)
+    expect(cellSrc).not.toMatch(/aspect-square/)
   })
 
-  it('cell sm height is sm:h-[60px] sm:min-h-[60px]', () => {
-    expect(cellSrc).toMatch(/sm:h-\[60px\] sm:min-h-\[60px\]/)
+  it('board columns fill the width with a 84px floor, and gaps are 2px', () => {
+    // Phones cap the track via --af-board-col-max (2026-10-29); md+ leaves it unset, so 1fr fills.
+    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, var\(--af-board-col-max, 1fr\)\)'/)
+    expect(boardSrc).toMatch(/grid gap-\[2px\]/)
   })
 
-  it('old 42px / 44px tile heights are gone', () => {
-    expect(cellSrc).not.toMatch(/flex h-\[42px\] min-h-\[42px\]/)
-    expect(cellSrc).not.toMatch(/sm:h-\[44px\] sm:min-h-\[44px\]/)
-  })
-
-  it('board columns are at least 104px and round labels match the tile height', () => {
-    expect(boardSrc).toMatch(/minmax\(104px, 1fr\)/)
-    expect(boardSrc).not.toMatch(/minmax\(88px, 1fr\)/)
-    expect(boardSrc).toMatch(/min-h-\[56px\][^`"]*sm:min-h-\[60px\]/)
+  it('filled tiles are solid position colours with dark text', () => {
+    expect(cellSrc).toMatch(/positionTintHex\(pick\.position\)/)
+    expect(cellSrc).toMatch(/\{ backgroundColor: fillHex \}/)
+    expect(cellSrc).toMatch(/text-\[#14172a\]/)
   })
 })
 

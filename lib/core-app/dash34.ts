@@ -1,6 +1,7 @@
 import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
@@ -2151,6 +2152,9 @@ async function loadDash34Data(
     moreHref: '#af-d2-needs',
     moreLabel: 'See every call',
   }
+
+  // Exile Island rows learn which Survivor league they belong to, so the home card can pair them.
+  await attachSurvivorExileLinks([...needs, ...quietLeagues])
 
   return {
     injuryCheckedAt: injuryChecks.length && injuryChecks.every(check => check?.lastSuccessAt)

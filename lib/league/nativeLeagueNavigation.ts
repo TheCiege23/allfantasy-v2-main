@@ -13,41 +13,91 @@ export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 's
   return 'Setup'
 }
 
-export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false) {
+/** A `t` from useLanguage/useOptionalLanguage: returns the key itself when it has no entry. */
+export type NavTranslate = (key: string) => string
+
+/** English fallback when no `t` is passed or the key is missing, so a server render or a test never shows a raw key. */
+function translator(t?: NavTranslate) {
+  return (key: string, english: string) => {
+    if (!t) return english
+    const value = t(key)
+    return value && value !== key ? value : english
+  }
+}
+
+/** Survivor tabs: id → [i18n key, English]. */
+const SURVIVOR_NAV_LABELS: Record<string, [string, string]> = {
+  survivor: ['league.nav.survivor.island', 'Island'],
+  survivor_tribal: ['league.nav.survivor.tribal', 'Elimination Council'],
+  survivor_challenges: ['league.nav.survivor.challenges', 'Challenges'],
+  survivor_ai: ['league.nav.survivor.chimmy', 'Chimmy'],
+  survivor_chimmy: ['league.nav.survivor.chimmy', 'Chimmy'],
+  survivor_exile: ['league.nav.survivor.exile', 'Exile'],
+  survivor_jury: ['league.nav.survivor.jury', 'Jury & finale'],
+  survivor_commissioner: ['league.nav.survivor.commissioner', 'Survivor command'],
+  survivor_command: ['league.nav.survivor.command', 'Commissioner hub'],
+}
+
+/** Group ids are stable across languages; `title` is what the reader sees. */
+export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'week' | 'more'
+
+export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
+  const tr = translator(t)
   const used = new Set<string>()
-  const item = (label: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
+  const item = (key: string, english: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
     const id = ids.find(value => tabs.some(tab => tab.id === value))
     if (!id) return []
     used.add(id)
-    return [{ id, label, icon }]
+    return [{ id, label: tr(key, english), icon }]
   }
   const primary = [
-    ...item('League home', 'home', 'native_home', 'home'),
+    ...item('league.nav.leagueHome', 'League home', 'home', 'native_home', 'home'),
     // A guillotine league's defining screen (chop line, danger zone, history) sat under "More tools".
-    ...item('Guilly', 'guillotine', 'guillotine'),
-    ...item('My team', 'team', 'roster', 'team', 'squad'),
-    ...item('Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
-    ...item('Players & waivers', 'players', 'waivers', 'players'),
-    ...item('Trades', 'trades', 'trades', 'transfers'),
-    ...item('Draft HQ', 'draft', 'draft'),
-    ...item(isSurvivor ? 'Standings' : 'Standings & playoffs', 'standings', 'standings', 'table'),
-    ...item('League chat', 'chat', 'league_chat'),
+    ...item('league.nav.guilly', 'Guilly', 'guillotine', 'guillotine'),
+    ...item('league.nav.myTeam', 'My team', 'team', 'roster', 'team', 'squad'),
+    ...item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
+    ...item('league.nav.playersWaivers', 'Players & waivers', 'players', 'waivers', 'players'),
+    ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
+    ...item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft'),
+    ...(isSurvivor ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
+    ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
     // Commissioner lands on the League Settings page (?view=settings); the old commissioner tab stays under More tools.
-    ...(commissioner ? item('Commissioner', 'settings', 'settings', 'commissioner', 'league') : []),
+    ...(commissioner ? item('league.nav.commissioner', 'Commissioner', 'settings', 'settings', 'commissioner', 'league') : []),
+  ]
+  /*
+   * Dynasty / Taxi / Picks used to fall into "More tools" with the generic icon. The tabs only exist when
+   * LeagueShell's tab list says the league is dynasty (isDynastyLeague), so this group needs no check of its own.
+   */
+  const dynasty = [
+    ...item('league.nav.dynasty', 'Dynasty hub', 'dynasty', 'dynasty'),
+    ...item('league.nav.dynastyTaxi', 'Taxi squad', 'taxi', 'dynasty_taxi'),
+    ...item('league.nav.dynastyPicks', 'Draft picks', 'picks', 'dynasty_picks'),
   ]
   const survivor = tabs.filter(tab => tab.id.startsWith('survivor')).map(tab => {
     used.add(tab.id)
-    const labels: Record<string, string> = { survivor: 'Island', survivor_tribal: 'Elimination Council', survivor_challenges: 'Challenges', survivor_ai: 'Chimmy', survivor_chimmy: 'Chimmy', survivor_exile: 'Exile', survivor_jury: 'Jury & finale', survivor_commissioner: 'Survivor command', survivor_command: 'Commissioner hub' }
-    return { ...tab, label: labels[tab.id] ?? tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'survivor' }
+    const known = SURVIVOR_NAV_LABELS[tab.id]
+    return { ...tab, label: known ? tr(known[0], known[1]) : tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'survivor' }
   })
   const weekly = [
-    ...item('War Room', 'war', 'war_room'),
-    ...item('Live scores', 'scores', 'scores'),
-    ...item('Decision OS', 'insight', 'decide'),
+    ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
+    ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
+    ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
   ]
   // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
   const more = tabs.filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner')).map(tab => ({ ...tab, icon: 'more' }))
-  return [{ title: 'This league', items: primary }, { title: 'Survivor', items: survivor }, { title: 'This week', items: weekly }, { title: 'More tools', items: more }].filter(group => group.items.length)
+  const groups: Array<{ id: NativeNavGroupId; title: string; items: WorkspaceNavItem[] }> = [
+    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: primary },
+    { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: dynasty },
+    { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: survivor },
+    { id: 'week', title: tr('league.nav.group.thisWeek', 'This week'), items: weekly },
+    { id: 'more', title: tr('league.nav.group.moreTools', 'More tools'), items: more },
+  ]
+  return groups.filter(group => group.items.length)
+}
+
+/** The "Your record" group heading (see nativeLeagueRecordLinks). */
+export function nativeLeagueRecordTitle(t?: NavTranslate) {
+  return translator(t)('league.nav.group.yourRecord', 'Your record')
 }
 
 /**
@@ -57,11 +107,12 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
  * "This week" keeps Decision OS where the handoff drew "Season Outlook": Decision OS replaced the
  * outlook screen on 2026-10 and is the live surface; this group is added beside it, not instead of it.
  */
-export function nativeLeagueRecordLinks(leagueId: string): Array<{ id: string; label: string; href: string; icon: string }> {
+export function nativeLeagueRecordLinks(leagueId: string, t?: NavTranslate): Array<{ id: string; label: string; href: string; icon: string }> {
+  const tr = translator(t)
   const q = `?league=${encodeURIComponent(leagueId)}`
   return [
-    { id: 'career', label: 'Your career', href: `/core/career${q}`, icon: 'career' },
-    { id: 'rankings', label: 'Rankings', href: `/core/rankings${q}`, icon: 'rankings' },
+    { id: 'career', label: tr('league.nav.yourCareer', 'Your career'), href: `/core/career${q}`, icon: 'career' },
+    { id: 'rankings', label: tr('league.nav.rankings', 'Rankings'), href: `/core/rankings${q}`, icon: 'rankings' },
   ]
 }
 

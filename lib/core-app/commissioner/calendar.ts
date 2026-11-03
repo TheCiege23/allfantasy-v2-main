@@ -29,6 +29,7 @@
  */
 
 import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
 export type CalendarKind = 'draft' | 'waivers' | 'trade_deadline' | 'playoffs' | 'dues' | 'vote' | 'renewal'
@@ -110,7 +111,7 @@ function weekStatus(week: number, currentWeek: number | null): CalendarEvent['st
 }
 
 export function formatWhen(at: Date, allDay: boolean, language = 'en'): string {
-  const locale = language === 'es' ? 'es-US' : 'en-US'
+  const locale = coreLocale(language).usLocale
   const date = at.toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',

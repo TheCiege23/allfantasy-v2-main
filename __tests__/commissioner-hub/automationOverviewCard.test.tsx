@@ -56,3 +56,28 @@ describe('the preset buttons', () => {
     expect(JSON.parse(String(post[1]!.body))).toEqual({ preset: 'recommended' })
   })
 })
+
+describe('switching a free automation on the card', () => {
+  it('sends that automation’s own request and reloads; paid rows have no switch', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    let on = false
+    const calls: Array<[string, RequestInit | undefined]> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url.endsWith('/fill-empty-starters')) { on = true; return json({ ok: true, on: true }) }
+      return json({ supported: true, commissionerPlan: true, rows: [
+        { key: 'fill_empty_starters', group: 'lineups', label: 'Fill empty starting spots before lock', state: on ? 'on' : 'off', detail: null, detailEs: null, href: '#ch-fill-empty-starters', plan: 'free' },
+        { key: 'tanking', group: 'fairness', label: 'Anti-tanking monitor', state: 'off', detail: null, detailEs: null, href: '/x', plan: 'commissioner' },
+      ] })
+    }))
+    render(<AutomationOverview leagueId="L1" />)
+    const box = (await screen.findByTestId('automation-toggle-fill_empty_starters')) as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect(screen.queryByTestId('automation-toggle-tanking')).toBeNull()
+    fireEvent.click(box)
+    await vi.waitFor(() => expect((screen.getByTestId('automation-toggle-fill_empty_starters') as HTMLInputElement).checked).toBe(true))
+    const post = calls.find(([u]) => u.endsWith('/fill-empty-starters'))!
+    expect(post[1]).toMatchObject({ method: 'POST' })
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ on: true })
+  })
+})

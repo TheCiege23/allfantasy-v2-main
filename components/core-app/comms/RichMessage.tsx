@@ -160,6 +160,7 @@ export function RichMessage({
   onClosePoll,
   messageType,
   body,
+  dynasty = false,
 }: {
   metadata: RichMetadata
   /*
@@ -174,6 +175,8 @@ export function RichMessage({
   /** With `body`, lets a type-`gif` row (URL as body) render as the GIF it is. */
   messageType?: string | null
   body?: string | null
+  /** A dynasty league's chat: the completed trade card wears the dynasty look (TradeCardView). */
+  dynasty?: boolean
 }) {
   const [viewing, setViewing] = useState<string | null>(null)
   const gif = readSafeGif(metadata, messageType, body)
@@ -229,7 +232,7 @@ export function RichMessage({
         return null
       })}
 
-      {trade || tradeOffer ? <TradeCardView card={trade} metadata={metadata ?? null} viewerUserId={viewerUserId ?? null} /> : null}
+      {trade || tradeOffer ? <TradeCardView card={trade} metadata={metadata ?? null} viewerUserId={viewerUserId ?? null} dynasty={dynasty} /> : null}
 
       {viewerPoll && onVote ? (
         <MessagePoll poll={viewerPoll} onVote={onVote} onClose={onClosePoll} />

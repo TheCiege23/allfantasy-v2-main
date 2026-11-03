@@ -9,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isC2CLeague, getC2CConfig, upsertC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
+import { mirrorRookieDraftToDynasty, publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,8 @@ export async function PATCH(
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C / Merged Devy league' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
+  // The popup's rookie-draft and taxi rules, before the write, for the "What changed" card.
+  const rulesBefore = await readVariantConfigRules(leagueId)
   const updated = await upsertC2CConfig(leagueId, {
     ...(body.startupFormat !== undefined && { startupFormat: String(body.startupFormat) }),
     ...(body.mergedStartupDraft !== undefined && { mergedStartupDraft: Boolean(body.mergedStartupDraft) }),
@@ -142,5 +145,8 @@ export async function PATCH(
     ...(body.collegeFAABBudget !== undefined && { collegeFAABBudget: body.collegeFAABBudget === null ? null : Number(body.collegeFAABBudget) }),
   })
   if (!updated) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+  // The rookie draft is built from the dynasty config: its rounds and type go there too.
+  await mirrorRookieDraftToDynasty(leagueId, body)
+  await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'c2c', before: rulesBefore })
   return NextResponse.json({ ok: true, config: updated })
 }

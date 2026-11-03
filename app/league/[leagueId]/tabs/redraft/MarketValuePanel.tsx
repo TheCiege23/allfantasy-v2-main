@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAllFantasyMarketValues, type AllFantasyMarketValueRow } from '@/lib/redraft/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * T9 commissioner-only "AllFantasy Market Value" panel — read-only. Shows published official market
@@ -9,6 +10,7 @@ import { fetchAllFantasyMarketValues, type AllFantasyMarketValueRow } from '@/li
  * Does NOT change trade grading and changes no other value.
  */
 export function MarketValuePanel({ leagueId }: { leagueId: string }) {
+  const { t } = useOptionalLanguage()
   const [open, setOpen] = useState(false)
   const [values, setValues] = useState<AllFantasyMarketValueRow[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -20,15 +22,16 @@ export function MarketValuePanel({ leagueId }: { leagueId: string }) {
     try {
       setValues((await fetchAllFantasyMarketValues(leagueId)).values)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load market values')
+      setError(e instanceof Error ? e.message : t('tradeCenter.marketValue.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [leagueId])
+  }, [leagueId, t])
 
   useEffect(() => {
-    if (open && values === null && !loading) void load()
-  }, [open, values, loading, load])
+    // `error === null`: a failed load stays failed instead of re-fetching on every render.
+    if (open && values === null && !loading && error === null) void load()
+  }, [open, values, loading, error, load])
 
   return (
     <div className="rounded-lg border border-amber-300/15 bg-amber-400/[0.05]" data-testid="market-value-panel">
@@ -38,14 +41,14 @@ export function MarketValuePanel({ leagueId }: { leagueId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-amber-100"
       >
-        <span>AllFantasy Market Value</span>
+        <span>{t('tradeCenter.marketValue.toggle')}</span>
         <span className="text-amber-200/70">{open ? '▾' : '▸'}</span>
       </button>
 
       {open ? (
         <div className="space-y-2 border-t border-amber-300/15 px-3 py-2 text-[11px]">
           {loading ? (
-            <p className="text-white/50">Loading…</p>
+            <p className="text-white/50">{t('tradeCenter.marketValue.loading')}</p>
           ) : error ? (
             <p className="text-rose-300">{error}</p>
           ) : values && values.length ? (
@@ -66,12 +69,12 @@ export function MarketValuePanel({ leagueId }: { leagueId: string }) {
                 ))}
               </div>
               <p className="text-[11px] text-white/35" data-testid="market-value-disclaimer">
-                AllFantasy market value is separate from provider, ADP, projection, and historical snapshot values.
+                {t('tradeCenter.marketValue.disclaimer')}
               </p>
             </>
           ) : (
             <p className="text-white/55" data-testid="market-value-insufficient">
-              Not enough verified AllFantasy market history to publish an official market value yet.
+              {t('tradeCenter.marketValue.insufficient')}
             </p>
           )}
         </div>

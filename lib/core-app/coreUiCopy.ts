@@ -11,6 +11,9 @@ const spanish: Record<string, string> = {
   'A long-shot forecast; a nonzero probability is not mathematical elimination.': 'Un pronóstico poco probable; una probabilidad distinta de cero no es eliminación matemática.',
   'Divisions and head-to-head tiebreaks are not modelled: seeding is wins plus half a win per final tie, then points for.': 'No se modelan divisiones ni desempates por enfrentamientos: se ordena por victorias más media victoria por empate final y luego por puntos a favor.',
   Home: 'Inicio',
+  // The phone ↻ menu's Display section (theme and language) and its plan line (AfCoreShell).
+  Display: 'Pantalla',
+  'tokens left': 'tokens restantes',
   Brackets: 'Brackets',
   'My team': 'Mi equipo',
   'Defense Hub': 'Defensa',
@@ -48,10 +51,28 @@ const spanish: Record<string, string> = {
   'My Leagues': 'Mis ligas',
   'My leagues': 'Mis ligas',
   'This league': 'Esta liga',
+  // A Survivor league's tab and section names (lib/core-app/survivorTheme.ts).
+  Camp: 'Campamento',
+  'Your shelter': 'Tu refugio',
+  'Immunity challenge': 'Prueba de inmunidad',
+  'Strategy hut': 'Choza de estrategia',
+  'Supply drop': 'Provisiones',
+  'Beach deals': 'Tratos en la playa',
+  'The marooning': 'El abandono',
+  'This episode': 'Este episodio',
+  'Challenge feed': 'Pruebas en vivo',
+  'Tribe standings': 'Clasificación de tribus',
+  'Island map': 'Mapa de la isla',
+  'Island control': 'Control de la isla',
+  'The island': 'La isla',
   'This week': 'Esta semana',
   'Your record': 'Tu historial',
   Manage: 'Administrar',
   'Create a league': 'Crear una liga',
+  'Exile Island': 'Isla del Exilio',
+  PUBLIC: 'PÚBLICA',
+  PRIVATE: 'PRIVADA',
+  'Exile Island for': 'Isla del Exilio de',
   'Find a league': 'Buscar una liga',
   'Import a league': 'Importar una liga',
   'Mock draft': 'Draft simulado',
@@ -592,6 +613,8 @@ const spanish: Record<string, string> = {
   'Claims are made on your platform. AllFantasy only reads your league.': 'Los reclamos se hacen en tu plataforma. AllFantasy solo lee tu liga.',
   'Claims for this league are made here, on AllFantasy.': 'Los reclamos de esta liga se hacen aquí, en AllFantasy.',
   'no waiver settings were ingested for this league': 'No se importaron los ajustes de reclamos de esta liga.',
+  'Fantrax does not send its waiver settings to AllFantasy, so this league’s waiver rules are unknown — check them on Fantrax.':
+    'Fantrax no envía sus ajustes de reclamos a AllFantasy, así que las reglas de reclamos de esta liga son desconocidas. Revísalas en Fantrax.',
   'this league’s waiver type was not read': 'No se pudo leer el tipo de reclamo de esta liga.',
   'this league has waivers turned off — free agents are claimed instantly': 'Esta liga tiene los reclamos desactivados; los agentes libres se adquieren al instante.',
   'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.': 'No se importó el calendario de reclamos de Sleeper. Revisa los ajustes de la liga allí.',
@@ -1325,6 +1348,15 @@ const spanish: Record<string, string> = {
     "No pudimos leer tu historial en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguno.",
   "We could not load your leagues just now. This is a read failure on our side, not a sign that you have none.":
     "No pudimos cargar tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
+  // My team's no-game badge and Your week's season-race strip (redraft /core batch B2).
+  'Off day': 'Día libre',
+  'No games': 'Sin partidos',
+  'His team has no game today. A starter with no game scores nothing for the day.':
+    'Su equipo no juega hoy. Un titular sin partido no suma nada en el día.',
+  'His team has no games this week. A starter with no games scores nothing this week.':
+    'Su equipo no juega esta semana. Un titular sin partidos no suma nada en la semana.',
+  'Season race': 'Carrera de la temporada',
+  'by record': 'por récord',
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

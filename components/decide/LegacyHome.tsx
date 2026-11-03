@@ -21,6 +21,7 @@ import type {
 import { DraftReportCards } from '@/components/decide/DraftReportCards'
 import { ManagerH2H } from '@/components/decide/ManagerH2H'
 import { TradeLedgerGraded } from '@/components/decide/TradeLedgerGraded'
+import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -49,6 +50,7 @@ function record(row: { wins: number; losses: number; ties: number }): string {
 }
 
 export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId: string }) {
+  const rd = useRedraftDeck(league)
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [seasonKey, setSeasonKey] = useState<string | null>(null)
@@ -92,12 +94,25 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
     Boolean(m?.ownerId && viewerId && m.ownerId === viewerId)
 
   return (
-    <div className="bdx" data-testid="legacy-home">
+    <div className="bdx" data-testid="legacy-home" {...rdDeckAttrs(rd)}>
       {loading ? (
         <>
           <div className="bdx-skel" />
           <div className="bdx-skel" style={{ marginTop: 12 }} />
         </>
+      ) : rd && data && !data.supported ? (
+        /* Redraft: the history feed covers Sleeper-imported chains only. Say what is true for an
+           AllFantasy league and point at the race it can see today, rather than naming a platform. */
+        <div className="bdx-empty rdk-deck-empty" data-testid="redraft-legacy-empty">
+          <div className="t">League history covers imported Sleeper leagues</div>
+          <div className="m">
+            Champions, the all-time manager table and past drafts come from a league&apos;s Sleeper chain.
+            {' '}{league.name} runs on AllFantasy, so its {rd.sportLabel} season lives in Standings &amp; playoffs.
+          </div>
+          <a className="bdx-btn pri rdk-deck-cta" href={`/league/${encodeURIComponent(leagueId)}?view=standings`}>
+            Open standings →
+          </a>
+        </div>
       ) : data && !data.supported ? (
         <div className="bdx-empty">
           <div className="t">History for {data.platform} leagues isn&apos;t synced yet</div>
@@ -278,7 +293,7 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
-                              color: isMe(p.pickedBy) ? '#ff9d5c' : undefined,
+                              color: isMe(p.pickedBy) ? 'var(--bdx-me)' : undefined,
                               fontWeight: isMe(p.pickedBy) ? 700 : undefined,
                             }}
                           >

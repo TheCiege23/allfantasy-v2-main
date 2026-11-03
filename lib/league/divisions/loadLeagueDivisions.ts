@@ -9,6 +9,8 @@ import {
 
 export type SeasonRosterDivisions = {
   playoffRule: DivisionPlayoffRule
+  /** Schedule each division rival a second time after the full round robin. */
+  rivalsTwice: boolean
   divisions: LeagueDivision[]
   /** `RedraftRoster.id` → its division. Rosters with none are absent. */
   byRoster: Map<string, LeagueDivision>
@@ -48,7 +50,7 @@ export async function loadSeasonRosterDivisions(
         return { rosterId: r.id, ids: [r.ownerId, link?.id, link?.platformUserId] }
       }),
     )
-    return { playoffRule: active.playoffRule, divisions: active.divisions, byRoster }
+    return { playoffRule: active.playoffRule, rivalsTwice: active.rivalsTwice, divisions: active.divisions, byRoster }
   } catch {
     return null
   }

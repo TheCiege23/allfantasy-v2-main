@@ -118,7 +118,8 @@ describe('integrity alert', () => {
         userIds: ['U1'],
         category: 'commissioner_alerts',
         type: 'integrity_collusion_flag',
-        actionHref: '/league/L1/commissioner/integrity',
+        // The alert opens the flag itself, which the page scrolls to and highlights.
+        actionHref: '/league/L1/commissioner/integrity?flag=F1',
       }),
     )
     expect(queues.add).not.toHaveBeenCalled()

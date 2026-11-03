@@ -1,3 +1,6 @@
+import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
+import { planRookieAuction, type RookieAuctionTrade } from './rookieAuctionPickPolicy'
+import { parseRookieAuctionSettings } from './rookieAuctionSettings'
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
@@ -26,6 +29,7 @@ import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { processWinningContractBid } from '@/lib/salary-cap/ContractBidService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
+import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -81,6 +85,9 @@ export function getAuctionStateFromSession(session: {
   const o = raw as Record<string, unknown>
   return {
     nominationOrderIndex: Number(o.nominationOrderIndex ?? 0),
+    ...(Array.isArray(o.nominationOrder) ? { nominationOrder: o.nominationOrder as SlotOrderEntry[] } : {}),
+    ...(Number.isInteger(o.nominationFallbackStart) ? { nominationFallbackStart: Number(o.nominationFallbackStart) } : {}),
+    ...(o.rookieAuction ? { rookieAuction: o.rookieAuction } : {}),
     currentNomination: (o.currentNomination as AuctionNomination) ?? null,
     currentBid: Number(o.currentBid ?? 0),
     currentBidderRosterId: (o.currentBidderRosterId as string) ?? null,
@@ -110,6 +117,18 @@ export function getBudgetsFromSession(session: {
 /** Who is the current nominator (0-based index into slotOrder). */
 export function getCurrentNominatorIndex(auctionState: AuctionState | null): number {
   return auctionState?.nominationOrderIndex ?? 0
+}
+
+/** The persisted first-pass nominations are followed by the regular repeating rotation. */
+export function getAuctionNominationOrder(slotOrder: SlotOrderEntry[], state: AuctionState | null): SlotOrderEntry[] {
+  return state?.nominationOrder?.length ? state.nominationOrder : slotOrder
+}
+
+export function advanceAuctionNominationIndex(state: AuctionState, orderLength: number): number {
+  const next = Math.max(0, Math.floor(state.nominationOrderIndex)) + 1
+  if (next < orderLength) return next
+  const fallback = state.nominationFallbackStart
+  return Number.isInteger(fallback) && fallback! >= 0 && fallback! < orderLength ? fallback! : 0
 }
 
 /** Minimum next bid for current auction. */
@@ -158,9 +177,10 @@ async function _nominatePlayerCore(
   const season = await loadSeasonDraftContext(leagueId)
   if (season && seasonDraftSessionError(season, session)) return { success: false, error: 'The auction session differs from its frozen tournament rules.' }
   if (season && options?.autoMinimumBid && !timerHasExpired(session.timerEndAt, new Date())) return { success: false, error: 'The nomination clock has not expired.' }
-  const nominationIndex = season ? nextSeasonNominator(slotOrder, state?.nominationOrderIndex ?? 0, session.picks, session.rounds, getBudgetsFromSession(session), config.minBid) : normalizeNominationIndex(state?.nominationOrderIndex ?? 0, slotOrder.length)
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = season ? nextSeasonNominator(slotOrder, state?.nominationOrderIndex ?? 0, session.picks, session.rounds, getBudgetsFromSession(session), config.minBid) : normalizeNominationIndex(state?.nominationOrderIndex ?? 0, nominationOrder.length)
   if (nominationIndex === null) return { success: false, error: 'No eligible nominator remains. Review roster and budget readiness.' }
-  const currentNominator = slotOrder[nominationIndex]
+  const currentNominator = nominationOrder[nominationIndex]
   if (!currentNominator || currentNominator.rosterId !== nominatorRosterId) {
     return { success: false, error: 'You are not the current nominator' }
   }
@@ -168,6 +188,14 @@ async function _nominatePlayerCore(
     return { success: false, error: 'A player is already on the block' }
   }
 
+  if (session.draftModeLabel === 'rookie') {
+    const available = await loadRookieAuctionAvailability(leagueId)
+    if (!available(nomination)) return { success: false, error: 'This player is already on a league roster.' }
+  }
+  if (isRookieRestrictedPlayerPool(session.playerPool)) {
+    const rookie = await resolveServerRookieStatus({ leagueId, playerId: nomination.playerId, playerName: nomination.playerName })
+    if (!isEligibleForPlayerPool(session.playerPool, rookie)) return { success: false, error: 'That player is not eligible for this draft pool.' }
+  }
   const seasonError = await validateSeasonDraftPlayer(leagueId, season && options?.autoMinimumBid ? nominatorRosterId : null, session.picks, nomination)
   if (seasonError) return { success: false, error: seasonError }
   const playerName = nomination.playerName?.trim()
@@ -186,6 +214,7 @@ async function _nominatePlayerCore(
   const minNextBid = openingBid ? openingBid + config.minBidIncrement : config.minBid
 
   const newState: AuctionState = {
+    ...state,
     nominationOrderIndex: nominationIndex,
     currentNomination: {
       playerName,
@@ -217,7 +246,13 @@ async function _nominatePlayerCore(
       return claim
     })
     if (changed.count !== 1) return { success: false, error: 'Auction changed. Reload and retry.' }
-  } else await updateSessionWithArchive(session, write.data, 'auction_nomination', { nomination: newState.currentNomination, nominatorRosterId })
+  } else {
+    try { await updateSessionWithArchive(session, write.data, 'auction_nomination', { nomination: newState.currentNomination, nominatorRosterId }, session.version) }
+    catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') return { success: false, error: 'Auction changed. Reload and retry.' }
+      throw error
+    }
+  }
 
   return { success: true }
 }
@@ -313,7 +348,13 @@ async function _placeBidCore(
       return claim
     })
     if (changed.count !== 1) return { success: false, error: 'Auction changed or bidding expired. Reload and retry.' }
-  } else await updateSessionWithArchive(session, write.data, 'auction_bid', { rosterId, amount })
+  } else {
+    try { await updateSessionWithArchive(session, write.data, 'auction_bid', { rosterId, amount }, session.version) }
+    catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') return { success: false, error: 'Auction changed. Reload and retry.' }
+      throw error
+    }
+  }
 
   return { success: true }
 }
@@ -396,19 +437,31 @@ async function _resolveAuctionWinCore(
     }
   }
 
+  if (winnerRosterId && session.draftModeLabel === 'rookie') {
+    const available = await loadRookieAuctionAvailability(leagueId)
+    if (!available(state.currentNomination)) return { success: false, error: 'This player is already on a league roster.' }
+  }
+
+  if (winnerRosterId && isRookieRestrictedPlayerPool(session.playerPool)) {
+    const rookie = await resolveServerRookieStatus({ leagueId, playerId: state.currentNomination.playerId, playerName: state.currentNomination.playerName })
+    if (!isEligibleForPlayerPool(session.playerPool, rookie)) return { success: false, error: 'That player is not eligible for this draft pool.' }
+  }
+
   const sold = Boolean(winnerRosterId && amount > 0)
   const shouldCompleteAfterResolution = picksCount + (sold ? 1 : 0) >= totalPicks
   const nomination = state.currentNomination
-  const nominationIndex = normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = normalizeNominationIndex(state.nominationOrderIndex, nominationOrder.length)
   const nextBudgets = { ...getBudgetsFromSession(session) }
   if (sold && winnerRosterId) nextBudgets[winnerRosterId] = (nextBudgets[winnerRosterId] ?? 0) - amount
   const futurePicks = sold && winnerRosterId ? [...session.picks, { rosterId: winnerRosterId, playerName: nomination.playerName, position: nomination.position }] : session.picks
-  const nextNominationIndex = season ? nextSeasonNominator(slotOrder, nominationIndex + 1, futurePicks, session.rounds, nextBudgets, config.minBid) : normalizeNominationIndex(nominationIndex + 1, slotOrder.length)
+  const nextNominationIndex = season ? nextSeasonNominator(slotOrder, nominationIndex + 1, futurePicks, session.rounds, nextBudgets, config.minBid) : advanceAuctionNominationIndex({ ...state, nominationOrderIndex: nominationIndex }, nominationOrder.length)
   if (!shouldCompleteAfterResolution && nextNominationIndex === null) return { success: false, error: 'No eligible nominator remains. Review roster and budget readiness.' }
   const nextNominationTimerEndAt = shouldCompleteAfterResolution
     ? null
     : computeTimerEndAt(config.bidTimerSeconds, now)
   const nextAuctionState: AuctionState = {
+    ...state,
     nominationOrderIndex: nextNominationIndex ?? 0,
     currentNomination: null,
     currentBid: 0,
@@ -418,10 +471,11 @@ async function _resolveAuctionWinCore(
   }
 
   try { await prisma.$transaction(async (tx) => {
-    if (season) {
-      const claimed = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'in_progress', timerEndAt: { lte: now } }, data: { version: { increment: 1 } } })
-      if (claimed.count !== 1) throw new Error('SEASON_AUCTION_STALE')
-    }
+    const claimed = await tx.draftSession.updateMany({
+      where: { id: session.id, version: session.version, status: 'in_progress', ...(!force ? { timerEndAt: { lte: now } } : {}) },
+      data: { version: { increment: 1 } },
+    })
+    if (claimed.count !== 1) throw new Error('AUCTION_STALE')
     if (sold && winnerRosterId && amount > 0) {
       const budgets = getBudgetsFromSession(session)
       const newBudgets = { ...budgets }
@@ -486,10 +540,22 @@ async function _resolveAuctionWinCore(
     }
     if (shouldCompleteAfterResolution && !season) {
       await recordArchiveEvent(tx, { ...session, status: 'completed' }, 'complete', {}, now)
+      const { applyPostDraftLifecycleInTransaction } = await import('@/server/services/leagueLifecycleService')
+      await applyPostDraftLifecycleInTransaction(tx, leagueId)
     }
   }) } catch (error) {
-    if (error instanceof Error && error.message === 'SEASON_AUCTION_STALE') return { success: false, error: 'Auction changed. Reload and retry.' }
+    if (error instanceof Error && error.message === 'AUCTION_STALE') return { success: false, error: 'Auction changed. Reload and retry.' }
     throw error
+  }
+
+  if (!season && shouldCompleteAfterResolution) {
+    // The final sale is committed; the shared finalizer mirrors picks into the season rosters.
+    try {
+      const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
+      await runPostDraftFinalizationArtifacts(leagueId)
+    } catch (error) {
+      console.error('[auction] post-draft finalization pending', { leagueId, error: String(error) })
+    }
   }
 
   if (season && shouldCompleteAfterResolution) {
@@ -619,26 +685,40 @@ async function tryAssignAuctionContract(
   }
 }
 
-/**
- * Initialize auction state and budgets when starting an auction draft.
- */
-export async function initializeAuctionForSession(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
-  if (!session || session.draftType !== 'auction') return false
-
-  const season = await loadSeasonDraftContext(leagueId)
-  if (season && seasonDraftSessionError(season, session)) return false
-  if (season && session.auctionState) return true
+/** Build the initial auction values for the same conditional write that starts the session. */
+export async function buildInitialAuctionSessionUpdate(leagueId: string, session: {
+  slotOrder?: unknown
+  auctionBudgetPerTeam?: number | null
+  timerSeconds?: number | null
+  rounds?: number
+  auctionState?: unknown
+  draftModeLabel?: string | null
+}) {
   const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
   const config = await getAuctionConfigForLeague(leagueId, session)
-  const budgetPerTeam = config.budgetPerTeam
   const budgets: AuctionBudgets = {}
-  for (const entry of slotOrder) {
-    budgets[entry.rosterId] = budgetPerTeam
+  for (const entry of slotOrder) budgets[entry.rosterId] = config.budgetPerTeam
+  const saved = session.auctionState && typeof session.auctionState === 'object' ? (session.auctionState as Record<string, unknown>).rookieAuction : null
+  if (session.draftModeLabel === 'rookie' && (!saved || typeof saved !== 'object' || Array.isArray(saved))) {
+    throw new Error('The rookie auction pick plan is missing. Recreate the draft after resolving its settings.')
+  }
+  let nominationOrder: SlotOrderEntry[] | undefined
+  let nominationFallbackStart: number | undefined
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    const raw = saved as Record<string, unknown>
+    const parsed = parseRookieAuctionSettings(raw)
+    if (!parsed.ok || !Array.isArray(raw.trades)) throw new Error('Rookie auction pick settings are invalid. Recreate the draft after resolving its settings.')
+    const plan = planRookieAuction({ ...parsed.value, slotOrder, rounds: session.rounds ?? 0, trades: raw.trades as RookieAuctionTrade[] })
+    Object.assign(budgets, plan.budgets)
+    if (plan.policy === 'nominations') {
+      nominationFallbackStart = plan.nominationOrder.length
+      nominationOrder = [...plan.nominationOrder, ...slotOrder]
+    }
   }
   const nominationWindowEndAt = computeTimerEndAt(config.bidTimerSeconds)
-
-  const initialAuctionState: AuctionState = {
+  const auctionState: AuctionState = {
+    ...(saved ? { rookieAuction: saved } : {}),
+    ...(nominationOrder ? { nominationOrder, nominationFallbackStart } : {}),
     nominationOrderIndex: 0,
     currentNomination: null,
     currentBid: 0,
@@ -646,22 +726,21 @@ export async function initializeAuctionForSession(leagueId: string): Promise<boo
     bidTimerEndAt: nominationWindowEndAt.toISOString(),
     minNextBid: config.minBid,
   }
+  return { auctionBudgets: budgets as any, auctionState: auctionState as any, timerEndAt: nominationWindowEndAt, pausedRemainingSeconds: null }
+}
 
-  const write = {
-    where: { id: session.id },
-    data: {
-      auctionBudgets: budgets as any,
-      auctionState: initialAuctionState as any,
-      timerEndAt: nominationWindowEndAt,
-      pausedRemainingSeconds: null,
-      version: { increment: 1 },
-      updatedAt: new Date(),
-    },
-  }
+/** Initialize an already-running tournament auction (or an explicit recovery initialization). */
+export async function initializeAuctionForSession(leagueId: string): Promise<boolean> {
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
+  if (!session || session.draftType !== 'auction') return false
+  const season = await loadSeasonDraftContext(leagueId)
+  if (season && seasonDraftSessionError(season, session)) return false
+  if (season && session.auctionState) return true
+  const data = { ...(await buildInitialAuctionSessionUpdate(leagueId, session)), version: { increment: 1 }, updatedAt: new Date() }
   if (season) {
-    const changed = await prisma.draftSession.updateMany({ ...write, where: { id: session.id, version: session.version, status: 'in_progress' } })
+    const changed = await prisma.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'in_progress' }, data })
     return changed.count === 1
   }
-  await prisma.draftSession.update(write)
+  await prisma.draftSession.update({ where: { id: session.id }, data })
   return true
 }

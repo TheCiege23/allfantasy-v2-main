@@ -1,4 +1,5 @@
 import 'server-only'
+import { ffcObservationDate, ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 
 import { fetchAllFFCFormats } from '@/lib/adp-data'
 import { confidenceForConsensus } from '@/lib/adp/consensusConfidence'
@@ -46,6 +47,7 @@ type AdpRow = {
   week: number
   season: number
   source: string
+  createdAt?: Date
 }
 
 /*
@@ -197,6 +199,7 @@ export async function runAdpImporter(options?: {
   consensusRowsAttemptedBySport: Record<string, number>
   consensusRowsBySport: Record<string, number>
   staticAdpCoverage: StaticAdpCoverage | null
+  ffcByFormat: Record<string, { rows: number; observedThrough: string | null; fresh: boolean }>
   /** Null when the NBA Fantrax fetch did not run (sport not requested, or no `allowProviderFetch`). */
   fantraxNba: FantraxNbaAdpRunStats | null
   /** Every Fantrax ADP fetch that ran (NBA, MLB, NHL), keyed by sport. */
@@ -208,6 +211,7 @@ export async function runAdpImporter(options?: {
     new Set((options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) => normalizeToSupportedSport(sport)))
   )
 
+  const ffcByFormat: Record<string, { rows: number; observedThrough: string | null; fresh: boolean }> = {}
   let imported = 0
   let providerRowsRead = 0
   let providerRowsWritten = 0
@@ -297,6 +301,8 @@ export async function runAdpImporter(options?: {
 
       for (const [ffcKey, format, scoring] of ffcFormats) {
         const payload = ffc[ffcKey]
+        const observed = ffcObservationDate(payload?.meta)
+        ffcByFormat[ffcKey] = { rows: payload?.players?.length ?? 0, observedThrough: observed?.toISOString() ?? null, fresh: ffcObservationIsFresh(payload?.meta) }
         for (const player of payload?.players ?? []) {
           const playerId = buildPlayerId(sport, player.name, player.position, player.team)
           const key = `${sport}:${format}:${scoring}:${playerId}:ffc`
@@ -313,6 +319,7 @@ export async function runAdpImporter(options?: {
             week,
             season,
             source: 'ffc',
+            ...(observed ? { createdAt: observed } : {}),
           })
         }
       }
@@ -467,6 +474,7 @@ export async function runAdpImporter(options?: {
      * rather than only in a row count that looks identical either way. Null when no NFL branch ran.
      */
     staticAdpCoverage,
+    ffcByFormat,
     fantraxNba,
     fantraxBySport,
   }

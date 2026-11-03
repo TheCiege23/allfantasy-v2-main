@@ -24,7 +24,7 @@ export type DynastyRecipe = {
   regularSeasonLength?: number
   rookieDraftOrderMethod?: DynastyRookieOrderMethod
   rookieDraftRounds?: number
-  rookieDraftType?: 'linear' | 'snake'
+  rookieDraftType?: 'linear' | 'snake' | 'auction'
   taxiSlotCount?: number
   taxiEligibilityYears?: number
   futurePickTradeYears?: number
@@ -47,7 +47,7 @@ export type TemplateRecipe = {
   keeper: KeeperRecipe | null
 }
 
-const ROOKIE_ORDER = new Set<DynastyRookieOrderMethod>(['reverse_standings', 'max_pf', 'lottery', 'commissioner'])
+const ROOKIE_ORDER = new Set<DynastyRookieOrderMethod>(['reverse_standings', 'max_pf', 'lottery', 'weighted_lottery', 'commissioner'])
 const WAIVER = new Set(['faab', 'rolling', 'reverse_standings'])
 const ELIGIBILITY = new Set(['any', 'drafted_only', 'no_waivers'])
 
@@ -96,7 +96,7 @@ export function recipeFromLeague(src: RecipeSource): TemplateRecipe {
         regularSeasonLength: intIn(d.regularSeasonWeeks, 8, 18),
         rookieDraftOrderMethod: ROOKIE_ORDER.has(d.rookiePickOrderMethod as DynastyRookieOrderMethod) ? (d.rookiePickOrderMethod as DynastyRookieOrderMethod) : undefined,
         rookieDraftRounds: intIn(d.rookieDraftRounds, 1, 10),
-        rookieDraftType: d.rookieDraftType === 'linear' || d.rookieDraftType === 'snake' ? d.rookieDraftType : undefined,
+        rookieDraftType: d.rookieDraftType === 'linear' || d.rookieDraftType === 'snake' || d.rookieDraftType === 'auction' ? d.rookieDraftType : undefined,
         taxiSlotCount: intIn(d.taxiSlots, 0, 10),
         taxiEligibilityYears: intIn(d.taxiEligibilityYears, 1, 3),
         futurePickTradeYears: intIn(d.futurePicksYearsOut, 1, 5),
@@ -184,7 +184,7 @@ export function stateFromRecipe(recipe: TemplateRecipe): CreateLeagueV2State {
 }
 
 const TYPE_LABEL: Record<string, string> = { redraft: 'Redraft', dynasty: 'Dynasty', keeper: 'Keeper', best_ball: 'Best ball', bestball: 'Best ball', guillotine: 'Guilly', devy: 'Devy', c2c: 'C2C', survivor: 'Survivor', salary_cap: 'Salary cap' }
-const ORDER_LABEL: Record<DynastyRookieOrderMethod, string> = { reverse_standings: 'reverse standings', max_pf: 'reverse max PF', lottery: 'lottery', commissioner: 'commissioner-set' }
+const ORDER_LABEL: Record<DynastyRookieOrderMethod, string> = { reverse_standings: 'reverse standings', max_pf: 'reverse max PF', lottery: 'weighted lottery', weighted_lottery: 'weighted lottery', commissioner: 'commissioner-set' }
 
 /** Short tags for a library card: what the league plays like, in a glance. */
 export function describeRecipe(recipe: TemplateRecipe): string[] {

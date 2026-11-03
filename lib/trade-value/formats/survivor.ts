@@ -14,16 +14,18 @@ function survivalFit(input: Parameters<FormatValueModel['adjust']>[0], label: st
   return {
     multiplier: after / before,
     reason: `${label} values this deal by this roster's survival odds: ${(before * 100).toFixed(1)}% before and ${(after * 100).toFixed(1)}% after. Tribe, exile and immunity effects must already be included in those league-specific simulations.`,
+    reasonCode: 'survivor.odds',
+    reasonParams: { label, before: (before * 100).toFixed(1), after: (after * 100).toFixed(1) },
   }
 }
 
 function legality(input: Parameters<NonNullable<FormatValueModel['canTrade']>>[0]) {
   const giver = object(input.teamState)
   const receiver = object(input.acquiringTeamState)
-  if (giver?.eliminated === true || receiver?.eliminated === true) return { ok: false, reason: 'An eliminated Survivor roster cannot trade.' }
-  if (giver?.exiled === true || receiver?.exiled === true) return { ok: false, reason: 'Exile currently removes this roster from trading under the league rules.' }
+  if (giver?.eliminated === true || receiver?.eliminated === true) return { ok: false, reason: 'An eliminated Survivor roster cannot trade.', reasonCode: 'survivor.eliminated' }
+  if (giver?.exiled === true || receiver?.exiled === true) return { ok: false, reason: 'Exile currently removes this roster from trading under the league rules.', reasonCode: 'survivor.exiled' }
   const deadline = input.shape.deadlineWeek
-  if (deadline != null && input.currentWeek != null && input.currentWeek > deadline) return { ok: false, reason: `Trades closed after week ${deadline}.` }
+  if (deadline != null && input.currentWeek != null && input.currentWeek > deadline) return { ok: false, reason: `Trades closed after week ${deadline}.`, reasonCode: 'closedAfter', reasonParams: { week: deadline } }
   return { ok: true }
 }
 

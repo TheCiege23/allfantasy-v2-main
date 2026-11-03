@@ -40,7 +40,7 @@ export default function CollegePlayerRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="truncate text-[15px] font-semibold text-white">{slot.player.name}</div>
-          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-[var(--badge-text-cyan)]">
             {statusPill}
           </span>
           {isLive ? (

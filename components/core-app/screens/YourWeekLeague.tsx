@@ -5,6 +5,9 @@ import type { LeagueWeekBoard, LeagueSideline } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import '@/components/core-app/af-week-league.css'
+/* After af-week-league.css: the redraft batch's rules apply only under the shell's redraft stamp. */
+import '@/components/core-app/af-core-redraft-myteam.css'
+import { seasonRaceOrdinal, seasonRaceRank } from '@/lib/core-app/redraftCoreMyTeam'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { yourWeekLeagueMessages, type YourWeekLeagueMessages } from '@/lib/core-app/messages/yourWeekLeague'
@@ -131,6 +134,15 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
   const yourRecord = recordOf(board, board.yourRosterId)
   const oppRecord = recordOf(board, yours?.opponent.rosterId)
   const yourName = board.yourTeamName ?? copy('Your team')
+  /*
+   * The season race: where you sit by record, from the board's own scored records. Every roster the
+   * week pairs is passed so a team with no scored game yet drops the rank rather than shrinking the
+   * league (redraftCoreMyTeam.ts `seasonRaceRank`).
+   */
+  const raceRank = seasonRaceRank(board.records, board.yourRosterId, [
+    yours?.opponent.rosterId,
+    ...sidelines.flatMap((m) => [m.a.rosterId, m.b.rosterId]),
+  ])
 
   return (
     <div className="af-wl">
@@ -144,6 +156,28 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             {copy('Every league at once')} →
           </Link>
         </div>
+        {/*
+          The season-race line: the week, your record, your place by record. Each piece only when it is
+          real — no record before a scored game, no place unless every team in the week has a record.
+        */}
+        {yourRecord || raceRank ? (
+          <p className="af-wl-race" data-testid="week-season-race" aria-label={copy('Season race')}>
+            <span className="af-wl-race-chip af-num" data-kind="week">
+              {msg.period} {board.week}
+            </span>
+            {yourRecord ? (
+              <span className="af-wl-race-chip af-num" data-kind="record">
+                <span className="af-wl-race-k">{copy('Record')}</span> {yourRecord}
+              </span>
+            ) : null}
+            {raceRank ? (
+              <span className="af-wl-race-chip af-num" data-kind="rank">
+                {seasonRaceOrdinal(raceRank)} {copy('of')} {raceRank.of}{' '}
+                <span className="af-wl-race-k">{copy('by record')}</span>
+              </span>
+            ) : null}
+          </p>
+        ) : null}
       </header>
 
       {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}

@@ -123,13 +123,17 @@ describe('the desktop rail opens without being asked', () => {
     expect(railFlag(container)).toBeNull()
   })
 
-  it('gives the mobile league control a stateful accessible name', () => {
+  /* The floating "Leagues" pill is gone (2026-10-29); the bar's Leagues tab opens the tray. */
+  it('opens the phone tray from the bar\'s Leagues tab, which reports its state', () => {
     setViewport(false)
     const { container } = render(shell())
-    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')
-    expect(handle?.getAttribute('aria-label')).toBe('Open leagues')
-    fireEvent.click(handle as HTMLButtonElement)
-    expect(handle?.getAttribute('aria-label')).toBe('Close leagues')
+    expect(container.querySelector('.af-rail-handle')).toBeNull()
+    const tab = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+    expect(tab.textContent).toBe('Leagues')
+    expect(tab).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(tab)
+    expect(tab).toHaveAttribute('aria-expanded', 'true')
+    expect(railFlag(container)).toBe('true')
   })
 
   /* The open tray's header row is its close control at the top: a ✕ that says so, and that closes it. */
@@ -138,7 +142,7 @@ describe('the desktop rail opens without being asked', () => {
     const { container } = render(shell())
     const toggle = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
     expect(toggle.getAttribute('aria-label')).toBeNull()
-    fireEvent.click(container.querySelector<HTMLButtonElement>('.af-rail-handle')!)
+    fireEvent.click(container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!)
     expect(toggle.getAttribute('aria-label')).toBe('Close leagues')
     expect(toggle.querySelector('.af-rail-toggle-icon')?.textContent).toBe('✕')
     fireEvent.click(toggle)
@@ -158,21 +162,28 @@ describe('the desktop rail opens without being asked', () => {
     // jsdom has no layout; treat these rendered controls as visible here.
     vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
     const { container } = render(shell())
-    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')!
+    const opener = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+    const close = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
+    const rail = container.querySelector<HTMLElement>('#af-rail')!
     const home = container.querySelector<HTMLAnchorElement>('.af-rail-logo')!
     const content = container.querySelector<HTMLElement>('#af-content')!
     const previousOverflow = document.body.style.overflow
-    fireEvent.click(handle)
-    expect(document.activeElement).toBe(handle)
+    opener.focus()
+    fireEvent.click(opener)
+    // With the pill gone the tray's own ✕ header row is where focus starts — it is the way out.
+    expect(document.activeElement).toBe(close)
     expect(document.body.style.overflow).toBe('hidden')
     expect(content.closest('.af-main')?.inert ?? content.inert).toBe(true)
+    // Shift+Tab from the tray's first control wraps inside the tray, never out to the inert bar.
+    home.focus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(rail.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).not.toBe(home)
     fireEvent.keyDown(document, { key: 'Tab' })
     expect(document.activeElement).toBe(home)
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
-    expect(document.activeElement).toBe(handle)
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(handle).toHaveAttribute('aria-expanded', 'false')
-    expect(document.activeElement).toBe(handle)
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(opener)
     expect(document.body.style.overflow).toBe(previousOverflow)
     expect(content.closest('.af-main')?.inert ?? content.inert).not.toBe(true)
   })
@@ -180,7 +191,7 @@ describe('the desktop rail opens without being asked', () => {
   it('closes the phone tray for its home and utility links too', () => {
     setViewport(false)
     const { container } = render(shell())
-    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')!
+    const handle = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
     for (const selector of ['.af-rail-logo', '.af-rail-add', '.af-rail-profile']) {
       fireEvent.click(handle)
       fireEvent.click(container.querySelector(selector)!)
@@ -238,7 +249,7 @@ describe('the desktop rail opens without being asked', () => {
     setViewport(false)
     window.localStorage.setItem('af-rail-open', '0')
     const { container } = render(shell())
-    fireEvent.click(container.querySelector('.af-rail-handle')!)
+    fireEvent.click(container.querySelector('[data-testid="af-tabbar-leagues"]')!)
     expect(railFlag(container)).toBe('true')
     expect(window.localStorage.getItem('af-rail-open')).toBe('0')
   })

@@ -10,6 +10,7 @@ const mockLeagueFindMany = vi.hoisted(() => vi.fn())
 const mockTeamFindMany = vi.hoisted(() => vi.fn())
 const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
+const mockIdentityFindMany = vi.hoisted(() => vi.fn())
 const mockSearchPlayers = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findMany: mockTeamFindMany },
     roster: { findMany: mockRosterFindMany },
     sportsPlayer: { findMany: mockSportsPlayerFindMany },
+    playerIdentityMap: { findMany: mockIdentityFindMany },
   },
 }))
 vi.mock('@/lib/core-app/playerFinder', () => ({ suggestCatalog: mockSearchPlayers }))
@@ -82,8 +84,13 @@ beforeEach(() => {
   mockLeagueFindMany.mockResolvedValue(LEAGUES)
   mockTeamFindMany.mockResolvedValue(TEAMS)
   mockRosterFindMany.mockResolvedValue(ROSTERS)
-  mockSportsPlayerFindMany.mockImplementation(async (args: { where: { sleeperId: { in: string[] } } }) =>
-    args.where.sleeperId.in.filter((id) => KNOWN.has(id)).map((id) => ({ sleeperId: id })),
+  mockIdentityFindMany.mockResolvedValue([])
+  // Every known id is an NFL player; a read scoped to another sport finds none of them.
+  type Where = { sport?: string; sleeperId?: { in: string[] }; OR?: Where[] }
+  const ids = (w: Where): string[] =>
+    w.OR ? w.OR.flatMap(ids) : w.sport != null && w.sport !== 'NFL' ? [] : w.sleeperId?.in ?? []
+  mockSportsPlayerFindMany.mockImplementation(async (args: { where: Where }) =>
+    [...new Set(ids(args.where))].filter((id) => KNOWN.has(id)).map((id) => ({ sleeperId: id, sport: 'NFL' })),
   )
   // The catalog's own order: alphabetical, which is exactly the problem.
   mockSearchPlayers.mockResolvedValue([KINCAID, KINCHENS, SUAMATAIA, NO_ID, SKINNER])
@@ -143,15 +150,57 @@ describe('suggestPlayers', () => {
     expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
   })
 
-  /* ⚠ ONE ROW PER PERSON: the college row and the second team spelling fold into the rostered NFL row. */
-  it('folds a player’s college row and a second team spelling into one suggestion, NFL first', async () => {
+  /* Source duplicates fold, while the college and NFL catalog entries remain searchable separately. */
+  it('keeps a player’s college row while folding duplicate rows within each sport', async () => {
     mockSearchPlayers.mockResolvedValue([KINCAID_COLLEGE, KINER_A, KINER_B, KINCAID, KINCHENS, KINCHENS_S])
     const got = await suggestPlayers({ query: 'kin', userId: null, loadLeagueIds })
     expect(got.map((s) => `${s.name} · ${s.sport} · ${s.externalId}`)).toEqual([
       'Dalton Kincaid · NFL · ri-1',
       'Corey Kiner · NFL · ri-6',
       'Kamren Kinchens · NFL · ri-2',
+      'Dalton Kincaid · NCAAF · cfbd-1',
     ])
+  })
+
+  it('returns the chosen sport and never uses an NFL league for its roster chip', async () => {
+    const college = { ...KINCAID_COLLEGE, sleeperId: '10236' }
+    mockSearchPlayers.mockResolvedValue([KINCAID, college])
+    const got = await suggestPlayers({ query: 'kinc', sport: 'NCAAF', userId: 'me', loadLeagueIds })
+    expect(got).toHaveLength(1)
+    expect(got[0].sport).toBe('NCAAF')
+    expect(got[0].presence).toEqual({ yours: [], owned: [], free: [], unchecked: 0 })
+    expect(mockSearchPlayers.mock.calls[0][2]).toMatchObject({ sport: 'NCAAF' })
+  })
+
+  it('shows native and Fantrax college roster presence using provider-qualified ids', async () => {
+    const college = { ...KINCAID_COLLEGE, source: 'rolling_insights', externalId: '340', position: 'QB', name: 'Jordan Smith' }
+    const mapped = {
+      id: 'identity-1', sport: 'NCAAF', canonicalName: 'Jordan Smith', position: 'QB',
+      rollingInsightsId: '340', cfbdId: null, apiSportsId: null, sleeperId: null,
+      espnId: null, mflId: null, fleaflickerId: null, fantraxId: '06k5m',
+    }
+    mockSearchPlayers.mockResolvedValue([college])
+    mockIdentityFindMany.mockResolvedValue([mapped])
+    mockLeagueFindMany.mockResolvedValue([
+      { id: 'N-native', name: 'College Native', platform: 'allfantasy', sport: 'NCAAF' },
+      { id: 'N-fantrax', name: 'College Fantrax', platform: 'fantrax', sport: 'NCAAF' },
+      { id: 'N-espn', name: 'College ESPN', platform: 'espn', sport: 'NCAAF' },
+    ])
+    mockTeamFindMany.mockResolvedValue([
+      { leagueId: 'N-native', externalId: '1', platformUserId: 'me', claimedByUserId: 'me', ownerName: 'Me' },
+      { leagueId: 'N-fantrax', externalId: '2', platformUserId: 'rival', claimedByUserId: null, ownerName: 'Rival' },
+    ])
+    mockRosterFindMany.mockResolvedValue([
+      { leagueId: 'N-native', platformUserId: 'me', playerData: { players: ['340'] }, league: { platform: 'allfantasy', sport: 'NCAAF' } },
+      { leagueId: 'N-fantrax', platformUserId: 'rival', playerData: { players: ['06k5m'] }, league: { platform: 'fantrax', sport: 'NCAAF' } },
+      { leagueId: 'N-espn', platformUserId: 'stranger', playerData: { players: ['340'] }, league: { platform: 'espn', sport: 'NCAAF' } },
+    ])
+    const got = await suggestPlayers({ query: 'jor', sport: 'NCAAF', userId: 'me', loadLeagueIds: async () => ['N-native', 'N-fantrax', 'N-espn'] })
+    expect(got[0]?.presence).toEqual({
+      yours: ['College Native'],
+      owned: [{ leagueName: 'College Fantrax', ownerName: 'Rival' }],
+      free: [], unchecked: 1,
+    })
   })
 
   it('keeps two different players who share a name but not a position group', async () => {
@@ -175,7 +224,7 @@ describe('suggestPlayers', () => {
 describe('getGlobalRosterCounts', () => {
   it('serves the stale count at once and refreshes it once behind the request', async () => {
     const first = await getGlobalRosterCounts(0)
-    expect(first.get('10236')).toBe(2)
+    expect(first.get('NFL:10236')).toBe(2)
     expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
 
     // Ten minutes on, the rosters have grown; the caller still gets the old map immediately.
@@ -189,7 +238,7 @@ describe('getGlobalRosterCounts', () => {
 
     await new Promise((r) => setTimeout(r, 0))
     const fresh = await getGlobalRosterCounts(11 * 60_000 + 1)
-    expect(fresh.get('10236')).toBe(3)
+    expect(fresh.get('NFL:10236')).toBe(3)
     expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
   })
 
@@ -273,6 +322,6 @@ describe('suggestions — a foreign-id league', () => {
 
   it('does not count a foreign roster toward how widely he is rostered', async () => {
     const counts = await getGlobalRosterCounts(0)
-    expect(counts.get('10236')).toBe(2)
+    expect(counts.get('NFL:10236')).toBe(2)
   })
 })

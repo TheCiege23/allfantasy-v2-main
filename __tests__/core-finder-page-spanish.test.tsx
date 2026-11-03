@@ -534,7 +534,7 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
     for (const count of [1, 4]) {
       const { container, unmount } = renderFinder({
         leagueCount: count,
-        detail: { ...DETAIL, leagues: { available: true, data: [] }, impact: { available: true, data: [] } } as PlayerDetail,
+        detail: { ...DETAIL, leagues: { available: true, data: [] }, rosterCoverage: { unmatched: [] }, impact: { available: true, data: [] } } as PlayerDetail,
       })
       const out = ownText(container)
       expectSpanish(out, `no roster ${count}`)

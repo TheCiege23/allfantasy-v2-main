@@ -88,6 +88,11 @@ export async function GET(req: NextRequest) {
       // With sport, isDynasty and leagueType (from `comm`), what the draft panels need to hide
       // the Autostart toggle where it does nothing (lib/draft/redraftScheduledStart.ts).
       platform: league.platform ?? null,
+      // The Import / Sync tab: where an imported league came from and when it was last read. The
+      // stored sync error is never sent — it can carry provider text.
+      importedAt: league.importedAt?.toISOString() ?? null,
+      lastSyncedAt: league.lastSyncedAt?.toISOString() ?? null,
+      syncStatus: league.syncStatus ?? null,
       survivorMode: league.survivorMode ?? null,
       guillotineMode: league.guillotineMode ?? null,
       bestBallMode: league.bestBallMode ?? null,

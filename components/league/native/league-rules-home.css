@@ -1,0 +1,30 @@
+/* League rules popup (LeagueRulesHomeHost). The colours used to be Tailwind arbitrary hex in the TSX
+ * (`bg-[#0d1526]`, `bg-[#ff3d81]`, white alphas), which is a dark panel on every theme — unreadable
+ * against nothing in particular in light mode, and pink inside a sport-themed redraft league.
+ *
+ * ⚠ THE DEFAULT RULES BELOW ARE THE OLD VALUES, ONE FOR ONE, ON PURPOSE. The popup is shared with every
+ * native format and with an imported league's League tab (`variant="classic"`); those keep exactly
+ * what they had. Only a native redraft league re-points it onto /core's palette and the sport
+ * tokens — the host portals the popup into that league's workspace root, so the redraft tokens
+ * (redraft-identity.css) are inherited and light mode follows <html data-mode>. */
+
+.nl-rules-modal{border:1px solid rgba(255,255,255,.1);background:#0d1526;color:#fff}
+.nl-rules-modal-head,.nl-rules-modal-foot{border-color:rgba(255,255,255,.07)}
+.nl-rules-modal-sub{color:rgba(255,255,255,.55)}
+.nl-rules-modal-close{border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.8)}
+.nl-rules-modal-h3{color:rgba(255,255,255,.45)}
+.nl-rules-modal-line{color:rgba(255,255,255,.9)}
+.nl-rules-modal-when{color:rgba(255,255,255,.45)}
+.nl-rules-modal-change{color:rgba(255,255,255,.88)}
+.nl-rules-modal-empty{color:rgba(255,255,255,.55)}
+.nl-rules-modal-chimmy{border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.85)}
+.nl-rules-modal-gotit{background:#ff3d81;color:#fff}
+
+.nl-workspace[data-format=redraft] .nl-rules-modal{border-color:var(--rd-accent-line);background:var(--surface);color:var(--text)}
+.nl-workspace[data-format=redraft] :is(.nl-rules-modal-head,.nl-rules-modal-foot){border-color:var(--line)}
+.nl-workspace[data-format=redraft] :is(.nl-rules-modal-sub,.nl-rules-modal-empty){color:var(--text2)}
+.nl-workspace[data-format=redraft] .nl-rules-modal-close{border-color:var(--line2);color:var(--text2)}
+.nl-workspace[data-format=redraft] :is(.nl-rules-modal-h3,.nl-rules-modal-when){color:var(--muted)}
+.nl-workspace[data-format=redraft] :is(.nl-rules-modal-line,.nl-rules-modal-change){color:var(--text)}
+.nl-workspace[data-format=redraft] .nl-rules-modal-chimmy{border-color:var(--line2);color:var(--text)}
+.nl-workspace[data-format=redraft] .nl-rules-modal-gotit{background:var(--rd-accent);color:var(--rd-accent-ink)}

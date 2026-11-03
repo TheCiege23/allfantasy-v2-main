@@ -6,6 +6,7 @@ import { Plus, TrendingUp, Loader2 } from "lucide-react"
 import { PlayerHeadshot } from "@/components/league/PlayerHeadshot"
 import { teamLogoUrl } from "@/lib/media-url"
 import { positionColor } from "@/lib/draft/positions"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 
 type Props = {
   player: {
@@ -32,6 +33,8 @@ type Props = {
     seasonStatsSummary?: string[]
   }
   sport?: string | null
+  /** NHL dynasty: a Fantrax-only prospect — "Prospect" badge, "Unsigned" when he has no club. */
+  prospect?: boolean
   onAddClick: () => void
   /** When set, the primary CTA performs an immediate free-agent add/drop instead of opening a claim. */
   addMode?: boolean
@@ -108,6 +111,7 @@ function SourcePill({ label, tone = "neutral" }: { label: string; tone?: "neutra
 export default function WaiverPlayerRow({
   player,
   sport,
+  prospect,
   onAddClick,
   addMode,
   onAdd,
@@ -120,8 +124,11 @@ export default function WaiverPlayerRow({
   waiverHoldLabel,
   movesClosedReason,
 }: Props) {
+  const { t } = useOptionalLanguage()
   const pos = player.position || "UNK"
   const team = player.team || "FA"
+  // A prospect Fantrax lists with no NHL club is "Unsigned", never "FA" (every row here is a free agent).
+  const teamLabel = prospect && !player.team ? t("draftRoom.pool.prospectUnsigned") : team
   const normalizedSport = String(sport ?? "NFL").toUpperCase()
   const trend = typeof trendScore === "number" ? trendScore : 0
   const logo = player.teamLogoUrl || (player.team ? teamLogoUrl(player.team, sport ?? "NFL") : "")
@@ -172,9 +179,21 @@ export default function WaiverPlayerRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-semibold text-[var(--text)]">{player.name}</span>
             <TeamLogoBadge logo={logo} team={team} sport={normalizedSport} />
-            <span className="rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
-              {team}
+            <span
+              className="rounded-full border border-[var(--line2)] bg-[var(--surface2)] px-2 py-0.5 text-[11px] text-[var(--muted)]"
+              data-testid={prospect && !player.team ? `waiver-player-prospect-unsigned-${player.id}` : undefined}
+            >
+              {teamLabel}
             </span>
+            {prospect ? (
+              <span
+                className="rounded border border-sky-300/35 bg-sky-500/12 px-1 py-px text-[11px] font-semibold uppercase tracking-[0.06em] text-sky-100"
+                title={t("draftRoom.pool.prospectTooltip")}
+                data-testid={`waiver-player-prospect-badge-${player.id}`}
+              >
+                {t("draftRoom.pool.prospectBadge")}
+              </span>
+            ) : null}
             {player.injuryStatus ? (
               <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-100">
                 {player.injuryStatus}

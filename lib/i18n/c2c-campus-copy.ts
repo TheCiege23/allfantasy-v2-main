@@ -23,6 +23,11 @@ export const CAMPUS_COPY = {
     en: 'No college games count this week, so campus starters score 0 and your pro lineup decides.',
     es: 'Esta semana no cuenta ningún partido universitario: tus titulares universitarios suman 0 y decide tu alineación profesional.',
   },
+  dates: { en: 'Counts college games from {{from}} to {{to}}.', es: 'Cuenta los partidos universitarios del {{from}} al {{to}}.' },
+  noDates: {
+    en: 'This week’s dates are not set yet, so campus starters score 0 and your pro lineup decides.',
+    es: 'Las fechas de esta semana aún no están fijadas: tus titulares universitarios suman 0 y decide tu alineación profesional.',
+  },
   noSeats: { en: 'This league starts no college players.', es: 'Esta liga no alinea jugadores universitarios.' },
   noPlayers: { en: 'You have no college players yet.', es: 'Todavía no tienes jugadores universitarios.' },
   start: { en: 'Start', es: 'Alinear' },

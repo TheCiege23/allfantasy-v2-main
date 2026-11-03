@@ -1,3 +1,4 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -86,7 +87,7 @@ async function rosterAccess(input: {
     select: { id: true, ownerId: true, seasonId: true, leagueId: true },
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
-  if (roster.ownerId === input.userId) return { ok: true as const, roster, isCommissioner: false }
+  if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
   const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }

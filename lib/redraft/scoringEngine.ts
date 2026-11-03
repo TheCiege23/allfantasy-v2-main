@@ -2,15 +2,18 @@ import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } fro
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
+import { campusSport } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
@@ -150,11 +153,26 @@ export function countsTowardScore(slotType: string | null | undefined, bestBall:
   return bestBall ? isBestBallCandidateSlot(slotType) : isScoringStarterSlot(slotType)
 }
 
+/**
+ * Lineups set themselves: a Best Ball league, or a Guilly league its commissioner made best ball
+ * (lib/guillotine/guillotineBestBall.ts — `settings.best_ball`, which only a guillotine league's
+ * scoring reads here, so an imported league carrying the provider's flag scores as before). A caller
+ * that wants the Guilly half must select `settings` and `guillotineMode` too.
+ */
 export function leagueIsBestBall(
-  league: { bestBallMode?: boolean | null; leagueVariant?: string | null; leagueType?: string | null } | null | undefined,
+  league:
+    | {
+        bestBallMode?: boolean | null
+        leagueVariant?: string | null
+        leagueType?: string | null
+        guillotineMode?: boolean | null
+        settings?: unknown
+      }
+    | null
+    | undefined,
 ): boolean {
   if (!league) return false
-  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
+  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
 }
 
 /**
@@ -710,6 +728,8 @@ async function scoreRosterBestBall(args: {
   seasonYear: number
   bestBall: BestBallScoringContext
   collectPlayerPoints?: boolean
+  /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
+  includeBench?: boolean
 }): Promise<RosterScoreSummary> {
   const players = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId: args.rosterId, droppedAt: null },
@@ -759,6 +779,13 @@ async function scoreRosterBestBall(args: {
     starterCount: candidates.length,
     scoredStarterCount: scored,
     points: Math.round(lineup.total * 100) / 100,
+    /*
+     * A best ball team's bench is everyone the optimal lineup left out. Without it a best ball Guilly
+     * league's `bench_points` tiebreak compared nothing with nothing and fell straight through.
+     */
+    ...(args.includeBench
+      ? { benchPoints: Math.round(inputs.filter((i) => !started.has(i.playerId)).reduce((sum, i) => sum + i.points, 0) * 100) / 100 }
+      : {}),
     missingPlayerIds,
     allFinal,
     bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
@@ -771,7 +798,7 @@ async function scoreRosterBestBall(args: {
 async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
   })
   if (!league || !leagueIsBestBall(league)) return null
   const sport = String(league.sport ?? 'NFL')
@@ -795,22 +822,34 @@ export async function scoreRosterForWeek(args: {
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
-  return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  if (useDevyEngine || bestBall) return result
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, platform: true, leagueVariant: true } })
+  if (!league || !isNativePlatform(league.platform) || String(league.sport ?? '').toUpperCase() !== 'NBA' || !['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) return result
+  const campus = await loadCampusPoints(league, { season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
+  if (!campus || !('window' in campus)) return result
+  return { ...result, points: Math.round((result.points + campus.home.points) * 100) / 100, missingPlayerIds: [...result.missingPlayerIds, 'campus-evidence-pending'], allFinal: false }
 }
 
 /**
  * C2C (Campus to Canton): each team's campus starters score on top of its pro lineup — one total
- * (lib/c2c/campusScoring.ts). Native football C2C leagues only; null when no one starts a college
- * player, so a league without a campus lineup scores exactly as before. Imported lazily: the campus
- * scorer uses this module's stat scorer.
+ * (lib/c2c/campusScoring.ts). Native C2C leagues: NFL from college football weeks, NBA from the college
+ * basketball games inside the week's dates. Null when no one starts a college player, so a league
+ * without a campus lineup scores exactly as before. Imported lazily: the campus scorer uses this
+ * module's stat scorer.
  */
 async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
-  args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
+  args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
-  if (!league || !isNativePlatform(league.platform)) return null
-  const { campusPointsForMatchup, isFootballC2CLeague } = await import('@/lib/c2c/campusScoring')
-  return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
+  if (!league || !isNativePlatform(league.platform) || !campusSport(league)) return null
+  const { campusBasketballPointsForMatchup, campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
+  const sport = campusSport(league)
+  if (sport === 'football') {
+    return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
+  }
+  if (sport === 'basketball') return campusBasketballPointsForMatchup(prisma as never, args)
+  return null
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
@@ -842,7 +881,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (!season) return null
   const seasonYear = season.season
 
-  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true } })
+  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true, leagueType: true } })
   // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
   const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
@@ -891,14 +930,21 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   const campus =
     scoringMode === 'points' && !bestBall && !useDevyEngine
-      ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
+      ? await loadCampusPoints(scoringLeague, { season: seasonYear, week, homeRosterId, awayRosterId })
       : null
   if (campus) {
     home.points = Math.round((home.points + campus.home.points) * 100) / 100
     away.points = Math.round((away.points + campus.away.points) * 100) / 100
   }
+  const zombieBaseScores = { home: home.points, away: away.points }
+  let zombieItems: import('@/lib/zombie/beta2025Items').ItemScoreReceipt | null = null
+  const zombieScoring = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform) && scoringLeague && isZombieLeagueLike(scoringLeague)
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
+  // The current college basketball feed does not establish whether a missing line is a bye,
+  // an incomplete box score, or an unpublished postseason game. Keep the score provisional.
+  const campusPending = Boolean(campus && 'window' in campus)
   const isComplete =
+    !campusPending &&
     missingPlayerIds.length === 0 &&
     home.starterCount > 0 &&
     away.starterCount > 0 &&
@@ -927,27 +973,51 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     }
   }
 
-  await prisma.redraftMatchup.update({
-    where: { id: matchupId },
-    data: {
-      homeScore: scoringMode === 'roto' ? 0 : home.points,
-      awayScore: scoringMode === 'roto' ? 0 : away.points,
-      status: isFinal ? 'final' : 'active',
-      lineupSnapshots: {
-        ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
-        ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
-        redraftScoring: {
-          scoredAt: new Date().toISOString(),
-          isComplete,
-          ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
-          ...(campus ? { campus } : {}),
-          home,
-          away,
-          missingPlayerIds,
+  const persistScores = async (db: Pick<typeof prisma, 'redraftMatchup'>) => {
+    let previousSnapshots = m.lineupSnapshots
+    home.points = zombieBaseScores.home
+    away.points = zombieBaseScores.away
+    if (zombieScoring) {
+      const liveMatchup = await db.redraftMatchup.findUniqueOrThrow({ where: { id: matchupId }, select: { lineupSnapshots: true, homeRosterId: true, awayRosterId: true } })
+      if (liveMatchup.homeRosterId !== homeRosterId || liveMatchup.awayRosterId !== awayRosterId) {
+        throw new Error('ZOMBIE_MATCHUP_CHANGED_RETRY')
+      }
+      previousSnapshots = liveMatchup.lineupSnapshots
+      zombieItems = await (await import('@/lib/zombie/beta2025ItemService')).loadBetaItemScoreReceipt({ leagueId, week, season: seasonYear, homeRosterId, awayRosterId, previousSnapshots }, db as never)
+      if (zombieItems) {
+        home.points = Math.round((home.points + zombieItems.home.bonus) * 100) / 100
+        away.points = Math.round((away.points + zombieItems.away.bonus) * 100) / 100
+      }
+    }
+    await db.redraftMatchup.update({
+      where: { id: matchupId },
+      data: {
+        homeScore: scoringMode === 'roto' ? 0 : home.points,
+        awayScore: scoringMode === 'roto' ? 0 : away.points,
+        status: isFinal ? 'final' : 'active',
+        lineupSnapshots: {
+          ...(previousSnapshots && typeof previousSnapshots === 'object' && !Array.isArray(previousSnapshots) ? previousSnapshots : {}),
+          ...(zombieItems ? { zombieItems: { ...zombieItems, homeBaseScore: zombieBaseScores.home, awayBaseScore: zombieBaseScores.away } } : {}),
+          ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
+          redraftScoring: {
+            scoredAt: new Date().toISOString(),
+            isComplete,
+            ...(campusPending ? { campusPending: true } : {}),
+            ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
+            ...(campus ? { campus } : {}),
+            home,
+            away,
+            missingPlayerIds,
+          },
         },
       },
-    },
-  })
+    })
+
+  }
+  if (zombieScoring) {
+    const { itemTransaction, lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')
+    await itemTransaction(async tx => { await lockItemLeague(tx, leagueId); await persistScores(tx) })
+  } else await persistScores(prisma)
 
   // G15.2b/G15.3 — best-effort, never throws.
   //  • matchup.finalized: once per matchup (deterministic key), on final result.
@@ -1102,11 +1172,12 @@ async function updateByeRowScore(row: {
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
   // A C2C bye team's campus starters count toward its median / extra-game score too.
   const campus = !bestBall && !useDevyEngine
-    ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
+  const campusPending = Boolean(campus && 'window' in campus)
   const isComplete =
-    home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+    !campusPending && home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
   await prisma.redraftMatchup.update({
     where: { id: m.id },
     data: {
@@ -1117,10 +1188,11 @@ async function updateByeRowScore(row: {
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
+          ...(campusPending ? { campusPending: true } : {}),
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,
-          ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
+          ...(campus ? { campus: { ...('cfbWeeks' in campus ? { cfbWeeks: campus.cfbWeeks } : { window: campus.window }), home: campus.home } } : {}),
         },
       },
     },

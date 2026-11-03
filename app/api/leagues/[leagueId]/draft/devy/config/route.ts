@@ -10,6 +10,8 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { emptyCollegeRoundsError, sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,15 +42,34 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}))
   const enabled = Boolean(body.enabled)
-  const devyRounds = Array.isArray(body.devyRounds)
-    ? (body.devyRounds as number[]).filter((r) => typeof r === 'number' && r >= 1 && r <= (draft.rounds ?? 50))
-    : []
+  // Whole rounds 1..draft.rounds, each once, ascending — the same normaliser Settings › Draft uses
+  // (lib/draft-defaults/draftRoundList.ts). Kept, normalised, when off: the pick check ignores them.
+  const devyRounds = sanitizeRoundList(body.devyRounds, draft.rounds)
+  // On with no round would make every round pro-only (the pick check's Array.includes never
+  // matches), so it is refused rather than stored — Settings › Draft refuses it too.
+  if (enabled && devyRounds.length === 0) {
+    return NextResponse.json({ error: emptyCollegeRoundsError('devy', draft.rounds) }, { status: 400 })
+  }
 
   const devyConfig = { enabled, devyRounds }
+
+  // The draft rules as members read them, before the write — for the "What changed" card. Loaded
+  // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
 
   await prisma.draftSession.update({
     where: { id: draft.id },
     data: { devyConfig: devyConfig as any, version: { increment: 1 }, updatedAt: new Date() },
+  })
+
+  // Published silently (no push / email): the league home's "What changed" card is how members hear
+  // that the devy rounds moved. Nothing when they did not (a save of the same rounds).
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'draft',
+    changes: draftRules ? draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)) : [],
   })
 
   const snapshot = await buildSessionSnapshot(leagueId)

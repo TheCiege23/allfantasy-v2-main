@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
+import { usesDynastyBackground } from "@/lib/league-media/dynastyBackground"
 import LeagueChatDock from "@/components/chat/LeagueChatDock"
 
 /**
@@ -12,6 +13,7 @@ export default function LeagueChatDockClient() {
   const params = useParams<{ leagueId: string }>()
   const leagueId = params?.leagueId ?? ""
   const [isCommissioner, setIsCommissioner] = useState(false)
+  const [dynastyBackground, setDynastyBackground] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -27,6 +29,13 @@ export default function LeagueChatDockClient() {
         if (active) setIsCommissioner(false)
       }
     }
+    setDynastyBackground(false)
+    if (leagueId) {
+      fetch(`/api/leagues/${encodeURIComponent(leagueId)}`, { cache: "no-store" })
+        .then(res => res.ok ? res.json() : null)
+        .then(league => { if (active && league) setDynastyBackground(usesDynastyBackground(league)) })
+        .catch(() => {})
+    }
     void loadCommissionerStatus()
     return () => {
       active = false
@@ -38,6 +47,7 @@ export default function LeagueChatDockClient() {
   return (
     <LeagueChatDock
       leagueId={leagueId}
+      dynastyBackground={dynastyBackground}
       isCommissioner={isCommissioner}
     />
   )

@@ -22,11 +22,20 @@ export async function POST(req: NextRequest) {
   const gate = await assertLeagueCommissioner(row.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
+  // A second merge of the same session would write its history seasons again. Re-importing
+  // means starting a new session.
+  if (row.status === 'merged') {
+    return NextResponse.json({ error: 'Session already merged', code: 'already_merged' }, { status: 409 })
+  }
+
   await prisma.devyImportSession.update({
     where: { id: sessionId },
     data: { approvedAt: new Date(), status: 'approved' },
   })
 
-  const result = await executeMerge(sessionId, userId)
+  // executeMerge looks the session up by its creator. The gate above already allows any
+  // commissioner or co-commissioner, so pass the creator rather than the caller — otherwise a
+  // co-commissioner who did not open the session is told it does not exist.
+  const result = await executeMerge(sessionId, row.commissionerId)
   return NextResponse.json({ result })
 }
