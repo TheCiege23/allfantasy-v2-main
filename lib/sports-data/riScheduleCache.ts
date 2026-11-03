@@ -13,6 +13,8 @@ import type { RiSeasonType } from '@/lib/sports-data/riSeasonType'
 
 export type ScheduleGame = {
   gameId: string
+  /** Required for competition-scoped soccer advice; older cached fixtures may omit it. */
+  competition?: string | null
   /** US Eastern day, `YYYY-MM-DD` — the same bucketing `player_game_stats.game_date` uses. */
   day: string
   startTime: string | null
