@@ -20,6 +20,18 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("offers a direct link to later Group Play dates with pick controls available", () => {
+    const v = view()
+    const first = v.series.find((game) => game.id === "group")!
+    v.series.push({ ...first, id: "later", seriesNumber: 1003, startsAt: "2099-11-13T20:00:00Z" })
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    const dates = screen.getByRole("navigation", { name: "Jump to a Group Play date" })
+    const later = within(dates).getByRole("link", { name: /Nov 13/ })
+    const day = document.getElementById(later.getAttribute("href")!.slice(1))!
+    expect(within(day).getByRole("button", { name: "Pick Boston Celtics" })).toBeEnabled()
+    expect(screen.getByRole("link", { name: /Next date: .*Nov 13/ })).toHaveAttribute("href", later.getAttribute("href"))
+  })
+
   it("shows mobile knockout rounds and only enables picks before tipoff", () => {
     vi.stubGlobal("matchMedia", () => ({
       matches: true,

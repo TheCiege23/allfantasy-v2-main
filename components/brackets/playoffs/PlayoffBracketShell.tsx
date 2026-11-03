@@ -14,6 +14,7 @@ import {
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
@@ -163,6 +164,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   function handleCreateEntry() {
+    if (!view.viewerUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}`)}`)
+      return
+    }
     startCreatingEntry(async () => {
       try {
         const nextEntryIndex = viewerEntryCount + 1
@@ -229,11 +234,13 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   async function copyInvite() {
     try {
-      const absoluteUrl = `${window.location.origin}${safeChallenge.inviteUrl}`
-      await navigator.clipboard.writeText(`${absoluteUrl}?code=${safeChallenge.inviteCode}`)
+      const absoluteUrl = new URL(safeChallenge.inviteUrl, window.location.origin)
+      absoluteUrl.searchParams.set("code", safeChallenge.inviteCode)
+      await navigator.clipboard.writeText(absoluteUrl.toString())
       toast.success(copy.inviteCopied)
     } catch {
       toast.error(copy.inviteCopyFailed)
+      document.getElementById("league-invite")?.scrollIntoView({ block: "center" })
     }
   }
 
@@ -249,6 +256,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   return (
+    <>
+    <BracketQuickNav current="league" leagueId={safeChallenge.id} language={language} />
     <main className="af-bracket-experience af-pd">
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
@@ -312,7 +321,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 className="af-bx-btn af-bx-primary"
               >
                 <ArrowRightCircle className="h-4 w-4" aria-hidden />
-                {primaryButtonLabel}
+                {!view.viewerUserId && !primaryEntry ? (language === "es" ? "Inicia sesión para crear tu cuadro" : "Sign in to create your bracket") : primaryButtonLabel}
               </button>
               {primaryEntry && canCreateEntry ? (
                 <button type="button" onClick={handleCreateEntry} disabled={creatingEntry} className="af-bx-btn">
@@ -320,10 +329,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                   {copy.createAnother}
                 </button>
               ) : null}
-              {canManagePlayoffPool && (
+              {canManagePlayoffPool && safeChallenge.inviteCode && (
                 <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-btn" className="af-bx-btn">
                   <Clipboard className="h-4 w-4" aria-hidden />
-                  {copy.invite}
+                  {copy.copyLeagueInvite}
                 </button>
               )}
               {canSyncPlayoffPool ? (
@@ -371,7 +380,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           </article>
 
           {canManagePlayoffPool ? (
-            <article data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
+            <article id="league-invite" data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
               <h2 className="af-pd-h2">{copy.invitePanel}</h2>
               <p className="af-pd-muted">{copy.shareLink}</p>
               <div className="af-bx-invite af-pd-invite">
@@ -573,5 +582,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {singleGameSport && <p className="af-bx-disclaimer af-pd-disclaimer">{copy.disclaimer}</p>}
       </div>
     </main>
+    </>
   )
 }

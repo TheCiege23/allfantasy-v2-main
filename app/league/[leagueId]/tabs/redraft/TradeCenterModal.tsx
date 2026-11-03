@@ -32,6 +32,8 @@ type PreviewGrade = {
   getValue: number | null
   evaluationReceiptId: string | null
   gradeScope?: 'zombie_future_scoring'
+  zombieEligibility?: { status: 'eligible' | 'blocked'; reason?: string }
+  zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
 }
 
 function initials(name: string): string {
@@ -811,6 +813,23 @@ export function TradeCenterModal({
                   </span>
                 ) : null}
               </div>
+              {serverGrade?.zombieEligibility && (
+                <div role="status" className="rounded border border-white/20 bg-black/30 p-2 text-xs text-white">
+                  <strong>{serverGrade.zombieEligibility.status === 'blocked'
+                    ? pickEnEs({ en: 'Zombie trade blocked', es: 'Intercambio Zombie bloqueado' }, language)
+                    : pickEnEs({ en: 'Current Zombie eligibility verified', es: 'Elegibilidad Zombie actual verificada' }, language)}</strong>
+                  {serverGrade.zombieEligibility.reason && <p>{serverGrade.zombieEligibility.reason}</p>}
+                </div>
+              )}
+              {serverGrade?.zombieInventory && (
+                <section className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Projected item points · Before → After', es: 'Puntos proyectados de objetos · Antes → Después' }, language)}</h4>
+                  <dl className="mt-1 grid grid-cols-2 gap-2">
+                    <div><dt>{proposerName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.proposer.before} → {serverGrade.zombieInventory.proposer.after}</dd></div>
+                    <div><dt>{receiverName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.receiver.before} → {serverGrade.zombieInventory.receiver.after}</dd></div>
+                  </dl>
+                </section>
+              )}
               {(serverGrade?.grade || serverGrade?.gradeScope === 'zombie_future_scoring') && serverGrade?.giveValue != null && serverGrade?.getValue != null ? (
                 <div className="grid grid-cols-2 gap-2 text-[11px]" data-testid="trade-value-grade-totals">
                   <div className="rounded border border-white/10 bg-black/20 p-2">

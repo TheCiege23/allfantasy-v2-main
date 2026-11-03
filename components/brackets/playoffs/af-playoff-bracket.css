@@ -162,6 +162,21 @@
   margin-top: 14px;
 }
 
+.af-pb-next-step {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 12px;
+  border: 1px solid var(--pb-line);
+  border-radius: 10px;
+  color: var(--pb-text);
+  font-size: 13px;
+}
+.af-pb-next-step strong { width: 100%; }
+.af-pb-next-step span { color: var(--pb-muted); }
+
 .af-pb-progress {
   display: flex;
   gap: 10px;
