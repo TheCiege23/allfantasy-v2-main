@@ -349,7 +349,7 @@ describe('Player Finder — core view', () => {
     })
     // Twice in the DOM: under the phone's league cards and under the desktop table — CSS shows one per width.
     expect(screen.getAllByText(/Not checked: Office Pool/)).toHaveLength(2)
-    expect(screen.getAllByText(/ESPN player ids/)).toHaveLength(2)
+    expect(screen.getAllByText(/could not verify this player's roster status in this ESPN league/)).toHaveLength(2)
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
