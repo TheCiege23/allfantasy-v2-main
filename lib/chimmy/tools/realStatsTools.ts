@@ -302,16 +302,29 @@ export async function buildPlayerGameLogContext(
 
   /*
    * player_game_stats keys NFL rows on the SLEEPER id; PlayerIdentityMap is the bridge (sleeperId is
-   * unique there — measured 9,037 rows / 9,037 ids). Matched exactly in JS with the app's own
+   * unique there). Historical IDs missing from that registry can use a stored Sleeper ID from
+   * SportsPlayer when there are game rows under that ID. Matched exactly in JS with the app's own
    * normalizer, never the stored normalizedName column, which other writers fill differently.
    */
   const candidates = await db.$queryRaw<Array<{ sleeperId: string; canonicalName: string; position: string | null; currentTeam: string | null }>>(Prisma.sql`
-    SELECT "sleeperId", "canonicalName", position, "currentTeam"
-    FROM "PlayerIdentityMap"
-    WHERE sport = 'NFL' AND "sleeperId" IS NOT NULL AND "canonicalName" ILIKE ${`%${token}%`}
-    LIMIT 60`)
+    WITH names AS (
+      SELECT "sleeperId", "canonicalName", position, "currentTeam", 0 AS priority
+      FROM "PlayerIdentityMap"
+      WHERE sport = 'NFL' AND "sleeperId" IS NOT NULL AND "canonicalName" ILIKE ${`%${token}%`}
+      UNION ALL
+      SELECT s."sleeperId", s.name, s.position, s.team, 1
+      FROM "SportsPlayer" s
+      WHERE s.sport = 'NFL' AND s."sleeperId" IS NOT NULL AND s.name ILIKE ${`%${token}%`}
+        AND EXISTS (SELECT 1 FROM player_game_stats g WHERE g."sportType" = 'NFL' AND g."playerId" = s."sleeperId")
+        AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" i WHERE i.sport = 'NFL' AND i."sleeperId" = s."sleeperId")
+    )
+    SELECT DISTINCT ON ("sleeperId", "canonicalName") "sleeperId", "canonicalName", position, "currentTeam"
+    FROM names ORDER BY "sleeperId", "canonicalName", priority, position, "currentTeam"
+    LIMIT 61`)
+  if (candidates.length > 60) return 'Too many NFL player identities match this name. Ask for the full player name.'
   const target = normalizePlayerName(asked)
-  const players = candidates.filter((c) => normalizePlayerName(c.canonicalName) === target)
+  const players = [...new Map(candidates.filter((p) => normalizePlayerName(p.canonicalName) === target)
+    .map((p) => [p.sleeperId, p])).values()]
   if (players.length === 0) {
     const near = [...new Set(candidates.map((c) => c.canonicalName))].slice(0, 5)
     return [
@@ -425,7 +438,7 @@ const NCAAF_GAME_KEYS: Array<[string, string]> = [
 /*
  * College lines live in player_game_stats under the CFBD athlete id — the SAME id the CFBD season
  * rows in fantasy_stat_lines carry (their `player_id`), so a player found by name there is the key
- * here. No identity-map hop, and so none of its coverage gaps.
+ * here. A named weekly CFBD row also supplies its own provider athlete ID when no season total is available.
  */
 async function buildNcaafGameLogContext(
   args: { playerName: string; season?: unknown; week?: unknown; lastN?: unknown },
@@ -436,14 +449,26 @@ async function buildNcaafGameLogContext(
   if (token.length < 2) return `"${asked}" is not a name I can search for. Ask for the player's full name.`
 
   const candidates = await db.$queryRaw<Array<{ playerId: string; name: string | null; team: string | null; position: string | null; season: string }>>(Prisma.sql`
-    SELECT DISTINCT ON (player_id) player_id AS "playerId", stats ->> 'name' AS name,
-           coalesce(stats ->> 'riTeam', team) AS team, stats ->> 'position' AS position, season
-    FROM fantasy_stat_lines
-    WHERE sport = 'NCAAF' AND source = 'cfbd' AND week = 0 AND (stats ->> 'name') ILIKE ${`%${token}%`}
-    ORDER BY player_id, season DESC
-    LIMIT 60`)
+    WITH names AS (
+      SELECT player_id, stats ->> 'name' AS name, coalesce(stats ->> 'riTeam', team) AS team,
+             stats ->> 'position' AS position, season, 0 AS priority
+      FROM fantasy_stat_lines
+      WHERE sport = 'NCAAF' AND source = 'cfbd' AND week = 0 AND (stats ->> 'name') ILIKE ${`%${token}%`}
+      UNION ALL
+      SELECT g."playerId", g.stat_payload ->> 'name', coalesce(g.stat_payload ->> '_team', g.team),
+             NULL, g.season::text, 1
+      FROM player_game_stats g
+      WHERE g."sportType" = 'NCAAF' AND g."playerId" ~ '^[1-9][0-9]*$'
+        AND (g.source = 'cfbd-weekly' OR (g.source IS NULL AND g.stat_payload ? '_team'))
+        AND (g.stat_payload ->> 'name') ILIKE ${`%${token}%`}
+    )
+    SELECT DISTINCT ON (player_id, name) player_id AS "playerId", name, team, position, season
+    FROM names ORDER BY player_id, name, priority, season DESC, team, position
+    LIMIT 61`)
+  if (candidates.length > 60) return 'Too many college football player identities match this name. Ask for the full player name.'
   const target = normalizePlayerName(asked)
-  const players = candidates.filter((c) => normalizePlayerName(c.name ?? '') === target)
+  const players = [...new Map(candidates.filter((p) => normalizePlayerName(p.name ?? '') === target)
+    .map((p) => [p.playerId, p])).values()]
   if (players.length === 0) {
     const near = [...new Set(candidates.map((c) => c.name).filter(Boolean))].slice(0, 5)
     return [

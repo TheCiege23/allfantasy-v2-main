@@ -11,6 +11,14 @@ async function main() {
       UNION
       SELECT sport, player_id FROM fantasy_stat_lines
       WHERE sport = 'NCAAF' AND source = 'cfbd' AND week = 0 AND nullif(stats ->> 'name', '') IS NOT NULL
+      UNION
+      SELECT sport, "sleeperId" FROM "SportsPlayer"
+      WHERE sport = 'NFL' AND "sleeperId" IS NOT NULL AND nullif(name, '') IS NOT NULL
+      UNION
+      SELECT "sportType", "playerId" FROM player_game_stats
+      WHERE "sportType" = 'NCAAF' AND "playerId" ~ '^[1-9][0-9]*$'
+        AND (source = 'cfbd-weekly' OR (source IS NULL AND stat_payload ? '_team'))
+        AND nullif(stat_payload ->> 'name', '') IS NOT NULL
     )
     SELECT p."sportType" AS sport, p.season, p.source, count(*)::int AS rows,
       count(*) FILTER (WHERE i.player_id IS NOT NULL)::int AS rows_with_reader_identity,

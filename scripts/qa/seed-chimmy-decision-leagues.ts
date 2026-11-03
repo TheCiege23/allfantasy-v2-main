@@ -1,3 +1,4 @@
+import { upsertChimmyStagingLeagueFixture } from '@/lib/domain/stagingLeagueFixture'
 import { prisma } from '@/lib/prisma'
 import { executeChimmyTool } from '@/lib/chimmy/tools/chimmyTools'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
@@ -14,8 +15,6 @@ const names = ['Avery Lockhart', 'Casey Bellwood', 'Jordan Ashford', 'Morgan Wes
 
 async function main() {
   if (process.env.CHIMMY_STAGING_PROJECT_ID !== PROJECT) throw new Error('Isolated bracket staging required')
-  const account = await prisma.appUser.findUnique({ where: { id: USER }, select: { email: true } })
-  if (account?.email !== 'bracket-admin@staging.invalid') throw new Error('Wrong staging QA identity')
   for (const fixture of fixtures) {
     const leagueId = 'chimmy-3164-qa-' + fixture.kind
     const ids = names.map((_, i) => leagueId + '-player-' + i)
@@ -23,13 +22,11 @@ async function main() {
     const owners = [USER, leagueId + '-manager']
     const teamNames = ['QA Harbor', 'QA Summit']
     await prisma.$transaction(async (tx) => {
-      const existing = await tx.league.findUnique({ where: { id: leagueId }, select: { userId: true, tenantId: true } })
-      if (existing && (existing.userId !== USER || existing.tenantId !== TENANT)) throw new Error('Fixture ownership mismatch')
       const rules = { settings: fixture.settings, scoring: fixture.scoring, starters: [fixture.slot], rosterSize: 3, irSlots: 1 }
-      await tx.league.upsert({ where: { id: leagueId }, update: rules, create: {
+      await upsertChimmyStagingLeagueFixture(tx, {
         id: leagueId, tenantId: TENANT, userId: USER, platform: 'allfantasy', platformLeagueId: leagueId,
         name: 'Chimmy QA ' + fixture.kind, sport: fixture.sport, season: 2026, leagueType: 'redraft', ...rules,
-      } })
+      }, rules)
       for (let i = 0; i < names.length; i++) {
         const player = { name: names[i]!, sport: fixture.sport, team: fixture.team[i]!, position: fixture.position,
           stats: {}, projections: {}, injuryStatus: i === 1 ? 'Out' : null, dataSource: 'chimmy_staging_qa' }
