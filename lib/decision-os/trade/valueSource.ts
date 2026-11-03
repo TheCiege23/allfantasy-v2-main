@@ -18,6 +18,7 @@
  *   guillotine_points  guillotine: points over the free agent for the same lineup slot × weeks of survival
  *   guillotine_faab    guillotine: FAAB's share of what the remaining chops will release, at grading
  *   zombie_points      zombie: league points over the best free agent for the slot × remaining weeks
+ *   zombie_item        zombie: team-specific future item score from actual inventory and Horde state
  *   historical_file    the name-keyed historical value file             its snapshot date
  *   draft_analytics    a draft-capital lifetime value                   no date recorded
  *   position_baseline  a flat per-position constant                     no date recorded
@@ -37,6 +38,7 @@ export type TradeValueSource =
   | 'guillotine_points'
   | 'guillotine_faab'
   | 'zombie_points'
+  | 'zombie_item'
   | 'historical_file'
   | 'draft_analytics'
   | 'position_baseline'

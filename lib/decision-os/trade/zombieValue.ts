@@ -6,7 +6,25 @@ import { pointsOverReplacement, type GuillotineContext } from './guillotineValue
 /** Old generic market grades are not originals on the Zombie player basis. */
 export function isZombieBasisGrade(grade: { lines?: ReadonlyArray<{ valueSource?: string | null }> | null } | null | undefined): boolean {
   const lines = grade?.lines ?? []
-  return lines.length > 0 && lines.every((line) => line.valueSource === 'zombie_points')
+  return lines.length > 0 && lines.every((line) => line.valueSource === 'zombie_points' || line.valueSource === 'zombie_item')
+}
+
+export function priceZombiePlayerSide(
+  assets: readonly TradeAssetInput[], side: 'give' | 'get', ctx: GuillotineContext,
+): { lines: TradeGradeLine[]; total: number } | { withheld: string } {
+  const index = indexBoard(ctx.board)
+  const lines: TradeGradeLine[] = []
+  let total = 0
+  for (const asset of assets) {
+    if (asset.kind === 'pick') return { withheld: 'This Zombie player comparison cannot price draft picks. The full deal is not graded.' }
+    if (asset.kind === 'faab') return { withheld: 'This Zombie league uses free agency rather than a FAAB waiver auction. The full deal is not graded.' }
+    const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
+    if (!found.ok) return { withheld: `${found.reason} The full deal is not graded.` }
+    const value = Math.round(pointsOverReplacement(found.player, ctx.seats, ctx.replacementBySlot) * ctx.weeksLeft * 10) / 10
+    total += value
+    lines.push({ side, name: found.player.name, marketValue: value, leagueValue: value, source: 'zombie-player-vorp', valueSource: 'zombie_points', valueAsOf: null })
+  }
+  return { lines, total }
 }
 
 /** Player-only Zombie grade. Infection, item holdings and trade eligibility need live team state. */
@@ -20,25 +38,9 @@ export function gradeZombiePlayerDeal(args: {
   const basis = `Zombie · ${ctx.lineupLabel} · league scoring · ${weeks} projected week${weeks === 1 ? '' : 's'} left. Players are priced above the best available free agent for each eligible lineup slot because adds are free and immediate. Infection, weapons, serums, payout and counterparty eligibility are not priced.`
   if (!(weeks > 0)) return { graded: false, reason: 'No projected season weeks remain for a Zombie player comparison.', basis }
 
-  const index = indexBoard(ctx.board)
-  const price = (assets: readonly TradeAssetInput[], side: 'give' | 'get'): { lines: TradeGradeLine[]; total: number } | { withheld: string } => {
-    const lines: TradeGradeLine[] = []
-    let total = 0
-    for (const asset of assets) {
-      if (asset.kind === 'pick') return { withheld: 'This Zombie player comparison cannot price draft picks. The full deal is not graded.' }
-      if (asset.kind === 'faab') return { withheld: 'This Zombie league uses free agency rather than a FAAB waiver auction. The full deal is not graded.' }
-      const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
-      if (!found.ok) return { withheld: `${found.reason} The full deal is not graded.` }
-      const value = Math.round(pointsOverReplacement(found.player, ctx.seats, ctx.replacementBySlot) * weeks * 10) / 10
-      total += value
-      lines.push({ side, name: found.player.name, marketValue: value, leagueValue: value, source: 'zombie-player-vorp', valueSource: 'zombie_points', valueAsOf: null })
-    }
-    return { lines, total }
-  }
-
-  const give = price(args.give, 'give')
+  const give = priceZombiePlayerSide(args.give, 'give', ctx)
   if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
-  const get = price(args.get, 'get')
+  const get = priceZombiePlayerSide(args.get, 'get', ctx)
   if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
   if (give.total <= 0 && get.total <= 0) {
     return { graded: false, reason: 'Both sides project at or below the best free agents for this Zombie lineup.', basis }
