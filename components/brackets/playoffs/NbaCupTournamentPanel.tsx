@@ -29,21 +29,25 @@ export default function NbaCupTournamentPanel({ series, season, syncedAt, showGa
   const teams = groups.flatMap((group) => group.teams.map((team) => ({ ...team, group: group.name })))
   const [selected, setSelected] = useState("")
   const [allFinals, setAllFinals] = useState(false)
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(timer) }, [])
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => {
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 15_000)
+    return () => clearInterval(timer)
+  }, [])
   const team = teams.find((row) => row.team === selected) ?? teams[0]
   const records = Object.fromEntries(teams.map((row) => [row.team, `${row.wins}–${row.losses}`]))
   const live = series.filter((game) => game.status === "in_progress")
   const finals = series.filter((game) => game.status === "final").sort((a, b) => Date.parse(b.startsAt ?? "") - Date.parse(a.startsAt ?? ""))
   const syncTime = syncedAt ? Date.parse(syncedAt) : NaN
-  const stale = live.length > 0 && (!Number.isFinite(syncTime) || now - syncTime > 120_000)
+  const stale = live.length > 0 && now !== null && (!Number.isFinite(syncTime) || now - syncTime > 120_000)
   return <section className="rounded-3xl border border-teal-300/25 bg-slate-950 p-4 text-white sm:p-6" aria-label="NBA Cup live scores and qualification">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-xl font-black">NBA Cup · live games &amp; road to the bracket</h2>
         <p className="mt-2 text-sm text-slate-300">Game scores refresh automatically. Pick points are awarded after the official final.</p></div>
       <p className={`max-w-xs text-xs ${stale ? "text-amber-200" : "text-teal-200"}`} role="status">
         {stale ? "Live feed delayed — showing last verified scores. " : ""}
-        {Number.isFinite(syncTime) ? `Last verified sync: ${new Date(syncTime).toLocaleTimeString()}` : "Waiting for the first verified update."}
+        {Number.isFinite(syncTime) ? now === null ? "Scores have been synced." : `Last verified sync: ${new Date(syncTime).toLocaleTimeString()}` : "Waiting for the first verified update."}
       </p>
     </div>
     {showGames && <div className="mt-5">
