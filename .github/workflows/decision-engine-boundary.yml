@@ -37,8 +37,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history: the guard diffs base..head, and a shallow clone cannot resolve the base.
-          fetch-depth: 0
+          # The guard compares two trees; full history and all branches are unnecessary.
+          fetch-depth: 1
+
+      - name: Fetch the base commit for the boundary diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          fi
 
       - uses: actions/setup-node@v4
         with:
