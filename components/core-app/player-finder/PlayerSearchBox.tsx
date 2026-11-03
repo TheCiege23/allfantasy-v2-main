@@ -225,10 +225,10 @@ export function PlayerSearchBox({
       {/* Keeps the held league in context across a new search. */}
       {selectedLeagueId ? <input type="hidden" name="league" value={selectedLeagueId} /> : null}
       <label className="af-pf-sport-label">
-        <span>{language === 'es' ? 'Deporte' : 'Sport'}</span>
+        <span>{t.sportLabel}</span>
         <select
           name="sport"
-          aria-label={language === 'es' ? 'Deporte' : 'Sport'}
+          aria-label={t.sportLabel}
           value={sport ?? ''}
           onChange={(e) => {
             setSport((e.target.value || null) as FinderSport | null)
@@ -238,8 +238,8 @@ export function PlayerSearchBox({
             setActive(-1)
           }}
         >
-          <option value="">{language === 'es' ? 'Todos los deportes' : 'All sports'}</option>
-          {FINDER_SPORTS.map((candidate) => <option key={candidate} value={candidate}>{candidate === 'SOCCER' ? 'Soccer' : candidate}</option>)}
+          <option value="">{t.allSports}</option>
+          {FINDER_SPORTS.map((candidate) => <option key={candidate} value={candidate}>{candidate === 'SOCCER' ? t.soccer : candidate}</option>)}
         </select>
       </label>
       <div className="af-pf-search-field">

@@ -154,8 +154,8 @@ describe('suggestPlayers', () => {
     expect(got.map((s) => `${s.name} · ${s.sport} · ${s.externalId}`)).toEqual([
       'Dalton Kincaid · NFL · ri-1',
       'Corey Kiner · NFL · ri-6',
-      'Dalton Kincaid · NCAAF · cfbd-1',
       'Kamren Kinchens · NFL · ri-2',
+      'Dalton Kincaid · NCAAF · cfbd-1',
     ])
   })
 
