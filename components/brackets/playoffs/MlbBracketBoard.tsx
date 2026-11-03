@@ -214,6 +214,10 @@ export default function MlbBracketBoard({
   )
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
+  const knockoutPublished = rollingCup && view.series.some((game) =>
+    game.round !== "cup_group_play" && isOfficial(game.homeTeamName) && isOfficial(game.awayTeamName) &&
+    Number.isFinite(Date.parse(game.startsAt ?? "")),
+  )
   const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(view.series) : [], [rollingCup, view.series])
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
@@ -527,15 +531,15 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
-          <BracketCoachPanel view={view} />
-          {rollingCup ? <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
-          {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
+          {!rollingCup ? <BracketCoachPanel view={view} /> : null}
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure" aria-label="NBA Cup scoring">
+            <summary>Scoring rules</summary>
             <div className="af-pb-cup-group-heading"><div>
               <h2>NBA Cup scoring</h2>
               <p>Each correct Group Play winner earns {pointsForSeries({ round: "cup_group_play" }, sport)} point. Group Play and knockout points both count toward your league and universal standings.</p>
             </div></div>
             {scoringTiles}
-          </section> : null}
+          </details> : null}
           {rollingCup ? (
             <CupGroupPlaySection
               scoringExcludedReasonFor={scoringExcludedReasonFor}
@@ -551,8 +555,12 @@ export default function MlbBracketBoard({
             />
           ) : null}
           <section className="af-pb-card">
-            {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>Quarterfinals → Semifinals → Championship. Matchups open as qualifiers are confirmed.</p></div></div> : null}
-            {rollingCup && compactCup ? (
+            {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>{knockoutPublished ? "Pick each matchup once its teams and tipoff are confirmed. Each game locks at tipoff." : "Knockout picks open after Group Play ends and the NBA confirms the quarterfinal teams and tipoff times."}</p></div></div> : null}
+            {rollingCup && !knockoutPublished ? (
+              <ol className="af-cup-knockout-steps" aria-label="Knockout rounds">
+                <li>Quarterfinals</li><li>Semifinals</li><li>Championship</li>
+              </ol>
+            ) : rollingCup && compactCup ? (
               <div className="af-cup-knockout-list">
                 {(["cup_quarterfinals", "cup_semifinals", "cup_championship"] as const).map((round) => {
                   const games = view.series.filter((game) => game.round === round)
@@ -678,11 +686,18 @@ export default function MlbBracketBoard({
                 : "Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each league hold a bye and enter at the Division round, so their opponent stays unknown until the Wild Card round resolves. The bracket scrolls sideways on a phone."}
             </p>
           </section>
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure">
+            <summary>Chimmy insights and reminders</summary>
+            <BracketCoachPanel view={view} />
+          </details> : null}
         </div>
 
         <aside className="af-pb-rail">
-          {rollingCup ? <CupStandingsRail groups={cupGroups} series={view.series} sport={sport} teamLogos={teamLogos} /> : null}
-          <PlayoffDecisionRail view={view} graph={graph} sport={sport} />
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure">
+            <summary>Group standings and qualification</summary>
+            <CupStandingsRail groups={cupGroups} series={view.series} sport={sport} teamLogos={teamLogos} />
+            <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} />
+          </details> : <PlayoffDecisionRail view={view} graph={graph} sport={sport} />}
         </aside>
       </div>
 

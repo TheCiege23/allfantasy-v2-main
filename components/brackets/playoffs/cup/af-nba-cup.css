@@ -497,6 +497,24 @@
 /* Knockout tree: a live NBA Cup game gets the live edge (MlbBracketBoard sets data-live). */
 .af-pb-match[data-live="true"] { border-color: rgba(255, 90, 95, 0.45); }
 
+.af-cup-disclosure > summary {
+  padding: 14px 16px;
+  cursor: pointer;
+  color: var(--pb-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.af-cup-knockout-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0 20px 20px;
+  padding-inline-start: 24px;
+  color: var(--pb-muted);
+  font-size: 13px;
+}
+
 /* ── breakpoints: keep every @media block below this line ───────────── */
 @media (max-width: 760px) {
   .af-cup-teams, .af-cup-leaders, .af-cup-split, .af-cup-stakes { grid-template-columns: minmax(0, 1fr); }
