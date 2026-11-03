@@ -25,11 +25,19 @@ type NativeProposal = {
   assets: readonly NativeAsset[]
 }
 
-const withheld = (reason: string): TradeGradeView => ({ graded: false, reason, basis: null })
+type ZombieItemGrade = TradeGradeView & {
+  zombieEligibility?: { status: "eligible" | "blocked"; reason?: string }
+  zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
+}
+
+const withheld = (reason: string, blocked = false): ZombieItemGrade => ({
+  graded: false, reason, basis: null,
+  ...(blocked ? { zombieEligibility: { status: "blocked", reason } } : {}),
+})
 
 /** One read per league list, then one evidence-backed grade per two-team proposal with items. */
 export async function createZombieNativeItemGrader(leagueId: string): Promise<{
-  grade(proposal: NativeProposal): Promise<TradeGradeView>
+  grade(proposal: NativeProposal): Promise<ZombieItemGrade>
 }> {
   const [zombie, league, teams, rosterLinks] = await Promise.all([
     prisma.zombieLeague.findUnique({ where: { leagueId }, select: {
@@ -68,16 +76,16 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
 
   return {
     async grade(proposal) {
-      if (!['active', 'in_progress'].includes(zombie.status)) return withheld('This Zombie season is not active.')
-      if (zombie.correctionHoldFromWeek != null) return withheld('A Zombie stat correction is awaiting review, so trade values are held.')
-      if (resolution && resolution.status !== 'pending') return withheld('This Zombie week is resolving or awaiting review, so item trades are held.')
+      if (!['active', 'in_progress'].includes(zombie.status)) return withheld('This Zombie season is not active.', true)
+      if (zombie.correctionHoldFromWeek != null) return withheld('A Zombie stat correction is awaiting review, so trade values are held.', true)
+      if (resolution && resolution.status !== 'pending') return withheld('This Zombie week is resolving or awaiting review, so item trades are held.', true)
       if (window.finalWeek <= window.currentWeek) return withheld('No future Zombie scoring weeks remain for item valuation.')
       const proposer = byNativeRosterId.get(proposal.proposerRosterId)
       const receiver = byNativeRosterId.get(proposal.receiverRosterId)
       if (!proposer || !receiver || proposer.id === receiver.id) return withheld('Both Zombie teams must be identified before item values can be graded.')
       try {
         if (itemRole(proposer.status) === 'Zombie' || itemRole(receiver.status) === 'Zombie') {
-          return withheld('A Zombie cannot trade. The current team roles make this proposal ineligible.')
+          return withheld('A Zombie cannot trade. The current team roles make this proposal ineligible.', true)
         }
       } catch {
         return withheld('A team’s Zombie role could not be verified.')
@@ -103,7 +111,7 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
         return withheld('A traded Zombie item is no longer in the sender’s verified inventory.')
       }
       if (zombie.experienceMode === 'simple' && items.some(({ item }) => item.itemType.startsWith('weapon_'))) {
-        return withheld('Weapon trades are disabled in Simple Zombie.')
+        return withheld('Weapon trades are disabled in Simple Zombie.', true)
       }
       if (new Set(items.map(item => item.id)).size !== items.length) return withheld('The same Zombie item appears more than once in this trade.')
       const proposerItems = zombieItemSwapValue({
@@ -181,6 +189,11 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
       })
       return {
         ...grade,
+        zombieEligibility: { status: "eligible" },
+        zombieInventory: {
+          proposer: { before: proposerItems.before, after: proposerItems.after },
+          receiver: { before: receiverItems.before, after: receiverItems.after },
+        },
         partnerLetter: partner.graded ? partner.letter : grade.partnerLetter,
         action: 'review',
         recommendation: 'Review infection risk, serum revival, loot, payout rules, and final trade eligibility before accepting. Item values are team-specific future scoring estimates.',

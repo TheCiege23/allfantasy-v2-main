@@ -59,6 +59,10 @@ describe('native Zombie item proposal grading', () => {
     expect(grade.graded).toBe(true)
     if (!grade.graded) return
     expect(grade.action).toBe('review')
+    expect(grade.zombieEligibility?.status).toBe('eligible')
+    expect(grade.zombieInventory?.proposer.after).toBe(32)
+    expect(grade.zombieInventory?.receiver.before).toBe(32)
+    expect(grade.zombieInventory?.proposer.before).toBe(grade.zombieInventory?.receiver.after)
     expect(grade.letter).toBe('A')
     expect(grade.partnerLetter).toBe('F')
     expect(grade.lines.filter(line => line.valueSource === 'zombie_item')).toHaveLength(2)
@@ -71,6 +75,8 @@ describe('native Zombie item proposal grading', () => {
     const grader = await createZombieNativeItemGrader('league')
     const grade = await grader.grade(proposal())
     expect(grade.graded).toBe(false)
+    expect(grade.zombieEligibility?.status).toBe('blocked')
+    expect(grade.zombieInventory).toBeUndefined()
     if (!grade.graded) expect(grade.reason).toContain('Zombie cannot trade')
   })
 
