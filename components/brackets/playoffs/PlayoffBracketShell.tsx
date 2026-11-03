@@ -14,6 +14,7 @@ import {
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
@@ -255,6 +256,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   return (
+    <>
+    <BracketQuickNav current="league" leagueId={safeChallenge.id} language={language} />
     <main className="af-bracket-experience af-pd">
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
@@ -579,5 +582,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {singleGameSport && <p className="af-bx-disclaimer af-pd-disclaimer">{copy.disclaimer}</p>}
       </div>
     </main>
+    </>
   )
 }

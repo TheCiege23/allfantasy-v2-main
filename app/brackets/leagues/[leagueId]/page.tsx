@@ -5,7 +5,6 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getPlayoffBracketView } from "@/lib/playoffs/playoffService"
 import PlayoffBracketShell from "@/components/brackets/playoffs/PlayoffBracketShell"
-import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 
 export const dynamic = "force-dynamic"
 
@@ -172,10 +171,7 @@ export default async function BracketLeagueDetailPage(
           challengeId: playoffView.challenge.id,
         })
       }
-      return <>
-        <BracketQuickNav current="league" leagueId={params.leagueId} />
-        <PlayoffBracketShell initialView={playoffView} />
-      </>
+      return <PlayoffBracketShell initialView={playoffView} />
     }
 
     console.warn("[brackets/leagues] checking legacy league", { leagueId: params.leagueId })
