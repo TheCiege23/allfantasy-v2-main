@@ -45,3 +45,33 @@ Do not widen the cohort until a claimed league passes the plan's 95% identity ga
 ## Validation
 
 Focused Vitest suite: 17 tests passed across NBA reconciliation, CFBD box normalization, college/soccer outlook gates, the existing Finder impact path, and pilot allowlist. Focused TypeScript project: zero errors in changed modules; 41 errors remain in unrelated imported modules. The repository-wide typecheck exceeded Node's 8 GB heap limit. Validation dependencies and Prisma Client were installed/generated in a temporary C: copy because G: lacked space; no test connected to production.
+
+## Follow-through audit, 2026-11-03
+
+### Live search and NBA reconciliation
+
+The public `/api/players/search` and `/players/{slug}` paths returned matching results and HTTP 200 detail pages for NBA, NHL, MLB, NCAAF, NCAAB, and soccer. This is a signed-out catalog check; a signed-in roster chip still needs a browser session to verify its display.
+
+After PR #3208 was deployed, the existing authenticated `?sleeperRows=1&sport=NBA` path ran in three bounded batches. It created 1,599 missing Sleeper source rows and linked 31 identities with zero reconciliation errors. All 595 distinct Sleeper NBA roster IDs now have a source row; 264 are identity-linked. The remaining 331 are 94 teamless source rows and 237 team-bearing rows without independent matching evidence. The route's `remaining` value is per-run feed coverage, not a cumulative backlog: a fresh existing row is counted as remaining even after the whole feed is stored. Use the distinct source-row count and roster exception query for the release check.
+
+### NCAAF pilot validation
+
+The claimed Fantrax league `ff59b139-03a8-47c6-82c0-59d6580670b4` has 38/39 mapped roster IDs and ten mapped starters. A read-only production-data run of the actual Finder impact loader, with the allowlist simulated locally, exposed two gaps: the verified Coastal Carolina RB Dominic Knicely is now listed by the school and CFBD as Dominic Lee-Knicely, and Fantrax stores `SLOT:COUNT` roster positions whose order does not correspond to the starters array. This branch adds only that independently verified name alias and proves counted-lineup swaps by matching the entire lineup to all allowed seats. It does not infer a player's exact seat from array order.
+
+With those local fixes, the read-only run produced an impact for all ten starters, priced nine with upcoming fixtures, and left Kent State's Wayne Harris unavailable on a bye. It found a legal bench upgrade: Beau Sparks over Preston Douglas, +7.96 projected league points. The server allowlist remains unset in production until this branch is reviewed and deployed; then enable only this league and verify an authenticated Finder card in the browser.
+
+The reusable read-only check is `scripts/verify-player-finder-period-pilot.ts`; run it with the repository's `scripts/_audit-preload.cjs` shim and `--preview-allowlist --all` for a full claimed-roster report. Focused Vitest validation passed 20 tests across four files. Focused TypeScript validation found zero diagnostics in the changed modules or pilot script; 41 diagnostics remain in imported modules outside this change.
+
+### NCAAB and soccer coverage
+
+The 2026 NCAAB Rolling Insights schedule cache is synced (2026-11-03) and contains 598 games over the next 15 days, but the only production NCAAB league has 20 empty rosters. Current-season game logs contain 2,551 players with one line each, below the loader's three-game minimum. No user roster or forecast should be synthesized from the catalog.
+
+The soccer cache has 33 upcoming fixtures over three days, all without competition tags. A scoped production schedule refresh was refused by the existing completeness guard because the provider did not return three complete 380-game league slates; no cache was overwritten. The ten soccer seed leagues have no rosters or verified competition settings. Keep soccer advice unavailable until the provider supplies a complete tagged schedule and a real claimed league exists.
+
+### Identity exceptions and schema ownership
+
+The read-only Fantrax NCAAF exception query now finds 3,295 linked of 4,968 roster IDs. The remaining 1,673 are 750 unique name/position candidates without an independent team or provider-ID proof, 624 with no exact candidate, 289 ambiguous candidates, and 10 missing metadata. No additional identity was linked from name alone. The two earlier local CSV exports predate this refresh and are not release evidence; rerun the query before reviewing a specific ID.
+
+Production's `redraft_player_state_events` writer is the enabled `redraft_player_state_capture` trigger on `redraft_roster_players`, implemented by `capture_redraft_player_state()` and owned by `neondb_owner`. It was still writing during this audit (207,636 events across 543 leagues); `redraft_lineup_history_epochs` held 569 rows. Both tables and their `ON DELETE CASCADE` league foreign keys are one operational history unit. `sports_stat_coverage` is empty and has no repo reader or writer, but emptiness is not deletion evidence. Preserve all three tables. The seven dated repair/rollback tables also remain preservation evidence; assign no deletion date.
+
+The repo's read-only production drift check found exactly 12 new destructive clauses relative to its 2026-09-13 baseline: ten live tables and the two history foreign keys. Two old draft-session index clauses were resolved. The generated production baseline now records the exact 238-clause diff for endpoint `ep-curly-block-ad0dlt9o/neondb`; this is an explicit preservation baseline, not SQL to apply. Neon production retains 24 hours of branch history. Before any future retirement of these objects, assign a retention owner, take a named snapshot, restore it to an isolated branch, and verify row counts, foreign keys, and the trigger there. No production schema object was changed here.
