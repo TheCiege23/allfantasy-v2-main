@@ -218,8 +218,8 @@ export async function createZombieLeague(
 ) {
   const sport = normalizeToSupportedSport(config.sport)
   const schedule = getZombieSeasonSchedule(sport)
-  const allowedTeamCounts = new Set([8, 10, 12, 14, 16])
-  const defaultTeamCount = allowedTeamCounts.has(schedule.defaultTeamCount)
+  const allowedTeamCounts = new Set(sport === 'NCAAB' ? Array.from({ length: 15 }, (_, i) => 4 + i * 2) : [8, 10, 12, 14, 16])
+  const defaultTeamCount = sport === 'NCAAB' ? 20 : allowedTeamCounts.has(schedule.defaultTeamCount)
     ? schedule.defaultTeamCount
     : 12
   const resolvedTeamCount =

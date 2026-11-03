@@ -179,6 +179,7 @@ export function getDefaultTeamCount(
 ): number {
   const opts = getTeamCountOptions(sport, leagueType, soccerPipeline)
   if (opts.length === 0) return 12
+  if (sport === 'NCAAB' && leagueType === 'zombie') return 20
   // Survivor starts at 16 managers (four tribes of four) when offered, else its smallest cast.
   if (leagueType === 'survivor') return opts.includes(16) ? 16 : opts[0]!
   // Prefer 12 if available, otherwise middle of the list

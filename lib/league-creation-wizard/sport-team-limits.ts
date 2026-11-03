@@ -75,6 +75,7 @@ const ZOMBIE_TEAM_COUNT_OPTIONS = [8, 10, 12, 14, 16] as const
 
 /** Preferred Zombie sizes; capped per sport max. */
 export function getZombieTeamCountOptionsForSport(sport: string): number[] {
+  if (sport.toUpperCase() === 'NCAAB') return evenTeamRange(4, 32)
   const max = getMaxTeamsForSport(sport)
   const filtered = ZOMBIE_TEAM_COUNT_OPTIONS.filter((n) => n <= max)
   if (filtered.length > 0) return filtered
