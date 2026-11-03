@@ -540,6 +540,12 @@ function dedupeLiveScoreRows(rows: LiveScoreRow[]): LiveScoreRow[] {
   return Array.from(byId.values())
 }
 
+function readEspnScore(value: unknown): number | null {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return null
+  const score = Number(value)
+  return Number.isSafeInteger(score) && score >= 0 ? score : null
+}
+
 export async function fetchEspnScoreboard(
   sport: LiveSport,
   options: { dates?: string[] } = {},
@@ -581,14 +587,14 @@ export async function fetchEspnScoreboard(
         homeTeamId: home.team.id,
         homeTeamFull: home.team.displayName,
         homeLogo: home.team.logo,
-        homeScore: parseInt(home.score, 10) || 0,
+        homeScore: readEspnScore(home.score),
         homeRecord: home.records?.[0]?.summary ?? null,
         ...(isTop25Sport(sport) && home.curatedRank ? { homeRank: top25Rank(home.curatedRank.current) } : {}),
         awayTeam: abbrev(away.team.abbreviation),
         awayTeamId: away.team.id,
         awayTeamFull: away.team.displayName,
         awayLogo: away.team.logo,
-        awayScore: parseInt(away.score, 10) || 0,
+        awayScore: readEspnScore(away.score),
         awayRecord: away.records?.[0]?.summary ?? null,
         ...(isTop25Sport(sport) && away.curatedRank ? { awayRank: top25Rank(away.curatedRank.current) } : {}),
         status: comp.status.type.name,
