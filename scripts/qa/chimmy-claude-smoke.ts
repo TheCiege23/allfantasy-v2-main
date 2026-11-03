@@ -11,7 +11,8 @@ type DeepCase = {
   sport: string
   leagueId?: string
   source?: string
-  tools: string[]
+  tools?: string[]
+  decisionGap?: string
   contains: string[]
 }
 
@@ -22,11 +23,13 @@ function parseCases(raw: unknown): DeepCase[] {
     if (!test || typeof test.id !== 'string' || !/^[a-z0-9-]+$/.test(test.id) || ids.has(test.id) ||
         typeof test.message !== 'string' || !test.message.trim() ||
         !['NFL','NCAAF','NBA','NCAAB','NHL','MLB','SOCCER'].includes(test.sport) ||
-        !Array.isArray(test.tools) || !test.tools.length || test.tools.some((tool: unknown) => typeof tool !== 'string' || !tool) ||
+        (test.decisionGap !== undefined
+          ? typeof test.decisionGap !== 'string' || !test.decisionGap || !test.leagueId || test.tools !== undefined
+          : !Array.isArray(test.tools) || !test.tools.length || test.tools.some((tool: unknown) => typeof tool !== 'string' || !tool)) ||
         !Array.isArray(test.contains) || !test.contains.length || test.contains.some((part: unknown) => typeof part !== 'string' || !part) ||
         (test.leagueId !== undefined && typeof test.leagueId !== 'string') ||
         (test.source !== undefined && typeof test.source !== 'string')) {
-      throw new Error('Invalid Claude case. Each requires a unique id, prompt, sport, tools, and answer facts.')
+      throw new Error('Invalid Claude case. Each requires a unique id, prompt, sport, answer facts, and expected tools or a decision gap.')
     }
     ids.add(test.id)
   }
@@ -73,9 +76,12 @@ async function main() {
       const tools = Array.isArray(body?.meta?.toolsUsed) ? body.meta.toolsUsed : []
       const claude = body?.meta?.providerStatus?.anthropic === 'ok' && /^claude-/i.test(body?.meta?.model ?? '')
       const factsMatch = test.contains.every((fact) => answer.includes(fact.toLowerCase()))
-      const toolsMatch = test.tools.every((tool) => tools.includes(tool))
-      const passed = res.status() === 200 && claude && factsMatch && toolsMatch
-      console.log(JSON.stringify({ case: test.id, status: res.status(), claude, factsMatch, toolsMatch, passed }))
+      const toolsMatch = test.tools?.every((tool) => tools.includes(tool)) ?? false
+      const decisionMatch = Boolean(test.decisionGap && body?.source === 'chimmy_decision_engine' &&
+        body?.meta?.decision?.status === 'needs_data' && body?.meta?.decision?.gap?.code === test.decisionGap &&
+        body?.meta?.decision?.leagueId === test.leagueId && body?.meta?.tokenSpend === null)
+      const passed = res.status() === 200 && factsMatch && (test.decisionGap ? decisionMatch : claude && toolsMatch)
+      console.log(JSON.stringify({ case: test.id, status: res.status(), claude, factsMatch, toolsMatch, decisionMatch, passed }))
       await res.dispose()
       if (!passed) {
         process.exitCode = 1

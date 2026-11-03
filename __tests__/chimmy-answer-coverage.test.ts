@@ -50,7 +50,7 @@ describe('Chimmy answer coverage', () => {
   it('reads only the verified league season and keeps policy separate from settings', async () => {
     resolveContext.mockResolvedValue({
       ok: true,
-      context: { leagueName: 'Friday League', season: 2026, trade: { tradeDeadlineWeek: 10 }, importHealth: {} },
+      context: { leagueName: 'Friday League', sport: 'NFL', season: 2026, trade: { tradeDeadlineWeek: 10 }, importHealth: {} },
     })
     findFirst.mockResolvedValue({
       createdAt: now,
@@ -63,6 +63,20 @@ describe('Chimmy answer coverage', () => {
     expect(answer).toContain('"tradeDeadlineWeek":10')
     expect(answer).toContain('Trade deadline is week 9')
     expect(answer).toContain('Report conflicts explicitly')
+  })
+
+  it('reports verified native categories alongside the selected rules', async () => {
+    resolveContext.mockResolvedValue({ ok: true, context: {
+      leagueName: 'Category League', sport: 'NBA', season: 2026, importHealth: {},
+      scoring: { scoringModel: 'unknown', rawSources: { settingsJson: {
+        scoring_mode: 'h2h_category', category_preset_id: 'nba_9cat', category_record_mode: 'each',
+      } } },
+    } })
+    findFirst.mockResolvedValue(null)
+    const answer = await buildSelectedLeagueRules('league-a', 'member')
+    expect(answer).toContain('"scoringModel":"category"')
+    expect(answer).toContain('"presetId":"nba_9cat"')
+    expect(answer).toContain('rate-stat denominators')
   })
 
   it('does not read a constitution without verified league access', async () => {

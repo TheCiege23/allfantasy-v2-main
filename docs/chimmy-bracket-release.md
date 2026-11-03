@@ -38,7 +38,7 @@ Validate the prepared inputs with no model requests:
 node --import tsx scripts/qa/chimmy-claude-smoke.ts scripts/qa/chimmy-claude-cases.json
 ```
 
-After a valid Claude credential is active on the isolated staging app, set the staging QA gateway and app credentials in the runner environment and append `--run`. The runner verifies the staging account and stops at the first failure. It requires HTTP 200, an Anthropic success with a Claude model, the expected tools, and the expected answer facts. A fallback or spend-preview response fails the check. Review the answer in the staging UI for directionality and timestamps.
+After a valid Claude credential is active on the isolated staging app, set the staging QA gateway and app credentials in the runner environment and append `--run`. The runner verifies the staging account and stops at the first failure. The model cases require HTTP 200, a successful Claude response, the expected tools, and the expected facts. Decision cases require the expected free engine result, gap code, league, and facts. A provider fallback or spend preview fails the relevant check. Review the answer in the staging UI for directionality and timestamps.
 
 | Case | Evidence to prepare and verify |
 | --- | --- |
@@ -50,3 +50,13 @@ After a valid Claude credential is active on the isolated staging app, set the s
 | Exact bracket alert | Use the first saved CFP result reference after the second result exists. Confirm the answer describes QA Harbor vs. QA Metro, then replay the second reference and reopen the first. |
 
 Run the locked-lineup and trade cases after the QA league has verified rosters, applicable scoring and a usable scoring period. Do not use a no-data response as a pass for either positive case.
+
+### Populated decision fixtures
+
+Run `node --require ./scripts/_audit-preload.cjs --import tsx scripts/qa/seed-chimmy-decision-leagues.ts` with the isolated bracket staging database and project marker before the paid run. The script verifies the fixture account, refreshes the synthetic kickoff and weekly projections, then asserts outputs from the regular Chimmy tools.
+
+- The NFL PPR fixture has a started WR, an injured-reserve WR, an eligible bench WR, and an opposing roster. A proposed player-for-player exchange changes the fixture week-nine starting total from 14 to 16. The chart has no market prices for the synthetic players, so the answer must withhold a grade. This is a read-only evaluation of a hypothetical offer.
+- The NBA fixture has nine stored categories and populated opposing rosters. It verifies IR eligibility and truthful trade coverage limits. A positive category lineup comparison still requires an eligible current slate and linked current-season game logs. A positive category trade grade requires a supported category valuation model.
+- Run `node --require ./scripts/_audit-preload.cjs --import tsx scripts/qa/audit-chimmy-history-coverage.ts` for aggregate player game-log identity and finalized fantasy-score coverage by source and season. NFL uses Sleeper identity keys, college football uses named CFBD season rows, and daily sports use the Rolling Insights registry keys. Yahoo league scores are excluded.
+- On November 3, 2026, the reader keys covered all sampled Rolling Insights rows for NBA, college basketball, NHL, MLB, and soccer. They did not cover 3,241 NFL rows from 2023–2025 or 7,386 college football rows from 2026. These are row counts, not distinct players. NFL and college football require separate identity fixes.
+- Older player-log coverage was uneven. Of the daily sports, college basketball and soccer had 2025 rows. NBA, NHL, and MLB only had 2026 rows in the audited window. Sleeper had finalized league-scored player rows for 2023–2025. The audited Fantrax weekly player rows were 2026 provisional data.
