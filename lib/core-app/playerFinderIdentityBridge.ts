@@ -5,6 +5,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import type { LeagueSlot, PlayerMatch } from './playerFinder'
 import { isBestBallLeagueRow } from './leagueBestBall'
+import { normalizePosition } from './positionNormalization'
 
 type IdentityColumn = 'rollingInsightsId' | 'cfbdId' | 'apiSportsId'
 type RosterColumn = 'rollingInsightsId' | 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
@@ -35,19 +36,21 @@ function slotOf(data: unknown, playerId: string): string | null {
 }
 
 /** Resolve a catalog row only through its sport and the provider that minted its id. */
-export async function identityForFinderPlayer(player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'>): Promise<Identity | null> {
+export async function identityForFinderPlayer(player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null }): Promise<Identity | null> {
   const column = SOURCE_COLUMN[String(player.source ?? '').toLowerCase()]
   if (!column || !player.externalId) return null
   const rows = await prisma.playerIdentityMap.findMany({
     where: { sport: player.sport, [column]: player.externalId },
     select: {
-      id: true, canonicalName: true, rollingInsightsId: true, sleeperId: true, espnId: true,
+      id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperId: true, espnId: true,
       mflId: true, fleaflickerId: true, fantraxId: true,
     },
     take: 2,
   })
   // Provider columns are indexed, but not unique. Two identity rows make a crosswalk unsafe.
   if (rows.length !== 1 || !playerNamesAgree(rows[0]!.canonicalName, player.name)) return null
+  if (player.position && rows[0]!.position &&
+    normalizePosition(player.position) !== normalizePosition(rows[0]!.position)) return null
   const identity: Identity = { ...rows[0]! }
   // The target columns are also nonunique. A duplicate Fantrax/ESPN/etc. id cannot
   // prove which athlete a roster means, even when this source id was unique.
@@ -87,7 +90,7 @@ export type FinderBridgeResult = {
 
 /** Read raw non-NFL rosters in their own id space; never translate them through Sleeper. */
 export async function resolveNonNflLeagueSlots(
-  player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'>,
+  player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null },
   leagueIds: string[],
   userId: string | null | undefined,
 ): Promise<FinderBridgeResult> {

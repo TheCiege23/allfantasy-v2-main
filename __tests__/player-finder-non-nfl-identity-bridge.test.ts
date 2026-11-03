@@ -10,9 +10,9 @@ vi.mock('@/lib/prisma', () => ({ prisma: db }))
 
 import { identityForFinderPlayer, resolveNonNflLeagueSlots, rosterIdForFinderPlayer } from '@/lib/core-app/playerFinderIdentityBridge'
 
-const player = { sport: 'NCAAF', source: 'rolling_insights', externalId: '340', name: 'Jordan Smith' }
+const player = { sport: 'NCAAF', source: 'rolling_insights', externalId: '340', name: 'Jordan Smith', position: 'QB' }
 const identity = {
-  id: 'identity-1', canonicalName: 'Jordan Smith', rollingInsightsId: '340', sleeperId: null,
+  id: 'identity-1', canonicalName: 'Jordan Smith', position: 'QB', rollingInsightsId: '340', sleeperId: null,
   espnId: '777', mflId: null, fleaflickerId: null, fantraxId: '06k5m',
 }
 const leagues = [
@@ -77,6 +77,8 @@ describe('Player Finder sport-qualified identity bridge', () => {
     db.playerIdentityMap.findMany.mockResolvedValueOnce([identity, { ...identity, canonicalName: 'Another Player' }])
     expect(await identityForFinderPlayer(player)).toBeNull()
     db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, canonicalName: 'Another Player' }])
+    expect(await identityForFinderPlayer(player)).toBeNull()
+    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, position: 'LB' }])
     expect(await identityForFinderPlayer(player)).toBeNull()
   })
 
