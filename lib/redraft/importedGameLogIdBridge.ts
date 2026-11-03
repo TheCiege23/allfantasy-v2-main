@@ -72,12 +72,12 @@ export async function bridgeImportedGameLogIds(args: {
 async function bridgeSleeperNbaIds(ids: string[]) {
   const players = await prisma.sportsPlayer.findMany({
     where: { sport: 'NBA', source: 'sleeper', sleeperId: { in: ids } },
-    select: { sleeperId: true, name: true, team: true },
+    select: { sleeperId: true, name: true, team: true, dob: true },
   })
   const names = [...new Set(players.map((player) => normalizePlayerName(player.name)))]
   const candidates = await prisma.playerIdentityMap.findMany({
     where: { sport: 'NBA', normalizedName: { in: names }, rollingInsightsId: { not: null } },
-    select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true },
+    select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true, dob: true },
   })
 
   const matches = new Map<string, (typeof candidates)[number]>()
@@ -92,9 +92,19 @@ async function bridgeSleeperNbaIds(ids: string[]) {
     if (!player) continue
     const name = normalizePlayerName(player.name)
     const team = player.team ? proTeamCode('NBA', player.team) : null
-    if (!name || !team) continue
-    const targets = candidates.filter((candidate) => candidate.normalizedName === name &&
-      candidate.currentTeam && proTeamCode('NBA', candidate.currentTeam) === team)
+    if (!name) continue
+    const named = candidates.filter((candidate) => candidate.normalizedName === name)
+    const byTeam = team ? named.filter((candidate) => proTeamCode('NBA', candidate.currentTeam) === team) : []
+    // A free agent or a player whose team changed can still be corroborated by birth date.
+    const dob = player.dob?.trim()
+    const byBirthDate = dob && /^\d{4}-\d{2}-\d{2}$/.test(dob)
+      ? named.filter((candidate) => candidate.dob === dob)
+      : []
+    if (byTeam.length === 1 && byBirthDate.length === 1 && byTeam[0]!.id !== byBirthDate[0]!.id) {
+      ambiguous.push(id)
+      continue
+    }
+    const targets = byBirthDate.length === 1 ? byBirthDate : byTeam.length ? byTeam : byBirthDate
     if (targets.length > 1) ambiguous.push(id)
     if (targets.length === 1) matches.set(id, targets[0]!)
   }
