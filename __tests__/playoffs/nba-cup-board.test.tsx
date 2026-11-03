@@ -20,6 +20,21 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("filters group games by date and restores all dates", () => {
+    const v = view()
+    const first = v.series.find((game) => game.id === "group")!
+    v.series.push({ ...first, id: "later", seriesNumber: 1003, startsAt: "2099-11-13T20:00:00Z" })
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    const selector = screen.getByLabelText("Show games by date")
+    expect(screen.getByTestId("cup-game-1001")).toBeInTheDocument()
+    expect(screen.getByTestId("cup-game-1003")).toBeInTheDocument()
+    const later = within(selector).getByRole("option", { name: /Nov 13/ }) as HTMLOptionElement
+    fireEvent.change(selector, { target: { value: later.value } })
+    expect(screen.queryByTestId("cup-game-1001")).not.toBeInTheDocument()
+    expect(screen.getByTestId("cup-game-1003")).toBeInTheDocument()
+    fireEvent.change(selector, { target: { value: "all" } })
+    expect(screen.getByTestId("cup-game-1001")).toBeInTheDocument()
+  })
   it("offers a direct link to later Group Play dates with pick controls available", () => {
     const v = view()
     const first = v.series.find((game) => game.id === "group")!
@@ -137,3 +152,4 @@ describe("NBA Cup remaining-game board", () => {
     expect(within(sheet).getByText("Jaylen Brown")).toBeInTheDocument()
   })
 })
+
