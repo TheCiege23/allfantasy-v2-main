@@ -10,6 +10,7 @@ const mockLeagueFindMany = vi.hoisted(() => vi.fn())
 const mockTeamFindMany = vi.hoisted(() => vi.fn())
 const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
+const mockIdentityFindMany = vi.hoisted(() => vi.fn())
 const mockSearchPlayers = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findMany: mockTeamFindMany },
     roster: { findMany: mockRosterFindMany },
     sportsPlayer: { findMany: mockSportsPlayerFindMany },
+    playerIdentityMap: { findMany: mockIdentityFindMany },
   },
 }))
 vi.mock('@/lib/core-app/playerFinder', () => ({ suggestCatalog: mockSearchPlayers }))
@@ -82,6 +84,7 @@ beforeEach(() => {
   mockLeagueFindMany.mockResolvedValue(LEAGUES)
   mockTeamFindMany.mockResolvedValue(TEAMS)
   mockRosterFindMany.mockResolvedValue(ROSTERS)
+  mockIdentityFindMany.mockResolvedValue([])
   // Every known id is an NFL player; a read scoped to another sport finds none of them.
   type Where = { sport?: string; sleeperId?: { in: string[] }; OR?: Where[] }
   const ids = (w: Where): string[] =>
@@ -167,6 +170,37 @@ describe('suggestPlayers', () => {
     expect(got[0].sport).toBe('NCAAF')
     expect(got[0].presence).toEqual({ yours: [], owned: [], free: [], unchecked: 0 })
     expect(mockSearchPlayers.mock.calls[0][2]).toMatchObject({ sport: 'NCAAF' })
+  })
+
+  it('shows native and Fantrax college roster presence using provider-qualified ids', async () => {
+    const college = { ...KINCAID_COLLEGE, source: 'rolling_insights', externalId: '340', position: 'QB', name: 'Jordan Smith' }
+    const mapped = {
+      id: 'identity-1', sport: 'NCAAF', canonicalName: 'Jordan Smith', position: 'QB',
+      rollingInsightsId: '340', cfbdId: null, apiSportsId: null, sleeperId: null,
+      espnId: null, mflId: null, fleaflickerId: null, fantraxId: '06k5m',
+    }
+    mockSearchPlayers.mockResolvedValue([college])
+    mockIdentityFindMany.mockResolvedValue([mapped])
+    mockLeagueFindMany.mockResolvedValue([
+      { id: 'N-native', name: 'College Native', platform: 'allfantasy', sport: 'NCAAF' },
+      { id: 'N-fantrax', name: 'College Fantrax', platform: 'fantrax', sport: 'NCAAF' },
+      { id: 'N-espn', name: 'College ESPN', platform: 'espn', sport: 'NCAAF' },
+    ])
+    mockTeamFindMany.mockResolvedValue([
+      { leagueId: 'N-native', externalId: '1', platformUserId: 'me', claimedByUserId: 'me', ownerName: 'Me' },
+      { leagueId: 'N-fantrax', externalId: '2', platformUserId: 'rival', claimedByUserId: null, ownerName: 'Rival' },
+    ])
+    mockRosterFindMany.mockResolvedValue([
+      { leagueId: 'N-native', platformUserId: 'me', playerData: { players: ['340'] }, league: { platform: 'allfantasy', sport: 'NCAAF' } },
+      { leagueId: 'N-fantrax', platformUserId: 'rival', playerData: { players: ['06k5m'] }, league: { platform: 'fantrax', sport: 'NCAAF' } },
+      { leagueId: 'N-espn', platformUserId: 'stranger', playerData: { players: ['340'] }, league: { platform: 'espn', sport: 'NCAAF' } },
+    ])
+    const got = await suggestPlayers({ query: 'jor', sport: 'NCAAF', userId: 'me', loadLeagueIds: async () => ['N-native', 'N-fantrax', 'N-espn'] })
+    expect(got[0]?.presence).toEqual({
+      yours: ['College Native'],
+      owned: [{ leagueName: 'College Fantrax', ownerName: 'Rival' }],
+      free: [], unchecked: 1,
+    })
   })
 
   it('keeps two different players who share a name but not a position group', async () => {

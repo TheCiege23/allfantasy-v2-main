@@ -5,6 +5,7 @@ import { suggestCatalog, type PlayerMatch } from './playerFinder'
 import { normalizePosition } from './positionNormalization'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
+import { finderIdentityKey, identitiesForFinderPlayers, rosterIdForFinderPlayer, type FinderIdentity } from './playerFinderIdentityBridge'
 
 /**
  * Suggestions as you type, ranked by what you meant and annotated with where
@@ -50,9 +51,8 @@ export type PlayerSuggestion = PlayerMatch & {
   /** Null when signed out, or when the player has no Sleeper id to join on. */
   presence: SuggestionPresence | null
   /**
-   * Rosters across every league AllFantasy holds that carry him — the one
-   * relevance signal the catalog can offer. "kin" has forty prefix matches
-   * with a team; the ones anyone is typing for are the ones people roster.
+   * NFL: rosters across every league AllFantasy holds. Other sports: the
+   * viewer's connected leagues whose provider ids could be verified.
    */
   rostered: number
 }
@@ -123,10 +123,12 @@ type IndexedLeague = {
   id: string
   name: string
   sport: string
+  platform: string | null
   /** False when the sampled roster ids do not resolve against our player table. */
   usable: boolean
   yoursIds: Set<string>
   rosters: IndexedRoster[]
+  providerRosters: IndexedRoster[]
   ownerByRoster: Map<string, string | null>
 }
 export type RosterIndex = { leagues: IndexedLeague[] }
@@ -174,6 +176,12 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
     const arr = rostersByLeague.get(r.leagueId) ?? []
     arr.push(r)
     rostersByLeague.set(r.leagueId, arr)
+  }
+  const rawByLeague = new Map<string, typeof rawRosters>()
+  for (const r of rawRosters) {
+    const arr = rawByLeague.get(r.leagueId) ?? []
+    arr.push(r)
+    rawByLeague.set(r.leagueId, arr)
   }
   const samples = new Map<string, string[]>()
   for (const [id, rs] of rostersByLeague) samples.set(id, sampleRosterIds(rs.map((r) => r.playerData), 60))
@@ -229,9 +237,11 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
       id,
       name: nameById.get(id) ?? 'Untitled league',
       sport: sportOf.get(id) ?? 'NFL',
+      platform: leagues.find((l) => l.id === id)?.platform ?? null,
       usable: sample.length > 0 && rosterIdCoverage(sample, knownBySport.get(sportOf.get(id) ?? 'NFL') ?? new Set()).usable,
       yoursIds,
       rosters: rs.map((r) => ({ platformUserId: r.platformUserId, ids: allIds((r.playerData ?? {}) as Record<string, unknown>) })),
+      providerRosters: (rawByLeague.get(id) ?? []).map((r) => ({ platformUserId: r.platformUserId, ids: allIds((r.playerData ?? {}) as Record<string, unknown>) })),
       ownerByRoster,
     })
   }
@@ -293,6 +303,24 @@ export function presenceOf(sleeperId: string | null, index: RosterIndex, sport =
     }
   }
   return p
+}
+
+/** Typeahead presence for non-NFL rosters, using the same verified ids as the detail card. */
+export function presenceOfProviderPlayer(player: PlayerMatch, index: RosterIndex, identity: FinderIdentity | null): SuggestionPresence {
+  const presence: SuggestionPresence = { yours: [], owned: [], free: [], unchecked: 0 }
+  for (const league of index.leagues) {
+    if (league.sport !== player.sport.toUpperCase()) continue
+    const id = rosterIdForFinderPlayer(player, league.platform, identity)
+    if (!id || !league.providerRosters.some((r) => r.ids.size > 0)) {
+      presence.unchecked += 1
+      continue
+    }
+    const holder = league.providerRosters.find((r) => r.ids.has(id))
+    if (!holder) presence.free.push(league.name)
+    else if (league.yoursIds.has(holder.platformUserId)) presence.yours.push(league.name)
+    else presence.owned.push({ leagueName: league.name, ownerName: league.ownerByRoster.get(holder.platformUserId) ?? null })
+  }
+  return presence
 }
 
 export function isPrefixMatch(query: string, name: string): boolean {
@@ -388,11 +416,20 @@ export async function suggestPlayers(args: {
     suggestCatalog(q, limit * 3, { preferIds, ...(args.sport ? { sport: args.sport } : {}) }),
     args.userId ? getRosterIndex(args.userId, args.loadLeagueIds) : Promise.resolve(null),
   ])
-  const rows: PlayerSuggestion[] = matches.filter((m) => !args.sport || m.sport === args.sport).map((m) => ({
-    ...m,
-    prefix: isPrefixMatch(q, m.name),
-    presence: index ? presenceOf(m.sleeperId, index, m.sport) : null,
-    rostered: m.sleeperId ? (counts.get(`${m.sport}:${m.sleeperId}`) ?? 0) : 0,
-  }))
+  const identities = index
+    ? await identitiesForFinderPlayers(matches.filter((m) => m.sport !== 'NFL'))
+    : new Map<string, FinderIdentity>()
+  const rows: PlayerSuggestion[] = matches.filter((m) => !args.sport || m.sport === args.sport).map((m) => {
+    const presence = !index ? null : m.sport === 'NFL'
+      ? presenceOf(m.sleeperId, index, m.sport)
+      : presenceOfProviderPlayer(m, index, identities.get(finderIdentityKey(m)) ?? null)
+    return {
+      ...m,
+      prefix: isPrefixMatch(q, m.name),
+      presence,
+      rostered: m.sleeperId ? (counts.get(`${m.sport}:${m.sleeperId}`) ?? 0) :
+        (presence?.yours.length ?? 0) + (presence?.owned.length ?? 0),
+    }
+  })
   return foldSamePerson(rankSuggestions(rows)).slice(0, limit)
 }

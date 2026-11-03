@@ -9,7 +9,9 @@ import { normalizePosition } from './positionNormalization'
 
 type IdentityColumn = 'rollingInsightsId' | 'cfbdId' | 'apiSportsId'
 type RosterColumn = 'rollingInsightsId' | 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
-type Identity = Record<RosterColumn, string | null> & { id: string; canonicalName: string }
+export type FinderIdentity = Record<RosterColumn, string | null> & { id: string; canonicalName: string }
+type Identity = FinderIdentity
+type FinderCandidate = Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null }
 
 const SOURCE_COLUMN: Record<string, IdentityColumn> = {
   rolling_insights: 'rollingInsightsId',
@@ -35,35 +37,65 @@ function slotOf(data: unknown, playerId: string): string | null {
   return null
 }
 
-/** Resolve a catalog row only through its sport and the provider that minted its id. */
-export async function identityForFinderPlayer(player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null }): Promise<Identity | null> {
-  const column = SOURCE_COLUMN[String(player.source ?? '').toLowerCase()]
-  if (!column || !player.externalId) return null
+function hasRosterIds(data: unknown): boolean {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false
+  const pd = data as Record<string, unknown>
+  return SLOT_ORDER.some((key) => Array.isArray(pd[key]) && (pd[key] as unknown[]).length > 0)
+}
+
+export function finderIdentityKey(player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId'>): string {
+  return `${player.sport}|${String(player.source ?? '').toLowerCase()}|${player.externalId}`
+}
+
+/** Batch source and reverse-target checks for the typeahead's several candidates. */
+export async function identitiesForFinderPlayers(players: readonly FinderCandidate[]): Promise<Map<string, FinderIdentity>> {
+  const out = new Map<string, FinderIdentity>()
+  const eligible = players.map((player) => ({ player, column: SOURCE_COLUMN[String(player.source ?? '').toLowerCase()] }))
+    .filter((item): item is { player: FinderCandidate; column: IdentityColumn } => Boolean(item.column && item.player.externalId))
+  if (!eligible.length) return out
   const rows = await prisma.playerIdentityMap.findMany({
-    where: { sport: player.sport, [column]: player.externalId },
-    select: {
-      id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperId: true, espnId: true,
-      mflId: true, fleaflickerId: true, fantraxId: true,
-    },
-    take: 2,
+    where: { OR: eligible.map(({ player, column }) => ({ sport: player.sport, [column]: player.externalId })) },
+    select: { id: true, sport: true, canonicalName: true, position: true, rollingInsightsId: true,
+      cfbdId: true, apiSportsId: true, sleeperId: true, espnId: true, mflId: true,
+      fleaflickerId: true, fantraxId: true },
   })
-  // Provider columns are indexed, but not unique. Two identity rows make a crosswalk unsafe.
-  if (rows.length !== 1 || !playerNamesAgree(rows[0]!.canonicalName, player.name)) return null
-  if (player.position && rows[0]!.position &&
-    normalizePosition(player.position) !== normalizePosition(rows[0]!.position)) return null
-  const identity: Identity = { ...rows[0]! }
-  // The target columns are also nonunique. A duplicate Fantrax/ESPN/etc. id cannot
-  // prove which athlete a roster means, even when this source id was unique.
+  const accepted: Array<{ player: FinderCandidate; column: IdentityColumn; identity: FinderIdentity }> = []
+  for (const { player, column } of eligible) {
+    const matches = rows.filter((row) => row.sport === player.sport && row[column] === player.externalId)
+    if (matches.length !== 1 || !playerNamesAgree(matches[0]!.canonicalName, player.name)) continue
+    if (player.position && matches[0]!.position &&
+      normalizePosition(player.position) !== normalizePosition(matches[0]!.position)) continue
+    accepted.push({ player, column, identity: { ...matches[0]! } })
+  }
   const targets = [...new Set<RosterColumn>(['rollingInsightsId', ...Object.values(PLATFORM_COLUMN)])]
-  await Promise.all(targets.map(async (target) => {
-    const id = identity[target]?.trim()
-    if (!id || target === column || target === 'sleeperId') return
-    const owners = await prisma.playerIdentityMap.findMany({
-      where: { sport: player.sport, [target]: id }, select: { id: true }, take: 2,
-    })
-    if (owners.length !== 1 || owners[0]!.id !== identity.id) identity[target] = null
-  }))
-  return identity
+  const targetConditions = new Map<string, { sport: string; column: RosterColumn; id: string }>()
+  for (const { player, column, identity } of accepted) {
+    for (const target of targets) {
+      const id = identity[target]?.trim()
+      if (!id || target === column || target === 'sleeperId') continue
+      targetConditions.set(`${player.sport}|${target}|${id}`, { sport: player.sport, column: target, id })
+    }
+  }
+  const reverseRows = targetConditions.size ? await prisma.playerIdentityMap.findMany({
+    where: { OR: [...targetConditions.values()].map(({ sport, column, id }) => ({ sport, [column]: id })) },
+    select: { id: true, sport: true, rollingInsightsId: true, espnId: true,
+      mflId: true, fleaflickerId: true, fantraxId: true },
+  }) : []
+  for (const { player, column, identity } of accepted) {
+    for (const target of targets) {
+      const id = identity[target]?.trim()
+      if (!id || target === column || target === 'sleeperId') continue
+      const owners = reverseRows.filter((row) => row.sport === player.sport && row[target] === id)
+      if (owners.length !== 1 || owners[0]!.id !== identity.id) identity[target] = null
+    }
+    out.set(finderIdentityKey(player), identity)
+  }
+  return out
+}
+
+/** Resolve one catalog row through its sport and source-qualified provider id. */
+export async function identityForFinderPlayer(player: FinderCandidate): Promise<FinderIdentity | null> {
+  return (await identitiesForFinderPlayers([player])).get(finderIdentityKey(player)) ?? null
 }
 
 /** The roster id for this player in this league's own namespace, if verified. */
@@ -90,7 +122,7 @@ export type FinderBridgeResult = {
 
 /** Read raw non-NFL rosters in their own id space; never translate them through Sleeper. */
 export async function resolveNonNflLeagueSlots(
-  player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null },
+  player: FinderCandidate,
   leagueIds: string[],
   userId: string | null | undefined,
 ): Promise<FinderBridgeResult> {
@@ -125,7 +157,7 @@ export async function resolveNonNflLeagueSlots(
     const leagueRosters = rosters.filter((r) => r.leagueId === league.id)
     if (!leagueRosters.length) continue
     const playerId = rosterIdForFinderPlayer(player, platform, identity)
-    if (!playerId) {
+    if (!playerId || !leagueRosters.some((r) => hasRosterIds(r.playerData))) {
       result.unmatched.push({ leagueId: league.id, leagueName: league.name ?? 'League', platform })
       continue
     }

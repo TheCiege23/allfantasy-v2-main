@@ -34,8 +34,7 @@ const teams = [
 
 beforeEach(() => {
   vi.clearAllMocks()
-  db.playerIdentityMap.findMany.mockImplementation(async ({ select }: { select: { id?: boolean } }) =>
-    select.id && !('canonicalName' in select) ? [{ id: identity.id }] : [identity])
+  db.playerIdentityMap.findMany.mockImplementation(async () => [{ ...identity, sport: 'NCAAF' }])
   db.league.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
     leagues.filter((l) => where.id.in.includes(l.id)))
   db.roster.findMany.mockImplementation(async ({ where }: { where: { leagueId: { in: string[] } } }) =>
@@ -62,7 +61,7 @@ describe('Player Finder sport-qualified identity bridge', () => {
       ['fantrax', false, 'NOT YOURS'],
     ])
     expect(db.playerIdentityMap.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { sport: 'NCAAF', rollingInsightsId: '340' },
+      where: { OR: [{ sport: 'NCAAF', rollingInsightsId: '340' }] },
     }))
   })
 
@@ -74,17 +73,20 @@ describe('Player Finder sport-qualified identity bridge', () => {
   })
 
   it('refuses ambiguous or wrong-name identity rows', async () => {
-    db.playerIdentityMap.findMany.mockResolvedValueOnce([identity, { ...identity, canonicalName: 'Another Player' }])
+    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, sport: 'NCAAF' }, { ...identity, sport: 'NCAAF', canonicalName: 'Another Player' }])
     expect(await identityForFinderPlayer(player)).toBeNull()
-    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, canonicalName: 'Another Player' }])
+    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, sport: 'NCAAF', canonicalName: 'Another Player' }])
     expect(await identityForFinderPlayer(player)).toBeNull()
-    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, position: 'LB' }])
+    db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, sport: 'NCAAF', position: 'LB' }])
     expect(await identityForFinderPlayer(player)).toBeNull()
   })
 
   it('drops a target provider id that belongs to two identity rows', async () => {
-    db.playerIdentityMap.findMany.mockImplementation(async ({ select, where }: { select: { canonicalName?: boolean }; where: Record<string, unknown> }) =>
-      select.canonicalName ? [identity] : 'fantraxId' in where ? [{ id: identity.id }, { id: 'identity-2' }] : [{ id: identity.id }])
+    db.playerIdentityMap.findMany.mockImplementation(async ({ select }: { select: { canonicalName?: boolean } }) =>
+      select.canonicalName ? [{ ...identity, sport: 'NCAAF' }] : [
+        { ...identity, sport: 'NCAAF' },
+        { ...identity, sport: 'NCAAF', id: 'identity-2', rollingInsightsId: null, espnId: null },
+      ])
     const result = await resolveNonNflLeagueSlots(player, ['native', 'fantrax'], 'u1')
     expect(result.slots.map((s) => s.leagueId)).toEqual(['native'])
     expect(result.unmatched.map((l) => l.leagueId)).toEqual(['fantrax'])
