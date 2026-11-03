@@ -11,7 +11,7 @@ describe("notification preference resolver", () => {
     const resolved = resolveNotificationPreferences({
       globalEnabled: true,
       categories: {
-        chat_mentions: { enabled: true, inApp: true, email: false, sms: false },
+        chat_mentions: { enabled: true, inApp: true, email: true, sms: true },
       },
     })
 
@@ -37,14 +37,15 @@ describe("notification preference resolver", () => {
       ...defaults,
       categories: {
         ...defaults.categories,
-        ai_alerts: {
-          ...(defaults.categories?.ai_alerts ?? { enabled: true, inApp: true, email: true, sms: false }),
+        system_account: {
+          ...(defaults.categories?.system_account ?? { enabled: true, inApp: true, email: true, sms: false }),
           email: false,
         },
       },
     }
     const fingerprintChanged = getNotificationPreferencesFingerprint(changed)
     expect(fingerprintChanged).not.toBe(fingerprintA)
+    expect(getNotificationPreferencesFingerprint({ ...defaults, pushDevices: { desktop: true } })).not.toBe(fingerprintA)
   })
 })
 

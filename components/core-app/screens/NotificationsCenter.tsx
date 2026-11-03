@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeftRight, Bell, ClipboardList, Clock, Megaphone, MessageSquare, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountProvider'
 import { groupNotificationRows } from '@/lib/core-app/notificationGroups'
 import type {
@@ -54,7 +55,7 @@ const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
   { id: 'trades', label: 'Trades' },
   { id: 'waivers', label: 'Waivers' },
   { id: 'lineups', label: 'Lineups' },
-  { id: 'mentions', label: 'Mentions' },
+  { id: 'mentions', label: 'Messages' },
   // 38a gives commissioner announcements their own chip. Before this they
   // classified as 'all' and sat unfindable among everything else — or worse, as
   // 'trades', because "commissioner confirmed the trade deadline" matches on
@@ -87,34 +88,61 @@ function timeAgo(iso: string, language = 'en'): string {
   return m.daysAgo(Math.round(hours / 24))
 }
 
+function DeliveryDetails({ meta, copy }: { meta: unknown; copy: (text: string) => string }) {
+  const delivery = (meta as { delivery?: Record<string, { status?: string; reason?: string }> } | null)?.delivery
+  const labels = {
+    ...(delivery?.mobile || delivery?.desktop ? { mobile: 'Phone and tablet push', desktop: 'Desktop browser push' } : { push: 'Device push' }),
+    email: 'Email',
+    sms: 'Text message',
+  }
+  return <ul className="af-nt-delivery" aria-label={copy('Initial delivery status')}>
+    <li>{copy('Added to your in-app inbox')}</li>
+    {Object.entries(labels).map(([key, label]) => {
+      const channel = delivery?.[key]
+      if (!channel?.status) return null
+      const result = channel.reason === 'quiet_hours' ? 'Skipped during quiet hours'
+        : channel.reason === 'no_subscriptions' ? 'No eligible device'
+        : channel.status === 'accepted' ? 'Accepted by provider'
+        : channel.status === 'delayed' ? 'Queued for retry'
+        : channel.status === 'suppressed' ? 'Skipped'
+        : channel.status === 'partial' ? 'Accepted for some devices'
+        : channel.status === 'failed' ? 'Delivery attempt failed'
+        : 'Status unavailable'
+      return <li key={key}>{copy(label)} · {copy(result)}</li>
+    })}
+  </ul>
+}
+
+const rowIcons = {
+  all: Bell, trades: ArrowLeftRight, waivers: Users, lineups: ClipboardList,
+  mentions: MessageSquare, commissioner: Megaphone, drafts: Clock,
+}
+
 function Row({
   row,
   urgent,
   onRead,
+  groupedRows = [],
 }: {
   row: NotificationRow
   urgent?: boolean
   onRead?: (id: string) => void
+  groupedRows?: NotificationRow[]
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(notificationsCenterMessages)
   /* A Survivor notice wears its island icon (by kind) and the torch accent. Display only. */
   const svIcon = survivorNotificationIcon(row.survivorType)
-  return (
-    <li
-      className="af-nt-row"
-      data-severity={row.severity}
-      data-read={row.read}
-      data-urgent={!!urgent}
-      data-survivor={svIcon ?? undefined}
-    >
+  const Icon = rowIcons[row.kind]
+  const content = (
+    <>
       <span className="af-nt-dot" aria-hidden />
       {svIcon ? (
         <span className="af-nt-sv-icon" aria-hidden="true" data-testid="survivor-notification-icon">
           <SurvivorNotificationGlyph icon={svIcon} />
         </span>
-      ) : null}
+      ) : <Icon className="af-nt-row-icon" aria-hidden />}
       <span className="af-nt-body">
         <span className="af-nt-toprow">
           <b className="af-nt-title">{copy(row.title)}</b>
@@ -130,24 +158,28 @@ function Row({
         {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt, language)}{row.relatedIds && row.relatedIds.length > 1 ? m.matchingNotices(row.relatedIds.length) : ''}</span> : null}
       </span>
 
-      {row.action ? (
-        row.action.external ? (
-          <a
-            className="af-nt-act"
-            href={row.action.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onRead?.(row.id)}
-          >
-            {copy(row.action.label)}
-          </a>
-        ) : (
-          <Link className="af-nt-act" href={row.action.href} onClick={() => onRead?.(row.id)}>
-            {copy(row.action.label)}
-          </Link>
-        )
-      ) : null}
-
+    </>
+  )
+  return (
+    <li
+      className="af-nt-row"
+      data-severity={row.severity}
+      data-read={row.read}
+      data-urgent={!!urgent}
+      data-survivor={svIcon ?? undefined}
+    >
+      {row.action?.external ? (
+        <a className="af-nt-row-link" aria-label={`${copy(row.action.label)} · ${copy(row.title)}`} href={row.action.href} target="_blank" rel="noopener noreferrer" onClick={() => onRead?.(row.id)}>{content}</a>
+      ) : row.action ? (
+        <Link className="af-nt-row-link" aria-label={`${copy(row.action.label)} · ${copy(row.title)}`} href={row.action.href} onClick={() => onRead?.(row.id)}>{content}</Link>
+      ) : <span className="af-nt-row-link">{content}</span>}
+      {!urgent ? <details className="af-nt-row-menu">
+        <summary aria-label={copy('Notification details')}>⋯</summary>
+        <p>{copy(row.detail)}</p>
+        <DeliveryDetails meta={row.meta} copy={copy} />
+        {groupedRows.length > 1 ? <ul>{groupedRows.map((item) => <li key={item.id}>{item.action && !item.action.external
+          ? <Link href={item.action.href} onClick={() => onRead?.(item.id)}>{copy(item.detail || item.title)}</Link>
+          : copy(item.title)}</li>)}</ul> : null}
       {/*
         One tap to the provider screen that acts on this (2026-09-14). The loader only
         sets `handoff` for a VERIFIED destination — never a homepage fallback, never
@@ -175,8 +207,13 @@ function Row({
       {!urgent && row.leagueId ? (
         <NotificationRowMute leagueId={row.leagueId} leagueName={row.leagueName} category={row.category ?? null} />
       ) : null}
+      </details> : null}
     </li>
   )
+}
+
+function NotificationDayRow({ date, ...props }: ComponentProps<typeof Row> & { date: string | null }) {
+  return <>{date ? <li className="af-nt-day"><h3>{date}</h3></li> : null}<Row {...props} /></>
 }
 
 export function NotificationsCenter({ data }: NotificationsCenterProps) {
@@ -190,6 +227,8 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(notificationsCenterMessages)
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [league, setLeague] = useState('')
   const [filter, setFilter] = useState<NotificationFilter>('all')
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
@@ -208,17 +247,20 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
   }, [data.rest, data.unread])
 
   const match = useCallback(
-    (r: NotificationRow) => filter === 'all' || r.kind === filter,
-    [filter],
+    (r: NotificationRow) => (!league || r.leagueId === league) && (filter === 'all' || r.kind === filter),
+    [filter, league],
   )
 
+  const leagues = useMemo(() => [...new Map([...data.actToday, ...data.rest].flatMap((row) =>
+    row.leagueId && row.leagueName ? [[row.leagueId, row.leagueName] as const] : []))].sort((a, b) => a[1].localeCompare(b[1])), [data.actToday, data.rest])
   const actToday = useMemo(() => data.actToday.filter(match), [data.actToday, match])
   const rest = useMemo(
     () =>
       groupNotificationRows(data.rest
         .filter(match)
-        .map((r) => (readIds.has(r.id) ? { ...r, read: true } : r))),
-    [data.rest, match, readIds],
+        .map((r) => (markedAll || readIds.has(r.id) ? { ...r, read: true } : r)))
+        .filter((r) => !unreadOnly || !r.read),
+    [data.rest, match, markedAll, readIds, unreadOnly],
   )
 
   /*
@@ -303,6 +345,8 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
           * only control that can clear them unreachable, in exactly the state
           * where a user most wants it. `ids: 'all'` clears them server-side.
           */}
+        <details className="af-nt-header-menu">
+          <summary aria-label={copy('Notification actions')}>⋯</summary>
         <button
           type="button"
           className="af-nt-markall"
@@ -311,23 +355,13 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
         >
           {copy(marking ? 'Marking…' : 'Mark all read')}
         </button>
+        </details>
       </header>
       {readError ? <p role="alert">{copy(readError)}</p> : null}
 
-      {/*
-        🛑 THE ASK LIVES HERE BECAUSE MOBILE NEVER REACHED THE OTHER ONE.
-        `EnableWebPushCard` is the only thing in the codebase that calls
-        `Notification.requestPermission()`, and until now it was rendered in exactly one
-        place: /settings → Notifications. On a phone that is behind a horizontally
-        scrolling rail, so the entire server-side push pipeline — the crons, the outbox
-        relay, `sendPushToUser`, the handlers in sw.js — ran correctly and delivered into
-        an empty subscription table, because nothing ever asked anyone.
-
-        ⚠ IT IS NOT GATED ON `data.push.suppressedReason`. The footer below is, and that
-        was the bug: a user with nothing suppressed saw no route to enabling alerts at all.
-        The card renders its own states (unsupported, not configured, denied, already on),
-        so the only correct gate here is "none".
-      */}
+      <details className="af-nt-settings">
+        <summary>{copy('Alert settings')}</summary>
+        <Link href="/settings?tab=notifications">{copy('Manage delivery preferences')}</Link>
       {/* Web push and web install only — hidden inside the iOS app, wrapper included, so no empty box. */}
       <div className="af-nt-push" data-hide-in-ios-app>
         <EnableWebPushCard />
@@ -343,69 +377,6 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
       </div>
       {/* The app's own alerts card; renders nothing outside the iOS app. */}
       <IosAppPushCard className="af-nt-push" />
-
-      {/* Live counts, straight off the loader. */}
-      <div className="af-nt-filters" role="tablist" aria-label={copy('Filter notifications')}>
-        {visibleFilters(data.mentionsAvailable).map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            role="tab"
-            aria-selected={filter === f.id}
-            className="af-nt-filter"
-            data-on={filter === f.id}
-            onClick={() => setFilter(f.id)}
-          >
-            {copy(f.label)}
-            <span className="af-nt-filtercount af-num">{data.counts[f.id]}</span>
-          </button>
-        ))}
-      </div>
-
-      {actToday.length > 0 ? (
-        <section className="af-nt-section" data-tier="urgent">
-          <h2 className="af-nt-sectiontitle">{copy('Act today')}</h2>
-          <p className="af-nt-sectionnote">
-            {copy('Every one of these has a deadline before tomorrow. Nothing without a clock is in here.')}
-          </p>
-          <ul className="af-nt-list">
-            {actToday.map((r) => (
-              <Row key={r.id} row={r} urgent />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section className="af-nt-section">
-        <h2 className="af-nt-sectiontitle">{copy('Everything else')}</h2>
-        {/*
-          * Says the window out loud. The chip counts are computed from the rows
-          * on this page, so with more stored than the loader fetches they are a
-          * page total wearing the appearance of an account total - the same
-          * mistake the header used to make, one element over.
-          */}
-        {data.olderNotListed > 0 ? (
-          <p className="af-nt-sectionnote">
-            {m.olderNotListed(data.listed, data.olderNotListed)}
-          </p>
-        ) : null}
-        {rest.length > 0 ? (
-          <ul className="af-nt-list">
-            {rest.map((r) => (
-              <Row key={r.id} row={r} onRead={(id) => markRead([id])} />
-            ))}
-          </ul>
-        ) : (
-          <p className="af-nt-empty">
-            {filter === 'all'
-              ? data.leagueId
-                ? copy('No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.')
-                : copy('No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.')
-              : m.nothingUnder(copy(FILTERS.find((f) => f.id === filter)!.label))}
-          </p>
-        )}
-      </section>
-
       {/*
         The suppression rule, stated to the user. It is the design principle of
         the whole surface, so it is copy rather than a footnote.
@@ -422,6 +393,69 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
           </Link>
         </footer>
       ) : null}
+
+      </details>
+      <div className="af-nt-filters" role="group" aria-label={copy('Filter notifications')}>
+        <button type="button" className="af-nt-filter" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>{copy('All')}</button>
+        <button type="button" className="af-nt-filter" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>{copy('Unread')}</button>
+        {!data.leagueId && leagues.length > 0 ? (
+          <select className="af-nt-filter" aria-label={copy('League')} value={league} onChange={(event) => setLeague(event.target.value)}>
+            <option value="">{copy('All leagues')}</option>
+            {leagues.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        ) : null}
+        <select className="af-nt-filter" aria-label={copy('Category')} value={filter} onChange={(event) => setFilter(event.target.value as NotificationFilter)}>
+          {visibleFilters(data.mentionsAvailable || data.rest.some((row) => row.kind === 'mentions')).map(({id, label}) => <option key={id} value={id}>{copy(id === 'all' ? 'All categories' : label)}</option>)}
+        </select>
+      </div>
+
+      {actToday.length > 0 ? (
+        <section className="af-nt-section" data-tier="urgent">
+          <h2 className="af-nt-sectiontitle">{copy('Needs action')}</h2>
+          <ul className="af-nt-list">
+            {actToday.map((r) => (
+              <Row key={r.id} row={r} urgent />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="af-nt-section">
+        <h2 className="af-nt-sectiontitle">{copy('Recent')}</h2>
+        {/*
+          * Says the window out loud. The chip counts are computed from the rows
+          * on this page, so with more stored than the loader fetches they are a
+          * page total wearing the appearance of an account total - the same
+          * mistake the header used to make, one element over.
+          */}
+        {data.olderNotListed > 0 ? (
+          <p className="af-nt-sectionnote">
+            {m.olderNotListed(data.listed, data.olderNotListed)}
+          </p>
+        ) : null}
+        {rest.length > 0 ? (
+          <ul className="af-nt-list">
+            {rest.map((r, index) => {
+              const date = new Date(r.createdAt).toLocaleDateString(language, { dateStyle: 'medium', timeZone: 'UTC' })
+              const previous = rest[index - 1]
+              const startsDay = !previous || new Date(previous.createdAt).toLocaleDateString(language, { dateStyle: 'medium', timeZone: 'UTC' }) !== date
+              return <NotificationDayRow key={r.id} date={startsDay ? date : null} row={r}
+                groupedRows={r.relatedIds && r.relatedIds.length > 1 ? data.rest.filter((item) => r.relatedIds?.includes(item.id)) : undefined}
+                onRead={(id) => markRead([id])} />
+            })}
+          </ul>
+        ) : (
+          <p className="af-nt-empty">
+            {unreadOnly ? copy('No unread notifications here.') : filter === 'all'
+              ? data.leagueId
+                ? copy('No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.')
+                : copy('No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.')
+              : m.nothingUnder(copy(FILTERS.find((f) => f.id === filter)!.label))}
+          </p>
+        )}
+      </section>
+
+
     </div>
   )
 }

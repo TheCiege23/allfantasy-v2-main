@@ -187,9 +187,7 @@ export async function POST(req: NextRequest) {
       type: 'mention',
       title: roomName ? `${senderName} mentioned you · ${roomName}` : `${senderName} mentioned you`,
       body: bodyText,
-      // The sender's display name is user-written; it stays in-app, not in the text.
-      smsBody: 'You were mentioned in a chat. Open AllFantasy to read it.',
-      skipChannels: isLeague ? { email: true, sms: true } : undefined,
+      skipChannels: { email: true, sms: true },
       severity: 'low',
       actionHref,
       actionLabel: isLeague ? 'Open league chat' : 'Open mention',

@@ -64,6 +64,7 @@ export interface LeagueNotificationOverride {
 
 export interface NotificationPreferences {
   globalEnabled?: boolean
+  pushDevices?: { mobile?: boolean; desktop?: boolean }
   categories?: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>>
   /**
    * Quiet hours, evaluated in the user's timezone by `lib/notifications/quietHours.ts`.
@@ -206,7 +207,11 @@ export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[]
  * by the time an inbox is read — "close game, 2:00 left" an hour later is noise, and a busy NBA
  * night is a dozen of them. The person can still switch email on.
  */
-export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = ["live_game_alerts"]
+export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = [
+  "live_game_alerts", "followed_team_scores", "followed_players", "followed_teams",
+  "breaking_news", "performance_alerts", "lineup_alerts", "lineup_reminders",
+  "ai_alerts", "autocoach", "league_drama", "trade_proposals", "waiver_processing",
+]
 
 /**
  * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,
@@ -220,7 +225,6 @@ export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] =
  * A row the user saved with an explicit `sms` value keeps it; this only changes the DEFAULT.
  */
 export const SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS: readonly NotificationCategoryId[] = [
-  "lineup_reminders",
   "lineup_alerts",
   "injury_alerts",
   "followed_players",

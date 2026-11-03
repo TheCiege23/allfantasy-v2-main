@@ -2,10 +2,10 @@ import "server-only"
 import { createHash } from 'node:crypto'
 import { recordSportsDelivery } from "./sportsDeliveryAudit"
 import { deliverDurably } from "./durableTransport"
-import { allowsLeagueSms } from "./channelPolicy"
+import { allowsLeagueEventSms } from "./channelPolicy"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
 import { getSettingsProfile } from "@/lib/user-settings"
-import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
+import { resolveNotificationPreferences, resolvePushDevices } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
@@ -124,6 +124,9 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
   const recipients = [...new Set(userIds)]
   const dispatchToUser = async (userId: string) => {
     let transportFailed = false
+    let inboxRowId: string | undefined
+    const deviceDelivery: Record<string, { status: string }> = {}
+    let inboxMeta: Record<string, unknown> | undefined
     const channels: NotificationDeliveryReceipt['channels'] = {
       inApp: {status:'unknown',reason:'evaluation_incomplete'}, email: {status:'unknown',reason:'evaluation_incomplete'},
       sms: {status:'unknown',reason:'evaluation_incomplete'}, push: {status:'unknown',reason:'evaluation_incomplete'},
@@ -192,6 +195,12 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       )
 
       if (catPrefs.inApp && availability.inApp && !skipChannels?.inApp) {
+        inboxMeta = {
+          ...(meta ?? {}),
+          ...(eligibleLeagueIds ? { leagueIds: eligibleLeagueIds } : {}),
+          notificationCategory: category,
+          ...(actionHref && { actionHref, actionLabel: actionLabel ?? "Open" }),
+        }
         const stored = await createPlatformNotification({
           userId,
           leagueId: effectiveLeagueId,
@@ -201,12 +210,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           body: body ?? undefined,
           severity,
           sourceKey: dedupePrefix ? `${dedupePrefix}:${userId}` : undefined,
-          meta: {
-            ...(meta ?? {}),
-            ...(eligibleLeagueIds ? { leagueIds: eligibleLeagueIds } : {}),
-            notificationCategory: category,
-            ...(actionHref && { actionHref, actionLabel: actionLabel ?? "Open" }),
-          },
+          meta: inboxMeta,
+          onCreated: (id) => { inboxRowId = id },
         })
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
       } else set('inApp',{status:'suppressed',reason:skipChannels?.inApp?'caller_excluded':'channel_off'})
@@ -249,7 +254,14 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
         try {
           const outcome = await deliverDurably({ ...transportMessage, channel: 'push' }, async () => {
-            const results = await sendPushToUser(userId, payload, { strictSubscriptionRead: true })
+            const results = await sendPushToUser(userId, payload, { strictSubscriptionRead: true, devices: resolvePushDevices(prefs) })
+            for (const device of ['mobile', 'desktop'] as const) {
+              const attempts = results.filter((result) => result.device === device)
+              if (attempts.length > 0) {
+                const accepted = attempts.filter((result) => result.ok).length
+                deviceDelivery[device] = { status: accepted === attempts.length ? 'accepted' : accepted ? 'partial' : 'failed' }
+              }
+            }
             const accepted = results.filter(r => r.ok).length
             set('push', results.length === 0 ? { status: 'suppressed', reason: 'no_subscriptions' } : {
               status: accepted === results.length ? 'accepted' : accepted > 0 ? 'partial' : 'failed',
@@ -316,7 +328,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
       } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
-      if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
+      if (allowsLeagueEventSms(category, effectiveLeagueId, { type, severity }) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         const smsClaim = dedupePrefix ? await claimSmsEvent(userId, dedupePrefix) : undefined
         if (smsClaim === null) {
           set('sms',{status:'suppressed',reason:'duplicate_event'})
@@ -360,6 +372,17 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         try { await recordSportsDelivery({ eventKey: dedupePrefix, type, sport: meta.sport, detectedAt,
           occurredAt: typeof meta.occurredAt === 'string' ? meta.occurredAt : undefined }, { userId, completedAt: new Date().toISOString(), channels }) }
         catch { tally.failed++; console.error('[sports-alerts] receipt persistence failed', { eventKey: dedupePrefix }) }
+      }
+      if (inboxRowId && inboxMeta) {
+        const delivery = Object.fromEntries(Object.entries(channels).map(([channel, { status, reason }]) => [channel, { status, reason }]))
+        try {
+          await prisma.platformNotification.updateMany({
+            where: { id: inboxRowId, userId },
+            data: { meta: { ...inboxMeta, delivery: { ...delivery, ...deviceDelivery } } as import('@prisma/client').Prisma.InputJsonObject },
+          })
+        } catch {
+          console.warn('[NotificationDispatcher] inbox delivery details unavailable', { type })
+        }
       }
       if(params.onDeliveryReceipt) {
         try { await params.onDeliveryReceipt({userId,completedAt:new Date().toISOString(),channels}) }
