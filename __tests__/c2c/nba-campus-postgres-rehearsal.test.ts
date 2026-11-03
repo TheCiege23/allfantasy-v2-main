@@ -19,6 +19,7 @@ import { nbaCampusPointsForMatchup } from '@/lib/c2c/nbaCampusMatchupScoring'
 import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameBoxes'
 import { finalizeRosterAssignments, mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { buildLeagueStatScorer, scoreRosterForWeek, updateMatchupScores } from '@/lib/redraft/scoringEngine'
+import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
 pilot('NBA campus snapshot and correction on isolated Postgres', () => {
@@ -121,11 +122,22 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       const pendingPlayoff = await scoreRosterForWeek({ leagueId: id, rosterId: homeId, seasonYear: 2026, week: 2 })
       expect(pendingPlayoff.allFinal).toBe(false)
       expect(pendingPlayoff.missingPlayerIds).toContain(playerId)
+      await prisma.redraftSeason.update({ where: { id: season.id }, data: { status: 'playoffs', playoffStartWeek: 2, currentWeek: 2 } })
+      const roundId = `${id}-round`, playoffId = `${id}-playoff`
+      await prisma.redraftPlayoffRound.create({ data: { id: roundId, seasonId: season.id, roundNumber: 1, status: 'active' } })
+      await prisma.redraftPlayoffMatchup.create({ data: { id: playoffId, seasonId: season.id, roundId, matchupNumber: 1, homeRosterId: homeId, awayRosterId: awayId, homeSeed: 1, awaySeed: 2 } })
+      // Assume the separate week-sealing gate has passed; the real playoff scorer must still
+      // withhold its result while this roster's campus box is missing.
+      const playoffDeps = { prisma, now: () => correctedAt, finalizeWeek: vi.fn(async () => ({ finalized: true, alreadyFinal: false })) as never }
+      expect((await scoreActivePlayoffRound({ seasonId: season.id, calendarWeek: 2 }, playoffDeps)).outcome).toBe('live')
+      expect((await prisma.redraftPlayoffMatchup.findUniqueOrThrow({ where: { id: playoffId } })).status).not.toBe('final')
       await updateMatchupScores(matchup.id)
       expect(await prisma.redraftMatchup.findUniqueOrThrow({ where: { id: matchup.id } })).toMatchObject({ status: 'active' })
       expect(await refresh(22, correctedAt)).toMatchObject({ stored: 1 })
       await updateMatchupScores(matchup.id)
       expect(await prisma.redraftMatchup.findUniqueOrThrow({ where: { id: matchup.id } })).toMatchObject({ status: 'final', homeScore: finalAfterCorrection.homeScore })
+      expect((await scoreActivePlayoffRound({ seasonId: season.id, calendarWeek: 2 }, playoffDeps)).outcome).toBe('scored')
+      expect(await prisma.redraftPlayoffMatchup.findUniqueOrThrow({ where: { id: playoffId } })).toMatchObject({ status: 'final', homeScore: finalAfterCorrection.homeScore })
       harness.campusDb = null
       harness.now = null
       await persistNbaCampusWeekSnapshot(prisma, { leagueId: id, rosterId: homeRoster, snapshot: { ...built.snapshot!, players: built.snapshot!.players.map(player => ({ ...player, selectedAt: '2026-11-01T19:00:00.000Z' })) }, now: savedAt })
