@@ -8,6 +8,7 @@ import { resolveClaimTarget } from '@/lib/shared-services/league-hub/replacement
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import { identityForFinderPlayer, rosterIdForFinderPlayer } from './playerFinderIdentityBridge'
+import { isFinderPeriodPilotLeague } from './playerFinderPeriodPilot'
 import { normalizePosition } from './positionNormalization'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -75,6 +76,7 @@ export async function getFinderDailyImpact(
   for (const slot of held) {
     const league = leagues.find((item) => item.id === slot.leagueId)
     if (!league || String(league.sport).toUpperCase() !== subject.sport) continue
+    if (['NCAAF', 'NCAAB', 'SOCCER'].includes(subject.sport) && !isFinderPeriodPilotLeague(league.id)) continue
     const platform = String(league.platform ?? 'manual').toLowerCase()
     const subjectId = rosterIdForFinderPlayer(subject, platform, subjectIdentity)
     if (!subjectId) continue
@@ -155,10 +157,11 @@ export async function getFinderDailyImpact(
       select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true, cfbdId: true },
     }) : []
     const poolRows = poolIdentities.length ? await prisma.sportsPlayer.findMany({
-      where: { sport: subject.sport, OR: [
+      where: subject.sport === 'NCAAF' ? { sport: subject.sport, OR: [
         { source: 'rolling_insights', externalId: { in: poolIdentities.flatMap((identity) => identity.rollingInsightsId ? [identity.rollingInsightsId] : []) } },
-        ...(subject.sport === 'NCAAF' ? [{ source: 'cfbd', externalId: { in: poolIdentities.flatMap((identity) => identity.cfbdId ? [identity.cfbdId] : []) } }] : []),
-      ] },
+        { source: 'cfbd', externalId: { in: poolIdentities.flatMap((identity) => identity.cfbdId ? [identity.cfbdId] : []) } },
+      ] } : { sport: subject.sport, source: 'rolling_insights',
+        externalId: { in: poolIdentities.flatMap((identity) => identity.rollingInsightsId ? [identity.rollingInsightsId] : []) } },
       select: { name: true, position: true, team: true, status: true, externalId: true },
     }) : []
     const poolKeyCounts = new Map<string, number>()
