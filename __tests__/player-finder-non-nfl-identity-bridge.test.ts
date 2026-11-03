@@ -88,9 +88,11 @@ describe('Player Finder sport-qualified identity bridge', () => {
     expect(result.unmatched.map((l) => l.leagueId)).toEqual(['fantrax'])
   })
 
-  it('does not treat a source-colliding soccer id as a Rolling Insights roster id', () => {
+  it('does not treat a source-colliding soccer id as a Rolling Insights or API-Sports roster id', async () => {
     const soccer = { sport: 'SOCCER', source: 'api_football', externalId: '1100' }
     expect(rosterIdForFinderPlayer(soccer, 'allfantasy', null)).toBeNull()
     expect(rosterIdForFinderPlayer(soccer, 'fantrax', null)).toBeNull()
+    expect(await identityForFinderPlayer({ ...soccer, name: 'Erling Haaland' })).toBeNull()
+    expect(db.playerIdentityMap.findMany).not.toHaveBeenCalled()
   })
 })

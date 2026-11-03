@@ -13,7 +13,7 @@ type Identity = Record<RosterColumn, string | null> & { id: string; canonicalNam
 const SOURCE_COLUMN: Record<string, IdentityColumn> = {
   rolling_insights: 'rollingInsightsId',
   cfbd: 'cfbdId',
-  api_football: 'apiSportsId',
+  api_sports: 'apiSportsId',
 }
 const PLATFORM_COLUMN: Record<string, RosterColumn> = {
   sleeper: 'sleeperId',
