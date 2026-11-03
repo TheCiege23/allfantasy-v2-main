@@ -270,6 +270,9 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
   const myRosterId = rosters.find((roster) => roster.ownerId === actorUserId)?.id ?? null
   const mySet = protections.find((set) => set.rosterId === myRosterId && set.week === state.week)
   const lockAt = state.lockAt && mySet?.lockAt && mySet.lockAt < state.lockAt ? mySet.lockAt : state.lockAt
+  const preLockAdvice = myRosterId ? await import('./preLockAdvice').then(({readPiratePreLockAdvice}) =>
+    readPiratePreLockAdvice({leagueId,rosterId:myRosterId,ownerId:actorUserId,season:state.season.season,week:state.week},db)
+  ).catch(() => null) : null
   return {
     league: { id: state.league.id, name: (await db.league.findUnique({ where: { id: leagueId }, select: { name: true } }))?.name, sport: state.league.sport, rosterLimit },
     rules: state.rules,
@@ -278,6 +281,7 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
     lockAt,
     canEditProtections: Boolean(myRosterId && mySet?.status !== 'void' && !isProtectionLocked(lockAt)),
     myRosterId,
+    preLockAdvice,
     rosters,
     protections,
     lineupRulings,
@@ -490,13 +494,15 @@ export async function commissionerRetryPirateClaim(input: {
     select: { deadlineAt: true },
   })
   if (!claim?.deadlineAt || claim.deadlineAt > now) refusal('The claim response window has not ended.')
-  return settlePirateClaim({ claimId: input.claimId, note: `Commissioner ${input.actorUserId} retried the overdue claim.`, now }, db)
+  return settlePirateClaim({ claimId: input.claimId, actorUserId: input.actorUserId, note: `Commissioner ${input.actorUserId} retried the overdue claim.`, now }, db)
 }
 
 export async function settlePirateClaim(input: {
   claimId: string
   returnPlayerId?: string | null
   note: string
+  automatic?: boolean
+  actorUserId?: string
   now?: Date
 }, db: Db = prisma) {
   const now = input.now ?? new Date()
@@ -566,6 +572,16 @@ export async function settlePirateClaim(input: {
         { leagueId: claim.leagueId, seasonId: claim.seasonId, rosterId: claim.loserRosterId, type: 'pirate_loss', metadata },
       ],
     })
+    const teams = await tx.redraftRoster.findMany({
+      where:{leagueId:claim.leagueId,id:{in:[claim.winnerRosterId,claim.loserRosterId]}},
+      select:{id:true,teamName:true,ownerName:true},
+    })
+    const teamName = (id:string) => {const team=teams.find(r=>r.id===id);return team?.teamName || team?.ownerName || null}
+    await tx.leagueAuditLog.create({data:{
+      leagueId:claim.leagueId,userId:input.actorUserId,actionType:'pirate_steal',entityType:'pirate_claim',entityId:claim.id,createdAt:now,
+      metadata:{week:claim.week,playerName:claimed.playerName,returnPlayerName:returning?.playerName??null,
+        winnerName:teamName(claim.winnerRosterId),loserName:teamName(claim.loserRosterId),automatic:input.automatic===true},
+    }})
     const league = await tx.league.findUniqueOrThrow({ where: { id: claim.leagueId }, select: { sport: true, settings: true, rosterSize: true } })
     const maxRoster = league.rosterSize && league.rosterSize > 0 ? league.rosterSize
       : resolveRedraftRosterConfig(String(league.sport), league.settings).maxRosterSize
@@ -627,6 +643,12 @@ export async function commissionerReversePirateClaim(input: {
       { leagueId: claim.leagueId, seasonId: claim.seasonId, rosterId: claim.winnerRosterId, type: 'pirate_reversal', metadata },
       { leagueId: claim.leagueId, seasonId: claim.seasonId, rosterId: claim.loserRosterId, type: 'pirate_reversal', metadata },
     ] })
+    const restoredTeam=await tx.redraftRoster.findUnique({where:{id:claim.loserRosterId},select:{teamName:true,ownerName:true}})
+    await tx.leagueAuditLog.create({data:{
+      leagueId:claim.leagueId,userId:input.actorUserId,actionType:'pirate_steal_reversed',entityType:'pirate_claim',entityId:claim.id,createdAt:now,
+      metadata:{week:claim.week,playerName:stolen.playerName,returnPlayerName:returned?.playerName??null,
+        loserName:restoredTeam?.teamName || restoredTeam?.ownerName || null},
+    }})
     return tx.pirateClaim.update({ where: { id: claim.id }, data: {
       status: 'reversed', reversedAt: now, reversedByUserId: input.actorUserId, reversalReason: reason,
       resolutionNote: [claim.resolutionNote, `Reversed by ${input.actorUserId}: ${reason}`].filter(Boolean).join(' '),
@@ -648,11 +670,11 @@ export async function respondToPirateClaim(input: {
   const loserAction = input.action === 'accept' || input.action === 'counter'
   await managedRoster(claim.seasonId, loserAction ? claim.loserRosterId : claim.winnerRosterId, input.actorUserId, db)
   if (claim.deadlineAt && now >= claim.deadlineAt) {
-    return settlePirateClaim({ claimId: claim.id, note: 'Automatic transfer after claim deadline', now }, db)
+    return settlePirateClaim({ claimId: claim.id, note: 'Automatic transfer after claim deadline', automatic: true, now }, db)
   }
   if (input.action === 'accept') {
     if (claim.status !== 'pending') refusal('The offer is not pending.')
-    return settlePirateClaim({ claimId: claim.id, returnPlayerId: claim.offeredPlayerId, note: 'Accepted by losing manager', now }, db)
+    return settlePirateClaim({ claimId: claim.id, actorUserId: input.actorUserId, returnPlayerId: claim.offeredPlayerId, note: 'Accepted by losing manager', now }, db)
   }
   if (input.action === 'counter') {
     if (claim.status !== 'pending') refusal('The offer is not pending.')
@@ -670,6 +692,7 @@ export async function respondToPirateClaim(input: {
   if (claim.status !== 'countered') refusal('No counteroffer is open.')
   return settlePirateClaim({
     claimId: claim.id,
+    actorUserId: input.actorUserId,
     returnPlayerId: input.action === 'accept_counter' ? claim.counterPlayerId : null,
     note: input.action === 'accept_counter' ? 'Counteroffer accepted' : 'Counteroffer declined; winner keeps the claim',
     now,
@@ -712,7 +735,7 @@ export async function maintainPirateClaims(input: { leagueId?: string; now?: Dat
   let failed = 0
   for (const claim of due) {
     try {
-      await settlePirateClaim({ claimId: claim.id, note: 'Automatic transfer after claim deadline', now }, db)
+      await settlePirateClaim({ claimId: claim.id, note: 'Automatic transfer after claim deadline', automatic: true, now }, db)
       transferred += 1
     } catch {
       failed += 1

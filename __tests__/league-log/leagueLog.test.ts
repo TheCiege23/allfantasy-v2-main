@@ -47,6 +47,16 @@ describe('visibility setting', () => {
 })
 
 describe('what a member sees', () => {
+  it('keeps a public Pirate recap and a separate reversal without exposing internal metadata',()=>{
+    const metadata={week:8,playerName:'Jordan Love',winnerName:'Sea Wolves',loserName:'Harbor Raiders',automatic:true,privateReason:'do not display'}
+    expect(describeLogEntry(row({actionType:'pirate_steal',metadata}),member)).toMatchObject({
+      category:'rosters',title:'Sea Wolves claimed Jordan Love from Harbor Raiders',
+      detail:'Week 8 · Automatic transfer after the response deadline',
+    })
+    const reversal=describeLogEntry(row({actionType:'pirate_steal_reversed',metadata}),member)
+    expect(reversal?.title).toBe('Pirate steal reversed: Jordan Love returned to Harbor Raiders')
+    expect(JSON.stringify(reversal)).not.toContain('do not display')
+  })
   it('a sentence, never the raw row', () => {
     const e = describeLogEntry(
       row({ actionType: 'settings_patch', metadata: { section: 'scoring', updatedFields: ['secret_field'] }, afterState: { sealed: 'x' } }),

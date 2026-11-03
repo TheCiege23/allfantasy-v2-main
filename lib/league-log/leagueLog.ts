@@ -114,6 +114,33 @@ type Action = {
  * commissioners, as its raw type.
  */
 export const LOG_ACTIONS: Record<string, Action> = {
+  pirate_steal: {
+    category: 'rosters',
+    members: true,
+    line: ({row}) => {
+      const m=obj(row.metadata)
+      const player=str(m.playerName)
+      const winner=str(m.winnerName)
+      const loser=str(m.loserName)
+      const exchanged=str(m.returnPlayerName)
+      const week=num(m.week)
+      const en=[week!=null?`Week ${week}`:null,m.automatic===true?'Automatic transfer after the response deadline':null,exchanged?`${exchanged} went the other way`:null].filter(Boolean).join(' · ')
+      const es=[week!=null?`Semana ${week}`:null,m.automatic===true?'Transferencia automática al vencer el plazo':null,exchanged?`${exchanged} pasó al otro equipo`:null].filter(Boolean).join(' · ')
+      return {en:`${winner??'A team'} claimed ${player??'a player'} from ${loser??'another team'}`,
+        es:`${winner??'Un equipo'} reclamó a ${player??'un jugador'} de ${loser??'otro equipo'}`,detailEn:en||null,detailEs:es||null}
+    },
+  },
+  pirate_steal_reversed: {
+    category: 'rosters',
+    members: true,
+    line: ({row}) => {
+      const m=obj(row.metadata)
+      const player=str(m.playerName)
+      const team=str(m.loserName)
+      return {en:`Pirate steal reversed: ${player??'a player'} returned to ${team??'the original team'}`,
+        es:`Robo pirata revertido: ${player??'un jugador'} volvió a ${team??'su equipo original'}`}
+    },
+  },
   settings_patch: {
     category: 'settings',
     members: true,

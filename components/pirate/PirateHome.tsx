@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Anchor, ArrowRight, Clock3, LockKeyhole, LockKeyholeOpen, Skull, Sparkles, X } from 'lucide-react'
+import type { PiratePreLockAdvice } from '@/lib/pirate/preLockAdvice'
+import { pirateReviewQueue } from '@/lib/pirate/reviewQueue'
 
 type Player = { id: string; playerId: string; playerName: string; position: string; team: string | null; slotType: string }
 type Roster = { id: string; ownerId: string; ownerName: string; teamName: string | null; players: Player[] }
@@ -33,6 +35,7 @@ type Data = {
   lineupPreviews: Record<string, { issues: string[]; reason: string }>
   lineupEvidence?: Record<string, LineupEvidence | null>
   claims: Claim[]
+  preLockAdvice?: PiratePreLockAdvice | null
 }
 
 function dateText(value: string | null): string {
@@ -183,6 +186,9 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
     return []
   }).sort((a, b) => (a.deadline ? Date.parse(a.deadline) : Infinity) - (b.deadline ? Date.parse(b.deadline) : Infinity))
   const nextClaim = personalActions[0]
+  const advice = data?.preLockAdvice && beforeDeadline(data.preLockAdvice.deadlineAt, now) ? data.preLockAdvice : null
+  const lineupFirst = advice && (!nextClaim || !nextClaim.deadline || Date.parse(advice.deadlineAt) < Date.parse(nextClaim.deadline))
+  const reviews = isCommissioner ? pirateReviewQueue(data?.claims ?? [], new Set(data?.lineupRulings?.map(r=>r.claimId)), data?.lineupEvidence ?? {}, now) : []
   const canManage = canEdit && Boolean(myRoster?.players.length)
   const nextTitle = nextClaim?.title ?? (!myRoster ? 'Claim a team to get started' : mySet?.status === 'void'
     ? 'Protections voided this week' : canManage ? dirty ? 'Save your protection changes' : saved.length ? 'Your protections are saved' : 'Protect your players'
@@ -192,6 +198,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
     : canManage ? 'Only saved protections carry into the matchup. Unused slots expire at lock.'
     : !lockAt ? 'Protection editing opens when the first game time is confirmed.' : 'Check your saved protections and watch the claim board for updates.')
   const actionDeadline = nextClaim ? nextClaim.deadline : canManage ? lockAt : null
+  const displayedDeadline = lineupFirst ? advice.deadlineAt : actionDeadline
   const shownSelection = canEdit ? selectedSet : savedSet
 
   return (
@@ -221,12 +228,32 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
         <>
           <section aria-labelledby="pirate-next-action" className="mt-3 rounded-2xl border border-amber-300/35 bg-[#102234] p-4 sm:mt-5 sm:p-5">
             <p className="text-xs font-bold uppercase tracking-widest text-[#fde68a]">Your next move</p>
-            <h3 id="pirate-next-action" className="mt-1 text-xl font-black">{nextTitle}</h3>
-            <p className="mt-1 text-sm leading-5 text-slate-200">{nextDetail}</p>
-            {actionDeadline && <p className="mt-2 flex items-start gap-2 text-sm font-semibold text-[#fde68a]"><Clock3 size={16} aria-hidden="true" className="mt-0.5 shrink-0" /><span>{nextClaim ? 'Due' : 'Locks'} <time dateTime={actionDeadline}>{dateText(actionDeadline)}</time> · {timeRemaining(actionDeadline, now)}</span></p>}
-            {(nextClaim || myRoster) && <a href={nextClaim ? `#pirate-claim-${nextClaim.claim.id}` : '#pirate-protections'} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-sm font-black text-[#071522] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto">{nextClaim ? 'Open claim' : canManage ? 'Manage protections' : 'View protections'} <ArrowRight size={16} aria-hidden="true" /></a>}
+            <h3 id="pirate-next-action" className="mt-1 text-xl font-black">{lineupFirst ? 'Fix your starting lineup' : nextTitle}</h3>
+            <p className="mt-1 text-sm leading-5 text-slate-200">{lineupFirst ? advice.issues[0] : nextDetail}</p>
+            {displayedDeadline && <p className="mt-2 flex items-start gap-2 text-sm font-semibold text-[#fde68a]"><Clock3 size={16} aria-hidden="true" className="mt-0.5 shrink-0" /><span>{lineupFirst ? 'Lineup locks' : nextClaim ? 'Due' : 'Protections lock'} <time dateTime={displayedDeadline}>{dateText(displayedDeadline)}</time> · {timeRemaining(displayedDeadline, now)}</span></p>}
+            {(nextClaim || myRoster) && <a href={lineupFirst ? '#pirate-lineup-warning' : nextClaim ? `#pirate-claim-${nextClaim.claim.id}` : '#pirate-protections'} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-sm font-black text-[#071522] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto">{lineupFirst ? 'See lineup options' : nextClaim ? 'Open claim' : canManage ? 'Manage protections' : 'View protections'} <ArrowRight size={16} aria-hidden="true" /></a>}
             {personalActions.length > 1 && <p className="mt-2 text-xs text-slate-300">{personalActions.length - 1} more {personalActions.length === 2 ? 'claim needs' : 'claims need'} your attention.</p>}
           </section>
+          {advice && <section id="pirate-lineup-warning" tabIndex={-1} aria-labelledby="pirate-lineup-warning-title" className="mt-3 scroll-mt-24 rounded-2xl border border-amber-300/25 bg-[#102234] p-4">
+            <h3 id="pirate-lineup-warning-title" className="font-bold">Before your lineup locks</h3>
+            <p className="mt-1 text-sm text-slate-200">Week {advice.week}{advice.scoringDay ? ` · ${advice.scoringDay} (Eastern scoring date)` : ''} · <time dateTime={advice.deadlineAt}>{dateText(advice.deadlineAt)}</time></p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-200">{advice.issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul>
+            {advice.moves.length ? <>
+              <p className="mt-3 text-sm font-bold text-[#fde68a]">Verified lineup option</p>
+              <ul className="mt-1 list-disc pl-5 text-sm text-slate-200">{advice.moves.map(move=><li key={move.playerName+move.slot}>Start {move.playerName} at {move.slot}.</li>)}</ul>
+              <p className="mt-1 text-xs text-slate-300">Review and save the lineup yourself. Availability may change before kickoff.</p>
+            </> : <p className="mt-2 text-sm text-slate-300">No legal on-roster replacement could be verified. Check your lineup and available players. This warning does not change protections.</p>}
+            <a className="mt-2 inline-flex min-h-11 items-center font-bold text-cyan-100 underline underline-offset-4" href={`/league/${encodeURIComponent(leagueId)}?view=roster`}>Open your lineup</a>
+          </section>}
+          {reviews.length>0 && <section aria-labelledby="pirate-attention-title" className="mt-3 rounded-2xl border border-cyan-300/25 bg-[#102234] p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-cyan-100">Commissioner</p>
+            <h3 id="pirate-attention-title" className="mt-1 text-lg font-black">Needs attention · {reviews.length}</h3>
+            <ul className="mt-2 divide-y divide-white/10">{reviews.map(({claim,reason})=><li key={claim.id} className="py-2 text-sm">
+              <p className="font-semibold">Week {claim.week} · {nameOf(byId.get(claim.winnerRosterId))} vs. {nameOf(byId.get(claim.loserRosterId))}</p>
+              <p className="mt-1 text-slate-300">{reason}</p>
+              <a href={`#pirate-claim-${claim.id}`} className="inline-flex min-h-11 items-center font-bold text-cyan-100 underline underline-offset-4">Review claim</a>
+            </li>)}</ul>
+          </section>}
           {myRoster && data.league.rosterLimit > 0 && rosterOverflow > 0 && (
             <p role="status" className="mt-5 rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm leading-6 text-amber-100">
               Your crew has {myRoster.players.length} players in a {data.league.rosterLimit}-player roster after a steal. Free {rosterOverflow} {rosterOverflow === 1 ? 'spot' : 'spots'} before another acquisition{overflowGraceUntil ? ` and by ${dateText(overflowGraceUntil)}` : ''}. No player will be dropped automatically.
@@ -423,8 +450,8 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
             <section className="mt-7 rounded-[24px] border border-white/10 bg-[#081625] p-5 sm:p-6">
               <div className="flex items-center gap-2"><Sparkles size={19} className="text-amber-300" /><h3 className="text-xl font-black">Recent plunder</h3></div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {settledClaims.slice(0, 6).map((claim) => (
-                  <div key={claim.id} className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-4">
+                {settledClaims.filter((claim,index)=>index<6 || (isCommissioner && claim.scoreCorrectionNeedsReversal)).map((claim) => (
+                  <div key={claim.id} id={`pirate-claim-${claim.id}`} tabIndex={-1} className="scroll-mt-24 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-amber-300">Week {claim.week} · Claimed</p>
                     <p className="mt-2 text-sm font-semibold">{nameOf(byId.get(claim.winnerRosterId))} took {playerName(byId.get(claim.winnerRosterId), claim.playerId)}</p>
                     {isCommissioner && claim.scoreCorrectionNeedsReversal && <div className="mt-3 space-y-2">

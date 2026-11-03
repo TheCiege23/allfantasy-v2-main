@@ -63,6 +63,22 @@ describe('Pirate Deck', () => {
     expect(screen.getByText('1 more claim needs your attention.')).toBeTruthy()
   })
 
+  it('shows a verified lineup option to the manager and keeps the review queue commissioner-only', async () => {
+    const base = deck()
+    const data = { ...base, preLockAdvice: { week: 9, scoringDay: null, deadlineAt: base.lockAt,
+      issues: ['QB: Alex Starter is OUT'], moves: [{ playerName: 'Blake Bench', slot: 'QB' }] },
+    claims: [{ id: 'expired', week: 8, winnerRosterId: 'mine', loserRosterId: 'rival', status: 'selection_expired' }] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => data }))
+    const view = render(<PirateHome leagueId="league" isCommissioner={false} />)
+    expect(await screen.findByRole('heading', { name: 'Fix your starting lineup' })).toBeTruthy()
+    expect(screen.getByText('Start Blake Bench at QB.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open your lineup' }).getAttribute('href')).toBe('/league/league?view=roster')
+    expect(screen.queryByRole('heading', { name: /Needs attention/ })).toBeNull()
+    view.rerender(<PirateHome leagueId="league" isCommissioner />)
+    expect(screen.getByRole('heading', { name: 'Needs attention · 1' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Review claim' }).getAttribute('href')).toBe('#pirate-claim-expired')
+  })
+
   it('keeps saved protections visible and blocks stale editing after the first game locks', async () => {
     const data = deck()
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => data })
