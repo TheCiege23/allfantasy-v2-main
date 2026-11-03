@@ -71,7 +71,10 @@ export async function bridgeImportedGameLogIds(args: {
 function nbaNameKey(name: string): string {
   const key = normalizePlayerName(name.normalize('NFKD').replace(/\p{M}/gu, ''))
   // NBA player 1641842 is listed as Ronald Holland II, with the profile slug ron-holland.
-  return key === 'ronald holland' ? 'ron holland' : key
+  if (key === 'ronald holland') return 'ron holland'
+  // NBA player 1642357 is listed as David Jones Garcia. Rolling Insights uses David Jones.
+  if (key === 'david jones garcia') return 'david jones'
+  return key
 }
 
 /** Resolve Sleeper's NBA ids via the provider catalog, never by their numeric value. */
