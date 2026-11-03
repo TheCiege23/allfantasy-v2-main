@@ -82,6 +82,8 @@ export function zombieItemSwapValue(args: {
   incoming: readonly ZombieValuationItem[]
   window: ZombieItemWindow
 }): {
+  before: number
+  after: number
   outgoingCost: number
   incomingBenefit: number
   outgoingValues: ReadonlyMap<string, number>
@@ -117,6 +119,8 @@ export function zombieItemSwapValue(args: {
     score = next
   }
   return {
+    before,
+    after: afterReceiving,
     outgoingCost: Math.round(Math.max(0, before - afterGiving) * 10) / 10,
     incomingBenefit: Math.round(Math.max(0, afterReceiving - afterGiving) * 10) / 10,
     outgoingValues,

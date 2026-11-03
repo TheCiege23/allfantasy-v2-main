@@ -178,6 +178,8 @@ export async function POST(req: NextRequest) {
       getValue: grade.graded ? grade.getValue : null,
       evaluationReceiptId: null,
       gradeScope: 'zombie_future_scoring',
+      zombieEligibility: grade.zombieEligibility,
+      zombieInventory: grade.zombieInventory,
     } })
   }
 
