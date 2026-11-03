@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
   const targetIds = Array.from(userIds)
   if (targetIds.length > 0) {
     const actionHref = isLeague && leagueId
-      ? `/league/${encodeURIComponent(leagueId)}`
+      ? `/league/${encodeURIComponent(leagueId)}?openChat=league&message=${encodeURIComponent(messageId)}`
       : `/messages?thread=${encodeURIComponent(threadId)}&message=${encodeURIComponent(messageId)}`
     /*
      * Who, where, and what they said — the same shape as a DM alert. "You were mentioned" with no
@@ -188,9 +188,8 @@ export async function POST(req: NextRequest) {
       title: roomName ? `${senderName} mentioned you · ${roomName}` : `${senderName} mentioned you`,
       body: bodyText,
       // The sender's display name is user-written; it stays in-app, not in the text.
-      smsBody: isLeague
-        ? 'You were mentioned in a league chat. Open AllFantasy to read it.'
-        : 'You were mentioned in a chat. Open AllFantasy to read it.',
+      smsBody: 'You were mentioned in a chat. Open AllFantasy to read it.',
+      skipChannels: isLeague ? { email: true, sms: true } : undefined,
       severity: 'low',
       actionHref,
       actionLabel: isLeague ? 'Open league chat' : 'Open mention',

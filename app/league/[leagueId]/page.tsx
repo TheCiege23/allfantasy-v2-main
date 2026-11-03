@@ -166,7 +166,14 @@ export default async function LeaguePage(
   }
 
   if (!session?.user?.id) {
-        const leaguePath = embedMode ? `/league/${leagueId}?embed=1` : `/league/${leagueId}`
+        const query = new URLSearchParams()
+        if (embedMode) query.set('embed', '1')
+        if (defaultOpenChat) {
+          query.set('openChat', defaultOpenChat)
+          const messageId = firstSearchParam(sp.message)
+          if (messageId) query.set('message', messageId)
+        }
+        const leaguePath = `/league/${encodeURIComponent(leagueId)}${query.size ? `?${query}` : ''}`
         redirect(`/login?callbackUrl=${encodeURIComponent(leaguePath)}`)
   }
 
