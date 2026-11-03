@@ -36,22 +36,23 @@ const SITE = getPublicSiteOrigin()
  * starts, so listing them would bury the useful links under thousands of others.
  */
 const POSITION_GROUPS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
+const SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 
 /** Per group, not per page — six groups of this size is a browsable index. */
 const PER_GROUP = 48
 
 export const metadata: Metadata = {
-  title: 'NFL Players – Fantasy Stats, Injuries & Projections – AllFantasy',
+  title: 'Fantasy Players by Sport – Stats, Injuries & Projections – AllFantasy',
   description:
-    'Every NFL player AllFantasy tracks, by position. Projections, injury designations and season statistics, plus the slot he is in across every league you have connected on Sleeper, ESPN and Yahoo.',
+    'Find NFL, NBA, NHL, MLB, college football, college basketball and soccer players. View available stats, injuries and projections.',
   alternates: { canonical: `${SITE}/players` },
   openGraph: {
     type: 'website',
     url: `${SITE}/players`,
     siteName: 'AllFantasy',
-    title: 'NFL Players – Fantasy Stats, Injuries & Projections – AllFantasy',
+    title: 'Fantasy Players by Sport – AllFantasy',
     description:
-      'Every NFL player AllFantasy tracks, by position. Projections, injury designations and season statistics.',
+      'Find players across seven sports and view available fantasy research.',
     /*
      * ⚠ DECLARING `openGraph` WITHOUT `images` DROPS THE SITE DEFAULT ENTIRELY.
      * Next REPLACES the openGraph object from a parent rather than deep-merging
@@ -63,9 +64,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'NFL Players – Fantasy Stats, Injuries & Projections – AllFantasy',
+    title: 'Fantasy Players by Sport – AllFantasy',
     description:
-      'Every NFL player AllFantasy tracks, by position. Projections, injury designations and season statistics.',
+      'Find players across seven sports and view available fantasy research.',
     images: [getOgImageUrl()],
   },
 }
@@ -97,17 +98,28 @@ export default async function PlayersIndexPage() {
       },
       distinct: ['sleeperId'],
       orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
-      select: { name: true, sport: true, sleeperId: true, position: true, team: true },
+      select: { name: true, sport: true, sleeperId: true, source: true, externalId: true, position: true, team: true },
     })
     .catch(() => [])
 
+  const otherSports = await Promise.all(SPORTS.filter((sport) => sport !== 'NFL').map(async (sport) => ({
+    sport,
+    players: await prisma.sportsPlayer.findMany({
+      where: { sport, source: 'rolling_insights', team: { not: null } },
+      orderBy: [{ name: 'asc' }, { externalId: 'asc' }],
+      take: PER_GROUP,
+      select: { name: true, sport: true, sleeperId: true, source: true, externalId: true, position: true, team: true },
+    }).catch(() => []),
+  })))
+
   const grouped = POSITION_GROUPS.map((pos) => ({
-    position: pos,
+    position: `NFL · ${pos}`,
     players: rows
       .filter((r) => r.position === pos)
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, PER_GROUP),
-  })).filter((g) => g.players.length > 0)
+  })).concat(otherSports.map(({ sport, players }) => ({ position: sport, players })))
+    .filter((g) => g.players.length > 0)
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -125,11 +137,10 @@ export default async function PlayersIndexPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
       <div className="af-core af-pf-shell af-pf-index">
-        <h1 className="af-display af-pf-h1">NFL players</h1>
+        <h1 className="af-display af-pf-h1">Fantasy players</h1>
         <p className="af-pf-seo-intro">
-          Projections, injury designations and season statistics for every NFL player AllFantasy
-          tracks. Sign in and connect a league to see the slot he is in on Sleeper, ESPN or Yahoo —
-          AllFantasy is read-only and points you at the screen where you make the change.
+          Browse NFL, NBA, NHL, MLB, NCAAF, NCAAB and soccer players. Each page shows the
+          statistics, injury reports and projections currently available for that sport.
         </p>
 
         {grouped.length === 0 ? (
@@ -148,7 +159,7 @@ export default async function PlayersIndexPage() {
                   const href = playerPath(p)
                   if (!href) return null
                   return (
-                    <li key={`${p.sport}-${p.sleeperId}`}>
+                    <li key={`${p.sport}-${p.source ?? 'sleeper'}-${p.externalId ?? p.sleeperId}`}>
                       <Link href={href} className="af-pf-related-link">
                         {p.name}
                         <span className="af-pf-related-team">{p.team}</span>

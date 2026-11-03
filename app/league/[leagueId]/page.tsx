@@ -31,6 +31,7 @@ import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -301,7 +302,7 @@ export default async function LeaguePage(
 
       const seasonYear = league.season ?? new Date().getFullYear()
 
-      const [role, allLeagues, dbUser, userProfile, leagueSeasonRow, leagueDashboard] =
+      const [role, rawAllLeagues, dbUser, userProfile, leagueSeasonRow, leagueDashboard] =
               await Promise.all([
                         getLeagueRole(leagueId, userId).catch((err) => {
                                     console.error('[league page] getLeagueRole failed', { leagueId, userId, err })
@@ -351,6 +352,15 @@ export default async function LeaguePage(
                                     return defaultLeagueDashboardView
                         }),
                       ])
+
+      // The league page powers the mobile switcher and the right rail. Use the same
+      // provider/season identity as /core so an older import is not shown as another league.
+      // Never group by name: separate AF leagues and separate Fantrax teams can share one.
+      const seriesMap = await loadLeagueSeriesMap(rawAllLeagues.map((l) => l.id))
+      const allLeagues = collapseLeagueSeasons(rawAllLeagues, seriesMap, (a, b) => {
+        const own = Number(b.userId === userId) - Number(a.userId === userId)
+        return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
+      }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
 
       const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
         const isHeadCommissioner = role === 'commissioner'

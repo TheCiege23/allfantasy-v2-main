@@ -86,4 +86,18 @@ describe('suggestCatalog', () => {
     expect(await suggestCatalog('k')).toEqual([])
     expect(mockFindMany).not.toHaveBeenCalled()
   })
+
+  it('scopes every catalog pass to the chosen sport', async () => {
+    mockFindMany.mockResolvedValue([])
+    await suggestCatalog('kin', 3, { sport: 'NCAAF' })
+    expect(mockFindMany).toHaveBeenCalledTimes(3)
+    for (const [call] of mockFindMany.mock.calls) expect(call.where.sport).toBe('NCAAF')
+  })
+
+  it('does not merge athletes from different sports with the same name and team code', async () => {
+    const nfl = row('nfl-1', 'Chris Smith')
+    mockFindMany.mockResolvedValueOnce([nfl, { ...nfl, sport: 'NBA', externalId: 'nba-1' }]).mockResolvedValue([])
+    const got = await suggestCatalog('smith', 3)
+    expect(got.map((m) => `${m.sport}:${m.externalId}`)).toEqual(['NFL:nfl-1', 'NBA:nba-1'])
+  })
 })

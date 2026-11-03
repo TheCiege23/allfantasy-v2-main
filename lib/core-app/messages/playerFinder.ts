@@ -113,6 +113,8 @@ export const playerFinderMessages = defineMessages({
     movesStandardScoring: 'standard scoring',
     movesReadOnly:
       "Lineup and IR moves are priced under each league's own scoring; claims are standard scoring. AllFantasy only reads your leagues — the change happens on the platform.",
+    movesLeagueClaimsReadOnly:
+      "Lineup moves and these claims use each league's own scoring. AllFantasy only reads your leagues — make the change on the platform.",
 
     // GameDayTriage
     triageTitle: 'Game day · your flagged starters',
@@ -218,6 +220,8 @@ export const playerFinderMessages = defineMessages({
     movesStandardScoring: 'puntuación estándar',
     movesReadOnly:
       'Los movimientos de alineación y de IR se calculan con la puntuación propia de cada liga; los reclamos, con la puntuación estándar. AllFantasy solo lee tus ligas: el cambio se hace en la plataforma.',
+    movesLeagueClaimsReadOnly:
+      'Los movimientos de alineación y estos reclamos usan la puntuación de cada liga. AllFantasy solo lee tus ligas: haz el cambio en la plataforma.',
 
     // GameDayTriage
     triageTitle: 'Día de partido · tus titulares señalados',

@@ -33,7 +33,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { loadGuillotineContext, leaguePointsPerGame } from '@/lib/decision-os/trade/guillotineContext'
+import { loadGuillotineContext, loadZombiePlayerContext, leaguePointsPerGame } from '@/lib/decision-os/trade/guillotineContext'
 
 const SETTINGS = {
   roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'],
@@ -114,5 +114,23 @@ describe('loadGuillotineContext', () => {
     roster(['1'], 10)
     roster([], 10)
     expect(await loadGuillotineContext(league)).toMatchObject({ ok: false, reason: expect.stringMatching(/Fewer than two/) })
+  })
+})
+
+describe('loadZombiePlayerContext', () => {
+  it('uses the best free agent and the full remaining season, while retaining every roster', async () => {
+    player('a', 'Rostered A', 'WR', { receptions: 5, receiving_yards: 60 }, '1')
+    player('b', 'Rostered B', 'WR', { receptions: 4, receiving_yards: 50 }, '2')
+    player('free1', 'Best Free Agent', 'WR', { receptions: 3, receiving_yards: 40 }, '3')
+    player('free2', 'Other Free Agent', 'WR', { receptions: 2, receiving_yards: 30 }, '4')
+    roster(['1'], null)
+    roster(['2'], null)
+    roster([], null)
+    const out = await loadZombiePlayerContext({ ...league, sport: 'NFL' })
+    if (!out.ok) throw new Error(out.reason)
+    expect(out.ctx.replacementBySlot.get('FLEX')?.name).toBe('Best Free Agent')
+    expect(out.ctx.teamsAlive).toBe(3)
+    expect(out.ctx.survival[0]).toBe(13)
+    expect(out.ctx.releaseValue).toBe(0)
   })
 })

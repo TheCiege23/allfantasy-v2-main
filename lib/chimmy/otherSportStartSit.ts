@@ -46,7 +46,7 @@ export async function buildOtherSportStartSit(args: {
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
   const provider = String(world.provenance?.provider ?? '').toLowerCase()
-  const imported = provider === 'espn' || isForeignIdSpace(provider)
+  const imported = provider === 'espn' || (provider === 'sleeper' && sport === 'NBA') || isForeignIdSpace(provider)
   const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
   if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
   if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', league.season, { db: prisma }).catch(() => null)

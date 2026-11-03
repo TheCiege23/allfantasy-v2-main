@@ -371,6 +371,8 @@ model PlayerIdentityMap {
   currentTeam       String?
   dob               String?
   sleeperId         String?  @unique
+  /// NBA Sleeper ids live in a different namespace from NFL Sleeper ids.
+  sleeperNbaId      String?
   fantasyCalcId     String?
   rollingInsightsId String?
   apiSportsId       String?
@@ -407,6 +409,7 @@ model PlayerIdentityMap {
   fantraxId         String?
 
   @@index([normalizedName])
+  @@unique([sport, sleeperNbaId])
   @@index([fantasyCalcId])
   @@index([rollingInsightsId])
   @@index([apiSportsId])
