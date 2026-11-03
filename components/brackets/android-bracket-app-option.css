@@ -1,0 +1,20 @@
+.af-bracket-app-option {
+  box-sizing: border-box;
+  width: min(100%, 440px);
+  margin: 0 auto 16px;
+  padding: 16px;
+  border: 1px solid #267a80;
+  border-radius: 16px;
+  background: #10252d;
+  color: #effbfb;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.af-bracket-app-option a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #79eee1;
+  font-weight: 700;
+  text-decoration: underline;
+}

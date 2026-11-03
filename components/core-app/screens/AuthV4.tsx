@@ -19,6 +19,7 @@ import { trackOnce } from '@/lib/analytics/dataLayer'
 import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialProviderResolver'
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
+import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -608,11 +609,21 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   // redirect callback never sees it — this is the only guard between the query string and navigation.
   const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
-  return mode === 'signin' ? (
-    <SignIn callbackUrl={callbackUrl} />
-  ) : (
-    <SignUp callbackUrl={callbackUrl} />
-  )
+  return <>
+    {callbackUrl.startsWith('/brackets/leagues/') ? <AndroidBracketAppOption /> : null}
+    {mode === 'signin' ? <SignIn callbackUrl={callbackUrl} /> : <SignUp callbackUrl={callbackUrl} />}
+  </>
+}
+
+function AuthModeSwitch({ mode }: { mode: AuthMode }) {
+  const params = useSearchParams()
+  const requested = params?.get('callbackUrl')
+  const callback = requested ? safeRedirectPath(requested) : null
+  const destination = mode === 'signup' ? '/login' : '/signup'
+  const href = callback ? `${destination}?callbackUrl=${encodeURIComponent(callback)}` : destination
+  return <span className="af-au-switch">
+    {mode === 'signup' ? <>Already have an account? <Link href={href}>Sign in</Link></> : <>New here? <Link href={href}>Create account</Link></>}
+  </span>
 }
 
 export function AuthV4({ mode }: { mode: AuthMode }) {
@@ -635,17 +646,7 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
           <Shield />
           <span className="af-au-wordmark">AllFantasy</span>
         </Link>
-        <span className="af-au-switch">
-          {mode === 'signup' ? (
-            <>
-              Already have an account? <Link href="/login">Sign in</Link>
-            </>
-          ) : (
-            <>
-              New here? <Link href="/signup">Create account</Link>
-            </>
-          )}
-        </span>
+        <Suspense fallback={null}><AuthModeSwitch mode={mode} /></Suspense>
       </div>
       {/*
         ⚠ THE SUSPENSE BOUNDARY IS NOT DECORATION — IT KEEPS THE FORM USABLE.

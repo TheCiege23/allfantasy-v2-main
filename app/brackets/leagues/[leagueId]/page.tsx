@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import type { Metadata } from "next"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -103,7 +104,7 @@ export async function generateMetadata(props: { params: Promise<{ leagueId: stri
 export default async function BracketLeagueDetailPage(
   props: {
     params: Promise<{ leagueId: string }>
-    searchParams?: Promise<{ entryId?: string }>
+    searchParams?: Promise<{ entryId?: string; code?: string }>
   }
 ) {
   const searchParams = await props.searchParams
@@ -116,6 +117,11 @@ export default async function BracketLeagueDetailPage(
     session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   } catch (err) {
     console.warn("[brackets/leagues] session lookup failed", { leagueId: params.leagueId, error: String(err) })
+  }
+
+  if (!session?.user?.id && typeof searchParams?.code === "string" && /^[a-z0-9]{8}$/i.test(searchParams.code)) {
+    const destination = `/brackets/leagues/${encodeURIComponent(params.leagueId)}?code=${encodeURIComponent(searchParams.code)}`
+    redirect(`/login?callbackUrl=${encodeURIComponent(destination)}`)
   }
 
   try {
