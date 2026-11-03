@@ -66,7 +66,11 @@ case "$ENDPOINT" in
   scoreboard)
     if ! [[ "$TEAM_ID" =~ ^[0-9]{8}(-[0-9]{8})?$ ]]; then echo "usage: probe.sh scoreboard <NBA|NFL> <YYYYMMDD[-YYYYMMDD]>" >&2; exit 2; fi
     PATH_SEG="/${SPORT_PATH}/scoreboard"
-    QS="dates=${TEAM_ID}&limit=1000"
+    if [[ "$SPORT" == "NCAAB" ]]; then
+      QS="dates=${TEAM_ID}&groups=50&limit=1000"
+    else
+      QS="dates=${TEAM_ID}&limit=1000"
+    fi
     NAME="scoreboard.${SPORT}.${TEAM_ID}"
     ;;
   fantasy-league)
@@ -84,14 +88,6 @@ case "$ENDPOINT" in
     PATH_SEG="/${SPORT_PATH}/summary"
     QS="event=${TEAM_ID}"
     NAME="summary.${SPORT}.event${TEAM_ID}"
-    ;;
-  scoreboard)
-    if [[ "$SPORT" != "NCAAB" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]{8}$ ]]; then
-      echo "usage: probe.sh scoreboard NCAAB <YYYYMMDD>" >&2; exit 2
-    fi
-    PATH_SEG="/${SPORT_PATH}/scoreboard"
-    QS="dates=${TEAM_ID}&groups=50&limit=1000"
-    NAME="scoreboard.${SPORT}.${TEAM_ID}"
     ;;
   teams)
     # `limit` is required in practice: the default page is short. The value is recorded
