@@ -43,6 +43,7 @@ export type LeagueTypeId =
   | 'zombie'
   | 'salary_cap'
   | 'big_brother'
+  | 'pirate'
 
 export type DraftTypeId =
   | 'snake'

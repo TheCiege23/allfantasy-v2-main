@@ -452,6 +452,42 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       })
     }
 
+    // Refresh NBA before the bulk import so it cannot be starved by the tail phases.
+    let sleeperNbaRows: unknown = { skipped: true }
+    let sleeperNbaIdentities: unknown = { skipped: true }
+    if (!dryRun && (!sports || sports.includes('NBA'))) {
+      const nbaBudget = createRunBudget(25_000, Date.now, signal)
+      if (budget.exhausted()) {
+        deferredPhases.push('sleeperNbaRows')
+      } else {
+        try {
+          const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+          const refreshed = await refreshSleeperPlayerRows({
+            sport: 'NBA',
+            limit: 600,
+            isExhausted: () => nbaBudget.exhausted() || budget.exhausted(),
+          })
+          sleeperNbaRows = refreshed
+          if (!refreshed.feedUnavailable) {
+            if (nbaBudget.exhausted() || budget.exhausted()) {
+              deferredPhases.push('sleeperNbaIdentities')
+            } else {
+              try {
+                const { reconcileSleeperNbaIdentities } = await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
+                sleeperNbaIdentities = await reconcileSleeperNbaIdentities({
+                  isExhausted: () => nbaBudget.exhausted() || budget.exhausted(),
+                })
+              } catch {
+                sleeperNbaIdentities = { error: 'NBA identity reconciliation failed' }
+              }
+            }
+          }
+        } catch (error) {
+          sleeperNbaRows = { error: error instanceof Error ? error.message.slice(0, 160) : 'Sleeper NBA refresh failed' }
+        }
+      }
+    }
+
     /*
      * 🛑 THE IMPORT GETS A SLICE OF THIS RUN'S BUDGET, NOT ALL OF IT.
      *
@@ -803,34 +839,6 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
      * A phase, not the job: bounded per run, stalest first, and dropped whole when
      * the budget is gone.
      */
-    let sleeperNbaRows: unknown = { skipped: true }
-    let sleeperNbaIdentities: unknown = { skipped: true }
-    if (!dryRun && (!sports || sports.includes('NBA'))) {
-      if (budget.exhausted()) {
-        deferredPhases.push('sleeperNbaRows')
-      } else {
-        try {
-          const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
-          const refreshed = await refreshSleeperPlayerRows({
-            sport: 'NBA',
-            limit: 600,
-            isExhausted: () => budget.exhausted(),
-          })
-          sleeperNbaRows = refreshed
-          if (!refreshed.feedUnavailable && !budget.exhausted()) {
-            try {
-              const { reconcileSleeperNbaIdentities } = await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
-              sleeperNbaIdentities = await reconcileSleeperNbaIdentities({ isExhausted: () => budget.exhausted() })
-            } catch {
-              sleeperNbaIdentities = { error: 'NBA identity reconciliation failed' }
-            }
-          }
-        } catch (error) {
-          sleeperNbaRows = { error: error instanceof Error ? error.message.slice(0, 160) : 'Sleeper NBA refresh failed' }
-        }
-      }
-    }
-
     let sleeperRows: unknown = { skipped: true }
     if (!dryRun && wantsNfl && budget.exhausted()) {
       deferredPhases.push('sleeperRows')
@@ -991,6 +999,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
               injuryCleanup: result.injuryCleanup,
               // [] means "every phase ran", which is a different fact from a missing field.
               deferredPhases,
+              sleeperNbaRows,
+              sleeperNbaIdentities,
               budgetExhausted: budget.exhausted(),
               budgetElapsedMs: budget.elapsedMs(),
             }),

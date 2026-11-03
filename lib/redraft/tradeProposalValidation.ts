@@ -34,6 +34,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
 import {
   REDRAFT_DRAFT_PICK_REFUSAL,
   resolveNflRedraftTradeRuntime,
@@ -66,6 +67,17 @@ export type RedraftProposalValidationInput = {
 }
 
 type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'league'>
+
+async function pirateTradeRefusal(input: RedraftProposalValidationInput, source: RedraftProposalValidationSource): Promise<RedraftProposalValidation | null> {
+  try {
+    await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+    })))
+    return null
+  } catch (error) {
+    return { ok: false, code: 'PIRATE_TRADE_LOCK', message: error instanceof Error ? error.message : 'Pirate trade is locked.', source }
+  }
+}
 
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
@@ -117,6 +129,8 @@ async function validateRedraftTradeProposalCore(
     if (deadline.passed) {
       return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
     }
+    const pirateRefusal = await pirateTradeRefusal(input, 'nfl_runtime')
+    if (pirateRefusal) return pirateRefusal
     return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
   }
 
@@ -148,9 +162,10 @@ async function validateRedraftTradeProposalCore(
       ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
-    return result.ok
-      ? { ok: true, warnings: result.warnings, source: 'league_runtime' }
-      : { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    const pirateRefusal = await pirateTradeRefusal(input, 'league_runtime')
+    if (pirateRefusal) return pirateRefusal
+    return { ok: true, warnings: result.warnings, source: 'league_runtime' }
   }
 
   if (deadline.passed) {
@@ -161,7 +176,9 @@ async function validateRedraftTradeProposalCore(
       source: 'ownership_fallback',
     }
   }
-  return validateOwnershipFallback(db, input)
+  const ownership = await validateOwnershipFallback(db, input)
+  if (!ownership.ok) return ownership
+  return (await pirateTradeRefusal(input, 'ownership_fallback')) ?? ownership
 }
 
 function faabAmountOf(asset: NflRedraftTradeAssetInput): number {

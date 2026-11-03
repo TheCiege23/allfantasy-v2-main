@@ -25,6 +25,8 @@ vi.mock('@/lib/push-notifications/useWebPushSubscription', () => ({
 vi.mock('@/lib/push-notifications/useIosAppPush', () => ({ useIosAppPush: () => ({ ...h.app, enable: h.enable }) }))
 
 import { SignInPushSheet } from '@/components/notifications/SignInPushSheet'
+import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { resetPushConfigCacheForTests } from '@/components/notifications/PushOptInPrompt'
 import {
   ASK_GAP_MS,
@@ -82,6 +84,34 @@ describe('when to ask', () => {
 })
 
 describe('the sheet', () => {
+  it('keeps keyboard focus in the alert prompt and supports Escape to reveal the guide', async () => {
+    render(<><HomePromptSlot enabled><CoreWelcomeTour leagueCount={1} /></HomePromptSlot><SignInPushSheet /></>)
+    const sheet = await screen.findByTestId('signin-push-sheet')
+    const enable = screen.getByRole('button', { name: 'Turn on alerts' })
+    const later = screen.getByRole('button', { name: 'Not now' })
+    await waitFor(() => expect(document.activeElement).toBe(enable))
+    fireEvent.keyDown(sheet, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(later)
+    fireEvent.keyDown(sheet, { key: 'Tab' })
+    expect(document.activeElement).toBe(enable)
+    fireEvent.keyDown(sheet, { key: 'Escape' })
+    expect(await screen.findByRole('region', { name: '1 league ready' })).toBeTruthy()
+    expect(screen.queryByTestId('signin-push-sheet')).toBeNull()
+  })
+
+  it('defers the welcome guide until alerts are dismissed, then shows readable guide actions', async () => {
+    render(<><HomePromptSlot enabled><CoreWelcomeTour leagueCount={1} /></HomePromptSlot><SignInPushSheet /></>)
+    await screen.findByTestId('signin-push-sheet')
+    expect(screen.queryByRole('region', { name: '1 league ready' })).toBeNull()
+    fireEvent.click(screen.getByText('Not now'))
+    expect(await screen.findByRole('region', { name: '1 league ready' })).toBeTruthy()
+    expect(screen.getByText(/league switcher at the top/)).toBeTruthy()
+    expect(localStorage.getItem('af-core-welcome-v1')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close guide' }))
+    expect(localStorage.getItem('af-core-welcome-v1')).toBe('done')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('shows after sign-in, and counts the ask', async () => {
     render(<SignInPushSheet />)
     await waitFor(() => expect(screen.getByText(TITLE)).toBeTruthy())

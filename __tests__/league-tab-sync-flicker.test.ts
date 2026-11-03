@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
+import { shouldApplyIncomingView, shouldMirrorActiveView } from '@/lib/league/leagueTabSync'
 
 /**
  * Regression for the Draft/League flicker.
@@ -13,20 +13,21 @@ import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
  *
  * The model below reproduces that with the real stale-closure semantics: within one React commit,
  * the URL->tab effect's `setActiveTab` does NOT change what the tab->URL effect sees this commit
- * (both read the start-of-commit snapshot). The fix (`shouldApplyIncomingView` echo guard) is the
- * only difference between the oscillating and converging runs.
+ * (both read the start-of-commit snapshot). The echo guard prevents oscillation; the pending-tab
+ * handoff also prevents a default tab from overwriting a fresh deep link in that first commit.
  */
 
-type SyncState = { activeTab: string; urlView: string | null; lastSynced: string | null }
+type SyncState = { activeTab: string; urlView: string | null; lastSynced: string | null; pending?: string | null }
 
-const IDS = new Set(['draft', 'matchups', 'league', 'roster', 'players'])
-const MAP: Record<string, string> = { draft: 'draft', matchups: 'matchups', league: 'league', roster: 'roster', players: 'players' }
+const IDS = new Set(['native_home', 'commissioner', 'settings', 'draft', 'matchups', 'league', 'roster', 'players'])
+const MAP: Record<string, string> = Object.fromEntries([...IDS].map(id => [id, id]))
 
 /** One React commit: URL->tab effect and tab->URL effect both read the SAME start-of-commit snapshot. */
 function commit(s: SyncState, useGuard: boolean): SyncState {
   let activeTab = s.activeTab
   let urlView = s.urlView
   let lastSynced = s.lastSynced
+  let pending = s.pending ?? null
 
   // URL -> tab effect (reads s.urlView, s.lastSynced)
   if (s.urlView) {
@@ -34,15 +35,19 @@ function commit(s: SyncState, useGuard: boolean): SyncState {
     const apply = useGuard ? shouldApplyIncomingView(key, s.lastSynced) : Boolean(key)
     if (apply) {
       const target = MAP[key]
-      if (target && IDS.has(target)) activeTab = target
+      if (target && IDS.has(target)) {
+        activeTab = target
+        if (useGuard) pending = target
+      }
     }
   }
   // tab -> URL effect (reads s.activeTab — STALE relative to the line above, like React batching)
-  if (IDS.has(s.activeTab)) {
+  if (IDS.has(s.activeTab) && (!useGuard || shouldMirrorActiveView(s.activeTab, pending))) {
+    pending = null
     lastSynced = s.activeTab
     if (s.urlView !== s.activeTab) urlView = s.activeTab
   }
-  return { activeTab, urlView, lastSynced }
+  return { activeTab, urlView, lastSynced, pending }
 }
 
 /** Run commits until a fixed point, or report oscillation if a state repeats without settling. */
@@ -73,6 +78,17 @@ describe('shouldApplyIncomingView (echo guard)', () => {
 })
 
 describe('Draft/League flicker — tab/URL sync state machine', () => {
+  it.each(['commissioner', 'settings'])('keeps %s in the URL during the first commit so an immediate reload cannot open league home', target => {
+    const first = commit({ activeTab: 'native_home', urlView: target, lastSynced: null }, true)
+    expect(first.activeTab).toBe(target)
+    expect(first.urlView).toBe(target)
+    expect(first.lastSynced).toBeNull()
+    const { final, oscillated } = settle(first, true)
+    expect(oscillated).toBe(false)
+    expect(final.urlView).toBe(target)
+    expect(final.activeTab).toBe(target)
+  })
+
   // The "crossed" seed a landing effect produces: activeTab moved to matchups, but ?view= still
   // holds the stale 'draft' the tab->URL effect wrote that same commit, and lastSynced='draft'.
   const crossedSeed: SyncState = { activeTab: 'matchups', urlView: 'draft', lastSynced: 'draft' }
@@ -122,10 +138,12 @@ describe('LeagueShell wiring (source contract)', () => {
   const shell = readFileSync(resolve(__dirname, '..', 'app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
 
   it('imports and uses the echo guard, and records the synced view', () => {
-    expect(shell).toContain("import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'")
+    expect(shell).toContain("import { shouldApplyIncomingView, shouldMirrorActiveView } from '@/lib/league/leagueTabSync'")
     expect(shell).toContain('lastSyncedViewRef')
     expect(shell).toContain('lastSyncedViewRef.current = activeTab')
     expect(shell).toMatch(/if \(!shouldApplyIncomingView\(key, lastSyncedViewRef\.current\)\) return/)
+    expect(shell).toContain('pendingIncomingTabRef.current = target')
+    expect(shell).toContain('if (!shouldMirrorActiveView(activeTab, pendingIncomingTabRef.current)) return')
   })
 
   it('resets the synced-view ref on league change', () => {

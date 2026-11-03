@@ -34,6 +34,11 @@ const matchesWeek = (w: unknown, week: number): boolean => {
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/adminAuth', () => ({ requireAdminOrBearer: vi.fn() }))
+vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: vi.fn() }))
+vi.mock('@/lib/pirate/service', () => ({
+  seedPirateClaims: vi.fn(async () => 0), queuePirateProtectionReminders: vi.fn(),
+  maintainPirateClaims: vi.fn(async () => ({ considered: 0, transferred: 0, failed: 0 })),
+}))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_meta: unknown, fn: () => Promise<unknown>, summarize: (r: unknown) => unknown) => {
     const r = await fn()
