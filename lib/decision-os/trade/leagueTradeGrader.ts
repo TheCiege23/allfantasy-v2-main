@@ -433,7 +433,7 @@ export async function createLeagueTradeGrader(args: {
   })
   const zombie = createZombieGrader({
     leagueType: leagueType.type,
-    dynastyBase: baseChart.chartIsDynasty,
+    dynastyBase: leagueSnapshot.isDynasty,
     league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null, sport },
   })
   /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */

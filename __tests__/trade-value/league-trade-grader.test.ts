@@ -26,7 +26,7 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
     name: 'Dynasty for life',
     sport: h.sport,
     leagueSize: 12,
-    isDynasty: true,
+    isDynasty: h.leagueType === 'zombie' ? h.dynastySettings : true,
     leagueType: h.leagueType,
     scoring: 'ppr',
     settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'], isDynasty: h.dynastySettings },
