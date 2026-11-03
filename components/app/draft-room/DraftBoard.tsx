@@ -793,7 +793,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="h-[50px] rounded-[4px] bg-red-500/15"
+                            className="aspect-square w-full max-w-[144px] rounded-[4px] bg-red-500/15"
                             title="Missing cell data for this slot"
                           />
                         )
