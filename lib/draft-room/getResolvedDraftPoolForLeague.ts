@@ -21,6 +21,7 @@ import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProve
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { isDevyLeague } from '@/lib/devy'
+import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
 import { isC2CLeague, getC2CPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/merged-devy-c2c'
 import type { LeagueSport } from '@prisma/client'
@@ -1463,13 +1464,21 @@ async function buildResolvedDraftPoolForLeague(
     })
   }
 
+  // The ESPN-backed basketball pool is eligible only while a fresh, unambiguous school
+  // roster confirms the athlete. A failed read withholds the college pool rather than showing
+  // old players. Other sports keep their existing pool rules.
+  let ncaabCurrentIdsPromise: Promise<string[]> | null = null
+  const currentNcaabIds = () => ncaabCurrentIdsPromise ??= currentNcaabRosterEvidence(prisma, new Date())
+    .then((evidence) => evidence.athletes.map((athlete) => athlete.id))
+    .catch(() => [])
+
   if (strictPoolSeparation && (poolType === 'devy' || poolType === 'college' || poolType === 'startup_college')) {
     // Scoped to the league's college sport: unscoped, an NBA devy league drew NCAAF players and an
     // NFL one drew NCAAB players. Sports with no college layer (null) keep the old unscoped read.
     const devySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}) },
+        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}), ...(devySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1663,7 +1672,7 @@ async function buildResolvedDraftPoolForLeague(
     const mergeDevySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}) },
+        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}), ...(mergeDevySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1717,7 +1726,7 @@ async function buildResolvedDraftPoolForLeague(
 
   if (eligiblePositions?.size) {
     rawListFiltered = rawListFiltered.filter((r: RawRow) =>
-      draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions),
+      draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions, sport),
     )
   }
 
