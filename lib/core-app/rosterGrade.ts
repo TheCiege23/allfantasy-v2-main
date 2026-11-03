@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
 import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
+import { readDailySportForm, readPriorDailySportForm } from '@/lib/projections/dailySportFormStore'
+import { scoreFormBlob } from '@/lib/projections/dailySportForm'
+import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { meetsSampleBar } from '@/lib/decision-os/trade/sportPointsValue'
 import { detectQbFormat } from './slotEligibility'
 import { sleeperReadableRosters } from './rosterIdSpace'
@@ -195,6 +198,22 @@ export async function getRosterGrade(args: {
       const rosterId = bridge.rosterIdFor(player.id)
       if (rosterId && meetsSampleBar(player) && Number.isFinite(player.perGame)) {
         priced.set(rosterId, { value: player.perGame, position: player.position })
+      }
+    }
+    if (priced.size < bridge.gameLogIds.length) {
+      const scorer = buildLeagueStatScorer({ sport: 'NBA', settings: league.settings })
+      const now = new Date()
+      const form = await readDailySportForm(prisma, 'NBA', now).catch(() => null)
+      if (scorer && form && !form.basis && form.season === league.season) {
+        const prior = await readPriorDailySportForm(prisma, 'NBA', form.season, now).catch(() => null)
+        const rates = scoreFormBlob(form, scorer, prior?.basis ? null : prior)
+        for (const id of bridge.gameLogIds) {
+          const rosterId = bridge.rosterIdFor(id)
+          const rate = rates.get(id)
+          if (!rosterId || priced.has(rosterId) || !rate || rate.perGame == null ||
+            !Number.isFinite(rate.perGame) || rate.recentGames + (rate.priorGames ?? 0) < 5) continue
+          priced.set(rosterId, { value: rate.perGame, position: rate.pos })
+        }
       }
     }
     // Compare only when coverage is strong for every team, including its bench.
