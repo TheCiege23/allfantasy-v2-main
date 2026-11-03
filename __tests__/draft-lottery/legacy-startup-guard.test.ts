@@ -9,8 +9,10 @@ vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: vi.fn(async (
 vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentDraft: vi.fn(async () => false), SEASON_DRAFT_MUTATION_BLOCKED: 'blocked' }))
 vi.mock('@/lib/draft-lottery/lotteryConfigStorage', () => ({ getDraftOrderModeAndLotteryConfig: vi.fn(async () => ({ lotteryConfig: {} })), setDraftOrderModeAndLotteryConfig: vi.fn() }))
 vi.mock('@/lib/draft-lottery/WeightedDraftLotteryEngine', () => ({ runWeightedLottery: m.run, previewLotteryOdds: m.preview }))
+vi.mock('@/lib/draft/resolve-draft-context', () => ({ assertLiveDraftContext: vi.fn(async () => ({ leagueId: 'L', draftId: 'startup-draft' })) }))
 import { POST as run } from '@/app/api/leagues/[leagueId]/draft/lottery/run/route'
 import { POST as preview } from '@/app/api/leagues/[leagueId]/draft/lottery/preview/route'
+import { runDraftLottery, previewDraftLottery } from '@/lib/workers/lottery-engine'
 
 const ctx = { params: Promise.resolve({ leagueId: 'L' }) }
 const request = () => new Request('http://localhost', { method: 'POST', body: JSON.stringify({ finalize: true }) }) as never
@@ -32,6 +34,14 @@ describe('legacy draft lottery startup guard', () => {
   it('rejects preview for the same startup', async () => {
     const result = await preview(request(), ctx)
     expect(result.status).toBe(403)
+    expect(m.preview).not.toHaveBeenCalled()
+  })
+
+  it('rejects both worker operations for the specified startup session', async () => {
+    await expect(runDraftLottery('startup-draft', { finalize: true })).rejects.toThrow(/startup/i)
+    await expect(previewDraftLottery('startup-draft')).rejects.toThrow(/startup/i)
+    expect(m.draft).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L', id: 'startup-draft' } }))
+    expect(m.run).not.toHaveBeenCalled()
     expect(m.preview).not.toHaveBeenCalled()
   })
 
