@@ -706,6 +706,9 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         </div>
         <div className="af-mt-player-meta">
           <GameContext text={player.gameContext} />
+          {player.latestCollegeBoxScore ? (
+            <span>{language === 'es' ? 'Último partido' : 'Last game'} {player.latestCollegeBoxScore.date} · {player.latestCollegeBoxScore.stats.map(({ key, value }) => `${value} ${key.toUpperCase()}`).join(' · ')}</span>
+          ) : null}
           {/* A forecast for a game already under way or over answers nothing. */}
           {player.gameDay && player.gameDay.state !== 'upcoming' ? (
             <GameDayChip day={player.gameDay} />

@@ -57,6 +57,7 @@ export type IdentityCoverage = {
   priced: number
   /** `League.platform`, lowercased. Named in the copy, because it is the cause. */
   platform: string
+  projectionGap?: string
 }
 
 /** Platforms whose ids this app can name, for copy that says what DOES work. */
@@ -106,6 +107,7 @@ export function identityGapNote(c: IdentityCoverage): string | null {
    * else.
    */
   if (c.named === c.total && c.priced === 0) {
+    if (c.projectionGap) return c.projectionGap
     /*
      * ⚠ THE CAUSE IS ONLY NAMED WHERE IT IS KNOWN. The provider-record
      * explanation is true for ESPN, whose identity rows carry a name and nothing

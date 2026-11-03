@@ -15,7 +15,7 @@ import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { isBestBallSettings } from './lineupMode'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences, hasIdpScoring, isIdpPosition } from './scoringNotes'
@@ -188,6 +188,7 @@ export type LineupPlayer = {
    * unknown or the sport is football, which is not the same as "he plays" (myTeamDailySport.ts).
    */
   noGamePeriod?: 'day' | 'week'
+  latestCollegeBoxScore?: { date: string; stats: Array<{ key: string; value: number }> }
   /**
    * Weekly projection for this player, or null when the feed does not carry him.
    *
@@ -1834,6 +1835,9 @@ async function loadMyTeamData(
      * would report a manager's own unfilled FLEX as our identity failure.
      */
     identityNote: identityGapNote({
+      projectionGap: sport === 'NCAAB' && league.platform === 'fantrax' && hasScoringRules(scoringSettings)
+        ? 'Your Fantrax scoring rules are saved. No college basketball projections are available for this lineup, so the bench check is unavailable.'
+        : undefined,
       platform: String(league.platform ?? 'manual').toLowerCase(),
       total: starters.filter((sl) => !sl.empty).length,
       named: starters.filter((sl) => !sl.empty && sl.player != null).length,
