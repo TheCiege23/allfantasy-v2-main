@@ -264,7 +264,7 @@ export function faabWorth(amount: number, ctx: Pick<GuillotineContext, 'liveFaab
 export function guillotineBasis(ctx: GuillotineContext): string {
   const weeks = ctx.survival[0] ?? 0
   const perWeek =
-    ctx.sport !== 'NFL' && ctx.gamesPerWeek != null
+    ctx.sport != null && ctx.sport !== 'NFL' && ctx.gamesPerWeek != null
       ? ` An ${ctx.sport} week is about ${round1(ctx.gamesPerWeek)} games a team (the games left over the ${ctx.weeksLeft} chop weeks left), so a player’s points a week are his points a game times that.`
       : ''
   return (
@@ -306,7 +306,7 @@ export function gradeGuillotineDeal(args: {
       const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
       // Daily-sport boards can carry thin early-season lines; a thin one is not a price.
-      if (ctx.sport !== 'NFL' && !meetsSampleBar(found.player)) {
+      if (ctx.sport != null && ctx.sport !== 'NFL' && !meetsSampleBar(found.player)) {
         return {
           withheld: `${found.player.name}’s projection rests on ${found.player.sampleGames} game${found.player.sampleGames === 1 ? '' : 's'}, too few to price — grades start at ${MIN_SAMPLE_GAMES} games. This deal is not graded.`,
         }
