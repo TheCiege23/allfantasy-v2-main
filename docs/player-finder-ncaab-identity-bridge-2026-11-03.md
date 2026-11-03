@@ -1,0 +1,9 @@
+# NCAAB Player Finder identity bridge
+
+On 2026-11-03, a claimed Fantrax NCAAB league appeared in production with 160 populated rosters and 2,880 distinct roster player IDs. The claimed roster has 18 players and initially had zero Fantrax-to-Rolling Insights identity links. The public Fantrax NCAAB directory returned 6,035 players; the production Rolling Insights catalog held 21,952 NCAAB players and 21,615 identity rows.
+
+The bridge in this branch attaches a Fantrax ID only when a rostered player has one exact normalized name, position, and school match to a Rolling Insights identity and its source player. School codes must resolve uniquely through the existing `SportsTeam.shortName` directory. A Fantrax ID or Rolling Insights identity claimed by multiple source rows is refused. The bridge never creates an identity, changes an existing Fantrax owner, or guesses a school from a name alone. The weekly cron job runs after the existing intel work and defers if less than 15 seconds remain.
+
+The read-only production dry run proposed 1,156 links from the 2,880 roster IDs; three were ambiguous and one had a competing source claim. No NCAAB identity was written during this audit. Focused unit tests cover exact proof, missing roster scope, mismatched source school, duplicate school codes, duplicate identity rows, competing Fantrax IDs, and existing ownership. Focused TypeScript validation found no changed-file diagnostics; unrelated imported-module diagnostics remain.
+
+This is an identity bridge, not a forecast override. Current-season NCAAB game logs held one line per player on 2026-11-03, below the Finder's three-game minimum. Keep period advice unavailable until the actual claimed roster is linked, enough real games are stored, the schedule is complete, and an authenticated card is checked. Soccer remains gated by an incomplete competition-tagged schedule and no claimed league.

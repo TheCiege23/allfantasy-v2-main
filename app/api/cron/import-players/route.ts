@@ -440,6 +440,19 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         error: err instanceof Error ? err.message.slice(0, 160) : 'profile refresh failed',
       }))
 
+      // Run this weekly identity bridge only on spare runway, after the existing intel work.
+      const ncaabFantraxIdentities = await withSyncJobRun(
+        { jobName: 'ncaab-fantrax-identities', sport: 'NCAAB', provider: 'fantrax', trigger: 'cron' },
+        async () => {
+          if (budget.remainingMs() < 15_000) return { skipped: 'deferred: run budget too low', proposed: 0, updated: 0 }
+          const { ingestNcaabFantraxIdentities } = await import('@/lib/player-identity/ingestNcaabFantraxIdentities')
+          return ingestNcaabFantraxIdentities()
+        },
+        result => ({ rowsWritten: result.updated,
+          warnings: 'skipped' in result && result.skipped?.startsWith('deferred') ? [result.skipped] : [],
+          metadata: result }),
+      ).catch(error => ({ error: error instanceof Error ? error.message.slice(0, 160) : 'NCAAB Fantrax identities failed' }))
+
       return NextResponse.json({
         ok: true,
         mode: 'intel',
@@ -448,6 +461,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         psychProfiles,
         // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.
         ncaabDevyPool,
+        ncaabFantraxIdentities,
         durationMs: Date.now() - startedAt,
       })
     }
