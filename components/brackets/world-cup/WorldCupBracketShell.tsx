@@ -3,6 +3,10 @@
 import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
+import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
+import { BracketChangeAlertToggle } from '@/components/chimmy/BracketChangeAlertToggle'
+import { BracketChimmyEntryLink } from '@/components/chimmy/BracketChimmyEntryLink'
+import { bracketPromptTarget } from '@/lib/chimmy/bracketEvidence'
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowUp, AtSign, BarChart3, Baseline, Bell, Bold, Bot, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock, Copy, Edit3, Film, Globe2, Hash, ImageIcon, Italic, ListOrdered, Loader2, Lock, MessageSquare, Mic, PlayCircle, Plus, RefreshCw, Send, Settings, Share2, Smile, Sparkles, Strikethrough, Trophy, Underline, Users, X, Zap } from "lucide-react"
 import { toast } from "sonner"
@@ -2560,6 +2564,16 @@ export default function WorldCupBracketShell({
                 <span className="line-clamp-2">{view.challenge.name}</span>
               )}
             </p>
+            {showBoard && selectedEntry ? (
+              <BracketChimmyEntryLink
+                href={getChimmyChatHrefWithPrompt(`Review my World Cup ${bracketPromptTarget(selectedEntry.name, view.challenge.name)}. Which picks are decided, and what do the recorded match results mean for my entry?`, { source: 'world_cup_bracket_entry', sport: 'SOCCER' })}
+                className="mt-1 inline-block text-[11px] font-bold text-cyan-200 underline decoration-cyan-200/40 hover:text-white"
+                testId="world-cup-entry-ask-deep-chimmy-link" format="world_cup"
+              >
+                Ask Chimmy for a deep bracket review
+              </BracketChimmyEntryLink>
+            ) : null}
+            {showBoard && selectedEntry ? <BracketChangeAlertToggle format="world_cup" entryId={selectedEntry.id} /> : null}
             {hasMounted && lockCountdownLabel ? (
               <p
                 data-testid="world-cup-lock-countdown"

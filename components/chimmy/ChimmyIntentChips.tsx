@@ -31,7 +31,7 @@ export default function ChimmyIntentChips({
   onSendPrompt,
   onTrackEvent,
 }: ChimmyIntentChipsProps) {
-  const chips = useMemo(() => getChimmyIntentChips({ leagueName }), [leagueName])
+  const chips = useMemo(() => getChimmyIntentChips({ leagueName, source }), [leagueName, source])
 
   if (!enabled || hasUserMessage || chips.length === 0) return null
 

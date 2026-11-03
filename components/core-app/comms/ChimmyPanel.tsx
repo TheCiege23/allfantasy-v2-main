@@ -2,6 +2,8 @@
 
 import posthog from 'posthog-js'
 import { ChimmyAnalysisPreview } from '@/components/chimmy/ChimmyAnalysisPreview'
+import { BracketEvidenceCard } from '@/components/chimmy/BracketEvidenceCard'
+import { readBracketEvidence, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { readDeepAnalysisPreview, type DeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
@@ -180,6 +182,7 @@ type ChatTurn = {
    * arrives with every answer and used to be discarded.
    */
   evidence?: ChimmyEvidence | null
+  bracketEvidence?: BracketEvidence | null
   /** A trade, add/drop or start/sit before/after, computed from the league's rosters. Only a resolved one arrives. */
   scenario?: ReadyChimmyScenario | null
   /** Advice this answer put on file — renders "Did it / Not doing it", and keeps the vote. */
@@ -448,6 +451,7 @@ type ChimmyEnvelope = {
     tokenSpend?: { tokenCost?: number }
     confidencePct?: number
     dataSources?: string[]
+    bracketEvidence?: unknown
     sourceLinks?: { label: string; href: string }[]
     staleness?: { staleMinutes?: number | null; warning?: unknown }
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
@@ -1025,6 +1029,7 @@ export function ChimmyPanel({
             connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
             evidence: readEvidence(payload),
+            bracketEvidence: readBracketEvidence(payload.meta?.bracketEvidence),
             /*
              * Only a well-formed, resolved scenario is kept. The route never sends anything else,
              * but a card that renders a half-shaped object would print "undefined" into a number
@@ -1128,8 +1133,8 @@ export function ChimmyPanel({
    * this week's win probability — rather than questions any chatbot would take.
    */
   const quickPrompts = scope
-    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Find me a trade that fills my weakest spot']
-    : ['Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
+    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'How are my brackets doing?', 'Find me a trade that fills my weakest spot']
+    : ['How are my brackets doing?', 'Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
 
   /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
   const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
@@ -1230,7 +1235,7 @@ export function ChimmyPanel({
             <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
             <p className="af-cm-empty-t">Nothing asked yet.</p>
             <p className="af-cm-empty-b">
-              Opening this costs nothing. The first question is yours.
+              Ask about a bracket, a matchup, or a fantasy league. Opening this costs nothing.
             </p>
             <div className="af-cm-quick">
               {quickPrompts.map((q) => (
@@ -1356,6 +1361,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && t.evidence ? (
                 <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
+              {t.role === 'chimmy' && t.bracketEvidence ? <BracketEvidenceCard evidence={t.bracketEvidence} /> : null}
 
 
               {t.role === 'chimmy' && t.actionCards?.length

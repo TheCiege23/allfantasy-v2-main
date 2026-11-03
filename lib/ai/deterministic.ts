@@ -808,12 +808,18 @@ async function buildCachedGamesAnswer(message: string): Promise<string | null> {
    * `homeTeamId` is null on every source but TheSportsDB, which uses its own
    * id space. See lib/sports/dedupeFixtures.ts.
    */
+  const now = Date.now()
   const lines = dedupeFixtures(games as any[]).map((game: any) => {
+    const status = normalizeGameStatus(game.status)
+    const fetchedAt = game.fetchedAt ? new Date(game.fetchedAt).getTime() : NaN
+    const stale = !Number.isFinite(fetchedAt) || now - fetchedAt > 5 * 60_000
+    const state = status === 'live' && stale ? 'last reported live, current status unverified' : status
     const score =
-      typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
+      (status === 'live' || status === 'final') && typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
         ? `${game.awayScore}-${game.homeScore}`
-        : 'score TBD'
-    return `- ${game.awayTeam} @ ${game.homeTeam}: ${score} (${game.status ?? 'scheduled'}) — ${formatEt(game.startTime)}`
+        : 'score unverified'
+    const observation = Number.isFinite(fetchedAt) ? `; observed ${formatEt(new Date(fetchedAt))}` : ''
+    return `- ${game.awayTeam} @ ${game.homeTeam}: ${score} (${state}) — ${formatEt(game.startTime)}${observation}`
   })
   return `Here are the cached ${sport ?? 'sports'} games I can verify for that window:\n${lines.join('\n')}\nSource: cached SportsGame rows.`
 }

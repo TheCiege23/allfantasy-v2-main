@@ -160,6 +160,8 @@ export function requiresLeagueGrounding(args: {
   if (source.includes('trade') || source.includes('waiver') || source.includes('lineup')) {
     return true
   }
+  if (/\b(?:my|our|this)\s+league\b/.test(message) &&
+      /\b(?:rules?|bylaws?|constitution|scoring|tiebreakers?|playoff settings|roster slots?)\b/.test(message)) return true
   if (isGeneralMarketValueQuestion(message)) return false
   /*
    * ⚠ "HOW DOES THE WAIVER PRIORITY RESET WORK ON SLEEPER?" WAS REFUSED FOR WANT OF A LEAGUE (eval

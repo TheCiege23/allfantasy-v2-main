@@ -1,4 +1,5 @@
 import { readDeepAnalysisPreview } from "@/lib/chimmy/deepAnalysisPreview"
+import { readBracketEvidence } from "@/lib/chimmy/bracketEvidence"
 import type {
   AIChatContext,
   ChimmyAnswerContract,
@@ -87,6 +88,7 @@ function fileToDataUrl(file: File): Promise<string> {
 function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
   if (!rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) return undefined
   const meta = rawMeta as Record<string, unknown>
+  const bracketEvidence = readBracketEvidence(meta.bracketEvidence)
   const responseStructureRaw =
     meta.responseStructure && typeof meta.responseStructure === "object" && !Array.isArray(meta.responseStructure)
       ? (meta.responseStructure as Record<string, unknown>)
@@ -171,6 +173,7 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
       : undefined
 
   return {
+    bracketEvidence: bracketEvidence ?? undefined,
     analysisPreview: readDeepAnalysisPreview(meta.analysisPreview) ?? undefined,
     mode: modeRaw ? normalizeChimmyAssistantMode(modeRaw) : undefined,
     answerContract,

@@ -318,7 +318,7 @@ describe('tool loop system prompt', () => {
     expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
     expect(PROMPT_SRC).not.toContain('the calm, analytical fantasy sports assistant')
     expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,[\s\S]{0,1200}?clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
-    expect(ROUTE).toContain('groundingLine: decisionOsGrounding && leagueSnapshot')
+    expect(ROUTE).toContain('groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot')
   })
 
   /*
@@ -377,7 +377,7 @@ describe('tool loop system prompt', () => {
     /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
     /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
     /* `eliminationSettles` (2026-09-28) feeds the SAFE / OUT chip from a decided guillotine week. */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, currentQuestion: message, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, currentQuestion: message, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\], bracketEvidence: \[\] as BracketEvidence\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

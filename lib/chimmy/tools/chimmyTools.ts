@@ -51,6 +51,8 @@ import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
  */
 
 export type ChimmyToolContext = {
+  /** Only verified owner reads can add a bracket evidence card. */
+  bracketEvidence?: import('@/lib/chimmy/bracketEvidence').BracketEvidence[]
   /**
    * The league in scope. Starts from the SESSION and is mutable for exactly one
    * reason: `find_league_by_name` binds it after verifying membership, so the
@@ -122,6 +124,30 @@ export type ChatStartCall = {
 
 /** OpenAI-shaped function tools; Grok accepts these through the OpenAI SDK. */
 export const CHIMMY_TOOL_SPECS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_brackets',
+      description: 'List the signed-in user\'s OWN bracket entries across tournament pools, World Cup challenges and playoff pools. Use for "my brackets", "which pool am I in", "how are my brackets doing", or to discover the exact entry and pool names before a detailed bracket question. No fantasy league selection is needed. Ranks and scores are stored snapshots, not live scores, and different pools cannot be compared by raw score.',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_bracket_entry',
+      description: 'Read one of the signed-in user\'s OWN bracket entries: saved picks, result status, rank/score when stored, lock state, recorded matchup scores, and saved before-and-after changes. Use for "how is my bracket", "what changed in my bracket", "who did I pick", "what happened to my pick", or bracket matchup advice. If a notification includes a change ref, pass it to retrieve that exact result. If several entries exist, call get_my_brackets first and pass the exact entry and pool NAMES; never guess. For a particular team, pass team to focus its matchups. Tournament-pool advice may include a seed-only heuristic and pool pick rate; it is not live odds. Some formats do not expose verified champion survival or score; say so when absent. This tool never changes a pick.',
+      parameters: { type: 'object', properties: {
+        entry_name: { type: 'string', description: 'Name of the user\'s own bracket entry, as written by the user or returned by get_my_brackets.' },
+        pool_name: { type: 'string', description: 'Name of the bracket pool or challenge when needed to disambiguate.' },
+        sport: { type: 'string', description: 'Sport from get_my_brackets when needed to disambiguate.' },
+        latest: { type: 'boolean', description: 'True only if the user explicitly asked about their most recently updated bracket entry.' },
+        team: { type: 'string', description: 'Team name to focus a matchup or pick question.' },
+        opponent: { type: 'string', description: 'Opponent team name to distinguish multiple matchups involving the same team.' },
+        change_ref: { type: 'string', description: 'Exact change ref from a bracket update notification, if present.' },
+      }, required: [], additionalProperties: false },
+    },
+  },
   {
     type: 'function' as const,
     function: {
@@ -319,6 +345,39 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_current_draft_board',
+      description: 'Read the current draft board, pick order and this manager’s draft recommendation when available. Use for who to draft next, backup picks, and who is on the clock.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_selected_league_rules',
+      description: 'Read the selected league and season’s stored settings and published constitution. Use for scoring, slots, lineup locks, waivers, trades, playoffs and custom rule questions.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_real_game_results',
+      description: 'Look up stored real game scores, live status, and historical team results across seven sports. Use the full team name and UTC date where known. This does not read fantasy scores or certify complete season records.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sport: { type: 'string', enum: ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'NHL', 'MLB', 'SOCCER'] },
+          team: { type: 'string', description: 'Full team name as stored. Required for season-only lookups.' },
+          date: { type: 'string', description: 'UTC calendar day YYYY-MM-DD. Look up adjacent dates if the user’s local date crosses UTC midnight.' },
+          season: { type: 'number', description: 'Season start year, when requested.' },
+        },
+        required: ['sport'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_upcoming_games',
       description:
         'Scheduled games that have not kicked off yet. Use for "when is the next game", "when does the season start", "what is on this week".',
@@ -327,7 +386,7 @@ export const CHIMMY_TOOL_SPECS = [
         properties: {
           sport: {
             type: 'string',
-            description: 'NFL, NCAAF, NBA, MLB, NHL or SOCCER. Omit for all sports.',
+            description: 'NFL, NCAAF, NBA, NCAAB, MLB, NHL or SOCCER. Omit for all sports.',
           },
           seasonType: {
             type: 'string',
@@ -794,6 +853,19 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      case 'get_my_brackets': {
+        if (!ctx.userId) return 'No signed-in user was verified, so no private bracket entries were read. Ask the user to sign in.'
+        const { buildMyBracketsContext } = await import('@/lib/chimmy/tools/bracketTool')
+        return await buildMyBracketsContext(ctx.userId)
+      }
+      case 'get_bracket_entry': {
+        if (!ctx.userId) return 'No signed-in user was verified, so no private bracket entry was read. Ask the user to sign in.'
+        const { buildBracketEntryContext, bracketChangeRefFromQuestion } = await import('@/lib/chimmy/tools/bracketTool')
+        const requestedRef = bracketChangeRefFromQuestion(ctx.currentQuestion ?? '')
+        return await buildBracketEntryContext(ctx.userId,
+          { ...args, ...(requestedRef ? { change_ref: requestedRef } : {}) },
+          (evidence) => ctx.bracketEvidence?.push(evidence))
+      }
       case 'get_draft_analysis': {
         const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
         return await buildDraftAnalysisContext(ctx, args)
@@ -1069,6 +1141,25 @@ export async function executeChimmyTool(
         }
         const sport = typeof args.sport === 'string' && args.sport.trim() ? args.sport.trim().toUpperCase() : null
         return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport, leagueId: args.scope === 'all' ? null : ctx.leagueId })
+      }
+
+      case 'get_current_draft_board': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const league = await resolveNormalizedLeagueContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        if (!league.ok) return 'Access to the selected league could not be verified.'
+        const { buildDraftContext } = await import('@/lib/chimmy/draftGrounding')
+        return (await buildDraftContext(ctx.leagueId, ctx.userId)) ?? 'No current draft board could be read for the selected league.'
+      }
+
+      case 'get_selected_league_rules': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildSelectedLeagueRules } = await import('@/lib/chimmy/tools/selectedLeagueRules')
+        return await buildSelectedLeagueRules(ctx.leagueId, ctx.userId)
+      }
+
+      case 'get_real_game_results': {
+        const { buildRealGameResults } = await import('@/lib/chimmy/tools/realGameResults')
+        return await buildRealGameResults(args)
       }
 
       case 'get_upcoming_games': {

@@ -33,7 +33,8 @@ jobs:
   decision-engine-boundary:
     name: Decision Engine Boundary
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full-history checkout can take more than five minutes on a cold runner.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:

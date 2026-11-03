@@ -34,6 +34,10 @@ export type AIContextSource =
   | "power_rankings"
   | "power_rankings_team"
   | "long_term_coaching"
+  | "bracket_entry"
+  | "playoff_bracket_entry"
+  | "world_cup_bracket_entry"
+  | "bracket_change_alert"
 
 export type AIChatContext = {
   prompt?: string
@@ -87,6 +91,7 @@ export type ChimmyResponseStructure = {
 }
 
 export type ChimmyMessageMeta = {
+  bracketEvidence?: import('@/lib/chimmy/bracketEvidence').BracketEvidence
   analysisPreview?: import("@/lib/chimmy/deepAnalysisPreview").DeepAnalysisPreview
   mode?: ChimmyAssistantMode
   answerContract?: ChimmyAnswerContract

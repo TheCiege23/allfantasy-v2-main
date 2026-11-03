@@ -17,6 +17,7 @@
     "dev:staging-lite": "node scripts/dev-staging-lite.cjs",
     "dev:no-clean": "set AF_NEXT_DIST_DIR=.next-dev-local&& set NODE_OPTIONS=--max-old-space-size=4096&& npx -y node@20 node_modules/next/dist/bin/next dev -p 3010 --hostname 127.0.0.1",
     "check:staging-env": "tsx scripts/check-staging-env.ts",
+    "chimmy:bracket-adoption": "tsx scripts/chimmy-bracket-adoption-report.ts",
     "setup:staging-db": "tsx scripts/setup-staging-db.ts",
     "worker:live-score": "tsx scripts/live-score-worker.ts",
     "decision-os:validate-sleeper-cohort": "tsx scripts/decision-os-validate-sleeper-cohort.ts",

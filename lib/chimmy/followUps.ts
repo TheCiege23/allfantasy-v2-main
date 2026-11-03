@@ -33,12 +33,17 @@ const GRADE_IDEA: Suggestion = { text: 'Grade the first trade idea for my lineup
  * the one question a waiver answer leads to — "so how much do I bid?" — was never offered.
  */
 const FAAB_PLAN: Suggestion = { text: 'How much FAAB should I bid this week?', repeats: ['get_faab_bid_plan'] }
+const BRACKET_DETAIL: Suggestion = { text: 'Which picks in my most recent bracket are still unresolved?', repeats: ['get_bracket_entry'] }
+const BRACKET_LIST: Suggestion = { text: 'How are my other brackets doing?', repeats: ['get_my_brackets'] }
+const BRACKET_IMPACT: Suggestion = { text: 'What does my latest result mean for this bracket?', repeats: [] }
 
 const ACROSS_ODDS: Suggestion = { text: 'How are my playoff odds across all my leagues?', repeats: ['get_playoff_outlook'] }
 const ACROSS_CLOSE: Suggestion = { text: 'Which of my matchups are coin flips this week?', repeats: ['get_my_matchup'] }
 
 /** After each tool, what an analyst would ask next — most useful first. */
 const AFTER: Record<string, readonly Suggestion[]> = {
+  get_my_brackets: [BRACKET_DETAIL, BRACKET_IMPACT, BRACKET_LIST],
+  get_bracket_entry: [BRACKET_IMPACT, BRACKET_LIST, BRACKET_DETAIL],
   optimize_my_lineup: [MATCHUP, PICKUP, PLAYOFFS],
   compare_start_options: [LINEUP, MATCHUP, PICKUP],
   evaluate_trade: [COUNTER, FIND_TRADE, LINEUP],
@@ -74,7 +79,8 @@ export function suggestChimmyFollowUps(args: { toolsUsed: readonly string[]; lea
    * Without a league in scope, a league-only question ("set my lineup") cannot be answered until one
    * is picked — so the cross-league questions stand in for the scoped ones.
    */
-  const pool = args.leagueScoped
+  const bracketAnswer = driver === 'get_my_brackets' || driver === 'get_bracket_entry'
+  const pool = args.leagueScoped || bracketAnswer
     ? candidates
     : candidates.map((s) => (s === PLAYOFFS ? ACROSS_ODDS : s === MATCHUP ? ACROSS_CLOSE : s)).filter(
         (s) =>

@@ -14,6 +14,7 @@ import { buildSmartFollowUpChips, type ChimmyFollowUpChip } from '@/lib/chimmy-c
 import ChimmyResponseStructure from './ChimmyResponseStructure'
 import { ChimmyOrchestrationPanel } from './ChimmyOrchestrationPanel'
 import ChimmyTrustPanel from './ChimmyTrustPanel'
+import { BracketEvidenceCard } from './BracketEvidenceCard'
 
 export type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 
@@ -212,6 +213,7 @@ export default function ChimmyMessageBubble({
           </div>
         )}
 
+        {!isUser && meta?.bracketEvidence && <BracketEvidenceCard evidence={meta.bracketEvidence} />}
         {!isUser && meta && showTrustPanel && (
           <ChimmyTrustPanel
             confidencePct={meta.confidencePct}

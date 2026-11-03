@@ -58,6 +58,8 @@ describe('tool specs', () => {
     const names = CHIMMY_TOOL_SPECS.map((t) => t.function.name)
     expect(names).toEqual([
       // Authorized archive read only; no model-selected league or write action.
+      'get_my_brackets',
+      'get_bracket_entry',
       'get_draft_analysis',
       'get_league_trade_activity',
       /*
@@ -127,6 +129,9 @@ describe('tool specs', () => {
        * the read and never name a league.
        */
       'get_league_trade_history',
+      'get_current_draft_board',
+      'get_selected_league_rules',
+      'get_real_game_results',
       'get_upcoming_games',
       /*
        * The ONLY tool here that spans every league at once, and the only one

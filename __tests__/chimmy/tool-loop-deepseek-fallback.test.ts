@@ -83,13 +83,21 @@ beforeEach(() => {
   vi.stubEnv('DEEPSEEK_API_KEY', 'live-deepseek-key')
   vi.stubEnv('DEEPSEEK_BASE_URL', '')
   vi.stubEnv('CHIMMY_TOOL_LOOP_PROVIDER', '')
+  vi.stubEnv('OPENAI_API_KEY', '')
+  vi.stubEnv('AI_INTEGRATIONS_OPENAI_API_KEY', '')
   h.execute.mockResolvedValue('NBA guilly — 2 open seats')
 })
 
 afterEach(() => vi.unstubAllEnvs())
 
 describe('provider order', () => {
-  it('tries every configured provider, Claude first and DeepSeek last', () => {
+  it('keeps the configured provider order and uses OpenAI last', () => {
+    vi.stubEnv('OPENAI_API_KEY', 'qa-openai-key')
+    expect(chimmyToolLoopProviders()).toEqual(['claude', 'grok', 'deepseek', 'openai'])
+    vi.stubEnv('CHIMMY_TOOL_LOOP_PROVIDER', 'openai')
+    expect(chimmyToolLoopProviders()).toEqual(['openai'])
+  })
+  it('tries the configured original providers in their established order', () => {
     expect(chimmyToolLoopProviders()).toEqual(['claude', 'grok', 'deepseek'])
     vi.stubEnv('ANTHROPIC_API_KEY', '')
     vi.stubEnv('XAI_API_KEY', '')
@@ -116,6 +124,21 @@ describe('isProviderUnavailable', () => {
 })
 
 describe('the fallback, end to end', () => {
+  it('reads the exact saved bracket with tools on an OpenAI-only deployment', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '')
+    vi.stubEnv('XAI_API_KEY', '')
+    vi.stubEnv('DEEPSEEK_API_KEY', '')
+    vi.stubEnv('OPENAI_API_KEY', 'qa-openai-key')
+    vi.stubEnv('OPENAI_MODEL_STANDARD', 'gpt-4o')
+    h.execute.mockResolvedValue('Saved change ref: first. Before: winner unknown. After: QA Harbor won.')
+    h.openaiCreate.mockResolvedValueOnce(openAiWantsTool('get_bracket_entry'))
+      .mockResolvedValueOnce(openAiAnswer('The saved first change records QA Harbor winning.'))
+    const result = await runChimmyToolLoop({ ...base, question: 'Explain my bracket change ref first' })
+    expect(result).toMatchObject({ provider: 'openai', toolsUsed: ['get_bracket_entry'], model: 'gpt-4o' })
+    expect(result?.evidence).toContain('After: QA Harbor won')
+    expect(h.openaiCreate.mock.calls[0][0]).toBe('https://api.openai.com/v1')
+    expect(h.openaiCreate.mock.calls[1][1].messages.some((m: { role: string; content?: string }) => m.role === 'tool' && m.content?.includes('QA Harbor'))).toBe(true)
+  })
   it('answers with tools on DeepSeek when Claude and Grok keys are dead — as in production', async () => {
     h.anthropicCreate.mockRejectedValue(httpError(401))
     h.openaiCreate.mockImplementation(async (url: unknown) => {
