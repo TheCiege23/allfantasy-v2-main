@@ -24,6 +24,7 @@ export type PiratePreLockAdvice = {
 /** Advisory only. Uses live DB data and a read-only save preview; never writes lock evidence or moves players. */
 export async function readPiratePreLockAdvice(input: {
   leagueId: string; rosterId: string; ownerId: string; season: number; week: number; now?: Date
+  leadWindowMs?: { min: number; max: number }
 }, db: PrismaClient): Promise<PiratePreLockAdvice | null> {
   const now = input.now ?? new Date()
   const league = await db.league.findUnique({where:{id:input.leagueId},select:{
@@ -38,6 +39,8 @@ export async function readPiratePreLockAdvice(input: {
   const dayStarts = scoringDay ? [...schedule.byTeamDay?.values() ?? []].flatMap(days => days.get(scoringDay) ?? []) : []
   const deadline = scoringDay ? (dayStarts.length ? new Date(Math.min(...dayStarts.map(d => d.getTime()))) : null) : schedule.firstKickoff
   if (!deadline || deadline <= now || schedule.warnings.length || lock.warnings.length) return null
+  const lead = deadline.getTime() - now.getTime()
+  if (input.leadWindowMs && (lead <= input.leadWindowMs.min || lead > input.leadWindowMs.max)) return null
   const roster = await db.redraftRoster.findFirst({where:{id:input.rosterId,leagueId:input.leagueId,ownerId:input.ownerId},select:{
     legacyRoster:{select:{id:true,playerData:true}},
     players:{where:{droppedAt:null},select:{playerId:true,playerName:true,position:true,slotType:true,team:true,byeWeek:true,injuryStatus:true}},

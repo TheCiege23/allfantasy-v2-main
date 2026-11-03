@@ -305,6 +305,8 @@ async function runRedraftReconciliation() {
           pirateClaimsCreated += await seedPirateClaims(season.leagueId)
           await queuePirateProtectionReminders(season.leagueId)
         } catch { pirateSeedFailed += 1 }
+        await import('@/lib/pirate/preLockPush').then(({queuePiratePreLockPush}) =>
+          queuePiratePreLockPush(season.leagueId, prisma)).catch(() => undefined)
       }
       continue
     }
@@ -455,6 +457,8 @@ async function runRedraftReconciliation() {
         pirateClaimsCreated += await seedPirateClaims(season.leagueId)
         await queuePirateProtectionReminders(season.leagueId)
       } catch { pirateSeedFailed += 1 }
+      await import('@/lib/pirate/preLockPush').then(({queuePiratePreLockPush}) =>
+        queuePiratePreLockPush(season.leagueId, prisma)).catch(() => undefined)
     }
   }
 

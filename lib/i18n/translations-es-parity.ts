@@ -1707,6 +1707,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.category.league_chat": "Mensajes del chat de la liga",
   "settings.notifications.category.league_drama": "Drama de la liga / historias",
   "settings.notifications.category.lineup_alerts": "Alertas de alineación titular",
+  "settings.notifications.category.pirate_lineup_alerts": "Problemas de alineación pirata antes del cierre",
   "settings.notifications.category.lineup_reminders": "Revisiones semanales de alineación y agentes libres de Chimmy",
   "settings.notifications.category.matchup_results": "Marcadores, descansos, partidos cerrados y resultados finales",
   "settings.notifications.category.performance_alerts": "Anotaciones y grandes jugadas",

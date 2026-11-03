@@ -18,6 +18,7 @@ export type NotificationCategoryId =
   | "injury_alerts"
   | "performance_alerts"
   | "lineup_alerts"
+  | "pirate_lineup_alerts"
   | "draft_alerts"
   | "draft_intel_alerts"
   | "autocoach"
@@ -113,6 +114,7 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "injury_alerts",
   "performance_alerts",
   "lineup_alerts",
+  "pirate_lineup_alerts",
   "draft_alerts",
   "draft_intel_alerts",
   "autocoach",
@@ -147,6 +149,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   injury_alerts: "Team injury updates",
   performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
+  pirate_lineup_alerts: "Pirate lineup problems before lock",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
   draft_intel_alerts: "Draft intelligence (AI queue, Chimmy DMs, recap)",
   autocoach: "Chimmy AutoCoach lineup swaps",
@@ -199,7 +202,7 @@ export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
  * ⚠ BULK SWITCHES SKIP THESE. "All push on" means "the alerts I get, on my phone", not "and also
  * subscribe me to every league chat message" — see NotificationsSettingsSection.
  */
-export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]
+export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat", "pirate_lineup_alerts"]
 
 /**
  * Categories whose EMAIL channel starts off (in-app and push stay on). A live game moment is stale

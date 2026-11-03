@@ -207,12 +207,25 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
 
     case "push": {
       if (!row.userId) return { outcome: "skipped", error: "push row has no userId" }
+      let body = row.body
+      let pushDeadline = deadline
+      let href = actionHrefFrom(row.metadata)
+      if (row.eventType === 'pirate_pre_lock_lineup') {
+        if (!row.leagueId || deadline === undefined) return { outcome: 'skipped', error: 'Pirate lineup alert scope or deadline missing' }
+        const refreshed = await import('@/lib/pirate/preLockPush').then(({refreshPiratePreLockPush}) =>
+          refreshPiratePreLockPush(row.leagueId!, row.userId!, metadata, prisma))
+        if (!refreshed) return { outcome: 'skipped', error: 'Pirate lineup no longer has a verified fix before lock' }
+        pushDeadline = Math.min(deadline, Date.parse(refreshed.expiresAt))
+        if (pushDeadline <= Date.now()) return { outcome: 'skipped', error: 'Pirate lineup alert expired before delivery' }
+        body = refreshed.body
+        href = `/league/${encodeURIComponent(row.leagueId)}?view=roster`
+      }
       const results = await sendPushToUser(row.userId, {
         title: row.title,
-        body: row.body,
-        href: actionHrefFrom(row.metadata),
+        body,
+        href,
         type: row.eventType,
-        expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
+        expiresAt: pushDeadline === undefined ? undefined : new Date(pushDeadline).toISOString(),
         leagueId: row.leagueId,
         tag: pushTagFor(category ?? row.eventType, metadata),
         imageUrl: typeof metadata.imageUrl === "string" ? metadata.imageUrl : null,

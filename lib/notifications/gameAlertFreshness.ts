@@ -12,5 +12,5 @@ export function gameAlertDeadline(type: string | undefined, createdAt: Date, exp
 
 /** Zero means deliver now or discard; never replay game updates when a device reconnects. */
 export function pushRetentionSeconds(type: string | undefined): number {
-  return isLiveGameAlert(type) ? 0 : 86400
+  return isLiveGameAlert(type) || type === 'pirate_pre_lock_lineup' ? 0 : 86400
 }

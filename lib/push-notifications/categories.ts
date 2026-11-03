@@ -25,6 +25,7 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "autocoach",
   "injury_alerts",
   "lineup_alerts",
+  "pirate_lineup_alerts",
   "performance_alerts",
   "trade_proposals",
   "trade_accept_reject",

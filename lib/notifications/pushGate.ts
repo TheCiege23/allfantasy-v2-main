@@ -56,6 +56,11 @@ export function decidePush(
   input: PushDecisionInput & { fallbackTimezone?: string | null },
 ): PushDecision {
   if (saved?.globalEnabled === false) return blocked("global_off")
+  // This alert requires an explicit Push opt-in, including for older settings
+  // whose unspecified Push value would otherwise follow the in-app switch.
+  if (input.category === "pirate_lineup_alerts" && saved?.categories?.pirate_lineup_alerts?.push !== true) {
+    return blocked("push_off")
+  }
   const prefs = resolveNotificationPreferences(saved)
   if (prefs.globalEnabled === false) return blocked("global_off")
 

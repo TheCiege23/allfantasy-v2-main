@@ -4429,6 +4429,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.category.injury_alerts": "Team injury updates",
     "settings.notifications.category.performance_alerts": "Scoring plays & big plays",
     "settings.notifications.category.lineup_alerts": "Starting lineup alerts",
+    "settings.notifications.category.pirate_lineup_alerts": "Pirate lineup problems before lock",
     "settings.notifications.category.draft_alerts": "Draft alerts (on the clock, timer, trade offers)",
     "settings.notifications.category.draft_intel_alerts": "Draft intelligence (AI queue, Chimmy DMs, recap)",
     "settings.notifications.category.autocoach": "Chimmy AutoCoach lineup swaps",
