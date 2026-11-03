@@ -488,7 +488,7 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
     /* No setup words here: an empty Sleeper result is usually a typo, and a
        "connect your accounts" link would send someone to fix what is not broken. */
     return (
-      'No NFL leagues came back for that Sleeper username this season. Check the ' +
+      'No NFL or NBA leagues came back for that Sleeper username this season. Check the ' +
       'spelling, or leave it blank to use the Sleeper account on your profile.'
     )
   }
