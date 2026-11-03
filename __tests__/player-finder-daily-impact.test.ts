@@ -67,4 +67,15 @@ describe('Player Finder daily-sport advice', () => {
     expect(result.moves).toEqual([])
     expect(db.aFProjectionSnapshot.findMany).not.toHaveBeenCalled()
   })
+
+  it('passes an unavailable subject to the outlook and never recommends starting them', async () => {
+    db.roster.findMany.mockResolvedValue([
+      { leagueId: 'L', platformUserId: 'me', playerData: { players: ['340', '341', '343'], starters: ['341', '343'] } },
+    ])
+    const result = await getFinderDailyImpact({ ...subject, status: 'Out' }, [slot], 'u1', false)
+    expect(outlook).toHaveBeenCalledWith(db, expect.objectContaining({
+      players: expect.arrayContaining([expect.objectContaining({ key: 'roster:340', injuryStatus: 'Out' })]),
+    }))
+    expect(result.impact[0].startOver).toBeNull()
+  })
 })

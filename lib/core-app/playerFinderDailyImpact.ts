@@ -13,7 +13,7 @@ import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import type { LeagueSlot, RecommendedMove } from './playerFinder'
 
 const DAILY_SPORTS = new Set(['NBA', 'NHL', 'MLB'])
-type Subject = { sport: string; source: string; externalId: string; sleeperId: string | null; name: string; position: string | null; team: string | null }
+type Subject = { sport: string; source: string; externalId: string; sleeperId: string | null; name: string; position: string | null; team: string | null; status?: string | null }
 type Athlete = { name: string; position: string | null; team: string | null; status: string | null }
 type Identity = { id: string; canonicalName: string; position: string | null; rollingInsightsId: string | null; sleeperNbaId: string | null; fantraxId: string | null }
 
@@ -126,7 +126,8 @@ export async function getFinderDailyImpact(
         }
       }
     }
-    athleteById.set(subjectId, { name: subject.name, position: subject.position, team: subject.team, status: null })
+    athleteById.set(subjectId, { name: subject.name, position: subject.position, team: subject.team,
+      status: subject.status ?? athleteById.get(subjectId)?.status ?? null })
 
     // A TSDB native roster cannot be fully crosswalked to RI ids. In that case
     // we cannot prove a candidate is unrostered, so do not offer a claim.
@@ -180,7 +181,8 @@ export async function getFinderDailyImpact(
     const starterIndex = starters.indexOf(subjectId)
     const lineupSlots = startingSlots(league.settings)
     const exactSlot = starterIndex >= 0 ? slotForStarterIndex(lineupSlots, starters.length, starterIndex) : null
-    const startOver: LeagueImpact['startOver'] = starterIndex >= 0 || subjectPoints == null ? null
+    const startOver: LeagueImpact['startOver'] = starterIndex >= 0 || subjectPoints == null ||
+      unavailable(athleteById.get(subjectId)?.status ?? null) ? null
       : starters.reduce<LeagueImpact['startOver']>((weakest, id, index) => {
           const athlete = athleteById.get(id)
           const seat = slotForStarterIndex(lineupSlots, starters.length, index)

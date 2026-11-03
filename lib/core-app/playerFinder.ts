@@ -957,7 +957,8 @@ export async function getPlayerDetail(
       : null
 
   const dailyImpact = userId && row.sport !== 'NFL' && leagues.available
-    ? await getFinderDailyImpact(row, leagues.data, userId, includeMoves).catch(() => null)
+    ? await getFinderDailyImpact({ ...row, status: injury.available ? injury.data.status : null },
+      leagues.data, userId, includeMoves).catch(() => null)
     : null
   const allImpactRows = row.sport === 'NFL' ? impactRows : dailyImpact?.impact ?? null
 
