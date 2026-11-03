@@ -138,7 +138,7 @@ describe('real Fantrax captures — a league that has not drafted yet', () => {
     serve(epl as unknown as Capture)
     const outcome = await importFantraxLeague({ leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' })
     expect(outcome).toMatchObject({ ok: false })
-    expect((outcome as { error: string }).error).toMatch(/do not match the college, NFL, MLB, NBA or NHL player lists/)
+    expect((outcome as { error: string }).error).toMatch(/do not match .* player lists, so it was not imported\. Nothing was saved\./)
     expect(h.upsert).not.toHaveBeenCalled()
   })
 })
