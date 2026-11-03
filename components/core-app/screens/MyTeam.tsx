@@ -1602,7 +1602,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
       */}
       <div
         id={standardId}
-        hidden={!compare}
+        hidden={!compare || fantraxCollege}
         className="af-mt-tile af-mt-tile--proj"
         data-missing={proj ? !proj.standardComparable : undefined}
       >
