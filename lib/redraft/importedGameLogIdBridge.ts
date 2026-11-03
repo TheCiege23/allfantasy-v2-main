@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { normalizePlayerName } from '@/lib/team-abbrev'
+import { proTeamCode } from '@/lib/player-identity/proFantraxIdentityPlan'
 
 type Provider = 'espn' | 'fleaflicker' | 'mfl' | 'fantrax'
 type Identity = {
@@ -27,6 +29,9 @@ export async function bridgeImportedGameLogIds(args: {
   unresolved: string[]; ambiguous: string[] }> {
   const ids = [...new Set(args.rosterIds.map((id) => id.trim()).filter(Boolean))]
   const field = column[args.provider.toLowerCase() as Provider]
+  if (args.provider.toLowerCase() === 'sleeper' && args.sport.toUpperCase() === 'NBA') {
+    return bridgeSleeperNbaIds(ids)
+  }
   if (!field || !ids.length) return { gameLogIds: [], rosterIdFor: () => undefined,
     metadata: new Map(), unresolved: ids, ambiguous: [] }
   const sport = args.sport.toUpperCase()
@@ -61,4 +66,55 @@ export async function bridgeImportedGameLogIds(args: {
   }
   return { gameLogIds: [...mapping.keys()], rosterIdFor: (id) => mapping.get(id), metadata,
     unresolved: ids.filter((id) => !ambiguous.includes(id) && ![...mapping.values()].includes(id)), ambiguous }
+}
+
+/** Resolve Sleeper's NBA ids via the provider catalog, never by their numeric value. */
+async function bridgeSleeperNbaIds(ids: string[]) {
+  const players = await prisma.sportsPlayer.findMany({
+    where: { sport: 'NBA', source: 'sleeper', sleeperId: { in: ids } },
+    select: { sleeperId: true, name: true, team: true },
+  })
+  const names = [...new Set(players.map((player) => normalizePlayerName(player.name)))]
+  const candidates = await prisma.playerIdentityMap.findMany({
+    where: { sport: 'NBA', normalizedName: { in: names }, rollingInsightsId: { not: null } },
+    select: { id: true, normalizedName: true, canonicalName: true, position: true, currentTeam: true },
+  })
+
+  const matches = new Map<string, (typeof candidates)[number]>()
+  const ambiguous: string[] = []
+  for (const id of ids) {
+    const sources = players.filter((player) => player.sleeperId === id)
+    if (sources.length > 1) {
+      ambiguous.push(id)
+      continue
+    }
+    const player = sources[0]
+    if (!player) continue
+    const name = normalizePlayerName(player.name)
+    const team = player.team ? proTeamCode('NBA', player.team) : null
+    if (!name || !team) continue
+    const targets = candidates.filter((candidate) => candidate.normalizedName === name &&
+      candidate.currentTeam && proTeamCode('NBA', candidate.currentTeam) === team)
+    if (targets.length > 1) ambiguous.push(id)
+    if (targets.length === 1) matches.set(id, targets[0]!)
+  }
+
+  const mapping = new Map<string, string>()
+  const metadata = new Map<string, { name: string; position: string | null; team: string | null }>()
+  for (const [id, target] of matches) {
+    if ([...matches.values()].filter((row) => row.id === target.id).length !== 1) {
+      ambiguous.push(id)
+      continue
+    }
+    mapping.set(target.id, id)
+    metadata.set(id, { name: target.canonicalName, position: target.position, team: target.currentTeam })
+  }
+
+  return {
+    gameLogIds: [...mapping.keys()],
+    rosterIdFor: (id: string) => mapping.get(id),
+    metadata,
+    unresolved: ids.filter((id) => !metadata.has(id) && !ambiguous.includes(id)),
+    ambiguous,
+  }
 }
