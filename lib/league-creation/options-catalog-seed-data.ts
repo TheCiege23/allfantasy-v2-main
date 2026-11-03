@@ -143,7 +143,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
      * before it can eliminate a roster. This list controls both the wizard and create API.
      */
     guillotine: ['NFL', 'NBA', 'NHL', 'MLB'],
-    zombie: ['NFL', 'NBA', 'MLB', 'NHL'],
+    zombie: ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAB'],
     survivor: SURVIVOR_ALLOWED_SPORTS,
     tournament: ALL_SPORTS,
     big_brother: ALL_SPORTS,
@@ -236,6 +236,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NBA: ['nba_points'],
       MLB: ['mlb_points'],
       NHL: ['nhl_points'],
+      NCAAB: ['ncaab_points'],
     },
     survivor: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
@@ -335,6 +336,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NBA: [8, 10, 12, 14],
       MLB: [8, 10, 12, 14],
       NHL: [8, 10, 12, 14],
+      NCAAB: Array.from({ length: 15 }, (_, i) => 4 + i * 2),
     },
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten
