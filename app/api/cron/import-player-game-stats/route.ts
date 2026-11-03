@@ -166,9 +166,6 @@ async function handle(req: NextRequest) {
     await syncSchedule("MLB")
     // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
     await syncSchedule("NCAAB")
-    // Three verified soccer slates define future gameweeks and keep the current
-    // finalizer complete. Fetch them before the stat sweep spends the budget.
-    await syncSchedule("SOCCER")
 
     // NBA C2C uses college boxes only for saved campus lineups. Reserve a small part of the
     // existing pass, and report a provider refusal without retrying elsewhere in this run.
@@ -179,6 +176,10 @@ async function handle(req: NextRequest) {
         nbaCampus = await refreshActiveNbaCampusWeeks(prisma, { now: new Date(), deadlineAt: Date.now() + Math.min(30_000, budget.remainingMs() - 15_000), maxEvents: 20 })
       } catch (err) { nbaCampus = { error: String(err).slice(0, 200) } }
     }
+
+    // Three verified soccer slates define future gameweeks and keep the current
+    // finalizer complete. Fetch them before the stat sweep spends the budget.
+    await syncSchedule("SOCCER")
 
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
