@@ -129,8 +129,9 @@ export async function syncRiSeasonSchedule(opts: {
       result.error = `schedule-season ${league} returned 200 with no parseable games — refusing to write the other leagues without it`
       return result
     }
-    games.push(...parsed)
-    if (league) soccerLeagues.set(league, parsed)
+    const scoped = league ? parsed.map((game) => ({ ...game, competition: league })) : parsed
+    games.push(...scoped)
+    if (league) soccerLeagues.set(league, scoped)
   }
   if (games.length === 0) {
     result.error = 'schedule-season returned 200 with no parseable games — refusing to replace a stored schedule with nothing'

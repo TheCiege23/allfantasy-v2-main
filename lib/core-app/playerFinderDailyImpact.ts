@@ -2,20 +2,22 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { loadDailySportOutlook, type OutlookPlayerInput } from '@/lib/projections/dailySportOutlook'
+import { loadFinderCollegeSoccerOutlook } from '@/lib/projections/finderCollegeSoccerOutlook'
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
 import { resolveClaimTarget } from '@/lib/shared-services/league-hub/replacementOptions'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import { identityForFinderPlayer, rosterIdForFinderPlayer } from './playerFinderIdentityBridge'
+import { isFinderPeriodPilotLeague } from './playerFinderPeriodPilot'
 import { normalizePosition } from './positionNormalization'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import type { LeagueSlot, RecommendedMove } from './playerFinder'
 
-const DAILY_SPORTS = new Set(['NBA', 'NHL', 'MLB'])
+const DAILY_SPORTS = new Set(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 type Subject = { sport: string; source: string; externalId: string; sleeperId: string | null; name: string; position: string | null; team: string | null; status?: string | null }
 type Athlete = { name: string; position: string | null; team: string | null; status: string | null }
-type Identity = { id: string; canonicalName: string; position: string | null; rollingInsightsId: string | null; sleeperNbaId: string | null; fantraxId: string | null }
+type Identity = { id: string; canonicalName: string; position: string | null; rollingInsightsId: string | null; sleeperNbaId: string | null; fantraxId: string | null; cfbdId: string | null }
 
 function ids(value: unknown): string[] {
   return Array.isArray(value) ? value.map((id) => String(id ?? '').trim()).filter(Boolean) : []
@@ -47,7 +49,7 @@ function rosterKey(platform: string, identity: Identity): string | null {
   return null
 }
 
-/** Score only verified NBA/NHL/MLB roster identities against this league's daily outlook. */
+/** Score only verified roster identities against this league's stored period slate. */
 export async function getFinderDailyImpact(
   subject: Subject,
   slots: readonly LeagueSlot[],
@@ -74,6 +76,7 @@ export async function getFinderDailyImpact(
   for (const slot of held) {
     const league = leagues.find((item) => item.id === slot.leagueId)
     if (!league || String(league.sport).toUpperCase() !== subject.sport) continue
+    if (['NCAAF', 'NCAAB', 'SOCCER'].includes(subject.sport) && !isFinderPeriodPilotLeague(league.id)) continue
     const platform = String(league.platform ?? 'manual').toLowerCase()
     const subjectId = rosterIdForFinderPlayer(subject, platform, subjectIdentity)
     if (!subjectId) continue
@@ -94,19 +97,22 @@ export async function getFinderDailyImpact(
         { rollingInsightsId: { in: ownIds } }, { fantraxId: { in: ownIds } },
         ...(subject.sport === 'NBA' ? [{ sleeperNbaId: { in: ownIds } }] : []),
       ] },
-      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
+      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true, cfbdId: true },
     })
     const identityByRosterId = new Map<string, Identity | null>()
     for (const identity of identityRows) {
       const key = rosterKey(platform, identity)
       if (key && ownIds.includes(key)) identityByRosterId.set(key, identityByRosterId.has(key) ? null : identity)
     }
+    if (subject.sport === 'NCAAF' && ownIds.length > 0 &&
+      [...identityByRosterId.values()].filter(Boolean).length / ownIds.length < 0.95) continue
     const riIds = identityRows.flatMap((identity) => identity.rollingInsightsId ? [identity.rollingInsightsId] : [])
     const athleteRows = await prisma.sportsPlayer.findMany({
       where: { sport: subject.sport, OR: [
         { source: 'rolling_insights', externalId: { in: [...new Set([...ownIds, ...riIds])] } },
         { source: 'thesportsdb', externalId: { in: ownIds } },
         ...(subject.sport === 'NBA' ? [{ source: 'sleeper', sleeperId: { in: ownIds } }] : []),
+        ...(subject.sport === 'NCAAF' ? [{ source: 'cfbd', externalId: { in: identityRows.flatMap((identity) => identity.cfbdId ? [identity.cfbdId] : []) } }] : []),
       ] },
       select: { name: true, position: true, team: true, status: true, source: true, externalId: true, sleeperId: true },
     })
@@ -116,7 +122,8 @@ export async function getFinderDailyImpact(
       const athlete = athleteRows.find((row) => (platform === 'sleeper'
         ? row.source === 'sleeper' && row.sleeperId === id
         : platform === 'fantrax'
-          ? row.source === 'rolling_insights' && row.externalId === identity?.rollingInsightsId
+          ? (row.source === 'rolling_insights' && row.externalId === identity?.rollingInsightsId) ||
+            (subject.sport === 'NCAAF' && row.source === 'cfbd' && row.externalId === identity?.cfbdId)
           : row.externalId === id && (row.source === 'rolling_insights' || row.source === 'thesportsdb')))
       if (athlete) {
         athleteById.set(id, athlete)
@@ -126,12 +133,16 @@ export async function getFinderDailyImpact(
         }
       }
     }
-    athleteById.set(subjectId, { name: subject.name, position: subject.position, team: subject.team,
-      status: subject.status ?? athleteById.get(subjectId)?.status ?? null })
+    const verifiedSubject = athleteById.get(subjectId)
+    athleteById.set(subjectId, { name: subject.name, position: subject.position,
+      // College and soccer slate keys must come from the verified provider row, never an unrelated search hit.
+      team: ['NCAAF', 'NCAAB', 'SOCCER'].includes(subject.sport) ? verifiedSubject?.team ?? null : subject.team,
+      status: subject.status ?? verifiedSubject?.status ?? null })
 
     // A TSDB native roster cannot be fully crosswalked to RI ids. In that case
     // we cannot prove a candidate is unrostered, so do not offer a claim.
-    const canCheckPool = ![...allIds].some((id) => id.startsWith('tsdb_'))
+    const canCheckPool = !['NCAAB', 'SOCCER'].includes(subject.sport) &&
+      ![...allIds].some((id) => id.startsWith('tsdb_'))
     const seasonRow = includeMoves && canCheckPool ? await prisma.aFProjectionSnapshot.findFirst({
       where: { sport: subject.sport, week: null }, orderBy: { season: 'desc' }, select: { season: true },
     }) : null
@@ -140,11 +151,16 @@ export async function getFinderDailyImpact(
       orderBy: { afProjection: 'desc' }, take: 100, select: { playerId: true },
     }) : []
     const poolIdentities = topRows.length ? await prisma.playerIdentityMap.findMany({
-      where: { sport: subject.sport, id: { in: topRows.map((item) => item.playerId) } },
-      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true },
+      where: { sport: subject.sport, ...(subject.sport === 'NCAAF'
+        ? { cfbdId: { in: topRows.map((item) => item.playerId) } }
+        : { id: { in: topRows.map((item) => item.playerId) } }) },
+      select: { id: true, canonicalName: true, position: true, rollingInsightsId: true, sleeperNbaId: true, fantraxId: true, cfbdId: true },
     }) : []
     const poolRows = poolIdentities.length ? await prisma.sportsPlayer.findMany({
-      where: { sport: subject.sport, source: 'rolling_insights',
+      where: subject.sport === 'NCAAF' ? { sport: subject.sport, OR: [
+        { source: 'rolling_insights', externalId: { in: poolIdentities.flatMap((identity) => identity.rollingInsightsId ? [identity.rollingInsightsId] : []) } },
+        { source: 'cfbd', externalId: { in: poolIdentities.flatMap((identity) => identity.cfbdId ? [identity.cfbdId] : []) } },
+      ] } : { sport: subject.sport, source: 'rolling_insights',
         externalId: { in: poolIdentities.flatMap((identity) => identity.rollingInsightsId ? [identity.rollingInsightsId] : []) } },
       select: { name: true, position: true, team: true, status: true, externalId: true },
     }) : []
@@ -155,7 +171,8 @@ export async function getFinderDailyImpact(
     }
     const pool = poolIdentities.flatMap((identity) => {
       const id = rosterKey(platform, identity)
-      const athlete = poolRows.find((row) => row.externalId === identity.rollingInsightsId)
+      const athlete = poolRows.find((row) => row.externalId === identity.rollingInsightsId ||
+        subject.sport === 'NCAAF' && row.externalId === identity.cfbdId)
       return id && poolKeyCounts.get(id) === 1 && athlete && !allIds.has(id) && athlete.team &&
         playerNamesAgree(identity.canonicalName, athlete.name) &&
         (!identity.position || !athlete.position || normalizePosition(identity.position) === normalizePosition(athlete.position)) &&
@@ -168,12 +185,14 @@ export async function getFinderDailyImpact(
         const identity = identityByRosterId.get(id)
         return { key: `roster:${id}`, lookupId: identity === null ? null : identity?.id ??
           (isNativePlatform(platform) && /^\d+$/.test(id) ? id : null), team: athleteById.get(id)?.team ?? null,
-          injuryStatus: athleteById.get(id)?.status ?? null }
+          injuryStatus: athleteById.get(id)?.status ?? null, position: athleteById.get(id)?.position ?? null }
       }),
       ...pool.map(({ id, identity, athlete }) => ({ key: `pool:${id}`, lookupId: identity.id,
-        team: athlete.team, injuryStatus: athlete.status })),
+        team: athlete.team, injuryStatus: athlete.status, position: athlete.position })),
     ]
-    const outlook = await loadDailySportOutlook(prisma, {
+    const loadOutlook = ['NCAAF', 'NCAAB', 'SOCCER'].includes(subject.sport)
+      ? loadFinderCollegeSoccerOutlook : loadDailySportOutlook
+    const outlook = await loadOutlook(prisma, {
       league: { sport: subject.sport, season: league.season, settings: league.settings },
       players: outlookPlayers,
     }).catch(() => null)
@@ -228,6 +247,7 @@ export async function getFinderDailyImpact(
         projectionWeek: outlook?.period?.week ?? null, affectedProjection: subjectPoints,
         freeAgents, claimTarget: resolveClaimTarget({ id: league.id, platform, platformLeagueId: league.platformLeagueId }),
         scoringBasis: 'league', periodLabel: outlook?.period?.kind === 'day' ? 'today' :
+          outlook?.period?.kind === 'fixture' ? `gameweek ${outlook.period.week}` :
           outlook?.period?.week != null ? `week ${outlook.period.week}` : null })
     }
   }
