@@ -183,6 +183,7 @@ export async function getRosterGrade(args: {
    * have priced best would come first. Below half, there is no comparison to
    * report and this returns null so the screen says why.
    */
+  let leagueScored = false
   if (nba) {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
@@ -218,6 +219,7 @@ export async function getRosterGrade(args: {
     }
     // Compare only when coverage is strong for every team, including its bench.
     if ([...byTeam.values()].some((ids) => ids.filter((id) => priced.has(id)).length < ids.length * 0.8)) return null
+    leagueScored = true
   }
   if (priced.size < everyId.length * 0.5) return null
 
@@ -235,7 +237,6 @@ export async function getRosterGrade(args: {
    * Bounded to this league's players on purpose: the comparison is between
    * these twelve rosters, so the field to rank within is the assets in play.
    */
-  let leagueScored = nba
   if (!nba && args.scoringSettings) {
     const ledger = await buildValueLedger({
       sleeperIds: everyId,
