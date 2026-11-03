@@ -19,6 +19,8 @@ describe('Sleeper NBA reconciliation', () => {
   it('links a unique exact name, position, and team', () => {
     expect(planSleeperNbaReconciliation([sleeper('100')], [ri('200')], [identity('nba-person', '200')]).links)
       .toEqual([{ identityId: 'nba-person', sleeperId: '100', evidence: 'name_position_team' }])
+    expect(planSleeperNbaReconciliation([sleeper('100', { dob: '2001-01-01' })], [ri('200')], [identity('nba-person', '200')]).links)
+      .toEqual([])
   })
 
   it('uses a matching birthday for a spelling alias only with the same position and team', () => {
@@ -26,6 +28,16 @@ describe('Sleeper NBA reconciliation', () => {
     expect(plan.links).toEqual([{ identityId: 'nba-person', sleeperId: '100', evidence: 'dob_position_team' }])
     expect(planSleeperNbaReconciliation([sleeper('100', { name: 'A. Example', dob: '2001-01-01' })],
       [ri('200')], [identity('nba-person', '200')]).links).toEqual([])
+  })
+
+  it('accepts a verified name, birthday, and team when basketball position labels differ', () => {
+    const source = sleeper('100', { position: 'PF' })
+    const provider = ri('200', { position: 'SF' })
+    const target = identity('nba-person', '200', { position: 'SF' })
+    expect(planSleeperNbaReconciliation([source], [provider], [target]).links)
+      .toEqual([{ identityId: 'nba-person', sleeperId: '100', evidence: 'name_dob_team' }])
+    expect(planSleeperNbaReconciliation([{ ...source, dob: null }], [provider], [target]).links).toEqual([])
+    expect(planSleeperNbaReconciliation([{ ...source, team: 'LAL' }], [provider], [target]).links).toEqual([])
   })
 
   it('refuses duplicate targets, conflicting owners, and teamless rows', () => {

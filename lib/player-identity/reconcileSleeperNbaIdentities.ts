@@ -8,12 +8,15 @@ type RiRow = { externalId: string; name: string; position: string | null; team: 
 type IdentityRow = { id: string; rollingInsightsId: string | null; sleeperNbaId: string | null; canonicalName: string; position: string | null; dob: string | null }
 
 export type NbaReconciliationPlan = {
-  links: Array<{ identityId: string; sleeperId: string; evidence: 'name_position_team' | 'dob_position_team' }>
+  links: Array<{ identityId: string; sleeperId: string; evidence: 'name_position_team' | 'dob_position_team' | 'name_dob_team' }>
   reasons: Record<string, number>
 }
 
 const key = (value: string | null | undefined) => String(value ?? '').trim().toLowerCase()
 const team = (value: string | null | undefined) => proTeamCode('NBA', value) ?? null
+const NBA_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC', 'UT', 'UTIL'])
+const basketballPosition = (value: string | null | undefined) =>
+  String(value ?? '').toUpperCase().split(/[,/\s-]+/).some((part) => NBA_POSITIONS.has(part))
 
 /** A plan is computed from one consistent read. No name-only or team-only link is ever proposed. */
 export function planSleeperNbaReconciliation(
@@ -39,16 +42,20 @@ export function planSleeperNbaReconciliation(
     if ((sourceCounts.get(sleeperId) ?? 0) !== 1) { count('duplicate_source_id'); continue }
     if (ownedSleeperIds.has(sleeperId)) { count('already_linked'); continue }
     const sourceTeam = team(sleeper.team)
-    if (!sourceTeam || !sleeper.position || !sleeper.name) { count('missing_match_evidence'); continue }
+    if (!sourceTeam || !basketballPosition(sleeper.position) || !sleeper.name) { count('missing_match_evidence'); continue }
     const candidates = riRows.flatMap((ri) => {
-      if (team(ri.team) !== sourceTeam || key(ri.position) !== key(sleeper.position)) return []
+      if (team(ri.team) !== sourceTeam || !basketballPosition(ri.position)) return []
       const matches = byRi.get(ri.externalId) ?? []
       if (matches.length !== 1) return []
       const identity = matches[0]
-      if (identity.sleeperNbaId || key(identity.position) !== key(ri.position) || key(identity.canonicalName) !== key(ri.name)) return []
+      if (identity.sleeperNbaId || !basketballPosition(identity.position) || key(identity.canonicalName) !== key(ri.name)) return []
+      if (sleeper.dob && ((ri.dob && sleeper.dob !== ri.dob) || (identity.dob && sleeper.dob !== identity.dob))) return []
       const exactName = key(sleeper.name) === key(ri.name)
       const sameDob = Boolean(sleeper.dob && identity.dob && ri.dob && sleeper.dob === identity.dob && sleeper.dob === ri.dob)
-      return exactName || sameDob ? [{ identityId: identity.id, sleeperId, evidence: exactName ? 'name_position_team' as const : 'dob_position_team' as const }] : []
+      const samePosition = key(sleeper.position) === key(ri.position) && key(identity.position) === key(ri.position)
+      if (!((exactName && samePosition) || (sameDob && (exactName || samePosition)))) return []
+      const evidence = !samePosition ? 'name_dob_team' as const : exactName ? 'name_position_team' as const : 'dob_position_team' as const
+      return [{ identityId: identity.id, sleeperId, evidence }]
     })
     if (candidates.length === 0) { count('no_verified_candidate'); continue }
     if (candidates.length !== 1) { count('ambiguous_candidate'); continue }
