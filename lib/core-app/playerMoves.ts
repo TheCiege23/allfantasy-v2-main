@@ -225,11 +225,12 @@ export function composePlayerMoves(args: {
       tone: 'good',
       title: `Claim ${fa.name} over ${last}`,
       path: movePath(league, 'Waivers'),
-      note: [locked, fa.position, 'unrostered', mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null, 'standard scoring']
+      note: [locked, fa.position, 'unrostered', mv.periodLabel ?? (mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null),
+        mv.scoringBasis === 'league' ? 'this league’s scoring' : 'standard scoring']
         .filter(Boolean)
         .join(' · '),
       delta: fa.delta,
-      scoring: 'standard',
+      scoring: mv.scoringBasis === 'league' ? 'league' : 'standard',
       link,
       locked,
       parts: {

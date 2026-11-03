@@ -25,12 +25,14 @@ import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { isForeignIdSpace, isKnownNonNflSport, translateRostersByLeague } from './rosterIdSpace'
 import { applyBridge, bridgeIdsForSleeperId, loadBridgedLeagues } from './bridgedRosterIds'
-import { resolveNonNflLeagueSlots } from './playerFinderIdentityBridge'
+import { identityForFinderPlayer, resolveNonNflLeagueSlots } from './playerFinderIdentityBridge'
+import { getFinderDailyImpact } from './playerFinderDailyImpact'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
 // server-only-free module because the client link builder needs them too.
 import { parsePlayerRef } from './playerRef'
+import { playerRef } from './playerRef'
 export { playerRef, parsePlayerRef } from './playerRef'
 // The Player Command Center's replacement engine — reused as-is for the
 // "recommended moves" section rather than re-deriving free agents here.
@@ -126,6 +128,9 @@ export type RecommendedMove = {
   freeAgents: ReplacementCandidate[]
   /** Where a claim actually happens: our waiver wire, or the provider's own page. */
   claimTarget: ClaimTarget
+  /** NBA/NHL/MLB outlooks are priced with this league's scoring. */
+  scoringBasis?: 'league'
+  periodLabel?: string | null
 }
 
 export type PlayerDetail = {
@@ -187,6 +192,8 @@ export type PlayerDetail = {
    * holds, so no per-league read is needed. Optional so a cached or older payload still parses.
    */
   afProjection?: SectionState<{ points: number; season: string; week: number }>
+  /** AllFantasy season baseline in points per game, with no week or league scoring implied. */
+  afBaseline?: SectionState<{ pointsPerGame: number; season: number }>
   /**
    * The game he plays this week — the instant every lineup lock on the card
    * counts down to (2026-09-06). From the ingested schedule for the resolved
@@ -910,7 +917,7 @@ export async function getPlayerDetail(
     loadPlayerFacts(refSport, externalId, refSource),
   )
   if (!facts) return null
-  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank } = facts
+  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, afBaseline, snapShare, idpValue, positionRank: rank } = facts
 
   // Sleeper ids are reused between sports. Only leagues of this athlete's
   // sport may participate in roster, impact, and pickup reads.
@@ -945,16 +952,23 @@ export async function getPlayerDetail(
    * your teams" and must not be rendered as one.
    */
   const impactRows =
-    userId && row.sleeperId
+    userId && row.sport === 'NFL' && row.sleeperId
       ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: scopedLeagueIds }).catch(() => null)
       : null
 
-  const impact: PlayerDetail['impact'] = impactRows
-    ? { available: true, data: impactRows }
+  const dailyImpact = userId && row.sport !== 'NFL' && leagues.available
+    ? await getFinderDailyImpact(row, leagues.data, userId, includeMoves).catch(() => null)
+    : null
+  const allImpactRows = row.sport === 'NFL' ? impactRows : dailyImpact?.impact ?? null
+
+  const impact: PlayerDetail['impact'] = allImpactRows
+    ? { available: true, data: allImpactRows }
     : {
         available: false,
         reason: !userId
           ? 'sign in to see which of your leagues this affects'
+          : row.sport !== 'NFL'
+            ? 'no league-scored lineup outlook is available for this sport or roster identity'
           : !row.sleeperId
             ? 'we hold no Sleeper id for this player, so we cannot locate him on your rosters'
             : 'we could not read your rosters for this player',
@@ -971,7 +985,7 @@ export async function getPlayerDetail(
    */
   const MOVE_LEAGUE_CAP = 4
   const moveLeagues =
-    includeMoves && userId && row.sleeperId && leagues.available
+    includeMoves && userId && row.sport === 'NFL' && row.sleeperId && leagues.available
       ? leagues.data
           // Only leagues where he is on YOUR roster have a hole for a pickup to fill.
           .filter((l) => l.isYours)
@@ -979,7 +993,7 @@ export async function getPlayerDetail(
           .slice(0, MOVE_LEAGUE_CAP)
       : []
 
-  const moveRows = (
+  const moveRows = row.sport !== 'NFL' ? dailyImpact?.moves ?? [] : (
     await Promise.all(
       moveLeagues.map(async (l) => {
         const r = await resolveReplacementOptions({
@@ -1010,6 +1024,8 @@ export async function getPlayerDetail(
             ? 'pickup options are part of AF Pro'
             : !userId
             ? 'sign in to see pickup options for your own leagues'
+            : row.sport !== 'NFL'
+              ? 'no period-priced unrostered players are available for this sport and league'
             : !row.sleeperId
               ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'
               : !leagues.available || leagues.data.every((l) => !l.isYours)
@@ -1059,6 +1075,7 @@ export async function getPlayerDetail(
     impact,
     projection,
     afProjection,
+    afBaseline,
     game,
     kickoffs,
     scheduleWeek,
@@ -1234,13 +1251,15 @@ async function loadPlayerFacts(
    */
   const nameSharers = await prisma.sportsPlayer
     .findMany({
-      where: { sport: row.sport, name: { equals: row.name, mode: 'insensitive' }, sleeperId: { not: null } },
-      select: { sleeperId: true },
-      distinct: ['sleeperId'],
+      where: { sport: row.sport, name: { equals: row.name, mode: 'insensitive' },
+        ...(row.sport === 'NFL' ? { sleeperId: { not: null } } : { source: 'rolling_insights' }) },
+      select: { sleeperId: true, externalId: true, name: true, position: true, team: true },
+      distinct: row.sport === 'NFL' ? ['sleeperId'] : ['externalId'],
       take: 5,
     })
-    .catch(() => [] as Array<{ sleeperId: string | null }>)
-  const nameIsAmbiguous = nameSharers.length > 1
+    .catch(() => [] as Array<{ sleeperId: string | null; externalId: string; name: string; position: string | null; team: string | null }>)
+  const nameIsAmbiguous = row.sport === 'NFL' ? nameSharers.length > 1
+    : nameSharers.length !== 1 || !rowsDescribeSamePlayer(nameSharers[0]!, row)
 
   // One row per source. The freshest says the word; the earliest row of that
   // word says WHEN — the live game-window fold is always freshest and used to
@@ -1403,8 +1422,8 @@ async function loadPlayerFacts(
    * `sleeperId` is NFL-only and covers 87.2% of the table — so it produces an
    * explicit "we can't price this one", never a zero.
    */
-  const projectionWeek = row.sleeperId ? await latestProjectionWeek() : null
-  const projKey = row.sleeperId ?? ''
+  const projectionWeek = row.sport === 'NFL' && row.sleeperId ? await latestProjectionWeek() : null
+  const projKey = row.sport === 'NFL' ? row.sleeperId ?? '' : ''
 
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
@@ -1421,7 +1440,9 @@ async function loadPlayerFacts(
       }
     : {
         available: false,
-        reason: row.sleeperId
+        reason: row.sport !== 'NFL'
+          ? 'weekly provider projections are not available for this sport'
+          : row.sleeperId
           ? 'this week’s projection feed does not carry this player'
           : 'we hold no Sleeper id for this player, and the projection feed is keyed by one',
       }
@@ -1490,12 +1511,32 @@ async function loadPlayerFacts(
       }
     : {
         available: false,
-        reason: row.sleeperId
+        reason: row.sport !== 'NFL'
+          ? 'weekly AF projections are not available for this sport'
+          : row.sleeperId
           ? 'AllFantasy’s engine has no projection for this player this week'
           : 'we hold no Sleeper id for this player, and AllFantasy’s projections are keyed by one',
       }
 
-  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank }
+  const afBaseline: PlayerDetail['afBaseline'] = row.sport === 'NFL'
+    ? undefined
+    : await loadFinderAfBaseline(row)
+
+  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, afBaseline, snapShare, idpValue, positionRank: rank }
+}
+
+async function loadFinderAfBaseline(row: { sport: string; source: string; externalId: string; name: string; position: string | null }): Promise<NonNullable<PlayerDetail['afBaseline']>> {
+  const identity = await identityForFinderPlayer(row).catch(() => null)
+  const playerId = row.sport === 'NCAAF' ? identity?.cfbdId : identity?.id
+  if (!playerId) return { available: false, reason: 'no verified projection identity for this player' }
+  const snapshot = await prisma.aFProjectionSnapshot.findFirst({
+    where: { sport: row.sport, playerId, week: null },
+    orderBy: [{ season: 'desc' }, { computedAt: 'desc' }],
+    select: { afProjection: true, season: true },
+  }).catch(() => null)
+  return snapshot && Number.isFinite(snapshot.afProjection)
+    ? { available: true, data: { pointsPerGame: snapshot.afProjection, season: snapshot.season } }
+    : { available: false, reason: 'no season baseline is stored for this player' }
 }
 
 /**
@@ -1558,14 +1599,24 @@ async function loadWeekSchedule(sport: string) {
  */
 export async function resolvePublicPlayer(
   sport: string,
-  sleeperId: string
-): Promise<{ playerReference: string; name: string; sport: string; sleeperId: string } | null> {
+  sleeperIdOrExternalId: string,
+  source?: string,
+): Promise<{ playerReference: string; name: string; sport: string; sleeperId: string | null; source: string; externalId: string } | null> {
+  if (sport !== 'NFL') {
+    if (!source) return null
+    const row = await prisma.sportsPlayer.findUnique({
+      where: { sport_externalId_source: { sport, externalId: sleeperIdOrExternalId, source } },
+      select: { name: true, sport: true, sleeperId: true, source: true, externalId: true },
+    }).catch(() => null)
+    if (!row) return null
+    return { ...row, playerReference: playerRef(row.sport, row.externalId, row.source) }
+  }
   const rows = await prisma.sportsPlayer
     .findMany({
       where: {
         sport,
         // The column stores `TB` for team defences while the slug is lowercased.
-        sleeperId: { equals: sleeperId, mode: 'insensitive' },
+        sleeperId: { equals: sleeperIdOrExternalId, mode: 'insensitive' },
       },
       orderBy: [{ fetchedAt: 'desc' }],
       select: {
@@ -1586,10 +1637,12 @@ export async function resolvePublicPlayer(
   if (!best || !best.sleeperId) return null
 
   return {
-    playerReference: `${best.sport}:${best.externalId}`,
+    playerReference: playerRef(best.sport, best.externalId, best.source),
     name: best.name,
     sport: best.sport,
     sleeperId: best.sleeperId,
+    source: best.source,
+    externalId: best.externalId,
   }
 }
 
@@ -1618,29 +1671,28 @@ export async function getRelatedPlayers(
   sport: string,
   team: string | null,
   position: string | null,
-  excludeSleeperId: string,
+  excludeId: string,
   limit = 6
-): Promise<Array<{ name: string; sport: string; sleeperId: string; position: string | null }>> {
+): Promise<Array<{ name: string; sport: string; sleeperId: string | null; source: string; externalId: string; position: string | null }>> {
   if (!team || !position) return []
 
   const rows = await prisma.sportsPlayer
     .findMany({
       where: {
         sport,
-        source: 'sleeper',
+        source: sport === 'NFL' ? 'sleeper' : 'rolling_insights',
         team,
         position,
-        sleeperId: { not: null },
-        NOT: { sleeperId: { equals: excludeSleeperId, mode: 'insensitive' } },
+        ...(sport === 'NFL'
+          ? { sleeperId: { not: null }, NOT: { sleeperId: { equals: excludeId, mode: 'insensitive' as const } } }
+          : { NOT: { externalId: excludeId } }),
       },
-      distinct: ['sleeperId'],
-      orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+      distinct: sport === 'NFL' ? ['sleeperId'] : ['externalId'],
+      orderBy: sport === 'NFL' ? [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }] : [{ externalId: 'asc' }],
       take: limit,
-      select: { name: true, sport: true, sleeperId: true, position: true },
+      select: { name: true, sport: true, sleeperId: true, source: true, externalId: true, position: true },
     })
     .catch(() => [])
 
-  return rows.flatMap((r) =>
-    r.sleeperId ? [{ name: r.name, sport: r.sport, sleeperId: r.sleeperId, position: r.position }] : []
-  )
+  return rows.filter((r) => sport !== 'NFL' || r.sleeperId !== null)
 }

@@ -12,7 +12,7 @@ import { identityForFinderPlayer, resolveNonNflLeagueSlots, rosterIdForFinderPla
 
 const player = { sport: 'NCAAF', source: 'rolling_insights', externalId: '340', name: 'Jordan Smith', position: 'QB' }
 const identity = {
-  id: 'identity-1', canonicalName: 'Jordan Smith', position: 'QB', rollingInsightsId: '340', sleeperId: null,
+  id: 'identity-1', canonicalName: 'Jordan Smith', position: 'QB', rollingInsightsId: '340', sleeperId: null, sleeperNbaId: null, cfbdId: null,
   espnId: '777', mflId: null, fleaflickerId: null, fantraxId: '06k5m',
 }
 const leagues = [
@@ -52,6 +52,23 @@ describe('Player Finder sport-qualified identity bridge', () => {
       expect(rosterIdForFinderPlayer(athlete, 'fantrax', null)).toBeNull()
     },
   )
+
+  it('reads a Sleeper NBA id only in an NBA Sleeper league', () => {
+    const athlete = { sport: 'NBA', source: 'sleeper', externalId: 'sleeper:1029', sleeperId: '1029' }
+    expect(rosterIdForFinderPlayer(athlete, 'sleeper', null)).toBe('1029')
+    expect(rosterIdForFinderPlayer(athlete, 'allfantasy', null)).toBeNull()
+    expect(rosterIdForFinderPlayer({ ...athlete, sport: 'NFL' }, 'sleeper', null)).toBeNull()
+  })
+
+  it('uses the NBA-specific crosswalk for an RI player on a Sleeper NBA roster', async () => {
+    const nba = { sport: 'NBA', source: 'rolling_insights', externalId: '340', name: 'Jordan Smith', position: 'PG' }
+    db.playerIdentityMap.findMany.mockImplementation(async ({ select }: { select: { canonicalName?: boolean } }) =>
+      select.canonicalName ? [{ ...identity, sport: 'NBA', position: 'PG', sleeperNbaId: '1029' }] :
+        [{ ...identity, sport: 'NBA', position: 'PG', sleeperNbaId: '1029' }])
+    const mapped = await identityForFinderPlayer(nba)
+    expect(rosterIdForFinderPlayer(nba, 'sleeper', mapped)).toBe('1029')
+    expect(rosterIdForFinderPlayer({ ...nba, sport: 'NHL' }, 'sleeper', mapped)).toBeNull()
+  })
 
   it('finds native and Fantrax rosters without treating an ESPN numeric collision as the same player', async () => {
     const result = await resolveNonNflLeagueSlots(player, leagues.map((l) => l.id), 'u1')

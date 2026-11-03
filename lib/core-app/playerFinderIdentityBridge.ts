@@ -7,11 +7,14 @@ import type { LeagueSlot, PlayerMatch } from './playerFinder'
 import { isBestBallLeagueRow } from './leagueBestBall'
 import { normalizePosition } from './positionNormalization'
 
-type IdentityColumn = 'rollingInsightsId' | 'cfbdId' | 'apiSportsId'
-type RosterColumn = 'rollingInsightsId' | 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
-export type FinderIdentity = Record<RosterColumn, string | null> & { id: string; canonicalName: string }
+type IdentityColumn = 'rollingInsightsId' | 'cfbdId' | 'apiSportsId' | 'sleeperNbaId'
+type RosterColumn = 'rollingInsightsId' | 'sleeperId' | 'sleeperNbaId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
+export type FinderIdentity = Record<RosterColumn, string | null> & { id: string; canonicalName: string; cfbdId: string | null }
 type Identity = FinderIdentity
-type FinderCandidate = Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & { position?: string | null }
+type FinderCandidate = Pick<PlayerMatch, 'sport' | 'source' | 'externalId' | 'name'> & {
+  position?: string | null
+  sleeperId?: string | null
+}
 
 const SOURCE_COLUMN: Record<string, IdentityColumn> = {
   rolling_insights: 'rollingInsightsId',
@@ -50,24 +53,26 @@ export function finderIdentityKey(player: Pick<PlayerMatch, 'sport' | 'source' |
 /** Batch source and reverse-target checks for the typeahead's several candidates. */
 export async function identitiesForFinderPlayers(players: readonly FinderCandidate[]): Promise<Map<string, FinderIdentity>> {
   const out = new Map<string, FinderIdentity>()
-  const eligible = players.map((player) => ({ player, column: SOURCE_COLUMN[String(player.source ?? '').toLowerCase()] }))
-    .filter((item): item is { player: FinderCandidate; column: IdentityColumn } => Boolean(item.column && item.player.externalId))
+  const eligible = players.map((player) => ({ player, column: player.sport === 'NBA' && player.source === 'sleeper'
+    ? 'sleeperNbaId' as const : SOURCE_COLUMN[String(player.source ?? '').toLowerCase()],
+    lookupId: player.sport === 'NBA' && player.source === 'sleeper' ? player.sleeperId : player.externalId }))
+    .filter((item): item is { player: FinderCandidate; column: IdentityColumn; lookupId: string } => Boolean(item.column && item.lookupId))
   if (!eligible.length) return out
   const rows = await prisma.playerIdentityMap.findMany({
-    where: { OR: eligible.map(({ player, column }) => ({ sport: player.sport, [column]: player.externalId })) },
+    where: { OR: eligible.map(({ player, column, lookupId }) => ({ sport: player.sport, [column]: lookupId })) },
     select: { id: true, sport: true, canonicalName: true, position: true, rollingInsightsId: true,
-      cfbdId: true, apiSportsId: true, sleeperId: true, espnId: true, mflId: true,
+      cfbdId: true, apiSportsId: true, sleeperId: true, sleeperNbaId: true, espnId: true, mflId: true,
       fleaflickerId: true, fantraxId: true },
   })
   const accepted: Array<{ player: FinderCandidate; column: IdentityColumn; identity: FinderIdentity }> = []
-  for (const { player, column } of eligible) {
-    const matches = rows.filter((row) => row.sport === player.sport && row[column] === player.externalId)
+  for (const { player, column, lookupId } of eligible) {
+    const matches = rows.filter((row) => row.sport === player.sport && row[column] === lookupId)
     if (matches.length !== 1 || !playerNamesAgree(matches[0]!.canonicalName, player.name)) continue
     if (player.position && matches[0]!.position &&
       normalizePosition(player.position) !== normalizePosition(matches[0]!.position)) continue
     accepted.push({ player, column, identity: { ...matches[0]! } })
   }
-  const targets = [...new Set<RosterColumn>(['rollingInsightsId', ...Object.values(PLATFORM_COLUMN)])]
+  const targets = [...new Set<RosterColumn>(['rollingInsightsId', 'sleeperNbaId', ...Object.values(PLATFORM_COLUMN)])]
   const targetConditions = new Map<string, { sport: string; column: RosterColumn; id: string }>()
   for (const { player, column, identity } of accepted) {
     for (const target of targets) {
@@ -78,7 +83,7 @@ export async function identitiesForFinderPlayers(players: readonly FinderCandida
   }
   const reverseRows = targetConditions.size ? await prisma.playerIdentityMap.findMany({
     where: { OR: [...targetConditions.values()].map(({ sport, column, id }) => ({ sport, [column]: id })) },
-    select: { id: true, sport: true, rollingInsightsId: true, espnId: true,
+    select: { id: true, sport: true, rollingInsightsId: true, sleeperNbaId: true, espnId: true,
       mflId: true, fleaflickerId: true, fantraxId: true },
   }) : []
   for (const { player, column, identity } of accepted) {
@@ -100,11 +105,15 @@ export async function identityForFinderPlayer(player: FinderCandidate): Promise<
 
 /** The roster id for this player in this league's own namespace, if verified. */
 export function rosterIdForFinderPlayer(
-  player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId'>,
+  player: Pick<PlayerMatch, 'sport' | 'source' | 'externalId'> & { sleeperId?: string | null },
   platform: string | null | undefined,
   identity: Identity | null,
 ): string | null {
   const provider = String(platform ?? '').toLowerCase()
+  if (provider === 'sleeper' && player.sport === 'NBA' && player.source === 'sleeper') {
+    return player.sleeperId?.trim() || null
+  }
+  if (provider === 'sleeper' && player.sport === 'NBA') return identity?.sleeperNbaId?.trim() || null
   if (isNativePlatform(provider)) {
     if (player.source === 'rolling_insights' && /^\d+$/.test(player.externalId)) return player.externalId
     if (player.source === 'thesportsdb' && /^tsdb_/.test(player.externalId)) return player.externalId
@@ -129,7 +138,8 @@ export async function resolveNonNflLeagueSlots(
   const identity = await identityForFinderPlayer(player)
   const resolved = Boolean(identity ||
     (player.source === 'rolling_insights' && /^\d+$/.test(player.externalId)) ||
-    (player.source === 'thesportsdb' && /^tsdb_/.test(player.externalId)))
+    (player.source === 'thesportsdb' && /^tsdb_/.test(player.externalId)) ||
+    (player.sport === 'NBA' && player.source === 'sleeper' && player.sleeperId))
   const result: FinderBridgeResult = { resolved, slots: [], unmatched: [] }
   if (!leagueIds.length || !userId) return result
 

@@ -1060,7 +1060,7 @@ export function PlayerFinder({
                 In league mode both tiles switch to the league's own scoring
                 (Guap, 2026-09-02). Standard scoring is the cross-league number.
               */}
-              {leagueProj ? (
+              {detail.player.sport !== 'NFL' && !leagueProj ? null : leagueProj ? (
                 <StatTile
                   label={leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek}
                   state={leagueProj}
@@ -1086,7 +1086,7 @@ export function PlayerFinder({
                 this league's scoring; across leagues it is the engine's standard-scoring number, like
                 the tile beside it.
               */}
-              {detail.afProjection ? (
+              {detail.player.sport === 'NFL' && detail.afProjection ? (
                 <StatTile
                   label={detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj}
                   state={detail.afProjection}
@@ -1094,6 +1094,17 @@ export function PlayerFinder({
                   tone="good"
                   tip={{ title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody }}
                   help={detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined}
+                  why={why}
+                />
+              ) : null}
+              {detail.player.sport !== 'NFL' && detail.afBaseline ? (
+                <StatTile
+                  label={t.afBaselineLabel}
+                  state={detail.afBaseline}
+                  value={detail.afBaseline.available ? detail.afBaseline.data.pointsPerGame.toFixed(1) : null}
+                  tone="good"
+                  tip={{ title: t.afBaselineLabel, body: t.afBaselineBody }}
+                  help={detail.afBaseline.available ? t.perGameSeason(detail.afBaseline.data.season) : undefined}
                   why={why}
                 />
               ) : null}
