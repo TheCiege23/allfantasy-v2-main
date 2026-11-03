@@ -39,7 +39,7 @@ export type GradeMomentFields = {
   pricedAsOf: string | null
   tradeAt: string | null
   guillotine: boolean
-  zombie: boolean
+  zombie?: boolean
 }
 
 /**
@@ -130,7 +130,7 @@ export function gradeMomentOf(grade: GradeMomentInput | null | undefined): Grade
     pricedAsOf: grade?.pricedAsOf ?? null,
     tradeAt: grade?.tradeAt ?? null,
     guillotine: onGuillotine(grade),
-    zombie: onZombie(grade),
+    ...(onZombie(grade) ? { zombie: true } : {}),
   }
 }
 
