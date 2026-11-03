@@ -15,6 +15,7 @@ import {
   weaponAcquisitionValue,
   weaponSurplus,
   WEAPON_POINTS,
+  zombieInventoryNotes,
 } from '@/lib/trade-intel/zombie'
 
 /**
@@ -308,7 +309,8 @@ describe('the surplus note reaches the screen', () => {
   it('reads the viewer’s own unused inventory', () => {
     expect(SRC).toContain('prisma.zombieTeamItem')
     expect(SRC).toContain('isUsed: false')
-    expect(SRC).toContain('weaponSurplus(')
+    expect(SRC).toContain('zombieLeagueId: zombieLeague.id')
+    expect(SRC).toContain('zombieInventoryNotes(items)')
   })
 
   it('⚠ classifies serums and weapons separately, because they cap differently', () => {
@@ -317,7 +319,15 @@ describe('the surplus note reaches the screen', () => {
      * the reverse: weapons cap at two and serums stack without limit, so getting
      * the class wrong inverts the advice.
      */
-    expect(SRC).toContain("tag.includes('serum')")
-    expect(SRC).toContain('serumStackingNote(')
+    const notes = zombieInventoryNotes([
+      { itemType: 'weapon_gun', itemLabel: null },
+      { itemType: 'weapon_bow', itemLabel: null },
+      { itemType: 'bomb', itemLabel: null },
+      { itemType: 'serum', itemLabel: null },
+      { itemType: 'serum', itemLabel: null },
+    ])
+    expect(notes).not.toContainEqual(expect.stringContaining('beyond your top two'))
+    expect(notes).toContainEqual(expect.stringContaining('17')) // bomb's 35 minus gun + bow (18)
+    expect(notes).toContainEqual(expect.stringContaining('do not cap'))
   })
 })

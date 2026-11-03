@@ -34,6 +34,7 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
 import { createGuillotineGrader } from './guillotineGrader'
+import { createZombieGrader } from './zombieGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
@@ -430,6 +431,11 @@ export async function createLeagueTradeGrader(args: {
     leagueVariant: leagueRow.leagueVariant ?? null,
     league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
   })
+  const zombie = createZombieGrader({
+    leagueType: leagueType.type,
+    dynastyBase: baseChart.chartIsDynasty,
+    league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null, sport },
+  })
   /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */
   const assets = createLeagueAssetPolicy({
     id: args.leagueId,
@@ -456,6 +462,7 @@ export async function createLeagueTradeGrader(args: {
     },
   ): Promise<TradeGradeView> => {
     try {
+      if (zombie) return await zombie.grade(give, get)
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
       // Guillotine first: an NBA guillotine league has a points grader too, on the whole-season basis.
@@ -527,7 +534,7 @@ export async function createLeagueTradeGrader(args: {
    * Only an NFL league with a market context prices on the stored FantasyCalc books. A college league
    * grades on its own model (`ncaafLeagueGrader`) and has no dated book to be priced on.
    */
-  const book = baseChart.marketCtx && sport === 'NFL' ? marketBookFor(baseChart) : null
+  const book = baseChart.marketCtx && sport === 'NFL' && !zombie ? marketBookFor(baseChart) : null
   // From the BASE chart's settings, which a `marketless` chart resolves too — the same profile today's
   // chart is (or would be) fetched with.
   const profile = book ? fantasyCalcSettingsForChart(baseChart) : null

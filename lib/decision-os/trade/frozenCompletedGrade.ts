@@ -7,6 +7,7 @@ import { mirrorTradeGrade, type TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { isGuillotineBasisGrade, isGuillotineTradeLeague } from './guillotineValue'
+import { isZombieBasisGrade } from './zombieValue'
 
 /**
  * THE ORIGINAL GRADE OF A COMPLETED PROVIDER TRADE, FROZEN THE FIRST TIME ANY SURFACE GRADES IT.
@@ -204,6 +205,7 @@ async function originalBasisFor(afLeagueId: string): Promise<((grade: Graded) =>
     })
     if (!row) return null
     const type = leagueTypeBasis({ settings: row.settings, leagueType: row.leagueType, platform: row.platform ?? null }).type
+    if (type === 'zombie') return (grade) => isZombieBasisGrade(grade)
     if (!isGuillotineTradeLeague({ sport: String(row.sport), leagueType: type, leagueVariant: row.leagueVariant })) return null
     return (grade) => isGuillotineBasisGrade(grade)
   } catch {
