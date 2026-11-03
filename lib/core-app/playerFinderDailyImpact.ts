@@ -11,6 +11,7 @@ import { identityForFinderPlayer, rosterIdForFinderPlayer } from './playerFinder
 import { isFinderPeriodPilotLeague } from './playerFinderPeriodPilot'
 import { normalizePosition } from './positionNormalization'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
+import { countedLineupReplacementIsLegal } from './countedLineupSwap'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import type { LeagueSlot, RecommendedMove } from './playerFinder'
 
@@ -200,23 +201,32 @@ export async function getFinderDailyImpact(
     const starterIndex = starters.indexOf(subjectId)
     const lineupSlots = startingSlots(league.settings)
     const exactSlot = starterIndex >= 0 ? slotForStarterIndex(lineupSlots, starters.length, starterIndex) : null
+    const starterPositions = starters.map((id) => athleteById.get(id)?.position ?? null)
+    const countedSwapIsLegal = (index: number, candidatePosition: string | null) =>
+      subject.sport === 'NCAAF' && platform === 'fantrax' && countedLineupReplacementIsLegal({
+        sport: subject.sport, settings: league.settings, starterPositions,
+        replacedIndex: index, candidatePosition,
+      })
     const startOver: LeagueImpact['startOver'] = starterIndex >= 0 || subjectPoints == null ||
       unavailable(athleteById.get(subjectId)?.status ?? null) ? null
       : starters.reduce<LeagueImpact['startOver']>((weakest, id, index) => {
           const athlete = athleteById.get(id)
           const seat = slotForStarterIndex(lineupSlots, starters.length, index)
           const points = outlook?.byKey.get(`roster:${id}`)?.projectedPoints ?? null
-          if (!athlete || !seat || !mayFill(subject.sport, seat, subject.position) || points == null) return weakest
+          if (!athlete || !(seat ? mayFill(subject.sport, seat, subject.position) :
+            countedSwapIsLegal(index, subject.position)) || points == null) return weakest
           return weakest && weakest.afPoints <= points ? weakest : {
             playerId: id, name: athlete.name, position: athlete.position, team: athlete.team,
             slot: seat, afPoints: points, delta: Math.round((subjectPoints - points) * 100) / 100,
           }
         }, null)
     const benchIds = ownIds.filter((id) => id !== subjectId && !starters.includes(id))
-    const replacements: ReplacementOption[] = exactSlot ? benchIds.flatMap((id) => {
+    const replacements: ReplacementOption[] = starterIndex >= 0 ? benchIds.flatMap((id) => {
       const athlete = athleteById.get(id)
       const points = outlook?.byKey.get(`roster:${id}`)?.projectedPoints ?? null
-      if (!athlete || !mayFill(subject.sport, exactSlot, athlete.position) || points == null || unavailable(athlete.status)) return []
+      const eligible = exactSlot ? mayFill(subject.sport, exactSlot, athlete?.position ?? null) :
+        countedSwapIsLegal(starterIndex, athlete?.position ?? null)
+      if (!athlete || !eligible || points == null || unavailable(athlete.status)) return []
       return [{ playerId: id, name: athlete.name, position: athlete.position, team: athlete.team,
         afPoints: points, delta: subjectPoints == null ? null : Math.round((points - subjectPoints) * 100) / 100,
         injuryStatus: athlete.status, from: ids(data.reserve).includes(id) ? 'IR' : ids(data.taxi).includes(id) ? 'TAXI' : 'BENCH' }]
@@ -238,7 +248,8 @@ export async function getFinderDailyImpact(
 
     if (includeMoves && subjectPoints != null) {
       const freeAgents = pool.flatMap(({ id, athlete }) => {
-        if (!exactSlot || !mayFill(subject.sport, exactSlot, athlete.position)) return []
+        if (!(exactSlot ? mayFill(subject.sport, exactSlot, athlete.position) :
+          starterIndex >= 0 && countedSwapIsLegal(starterIndex, athlete.position))) return []
         const points = outlook?.byKey.get(`pool:${id}`)?.projectedPoints ?? null
         return points == null ? [] : [{ playerId: id, name: athlete.name, position: athlete.position,
           team: athlete.team, projectedPoints: points, delta: Math.round((points - subjectPoints) * 100) / 100 }]
