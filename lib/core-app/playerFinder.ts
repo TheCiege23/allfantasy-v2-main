@@ -25,6 +25,7 @@ import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { isForeignIdSpace, isKnownNonNflSport, translateRostersByLeague } from './rosterIdSpace'
 import { applyBridge, bridgeIdsForSleeperId, loadBridgedLeagues } from './bridgedRosterIds'
+import { resolveNonNflLeagueSlots } from './playerFinderIdentityBridge'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -43,22 +44,18 @@ import {
  * Player Finder — "one name in, every platform, league, slot, injury and the
  * move to make".
  *
- * The cross-league part is the whole point of this screen, and it works like
- * this: `Roster.playerData` stores platform player ids in `players`, `starters`,
- * `reserve` and `taxi` arrays, and `SportsPlayer.sleeperId` bridges our player
- * rows to those ids. So a player is resolved to a sleeper id once, then every
- * roster in the user's leagues is filtered on it.
+ * The cross-league part reads `Roster.playerData` in the league's own id space.
+ * NFL uses the Sleeper bridge below. Other sports use the sport/source-qualified
+ * identity map in playerFinderIdentityBridge, with direct provider ids for
+ * native rosters and verified provider ids for imports.
  *
  * Verified before building on it: Dalton Kincaid resolves to sleeperId 10236 and
  * appears on 42 rosters, 27 of them as a starter, with a positive control on a
  * second id. A JSON path filter that silently matched nothing would have made
  * this screen quietly claim the user owns no one.
  *
- * ⚠ The identity bridge is NOT complete. sleeperId is populated on roughly
- * 15k of 96k player rows, and PlayerIdentityMap holds under 2k entries — it
- * missed a player that SportsPlayer resolved. So `identityResolved: false` is a
- * real outcome and the screen says "we cannot cross-reference this player"
- * rather than "you do not own him".
+ * Identity coverage remains partial. A roster whose provider id cannot be
+ * verified is named as unchecked, never silently counted as a free agent.
  */
 
 export type PlayerMatch = {
@@ -924,10 +921,14 @@ export async function getPlayerDetail(
       })).filter((league) => String(league.sport ?? 'NFL').toUpperCase() === row.sport).map((league) => league.id)
     : []
 
-  const resolvedSlots = identityResolved
-    ? await resolveLeagueSlots(row.sleeperId!, scopedLeagueIds, userId)
+  const nonNflBridge = row.sport !== 'NFL'
+    ? await resolveNonNflLeagueSlots(row, scopedLeagueIds, userId)
     : null
-  const leagues: SectionState<LeagueSlot[]> = !resolvedSlots
+  const resolvedSlots = nonNflBridge ?? (identityResolved
+    ? await resolveLeagueSlots(row.sleeperId!, scopedLeagueIds, userId)
+    : null)
+  const rosterIdentityResolved = nonNflBridge?.resolved ?? identityResolved
+  const leagues: SectionState<LeagueSlot[]> = !resolvedSlots || !rosterIdentityResolved
     ? {
         available: false,
         reason:
@@ -1047,7 +1048,7 @@ export async function getPlayerDetail(
         ? [...new Set(leagues.data.filter((l) => l.isYours).map((l) => l.platform))]
         : [],
     },
-    identityResolved,
+    identityResolved: rosterIdentityResolved,
     idpValue,
     bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
     injury,

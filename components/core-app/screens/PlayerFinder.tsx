@@ -1245,7 +1245,7 @@ export function PlayerFinder({
                   </Link>
                 </>
               ) : detail.leagues.available ? (
-                shownRows.length === 0 ? (
+                shownRows.length === 0 && unmatched.length > 0 ? null : shownRows.length === 0 ? (
                   <p className="af-pf-unavailable">
                     {leagueRows.length > 0 ? t.notOnYourRosters : leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
