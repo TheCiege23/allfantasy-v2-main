@@ -2,6 +2,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
+import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
+import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
+import { meetsSampleBar } from '@/lib/decision-os/trade/sportPointsValue'
 import { detectQbFormat } from './slotEligibility'
 import { sleeperReadableRosters } from './rosterIdSpace'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
@@ -69,6 +72,7 @@ export type RosterGrade = {
      * claim, and the screen should not present them as though they were.
      */
     leagueScored: boolean
+    source?: 'nba_projection'
   }
 }
 
@@ -118,8 +122,8 @@ export async function getRosterGrade(args: {
     (r) => r.league?.sport,
   )
 
-  // FantasyCalc snapshots here are NFL prices. Sleeper NBA can reuse the same numeric IDs.
-  if (rosters.some((roster) => roster.league?.sport?.toUpperCase() === 'NBA')) return null
+  const nba = rosters.some((roster) => roster.league?.sport?.toUpperCase() === 'NBA')
+  if (nba && rosters.some((roster) => roster.league?.platform?.toLowerCase() !== 'sleeper')) return null
 
   // Two teams is not a league to be ranked within.
   if (rosters.length < 3) return null
@@ -153,7 +157,7 @@ export async function getRosterGrade(args: {
    * `newest` below is unchanged in meaning: the latest capture across the league is the max of
    * each player's latest capture.
    */
-  const rows = await loadLatestPlayerValueSnapshots({
+  const rows = nba ? [] : await loadLatestPlayerValueSnapshots({
     sleeperIds: everyId,
     source: 'FANTASYCALC',
     format,
@@ -176,6 +180,26 @@ export async function getRosterGrade(args: {
    * have priced best would come first. Below half, there is no comparison to
    * report and this returns null so the screen says why.
    */
+  if (nba) {
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { id: true, settings: true, leagueType: true, leagueSize: true, season: true, status: true },
+    })
+    if (!league) return null
+    const [bridge, model] = await Promise.all([
+      bridgeImportedGameLogIds({ provider: 'sleeper', sport: 'NBA', rosterIds: everyId }),
+      loadSportPointsBase({ sport: 'NBA', league }),
+    ])
+    if (!model.ok || model.ctx.valueKind !== 'points') return null
+    for (const player of model.ctx.board) {
+      const rosterId = bridge.rosterIdFor(player.id)
+      if (rosterId && meetsSampleBar(player) && Number.isFinite(player.perGame)) {
+        priced.set(rosterId, { value: player.perGame, position: player.position })
+      }
+    }
+    // Compare only when coverage is strong for every team, including its bench.
+    if ([...byTeam.values()].some((ids) => ids.filter((id) => priced.has(id)).length < ids.length * 0.8)) return null
+  }
   if (priced.size < everyId.length * 0.5) return null
 
   /*
@@ -192,8 +216,8 @@ export async function getRosterGrade(args: {
    * Bounded to this league's players on purpose: the comparison is between
    * these twelve rosters, so the field to rank within is the assets in play.
    */
-  let leagueScored = false
-  if (args.scoringSettings) {
+  let leagueScored = nba
+  if (!nba && args.scoringSettings) {
     const ledger = await buildValueLedger({
       sleeperIds: everyId,
       format,
@@ -279,6 +303,7 @@ export async function getRosterGrade(args: {
     positions: strengths,
     pricedPlayers: mine.filter((id) => priced.has(id)).length,
     totalPlayers: mine.length,
-    basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null, leagueScored },
+    basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null, leagueScored,
+      ...(nba ? { source: 'nba_projection' as const } : {}) },
   }
 }
