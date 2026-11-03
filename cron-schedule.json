@@ -37,10 +37,6 @@
       "schedule": "0 */6 * * *"
     },
     {
-      "path": "/api/cron/import-players?sport=NBA&sleeperRows=1",
-      "schedule": "35 */6 * * *"
-    },
-    {
       "path": "/api/cron/import-players?intel=1",
       "schedule": "10 */6 * * *"
     },
