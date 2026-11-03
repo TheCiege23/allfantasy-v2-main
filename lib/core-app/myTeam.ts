@@ -38,6 +38,7 @@ import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { lookupNcaafProjections } from './ncaafProjections'
 import { applyDailySportToLineup, type DailyLineupPeriod } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
@@ -838,6 +839,16 @@ async function resolvePlayers(
      * Same week window as the Sleeper path: `week` comes from `resolveSportsWeek(sport)`. A
      * missing directory or week leaves every fixture null, exactly as before.
      */
+    if (String(sport).toUpperCase() === 'NCAAF' && scoringSettings) {
+      const collegeProjections = await lookupNcaafProjections(ids, null, 'fantrax').catch(() => new Map())
+      for (const [id, projection] of collegeProjections) {
+        const player = out.get(id)
+        if (!player || !projection.componentStats) continue
+        const scored = computeLeagueProjectedPoints(projection.componentStats, scoringSettings)
+        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points })
+      }
+    }
+
     if (String(sport).toUpperCase() === 'NCAAF' && week) {
       const pending = [...out.entries()].filter(([, p]) => p.team && p.kickoff == null)
       const index = pending.length > 0 ? await loadCollegeTeamIndex().catch(() => null) : null
