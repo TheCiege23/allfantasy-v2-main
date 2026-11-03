@@ -268,8 +268,21 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           backLabel="Back to pool dashboard"
           actions={
             <>
+              {rollingCup ? (
+                <div className="af-pb-next-step" role="status">
+                  {activeEntry.finalizedAt ? (
+                    <><strong>Finalized</strong><span>Your changes to upcoming games save automatically. Each pick locks at tipoff.</span></>
+                  ) : completion?.isSubmittable ? (
+                    <><strong>{completion.savedRequiredPickCount} of {completion.requiredPickCount} available picks saved · Ready to finalize</strong><span>Finalize before your first selected game starts.</span></>
+                  ) : (
+                    <><strong>{completion?.savedRequiredPickCount ?? 0} of {completion?.requiredPickCount ?? 0} available picks saved</strong><span>{completion?.missingRequiredSeriesIds.length ? `${completion.missingRequiredSeriesIds.length} picks still needed before finalizing.` : "Confirmed games will appear when available."}</span>
+                      {completion?.missingRequiredSeriesIds.length && nextActionableSeries ? <button type="button" className="af-pb-btn" onClick={continuePicking}>Go to next missing pick</button> : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
               {showTiebreaker ? <label className="af-pb-tiebreaker">{rollingCup ? "Optional championship tiebreaker" : "Final game combined score"} <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
-              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share bracket</button> : null}
+              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Share my read-only bracket</button> : null}
               {!rollingCup || !activeEntry.finalizedAt || showTiebreaker ? <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"

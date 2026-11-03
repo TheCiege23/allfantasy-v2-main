@@ -515,6 +515,44 @@
   font-size: 13px;
 }
 
+.af-cup-date-nav { padding: 0 12px 16px; color: var(--pb-text); font-size: 14px; }
+.af-cup-date-nav > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.af-cup-date-nav a, .af-cup-next-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  color: var(--pb-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-cup-date-nav a { flex-direction: column; }
+.af-cup-date-nav small { color: var(--pb-muted); font-size: 12px; }
+.af-cup-next-date { align-self: flex-end; }
+.af-cup-day[id] { scroll-margin-top: 80px; }
+.af-cup-walkthrough {
+  margin: 0 12px 16px;
+  padding: 0 12px;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  color: var(--pb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.af-cup-walkthrough summary {
+  min-height: 44px;
+  padding-block: 11px;
+  cursor: pointer;
+  color: var(--pb-text);
+  font-weight: 700;
+}
+.af-cup-walkthrough ol { list-style: decimal; padding-inline-start: 22px; }
+.af-cup-walkthrough li + li { margin-top: 8px; }
+.af-cup-walkthrough p { margin: 12px 0; }
+
 /* ── breakpoints: keep every @media block below this line ───────────── */
 @media (max-width: 760px) {
   .af-cup-teams, .af-cup-leaders, .af-cup-split, .af-cup-stakes { grid-template-columns: minmax(0, 1fr); }
