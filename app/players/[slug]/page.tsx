@@ -203,6 +203,7 @@ export default async function PublicPlayerPage({ params }: Params) {
      */
     leagueIds = leagues
       .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+      .filter((l) => String(l.sport ?? 'NFL').toUpperCase() === identity.sport)
       .map((l) => l.id)
   }
 

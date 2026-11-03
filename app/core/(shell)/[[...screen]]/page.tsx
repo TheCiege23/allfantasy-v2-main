@@ -2423,6 +2423,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           { includeMoves: playerDepthOpen },
         ).catch(() => null)
       : null
+  const finderPlayerLeagueIds = playerDetail
+    ? finderLeagueIds.filter((id) => playedLeagues.some((l) => l.id === id && String(l.sport ?? 'NFL').toUpperCase() === playerDetail.player.sport))
+    : finderLeagueIds
 
   /*
    * Phase 1, the deeper card (2026-09-27): this season against the projection, next games with the
@@ -2445,7 +2448,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           sleeperId: playerDetail.player.sleeperId ?? null,
           freeLeagueIds: freeLeagueIds(
-            selectedLeagueId ? [selectedLeagueId] : finderLeagueIds,
+            selectedLeagueId ? finderPlayerLeagueIds.filter((id) => id === selectedLeagueId) : finderPlayerLeagueIds,
             playerDetail.leagues.data,
             playerDetail.rosterCoverage.unmatched,
           ),
@@ -5054,7 +5057,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           sport={playerSport}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={finderScope.count}
+          leagueCount={finderPlayerLeagueIds.length}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
           following={playerFollowing}
@@ -5062,8 +5065,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           weeklyMvp={weeklyMvp}
           trendingFreeIn={trendingFreeIn}
           leagueShares={playerLeagueShares}
-          pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
-          savedPicks={finderScope.picked ? finderLeagueIds : null}
+          pickLeagues={playedLeagues.filter((l) => !playerDetail || String(l.sport ?? 'NFL').toUpperCase() === playerDetail.player.sport).map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
+          savedPicks={finderScope.picked ? finderPlayerLeagueIds : null}
           freeAgentBids={freeAgentBids}
           liveGame={playerLiveGame}
           depthChart={depthChart}

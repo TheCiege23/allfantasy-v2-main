@@ -165,7 +165,10 @@ export async function resolveNonNflLeagueSlots(
   for (const league of sameSportLeagues) {
     const platform = String(league.platform ?? 'manual').toLowerCase()
     const leagueRosters = rosters.filter((r) => r.leagueId === league.id)
-    if (!leagueRosters.length) continue
+    if (!leagueRosters.length) {
+      result.unmatched.push({ leagueId: league.id, leagueName: league.name ?? 'League', platform })
+      continue
+    }
     const playerId = rosterIdForFinderPlayer(player, platform, identity)
     if (!playerId || !leagueRosters.some((r) => hasRosterIds(r.playerData))) {
       result.unmatched.push({ leagueId: league.id, leagueName: league.name ?? 'League', platform })
