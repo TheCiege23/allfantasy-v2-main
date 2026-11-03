@@ -102,7 +102,7 @@ describe('LeagueCreationImportSubmissionService', () => {
         '@/lib/league-import/LeagueCreationImportSubmissionService'
       )
 
-      const result = discoverProviderLeagues('fantrax', 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home')
+      const result = discoverProviderLeagues('fantrax', 'v2kzedypmm8jp61b')
       await vi.advanceTimersByTimeAsync(70_000)
 
       expect(await result).toEqual({ ok: true, data: { leagues } })
