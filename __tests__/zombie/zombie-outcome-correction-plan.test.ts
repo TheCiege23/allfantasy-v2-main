@@ -51,7 +51,7 @@ describe('snapshot-based outcome correction plan', () => {
       homeWeaponBonus: 0, awayWeaponBonus: 0,
     })
     const beforeMatches = [match(101, 90)]
-    const outcome = compareBeta2025TradeSlate({
+    const input: Parameters<typeof compareBeta2025TradeSlate>[0] = {
       zombieLeagueId: 'league',
       before: {
         week: 3, settledAt: '2026-10-27T00:00:00Z', deadlineAt: '2026-10-28T00:00:00Z',
@@ -60,11 +60,18 @@ describe('snapshot-based outcome correction plan', () => {
         matches: beforeMatches,
       },
       afterMatches: [match(90, 101)], afterItems: [],
-    })
+    }
+    const outcome = compareBeta2025TradeSlate(input)
     expect(outcome.before.infections.map(i => i.victimRosterId)).toEqual(['human'])
     expect(outcome.after.infections).toEqual([])
     expect(outcome.before.totals.human).toBe(0)
     expect(outcome.after.totals.human).toBe(6)
+    expect(() => compareBeta2025TradeSlate({
+      ...input, before: { ...input.before, matches: [] }, afterMatches: [],
+    })).toThrow('one matchup per team')
+    expect(() => compareBeta2025TradeSlate({
+      ...input, afterMatches: [match(Number.NaN, 101)],
+    })).toThrow('finite base scores')
   })
 
   it('reverses a prior win and plans a new infection and awards', () => {

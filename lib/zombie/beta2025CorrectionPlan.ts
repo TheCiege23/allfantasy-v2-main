@@ -152,7 +152,18 @@ export function compareBeta2025TradeSlate(input: {
   if (scheduleKey(before.matches) !== scheduleKey(afterMatches)) {
     throw new Error('Trade scenarios must use the same matchup slate.')
   }
-  if (Date.parse(before.settledAt) >= Date.parse(before.deadlineAt)) {
+  const rosterIds = new Set(before.snapshot.teams.map(team => team.rosterId))
+  const scheduled = before.matches.flatMap(match => [match.homeRosterId, match.awayRosterId])
+  if (scheduled.length === 0 || scheduled.length !== rosterIds.size ||
+      new Set(scheduled).size !== scheduled.length || scheduled.some(id => !rosterIds.has(id)) ||
+      new Set(before.matches.map(match => match.matchupId)).size !== before.matches.length) {
+    throw new Error('Projected settlement requires one matchup per team and unique matchup ids.')
+  }
+  if ([...before.matches, ...afterMatches].some(match =>
+    !Number.isFinite(match.homeBaseScore) || !Number.isFinite(match.awayBaseScore))) {
+    throw new Error('Projected settlement requires finite base scores for both teams.')
+  }
+  if (!(Date.parse(before.settledAt) < Date.parse(before.deadlineAt))) {
     throw new Error('Projected settlement must precede the manager choice deadline.')
   }
   const project = (week: CorrectionWeekInput) => replay({
