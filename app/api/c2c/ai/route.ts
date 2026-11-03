@@ -481,6 +481,8 @@ export async function POST(req: NextRequest) {
       case 'weekly_recap': {
         const week = typeof body.week === 'number' ? body.week : 1
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+        // Read finalized matchup evidence on every request so a correction cannot leave a stale recap.
+        if (!smokeProviderEnabled) return NextResponse.json({ recap: await generateWeeklyC2CRecap(leagueId, week) })
         const cacheInputs = {
           action,
           leagueId,
@@ -517,21 +519,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(smokePayload)
         }
 
-        const recap = await generateWeeklyC2CRecap(leagueId, week)
-        const responsePayload = { recap }
-        writeAiResultCache({
-          resultKey,
-          inputHash,
-          feature: 'c2c-chimmy',
-          scopeType: 'league',
-          scopeId: leagueId,
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          inputJson: cacheInputs,
-          resultJson: responsePayload,
-          ttlMs: C2C_AI_CACHE_TTL_MS,
-        }).catch(() => undefined)
-        return NextResponse.json(responsePayload)
+        throw new Error('Recap smoke provider unavailable')
       }
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
