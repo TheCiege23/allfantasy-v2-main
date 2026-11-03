@@ -242,7 +242,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[50px] w-full flex-col overflow-hidden rounded-[4px] px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
+      className={`group relative flex aspect-square w-full max-w-[144px] flex-col overflow-hidden rounded-[4px] px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
