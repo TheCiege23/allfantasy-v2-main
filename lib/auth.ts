@@ -18,6 +18,7 @@ import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { clearSharedRateLimit, consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
 import { prisma } from "@/lib/prisma";
+import { phoneOtpProvider } from "@/lib/auth/phoneOtpProvider";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import {
   ACCOUNT_SUSPENDED_ERROR,
@@ -291,6 +292,7 @@ const providers: NextAuthOptions["providers"] = [
       }
     },
   }),
+  phoneOtpProvider,
   /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *

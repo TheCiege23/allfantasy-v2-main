@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { normalizePhoneE164, isValidPhoneE164 } from "@/lib/phone/e164"
 import { resolveOnboardingProfile } from "@/lib/signup/OnboardingProfileResolver"
 import {
   parseAvatarDataUrl,
@@ -30,6 +31,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: resolved.error, code: resolved.code }, { status: 400 })
   }
   const profile = resolved.value
+  const normalizedPhone = profile.phone ? normalizePhoneE164(profile.phone) : null
+  if (normalizedPhone && !isValidPhoneE164(normalizedPhone)) {
+    return NextResponse.json({ error: "Please enter a valid phone number with country code." }, { status: 400 })
+  }
 
   // Verification gate (unchanged): the account must have a verified email or phone.
   const existingProfile = await (prisma as any).userProfile
@@ -130,12 +135,17 @@ export async function POST(req: Request) {
     avatarPreset: profile.avatarPreset,
     profileComplete: true,
   }
-  if (profile.phone) profileUpdate.phone = profile.phone
+  if (normalizedPhone) {
+    profileUpdate.phone = normalizedPhone
+    // A different number has not passed Verify. Keep the verified status tied
+    // to the number that was actually checked, including for SMS sign-in.
+    if (normalizedPhone !== existingProfile?.phone) profileUpdate.phoneVerifiedAt = null
+  }
 
   await (prisma as any).userProfile.upsert({
     where: { userId },
     update: profileUpdate,
-    create: { userId, ...profileUpdate, phone: profile.phone },
+    create: { userId, ...profileUpdate, phone: normalizedPhone },
   })
 
   if (email) {

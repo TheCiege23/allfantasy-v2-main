@@ -5,6 +5,7 @@ import { resolveSharedProfileBootstrap } from "./SharedProfileBootstrapService"
 import { updateUserProfile } from "./UserProfileService"
 import type { SettingsSnapshot, UserProfileForSettings } from "./types"
 import { readEmailSubscription } from "@/lib/email/emailSubscription"
+import { isPhoneOnlyAccountEmail } from "@/lib/auth/phoneOnlyAccountEmail"
 
 /**
  * Fetches the full profile and account data needed for the settings UI.
@@ -139,7 +140,7 @@ async function queryBaseProfile(
   return {
     userId: user.id,
     username: user.username,
-    email: user.email ?? null,
+    email: isPhoneOnlyAccountEmail(user.email) ? null : user.email ?? null,
     displayName: profile?.displayName ?? user.displayName ?? null,
     profileImageUrl: user.avatarUrl ?? null,
     avatarPreset: profile?.avatarPreset ?? null,
@@ -228,7 +229,7 @@ async function queryBaseProfileMinimal(
   return {
     userId: user.id,
     username: user.username,
-    email: user.email ?? null,
+    email: isPhoneOnlyAccountEmail(user.email) ? null : user.email ?? null,
     displayName: profile?.displayName ?? user.displayName ?? null,
     profileImageUrl: user.avatarUrl ?? null,
     avatarPreset: profile?.avatarPreset ?? null,

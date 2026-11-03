@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { getClientIp } from "@/lib/rate-limit"
+import { consumeSharedRateLimit } from "@/lib/security/sharedRateLimit"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
@@ -18,19 +19,15 @@ export async function POST(req: Request) {
   }
 
   const ip = getClientIp(req)
-  // ⚠ SMS PUMPING. Keyed on ip+phone alone, rotating the NUMBER made sends from
-  // one IP unlimited — each text is billed to us. Three buckets now: the
-  // original per-pair resend throttle, a per-IP ceiling across all numbers,
-  // and a per-number ceiling across all IPs.
-  const rl = rateLimit(`signup-phone-start:${ip}:${phone}`, 3, 120_000)
-  const perIp = rl.success ? rateLimit(`signup-phone-start-ip:${ip}`, 10, 60 * 60 * 1000) : rl
-  const perPhone = perIp.success ? rateLimit(`signup-phone-start-num:${phone}`, 5, 60 * 60 * 1000) : perIp
-  if (!perPhone.success) {
+  // Bound SMS spend across app replicas and across rotated numbers.
+  const [pair, perIp, perPhone] = await Promise.all([
+    consumeSharedRateLimit(`signup-phone-start:${ip}:${phone}`, 3, 2 * 60),
+    consumeSharedRateLimit(`signup-phone-start-ip:${ip}`, 10, 60 * 60),
+    consumeSharedRateLimit(`signup-phone-start-num:${phone}`, 5, 60 * 60),
+  ])
+  if (!pair.success || !perIp.success || !perPhone.success) {
     return NextResponse.json(
-      {
-        error: "RATE_LIMITED",
-        message: "Please wait before requesting another code.",
-      },
+      { error: "RATE_LIMITED", message: "Please wait before requesting another code." },
       { status: 429 }
     )
   }

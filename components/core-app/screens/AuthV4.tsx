@@ -19,6 +19,7 @@ import { trackOnce } from '@/lib/analytics/dataLayer'
 import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialProviderResolver'
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
+import { normalizePhoneE164, isValidPhoneE164 } from '@/lib/phone/e164'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -161,7 +162,7 @@ const PROVIDERS: { id: SocialProvider; label: string }[] = [
 ]
 
 /** Which way someone chose to sign up — counted so the Google-first layout can be judged. */
-function trackSignupMethod(method: SocialProvider | 'email'): void {
+function trackSignupMethod(method: SocialProvider | 'email' | 'phone'): void {
   if (typeof window === 'undefined') return
   void fetch('/api/analytics/track', {
     method: 'POST',
@@ -261,7 +262,7 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
     e.preventDefault()
     setError(null)
     if (!login.trim() || !password) {
-      setError('Enter your email and password.')
+      setError('Enter your email, username or phone and password.')
       return
     }
     setLoading(true)
@@ -335,9 +336,121 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
         </button>
       </form>
 
+      <PhoneCodeSignIn callbackUrl={callbackUrl} />
+
       <DevBypassSignIn callbackUrl={callbackUrl} />
 
       <OAuthGrid callbackUrl={callbackUrl} />
+    </div>
+  )
+}
+
+function PhoneCodeSignIn({ callbackUrl }: { callbackUrl: string }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function sendCode() {
+    const normalized = normalizePhoneE164(phone)
+    if (!isValidPhoneE164(normalized)) {
+      setError('Enter a valid phone number with country code.')
+      return
+    }
+    setError(null)
+    setBusy(true)
+    try {
+      const res = await fetch('/api/auth/phone/signin/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      })
+      if (!res.ok) {
+        setError('We could not send a code right now. Please try again.')
+        return
+      }
+      setSent(true)
+    } catch {
+      setError('We could not send a code right now. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function signInWithCode(e: React.FormEvent) {
+    e.preventDefault()
+    if (!sent || !/^\d{4,10}$/.test(code.trim())) {
+      setError('Enter the texted verification code.')
+      return
+    }
+    setError(null)
+    setBusy(true)
+    try {
+      const result = await signIn('phone-otp', {
+        phone: normalizePhoneE164(phone),
+        code: code.trim(),
+        redirect: false,
+        callbackUrl,
+      })
+      if (result?.error) {
+        setError('Invalid or expired code. Request a new one and try again.')
+      } else {
+        router.replace(callbackUrl)
+      }
+    } catch {
+      setError('Something went wrong signing in. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button type="button" className="af-btn af-au-submit af-au-secondary" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        {open ? 'Hide text code sign-in' : 'Sign in with a text code'}
+      </button>
+      {open ? (
+        <form className="af-au-form" onSubmit={signInWithCode} style={{ marginTop: 16 }}>
+          <label className="af-au-field">
+            <span className="af-label">Phone number</span>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+1 555 123 4567"
+              value={phone}
+              onChange={(e) => { setPhone(e.target.value); setCode(''); setSent(false) }}
+              disabled={busy}
+            />
+          </label>
+          <button type="button" className="af-btn af-au-submit" onClick={sendCode} disabled={busy}>
+            {busy ? 'Please wait…' : sent ? 'Resend code' : 'Text me a code'}
+          </button>
+          {sent ? (
+            <>
+              <p className="af-au-hint">If this number is linked to a verified account, a code is on its way.</p>
+              <label className="af-au-field">
+                <span className="af-label">Verification code</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <button type="submit" className="af-btn af-au-submit" disabled={busy}>
+                {busy ? 'Signing in…' : 'Sign in with code'}
+              </button>
+            </>
+          ) : null}
+          {error ? <p className="af-au-error" role="alert">{error}</p> : null}
+        </form>
+      ) : null}
     </div>
   )
 }
@@ -390,6 +503,11 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [signupMethod, setSignupMethod] = useState<'EMAIL' | 'PHONE'>('EMAIL')
+  const [phone, setPhone] = useState('')
+  const [phoneCode, setPhoneCode] = useState('')
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false)
+  const [sendingPhoneCode, setSendingPhoneCode] = useState(false)
   const [password, setPassword] = useState('')
   /*
    * ⚠ THE SLEEPER HANDLE IS THE IMPORT KEY, COLLECTED AT THE DOOR. The
@@ -412,6 +530,33 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
   if (!disclaimer) missing.push('the age and fantasy-sports confirmation')
   if (!terms) missing.push('the Terms and Privacy Policy')
 
+  async function sendSignupCode() {
+    const normalized = normalizePhoneE164(phone)
+    if (!isValidPhoneE164(normalized)) {
+      setError('Enter a valid phone number with country code.')
+      return
+    }
+    setError(null)
+    setSendingPhoneCode(true)
+    try {
+      const res = await fetch('/api/auth/phone/signup/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(readableApiError(data, 'We could not send a code right now. Please try again.'))
+        return
+      }
+      setPhoneCodeSent(true)
+    } catch {
+      setError('We could not send a code right now. Please try again.')
+    } finally {
+      setSendingPhoneCode(false)
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -420,8 +565,12 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       setError(`Please accept ${missing.join(' and ')} to continue.`)
       return
     }
-    if (!email.trim() || !password || !displayName.trim()) {
-      setError('Fill in your name, email and a password.')
+    if (!password || !displayName.trim() || (signupMethod === 'EMAIL' && !email.trim())) {
+      setError(signupMethod === 'EMAIL' ? 'Fill in your name, email and a password.' : 'Fill in your name and a password.')
+      return
+    }
+    if (signupMethod === 'PHONE' && (!phoneCodeSent || !isValidPhoneE164(normalizePhoneE164(phone)) || !/^\d{4,10}$/.test(phoneCode.trim()))) {
+      setError('Request a text code and enter it to create your account.')
       return
     }
     if (password.length < 8) {
@@ -429,14 +578,14 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       return
     }
 
-    trackSignupMethod('email')
+    trackSignupMethod(signupMethod === 'PHONE' ? 'phone' : 'email')
     setLoading(true)
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
+          ...(signupMethod === 'EMAIL' ? { email: email.trim() } : { phone: normalizePhoneE164(phone), phoneVerificationCode: phoneCode.trim() }),
           password,
           displayName: displayName.trim(),
           // The disclaimer box states 18+ explicitly, so it carries both flags.
@@ -444,7 +593,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           ageConfirmed: disclaimer,
           disclaimerAgreed: disclaimer,
           termsAgreed: terms,
-          verificationMethod: 'EMAIL',
+          verificationMethod: signupMethod,
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
         }),
       })
@@ -479,11 +628,11 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
        */
       const createdUserId = typeof data.userId === 'string' ? data.userId : null
       if (createdUserId) {
-        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method: 'email' })
+        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method: signupMethod === 'PHONE' ? 'phone' : 'email' })
       }
 
       const signedIn = await signIn('credentials', {
-        login: email.trim(),
+        login: signupMethod === 'PHONE' ? normalizePhoneE164(phone) : email.trim(),
         password,
         redirect: false,
         callbackUrl,
@@ -509,7 +658,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
-          <p className="af-au-sub">Free to create or connect leagues. Next: verify your email, then choose how to start.</p>
+          <p className="af-au-sub">Free to create or connect leagues. {signupMethod === 'EMAIL' ? 'Next: verify your email, then choose how to start.' : 'Next: verify your phone, then choose how to start.'}</p>
         </div>
       </header>
 
@@ -527,16 +676,54 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           />
         </label>
 
-        <label className="af-au-field">
-          <span className="af-label">Email</span>
-          <input
-            type="email"
-            autoComplete="email"
-            placeholder="you@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
+        <div role="group" aria-label="Create account with" style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="af-btn af-au-method" aria-pressed={signupMethod === 'EMAIL'} onClick={() => { setSignupMethod('EMAIL'); setError(null) }}>Use email</button>
+          <button type="button" className="af-btn af-au-method" aria-pressed={signupMethod === 'PHONE'} onClick={() => { setSignupMethod('PHONE'); setError(null) }}>Use phone</button>
+        </div>
+
+        {signupMethod === 'EMAIL' ? (
+          <label className="af-au-field">
+            <span className="af-label">Email</span>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="you@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+        ) : (
+          <>
+            <label className="af-au-field">
+              <span className="af-label">Phone number</span>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+1 555 123 4567"
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setPhoneCode(''); setPhoneCodeSent(false) }}
+              />
+            </label>
+            <button type="button" className="af-btn af-au-submit" onClick={sendSignupCode} disabled={sendingPhoneCode || loading}>
+              {sendingPhoneCode ? 'Sending code…' : phoneCodeSent ? 'Resend code' : 'Text me a code'}
+            </button>
+            {phoneCodeSent ? (
+              <label className="af-au-field">
+                <span className="af-label">Verification code</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="Code from text message"
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value)}
+                />
+              </label>
+            ) : null}
+            <span className="af-au-hint">We text a one-time confirmation code. Message and data rates may apply.</span>
+          </>
+        )}
 
         <div className="af-au-field">
           <span className="af-label">Password</span>
@@ -560,7 +747,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             onChange={(e) => setSleeperHandle(e.target.value)}
           />
           <span className="af-au-hint">
-            Link it now and, once your email is verified, your Sleeper leagues import in one click.
+            {signupMethod === 'EMAIL' ? 'Link it now and, once your email is verified, your Sleeper leagues import in one click.' : 'Link it now and, once your phone is verified, your Sleeper leagues import in one click.'}
           </span>
         </label>
 
