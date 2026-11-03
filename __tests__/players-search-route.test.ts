@@ -58,7 +58,7 @@ describe('GET /api/players/search', () => {
     expect(body.error).toBe('Invalid query')
   })
 
-  it('requires a sleeperId in the query, and returns a slug every result can link with', async () => {
+  it('requires a Sleeper id for NFL results, and returns a slug every result can link with', async () => {
     sportsPlayerFindManyMock.mockResolvedValue([
       { id: '1', name: "Ja'Marr Chase", sport: 'NFL', position: 'WR', team: 'CIN', imageUrl: null, sleeperId: '7564', age: 25, number: 1, college: 'LSU' },
     ])
@@ -68,7 +68,10 @@ describe('GET /api/players/search', () => {
     const res = await GET(req)
     expect(sportsPlayerFindManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ sleeperId: { not: null } }),
+        where: expect.objectContaining({ AND: [{ OR: [
+          { sport: 'NFL', sleeperId: { not: null } },
+          { sport: { in: ['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] } },
+        ] }] }),
       })
     )
     const body = await res.json()
@@ -114,10 +117,20 @@ describe('GET /api/players/search', () => {
   })
 
   it('keeps the same sleeperId in different sports apart, and caps the output at limit', async () => {
-    const row = (id: string, sport: string, sleeperId: string) => ({ id, externalId: id, name: 'Same Name', sport, position: 'G', team: null, imageUrl: null, sleeperId, age: null, number: null, college: null })
+    const row = (id: string, sport: string, sleeperId: string) => ({ id, externalId: id, source: 'sleeper', name: 'Same Name', sport, position: 'G', team: null, imageUrl: null, sleeperId, age: null, number: null, college: null })
     sportsPlayerFindManyMock.mockResolvedValue([row('1', 'NBA', '77'), row('2', 'NFL', '77'), row('3', 'NFL', '78')])
     const { GET } = await import('@/app/api/players/search/route')
     const body = await (await GET(new Request('http://localhost/api/players/search?q=same&limit=2'))).json()
     expect(body.map((p: { id: string }) => p.id)).toEqual(['1', '2'])
+  })
+
+  it('returns a source-qualified non-NFL player without a Sleeper id', async () => {
+    sportsPlayerFindManyMock.mockResolvedValue([
+      { id: 'nba-ri', externalId: '340', source: 'rolling_insights', name: 'NBA Player', sport: 'NBA', position: 'PG', team: 'BOS', imageUrl: null, sleeperId: null, age: null, number: null, college: null },
+    ])
+    const { GET } = await import('@/app/api/players/search/route')
+    const body = await (await GET(new Request('http://localhost/api/players/search?q=NBA&sport=NBA'))).json()
+    expect(body).toEqual([expect.objectContaining({ id: 'nba-ri', slug: expect.stringMatching(/^nba-player-nba-x[0-9a-f]+$/) })])
+    expect(sportsPlayerFindManyMock.mock.calls.at(-1)?.[0].select).toMatchObject({ source: true, externalId: true })
   })
 })

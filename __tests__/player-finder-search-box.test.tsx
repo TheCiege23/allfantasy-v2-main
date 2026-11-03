@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
@@ -79,7 +79,17 @@ describe('PlayerSearchBox', () => {
     expect(container.querySelector('input[name="league"]')).toHaveAttribute('value', 'L-gang')
     expect(screen.getByRole('combobox', { name: 'Search any player' })).toHaveValue('Dalton Kincaid')
     expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('type', 'submit')
+    expect(screen.getByRole('combobox', { name: 'Sport' })).toHaveValue('')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('passes a chosen sport through suggestions and player links', async () => {
+    const nba = { ...KINCAID, externalId: 'nba-1', sleeperId: '123', name: 'Jalen Brunson', sport: 'NBA', position: 'PG', team: 'NYK' }
+    fetchMock.mockResolvedValueOnce(ok([nba]))
+    render(<PlayerSearchBox query="" sport="NBA" selectedLeagueId={null} signedIn />)
+    await typeAndSettle('bru')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/core/players/suggest?q=bru&limit=8&sport=NBA')
+    expect(screen.getByRole('link', { name: /Jalen Brunson/ })).toHaveAttribute('href', '/core/players?q=Jalen%20Brunson&player=NBA%3Anba-1&sport=NBA')
   })
 
   it('asks the catalog after a pause, folds duplicate source rows, and links each hit the way the match list does', async () => {
@@ -91,7 +101,7 @@ describe('PlayerSearchBox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toBe('/api/core/players/suggest?q=kin&limit=8')
     const list = screen.getByRole('listbox', { name: 'Suggestions' })
-    const options = screen.getAllByRole('option')
+    const options = within(list).getAllByRole('option')
     expect(options).toHaveLength(2)
     expect(list).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /Dalton Kincaid.*TE · BUF/ })
@@ -100,7 +110,7 @@ describe('PlayerSearchBox', () => {
     // The headshot is borrowed from the folded row; the crest rides along.
     expect(link.querySelector('img.af-pf-avatar')).toHaveAttribute('src', 'https://img/kincaid.png')
     expect(link.querySelector('img.af-pf-team-logo')).toHaveAttribute('src', 'https://a.espncdn.com/i/teamlogos/nfl/500/buf.png')
-    expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('combobox', { name: 'Search any player' })).toHaveAttribute('aria-expanded', 'true')
     // The chip says where he is in your leagues; a row without presence has none.
     expect(screen.getByText('@tashaR has him in Gridiron Gang')).toHaveAttribute('data-tone', 'warn')
     expect(link.querySelector('.af-pf-suggest-chip')).toBeNull()
@@ -124,10 +134,10 @@ describe('PlayerSearchBox', () => {
     fetchMock.mockResolvedValueOnce(ok([KINCAID, KING]))
     render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
     await typeAndSettle('kin')
-    const input = screen.getByRole('combobox')
+    const input = screen.getByRole('combobox', { name: 'Search any player' })
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true')
+    expect(within(screen.getByRole('listbox', { name: 'Suggestions' })).getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true')
     expect(input).toHaveAttribute('aria-activedescendant', 'af-pf-suggest-1')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(push).toHaveBeenCalledWith('/core/players?q=Kingsley%20Suamataia&player=NFL%3Ari-2')
@@ -138,7 +148,7 @@ describe('PlayerSearchBox', () => {
     fetchMock.mockResolvedValueOnce(ok([KINCAID]))
     render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
     await typeAndSettle('kin')
-    const input = screen.getByRole('combobox')
+    const input = screen.getByRole('combobox', { name: 'Search any player' })
     const enter = fireEvent.keyDown(input, { key: 'Enter' })
     expect(enter).toBe(true) // not prevented — the browser submits the GET form
     expect(push).not.toHaveBeenCalled()
@@ -180,7 +190,7 @@ describe('PlayerSearchBox', () => {
     })
     const list = screen.getByRole('listbox', { name: 'Players to compare' })
     expect(list).toHaveAttribute('id', 'af-pf-suggest-vs')
-    const links = screen.getAllByRole('option').map((o) => o.querySelector('a')?.getAttribute('href'))
+    const links = within(list).getAllByRole('option').map((o) => o.querySelector('a')?.getAttribute('href'))
     expect(links).toEqual([
       '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-2&league=L-gang',
       '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-1&league=L-gang',

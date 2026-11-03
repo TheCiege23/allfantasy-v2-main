@@ -69,7 +69,8 @@ export type PlayerMoveParts = {
   /** "Swap Ferguson out for Kincaid at TE"; `slotUnconfirmed` adds the note's caveat. */
   | { kind: 'swap'; outLast: string; last: string; slot: string | null; slotUnconfirmed: boolean }
   /** "Claim Isaiah Likely over Kincaid"; the note carries his position and the projection week. */
-  | { kind: 'claim'; name: string; last: string; position: string | null; week: number | null }
+  | { kind: 'claim'; name: string; last: string; position: string | null; week: number | null;
+      periodLabel?: string | null; scoringBasis?: 'league' }
 )
 
 function pathParts(league: { platform: string | null | undefined; name?: string | null }, screen: MoveScreen): PlayerMoveParts['path'] {
@@ -225,11 +226,12 @@ export function composePlayerMoves(args: {
       tone: 'good',
       title: `Claim ${fa.name} over ${last}`,
       path: movePath(league, 'Waivers'),
-      note: [locked, fa.position, 'unrostered', mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null, 'standard scoring']
+      note: [locked, fa.position, 'unrostered', mv.periodLabel ?? (mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null),
+        mv.scoringBasis === 'league' ? 'this league’s scoring' : 'standard scoring']
         .filter(Boolean)
         .join(' · '),
       delta: fa.delta,
-      scoring: 'standard',
+      scoring: mv.scoringBasis === 'league' ? 'league' : 'standard',
       link,
       locked,
       parts: {
@@ -238,6 +240,8 @@ export function composePlayerMoves(args: {
         last,
         position: fa.position || null,
         week: mv.projectionWeek ?? null,
+        periodLabel: mv.periodLabel,
+        scoringBasis: mv.scoringBasis,
         path: pathParts(league, 'Waivers'),
       },
     })
