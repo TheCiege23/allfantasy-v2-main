@@ -8,7 +8,7 @@ import {
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import {
-  getFantraxLeagueInfo,
+  getFantraxLeagueTeams,
   parseFantraxLeagueId,
 } from '@/lib/league-import/fantrax/fantraxApi'
 import { lookupSleeperUser } from '@/lib/sleeper/user-lookup'
@@ -369,7 +369,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const info = await getFantraxLeagueInfo(leagueId)
+    const info = await getFantraxLeagueTeams(leagueId)
     if (!info.ok) {
       /* Fantrax answers 200 with an error body, so `ok` is the only signal; a
          bad id reads as not-found rather than as a server fault. */
