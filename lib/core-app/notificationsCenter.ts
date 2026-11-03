@@ -286,7 +286,7 @@ function classifyStored(type: string, title: string, body: string | null, meta: 
     if (['lineup_reminders', 'lineup_alerts', 'injury_alerts'].includes(category)) return 'lineups'
     if (['trade_proposals', 'trade_accept_reject'].includes(category)) return 'trades'
     if (category === 'waiver_processing') return 'waivers'
-    if (category === 'chat_mentions') return 'mentions'
+    if (['chat_mentions', 'direct_messages', 'league_chat'].includes(category)) return 'mentions'
     if (['league_announcements', 'commissioner_alerts'].includes(category)) return 'commissioner'
     if (['draft_alerts', 'draft_intel_alerts'].includes(category)) return 'drafts'
     return 'all'

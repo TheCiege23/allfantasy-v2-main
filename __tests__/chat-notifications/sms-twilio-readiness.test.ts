@@ -103,7 +103,7 @@ const sendDm = () =>
     now: new Date('2026-09-25T18:00:00Z'), // 1pm Chicago: outside any default quiet hours
   })
 
-const sendLeague = () => dispatchNotification({ userIds: ['bob'], leagueId: 'league-1', category: 'draft_alerts', type: 'draft_start', title: 'Draft starting', body: 'Your league draft is starting.' })
+const sendLeague = () => dispatchNotification({ userIds: ['bob'], leagueId: 'league-1', category: 'draft_alerts', type: 'draft_on_the_clock', title: 'You are on the clock', body: 'Make your draft pick.' })
 
 beforeEach(() => {
   saved = {}
@@ -141,13 +141,14 @@ describe('🛑 DM texts: working code now, live the moment Twilio is configured'
     expect(h.email).toHaveBeenCalledTimes(1)
   })
 
-  it('does not text a standalone DM even with an old DM SMS preference enabled', async () => {
+  it('keeps a DM in-app and on push even with old email and SMS preferences enabled', async () => {
     configureTwilio()
     h.profilePrefs = { ...SMS_ON, categories: { direct_messages: { enabled: true, inApp: true, email: true, sms: true, push: true } } }
     await sendDm()
     expect(h.messagesCreate).not.toHaveBeenCalled()
+    expect(h.bell).toHaveBeenCalledTimes(1)
     expect(h.push).toHaveBeenCalledTimes(1)
-    expect(h.email).toHaveBeenCalledTimes(1)
+    expect(h.email).not.toHaveBeenCalled()
   })
 
   it('Twilio NOT configured (today): no text is attempted, nothing throws, and bell/push/email still go', async () => {

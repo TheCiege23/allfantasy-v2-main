@@ -34,18 +34,30 @@ describe('notification grouping and read receipts', () => {
     expect(source[0].read).toBe(true)
     expect(source[0].relatedIds).toBeUndefined()
   })
+  it('groups different chat messages by conversation and keeps the latest destination', () => {
+    const messages = [
+      row('m2', { type: 'direct_message', meta: { threadId: 'dm' }, detail: 'Second message' }),
+      row('m1', { type: 'direct_message', meta: { threadId: 'dm' }, detail: 'First message' }),
+      row('m3', { type: 'direct_message', meta: { threadId: 'other' }, detail: 'Another conversation' }),
+    ].map((message) => ({ ...message, leagueId: null }))
+    const [thread, other] = groupNotificationRows(messages)
+    expect(thread).toMatchObject({ id: 'm2', relatedIds: ['m2', 'm1'] })
+    expect(other.relatedIds).toEqual(['m3'])
+  })
+
   it('marks every underlying receipt when a grouped action is clicked', async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
     vi.stubGlobal('fetch', request)
     render(<NotificationsCenter data={data()} />)
-    expect(screen.getAllByRole('link', { name: 'Review lineup' })).toHaveLength(1)
-    fireEvent.click(screen.getByRole('link', { name: 'Review lineup' }))
+    expect(screen.getAllByRole('link', { name: /Review lineup/ })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('link', { name: /Review lineup/ }))
     await waitFor(() => expect(screen.getByText('Nothing is waiting on you.')).toBeTruthy())
     expect(JSON.parse(request.mock.calls[0][1].body).ids).toEqual(['n1', 'n2'])
   })
   it('keeps unread notices and offers retry after a failed receipt request', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
     render(<NotificationsCenter data={data()} />)
+    fireEvent.click(screen.getByLabelText('Notification actions'))
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Please try again'))
     expect(screen.getByText(/2 waiting/)).toBeTruthy()
@@ -55,6 +67,7 @@ describe('notification grouping and read receipts', () => {
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
     vi.stubGlobal('fetch', request)
     render(<NotificationsCenter data={{ ...data(), leagueId: 'league1', unread: 90, olderNotListed: 88 }} />)
+    fireEvent.click(screen.getByLabelText('Notification actions'))
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }))
     await waitFor(() => expect(screen.getByText('Nothing is waiting on you in this league.')).toBeTruthy())
     expect(JSON.parse(request.mock.calls[0][1].body)).toEqual({ ids: 'all', leagueId: 'league1' })

@@ -173,6 +173,7 @@ export async function createPlatformNotification(params: {
   meta?: Record<string, unknown>
   /** Unique per notification; duplicate inserts are skipped (idempotent fan-out). */
   sourceKey?: string | null
+  onCreated?: (id: string) => void
 }): Promise<boolean> {
   try {
     if (params.sourceKey) {
@@ -182,7 +183,8 @@ export async function createPlatformNotification(params: {
       })
       if (existing) return true
     }
-    await (prisma as any).platformNotification.create({
+    const created = await (prisma as any).platformNotification.create({
+      select: { id: true },
       data: {
         userId: params.userId,
         leagueId: params.leagueId ?? undefined,
@@ -195,6 +197,7 @@ export async function createPlatformNotification(params: {
         sourceKey: params.sourceKey ?? undefined,
       },
     })
+    if (created?.id) params.onCreated?.(created.id)
     return true
   } catch {
     return false
