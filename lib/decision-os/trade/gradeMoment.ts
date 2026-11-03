@@ -28,6 +28,7 @@ export type GradeMomentInput = {
   tradeAt?: string | null
   /** Priced on the guillotine basis — set by `gradeMomentOf`, or read from the grade's own lines. */
   guillotine?: boolean | null
+  zombie?: boolean | null
   lines?: ReadonlyArray<{ valueSource?: string | null }> | null
 }
 
@@ -38,6 +39,7 @@ export type GradeMomentFields = {
   pricedAsOf: string | null
   tradeAt: string | null
   guillotine: boolean
+  zombie: boolean
 }
 
 /**
@@ -51,8 +53,16 @@ function onGuillotine(grade: GradeMomentInput | null | undefined): boolean {
   return lines.length > 0 && lines.every((l) => l.valueSource === 'guillotine_points' || l.valueSource === 'guillotine_faab')
 }
 
+function onZombie(grade: GradeMomentInput | null | undefined): boolean {
+  if (typeof grade?.zombie === 'boolean') return grade.zombie
+  const lines = grade?.lines ?? []
+  return lines.length > 0 && lines.every((line) => line.valueSource === 'zombie_points')
+}
+
 const GUILLOTINE_NOTE_EN = '(Guilly lineup and FAAB values)'
 const GUILLOTINE_NOTE_ES = '(valores Guilly: alineación y FAAB)'
+const ZOMBIE_NOTE_EN = '(Zombie player and free-agent values)'
+const ZOMBIE_NOTE_ES = '(valores Zombie: jugadores y agentes libres)'
 const MARKET_NOTE_EN = '(no market record from the trade date)'
 const MARKET_NOTE_ES = '(no hay registro del mercado de la fecha del traspaso)'
 
@@ -102,9 +112,10 @@ export function gradeMoment(grade: GradeMomentInput | null | undefined, language
     const priced = dayOf(grade.pricedAsOf) ?? frozen
     const after = afterTrade(Math.max(0, Math.round(serial(priced) - serial(traded))), es)
     const g = onGuillotine(grade)
+    const z = onZombie(grade)
     return es
-      ? `del ${fmt(priced, true, true)}, ${after} ${g ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES}`
-      : `from ${fmt(priced, false, true)}, ${after} ${g ? GUILLOTINE_NOTE_EN : MARKET_NOTE_EN}`
+      ? `del ${fmt(priced, true, true)}, ${after} ${g ? GUILLOTINE_NOTE_ES : z ? ZOMBIE_NOTE_ES : MARKET_NOTE_ES}`
+      : `from ${fmt(priced, false, true)}, ${after} ${g ? GUILLOTINE_NOTE_EN : z ? ZOMBIE_NOTE_EN : MARKET_NOTE_EN}`
   }
 
   // A v1 original, or one whose trade time is unknown: when it was first graded, and nothing more.
@@ -119,6 +130,7 @@ export function gradeMomentOf(grade: GradeMomentInput | null | undefined): Grade
     pricedAsOf: grade?.pricedAsOf ?? null,
     tradeAt: grade?.tradeAt ?? null,
     guillotine: onGuillotine(grade),
+    zombie: onZombie(grade),
   }
 }
 
@@ -138,10 +150,10 @@ export function gradeMomentToSpanish(english: string): string | null {
     const d = esDate(atTrade[1]!, atTrade[2]!)
     return d ? `en la fecha del traspaso (${d})` : null
   }
-  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|(?:guillotine|Guilly) lineup and FAAB values)\)$/.exec(english)
+  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|(?:guillotine|Guilly) lineup and FAAB values|Zombie player and free-agent values)\)$/.exec(english)
   if (from) {
     const d = esDate(from[1]!, from[2]!, from[3]!)
-    const note = from[5]!.endsWith('lineup and FAAB values') ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES
+    const note = from[5]!.endsWith('lineup and FAAB values') ? GUILLOTINE_NOTE_ES : from[5]!.startsWith('Zombie') ? ZOMBIE_NOTE_ES : MARKET_NOTE_ES
     return d ? `del ${d}, ${afterTrade(from[4] ? Number(from[4]) : 0, true)} ${note}` : null
   }
   const first = /^when first graded ([A-Z][a-z]{2}) (\d{1,2})$/.exec(english)

@@ -255,3 +255,24 @@ export function serumStackingNote(args: { held: number }): string | null {
   if (args.held < 2) return null
   return `You hold ${args.held} serums. Unlike weapons, serums do not cap \u2014 you can use several in the same week for multiple +10 bonuses \u2014 so an extra one is worth as much as your first. Do not price them the way you price a third weapon.`
 }
+
+/** Inventory advice from this league's unused items. A bomb is one-time and never occupies a top-two weapon slot. */
+export function zombieInventoryNotes(items: readonly { itemType: string; itemLabel: string | null }[]): string[] {
+  const held: number[] = []
+  let serums = 0
+  let bombs = 0
+  for (const item of items) {
+    const tag = `${item.itemType ?? ''} ${item.itemLabel ?? ''}`.toLowerCase()
+    if (tag.includes('serum')) { serums += 1; continue }
+    if (tag.includes('bomb')) { bombs += 1; continue }
+    const tier = (Object.keys(WEAPON_POINTS) as WeaponTier[]).find((key) => tag.includes(key))
+    if (tier) held.push(WEAPON_POINTS[tier])
+  }
+  const notes: string[] = []
+  const surplus = weaponSurplus({ held, weeksRemaining: 0 })
+  if (surplus.basis) notes.push(surplus.basis)
+  const stacking = serumStackingNote({ held: serums })
+  if (stacking) notes.push(stacking)
+  if (bombs > 0) notes.push(bombValue({ held }).basis)
+  return notes
+}

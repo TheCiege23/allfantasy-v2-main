@@ -15,6 +15,8 @@ import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-tr
 import { inventoryPickId, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { livePickValue } from './leagueTradePricing'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { readConfirmedLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 /** Mirrors internal `RosterContext` in trade-engine (not exported). */
 export type TradeEngineRosterContext = {
@@ -259,8 +261,10 @@ export async function loadTradeEngineRosterContext(args: {
     } else {
       const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
         ? league.settings as Record<string, unknown> : null
+      const dynasty = leagueVariantFor(league.settings, league.leagueType).dynasty ||
+        (!readConfirmedLeagueConcept(league.settings) && league.isDynasty)
       const inventory = await loadImportedFuturePicks({ leagueId: args.leagueId, platform: league.platform,
-        isDynasty: league.isDynasty, leagueSeason: league.season,
+        isDynasty: dynasty, leagueSeason: league.season,
         status: typeof settings?.status === 'string' ? settings.status : null, teams, rosters })
       ownedPicks = inventory.picksByRosterId.get(userRoster.id) ?? []
       if (inventory.readFailed) args.dataGaps.push('Future pick ownership could not be loaded; no pick sweeteners are suggested.')

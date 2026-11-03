@@ -105,9 +105,18 @@ export async function loadGuillotineContext(league: GuillotineLeague, now: Date 
   return loadNflGuillotineContext(league)
 }
 
-async function loadNflGuillotineContext(league: GuillotineLeague): Promise<GuillotineContextResult> {
+/** Zombie players use the same league-scored projection board, with the best free agent as the replacement. */
+export async function loadZombiePlayerContext(league: GuillotineLeague): Promise<GuillotineContextResult> {
+  if (String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') {
+    return { ok: false, reason: 'Zombie player values currently cover NFL leagues only.' }
+  }
+  return loadNflGuillotineContext(league, 'zombie')
+}
+
+async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillotine' | 'zombie' = 'guillotine'): Promise<GuillotineContextResult> {
+  const format = mode === 'zombie' ? 'Zombie' : 'Guilly'
   const seatsRaw = lineupSeatsFromSettings(league.settings)
-  if (!seatsRaw) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
+  if (!seatsRaw) return { ok: false, reason: `This league’s starting lineup could not be read, so a ${format} grade cannot be priced.` }
   const seats: GuillotineSeat[] = seatsRaw.map((s) => ({ slot: s.slot, eligible: s.eligible }))
   const rules = scoringRulesFrom(league.settings)
   if (!rules || !hasScoringRules(rules)) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
@@ -116,7 +125,7 @@ async function loadNflGuillotineContext(league: GuillotineLeague): Promise<Guill
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({ where: { sport: 'NFL', week: null }, orderBy: { computedAt: 'desc' }, select: { season: true } })
     .catch(() => null)
-  if (!latest) return { ok: false, reason: 'No NFL projections are on file, so this Guilly trade cannot be graded yet.' }
+  if (!latest) return { ok: false, reason: `No NFL projections are on file, so this ${format} trade cannot be graded yet.` }
 
   const [rows, rosterRows] = await Promise.all([
     prisma.aFProjectionSnapshot
@@ -165,7 +174,7 @@ async function loadNflGuillotineContext(league: GuillotineLeague): Promise<Guill
   weeksLeft.sort((a, b) => a - b)
   const nflWeeksLeft = weeksLeft.length ? weeksLeft[Math.floor(weeksLeft.length / 2)]! : 0
 
-  return assembleGuillotineContext({ sport: 'NFL', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft: nflWeeksLeft, gamesPerWeek: null })
+  return assembleGuillotineContext({ sport: 'NFL', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft: nflWeeksLeft, gamesPerWeek: null, mode })
 }
 
 /**
@@ -273,6 +282,7 @@ function assembleGuillotineContext(args: {
   leagueSize: number | null
   weeksLeft: number
   gamesPerWeek: number | null
+  mode?: 'guillotine' | 'zombie'
 }): GuillotineContextResult {
   const { sport, board, seats, rosterRows, weeksLeft } = args
   const minGames = minReplacementGamesFor(sport)
@@ -282,7 +292,7 @@ function assembleGuillotineContext(args: {
   let ids = 0
   let mapped = 0
   for (const r of rosterRows) {
-    if (isTeamEliminated({ playerData: r.playerData, league: { guillotineMode: true }, eliminationRecorded: false })) continue
+    if (args.mode !== 'zombie' && isTeamEliminated({ playerData: r.playerData, league: { guillotineMode: true }, eliminationRecorded: false })) continue
     const players: string[] = []
     for (const id of rosteredIdsOf(r.playerData)) {
       ids += 1
@@ -295,13 +305,14 @@ function assembleGuillotineContext(args: {
     }
     live.push({ players, faab: typeof r.faabRemaining === 'number' ? r.faabRemaining : null })
   }
-  if (live.length < 2) return { ok: false, reason: 'Fewer than two teams are alive in this Guilly league, so there is nothing left to trade for.' }
+  if (live.length < 2) return { ok: false, reason: args.mode === 'zombie' ? 'Fewer than two team rosters are on file for this Zombie league.' : 'Fewer than two teams are alive in this Guilly league, so there is nothing left to trade for.' }
   if (ids === 0 || mapped / ids < MIN_ROSTER_MAPPING) {
     return { ok: false, reason: 'This league’s rosters could not be matched to projected players, so the waiver wire cannot be priced.' }
   }
 
-  const replacementBySlot = slotReplacement(board, rostered, seats, live.length, minGames)
-  const survival = survivalCurve(live.length, weeksLeft)
+  // Zombie has free, instant adds and no chopped-player auction: the best available player is replacement.
+  const replacementBySlot = slotReplacement(board, rostered, seats, args.mode === 'zombie' ? 0 : live.length, minGames)
+  const survival = args.mode === 'zombie' ? [Math.max(0, weeksLeft)] : survivalCurve(live.length, weeksLeft)
   const byId = new Map(board.map((p) => [p.id, p]))
   return {
     ok: true,
@@ -317,8 +328,8 @@ function assembleGuillotineContext(args: {
       minReplacementGames: minGames,
       survival,
       liveFaab: live.reduce((s, r) => s + Math.max(0, r.faab ?? 0), 0),
-      releaseValue: releaseValue({ rosters: live, board: byId, seats, replacementBySlot, survival }),
-      wireValue: wireValue({ board, rostered, seats, replacementBySlot, survival, minGames }),
+      releaseValue: args.mode === 'zombie' ? 0 : releaseValue({ rosters: live, board: byId, seats, replacementBySlot, survival }),
+      wireValue: args.mode === 'zombie' ? 0 : wireValue({ board, rostered, seats, replacementBySlot, survival, minGames }),
       lineupLabel: lineupLabel(seats),
     },
   }
