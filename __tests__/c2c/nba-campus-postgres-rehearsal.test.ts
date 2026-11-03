@@ -20,6 +20,7 @@ import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameB
 import { finalizeRosterAssignments, mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { buildLeagueStatScorer, scoreRosterForWeek, updateMatchupScores } from '@/lib/redraft/scoringEngine'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
+import { finalizeWeekWithRefresh } from '@/lib/redraft/weekFinalizer'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
 pilot('NBA campus snapshot and correction on isolated Postgres', () => {
@@ -136,7 +137,12 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       expect(await refresh(22, correctedAt)).toMatchObject({ stored: 1 })
       await updateMatchupScores(matchup.id)
       expect(await prisma.redraftMatchup.findUniqueOrThrow({ where: { id: matchup.id } })).toMatchObject({ status: 'final', homeScore: finalAfterCorrection.homeScore })
-      expect((await scoreActivePlayoffRound({ seasonId: season.id, calendarWeek: 2 }, playoffDeps)).outcome).toBe('scored')
+      // Exercise the real playoff week gate after the regular matchup has actually finalized.
+      // This covers its already-final path, not the initial slate sealing path.
+      const realGate = vi.fn(finalizeWeekWithRefresh)
+      expect((await scoreActivePlayoffRound({ seasonId: season.id, calendarWeek: 2 }, { prisma, now: () => correctedAt, finalizeWeek: realGate })).outcome).toBe('scored')
+      expect(realGate).toHaveReturned()
+      expect(await realGate.mock.results[0].value).toMatchObject({ alreadyFinal: true })
       expect(await prisma.redraftPlayoffMatchup.findUniqueOrThrow({ where: { id: playoffId } })).toMatchObject({ status: 'final', homeScore: finalAfterCorrection.homeScore })
       harness.campusDb = null
       harness.now = null
