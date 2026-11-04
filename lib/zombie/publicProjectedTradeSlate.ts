@@ -12,6 +12,7 @@ export async function projectPublicZombieTradeSlate(input: {
   leagueId: string
   zombieLeagueId: string
   openingWeek: number
+  forecastWeek?: number
   before: SlateInput
   afterRosters: SlateInput['rosters']
   affectedRosterIds: readonly string[]
@@ -30,14 +31,16 @@ export async function projectPublicZombieTradeSlate(input: {
   if (!afterItems) return null
   const paired = compareBeta2025TradeSlate({
     zombieLeagueId: input.zombieLeagueId,
-    before: { week: input.openingWeek, snapshot, matches, settledAt: input.settledAt, deadlineAt: input.deadlineAt },
+    before: { week: input.forecastWeek ?? input.openingWeek, snapshot, matches, settledAt: input.settledAt, deadlineAt: input.deadlineAt },
     afterMatches,
     afterItems,
   })
   const summarize = (slate: ReplayWeek, rosterId: string) => {
     const openingTeam = snapshot.teams.find(team => team.rosterId === rosterId)!
     const settledTeam = slate.teams.find(team => team.rosterId === rosterId)!
+    const match = slate.matches.find(match => match.homeRosterId === rosterId || match.awayRosterId === rosterId)!
     return {
+      points: match.homeRosterId === rosterId ? match.homeScore : match.awayScore,
       infected: slate.infections.some(infection => infection.victimRosterId === rosterId),
       revived: itemRole(openingTeam.status) === 'Zombie' && itemRole(settledTeam.status) === 'Survivor',
       inventoryAfter: slate.items.filter(item => item.teamStatusId === settledTeam.id && !item.isUsed && !item.isExpired).length,
@@ -49,6 +52,6 @@ export async function projectPublicZombieTradeSlate(input: {
   // An unresolved manager choice can change the outcome and the eligible partner pool.
   if ([...paired.before.choices, ...paired.after.choices].some(choice => choice.status === 'pending')) return null
   return input.affectedRosterIds.map(rosterId => ({
-    rosterId, before: summarize(paired.before, rosterId), after: summarize(paired.after, rosterId),
+    before: summarize(paired.before, rosterId), after: summarize(paired.after, rosterId),
   }))
 }

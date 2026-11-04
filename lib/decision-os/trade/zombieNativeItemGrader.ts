@@ -8,6 +8,9 @@ import { loadZombiePlayerContext, type GuillotineContextResult } from './guillot
 import { gradeTrade, type TradeGradeView } from './tradeGrade'
 import { priceZombiePlayerSide } from './zombieValue'
 import { zombieItemSwapValue, type ZombieValuationItem } from './zombieItemValue'
+import { projectPublicZombieTradeSlate } from '@/lib/zombie/publicProjectedTradeSlate'
+import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
+import { scoringRulesFrom } from './scoringContextFromWorld'
 
 type NativeAsset = {
   assetType: string
@@ -28,6 +31,7 @@ type NativeProposal = {
 type ZombieItemGrade = TradeGradeView & {
   zombieEligibility?: { status: "eligible" | "blocked"; reason?: string }
   zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
+  zombieForecast?: { week: number; teams: NonNullable<Awaited<ReturnType<typeof projectPublicZombieTradeSlate>>> }
 }
 
 const withheld = (reason: string, blocked = false): ZombieItemGrade => ({
@@ -36,7 +40,7 @@ const withheld = (reason: string, blocked = false): ZombieItemGrade => ({
 })
 
 /** One read per league list, then one evidence-backed grade per two-team proposal with items. */
-export async function createZombieNativeItemGrader(leagueId: string): Promise<{
+export async function createZombieNativeItemGrader(leagueId: string, previewSeasonId?: string): Promise<{
   grade(proposal: NativeProposal): Promise<ZombieItemGrade>
 }> {
   const [zombie, league, teams, rosterLinks] = await Promise.all([
@@ -187,8 +191,86 @@ export async function createZombieNativeItemGrader(leagueId: string): Promise<{
         getCount: proposal.assets.filter(asset => asset.toRosterId === proposal.receiverRosterId).length,
         basis, scoringApplied: true, needApplied: false, needGap: null, lines: [], moves: [],
       })
+      const forecast = async (): Promise<ZombieItemGrade['zombieForecast']> => {
+        if (!previewSeasonId) return
+        const seats = lineupSeatsFromSettings(league.settings)?.map(seat => seat.eligible)
+        const scoring = scoringRulesFrom(league.settings)
+        if (!seats?.length || !scoring) return
+        const week = zombie.currentWeek + 1
+        const [matchups, players] = await Promise.all([
+          prisma.redraftMatchup.findMany({ where: { leagueId, seasonId: previewSeasonId, week, status: 'scheduled', isMedianMatchup: false },
+            select: { id: true, homeRosterId: true, awayRosterId: true } }),
+          prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: [...byNativeRosterId.keys()] }, droppedAt: null },
+            select: { rosterId: true, playerId: true, position: true, byeWeek: true, injuryStatus: true, slotType: true } }),
+        ])
+        if (!matchups.length || !players.length) return
+        const schedule = matchups.flatMap(match => {
+          const home = byNativeRosterId.get(match.homeRosterId)
+          const away = match.awayRosterId && byNativeRosterId.get(match.awayRosterId)
+          return home && away ? [{ matchupId: match.id, homeRosterId: home.rosterId, awayRosterId: away.rosterId }] : []
+        })
+        if (schedule.length !== matchups.length) return
+        const ids = [...new Set(players.map(player => player.playerId))]
+        const identities = await prisma.playerIdentityMap.findMany({ where: { OR: [{ id: { in: ids } }, { sleeperId: { in: ids } }] }, select: { id: true, sleeperId: true } })
+        const aliases = new Map<string, Set<string>>()
+        for (const identity of identities) {
+          for (const alias of [identity.id, identity.sleeperId]) {
+            if (!alias) continue
+            const matches = aliases.get(alias) ?? new Set<string>()
+            matches.add(identity.id)
+            aliases.set(alias, matches)
+          }
+        }
+        const rows = await prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NFL', season: zombie.season, week,
+          playerId: { in: identities.map(identity => identity.id) } }, select: { playerId: true, adjustmentFactors: true } })
+        const projections = new Map(rows.map(row => [row.playerId, row.adjustmentFactors]))
+        if (projections.size !== rows.length) return
+        const { leaguePointsPerGame, readRates } = await import('./guillotineContext')
+        const rosters = new Map(teams.map(team => [team.rosterId, players.filter(player =>
+          byNativeRosterId.get(player.rosterId)?.rosterId === team.rosterId).map(player => {
+            const position = player.position.trim().toUpperCase()
+            const matched = aliases.get(player.playerId)
+            const id = matched?.size === 1 ? [...matched][0]! : null
+            const available = player.byeWeek !== week && !['IR', 'IL', 'TAXI'].includes(player.slotType.toUpperCase()) &&
+              !['OUT', 'IR', 'PUP', 'SUSPENDED'].includes(player.injuryStatus?.toUpperCase() ?? '')
+            return { id: player.playerId, positions: [position], available,
+              points: id ? leaguePointsPerGame(readRates(projections.get(id)), scoring, position) : null }
+          })]))
+        const after = new Map([...rosters].map(([id, roster]) => [id, [...roster]]))
+        const moved = new Set<string>()
+        for (const asset of playerAssets) {
+          const from = rosters.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
+          const fromAfter = after.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
+          const toAfter = after.get(byNativeRosterId.get(asset.toRosterId)!.rosterId)
+          const player = from?.find(candidate => candidate.id === asset.playerId)
+          if (!player || !fromAfter || !toAfter || moved.has(player.id)) return
+          moved.add(player.id)
+          fromAfter.splice(fromAfter.indexOf(player), 1)
+          toAfter.push(player)
+        }
+        const now = Date.now()
+        const result = await projectPublicZombieTradeSlate({
+          leagueId, zombieLeagueId: zombie.id, openingWeek: zombie.currentWeek, forecastWeek: week,
+          before: { schedule, rosters, seats }, afterRosters: after,
+          affectedRosterIds: [proposer.rosterId, receiver.rosterId],
+          settledAt: new Date(now).toISOString(), deadlineAt: new Date(now + 1).toISOString(),
+          applyItemTransfers: inventory => {
+            for (const move of items) {
+              const item = inventory.find(candidate => candidate.id === move.id)
+              const sender = byNativeRosterId.get(move.fromRosterId)!
+              const receiver = byNativeRosterId.get(move.toRosterId)!
+              if (!item || item.teamStatusId !== sender.id || item.isUsed || item.isExpired || item.activationState !== 'ready') return null
+              item.teamStatusId = receiver.id
+              item.activatesAtWeek = Math.max(week, item.activatesAtWeek ?? week)
+            }
+            return [...inventory]
+          },
+        })
+        return result ? { week, teams: result } : undefined
+      }
       return {
         ...grade,
+        zombieForecast: await forecast().catch(() => undefined),
         zombieEligibility: { status: "eligible" },
         zombieInventory: {
           proposer: { before: proposerItems.before, after: proposerItems.after },

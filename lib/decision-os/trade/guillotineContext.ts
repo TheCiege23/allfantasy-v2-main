@@ -50,7 +50,7 @@ const MIN_ROSTER_MAPPING = 0.5
 
 const RECEPTION_KEYS = ['rec', 'receptions', 'receiving.REC'] as const
 
-function readRates(adjustmentFactors: unknown): Record<string, unknown> | null {
+export function readRates(adjustmentFactors: unknown): Record<string, unknown> | null {
   if (!adjustmentFactors || typeof adjustmentFactors !== 'object' || Array.isArray(adjustmentFactors)) return null
   const f = adjustmentFactors as Record<string, unknown>
   const rates = f.perGameRates ?? f.componentRates ?? null

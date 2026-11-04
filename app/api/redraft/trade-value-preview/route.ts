@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
 
   if (assets.some(asset => asset.assetType === 'zombie_item')) {
     // Generic snapshots cannot represent an item asset. Return only the native Zombie estimate.
-    const grader = await createZombieNativeItemGrader(leagueId)
+    const grader = await createZombieNativeItemGrader(leagueId, seasonId)
     const grade = await grader.grade({
       proposerRosterId, receiverRosterId, status: 'pending',
       assets: assets.map(asset => ({
@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
       gradeScope: 'zombie_future_scoring',
       zombieEligibility: grade.zombieEligibility,
       zombieInventory: grade.zombieInventory,
+      zombieForecast: grade.zombieForecast,
     } })
   }
 
