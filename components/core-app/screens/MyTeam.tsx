@@ -707,7 +707,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         <div className="af-mt-player-meta">
           <GameContext text={player.gameContext} />
           {player.latestCollegeBoxScore ? (
-            <span>{language === 'es' ? 'Último partido' : 'Last game'} {player.latestCollegeBoxScore.date} · {player.latestCollegeBoxScore.stats.map(({ key, value }) => `${value} ${key.toUpperCase()}`).join(' · ')}</span>
+            <span>{copy('Last game')} {player.latestCollegeBoxScore.date} · {player.latestCollegeBoxScore.stats.map(({ key, value }) => `${value} ${key.toUpperCase()}`).join(' · ')}</span>
           ) : null}
           {/* A forecast for a game already under way or over answers nothing. */}
           {player.gameDay && player.gameDay.state !== 'upcoming' ? (
@@ -1752,7 +1752,7 @@ export function MyTeam({ data }: MyTeamProps) {
         "your lineup is fine".
       */}
       {data.identityNote ? (
-        <p className="af-mt-identity-gap">{data.identityNote}</p>
+        <p className="af-mt-identity-gap">{myTeamReasonText(data.identityNote, language)}</p>
       ) : null}
 
       {/* ── Both weekly totals, at the top where they belong ──── */}

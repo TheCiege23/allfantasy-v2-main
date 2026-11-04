@@ -3,6 +3,7 @@ import { ageText } from './shellCopy'
 
 /** Shared Core navigation copy. The source labels remain the English fallback. */
 const spanish: Record<string, string> = {
+  'Last game': 'Último partido',
   'Very likely in — not mathematically clinched': 'Clasificación muy probable; aún no está asegurada matemáticamente',
   'Long shot — probability is not elimination': 'Poco probable; una probabilidad no significa eliminación',
   'Schedule complete in the model — verify final standings': 'Calendario completo en el modelo; verifica la clasificación final',
