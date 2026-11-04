@@ -38,7 +38,10 @@ export async function readPiratePreLockAdvice(input: {
   const scoringDay = lock.mode === 'daily' ? easternDayKey(now) : null
   const dayStarts = scoringDay ? [...schedule.byTeamDay?.values() ?? []].flatMap(days => days.get(scoringDay) ?? []) : []
   const deadline = scoringDay ? (dayStarts.length ? new Date(Math.min(...dayStarts.map(d => d.getTime()))) : null) : schedule.firstKickoff
-  if (!deadline || deadline <= now || schedule.warnings.length || lock.warnings.length) return null
+  // Daily mode reports its normal behavior in warnings as an informational notice.
+  const lockWarning = lock.warnings.some(warning =>
+    !(lock.mode === 'daily' && warning.startsWith('Daily lineup lock is active:')))
+  if (!deadline || deadline <= now || schedule.warnings.length || lockWarning) return null
   const lead = deadline.getTime() - now.getTime()
   if (input.leadWindowMs && (lead <= input.leadWindowMs.min || lead > input.leadWindowMs.max)) return null
   const roster = await db.redraftRoster.findFirst({where:{id:input.rosterId,leagueId:input.leagueId,ownerId:input.ownerId},select:{

@@ -48,6 +48,13 @@ describe('Pirate pre-lock advice',()=>{
     expect(await readPiratePreLockAdvice(args,fixture({mode:'daily',dailySaved:false}) as unknown as PrismaClient)).toBeNull()
     expect(h.preview).not.toHaveBeenCalled()
   })
+  it('keeps daily pre-lock advice available when daily mode reports its normal behavior',async()=>{
+    const db=fixture({mode:'daily'})
+    h.mode.mockReturnValue({mode:'daily',manualLockedWeeks:new Set(),overrides:[],
+      warnings:['Daily lineup lock is active: players lock at their own game start each day and unlock the next day']})
+    const advice=await readPiratePreLockAdvice(args,db as unknown as PrismaClient)
+    expect(advice).toMatchObject({issues:['QB: 1 empty'],moves:[{playerName:'Bench QB',slot:'QB'}]})
+  })
   it('stops warnings at lock',async()=>{
     expect(await readPiratePreLockAdvice({...args,now:kickoff},fixture() as unknown as PrismaClient)).toBeNull()
     expect(h.preview).not.toHaveBeenCalled()
