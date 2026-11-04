@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ capture: vi.fn(), compare: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/zombie/weeklySettlementSnapshot', () => ({ capturePublicZombieForecastSnapshot: mocks.capture }))
 vi.mock('@/lib/zombie/beta2025CorrectionPlan', () => ({ compareBeta2025TradeWeeks: mocks.compare }))
+vi.mock('@/lib/zombie/projectedCashPayout', () => ({ projectedZombieCashPayout: vi.fn() }))
 
 import { projectPublicZombieTradeSlate } from '@/lib/zombie/publicProjectedTradeSlate'
 
