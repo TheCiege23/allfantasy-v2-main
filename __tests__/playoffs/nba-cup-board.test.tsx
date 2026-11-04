@@ -1,4 +1,6 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { renderToString } from "react-dom/server"
+import { hydrateRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import MlbBracketBoard from "@/components/brackets/playoffs/MlbBracketBoard"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
@@ -20,6 +22,28 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("hydrates across server and viewer time zones, then displays the viewer's local dates", async () => {
+    const original = process.env.TZ
+    const v = view()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const errors: unknown[] = []
+    try {
+      process.env.TZ = "UTC"
+      container.innerHTML = renderToString(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+      expect(container.textContent).toContain("Nov 6")
+      process.env.TZ = "America/New_York"
+      let root: ReturnType<typeof hydrateRoot>
+      await act(async () => { root = hydrateRoot(container, <MlbBracketBoard view={v} onViewChange={() => {}} />, { onRecoverableError: (error) => errors.push(error) }) })
+      expect(errors).toEqual([])
+      expect(container.textContent).toContain("Nov 5")
+      await act(async () => root!.unmount())
+    } finally {
+      if (original === undefined) delete process.env.TZ
+      else process.env.TZ = original
+      container.remove()
+    }
+  })
   it("filters group games by date and restores all dates", () => {
     const v = view()
     const first = v.series.find((game) => game.id === "group")!

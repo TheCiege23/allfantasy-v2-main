@@ -34,6 +34,7 @@ import CupGameCard from "./cup/CupGameCard"
 import CupGroupPlaySection from "./cup/CupGroupPlaySection"
 import CupStandingsRail from "./cup/CupStandingsRail"
 import CupPhaseTrack from "./cup/CupPhaseTrack"
+import { useClientTime } from "./cup/useClientTime"
 import BracketCoachPanel from "./BracketCoachPanel"
 
 /**
@@ -169,6 +170,7 @@ export default function MlbBracketBoard({
   backHref,
   backLabel,
 }: MlbBracketBoardProps) {
+  const clientTime = useClientTime()
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [liveNode, setLiveNode] = useState<string | null>(null)
@@ -218,7 +220,7 @@ export default function MlbBracketBoard({
     game.round !== "cup_group_play" && isOfficial(game.homeTeamName) && isOfficial(game.awayTeamName) &&
     Number.isFinite(Date.parse(game.startsAt ?? "")),
   )
-  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(view.series) : [], [rollingCup, view.series])
+  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(view.series, clientTime ? undefined : "UTC") : [], [rollingCup, view.series, clientTime])
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()
@@ -336,7 +338,7 @@ export default function MlbBracketBoard({
     // NBA Cup knockout cards carry the live clock and score, the same as Group Play.
     const cupState = rollingCup ? cupGameState(s) : null
     const showScore = cupState === "live" || cupState === "final"
-    const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"
+    const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: clientTime ? undefined : "UTC" }) : "Time TBA"
     return (
       <div id={`playoff-series-${s.id}`} className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
         {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></button> : null}
@@ -497,7 +499,7 @@ export default function MlbBracketBoard({
               {sport === "nba_cup" ? "30 teams · Group Play + 8-team knockout" : sport === "nfl" ? "14 teams · AFC and NFC · the 1 seeds start on a bye" : `12 teams · ${view.rounds.length} rounds`} · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
-            {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
+            {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString(undefined, { timeZone: clientTime ? undefined : "UTC" })}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
             {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Pick each new round as its matchups are confirmed. Saved picks lock at each game’s tipoff." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
           </div>
           <div className="af-pb-status">
@@ -724,3 +726,4 @@ export default function MlbBracketBoard({
     </div>
   )
 }
+

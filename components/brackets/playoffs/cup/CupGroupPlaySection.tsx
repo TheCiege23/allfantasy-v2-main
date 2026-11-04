@@ -5,6 +5,7 @@ import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { cupGameDetail, cupGameState, cupLiveClock, cupTeamCode, groupForTeam, type CupGroup } from "@/lib/playoffs/nbaCupBoard"
 import CupGameCard from "./CupGameCard"
 import { dayHeading, localDayKey } from "./cupFormat"
+import { useClientTime } from "./useClientTime"
 import "./af-nba-cup.css"
 
 type Filter = "next" | "results" | "all"
@@ -37,6 +38,7 @@ function startMs(game: PlayoffSeriesView): number {
 export default function CupGroupPlaySection({ games, groups, sport, picks, teamLogos, savingId, lockedReasonFor, onPick, onOpen, scoringExcludedReasonFor }: CupGroupPlaySectionProps) {
   const [filter, setFilter] = useState<Filter>("next")
   const [selectedDay, setSelectedDay] = useState("all")
+  const clientTime = useClientTime()
   const live = useMemo(() => games.filter((g) => cupGameState(g) === "live").sort((a, b) => startMs(a) - startMs(b)), [games])
   const finals = games.filter((g) => cupGameState(g) === "final").length
 
@@ -53,7 +55,7 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
     })
     const byDay = new Map<string, PlayoffSeriesView[]>()
     for (const game of shown) {
-      const key = localDayKey(game.startsAt)
+      const key = localDayKey(game.startsAt, clientTime ? undefined : "UTC")
       byDay.set(key, [...(byDay.get(key) ?? []), game])
     }
     const keys = [...byDay.keys()].sort((a, b) => (a === "tba" ? 1 : b === "tba" ? -1 : a.localeCompare(b)))
@@ -69,9 +71,9 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
         liveCount ? `${liveCount} live` : null,
         finalCount && picked ? `${correct} of ${picked} picks right` : null,
       ].filter(Boolean)
-      return { key, heading: dayHeading(key), sub: bits.join(" · "), list }
+      return { key, heading: dayHeading(key, undefined, clientTime ? undefined : "UTC", clientTime), sub: bits.join(" · "), list }
     })
-  }, [games, filter, picks])
+  }, [games, filter, picks, clientTime])
 
   const groupLabel = (game: PlayoffSeriesView) => groupForTeam(groups, game.homeTeamName)?.label ?? null
   const schedule = days.map((day) => {
