@@ -24,13 +24,15 @@ export type ChimmyModelOutputLike = {
 
 export type ChimmyDeliveryVerdict =
   | { delivered: true }
-  | { delivered: false; reason: 'no_model_answered' | 'empty_answer' | 'rejected_answer' }
+  | { delivered: false; reason: 'no_model_answered' | 'empty_answer' | 'rejected_answer' | 'insufficient_context' }
 
 export function judgeChimmyDelivery(args: {
   modelOutputs: readonly ChimmyModelOutputLike[] | null | undefined
   answer: string | null | undefined
   rejected?: boolean
+  contextBlocked?: boolean
 }): ChimmyDeliveryVerdict {
+  if (args.contextBlocked) return { delivered: false, reason: 'insufficient_context' }
   // A generated answer replaced by the safety guard never reached the user.
   if (args.rejected) return { delivered: false, reason: 'rejected_answer' }
   const answer = (args.answer ?? '').trim()

@@ -622,7 +622,10 @@ export default function ChimmyChatShell({
     [elevenLabsVoiceId, handleStopVoice, isVoicePlaying, ttsUnavailable, voiceConfig, voiceMessageId]
   )
 
+  const portfolioStateRef = useRef<import('@/lib/chimmy/portfolio/types').PortfolioState | undefined>(undefined)
+  useEffect(() => { portfolioStateRef.current = undefined }, [threadStorageKey])
   const handleFollowUp = useCallback((chip: ChimmyFollowUpChip) => {
+    portfolioStateRef.current = chip.portfolioState
     setInput(chip.prompt)
     setInlineError(null)
     if (!chimmyFeatureFlags.aiKpiEvents) return
@@ -766,7 +769,7 @@ export default function ChimmyChatShell({
         message: outgoingText,
         imageFile: image,
         conversation: [...conversationBeforeUser, userMsg],
-        context: requestContext,
+        context: { ...requestContext, portfolioState: portfolioStateRef.current },
         onChunk: (text) => {
           streamedAssistantHandled = true
           const partialAssistant: ChimmyChatMessage = {

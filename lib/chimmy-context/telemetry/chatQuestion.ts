@@ -38,6 +38,8 @@ export { questionEntry } from './questionEntry'
 
 export type ChimmyQuestionOutcome =
   | 'answered'
+  | 'needs_context'
+  | 'partial_answer'
   | 'price_shown'
   | 'out_of_answers'
   | 'upgrade_required'
@@ -49,13 +51,18 @@ export type ChimmyQuestionOutcome =
   | `http_${number}`
 
 type ResponseBody = {
+  meta?: { portfolio?: { status?: unknown } }
   code?: unknown
   upgradeRequired?: unknown
   preview?: { canSpend?: unknown } | null
 } | null
 
 export function questionOutcome(status: number, body: ResponseBody): ChimmyQuestionOutcome {
-  if (status >= 200 && status < 300) return body?.upgradeRequired === true ? 'upgrade_required' : 'answered'
+  if (status >= 200 && status < 300) {
+    if (body?.meta?.portfolio?.status === 'blocked') return 'needs_context'
+    if (body?.meta?.portfolio?.status === 'partial') return 'partial_answer'
+    return body?.upgradeRequired === true ? 'upgrade_required' : 'answered'
+  }
   if (status === 402) return 'out_of_answers'
   if (status === 409) {
     // The preflight says whether the user can pay at all; only "cannot" is a refusal.

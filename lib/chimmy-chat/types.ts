@@ -40,6 +40,7 @@ export type AIContextSource =
   | "bracket_change_alert"
 
 export type AIChatContext = {
+  portfolioState?: import("@/lib/chimmy/portfolio/types").PortfolioState
   prompt?: string
   leagueId?: string
   leagueName?: string
@@ -91,6 +92,7 @@ export type ChimmyResponseStructure = {
 }
 
 export type ChimmyMessageMeta = {
+  portfolio?: import("@/lib/chimmy/portfolio/types").PortfolioEvidence
   bracketEvidence?: import('@/lib/chimmy/bracketEvidence').BracketEvidence
   analysisPreview?: import("@/lib/chimmy/deepAnalysisPreview").DeepAnalysisPreview
   mode?: ChimmyAssistantMode
