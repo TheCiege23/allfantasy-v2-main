@@ -106,7 +106,7 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
     valueAdjusted: 'adjusted for this league’s scoring',
     slotUnconfirmed: 'slot unconfirmed',
     notChecked: (names, platforms) =>
-      `Not checked: ${names.join(', ')} — ${names.length === 1 ? 'its rosters use' : 'their rosters use'} ${platforms} player ids we have not matched to our player table yet.`,
+      `Not checked: ${names.join(', ')} — we could not verify this player's roster status in ${names.length === 1 ? 'this' : 'these'} ${platforms} ${names.length === 1 ? 'league' : 'leagues'}.`,
     tradeFor: (last) => `Trade for ${last} →`,
     whereToFix: 'Where to fix it →',
     nothingToDo: 'Nothing to do',
@@ -212,7 +212,7 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
     valueAdjusted: 'ajustado a la puntuación de esta liga',
     slotUnconfirmed: 'puesto sin confirmar',
     notChecked: (names, platforms) =>
-      `Sin comprobar: ${names.join(', ')}. Sus plantillas usan ids de jugador de ${platforms} que todavía no emparejamos con nuestra tabla de jugadores.`,
+      `Sin comprobar: ${names.join(', ')}. No pudimos verificar si este jugador está en las plantillas de ${names.length === 1 ? 'esta liga' : 'estas ligas'} de ${platforms}.`,
     tradeFor: (last) => `Intercambiar por ${last} →`,
     whereToFix: 'Dónde corregirlo →',
     nothingToDo: 'Nada que hacer',

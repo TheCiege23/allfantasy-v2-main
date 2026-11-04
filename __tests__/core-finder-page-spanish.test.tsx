@@ -356,7 +356,7 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
     const slots = [...container.querySelectorAll('.af-pf-slot')].map((s) => s.textContent)
     expect(slots).toEqual(['BANCA', 'PUESTO IR', 'BANCA', 'BANCA', 'TE', 'NO ES TUYO', 'NO ES TUYO'])
     expect(out).toContain(
-      'Sin comprobar: Office Pool. Sus plantillas usan ids de jugador de ESPN que todavía no emparejamos con nuestra tabla de jugadores.',
+      'Sin comprobar: Office Pool. No pudimos verificar si este jugador está en las plantillas de esta liga de ESPN.',
     )
     expect(out).toContain('Estadísticas de temporada')
     expect(container.querySelector('.af-pf-side')?.getAttribute('aria-label')).toBe('Qué hacer')
@@ -981,7 +981,7 @@ describe('Player Finder — English is unchanged', () => {
       'rostered by @tashaR',
       'rostered by another manager',
       'value 6,100',
-      'Not checked: Office Pool — its rosters use ESPN player ids we have not matched to our player table yet.',
+      "Not checked: Office Pool — we could not verify this player's roster status in this ESPN league.",
       'Stats, injuries and news come from live sports data — never an invented number.',
     ]) {
       expect(text, s).toContain(s)

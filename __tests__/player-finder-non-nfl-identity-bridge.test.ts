@@ -89,6 +89,13 @@ describe('Player Finder sport-qualified identity bridge', () => {
     expect(result.unmatched.map((l) => l.leagueId)).toEqual(['fantrax', 'espn'])
   })
 
+  it('marks a league with no readable rosters as unchecked rather than available', async () => {
+    db.roster.findMany.mockResolvedValueOnce([])
+    const result = await resolveNonNflLeagueSlots(player, ['fantrax'], 'u1')
+    expect(result.slots).toEqual([])
+    expect(result.unmatched.map((l) => l.leagueId)).toEqual(['fantrax'])
+  })
+
   it('refuses ambiguous or wrong-name identity rows', async () => {
     db.playerIdentityMap.findMany.mockResolvedValueOnce([{ ...identity, sport: 'NCAAF' }, { ...identity, sport: 'NCAAF', canonicalName: 'Another Player' }])
     expect(await identityForFinderPlayer(player)).toBeNull()

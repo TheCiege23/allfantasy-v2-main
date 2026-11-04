@@ -12,6 +12,9 @@ import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
+import { collegeFixturesByPlayerTeam } from './collegeNextGame'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
+import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { getRosteredMarket } from './rosteredMarket'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
@@ -473,15 +476,6 @@ const TRADE_COUNT = 3
 const MIN_LEAGUES_FOR_OWNERSHIP = 8
 
 /**
- * 🛑 UPPERCASE, AND THIS COST A REAL DETOUR. `SportsGame.sport` stores `'NFL'`;
- * a lowercase `'nfl'` filter returns ZERO rows and reads exactly like "no
- * schedule has ever been ingested" — which is the wrong conclusion about a table
- * holding all 272 regular-season fixtures. Every other core module spells it
- * lowercase, so the mistake is the natural one to make.
- */
-const SCHEDULE_SPORT = 'NFL'
-
-/**
  * The book used when NO league is in context.
  *
  * 🛑 THIS FILE USED TO PIN `DYNASTY / SUPERFLEX` FOR EVERY READ, INCLUDING THE
@@ -655,9 +649,13 @@ export async function loadSchedule(
    */
   future: ScheduleFutureWeeks | null = null,
   /** AllFantasy's own engine for `projectedWeek` only, beside the provider's `projection`. */
-  afProjection: number | null = null
+  afProjection: number | null = null,
+  sport: string = 'NFL',
 ): Promise<{ schedule: SectionState<PlayerCardSchedule>; byeWeek: number | null }> {
-  const club = normalizeTeamAbbrev(team)
+  const collegeIndex = sport === 'NCAAF' ? await loadCollegeTeamIndex().catch(() => null) : null
+  const club = sport === 'NCAAF'
+    ? (team && collegeIndex ? resolveFantraxCollegeTeam(team, collegeIndex)?.school ?? null : null)
+    : normalizeTeamAbbrev(team)
   if (!club) {
     return {
       schedule: unavailable('No club on file for this player, so his fixtures cannot be looked up.'),
@@ -669,7 +667,7 @@ export async function loadSchedule(
   const games = await prisma.sportsGame
     .findMany({
       where: {
-        sport: SCHEDULE_SPORT,
+        sport,
         season,
         week: { gte: fromWeek, lte: lastWeek },
         // An untyped preseason game can share the regular-season week number.
@@ -692,7 +690,9 @@ export async function loadSchedule(
     const inWeek = games.filter((g) => g.week === w)
     if (inWeek.length === 0) continue // week not ingested — not a bye claim
 
-    const found = buildNextGameMap(inWeek, only).get(club)
+    const found = sport === 'NCAAF' && team && collegeIndex
+      ? collegeFixturesByPlayerTeam(inWeek, [team], collegeIndex).get(team)
+      : buildNextGameMap(inWeek, only).get(club)
     if (found) {
       const row: PlayerCardWeek = {
         week: w,
@@ -712,6 +712,9 @@ export async function loadSchedule(
       }
       weeks.push(row)
     } else {
+      // College slates span several divisions and providers. A missing fixture
+      // is insufficient evidence for a bye on this individual card.
+      if (sport === 'NCAAF') continue
       // Match the roster's coverage gate; a partial week is not proof of a bye.
       const playing = new Set<string>()
       const fixtures = new Set<string>()

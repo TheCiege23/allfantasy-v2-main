@@ -19,6 +19,8 @@ import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { resolveSportsWeek } from './sportsWeek'
 import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
+import { collegeFixturesByPlayerTeam } from './collegeNextGame'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { designationOnset } from './designationOnset'
 import { injuryTimelineFromRows, type InjuryTimeline } from './injuryTimeline'
 import { createSwrCache } from './staleWhileRevalidate'
@@ -1041,7 +1043,9 @@ export async function getPlayerDetail(
    * provider display names and `row.team` holds an abbreviation (nextGameMap.ts).
    */
   const sched = await weekSchedule.get(row.sport, () => loadWeekSchedule(row.sport))
-  const game: PlayerDetail['game'] = playerGame(sched.games, normalizeTeamAbbrev(row.team), sched.week)
+  const game: PlayerDetail['game'] = row.sport === 'NCAAF'
+    ? await collegePlayerGame(sched.games, row.team, sched.week)
+    : playerGame(sched.games, normalizeTeamAbbrev(row.team), sched.week)
   // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
   const kickoffs = sched.kickoffs
   const scheduleWeek = sched.week ? { season: sched.week.season, week: sched.week.week } : null
@@ -1568,9 +1572,28 @@ async function loadWeekSchedule(sport: string) {
   return {
     week: sportsWeek,
     games: weekGames,
-    kickoffs: weekKickoffs(weekGames),
-    unresolved: unresolvedClubNames(weekGames).length,
+    // These helpers know the 32 NFL clubs. An empty map keeps the NFL bye
+    // inference from claiming a college player has a bye.
+    kickoffs: sport === 'NFL' ? weekKickoffs(weekGames) : {},
+    unresolved: sport === 'NFL' ? unresolvedClubNames(weekGames).length : 0,
   }
+}
+
+async function collegePlayerGame(
+  games: readonly import('./nextGameMap').FixtureRow[],
+  team: string | null,
+  week: Awaited<ReturnType<typeof resolveSportsWeek>> | null,
+): Promise<PlayerDetail['game']> {
+  if (!team) return { available: false, reason: 'no team on file for him, so there is no game to find' }
+  if (!week) return { available: false, reason: 'no upcoming week on the schedule for this sport' }
+  const index = await loadCollegeTeamIndex().catch(() => null)
+  if (!index) return { available: false, reason: 'college team directory is unavailable' }
+  const found = collegeFixturesByPlayerTeam(games, [team], index).get(team)
+  if (!found) return { available: false, reason: `no verified game on the schedule for ${team} in week ${week.week}` }
+  return { available: true, data: {
+    kickoff: found.at.toISOString(), opponent: found.opponent, home: found.home,
+    week: week.week, season: week.season, preseason: found.preseason,
+  } }
 }
 
 /**
