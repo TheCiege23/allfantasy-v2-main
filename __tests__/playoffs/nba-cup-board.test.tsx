@@ -1,4 +1,6 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { renderToString } from "react-dom/server"
+import { hydrateRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import MlbBracketBoard from "@/components/brackets/playoffs/MlbBracketBoard"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
@@ -20,6 +22,43 @@ function view(): PlayoffChallengeView {
 }
 
 describe("NBA Cup remaining-game board", () => {
+  it("hydrates across server and viewer time zones, then displays the viewer's local dates", async () => {
+    const original = process.env.TZ
+    const v = view()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const errors: unknown[] = []
+    try {
+      process.env.TZ = "UTC"
+      container.innerHTML = renderToString(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+      expect(container.textContent).toContain("Nov 6")
+      process.env.TZ = "America/New_York"
+      let root: ReturnType<typeof hydrateRoot>
+      await act(async () => { root = hydrateRoot(container, <MlbBracketBoard view={v} onViewChange={() => {}} />, { onRecoverableError: (error) => errors.push(error) }) })
+      expect(errors).toEqual([])
+      expect(container.textContent).toContain("Nov 5")
+      await act(async () => root!.unmount())
+    } finally {
+      if (original === undefined) delete process.env.TZ
+      else process.env.TZ = original
+      container.remove()
+    }
+  })
+  it("filters group games by date and restores all dates", () => {
+    const v = view()
+    const first = v.series.find((game) => game.id === "group")!
+    v.series.push({ ...first, id: "later", seriesNumber: 1003, startsAt: "2099-11-13T20:00:00Z" })
+    render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    const selector = screen.getByLabelText("Show games by date")
+    expect(screen.getByTestId("cup-game-1001")).toBeInTheDocument()
+    expect(screen.getByTestId("cup-game-1003")).toBeInTheDocument()
+    const later = within(selector).getByRole("option", { name: /Nov 13/ }) as HTMLOptionElement
+    fireEvent.change(selector, { target: { value: later.value } })
+    expect(screen.queryByTestId("cup-game-1001")).not.toBeInTheDocument()
+    expect(screen.getByTestId("cup-game-1003")).toBeInTheDocument()
+    fireEvent.change(selector, { target: { value: "all" } })
+    expect(screen.getByTestId("cup-game-1001")).toBeInTheDocument()
+  })
   it("offers a direct link to later Group Play dates with pick controls available", () => {
     const v = view()
     const first = v.series.find((game) => game.id === "group")!
@@ -137,3 +176,4 @@ describe("NBA Cup remaining-game board", () => {
     expect(within(sheet).getByText("Jaylen Brown")).toBeInTheDocument()
   })
 })
+
