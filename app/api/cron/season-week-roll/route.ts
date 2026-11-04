@@ -47,13 +47,22 @@ const JOB = 'cron-season-week-roll'
  * trusting it.
  */
 async function run(options: { dryRun: boolean; limit?: number }) {
+  const carryoverDeadline = Date.now() + 45_000
   // Both phases in one job, in this order. A league that advances out of its
   // final regular week lands on `regular_season_complete` with a bracket
   // already generated; running the postseason pass immediately after means it
   // is picked up on the same tick rather than an hour later.
   const regular = await rollSeasonWeeks({ dryRun: options.dryRun, limit: options.limit })
   const postseason = await rollPostseason({ dryRun: options.dryRun, limit: options.limit })
-  return { ok: true as const, dryRun: options.dryRun, ...regular, postseason }
+  let nbaCampusCarryover: unknown = null
+  if (!options.dryRun && Date.now() + 1_000 < carryoverDeadline) {
+    try {
+      const { prisma } = await import('@/lib/prisma')
+      const { seedNbaCampusCarryover } = await import('@/lib/c2c/seedNbaCampusCarryover')
+      nbaCampusCarryover = await seedNbaCampusCarryover(prisma, { now: new Date(), deadlineAt: Math.min(Date.now() + 15_000, carryoverDeadline), maxRosters: 100 })
+    } catch (err) { nbaCampusCarryover = { error: String(err).slice(0, 200) } }
+  }
+  return { ok: true as const, dryRun: options.dryRun, ...regular, postseason, nbaCampusCarryover }
 }
 
 function readOptions(request: Request): { dryRun: boolean; limit?: number } {
@@ -96,7 +105,7 @@ export async function GET(request: Request) {
       // A refusal is a degraded run, not a dead one: the sweep worked and a
       // league needs a human. Reporting it as success hides exactly the case
       // this job exists to surface.
-      status: r.failed > 0 ? 'partial' : 'success',
+      status: r.failed > 0 || (r.nbaCampusCarryover && typeof r.nbaCampusCarryover === 'object' && 'error' in r.nbaCampusCarryover) ? 'partial' : 'success',
       metadata: {
         considered: r.considered,
         advanced: r.advanced,

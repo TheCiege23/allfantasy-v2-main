@@ -1,0 +1,1448 @@
+{
+  "boxscore": {
+    "teams": [
+      {
+        "team": {
+          "id": "356",
+          "uid": "s:40~l:41~t:356",
+          "slug": "illinois-fighting-illini",
+          "location": "Illinois",
+          "name": "Fighting Illini",
+          "abbreviation": "ILL",
+          "displayName": "Illinois Fighting Illini",
+          "shortDisplayName": "Illinois",
+          "color": "ff5f05",
+          "alternateColor": "13294b",
+          "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png"
+        },
+        "statistics": [
+          {
+            "name": "fieldGoalPct",
+            "displayValue": "41",
+            "abbreviation": "FG%",
+            "label": "Field Goal %"
+          }
+        ],
+        "displayOrder": 1,
+        "homeAway": "away"
+      }
+    ],
+    "players": [
+      {
+        "team": {
+          "id": "356",
+          "uid": "s:40~l:41~t:356",
+          "slug": "illinois-fighting-illini",
+          "location": "Illinois",
+          "name": "Fighting Illini",
+          "abbreviation": "ILL",
+          "displayName": "Illinois Fighting Illini",
+          "shortDisplayName": "Illinois",
+          "color": "ff5f05",
+          "alternateColor": "13294b",
+          "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png"
+        },
+        "statistics": [
+          {
+            "names": [
+              "MIN"
+            ],
+            "keys": [
+              "minutes"
+            ],
+            "labels": [
+              "MIN"
+            ],
+            "descriptions": [
+              "Minutes"
+            ],
+            "athletes": [
+              {
+                "active": false,
+                "athlete": {
+                  "id": "5311832",
+                  "uid": "s:40~l:41~a:5311832",
+                  "guid": "9b0180bc-4575-32bf-8dd3-cf277c26203f",
+                  "displayName": "David Mirkovic",
+                  "shortName": "D. Mirkovic",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard"
+                      ],
+                      "href": "https://www.espn.com/mens-college-basketball/player/_/id/5311832/david-mirkovic",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5311832.png",
+                    "alt": "David Mirkovic"
+                  },
+                  "jersey": "0",
+                  "position": {
+                    "name": "Forward",
+                    "displayName": "Forward",
+                    "abbreviation": "F"
+                  }
+                },
+                "starter": true,
+                "didNotPlay": false,
+                "ejected": false,
+                "stats": [
+                  "25"
+                ]
+              }
+            ],
+            "totals": [
+              ""
+            ]
+          }
+        ],
+        "displayOrder": 1
+      }
+    ]
+  },
+  "format": {
+    "regulation": {
+      "periods": 2,
+      "displayName": "Half",
+      "slug": "half",
+      "clock": 1200
+    },
+    "overtime": {
+      "displayName": "Half",
+      "slug": "half",
+      "clock": 300
+    }
+  },
+  "gameInfo": {
+    "venue": {
+      "id": "479",
+      "guid": "43bff979-8dc4-393c-ba1b-0e063a051f08",
+      "fullName": "Pauley Pavilion",
+      "address": {
+        "city": "Los Angeles",
+        "state": "CA"
+      },
+      "grass": false,
+      "images": [
+        {
+          "href": "https://a.espncdn.com/i/venues/mens-college-basketball/day/479.jpg",
+          "width": 2000,
+          "height": 1125,
+          "alt": "",
+          "rel": [
+            "full"
+          ]
+        }
+      ]
+    },
+    "attendance": 10036,
+    "officials": [
+      {
+        "fullName": "Mike Littlewood",
+        "displayName": "Mike Littlewood",
+        "position": {
+          "name": "Referee",
+          "displayName": "Referee",
+          "id": "40"
+        },
+        "order": 1
+      }
+    ]
+  },
+  "leaders": [
+    {
+      "team": {
+        "id": "26",
+        "uid": "s:40~l:41~t:26",
+        "displayName": "UCLA Bruins",
+        "abbreviation": "UCLA",
+        "links": [
+          {
+            "href": "https://www.espn.com/mens-college-basketball/team/_/id/26/ucla-bruins",
+            "text": "Clubhouse"
+          }
+        ],
+        "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png",
+        "logos": [
+          {
+            "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png",
+            "width": 500,
+            "height": 500,
+            "alt": "",
+            "rel": [
+              "full"
+            ],
+            "lastUpdated": "2025-12-23T01:44Z"
+          }
+        ]
+      },
+      "leaders": [
+        {
+          "name": "points",
+          "displayName": "Points",
+          "leaders": [
+            {
+              "displayValue": "20",
+              "value": 20,
+              "athlete": {
+                "id": "4610012",
+                "uid": "s:40~l:41~a:4610012",
+                "guid": "817028dd-b41d-39cc-b4d1-cdc2eb33b305",
+                "lastName": "Dailey Jr.",
+                "fullName": "Eric Dailey Jr.",
+                "displayName": "Eric Dailey Jr.",
+                "shortName": "E. Dailey Jr.",
+                "links": [
+                  {
+                    "rel": [
+                      "playercard"
+                    ],
+                    "href": "https://www.espn.com/mens-college-basketball/player/_/id/4610012/eric-dailey-jr",
+                    "text": "Player Card"
+                  }
+                ],
+                "headshot": {
+                  "href": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/4610012.png",
+                  "alt": "Eric Dailey Jr."
+                },
+                "jersey": "3",
+                "position": {
+                  "name": "Forward",
+                  "displayName": "Forward",
+                  "abbreviation": "F"
+                },
+                "team": {
+                  "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/mens-college-basketball/seasons/2026/teams/26?lang=en&region=us",
+                  "id": "26"
+                },
+                "status": {
+                  "id": "1",
+                  "name": "Active",
+                  "type": "active",
+                  "abbreviation": "Active"
+                }
+              },
+              "statistics": [
+                {
+                  "name": "points",
+                  "displayName": "Points",
+                  "shortDisplayName": "PTS",
+                  "description": "The number of points scored.",
+                  "abbreviation": "PTS",
+                  "value": 20,
+                  "displayValue": "20"
+                }
+              ],
+              "mainStat": {
+                "value": "20",
+                "label": "PTS"
+              },
+              "summary": "8/13 FG, 1/2 FT"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "broadcasts": [],
+  "pickcenter": [
+    {
+      "provider": {
+        "id": "100",
+        "name": "DraftKings",
+        "priority": 1,
+        "logos": [
+          {
+            "href": "https://a.espncdn.com/i/betting/Draftkings_Light.svg",
+            "rel": [
+              "light"
+            ]
+          }
+        ]
+      },
+      "details": "ILL -6.5",
+      "overUnder": 146.5,
+      "spread": 6.5,
+      "overOdds": -112,
+      "underOdds": -108,
+      "awayTeamOdds": {
+        "favorite": true,
+        "underdog": false,
+        "moneyLine": -290,
+        "spreadOdds": -108,
+        "team": {
+          "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/mens-college-basketball/seasons/2026/teams/356?lang=en&region=us"
+        },
+        "teamId": "356",
+        "favoriteAtOpen": true
+      },
+      "homeTeamOdds": {
+        "favorite": false,
+        "underdog": true,
+        "moneyLine": 235,
+        "spreadOdds": -112,
+        "team": {
+          "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/mens-college-basketball/seasons/2026/teams/26?lang=en&region=us"
+        },
+        "teamId": "26",
+        "favoriteAtOpen": false
+      },
+      "links": [
+        {
+          "language": "en-US",
+          "rel": [
+            "home"
+          ],
+          "href": "https://sportsbook.draftkings.com/gateway?s=__s__&wpcid=__wpcid__&wpsrc=413&wpcn=ESPN&wpscn=Widget&wpcrn=BetSlipDeepLink&wpscid=__wpscid__&wpcrid=xx&preurl=https%3A%2F%2Fsportsbook.draftkings.com%2Fevent%2F33674029%3Foutcomes%3D0ML83510704_1",
+          "text": "Home Bet",
+          "shortText": "Home Bet",
+          "isExternal": true,
+          "isPremium": false
+        }
+      ],
+      "moneyline": {
+        "displayName": "Moneyline",
+        "shortDisplayName": "ML",
+        "home": {
+          "close": {
+            "odds": "+235"
+          },
+          "open": {
+            "odds": "+225"
+          }
+        },
+        "away": {
+          "close": {
+            "odds": "-290"
+          },
+          "open": {
+            "odds": "-278"
+          }
+        }
+      },
+      "pointSpread": {
+        "displayName": "Spread",
+        "shortDisplayName": "Spread",
+        "home": {
+          "close": {
+            "line": "+6.5",
+            "odds": "-112"
+          },
+          "open": {
+            "line": "+6.5",
+            "odds": "-110"
+          }
+        },
+        "away": {
+          "close": {
+            "line": "-6.5",
+            "odds": "-108"
+          },
+          "open": {
+            "line": "-6.5",
+            "odds": "-110"
+          }
+        }
+      },
+      "total": {
+        "displayName": "Total",
+        "shortDisplayName": "Total",
+        "over": {
+          "close": {
+            "line": "o146.5",
+            "odds": "-112"
+          },
+          "open": {
+            "line": "o145.5",
+            "odds": "-110"
+          }
+        },
+        "under": {
+          "close": {
+            "line": "u146.5",
+            "odds": "-108"
+          },
+          "open": {
+            "line": "u145.5",
+            "odds": "-110"
+          }
+        }
+      },
+      "link": {
+        "text": "See More Odds",
+        "language": "en-US",
+        "rel": [
+          "main"
+        ],
+        "href": "https://sportsbook.draftkings.com",
+        "isExternal": true,
+        "isPremium": false
+      },
+      "header": {
+        "logo": {
+          "dark": "https://a.espncdn.com/i/espnbet/dark/espn-bet-square-off.svg",
+          "light": "https://a.espncdn.com/i/espnbet/espn-bet-square-off.svg",
+          "exclusivesLogoDark": "https://a.espncdn.com/i/espnbet/espn-bet-square-mint.svg",
+          "exclusivesLogoLight": "https://a.espncdn.com/i/espnbet/espn-bet-square-mint.svg"
+        },
+        "text": "Game Odds"
+      },
+      "footer": {
+        "disclaimer": "GAMBLING PROBLEM? CALL 1-800-GAMBLER or 1-800-MY-RESET, (800) 327-5050 or visit gamblinghelplinema.org (MA). Call 877-8-HOPENY/text HOPENY (467369) (NY). Call 888-789-7777/visit ccpg.org (CT), or visit www.mdgamblinghelp.org (MD), 1-800-981-0023 (PR). 21+ and present in most states. (18+ DC/KY/NH/PR/WY). Void in ONT. Eligibility restrictions apply. Terms: draftkings.com/sportsbook. On behalf of Boot Hill Casino (KS). Pass-thru of per wager tax may apply in IL."
+      }
+    }
+  ],
+  "odds": [],
+  "againstTheSpread": [
+    {
+      "team": {
+        "id": "356",
+        "uid": "s:40~l:41~t:356",
+        "displayName": "Illinois Fighting Illini",
+        "abbreviation": "ILL",
+        "links": [
+          {
+            "href": "https://www.espn.com/mens-college-basketball/team/_/id/356/illinois-fighting-illini",
+            "text": "Clubhouse"
+          }
+        ],
+        "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png",
+        "logos": [
+          {
+            "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png",
+            "width": 500,
+            "height": 500,
+            "alt": "",
+            "rel": [
+              "full"
+            ],
+            "lastUpdated": "2025-12-23T01:44Z"
+          }
+        ]
+      },
+      "records": []
+    }
+  ],
+  "news": {
+    "header": "Men's College Basketball News",
+    "link": {
+      "language": "en",
+      "rel": [
+        "index"
+      ],
+      "href": "https://www.espn.com/mens-college-basketball/",
+      "text": "All NCAAM News",
+      "shortText": "All News",
+      "isExternal": false,
+      "isPremium": false
+    },
+    "articles": [
+      {
+        "id": 50336401,
+        "nowId": "1-50336401",
+        "contentKey": "50336401-1-5-1",
+        "dataSourceIdentifier": "ac574f9b80343",
+        "type": "HeadlineNews",
+        "headline": "LSU lands 5-star center Xavier Young for class of 2027",
+        "description": "Five-star center Xavier Young has committed to LSU and plans to reclassify into the 2027 class. The 16-year-old will need to spend at least two years in college before he's eligible for the NBA draft.",
+        "lastModified": "2026-10-31T17:52:04Z",
+        "published": "2026-10-31T17:52:04Z",
+        "images": [
+          {
+            "dataSourceIdentifier": "73be11d5deaeb",
+            "id": 25879997,
+            "type": "header",
+            "name": "LSU Generic Basketball [1296x729]",
+            "credit": "LSU Athletics",
+            "height": 729,
+            "width": 1296,
+            "url": "https://a.espncdn.com/photo/2019/0129/r495195_1296x729_16-9.jpg"
+          },
+          {
+            "type": "Media",
+            "name": "LSU lands 5-star center Xavier Young, now has 2027's top class",
+            "caption": "LSU lands 5-star center Xavier Young, now has 2027's top class",
+            "height": 324,
+            "width": 576,
+            "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/1031/ss_20261031_120135065_3717998/ss_20261031_120135065_3717998.jpg"
+          }
+        ],
+        "categories": [
+          {
+            "id": 9576,
+            "type": "league",
+            "uid": "s:40~l:41",
+            "guid": "11965179-4504-3b99-983e-83ea0e36d5f3",
+            "description": "NCAA Men's Basketball",
+            "sportId": 41,
+            "leagueId": 41,
+            "league": {
+              "id": 41,
+              "description": "NCAA Men's Basketball",
+              "abbreviation": "NCAAM",
+              "links": {
+                "mobile": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                },
+                "web": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": 3368,
+            "type": "team",
+            "uid": "s:40~l:41~t:99",
+            "guid": "0082bd85-3d3b-7d16-f176-b72443a93398",
+            "description": "LSU Tigers",
+            "sportId": 41,
+            "teamId": 99,
+            "team": {
+              "id": 99,
+              "description": "LSU Tigers",
+              "abbreviation": "LSU",
+              "shortDisplayName": "LSU",
+              "links": {
+                "mobile": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/99/lsu-tigers"
+                  }
+                },
+                "web": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/99/lsu-tigers"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": 409224,
+            "type": "topic",
+            "guid": "52313677-19f8-b106-ec91-d8d17e6087fe",
+            "description": "news",
+            "sportId": 0,
+            "topicId": 781
+          },
+          {
+            "id": 701833,
+            "type": "contributor",
+            "guid": "21d6b480-a77e-3151-9e69-227ad7836c9a",
+            "description": "Jeff Borzello",
+            "slug": "jeff-borzello",
+            "contributor": {
+              "id": 2392,
+              "description": "Jeff Borzello"
+            }
+          }
+        ],
+        "byline": "Jeff Borzello and Paul Biancardi",
+        "links": {
+          "api": {
+            "self": {
+              "href": "https://content.core.api.espn.com/v1/sports/news/50336401"
+            }
+          },
+          "app": {
+            "sportscenter": {
+              "href": "sportscenter://x-callback-url/showStory?uid=50336401"
+            }
+          },
+          "mobile": {
+            "href": "http://m.espn.go.com/ncb/story?storyId=50336401"
+          },
+          "web": {
+            "href": "https://www.espn.com/mens-college-basketball/story/_/id/50336401/lsu-lands-5-star-center-xavier-young-class-2027"
+          }
+        },
+        "premium": false
+      },
+      {
+        "id": 50334084,
+        "nowId": "1-50334084",
+        "contentKey": "50334084-1-22-1",
+        "dataSourceIdentifier": "56dc2fd2b9fb9",
+        "type": "Preview",
+        "headline": "Northern Illinois plays Grambling in Rock Hill, South Carolina",
+        "description": "Grambling Tigers vs. Northern Illinois Huskies",
+        "lastModified": "2026-10-31T08:44:00Z",
+        "published": "2026-10-31T08:44:00Z",
+        "images": [
+          {
+            "type": "stitcher",
+            "name": "espn.all.awayhome.16x9.1",
+            "ratio": "16x9",
+            "height": 173,
+            "width": 308,
+            "url": "https://s.espncdn.com/stitcher/sports/basketball/mens-college-basketball/events/401920912.png?templateId=espn.all.awayhome.16x9.1"
+          }
+        ],
+        "categories": [
+          {
+            "id": 9576,
+            "type": "league",
+            "uid": "s:40~l:41",
+            "guid": "11965179-4504-3b99-983e-83ea0e36d5f3",
+            "description": "NCAA Men's Basketball",
+            "sportId": 41,
+            "leagueId": 41,
+            "league": {
+              "id": 41,
+              "description": "NCAA Men's Basketball",
+              "abbreviation": "NCAAM",
+              "links": {
+                "mobile": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                },
+                "web": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": 3289,
+            "type": "team",
+            "uid": "s:40~l:41~t:2459",
+            "guid": "10daf0ea-9f4e-e0d6-4468-43afdafbd73e",
+            "description": "Northern Illinois Huskies",
+            "sportId": 41,
+            "teamId": 2459,
+            "team": {
+              "id": 2459,
+              "description": "Northern Illinois Huskies",
+              "abbreviation": "NIU",
+              "shortDisplayName": "N Illinois",
+              "links": {
+                "mobile": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/2459/northern-illinois-huskies"
+                  }
+                },
+                "web": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/2459/northern-illinois-huskies"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "event",
+            "uid": "s:40~l:41~e:401920912",
+            "guid": "6e44064a-0294-3221-aacf-2680ca21504c",
+            "description": "Grambling Tigers @ Northern Illinois Huskies",
+            "eventId": 401920912,
+            "event": {
+              "id": 401920912,
+              "sport": "basketball",
+              "league": "mens-college-basketball",
+              "description": "Grambling Tigers @ Northern Illinois Huskies"
+            }
+          }
+        ],
+        "links": {
+          "api": {
+            "self": {
+              "href": "https://content.core.api.espn.com/v1/sports/news/50334084"
+            }
+          },
+          "app": {
+            "sportscenter": {
+              "href": "sportscenter://x-callback-url/showStory?uid=50334084"
+            }
+          },
+          "mobile": {
+            "href": "http://m.espn.go.com/ncb/story?storyId=50334084"
+          },
+          "web": {
+            "href": "http://www.espn.com/ncb/preview?gameId=401920912"
+          }
+        },
+        "premium": false
+      }
+    ]
+  },
+  "plays": [
+    {
+      "id": "401825532119375734",
+      "sequenceNumber": "119375734",
+      "type": {
+        "id": "615",
+        "text": "Jumpball"
+      },
+      "text": "Jump Ball won by Illinois",
+      "awayScore": 0,
+      "homeScore": 0,
+      "period": {
+        "number": 1,
+        "displayValue": "1st Half"
+      },
+      "clock": {
+        "displayValue": "19:59"
+      },
+      "scoringPlay": false,
+      "scoreValue": 0,
+      "team": {
+        "id": "356"
+      },
+      "participants": [
+        {
+          "athlete": {
+            "id": "5214642"
+          }
+        }
+      ],
+      "wallclock": "2026-02-22T01:06:38Z",
+      "shootingPlay": false,
+      "coordinate": {
+        "x": 25,
+        "y": 0
+      },
+      "pointsAttempted": 0,
+      "shortDescription": "Jump Ball"
+    }
+  ],
+  "winprobability": [
+    {
+      "homeWinPercentage": 0.316,
+      "tiePercentage": 0,
+      "playId": "401825532119375733"
+    }
+  ],
+  "header": {
+    "id": "401825532",
+    "uid": "s:40~l:41~e:401825532",
+    "season": {
+      "year": 2026,
+      "current": false,
+      "type": 2
+    },
+    "timeValid": true,
+    "competitions": [
+      {
+        "id": "401825532",
+        "uid": "s:40~l:41~e:401825532~c:401825532",
+        "date": "2026-02-22T01:00Z",
+        "neutralSite": false,
+        "conferenceCompetition": true,
+        "boxscoreAvailable": true,
+        "commentaryAvailable": false,
+        "liveAvailable": false,
+        "shotChartAvailable": true,
+        "timeoutsAvailable": false,
+        "possessionArrowAvailable": false,
+        "onWatchESPN": false,
+        "recent": false,
+        "wallclockAvailable": true,
+        "boxscoreSource": "full",
+        "playByPlaySource": "full",
+        "competitors": [
+          {
+            "id": "356",
+            "uid": "s:40~l:41~t:356",
+            "order": 1,
+            "homeAway": "away",
+            "winner": false,
+            "team": {
+              "id": "356",
+              "guid": "d30fbdb4-49e3-2c6e-2432-7efc892c770c",
+              "uid": "s:40~l:41~t:356",
+              "location": "Illinois",
+              "name": "Fighting Illini",
+              "nickname": "Illinois",
+              "abbreviation": "ILL",
+              "displayName": "Illinois Fighting Illini",
+              "color": "ff5f05",
+              "alternateColor": "13294b",
+              "logos": [
+                {
+                  "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png",
+                  "width": 500,
+                  "height": 500,
+                  "alt": "",
+                  "rel": [
+                    "full"
+                  ],
+                  "lastUpdated": "2025-12-23T01:44Z"
+                }
+              ],
+              "groups": {
+                "id": "7",
+                "parent": {
+                  "id": "50",
+                  "name": "NCAA Division I",
+                  "slug": "ncaa-division-i"
+                },
+                "isConference": true,
+                "slug": "big-ten-conference"
+              },
+              "links": [
+                {
+                  "rel": [
+                    "clubhouse"
+                  ],
+                  "href": "https://www.espn.com/mens-college-basketball/team/_/id/356/illinois-fighting-illini",
+                  "text": "Clubhouse"
+                }
+              ]
+            },
+            "score": "94",
+            "linescores": [
+              {
+                "displayValue": "50"
+              }
+            ],
+            "record": [
+              {
+                "type": "total",
+                "summary": "22-6",
+                "displayValue": "22-6"
+              }
+            ],
+            "possession": false,
+            "rank": 10
+          }
+        ],
+        "status": {
+          "type": {
+            "id": "3",
+            "name": "STATUS_FINAL",
+            "state": "post",
+            "completed": true,
+            "description": "Final",
+            "detail": "Final/OT",
+            "shortDetail": "Final/OT",
+            "altDetail": "OT"
+          }
+        },
+        "broadcasts": [
+          {
+            "type": {
+              "id": "1",
+              "shortName": "TV"
+            },
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "shortName": "Fox"
+            },
+            "lang": "en",
+            "region": "us",
+            "isNational": true
+          }
+        ],
+        "groups": {
+          "id": "7",
+          "name": "Big Ten Conference",
+          "abbreviation": "big10",
+          "shortName": "Big Ten",
+          "midsizeName": "Big Ten"
+        },
+        "boxscoreMinutes": true
+      }
+    ],
+    "links": [
+      {
+        "rel": [
+          "summary"
+        ],
+        "href": "https://www.espn.com/mens-college-basketball/game/_/gameId/401825532/illinois-ucla",
+        "text": "Gamecast",
+        "shortText": "Summary",
+        "isExternal": false,
+        "isPremium": false
+      }
+    ],
+    "week": 16,
+    "league": {
+      "id": "41",
+      "uid": "s:40~l:41",
+      "name": "NCAA Men's Basketball",
+      "abbreviation": "NCAAM",
+      "shortName": "NCAAM",
+      "midsizeName": "NCAAM Basketball",
+      "slug": "mens-college-basketball",
+      "isTournament": false,
+      "links": [
+        {
+          "rel": [
+            "index"
+          ],
+          "href": "https://www.espn.com/mens-college-basketball/",
+          "text": "Index"
+        }
+      ],
+      "logos": [
+        {
+          "href": "https://a.espncdn.com/redesign/assets/img/icons/NCAASports_MensBasketball.png",
+          "rel": [
+            "full"
+          ]
+        }
+      ]
+    }
+  },
+  "article": {
+    "id": 48001404,
+    "nowId": "1-48001404",
+    "contentKey": "48001404-1-21-1",
+    "dataSourceIdentifier": "c3845ba605b3f",
+    "publishedkey": "ncb401825532",
+    "type": "Recap",
+    "gameId": "401825532",
+    "headline": "Dent’s late layup in OT lifts UCLA past No. 10 Illinois 95-94 after 23-point comeback",
+    "description": "— Donovan Dent hit a go-ahead layup with 1 second remaining in overtime, lifting UCLA over No. 10 Illinois 95-94 on Saturday night after the Bruins rallied from a 23-point, first-half deficit.",
+    "linkText": "Dent’s late layup in OT lifts UCLA past No. 10 Illinois 95-94 after 23-point comeback",
+    "categorized": "2026-02-22T06:52:42Z",
+    "originallyPosted": "2026-02-22T03:53:59Z",
+    "lastModified": "2026-02-22T03:54:02Z",
+    "published": "2026-02-22T03:53:59Z",
+    "section": "Men's College Basketball",
+    "source": "AP",
+    "images": [
+      {
+        "type": "Media",
+        "name": "Mick Cronin credits UCLA players on winning sequence",
+        "caption": "UCLA coach Mick Cronin credits his players for executing the right plays at the end of their overtime win over Illinois. ",
+        "height": 324,
+        "width": 576,
+        "url": "https://a.espncdn.com/media/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.jpg"
+      }
+    ],
+    "video": [
+      {
+        "id": 48002629,
+        "dataSourceIdentifier": "b2a3c0705a3ff",
+        "cerebroId": "699aa6f0177b157a4e230f4a",
+        "pccId": "0a218eda-0a5e-4831-a2f8-2c64d512bfd3",
+        "source": "espn",
+        "headline": "Mick Cronin credits UCLA players on winning sequence",
+        "shortHeadline": "Mick Cronin credits UCLA players on winning sequence",
+        "caption": "UCLA coach Mick Cronin credits his players for executing the right plays at the end of their overtime win over Illinois. ",
+        "title": "Mick Cronin credits UCLA players on winning sequence",
+        "description": "UCLA coach Mick Cronin credits his players for executing the right plays at the end of their overtime win over Illinois. ",
+        "shortDescription": "UCLA coach Mick Cronin credits his players for executing the right plays at the end of their overtime win over Illinois. ",
+        "lastModified": "2026-02-22T06:52:41Z",
+        "originalPublishDate": "2026-02-22T06:49:21Z",
+        "premium": false,
+        "syndicatable": true,
+        "duration": 96,
+        "videoRatio": "16:9,9:16",
+        "timeRestrictions": {
+          "embargoDate": "2026-02-22T06:49:20Z",
+          "expirationDate": "2038-01-01T04:59:59Z"
+        },
+        "deviceRestrictions": {
+          "devices": [
+            "settop"
+          ],
+          "type": "whitelist"
+        },
+        "gameId": 401825532,
+        "thumbnail": "https://a.espncdn.com/media/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.jpg",
+        "images": [
+          {
+            "name": "Poster Image",
+            "caption": "",
+            "alt": "",
+            "credit": "",
+            "height": 324,
+            "width": 576,
+            "url": "https://media.video-cdn.espn.com/images/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.jpg"
+          }
+        ],
+        "posterImages": {
+          "default": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_default.jpg",
+            "width": 576,
+            "height": 324
+          },
+          "full": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.jpg"
+          },
+          "square": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_1x1.jpg"
+          },
+          "vertical": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_9x16.jpg"
+          },
+          "verticalFirstFrame": {
+            "href": "https://service-pkgespn.akamaized.net/opp/img/espn/9x16/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/thumb-1-w406-h720-f4.jpg"
+          },
+          "wide": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_5x2.jpg"
+          }
+        },
+        "links": {
+          "api": {
+            "artwork": {
+              "href": "https://artwork.api.espn.com/artwork/collections/media/0a218eda-0a5e-4831-a2f8-2c64d512bfd3"
+            },
+            "self": {
+              "href": "https://content.core.api.espn.com/v1/video/clips/48002629"
+            }
+          },
+          "mobile": {
+            "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629",
+            "alert": {
+              "href": "https://m.espn.com/general/video/videoAlert?vid=48002629"
+            },
+            "progressiveDownload": {
+              "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629"
+            },
+            "source": {
+              "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.mp4"
+            },
+            "streaming": {
+              "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629"
+            }
+          },
+          "source": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_360p30_1464k.mp4",
+            "HD": {
+              "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_720p30_2896k.mp4"
+            },
+            "HLS": {
+              "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8",
+              "9x16": {
+                "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/9x16/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+              },
+              "HD": {
+                "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+              },
+              "cmaf": {
+                "href": "https://service-pkgespn.akamaized.net/opp/cmaf/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8",
+                "9x16": {
+                  "href": "https://service-pkgespn.akamaized.net/opp/cmaf/espn/9x16/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+                }
+              },
+              "shield": {
+                "href": "https://watch.auth.api.espn.com/video/auth/media/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset"
+              }
+            },
+            "flash": {
+              "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.smil"
+            },
+            "full": {
+              "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_360p30_1464k.mp4"
+            },
+            "hds": {
+              "href": "https://hds.video-cdn.espn.com/z/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_rel.smil/manifest.f4m"
+            },
+            "mezzanine": {
+              "href": "https://media.video-origin.espn.com/espnvideo/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.mp4"
+            }
+          },
+          "sportscenter": {
+            "href": "sportscenter://x-callback-url/showVideo?videoID=48002629&videoDSI=b2a3c0705a3ff"
+          },
+          "web": {
+            "href": "https://www.espn.com/video/clip?id=48002629",
+            "self": {
+              "href": "https://www.espn.com/video/clip?id=48002629",
+              "dsi": {
+                "href": "https://www.espn.com/video/clip?id=b2a3c0705a3ff"
+              }
+            }
+          }
+        },
+        "categories": [
+          {
+            "id": 9576,
+            "type": "league",
+            "uid": "s:40~l:41",
+            "guid": "11965179-4504-3b99-983e-83ea0e36d5f3",
+            "description": "NCAA Men's Basketball",
+            "sportId": 41,
+            "leagueId": 41,
+            "league": {
+              "id": 41,
+              "description": "NCAA Men's Basketball",
+              "abbreviation": "NCAAM",
+              "links": {
+                "mobile": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                },
+                "web": {
+                  "leagues": {
+                    "href": "https://www.espn.com/mens-college-basketball/"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": 3346,
+            "type": "team",
+            "uid": "s:40~l:41~t:26",
+            "guid": "90520a70-9714-8c22-a25d-f33f79c455a2",
+            "description": "UCLA Bruins",
+            "sportId": 41,
+            "teamId": 26,
+            "team": {
+              "id": 26,
+              "description": "UCLA Bruins",
+              "abbreviation": "UCLA",
+              "shortDisplayName": "UCLA",
+              "links": {
+                "mobile": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/26/ucla-bruins"
+                  }
+                },
+                "web": {
+                  "teams": {
+                    "href": "https://www.espn.com/mens-college-basketball/team/_/id/26/ucla-bruins"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "event",
+            "uid": "s:40~l:41~e:401825532",
+            "guid": "a9654944-0319-39a7-b202-b23326abf734",
+            "description": "Illinois Fighting Illini @ UCLA Bruins",
+            "eventId": 401825532,
+            "event": {
+              "id": 401825532,
+              "sport": "basketball",
+              "league": "mens-college-basketball",
+              "description": "Illinois Fighting Illini @ UCLA Bruins",
+              "links": {
+                "mobile": {
+                  "event": {
+                    "href": "https://www.espn.com/mens-college-basketball/game/_/gameId/401825532"
+                  }
+                },
+                "web": {
+                  "event": {
+                    "href": "https://www.espn.com/mens-college-basketball/game/_/gameId/401825532"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "ad": {
+          "bundle": "sportscenter",
+          "sport": "ncb"
+        },
+        "contributingPartner": "wsc",
+        "contributingSystem": "wsc",
+        "tracking": {
+          "coverageType": "PressConference",
+          "leagueName": "NCAA Men's Basketball",
+          "program": "NCAA Mens Basketball",
+          "sportName": "basketball",
+          "trackingId": "dm_NCB_mick_cronin_credits_ucla_players_on_winning_sequence",
+          "trackingName": "COM_NCB Interview (Mick Cronin credits UCLA players on winning sequence) 2026/02/22"
+        }
+      }
+    ],
+    "categories": [
+      {
+        "id": 9576,
+        "type": "league",
+        "uid": "s:40~l:41",
+        "guid": "11965179-4504-3b99-983e-83ea0e36d5f3",
+        "description": "NCAA Men's Basketball",
+        "sportId": 41,
+        "leagueId": 41,
+        "league": {
+          "id": 41,
+          "description": "NCAA Men's Basketball",
+          "abbreviation": "NCAAM",
+          "links": {
+            "mobile": {
+              "leagues": {
+                "href": "https://www.espn.com/mens-college-basketball/"
+              }
+            },
+            "web": {
+              "leagues": {
+                "href": "https://www.espn.com/mens-college-basketball/"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 3346,
+        "type": "team",
+        "uid": "s:40~l:41~t:26",
+        "guid": "90520a70-9714-8c22-a25d-f33f79c455a2",
+        "description": "UCLA Bruins",
+        "sportId": 41,
+        "teamId": 26,
+        "team": {
+          "id": 26,
+          "description": "UCLA Bruins",
+          "abbreviation": "UCLA",
+          "shortDisplayName": "UCLA",
+          "links": {
+            "mobile": {
+              "teams": {
+                "href": "https://www.espn.com/mens-college-basketball/team/_/id/26/ucla-bruins"
+              }
+            },
+            "web": {
+              "teams": {
+                "href": "https://www.espn.com/mens-college-basketball/team/_/id/26/ucla-bruins"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "event",
+        "uid": "s:40~l:41~e:401825532",
+        "guid": "a9654944-0319-39a7-b202-b23326abf734",
+        "description": "Illinois Fighting Illini @ UCLA Bruins",
+        "eventId": 401825532,
+        "event": {
+          "id": 401825532,
+          "sport": "basketball",
+          "league": "mens-college-basketball",
+          "description": "Illinois Fighting Illini @ UCLA Bruins",
+          "links": {
+            "mobile": {
+              "event": {
+                "href": "https://www.espn.com/mens-college-basketball/game/_/gameId/401825532"
+              }
+            },
+            "web": {
+              "event": {
+                "href": "https://www.espn.com/mens-college-basketball/game/_/gameId/401825532"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "keywords": [
+      "NCAA Men's Basketball"
+    ],
+    "story": "LOS ANGELES -- — <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/5107782/donovan-dent\">Donovan Dent</a> hit a go-ahead layup with 1 second remaining in overtime, lifting UCLA over No. 10 Illinois 95-94 on Saturday night after the Bruins rallied from a 23-point, first-half deficit.\n\n\r\n              Fans stormed the court in celebration at the buzzer. It was UCLA’s biggest comeback since rallying from 19 points down in a 90-83 victory over Oregon on Feb. 23, 2019, at home.\n\n\r\n              The Illini were favored by 7.5 points, according to  Sportsbook.\n\n\r\n              <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/3955263/eric-dailey\">Eric Dailey</a> Jr. led six Bruins in double figures with 20 points. <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/5105626/tyler-bilodeau\">Tyler Bilodeau</a> had 18 points and <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/5060706/trent-perry\">Trent Perry</a> 17.\n\n\r\n              Freshman <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/5254165/keaton-wagler\">Keaton Wagler</a> grabbed an offensive rebound and scored with 4.9 seconds remaining to put Illinois in front, 94-93, before Dent capped UCLA's comeback.\n\n\r\n              Neither team led by more than two points in the extra session.\n\n\r\n              Wagler had 19 points — making all eight of his free throws — eight rebounds and six assists.\n\n\r\n              The Bruins (18-9, 10-6 Big Ten) improved to 15-1 at home.\n\n\r\n              Making their first visit to Pauley Pavilion since 1997, the Illini (22-6, 13-4) were coming off <a href=\"https://apnews.com/article/illinois-usc-basketball-score-8ebc534b2b5ee3ee8536c871ecfa9005\">a 36-point victory</a> at Southern California, their largest in a Big Ten road game in 80 years, and had won 14 of 16.\n\n\r\n              UCLA erased an 11-point deficit early in the second half with three 3-pointers and took its first lead of the game on <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/4711304/xavier-booker\">Xavier Booker</a>'s basket, 60-58.\n\n\r\n              From there, the game was tied six times and the teams traded one-point leads.\n\n\r\n              Bilodeau hit a 3-pointer and Dailey made one of two free throws to keep UCLA ahead, 78-73.\n\n\r\n              The Illini outscored the Bruins 13-8 down the stretch, with Wagler making two free throws to tie it at 86-all. Dent missed a potential winning 3-pointer with 1 second left in regulation.\n\n\r\n              The Illini outrebounded the Bruins 43-27, including 20-8 on the offensive glass.\n\n\r\n              Ahead by three, the Illini ran off 20 straight points — hitting five 3-pointers — to take their largest lead, 33-10. UCLA missed 11 shots during its six-minute drought.\n\n\r\n              The Bruins outscored Illinois 33-17 to end the first half trailing 50-43. Booker had 10 points, Perry eight and <a href=\"http://www.espn.com/mens-college-basketball/player/_/id/5105794/skyy-clark\">Skyy Clark</a> five in the spurt. \n\n\r\n              The victory capped an otherwise lackluster week for the Bruins. They were coming off road losses at Michigan (30 points) and Michigan State (23 points). \n\n\r\n              <hl2>Up next</hl2>\r\n              Illinois: Hosts No. 1 Michigan on Friday.\n\n\r\n              UCLA: Hosts crosstown rival USC on Tuesday.\n\n\r\n              ------\n\n\r\n              Get poll alerts and updates on the AP Top 25 throughout the season. Sign up here and here (AP News mobile app). AP college basketball: https://apnews.com/hub/ap-top-25-college-basketball-poll and https://apnews.com/hub/college-basketball",
+    "allowComments": true,
+    "allowContentReactions": false,
+    "allowSearch": true,
+    "isLiveBlog": false,
+    "links": {
+      "api": {
+        "self": {
+          "href": "https://content.core.api.espn.com/v1/sports/news/48001404"
+        }
+      },
+      "app": {
+        "sportscenter": {
+          "href": "sportscenter://x-callback-url/showStory?uid=48001404"
+        }
+      },
+      "mobile": {
+        "href": "http://m.espn.go.com/ncb/story?storyId=48001404"
+      },
+      "web": {
+        "href": "http://www.espn.com/ncb/recap?gameId=401825532"
+      }
+    },
+    "premium": false
+  },
+  "videos": [
+    {
+      "id": 48002629,
+      "cerebroId": "699aa6f0177b157a4e230f4a",
+      "source": "espn",
+      "headline": "Mick Cronin credits UCLA players on winning sequence",
+      "description": "UCLA coach Mick Cronin credits his players for executing the right plays at the end of their overtime win over Illinois. ",
+      "lastModified": "2026-02-22T06:52:41Z",
+      "originalPublishDate": "2026-02-22T06:49:21Z",
+      "duration": 96,
+      "timeRestrictions": {
+        "embargoDate": "2026-02-22T06:49:20Z",
+        "expirationDate": "2038-01-01T04:59:59Z"
+      },
+      "deviceRestrictions": {
+        "devices": [
+          "settop"
+        ],
+        "type": "whitelist"
+      },
+      "thumbnail": "https://a.espncdn.com/media/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.jpg",
+      "links": {
+        "api": {
+          "artwork": {
+            "href": "https://artwork.api.espn.com/artwork/collections/media/0a218eda-0a5e-4831-a2f8-2c64d512bfd3"
+          },
+          "self": {
+            "href": "https://content.core.api.espn.com/v1/video/clips/48002629"
+          }
+        },
+        "mobile": {
+          "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629",
+          "alert": {
+            "href": "https://m.espn.com/general/video/videoAlert?vid=48002629"
+          },
+          "progressiveDownload": {
+            "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629"
+          },
+          "source": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.mp4"
+          },
+          "streaming": {
+            "href": "https://watch.auth.api.espn.com/video/auth/brightcove/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset?UMADPARAMreferer=https://www.espn.com/video/clip?id=48002629"
+          }
+        },
+        "source": {
+          "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_360p30_1464k.mp4",
+          "HD": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_720p30_2896k.mp4"
+          },
+          "HLS": {
+            "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8",
+            "9x16": {
+              "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/9x16/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+            },
+            "HD": {
+              "href": "https://service-pkgespn.akamaized.net/opp/hls/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+            },
+            "cmaf": {
+              "href": "https://service-pkgespn.akamaized.net/opp/cmaf/espn/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8",
+              "9x16": {
+                "href": "https://service-pkgespn.akamaized.net/opp/cmaf/espn/9x16/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654/playlist.m3u8"
+              }
+            },
+            "shield": {
+              "href": "https://watch.auth.api.espn.com/video/auth/media/0a218eda-0a5e-4831-a2f8-2c64d512bfd3/asset"
+            }
+          },
+          "flash": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.smil"
+          },
+          "full": {
+            "href": "https://media.video-cdn.espn.com/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_360p30_1464k.mp4"
+          },
+          "hds": {
+            "href": "https://hds.video-cdn.espn.com/z/motion/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654_rel.smil/manifest.f4m"
+          },
+          "mezzanine": {
+            "href": "https://media.video-origin.espn.com/espnvideo/wsc/2026/0222/fd6d5314-04b6-4b00-82c3-78291eb31654/fd6d5314-04b6-4b00-82c3-78291eb31654.mp4"
+          }
+        },
+        "sportscenter": {
+          "href": "sportscenter://x-callback-url/showVideo?videoID=48002629&videoDSI=b2a3c0705a3ff"
+        },
+        "web": {
+          "href": "https://www.espn.com/video/clip?id=48002629",
+          "self": {
+            "href": "https://www.espn.com/video/clip?id=48002629",
+            "dsi": {
+              "href": "https://www.espn.com/video/clip?id=b2a3c0705a3ff"
+            }
+          }
+        }
+      },
+      "ad": {
+        "bundle": "sportscenter",
+        "sport": "ncb"
+      },
+      "tracking": {
+        "coverageType": "PressConference",
+        "leagueName": "NCAA Men's Basketball",
+        "program": "NCAA Mens Basketball",
+        "sportName": "basketball",
+        "trackingId": "dm_NCB_mick_cronin_credits_ucla_players_on_winning_sequence",
+        "trackingName": "COM_NCB Interview (Mick Cronin credits UCLA players on winning sequence) 2026/02/22"
+      }
+    }
+  ],
+  "wallclockAvailable": true,
+  "meta": {
+    "gp_topic": "gp-basketball-mens-college-basketball-401825532",
+    "gameSwitcherEnabled": true,
+    "picker_topic": "picker-basketball-mens-college-basketball",
+    "lastUpdatedAt": "2026-02-22T03:39:52Z",
+    "firstPlayWallClock": "2026-02-22T01:06:37Z",
+    "lastPlayWallClock": "2026-02-22T03:39:52Z",
+    "gameState": "post",
+    "syncUrl": "https://client.espncdn.com/fauxcast/stats/41/401825532/en/us/"
+  },
+  "standings": {
+    "fullViewLink": {
+      "text": "Full Standings",
+      "href": "https://www.espn.com/mens-college-basketball/standings"
+    },
+    "header": "2025-26 Standings",
+    "groups": [
+      {
+        "standings": {
+          "entries": [
+            {
+              "team": "Michigan",
+              "link": "https://www.espn.com/mens-college-basketball/team/_/id/130/michigan-wolverines",
+              "id": "130",
+              "uid": "s:40~l:41~t:130",
+              "stats": [
+                {
+                  "id": "0",
+                  "name": "overall",
+                  "abbreviation": "Season",
+                  "displayName": "Team Season Record",
+                  "shortDisplayName": "Season",
+                  "description": "Overall Record",
+                  "type": "total",
+                  "summary": "37-3",
+                  "displayValue": "37-3"
+                },
+                {
+                  "name": "gamesBehind",
+                  "displayName": "Games Back",
+                  "shortDisplayName": "GB",
+                  "description": "Games Back",
+                  "abbreviation": "GB",
+                  "type": "vsconf_gamesbehind",
+                  "value": 0,
+                  "displayValue": "-"
+                }
+              ],
+              "logo": [
+                {
+                  "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png",
+                  "width": 500,
+                  "height": 500,
+                  "alt": "",
+                  "rel": [
+                    "full"
+                  ],
+                  "lastUpdated": "2026-01-08T23:30Z"
+                }
+              ]
+            }
+          ]
+        },
+        "header": "2025-26 Big Ten Conference Standings",
+        "href": "https://www.espn.com/mens-college-basketball/standings/_/group/7",
+        "conferenceHeader": "NCAA Division I",
+        "divisionHeader": "Big Ten Conference",
+        "shortDivisionHeader": "Big Ten"
+      }
+    ],
+    "isSameConference": true
+  }
+}

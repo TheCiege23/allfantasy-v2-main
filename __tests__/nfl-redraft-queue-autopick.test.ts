@@ -109,7 +109,7 @@ describe('autopick-expired route — lockout + fallback chain', () => {
 
   it('filters queue by starter-eligible positions before picking', () => {
     expect(src).toMatch(
-      /eligibleInQueue = filterEntriesByDraftEligiblePositions\(availableInQueue, draftEligiblePositions\)/,
+      /eligibleInQueue = filterEntriesByDraftEligiblePositions\(availableInQueue, draftEligiblePositions, rosterRules\?\.sport\)/,
     )
   })
 
@@ -164,7 +164,7 @@ describe('tryQueueAutoPick — race-aware candidate loop', () => {
 
   it('filters by starter-eligible positions before attempting submitPick', () => {
     expect(src).toMatch(
-      /eligibleQueueCandidates = filterEntriesByDraftEligiblePositions\(queueCandidates, draftEligiblePositions\)/,
+      /eligibleQueueCandidates = filterEntriesByDraftEligiblePositions\(queueCandidates, draftEligiblePositions, rosterRules\?\.sport\)/,
     )
   })
 
