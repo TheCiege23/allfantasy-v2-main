@@ -1654,7 +1654,7 @@ export function MyTeam({ data }: MyTeamProps) {
   }, [data.league.id])
 
   // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
-  const fantraxCollege = data.league.platform.toLowerCase() === 'fantrax' && data.league.sport.toUpperCase() === 'NCAAF'
+  const fantraxCollege = data.league.platform.toLowerCase() === 'fantrax' && data.league.sport?.toUpperCase() === 'NCAAF'
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
   const footballScoring = ['NFL', 'NCAAF'].includes((data.league.sport ?? '').toUpperCase())
