@@ -34,6 +34,16 @@ type PreviewGrade = {
   gradeScope?: 'zombie_future_scoring'
   zombieEligibility?: { status: 'eligible' | 'blocked'; reason?: string }
   zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
+  zombieForecast?: { week: number; teams: Array<{ before: ZombieWeekOutcome; after: ZombieWeekOutcome }> }
+}
+
+type ZombieWeekOutcome = {
+  points: number
+  infected: boolean
+  revived: boolean
+  inventoryAfter: number
+  weeklyWinnings: number
+  eligiblePartners: number
 }
 
 function initials(name: string): string {
@@ -828,6 +838,32 @@ export function TradeCenterModal({
                     <div><dt>{proposerName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.proposer.before} → {serverGrade.zombieInventory.proposer.after}</dd></div>
                     <div><dt>{receiverName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.receiver.before} → {serverGrade.zombieInventory.receiver.after}</dd></div>
                   </dl>
+                </section>
+              )}
+              {serverGrade?.zombieForecast && (
+                <section className="space-y-2 rounded border border-white/10 bg-black/20 p-2 text-xs text-white" data-testid="zombie-weekly-forecast">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Projected matchup · Before → After', es: 'Partido proyectado · Antes → Después' }, language)} · {serverGrade.zombieForecast.week}</h4>
+                  <p className="text-white/70">{pickEnEs({ en: 'One scenario using current roles and inventories, assuming no other changes before the projected week.', es: 'Un escenario con los roles e inventarios actuales, suponiendo que no haya otros cambios antes de la semana proyectada.' }, language)}</p>
+                  {serverGrade.zombieForecast.teams.map(({ before, after }, i) => {
+                    const number = new Intl.NumberFormat(language, { maximumFractionDigits: 2 })
+                    const yesNo = (value: boolean) => value ? pickEnEs({ en: 'Yes', es: 'Sí' }, language) : 'No'
+                    const rows = [
+                      [{ en: 'Matchup points', es: 'Puntos del partido' }, number.format(before.points), number.format(after.points)],
+                      [{ en: 'Infection', es: 'Infección' }, yesNo(before.infected), yesNo(after.infected)],
+                      [{ en: 'Revival', es: 'Reanimación' }, yesNo(before.revived), yesNo(after.revived)],
+                      [{ en: 'Items after settlement', es: 'Objetos tras la resolución' }, before.inventoryAfter, after.inventoryAfter],
+                      [{ en: 'Weekly ledger change', es: 'Cambio semanal en el registro' }, number.format(before.weeklyWinnings), number.format(after.weeklyWinnings)],
+                      [{ en: 'Eligible trade partners after settlement', es: 'Socios elegibles tras la resolución' }, before.eligiblePartners, after.eligiblePartners],
+                    ] as const
+                    return <div key={i}>
+                      <h5 className="font-semibold">{i === 0 ? proposerName : receiverName}</h5>
+                      <dl>{rows.map(([label, from, to]) => (
+                        <div key={label.en} className="flex justify-between gap-2">
+                          <dt>{pickEnEs(label, language)}</dt><dd className="shrink-0 tabular-nums">{from} → {to}</dd>
+                        </div>
+                      ))}</dl>
+                    </div>
+                  })}
                 </section>
               )}
               {(serverGrade?.grade || serverGrade?.gradeScope === 'zombie_future_scoring') && serverGrade?.giveValue != null && serverGrade?.getValue != null ? (
