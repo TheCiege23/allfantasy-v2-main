@@ -6,6 +6,7 @@ import { findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
+import { renderPortfolioAnswer } from '@/lib/chimmy/portfolio/render'
 import { buildMyStartersPlayingContext } from '@/lib/chimmy/tools/myStartersPlayingTool'
 import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjuriesTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
@@ -62,6 +63,7 @@ export type ChimmyToolContext = {
   leagueId: string | null
   userId: string | null
   currentQuestion?: string
+  portfolioBlocked?: boolean
   /**
    * "Start X over Y" calls the engines made during this answer, collected so the route can record
    * the ones the answer actually said (`lib/chimmy-advice/chatStartSitAdvice.ts`) and grade them later
@@ -207,6 +209,14 @@ export const CHIMMY_TOOL_SPECS = [
         required: ['query'],
         additionalProperties: false,
       },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_rosters',
+      description: 'Compare the signed-in user’s own teams across leagues by verified league-relative roster strength, balance, depth, injuries and data coverage. Use for most complete, strongest, weakest or needs-attention roster questions. Needs no selected league. Preserve the supplied horizon, scope and missing-data qualifications; never invent a score or unreported player.',
+      parameters: { type: 'object', properties: {}, required: [] },
     },
   },
   {
@@ -1004,6 +1014,13 @@ export async function executeChimmyTool(
         return renderFaabBidText(plan)
       }
 
+      case 'get_my_rosters': {
+        const { preparePortfolioTurn } = await import('@/lib/chimmy/portfolio/service')
+        if (!ctx.userId) return 'No signed-in user; private rosters were not read.'
+        const turn = await preparePortfolioTurn({ userId: ctx.userId, question: 'Compare my teams' })
+        ctx.portfolioBlocked = turn?.kind !== 'report' || turn.evidence.status === 'blocked'
+        return turn?.kind === 'report' ? renderPortfolioAnswer(turn.evidence, 'deep_analysis') : 'A verified roster comparison could not be completed. Do not invent teams or rankings.'
+      }
       case 'get_my_roster': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [roster, rules, waiver] = await Promise.all([

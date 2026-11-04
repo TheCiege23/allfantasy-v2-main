@@ -33,6 +33,8 @@ import {
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { readFollowUps } from '@/lib/chimmy/followUps'
+import { ChimmyPortfolioCard } from '@/components/chimmy/ChimmyPortfolioCard'
+import { readPortfolioState, readPortfolioEvidence, type PortfolioEvidence } from '@/lib/chimmy/portfolio/types'
 import { drawerFeedbackSurface, type ChimmyFeedbackValue } from '@/lib/chimmy-chat/feedback-events'
 import { questionEntry } from '@/lib/chimmy-context/telemetry/questionEntry'
 import {
@@ -196,6 +198,8 @@ type ChatTurn = {
   /** Brought in from another scope's conversation when the scope changed. */
   carried?: boolean
   /** What to ask next, from the server. Tapping fills the composer; it never sends. */
+  portfolio?: PortfolioEvidence | null
+  portfolioState?: import("@/lib/chimmy/portfolio/types").PortfolioState | null
   followUps?: string[] | null
   /** What this answer did to the plan's included answers, when the caller's plan includes Chimmy. */
   plan?: ChimmyPlanAllowanceView | null
@@ -246,6 +250,7 @@ function carryable(turns: ChatTurn[], fromThread: string): ChatTurn[] {
     id: t.id.startsWith('carried:') ? t.id : `carried:${fromThread}:${t.id}`,
     role: t.role,
     text: t.text,
+    portfolioState: readPortfolioState(t.portfolio?.state ?? t.portfolioState),
     carried: true,
   }))
 }
@@ -456,6 +461,7 @@ type ChimmyEnvelope = {
     staleness?: { staleMinutes?: number | null; warning?: unknown }
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
     /** Validated by `readFollowUps` before anything renders it. */
+    portfolio?: unknown
     followUps?: unknown
     /** The tools a tool-loop answer used, in order. Validated by `readToolsUsed`. */
     toolsUsed?: unknown
@@ -789,6 +795,8 @@ export function ChimmyPanel({
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
           if (attached) form.append('image', attached)
           if (scopeId) form.append('leagueId', scopeId)
+          const priorPortfolio = [...turns].reverse().map(t => readPortfolioState(readPortfolioEvidence(t.portfolio)?.state ?? t.portfolioState)).find(Boolean)
+          if (priorPortfolio) form.append('portfolioState', JSON.stringify(priorPortfolio))
           if (!publicMode && connectedMembers.length > 1) {
             form.append('connectedLeagueIds', JSON.stringify(includedLeagueIds))
           }
@@ -810,7 +818,7 @@ export function ChimmyPanel({
             JSON.stringify(
               turns.slice(-6).map((t) => ({
                 role: t.role === 'chimmy' ? 'assistant' : 'user',
-                content: t.text,
+                content: t.text.slice(0, 4000),
               })),
             ),
           )
@@ -1029,6 +1037,7 @@ export function ChimmyPanel({
             connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
             evidence: readEvidence(payload),
+            portfolio: readPortfolioEvidence(payload.meta?.portfolio),
             bracketEvidence: readBracketEvidence(payload.meta?.bracketEvidence),
             /*
              * Only a well-formed, resolved scenario is kept. The route never sends anything else,
@@ -1274,6 +1283,10 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && readChimmyVerdict(t.verdict) ? <ChimmyVerdictChip verdict={readChimmyVerdict(t.verdict)!} /> : null}
               {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
+              {t.role === 'chimmy' && readPortfolioEvidence(t.portfolio) ? <ChimmyPortfolioCard evidence={readPortfolioEvidence(t.portfolio)!} onEvidenceChange={portfolio => setTurns(all => all.map(x => x.id === t.id ? { ...x, portfolio } : x))} onAsk={(prompt, state) => {
+                setTurns(all => all.map(x => x.id === t.id && x.portfolio ? { ...x, portfolio: { ...x.portfolio, state } } : x))
+                setDraft(prompt)
+              }} /> : null}
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' && readDeepAnalysisPreview(t.analysisPreview) ? (
                 <ChimmyAnalysisPreview preview={readDeepAnalysisPreview(t.analysisPreview)!} busy={busy}

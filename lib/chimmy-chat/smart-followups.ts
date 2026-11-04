@@ -4,6 +4,7 @@ import type { ChimmyFollowUpSuggestion } from '@/lib/chimmy-orchestration/types'
 export type ChimmyFollowUpChip = {
   label: string
   prompt: string
+  portfolioState?: import('@/lib/chimmy/portfolio/types').PortfolioState
   origin: 'contract' | 'orchestration' | 'fallback'
 }
 

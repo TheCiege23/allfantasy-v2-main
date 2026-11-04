@@ -81,6 +81,7 @@ describe('tool specs', () => {
        * from the session — no id crosses the model boundary. Read-only, and it
        * returns roster facts with no projections attached.
        */
+      'get_my_rosters',
       'get_my_roster',
       /*
        * Subtracts the league's own rosters from our published value set. Reads

@@ -42,6 +42,11 @@ const ACROSS_CLOSE: Suggestion = { text: 'Which of my matchups are coin flips th
 
 /** After each tool, what an analyst would ask next — most useful first. */
 const AFTER: Record<string, readonly Suggestion[]> = {
+  get_my_rosters: [
+    { text: 'Which of my teams needs attention first?', repeats: [] },
+    { text: 'Compare my teams for dynasty outlook', repeats: [] },
+    { text: 'Why is that team ahead?', repeats: [] },
+  ],
   get_my_brackets: [BRACKET_DETAIL, BRACKET_IMPACT, BRACKET_LIST],
   get_bracket_entry: [BRACKET_IMPACT, BRACKET_LIST, BRACKET_DETAIL],
   optimize_my_lineup: [MATCHUP, PICKUP, PLAYOFFS],
