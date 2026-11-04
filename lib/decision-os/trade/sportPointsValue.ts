@@ -64,6 +64,7 @@ export type BoardPlayer = {
   aliases: readonly string[]
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
+  categoryStats?: Record<string, number>
   /**
    * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
@@ -111,6 +112,7 @@ export type SportPointsContext = {
   valueKind?: 'points' | 'categories'
   /** In a category league, the categories valued ("PTS, REB, … and TO"). */
   categoryList?: string | null
+  categoryDefinitions?: readonly import('@/lib/category-scoring/types').CategoryDefinition[]
   /**
    * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
    * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.

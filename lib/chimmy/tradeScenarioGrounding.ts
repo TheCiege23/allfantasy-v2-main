@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { renderCategoryTradeImpact } from '@/lib/decision-os/trade/categoryTradeImpact'
+
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
@@ -404,6 +406,7 @@ export async function buildTradeScenario(
           withheld: grade.reason,
         },
     receiptId: receipt.receiptId,
+    ...(grade.categoryImpact ? { categoryImpact: grade.categoryImpact } : {}),
     lineup,
     lineupWeek: impact?.week ?? null,
     lineupUnavailable: lineup ? null : impact?.blockedReason ?? receipt.canonicalError ?? 'The starting lineup could not be priced for this league.',
@@ -526,6 +529,7 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
      * The week and the rules are named in the line itself: this is ONE week under the league's own
      * scoring, and a model left to guess would call it a season rate.
      */
+    ...(s.categoryImpact ? [renderCategoryTradeImpact(s.categoryImpact)] : []),
     s.lineup
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,

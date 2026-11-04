@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
+import { buildCategoryTradeImpact } from './categoryTradeImpact'
 import type { TradeGradeView } from './tradeGrade'
 import {
   loadSportPointsBase,
@@ -53,7 +54,9 @@ export function createSportPointsGrader(
       if (ctx.dynasty && isDynastyGradedSport(ctx.sport)) {
         return gradeSportDynastyDeal({ give, get, ctx: { ...ctx, sport: ctx.sport }, dynasty: ctx.dynasty })
       }
-      return gradeSportPointsDeal({ give, get, ctx })
+      const grade = gradeSportPointsDeal({ give, get, ctx })
+      const categoryImpact = args.league ? buildCategoryTradeImpact(ctx, give, get) : undefined
+      return categoryImpact ? { ...grade, categoryImpact } : grade
     },
   }
 }

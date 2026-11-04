@@ -1307,6 +1307,13 @@ export async function tryDeterministicAnswerDetailed(
    * prefix, which is the right tool when all you have is a string; here reliability is known
    * structurally, so say it directly and do not make a second mechanism re-derive it.
    */
+  if (/\b(?:19|20)\d{2}\b/.test(message) && /\b(?:scores?|results?|who won|games? (?:on|in|from))\b/i.test(message)) {
+    const { answerDatedGameQuestion } = await import('@/lib/chimmy/tools/datedGameAnswer')
+    const historical = await answerDatedGameQuestion(message, resolveSportFromMessage(message))
+    if (historical) return answer(historical)
+    // The historical tools can interpret a season or a named date. The current slate cannot.
+    return null
+  }
   const currentGames = await buildCurrentGamesAnswer(message, safeLocale)
   if (currentGames) {
     return currentGames.reliable ? answer(currentGames.text) : refusal(currentGames.text)

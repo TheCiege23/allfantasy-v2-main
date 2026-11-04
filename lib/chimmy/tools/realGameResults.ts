@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeStatsSport } from '@/lib/chimmy/tools/realStatsTools'
-import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
+import { dedupeFixtures, sameTeam } from '@/lib/sports/dedupeFixtures'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { sanitizeUntrusted } from '@/lib/chimmy/sanitizeUntrusted'
 
@@ -48,6 +48,14 @@ export async function buildRealGameResults(args: Record<string, unknown>, now = 
   })
   if (!rows.length) return 'No stored games matched. Coverage varies by sport and season. Confirm the team name, sport, season or date before concluding that no game took place.'
 
+  if (team) {
+    const matches: string[] = []
+    for (const name of rows.flatMap((row) => [row.homeTeam, row.awayTeam])) {
+      if (name.toLowerCase().includes(team.toLowerCase()) && !matches.some((known) => sameTeam(known, name))) matches.push(name)
+    }
+    if (matches.length > 1) return 'That team name matches multiple clubs: ' +
+      matches.slice(0, 5).map(sanitizeUntrusted).join(', ') + '. Which full team name should I use?'
+  }
   return [
     sport + ' stored real games. Times are UTC. This is a limited result set; provider duplicates may remain if names or times differ. Do not use it to infer a full season record.',
     ...dedupeFixtures(rows).slice(0, 15).map((row) => {

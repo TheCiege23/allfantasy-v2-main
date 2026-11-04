@@ -109,6 +109,7 @@ export type TradeMarketGrade = {
 export type TradeGradeView =
   | {
       graded: true
+      categoryImpact?: import('./categoryTradeImpact').CategoryTradeImpact
       /**
        * For the side that sends `give` — "you" on every viewer surface. On the viewer's own trades, when
        * their roster need was priced, it is the YOUR-TEAM letter (`letterBasis: 'your_team'`); otherwise
@@ -186,6 +187,7 @@ export type TradeGradeView =
     }
   | {
       graded: false
+      categoryImpact?: import('./categoryTradeImpact').CategoryTradeImpact
       /** Why there is no letter, in words a manager can act on. */
       reason: string
       basis: string | null

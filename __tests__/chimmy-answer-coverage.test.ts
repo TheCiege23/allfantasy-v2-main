@@ -9,6 +9,7 @@ const { findMany, findFirst, resolveContext } = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsGame: { findMany }, leagueStoryline: { findFirst } } }))
 vi.mock('@/lib/league-context-engine', () => ({ resolveNormalizedLeagueContext: resolveContext }))
 
+import { answerDatedGameQuestion } from '@/lib/chimmy/tools/datedGameAnswer'
 import { buildRealGameResults } from '@/lib/chimmy/tools/realGameResults'
 import { buildSelectedLeagueRules } from '@/lib/chimmy/tools/selectedLeagueRules'
 import { requiresLeagueGrounding } from '@/lib/chimmy-chat/question-routing'
@@ -37,6 +38,22 @@ describe('Chimmy answer coverage', () => {
     expect(answer).toContain('last reported live; current status unverified')
     expect(answer).toContain('away 0, home 0')
     expect(answer).not.toContain('"source":"other"')
+  })
+
+  it('answers only the requested day and asks which club a partial name means', async () => {
+    findMany.mockResolvedValue([])
+    const missing = await answerDatedGameQuestion('What were the NBA scores on July 31, 2024?', 'NBA')
+    expect(missing).toContain('2024-07-31 UTC. No stored games matched')
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      startTime: { not: null, gte: new Date('2024-07-31'), lt: new Date('2024-08-01') },
+    }) }))
+    findMany.mockResolvedValue([
+      { ...game, homeTeam: 'Los Angeles Lakers' },
+      { ...game, homeTeam: 'Los Angeles Clippers' },
+    ])
+    const ambiguous = await answerDatedGameQuestion('What were the NBA scores for Los Angeles on 2024-07-31?', 'NBA')
+    expect(ambiguous).toContain('Los Angeles Lakers, Los Angeles Clippers')
+    expect(ambiguous).toContain('Which full team name')
   })
 
   it('does not promote missing scores or invalid dates into results', async () => {

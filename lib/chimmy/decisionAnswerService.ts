@@ -1,4 +1,6 @@
 import 'server-only'
+
+import { renderCategoryTradeImpact } from '@/lib/decision-os/trade/categoryTradeImpact'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { screenshotTradeQuestion } from './tradeOfferEvidence'
 import { tradeSeasonOutlook } from './tradeSeasonOutlook'
@@ -49,6 +51,7 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
     `You give ${names(s.give)}; you receive ${names(s.get)} from ${s.partnerTeamName}.`,
     s.value.grade ? `Trade Center grade: ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}.` : `No trade grade: ${s.value.withheld ?? 'league values are incomplete'}.`,
     `League value (${s.value.basis ?? 'league chart'}): ${points(s.value.given)} given, ${points(s.value.received)} received. Coverage: ${s.value.coveragePct}%.`,
+    ...(s.categoryImpact ? [renderCategoryTradeImpact(s.categoryImpact)] : []),
     s.lineup ? `Week ${s.lineupWeek ?? 'unknown'} projected lineup: ${points(s.lineup.before)} before, ${points(s.lineup.after)} after (${points(s.lineup.delta)} point change).` : `Lineup impact unavailable: ${s.lineupUnavailable ?? 'missing projections'}.`,
     ...(s.unpricedExcluded ? [`${s.unpricedExcluded} rostered players have no projection and were excluded from lineup totals.`] : []),
     ...(s.depthChanges ?? []).map(d => `${d.position} roster depth: ${d.before} before, ${d.after} after.`),
@@ -199,6 +202,10 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     }
     if (scenario?.status === 'ready') {
       if ('value' in scenario && imageTrade.assetCount != null && imageTrade.assetCount !== scenario.give.length + scenario.get.length) return gap('screenshot_assets_unresolved', 'I received the screenshot, but not every asset resolved against the league roster. No complete-package verdict was computed.', 'Confirm every player and pick on both sides before deciding.')
+      if ('value' in scenario && scenario.categoryImpact) {
+        return gap('category_team_impact_unverified', renderDecisionScenario(scenario),
+          'Compare the category changes against your team totals and lineup needs before making a trade decision.', scenario)
+      }
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')
       if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.', scenario)

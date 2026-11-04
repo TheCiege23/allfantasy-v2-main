@@ -25,6 +25,8 @@ import {
   type BoardPlayer,
   type SportPointsContext,
 } from '@/lib/decision-os/trade/sportPointsValue'
+import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
+import { renderCategoryTradeImpact } from '@/lib/decision-os/trade/categoryTradeImpact'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { tradeValueSourceOf } from '@/lib/decision-os/trade/valueSource'
@@ -272,6 +274,25 @@ describe('the grader', () => {
     await grader.grade([player('x', 'A')], [player('y', 'B')])
     expect(a).toMatchObject({ graded: false, reason: 'This league scores NBA by categories.' })
     expect(loadBase).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports both category packages using summed attempts and a shared baseline season', async () => {
+    const categoryDefinitions = getCategoryPresetDefinitions('nba_9cat')!
+    const scopedBoard = [
+      p('a', 'Player A', 'C', 9, { sourceSeason: 2025, categoryStats: { pts: 25, fgm: 5, fga: 10, to: 3 } }),
+      p('b', 'Player B', 'C', 6, { sourceSeason: 2025, categoryStats: { pts: 10, fgm: 1, fga: 2, to: 1 } }),
+      p('c', 'Player C', 'PG', 10, { sourceSeason: 2025, categoryStats: { pts: 30, fgm: 9, fga: 20, to: 2 } }),
+    ]
+    const league = { id: 'qa', season: 2026, leagueType: 'redraft', settings: {}, leagueSize: 12 }
+    const grader = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: async () => ({ ok: true, ctx: ctx({ board: scopedBoard, valueKind: 'categories', categoryDefinitions }) }),
+    })!
+    const view = await grader.grade([player('a', 'Player A'), player('b', 'Player B')], [player('c', 'Player C')])
+    expect(view.categoryImpact?.rows.find((row) => row.label === 'FG%')).toMatchObject({
+      give: 0.5, get: 0.45, giveAttempts: 12, getAttempts: 20,
+    })
+    expect(view.categoryImpact?.rows.find((row) => row.label === 'TO')).toMatchObject({ direction: 'lower', give: 4, get: 2 })
+    expect(renderCategoryTradeImpact(view.categoryImpact!)).toContain('The other team gets the reverse')
   })
 
   it('grades through a loaded context', async () => {

@@ -507,7 +507,7 @@ async function finishBoard(args: {
     const perGame = perGameOf(line)
     if (!Number.isFinite(perGame)) continue
     const { stats: _stats, ...player } = line
-    board.push({ ...player, perGame })
+    board.push({ ...player, perGame, ...(valuation.kind === 'categories' ? { categoryStats: _stats } : {}) })
   }
   const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport) })
   if (notReady) return { ok: false, reason: notReady }
@@ -550,6 +550,7 @@ async function finishBoard(args: {
       teams,
       valueKind: valuation.kind,
       categoryList: valuation.kind === 'categories' ? categoryList(valuation.categories) : null,
+      ...(valuation.kind === 'categories' ? { categoryDefinitions: valuation.categories } : {}),
     },
   }
 }

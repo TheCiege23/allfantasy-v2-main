@@ -113,6 +113,7 @@ export type ReadyTradeScenario = {
    * Absent on scenarios sent before 2026-09-27.
    */
   receiptId?: string | null
+  categoryImpact?: import('@/lib/decision-os/trade/categoryTradeImpact').CategoryTradeImpact
   lineup: TradeScenarioLineup | null
   /** The week `lineup` is for (`LEAGUE_WEEK_UNIT`); absent on scenarios sent before 2026-09-17. */
   lineupWeek?: number | null

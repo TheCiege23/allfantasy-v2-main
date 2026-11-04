@@ -27,6 +27,11 @@ const categoryStat = (totals: TeamStatTotals, key: string) => totals[key] ?? tot
  * A category's stat from a stat line — the lookup matchups use, exported so a trade grade valuing projected
  * lines (`lib/decision-os/trade/sportCategoryValue.ts`) reads a category exactly as a weekly matchup does.
  */
+export function readCategoryStat(totals: TeamStatTotals, key: string): number | null {
+  const value = categoryStat(totals, key)
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 export function categoryStatValue(totals: TeamStatTotals, key: string): number {
   const v = categoryStat(totals, key)
   return typeof v === 'number' && Number.isFinite(v) ? v : 0
