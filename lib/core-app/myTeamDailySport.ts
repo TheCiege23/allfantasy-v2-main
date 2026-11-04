@@ -89,6 +89,7 @@ export async function applyDailySportToLineup(
           lookupId: identityByFantraxId.get(id) ?? null,
           team: player.team,
           position: player.position,
+          injuryStatus: player.injuryStatus,
         })),
         now,
       }).catch(() => null),

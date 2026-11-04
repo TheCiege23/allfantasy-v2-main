@@ -59,8 +59,8 @@ describe('applyDailySportToLineup', () => {
     expect(h.collegeOutlook).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       league: { sport: 'NCAAB', season: 2026, settings: league.settings },
       players: [
-        { key: 'fx1', lookupId: 'verified', team: 'Duke', position: 'C' },
-        { key: 'fx2', lookupId: null, team: 'Kansas', position: 'C' },
+        { key: 'fx1', lookupId: 'verified', team: 'Duke', position: 'C', injuryStatus: null },
+        { key: 'fx2', lookupId: null, team: 'Kansas', position: 'C', injuryStatus: null },
       ],
     }))
     expect(players.get('fx1')).toMatchObject({ afProjectedPoints: 36.5, gameContext: '2 games this week' })
