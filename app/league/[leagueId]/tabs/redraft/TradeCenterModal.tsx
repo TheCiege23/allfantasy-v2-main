@@ -845,7 +845,7 @@ export function TradeCenterModal({
                   <h4 className="font-semibold">{pickEnEs({ en: 'Projected matchup · Before → After', es: 'Partido proyectado · Antes → Después' }, language)} · {serverGrade.zombieForecast.week}</h4>
                   <p className="text-white/70">{pickEnEs({ en: 'One scenario using current roles and inventories, assuming no other changes before the projected week.', es: 'Un escenario con los roles e inventarios actuales, suponiendo que no haya otros cambios antes de la semana proyectada.' }, language)}</p>
                   {serverGrade.zombieForecast.teams.map(({ before, after }, i) => {
-                    const number = new Intl.NumberFormat(language === 'es' ? 'es' : 'en', { maximumFractionDigits: 2 })
+                    const number = new Intl.NumberFormat(language, { maximumFractionDigits: 2 })
                     const yesNo = (value: boolean) => value ? pickEnEs({ en: 'Yes', es: 'Sí' }, language) : 'No'
                     const rows = [
                       [{ en: 'Matchup points', es: 'Puntos del partido' }, number.format(before.points), number.format(after.points)],
