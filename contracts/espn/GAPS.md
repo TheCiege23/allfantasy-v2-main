@@ -47,7 +47,10 @@ retained. The scoreboard contains 148 events and the target game; the final summ
 and 29 player rows. Parsed playing-player points sum to 94 and 95, matching the official team
 scores. This resolves the missing-array evidence for this historical game, not provider-wide or
 future/postseason schedule completeness. `__tests__/c2c/espn-captured-campus-scoring.test.ts`
-checks both production parsers against the retained responses.
+checks both production parsers and the current campus points scorer against the retained responses.
+The NCAAB engine's seven default categories omit double-double/triple-double bonuses even though
+a separate scoring-preset catalog lists them; any rule change requires reconciling those settings
+and historical scoring rather than assuming a bonus in this verification.
 
 College postseason schedule evidence (2026-10-30): the committed Rolling Insights 2025-26
 `schedule-season.NCAABB.json` contains 394 postseason games, including the NCAA title game

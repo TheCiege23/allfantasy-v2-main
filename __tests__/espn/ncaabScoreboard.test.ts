@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { matchCollegeScheduleGames, parseEspnCollegeScoreboard } from '@/lib/espn/espnNcaabScoreboard'
 import type { ScheduleGame } from '@/lib/sports-data/riScheduleCache'
-import trimmedProviderCapture from '@/contracts/espn/fixtures/scoreboard.NCAAB.20260221.json'
+import providerCapture from '@/contracts/espn/fixtures/scoreboard.NCAAB.20260221.json'
 const event = (id: string) => ({ id, date: '2026-11-02T00:30:00Z', competitions: [{ status: { type: { state: 'post' } }, competitors: [{ homeAway: 'home', team: { id: '10' } }, { homeAway: 'away', team: { id: '20' } }] }] })
 const game = (gameId: string): ScheduleGame => ({ gameId, day: '2026-11-01', startTime: null, status: 'completed', seasonType: 'regular', eventName: null, replacedBy: null, homeTeamId: '1', awayTeamId: '2' })
 describe('ESPN college game crosswalk', () => {
   it('refuses to treat a key-union capture with trimmed competitors as a complete scoreboard', () => {
-    expect(parseEspnCollegeScoreboard(trimmedProviderCapture).rejected).toBeGreaterThan(0)
+    const first = providerCapture.events[0]
+    const competition = first.competitions[0]
+    const partial = { events: [{ ...first, competitions: [{ ...competition, competitors: competition.competitors.slice(0, 1) }] }] }
+    expect(parseEspnCollegeScoreboard(partial).rejected).toBeGreaterThan(0)
   })
   it('uses Eastern game day and matches both provider team IDs', () => {
     const parsed = parseEspnCollegeScoreboard({ events: [event('100')] })
