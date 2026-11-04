@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { planZombieOutcomeReplay } from '@/lib/zombie/outcomeCorrectionPlanner'
-import { compareBeta2025TradeSlate } from '@/lib/zombie/beta2025CorrectionPlan'
+import { compareBeta2025TradeSlate, compareBeta2025TradeWeeks } from '@/lib/zombie/beta2025CorrectionPlan'
 import type { ZombieSettlementSnapshotV1 } from '@/lib/zombie/weeklySettlementSnapshot'
 
 const base: ZombieSettlementSnapshotV1 = {
@@ -66,6 +66,16 @@ describe('snapshot-based outcome correction plan', () => {
     expect(outcome.after.infections).toEqual([])
     expect(outcome.before.totals.human).toBe(0)
     expect(outcome.after.totals.human).toBe(6)
+    const { snapshot: opening, ...first } = input.before
+    const weeks = compareBeta2025TradeWeeks({
+      zombieLeagueId: input.zombieLeagueId, opening, afterItems: input.afterItems,
+      weeks: [
+        { ...first, afterMatches: input.afterMatches },
+        { ...first, week: 4, matches: [match(95, 90)], afterMatches: [match(90, 95)] },
+      ],
+    })
+    expect(weeks[1]?.before.teams.find(team => team.rosterId === 'human')?.status).toBe('Zombie')
+    expect(weeks[1]?.after.totals.human).toBe(10)
     expect(() => compareBeta2025TradeSlate({
       ...input, before: { ...input.before, matches: [] }, afterMatches: [],
     })).toThrow('one matchup per team')

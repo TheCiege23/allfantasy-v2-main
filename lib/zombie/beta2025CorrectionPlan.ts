@@ -145,6 +145,15 @@ export function compareBeta2025TradeSlate(input: {
   afterMatches: ItemWeekMatchup[]
   afterItems: ReplayItem[]
 }) {
+  return compareTradeSlates(input, input.before.snapshot)
+}
+
+function compareTradeSlates(input: {
+  zombieLeagueId: string
+  before: CorrectionWeekInput
+  afterMatches: ItemWeekMatchup[]
+  afterItems: ReplayItem[]
+}, afterOpening: Snapshot) {
   const { before, afterMatches } = input
   const scheduleKey = (matches: ItemWeekMatchup[]) => matches
     .map(({ matchupId, homeRosterId, awayRosterId }) => JSON.stringify([matchupId, homeRosterId, awayRosterId]))
@@ -172,8 +181,40 @@ export function compareBeta2025TradeSlate(input: {
   })
   return {
     before: project(before),
-    after: project({ ...before, matches: afterMatches, snapshot: { ...before.snapshot, items: input.afterItems } }),
+    after: project({ ...before, matches: afterMatches, snapshot: { ...afterOpening, items: input.afterItems } }),
   }
+}
+
+/** Continue each projected scenario with its own ledger, roles and inventory. */
+export function compareBeta2025TradeWeeks(input: {
+  zombieLeagueId: string
+  opening: Snapshot
+  afterItems: ReplayItem[]
+  weeks: ReadonlyArray<Omit<CorrectionWeekInput, 'snapshot'> & { afterMatches: ItemWeekMatchup[] }>
+}) {
+  if (!input.weeks.length || input.weeks.length > 18) throw new Error('Forecast requires one to eighteen weekly slates.')
+  const results: Array<{ before: ReplayWeek; after: ReplayWeek }> = []
+  const carry = (week: ReplayWeek): Snapshot => ({
+    ...week.snapshot, teams: week.teams, items: week.items, whisperer: week.whisperer,
+    winnings: { policy: 'beta_2025', openingByRoster: week.totals },
+  })
+  let before = input.opening
+  let after = { ...input.opening, items: input.afterItems }
+  for (const week of input.weeks) {
+    const prior = results.at(-1)
+    if (prior && week.week !== prior.before.week + 1) throw new Error('Forecast weeks must be consecutive.')
+    if (prior && [...prior.before.choices, ...prior.after.choices].some(choice => choice.status === 'pending')) {
+      throw new Error('An unresolved manager choice prevents projecting the next week.')
+    }
+    const paired = compareTradeSlates({
+      zombieLeagueId: input.zombieLeagueId, before: { ...week, snapshot: before },
+      afterMatches: week.afterMatches, afterItems: after.items,
+    }, after)
+    results.push(paired)
+    before = carry(paired.before)
+    after = carry(paired.after)
+  }
+  return results
 }
 
 /** Pure, bounded replay of the affected settled range; unsupported intervening actions are explicit holds. */
