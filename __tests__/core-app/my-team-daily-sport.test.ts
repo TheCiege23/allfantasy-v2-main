@@ -11,9 +11,12 @@ vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({
   identity: vi.fn(),
   outlook: vi.fn(),
+  collegeOutlook: vi.fn(),
+  gameLogs: vi.fn().mockResolvedValue([]),
 }))
-vi.mock('@/lib/prisma', () => ({ prisma: { playerIdentityMap: { findMany: h.identity } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { playerIdentityMap: { findMany: h.identity }, playerGameStat: { findMany: h.gameLogs } } }))
 vi.mock('@/lib/projections/dailySportOutlook', () => ({ loadDailySportOutlook: h.outlook }))
+vi.mock('@/lib/projections/finderCollegeSoccerOutlook', () => ({ loadFinderCollegeSoccerOutlook: h.collegeOutlook }))
 
 import { applyDailySportToLineup, dailyGameContext } from '@/lib/core-app/myTeamDailySport'
 import type { LineupPlayer } from '@/lib/core-app/myTeam'
@@ -41,6 +44,32 @@ beforeEach(() => {
 })
 
 describe('applyDailySportToLineup', () => {
+  it('projects Fantrax college basketball only through unambiguous athlete IDs', async () => {
+    h.identity.mockResolvedValue([
+      { id: 'verified', fantraxId: 'fx1' },
+      { id: 'first', fantraxId: 'fx2' },
+      { id: 'second', fantraxId: 'fx2' },
+    ])
+    h.gameLogs.mockResolvedValueOnce([{ playerId: 'verified', gameDate: new Date('2026-11-02T00:00:00Z'), normalizedStatMap: { pts: 14, reb: 0 } }])
+    h.collegeOutlook.mockResolvedValue(weekly({ fx1: { projectedPoints: 36.5, periodGames: 2 } }))
+    const players = new Map([['fx1', row('fx1', 'Duke')], ['fx2', row('fx2', 'Kansas')]])
+    const league = { ...LEAGUE, sport: 'NCAAB' }
+
+    expect(await applyDailySportToLineup(players, league)).toEqual({ kind: 'week', day: null, week: 4 })
+    expect(h.collegeOutlook).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      league: { sport: 'NCAAB', season: 2026, settings: league.settings },
+      players: [
+        { key: 'fx1', lookupId: 'verified', team: 'Duke', position: 'C', injuryStatus: null },
+        { key: 'fx2', lookupId: null, team: 'Kansas', position: 'C', injuryStatus: null },
+      ],
+    }))
+    expect(players.get('fx1')).toMatchObject({ afProjectedPoints: 36.5, gameContext: '2 games this week' })
+    expect(players.get('fx1')?.latestCollegeBoxScore).toEqual({ date: '2026-11-02', stats: [{ key: 'pts', value: 14 }, { key: 'reb', value: 0 }] })
+    expect(players.get('fx2')?.afProjectedPoints).toBeNull()
+    expect(h.outlook).not.toHaveBeenCalled()
+  })
+
+
   it('prices an NHL lineup and gives each row its games, under the league\'s own scoring', async () => {
     h.outlook.mockResolvedValue(weekly({ fx1: { projectedPoints: 11.5, periodGames: 3 }, fx2: { projectedPoints: 6, periodGames: 0 } }))
     const m = new Map([['fx1', row('fx1', 'NJ')], ['fx2', row('fx2', 'NYR')]])
