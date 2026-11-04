@@ -23,7 +23,7 @@ export async function upsertChimmyStagingLeagueFixture(
 ) {
   if (process.env.CHIMMY_STAGING_PROJECT_ID !== 'b3cd0239-9cb1-4c22-9d76-533d91d26f36' ||
       data.userId !== 'bracket-qa-admin' || data.tenantId !== 'chimmy-release-3164-rules-fixture-tenant' ||
-      !['chimmy-3164-qa-points', 'chimmy-3164-qa-categories'].includes(data.id)) {
+      !['chimmy-3164-qa-points', 'chimmy-3164-qa-categories', 'chimmy-qa-sleeper-history'].includes(data.id)) {
     throw new Error('Isolated Chimmy staging fixture scope required')
   }
   const account = await tx.appUser.findFirst({ where: { id: data.userId }, select: { email: true } })

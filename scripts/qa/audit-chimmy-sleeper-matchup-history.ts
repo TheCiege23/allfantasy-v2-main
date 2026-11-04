@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises'
 import { prisma } from '@/lib/prisma'
 import { getLeagueInfo, getLeagueMatchups } from '@/lib/sleeper-client'
 
@@ -13,6 +14,7 @@ async function main() {
       AND EXISTS (SELECT 1 FROM "WeeklyMatchup" w WHERE w."leagueId" = l."platformLeagueId" AND w."seasonYear" = 2026)
     ORDER BY 1 LIMIT ${ROOTS}
   `
+  const manifest: Array<{ leagueId: string; seasonYear: number; week: number; matchupId: number; rosterId: string; pointsFor: number; pointsAgainst: number }> = []
   const seen = new Set<string>()
   const report = new Map<number, { leagues: number; sampledWeeks: number; weeksWithPairedScores: number; weeksMissingFromStore: number; weeksWithDifferentStoredTotals: number }>()
   let unreadableOrInvalidLinks = 0
@@ -44,16 +46,24 @@ async function main() {
         for (const row of matchups) {
           const points = (row as typeof row & { custom_points?: number | null }).custom_points ?? row.points
           if (!Number.isInteger(row.matchup_id) || typeof points !== 'number' || !Number.isFinite(points)) continue
+          if (!Number.isInteger(row.roster_id) || row.roster_id < 1) continue
           const group = pairs.get(row.matchup_id!) ?? []
           group.push({ rosterId: String(row.roster_id), points })
           pairs.set(row.matchup_id!, group)
         }
-        const paired = [...pairs.values()].filter((group) => group.length === 2 &&
-          group[0]!.rosterId !== group[1]!.rosterId && group.some((row) => row.points !== 0)).flat()
+        const pairedGames = [...pairs].filter(([, group]) => group.length === 2 &&
+          group[0]!.rosterId !== group[1]!.rosterId && group.some((row) => row.points !== 0))
+        const paired = pairedGames.flatMap(([, group]) => group)
         if (!paired.length) continue
         summary.weeksWithPairedScores++
         const byRoster = new Map(stored.map((row) => [row.rosterId, row.pointsFor]))
-        if (paired.some((row) => !byRoster.has(row.rosterId))) summary.weeksMissingFromStore++
+        if (paired.some((row) => !byRoster.has(row.rosterId))) {
+          summary.weeksMissingFromStore++
+          for (const [matchupId, pair] of pairedGames) {
+            for (const [i, row] of pair.entries()) manifest.push({ leagueId: prior, seasonYear: season, week,
+              matchupId, rosterId: row.rosterId, pointsFor: row.points, pointsAgainst: pair[1 - i]!.points })
+          }
+        }
         if (paired.some((row) => byRoster.has(row.rosterId) && Math.abs(byRoster.get(row.rosterId)! - row.points) > 0.01)) {
           summary.weeksWithDifferentStoredTotals++
         }
@@ -61,7 +71,15 @@ async function main() {
       report.set(season, summary)
     }
   }
-  console.log(JSON.stringify({ sampledRoots: roots.length, priorLeagues: seen.size, unreadableOrInvalidLinks,
+  const path = process.argv[2]
+  if (path) {
+    const weeks = new Set(manifest.map((row) => [row.leagueId, row.seasonYear, row.week].join(':')))
+    if (weeks.size !== 70 || unreadableOrInvalidLinks || [...report.values()].some((s) => s.weeksWithDifferentStoredTotals)) {
+      throw new Error('The current provider sample differs from the reviewed backfill.')
+    }
+    await writeFile(path, JSON.stringify(manifest), { flag: 'wx' })
+  }
+  console.log(JSON.stringify({ manifestRows: manifest.length, sampledRoots: roots.length, priorLeagues: seen.size, unreadableOrInvalidLinks,
     seasons: [...report].sort(([a], [b]) => a - b).map(([season, counts]) => ({ season, ...counts })) }))
 }
 

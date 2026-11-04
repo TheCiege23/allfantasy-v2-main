@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { assertLeagueMember } from '@/lib/league/league-access'
 import { loadCareerGames } from '@/lib/core-app/careerRecords'
 import { NO_CAREER_FILTER } from '@/lib/core-app/careerModel'
 import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
@@ -190,13 +191,34 @@ async function olderProviderPointWeek(league: { id: string; name: string | null;
   if (season == null || season >= league.season || week == null || nativeWeeklyLeague(league)) return null
   const provider = String(league.platform ?? '').toLowerCase()
   const linked = provider === 'fleaflicker' ? null : await prisma.leagueDynastySeason.findFirst({
-    where: { leagueId: league.id, season }, select: { platformLeagueId: true } })
+    where: { leagueId: league.id, season, ...(provider === 'sleeper' ? { provider: 'sleeper' } : {}) }, select: { platformLeagueId: true } })
   const providerLeagueId = provider === 'fleaflicker' ? league.platformLeagueId : linked?.platformLeagueId
   if (!providerLeagueId) return null
   type Result = { team1: string; team2: string; score1: number; score2: number }
   let pairs: Result[] = []
   try {
-    if (provider === 'mfl') {
+    if (provider === 'sleeper') {
+      if (!/^\d+$/.test(providerLeagueId) || !(await assertLeagueMember(league.id, userId)).ok) return null
+      const rows = await prisma.weeklyMatchup.findMany({
+        where: { leagueId: providerLeagueId, seasonYear: season, week, matchupId: { not: null } },
+        select: { matchupId: true, rosterId: true, pointsFor: true, pointsAgainst: true },
+        orderBy: [{ matchupId: 'asc' }, { rosterId: 'asc' }],
+        take: 200,
+      })
+      if (rows.length === 200) return null
+      const groups = new Map<number, typeof rows>()
+      for (const row of rows) {
+        const group = groups.get(row.matchupId!) ?? []
+        group.push(row)
+        groups.set(row.matchupId!, group)
+      }
+      pairs = [...groups.values()].flatMap((group) => {
+        if (group.length !== 2) return []
+        const [a, b] = group as [typeof rows[number], typeof rows[number]]
+        if (a.pointsAgainst !== b.pointsFor || b.pointsAgainst !== a.pointsFor) return []
+        return [{ team1: a.rosterId, team2: b.rosterId, score1: a.pointsFor, score2: b.pointsFor }]
+      })
+    } else if (provider === 'mfl') {
       const response = await fetchMflScheduleForSync(userId, providerLeagueId, season)
       pairs = response.schedule.filter((row) => row.season === season && row.week === week)
         .flatMap((row) => row.matchups.map((m) => ({ team1: m.franchiseId1, team2: m.franchiseId2,
@@ -236,7 +258,9 @@ async function olderProviderPointWeek(league: { id: string; name: string | null;
   if (!shown.length) return null
   return [`HISTORICAL ${provider.toUpperCase()} FANTASY SCOREBOARD — ${league.name}, ${season} week ${week}.`,
     ...shown.map((pair) => `Team ${pair.team1} ${pair.score1.toFixed(2)}–${pair.score2.toFixed(2)} team ${pair.team2}.`),
-    'Source: season-verified provider matchup response. These are league scores, not box scores; team IDs are not attributed to the current manager.'].join('\n')
+    provider === 'sleeper'
+      ? 'Source: stored Sleeper matchup pairs for the linked season. These are league scores; historical team IDs do not identify your current roster.'
+      : 'Source: season-verified provider matchup response. These are league scores, not box scores; team IDs are not attributed to the current manager.'].join('\n')
 }
 
 async function importedRotoHistory(args: { league: { id: string; name: string | null; sport: string };
