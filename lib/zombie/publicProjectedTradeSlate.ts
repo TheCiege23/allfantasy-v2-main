@@ -4,6 +4,7 @@ import { compareBeta2025TradeWeeks, type CorrectionWeekInput, type ReplayItem, t
 import { itemRole } from './beta2025Items'
 import { buildProjectedZombieSlate } from './projectedWeeklySlate'
 import { capturePublicZombieForecastSnapshot } from './weeklySettlementSnapshot'
+import { projectedZombieCashPayout } from './projectedCashPayout'
 
 type SlateInput = Parameters<typeof buildProjectedZombieSlate>[0]
 
@@ -62,6 +63,9 @@ export async function projectPublicZombieTradeSlate(input: {
   if (projected.some(paired => [...paired.before.choices, ...paired.after.choices].some(choice => choice.status === 'pending'))) return null
   const first = projected[0]!
   const final = projected[projected.length - 1]!
+  const cash = await projectedZombieCashPayout({
+    leagueId: input.leagueId, zombieLeagueId: input.zombieLeagueId, opening: snapshot, weeks: projected,
+  }).catch(() => null)
   return input.affectedRosterIds.map(rosterId => ({
     before: summarize(first.before, rosterId), after: summarize(first.after, rosterId),
     throughWeek: final.before.week,
@@ -70,11 +74,13 @@ export async function projectPublicZombieTradeSlate(input: {
         ledgerBalance: final.before.totals[rosterId],
         eligibleWeeks: projected.filter(paired => itemRole(paired.before.teams.find(team => team.rosterId === rosterId)!.status) !== 'Zombie').length,
         eligiblePartners: summarize(final.before, rosterId).eligiblePartners,
+        cashPayoutCents: cash?.before[rosterId] ?? null,
       },
       after: {
         ledgerBalance: final.after.totals[rosterId],
         eligibleWeeks: projected.filter(paired => itemRole(paired.after.teams.find(team => team.rosterId === rosterId)!.status) !== 'Zombie').length,
         eligiblePartners: summarize(final.after, rosterId).eligiblePartners,
+        cashPayoutCents: cash?.after[rosterId] ?? null,
       },
     },
   }))

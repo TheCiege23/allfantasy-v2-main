@@ -40,7 +40,7 @@ type PreviewGrade = {
   }> }
 }
 
-type ZombiePeriodOutcome = { ledgerBalance: number; eligibleWeeks: number; eligiblePartners: number }
+type ZombiePeriodOutcome = { ledgerBalance: number; eligibleWeeks: number; eligiblePartners: number; cashPayoutCents: number | null }
 
 type ZombieWeekOutcome = {
   points: number
@@ -873,6 +873,9 @@ export function TradeCenterModal({
                         <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Ledger balance', es: 'Saldo del registro' }, language)}</dt><dd>{number.format(season.before.ledgerBalance)} → {number.format(season.after.ledgerBalance)}</dd></div>
                         <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Eligible weeks', es: 'Semanas elegibles' }, language)}</dt><dd>{season.before.eligibleWeeks} → {season.after.eligibleWeeks}</dd></div>
                         <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Partners at end of forecast', es: 'Socios al final del pronóstico' }, language)}</dt><dd>{season.before.eligiblePartners} → {season.after.eligiblePartners}</dd></div>
+                        {season.before.cashPayoutCents != null && season.after.cashPayoutCents != null && (
+                          <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Conditional season cash award (USD)', es: 'Premio condicional de la temporada (USD)' }, language)}</dt><dd>{number.format(season.before.cashPayoutCents / 100)} → {number.format(season.after.cashPayoutCents / 100)}</dd></div>
+                        )}
                       </dl>
                       </>}
                     </div>
