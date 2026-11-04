@@ -1,9 +1,10 @@
 import 'server-only'
 
-import { compareBeta2025TradeSlate, type CorrectionWeekInput, type ReplayItem, type ReplayWeek } from './beta2025CorrectionPlan'
+import { compareBeta2025TradeWeeks, type CorrectionWeekInput, type ReplayItem, type ReplayWeek } from './beta2025CorrectionPlan'
 import { itemRole } from './beta2025Items'
 import { buildProjectedZombieSlate } from './projectedWeeklySlate'
 import { capturePublicZombieForecastSnapshot } from './weeklySettlementSnapshot'
+import { projectedZombieCashPayout } from './projectedCashPayout'
 
 type SlateInput = Parameters<typeof buildProjectedZombieSlate>[0]
 
@@ -13,6 +14,7 @@ export async function projectPublicZombieTradeSlate(input: {
   zombieLeagueId: string
   openingWeek: number
   forecastWeek?: number
+  laterWeeks?: ReadonlyArray<{ week: number; before: SlateInput; afterRosters: SlateInput['rosters'] }>
   before: SlateInput
   afterRosters: SlateInput['rosters']
   affectedRosterIds: readonly string[]
@@ -29,10 +31,18 @@ export async function projectPublicZombieTradeSlate(input: {
   if (!snapshot?.config || input.affectedRosterIds.some(id => !snapshot.teams.some(team => team.rosterId === id))) return null
   const afterItems = input.applyItemTransfers(structuredClone(snapshot.items))
   if (!afterItems) return null
-  const paired = compareBeta2025TradeSlate({
+  const weeks = [{ week: input.forecastWeek ?? input.openingWeek, matches, afterMatches,
+    settledAt: input.settledAt, deadlineAt: input.deadlineAt }]
+  for (const later of input.laterWeeks ?? []) {
+    const matches = buildProjectedZombieSlate(later.before)
+    const afterMatches = buildProjectedZombieSlate({ ...later.before, rosters: later.afterRosters })
+    if (!matches || !afterMatches) return null
+    weeks.push({ week: later.week, matches, afterMatches, settledAt: input.settledAt, deadlineAt: input.deadlineAt })
+  }
+  const projected = compareBeta2025TradeWeeks({
     zombieLeagueId: input.zombieLeagueId,
-    before: { week: input.forecastWeek ?? input.openingWeek, snapshot, matches, settledAt: input.settledAt, deadlineAt: input.deadlineAt },
-    afterMatches,
+    opening: snapshot,
+    weeks,
     afterItems,
   })
   const summarize = (slate: ReplayWeek, rosterId: string) => {
@@ -50,8 +60,28 @@ export async function projectPublicZombieTradeSlate(input: {
     }
   }
   // An unresolved manager choice can change the outcome and the eligible partner pool.
-  if ([...paired.before.choices, ...paired.after.choices].some(choice => choice.status === 'pending')) return null
+  if (projected.some(paired => [...paired.before.choices, ...paired.after.choices].some(choice => choice.status === 'pending'))) return null
+  const first = projected[0]!
+  const final = projected[projected.length - 1]!
+  const cash = await projectedZombieCashPayout({
+    leagueId: input.leagueId, zombieLeagueId: input.zombieLeagueId, opening: snapshot, weeks: projected,
+  }).catch(() => null)
   return input.affectedRosterIds.map(rosterId => ({
-    before: summarize(paired.before, rosterId), after: summarize(paired.after, rosterId),
+    before: summarize(first.before, rosterId), after: summarize(first.after, rosterId),
+    throughWeek: final.before.week,
+    season: {
+      before: {
+        ledgerBalance: final.before.totals[rosterId],
+        eligibleWeeks: projected.filter(paired => itemRole(paired.before.teams.find(team => team.rosterId === rosterId)!.status) !== 'Zombie').length,
+        eligiblePartners: summarize(final.before, rosterId).eligiblePartners,
+        cashPayoutCents: cash?.before[rosterId] ?? null,
+      },
+      after: {
+        ledgerBalance: final.after.totals[rosterId],
+        eligibleWeeks: projected.filter(paired => itemRole(paired.after.teams.find(team => team.rosterId === rosterId)!.status) !== 'Zombie').length,
+        eligiblePartners: summarize(final.after, rosterId).eligiblePartners,
+        cashPayoutCents: cash?.after[rosterId] ?? null,
+      },
+    },
   }))
 }

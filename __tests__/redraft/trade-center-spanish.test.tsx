@@ -224,6 +224,16 @@ describe('redraft Trade Center modal — Spanish, every step', () => {
         zombieInventory: status === 'eligible'
           ? { proposer: { before: 10, after: 32 }, receiver: { before: 32, after: 10 } }
           : undefined,
+        zombieForecast: status === 'eligible' ? { week: 4, teams: [{
+          before: { points: 90, infected: true, revived: false, inventoryAfter: 0, weeklyWinnings: 0, eligiblePartners: 0 },
+          after: { points: 105, infected: false, revived: false, inventoryAfter: 2, weeklyWinnings: 4, eligiblePartners: 3 },
+          throughWeek: 8,
+          season: {
+            before: { ledgerBalance: 2, eligibleWeeks: 0, eligiblePartners: 0, cashPayoutCents: 4900 },
+            after: { ledgerBalance: 6, eligibleWeeks: 5, eligiblePartners: 3, cashPayoutCents: 10000 },
+          },
+        }] } : undefined,
+        dynastyMarket: status === 'eligible' ? { giveValue: 4000, getValue: 4500, asOf: null } : null,
       } }),
     })))
     renderModal({ currentWeek: 3, initialReceiverRosterId: 'r2' })
@@ -235,6 +245,9 @@ describe('redraft Trade Center modal — Spanish, every step', () => {
       expect(await screen.findByText('Elegibilidad Zombie actual verificada')).toBeTruthy()
       expect(screen.getByText('10 → 32')).toBeTruthy()
       expect(screen.getByText('32 → 10')).toBeTruthy()
+      expect(screen.getByText('Hasta la semana proyectada 8')).toBeTruthy()
+      expect(screen.getByText('49 → 100')).toBeTruthy()
+      expect(screen.getByText('Referencia de mercado de jugadores dynasty')).toBeTruthy()
     } else {
       expect(await screen.findByText('Intercambio Zombie bloqueado')).toBeTruthy()
       expect(screen.queryByText('10 → 32')).toBeNull()
