@@ -3,7 +3,7 @@ import { parseEspnCollegeBoxScore } from '@/lib/espn/espnNcaabBoxScore'
 import { fetchEspnCollegeBoxScore } from '@/lib/espn/espnNcaabFetch'
 import { EspnBlockedError } from '@/lib/espn/espnNcaabFetch'
 import { rawNcaab } from '@/__tests__/fixtures/espn-ncaab-summary'
-import trimmedProviderCapture from '@/contracts/espn/fixtures/summary.NCAAB.event401825532.json'
+import providerCapture from '@/contracts/espn/fixtures/summary.NCAAB.event401825532.json'
 
 function measuredFixture() {
   const value = rawNcaab()
@@ -13,7 +13,8 @@ function measuredFixture() {
 }
 describe('ESPN college basketball box score', () => {
   it('does not treat the key-union capture as a complete two-team box', () => {
-    expect(parseEspnCollegeBoxScore(trimmedProviderCapture, '401825532').complete).toBe(false)
+    const partial = { ...providerCapture, boxscore: { ...providerCapture.boxscore, players: providerCapture.boxscore.players.slice(0, 1) } }
+    expect(parseEspnCollegeBoxScore(partial, '401825532').complete).toBe(false)
   })
   it('parses explicit provider IDs, scoring labels, made threes, and DNPs', () => {
     const result = parseEspnCollegeBoxScore(measuredFixture(), '401825532')

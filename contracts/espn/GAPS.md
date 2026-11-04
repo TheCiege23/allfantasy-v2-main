@@ -41,6 +41,17 @@ key paths but dropped array values needed to prove both teams, all stat labels, 
 box-score parsing. The scoreboard capture does not prove daily-slate completeness either.
 E-07 remains open for those semantic checks; do not infer that a zero-event day is complete.
 
+**Owner-authorized recapture, 2026-11-03:** the same scoreboard and summary were captured again via
+`probe.sh` after the owner explicitly approved the exception to the no-repeat rule. Full arrays are
+retained. The scoreboard contains 148 events and the target game; the final summary has two teams
+and 29 player rows. Parsed playing-player points sum to 94 and 95, matching the official team
+scores. This resolves the missing-array evidence for this historical game, not provider-wide or
+future/postseason schedule completeness. `__tests__/c2c/espn-captured-campus-scoring.test.ts`
+checks both production parsers and the current campus points scorer against the retained responses.
+The NCAAB engine's seven default categories omit double-double/triple-double bonuses even though
+a separate scoring-preset catalog lists them; any rule change requires reconciling those settings
+and historical scoring rather than assuming a bonus in this verification.
+
 College postseason schedule evidence (2026-10-30): the committed Rolling Insights 2025-26
 `schedule-season.NCAABB.json` contains 394 postseason games, including the NCAA title game
 on April 6; the existing schedule parser and sync preserve those rows. The cached 2026-27
