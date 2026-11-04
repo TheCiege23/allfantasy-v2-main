@@ -7,7 +7,7 @@ import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
 import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import { Fragment, useEffect, useId, useState } from 'react'
+import { createContext, Fragment, useContext, useEffect, useId, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
@@ -541,7 +541,10 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
 }
 
 /** One side of the projected matchup. */
+const FantraxCollegeProjectionContext = createContext(false)
+
 function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
+  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -560,10 +563,10 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
         </div>
       </div>
       <div className="af-mt-mu-pts af-num">
-        {side.projected != null ? side.projected.toFixed(1) : '—'}
+        {side.projected != null ? `${fantraxCollege ? 'AF ' : ''}${side.projected.toFixed(1)}` : '—'}
       </div>
       {/* AllFantasy's own engine for the same lineup, beside the provider total. */}
-      {side.afProjected != null ? (
+      {!fantraxCollege && side.afProjected != null ? (
         <div className="af-mt-mu-af af-num" title={copy("AllFantasy engine projection, adjusted to this league's scoring")}>
           AF {side.afProjected.toFixed(1)}
         </div>
@@ -765,6 +768,7 @@ function StatusChip({ status }: { status: string | null }) {
  * own scoring could not be applied, and the caveat under the roster says so.
  */
 function Projections({ player }: { player: LineupPlayer }) {
+  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const fmt = (v: number | null) =>
@@ -783,7 +787,7 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title={`${copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
+        title={fantraxCollege ? copy("AllFantasy's own projection engine, adjusted to your league's scoring") : `${copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
           player.projectedPoints != null ? ` · ${copy('standard PPR')} ${player.projectedPoints.toFixed(1)}` : ''
         }`}
       >
@@ -798,7 +802,7 @@ function Projections({ player }: { player: LineupPlayer }) {
         className="af-mt-proj af-mt-proj--engine af-num"
         title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}
       >
-        {fmt(player.afEngineProjectedPoints ?? null)}
+        {fantraxCollege ? null : fmt(player.afEngineProjectedPoints ?? null)}
       </span>
       {/*
         OWN and START are the app's own market, read from every roster we hold.
@@ -854,6 +858,7 @@ const MARKET_COLUMNS_EXPLAINER =
   'start him this week — byes and injuries move it on their own. Both show on wide screens.'
 
 function ProjHeader() {
+  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -864,7 +869,7 @@ function ProjHeader() {
         second, hover-only copy of the same text over the popover itself.
       */}
       <span className="af-label af-mt-projhead--af">
-        {PROJECTION_PROVIDER_LABEL}
+        {fantraxCollege ? 'AF' : PROJECTION_PROVIDER_LABEL}
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
@@ -875,13 +880,13 @@ function ProjHeader() {
           its own wrapper — so the narrow page's `nth-child` rules still hide OWN and START, not AF.
           It explains all four columns: one "?" per header, never one per row.
         */}
-        <InfoTip label={copy('What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
-          <span className="af-info-para">{copy(AF_PTS_EXPLAINER)}</span>
+        <InfoTip label={copy(fantraxCollege ? 'What these columns mean' : 'What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
+          <span className="af-info-para">{copy(fantraxCollege ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</span>
           <span className="af-info-para">{copy(MARKET_COLUMNS_EXPLAINER)}</span>
         </InfoTip>
       </span>
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
-        AF
+        {fantraxCollege ? null : 'AF'}
       </span>
       {/*
         «PROP.» (propiedad) and «TIT.» (titular) in Spanish — the abbreviations Spanish fantasy
@@ -912,6 +917,7 @@ function ProjHeader() {
  * key cannot drift from the tooltips it stands in for.
  */
 function RosterKey() {
+  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -931,8 +937,8 @@ function RosterKey() {
           </div>
         ))}
         <div>
-          <dt>{PROJECTION_PROVIDER_LABEL} · AF</dt>
-          <dd>{copy(AF_PTS_EXPLAINER)}</dd>
+          <dt>{fantraxCollege ? 'AF' : `${PROJECTION_PROVIDER_LABEL} · AF`}</dt>
+          <dd>{copy(fantraxCollege ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</dd>
         </div>
         <div>
           <dt>{m.marketOwn} · {m.marketStart}</dt>
@@ -1525,6 +1531,7 @@ function LineupPeriodChip({ period }: { period: MyTeamData['lineupPeriod'] }) {
 }
 
 function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; bestBall: boolean }) {
+  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -1544,7 +1551,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
   }
   const engineId = useId()
   const standardId = useId()
-  const canCompare = proj != null && (proj.afEngineTotal != null || proj.standardComparable)
+  const canCompare = !fantraxCollege && proj != null && (proj.afEngineTotal != null || proj.standardComparable)
 
   return (
     <div className="af-mt-projgroup" data-compare={compare ? 'true' : 'false'}>
@@ -1559,7 +1566,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
         */}
         <div className="af-label">
           {copy(
-            proj?.defendersModelled
+            fantraxCollege ? 'Projected · AF · your league' : proj?.defendersModelled
               ? bestBall ? 'Listed starters · Sleeper + AF IDP · your league' : 'Projected · Sleeper + AF IDP · your league'
               : bestBall ? 'Listed starters · Sleeper · your league' : 'Projected · Sleeper · your league',
           )}
@@ -1580,7 +1587,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
         AllFantasy's own engine over the same starters — the second projection, at
         the same weight as the provider's so neither reads as the footnote once shown.
       */}
-      <div id={engineId} hidden={!compare} className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
+      <div id={engineId} hidden={!compare || fantraxCollege} className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
         <div className="af-mt-tile-value af-num">
           {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
         </div>
@@ -1595,7 +1602,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
       */}
       <div
         id={standardId}
-        hidden={!compare}
+        hidden={!compare || fantraxCollege}
         className="af-mt-tile af-mt-tile--proj"
         data-missing={proj ? !proj.standardComparable : undefined}
       >
@@ -1647,6 +1654,7 @@ export function MyTeam({ data }: MyTeamProps) {
   }, [data.league.id])
 
   // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
+  const fantraxCollege = data.league.platform.toLowerCase() === 'fantrax' && data.league.sport?.toUpperCase() === 'NCAAF'
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
   const footballScoring = ['NFL', 'NCAAF'].includes((data.league.sport ?? '').toUpperCase())
@@ -1692,6 +1700,7 @@ export function MyTeam({ data }: MyTeamProps) {
       prop threaded through PlayerCell, BenchRow and three call sites —
       which is the version somebody silently half-applies.
     */
+    <FantraxCollegeProjectionContext.Provider value={fantraxCollege}>
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mt">
       <header className="af-frame af-mt-head">
@@ -1921,8 +1930,8 @@ export function MyTeam({ data }: MyTeamProps) {
                 when there ARE numbers — explaining two dashes is noise.
               */}
               {data.nextMatchup.data.you.projected != null ? (
-                <InfoTip label={copy('What the matchup numbers mean')} title={copy('The two numbers')}>
-                  <span className="af-info-para">{copy(MATCHUP_NUMBERS_EXPLAINER)}</span>
+                <InfoTip label={copy('What the matchup numbers mean')} title={copy(fantraxCollege ? 'What the matchup numbers mean' : 'The two numbers')}>
+                  <span className="af-info-para">{copy(fantraxCollege ? "AllFantasy engine projection, adjusted to this league's scoring" : MATCHUP_NUMBERS_EXPLAINER)}</span>
                   <span className="af-info-para">{copy(MATCHUP_COVERAGE_EXPLAINER)}</span>
                 </InfoTip>
               ) : null}
@@ -2174,7 +2183,7 @@ export function MyTeam({ data }: MyTeamProps) {
         every defender standard scoring cannot price. The tile carries the
         explanation; the footnote stays out of it.
       */}
-      {data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
+      {fantraxCollege && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
         <p className="af-mt-footnote">
           {data.projections.data.unprojected === 0
             ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
@@ -2189,6 +2198,7 @@ export function MyTeam({ data }: MyTeamProps) {
       </div>
     </div>
     </PlayerCardLeagueScope>
+    </FantraxCollegeProjectionContext.Provider>
   )
 }
 
