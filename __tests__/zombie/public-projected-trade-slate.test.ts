@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ capture: vi.fn(), compare: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/zombie/weeklySettlementSnapshot', () => ({ capturePublicZombieForecastSnapshot: mocks.capture }))
-vi.mock('@/lib/zombie/beta2025CorrectionPlan', () => ({ compareBeta2025TradeSlate: mocks.compare }))
+vi.mock('@/lib/zombie/beta2025CorrectionPlan', () => ({ compareBeta2025TradeWeeks: mocks.compare }))
 
 import { projectPublicZombieTradeSlate } from '@/lib/zombie/publicProjectedTradeSlate'
 

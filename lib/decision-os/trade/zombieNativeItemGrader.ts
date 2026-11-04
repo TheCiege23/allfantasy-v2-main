@@ -11,6 +11,7 @@ import { zombieItemSwapValue, type ZombieValuationItem } from './zombieItemValue
 import { projectPublicZombieTradeSlate } from '@/lib/zombie/publicProjectedTradeSlate'
 import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { scoringRulesFrom } from './scoringContextFromWorld'
+import { buildProjectedZombieSlate } from '@/lib/zombie/projectedWeeklySlate'
 
 type NativeAsset = {
   assetType: string
@@ -196,62 +197,75 @@ export async function createZombieNativeItemGrader(leagueId: string, previewSeas
         const seats = lineupSeatsFromSettings(league.settings)?.map(seat => seat.eligible)
         const scoring = scoringRulesFrom(league.settings)
         if (!seats?.length || !scoring) return
-        const week = zombie.currentWeek + 1
-        const [matchups, players] = await Promise.all([
-          prisma.redraftMatchup.findMany({ where: { leagueId, seasonId: previewSeasonId, week, status: 'scheduled', isMedianMatchup: false },
-            select: { id: true, homeRosterId: true, awayRosterId: true } }),
-          prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: [...byNativeRosterId.keys()] }, droppedAt: null },
-            select: { rosterId: true, playerId: true, position: true, byeWeek: true, injuryStatus: true, slotType: true } }),
-        ])
-        if (!matchups.length || !players.length) return
-        const schedule = matchups.flatMap(match => {
-          const home = byNativeRosterId.get(match.homeRosterId)
-          const away = match.awayRosterId && byNativeRosterId.get(match.awayRosterId)
-          return home && away ? [{ matchupId: match.id, homeRosterId: home.rosterId, awayRosterId: away.rosterId }] : []
-        })
-        if (schedule.length !== matchups.length) return
-        const ids = [...new Set(players.map(player => player.playerId))]
-        const identities = await prisma.playerIdentityMap.findMany({ where: { OR: [{ id: { in: ids } }, { sleeperId: { in: ids } }] }, select: { id: true, sleeperId: true } })
-        const aliases = new Map<string, Set<string>>()
-        for (const identity of identities) {
-          for (const alias of [identity.id, identity.sleeperId]) {
-            if (!alias) continue
-            const matches = aliases.get(alias) ?? new Set<string>()
-            matches.add(identity.id)
-            aliases.set(alias, matches)
+        const loadWeek = async (week: number) => {
+          const [matchups, players] = await Promise.all([
+            prisma.redraftMatchup.findMany({ where: { leagueId, seasonId: previewSeasonId, week, status: 'scheduled', isMedianMatchup: false },
+              select: { id: true, homeRosterId: true, awayRosterId: true } }),
+            prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: [...byNativeRosterId.keys()] }, droppedAt: null },
+              select: { rosterId: true, playerId: true, position: true, byeWeek: true, injuryStatus: true, slotType: true } }),
+          ])
+          if (!matchups.length || !players.length) return
+          const schedule = matchups.flatMap(match => {
+            const home = byNativeRosterId.get(match.homeRosterId)
+            const away = match.awayRosterId && byNativeRosterId.get(match.awayRosterId)
+            return home && away ? [{ matchupId: match.id, homeRosterId: home.rosterId, awayRosterId: away.rosterId }] : []
+          })
+          if (schedule.length !== matchups.length) return
+          const ids = [...new Set(players.map(player => player.playerId))]
+          const identities = await prisma.playerIdentityMap.findMany({ where: { OR: [{ id: { in: ids } }, { sleeperId: { in: ids } }] }, select: { id: true, sleeperId: true } })
+          const aliases = new Map<string, Set<string>>()
+          for (const identity of identities) {
+            for (const alias of [identity.id, identity.sleeperId]) {
+              if (!alias) continue
+              const matches = aliases.get(alias) ?? new Set<string>()
+              matches.add(identity.id)
+              aliases.set(alias, matches)
+            }
           }
+          const rows = await prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NFL', season: zombie.season, week,
+            playerId: { in: identities.map(identity => identity.id) } }, select: { playerId: true, adjustmentFactors: true } })
+          const projections = new Map(rows.map(row => [row.playerId, row.adjustmentFactors]))
+          if (projections.size !== rows.length) return
+          const { leaguePointsPerGame, readRates } = await import('./guillotineContext')
+          const rosters = new Map(teams.map(team => [team.rosterId, players.filter(player =>
+            byNativeRosterId.get(player.rosterId)?.rosterId === team.rosterId).map(player => {
+              const position = player.position.trim().toUpperCase()
+              const matched = aliases.get(player.playerId)
+              const id = matched?.size === 1 ? [...matched][0]! : null
+              const available = player.byeWeek !== week && !['IR', 'IL', 'TAXI'].includes(player.slotType.toUpperCase()) &&
+                !['OUT', 'IR', 'PUP', 'SUSPENDED'].includes(player.injuryStatus?.toUpperCase() ?? '')
+              return { id: player.playerId, positions: [position], available,
+                points: id ? leaguePointsPerGame(readRates(projections.get(id)), scoring, position) : null }
+            })]))
+          const after = new Map([...rosters].map(([id, roster]) => [id, [...roster]]))
+          const moved = new Set<string>()
+          for (const asset of playerAssets) {
+            const from = rosters.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
+            const fromAfter = after.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
+            const toAfter = after.get(byNativeRosterId.get(asset.toRosterId)!.rosterId)
+            const player = from?.find(candidate => candidate.id === asset.playerId)
+            if (!player || !fromAfter || !toAfter || moved.has(player.id)) return
+            moved.add(player.id)
+            fromAfter.splice(fromAfter.indexOf(player), 1)
+            toAfter.push(player)
+          }
+          const before = { schedule, rosters, seats }
+          if (!buildProjectedZombieSlate(before) || !buildProjectedZombieSlate({ ...before, rosters: after })) return
+          return { week, before, afterRosters: after }
         }
-        const rows = await prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NFL', season: zombie.season, week,
-          playerId: { in: identities.map(identity => identity.id) } }, select: { playerId: true, adjustmentFactors: true } })
-        const projections = new Map(rows.map(row => [row.playerId, row.adjustmentFactors]))
-        if (projections.size !== rows.length) return
-        const { leaguePointsPerGame, readRates } = await import('./guillotineContext')
-        const rosters = new Map(teams.map(team => [team.rosterId, players.filter(player =>
-          byNativeRosterId.get(player.rosterId)?.rosterId === team.rosterId).map(player => {
-            const position = player.position.trim().toUpperCase()
-            const matched = aliases.get(player.playerId)
-            const id = matched?.size === 1 ? [...matched][0]! : null
-            const available = player.byeWeek !== week && !['IR', 'IL', 'TAXI'].includes(player.slotType.toUpperCase()) &&
-              !['OUT', 'IR', 'PUP', 'SUSPENDED'].includes(player.injuryStatus?.toUpperCase() ?? '')
-            return { id: player.playerId, positions: [position], available,
-              points: id ? leaguePointsPerGame(readRates(projections.get(id)), scoring, position) : null }
-          })]))
-        const after = new Map([...rosters].map(([id, roster]) => [id, [...roster]]))
-        const moved = new Set<string>()
-        for (const asset of playerAssets) {
-          const from = rosters.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
-          const fromAfter = after.get(byNativeRosterId.get(asset.fromRosterId)!.rosterId)
-          const toAfter = after.get(byNativeRosterId.get(asset.toRosterId)!.rosterId)
-          const player = from?.find(candidate => candidate.id === asset.playerId)
-          if (!player || !fromAfter || !toAfter || moved.has(player.id)) return
-          moved.add(player.id)
-          fromAfter.splice(fromAfter.indexOf(player), 1)
-          toAfter.push(player)
+        const first = await loadWeek(zombie.currentWeek + 1)
+        if (!first) return
+        const laterWeeks: NonNullable<Awaited<ReturnType<typeof loadWeek>>>[] = []
+        for (let period = first.week + 1; period <= zombie.totalWeeks; period++) {
+          const next = await loadWeek(period)
+          if (!next) break
+          laterWeeks.push(next)
         }
+        const week = first.week
         const now = Date.now()
         const result = await projectPublicZombieTradeSlate({
           leagueId, zombieLeagueId: zombie.id, openingWeek: zombie.currentWeek, forecastWeek: week,
-          before: { schedule, rosters, seats }, afterRosters: after,
+          before: first.before, afterRosters: first.afterRosters, laterWeeks,
           affectedRosterIds: [proposer.rosterId, receiver.rosterId],
           settledAt: new Date(now).toISOString(), deadlineAt: new Date(now + 1).toISOString(),
           applyItemTransfers: inventory => {
