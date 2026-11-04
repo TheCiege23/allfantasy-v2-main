@@ -38,6 +38,7 @@ type PreviewGrade = {
     before: ZombieWeekOutcome; after: ZombieWeekOutcome; throughWeek: number
     season?: { before: ZombiePeriodOutcome; after: ZombiePeriodOutcome }
   }> }
+  dynastyMarket?: { giveValue: number; getValue: number; asOf: string | null } | null
 }
 
 type ZombiePeriodOutcome = { ledgerBalance: number; eligibleWeeks: number; eligiblePartners: number; cashPayoutCents: number | null }
@@ -880,6 +881,13 @@ export function TradeCenterModal({
                       </>}
                     </div>
                   })}
+                </section>
+              )}
+              {serverGrade?.dynastyMarket && (
+                <section className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Dynasty player market reference', es: 'Referencia de mercado de jugadores dynasty' }, language)}</h4>
+                  <p>{pickEnEs({ en: 'Player package sent → received', es: 'Paquete de jugadores enviado → recibido' }, language)}: {serverGrade.dynastyMarket.giveValue} → {serverGrade.dynastyMarket.getValue}</p>
+                  <p className="text-white/70">{pickEnEs({ en: 'Multi-season market units. Review alongside the Zombie season outcomes.', es: 'Unidades de mercado de varias temporadas. Revísalas junto con los resultados de la temporada Zombie.' }, language)}</p>
                 </section>
               )}
               {(serverGrade?.grade || serverGrade?.gradeScope === 'zombie_future_scoring') && serverGrade?.giveValue != null && serverGrade?.getValue != null ? (

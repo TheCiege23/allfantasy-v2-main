@@ -48,6 +48,7 @@ import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGrade
 import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import { resolveRedraftTeamWindow } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
 import type { WindowDecision } from '@/lib/decision-os/value-v2/windowDecision'
+import { zombieDynastyTradeReference } from '@/lib/zombie/dynastyTradeReference'
 
 export const dynamic = 'force-dynamic'
 
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const [season, proposer, receiver] = await Promise.all([
-    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } }),
+    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueType: true, leagueVariant: true } } } }),
     prisma.redraftRoster.findFirst({ where: { id: proposerRosterId, seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: receiverRosterId, seasonId, leagueId } }),
   ])
@@ -153,7 +154,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only the proposer roster owner can price this trade' }, { status: 403 })
   }
 
-  if (assets.some(asset => asset.assetType === 'zombie_item')) {
+  if (assets.some(asset => asset.assetType === 'zombie_item') ||
+      season.league?.leagueType === 'zombie' || season.league?.leagueVariant === 'zombie') {
     // Generic snapshots cannot represent an item asset. Return only the native Zombie estimate.
     const grader = await createZombieNativeItemGrader(leagueId, seasonId)
     const grade = await grader.grade({
@@ -181,6 +183,7 @@ export async function POST(req: NextRequest) {
       zombieEligibility: grade.zombieEligibility,
       zombieInventory: grade.zombieInventory,
       zombieForecast: grade.zombieForecast,
+      dynastyMarket: await zombieDynastyTradeReference({ leagueId, userId, proposerRosterId, receiverRosterId, assets }).catch(() => null),
     } })
   }
 
