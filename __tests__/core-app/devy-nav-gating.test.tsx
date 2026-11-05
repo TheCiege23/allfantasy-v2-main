@@ -78,9 +78,10 @@ describe('the shell', () => {
 
   it('offers the hub for a devy or C2C league, and the league tab only with devy slots', () => {
     expect(navLabels({ selectedLeagueId: 'l1', devyInScope: true })).toEqual(['/core/devy?league=l1'])
-    expect(navLabels({ selectedLeagueId: 'l1', devyInScope: true, devySlotCount: 3 })).toEqual([
-      '/core/devy?league=l1',
+    // Order is the rail's grouping (Devy league sits in Plan ahead, the hub in All leagues), not the gate.
+    expect(navLabels({ selectedLeagueId: 'l1', devyInScope: true, devySlotCount: 3 }).sort()).toEqual([
       '/core/devy-league?league=l1',
+      '/core/devy?league=l1',
     ])
   })
 

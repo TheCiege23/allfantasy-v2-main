@@ -731,10 +731,13 @@ export async function getTradesData(
       : null
     return { grades, current }
   })()
-  const [{ grades, current }, pendingOffers, agentIdeas] = await Promise.all([
+  // The two deadline reads share nothing with the sections either, so they ride along too.
+  const [{ grades, current }, pendingOffers, agentIdeas, deadlineCountdown, pickTradeDeadline] = await Promise.all([
     gradesThenHistory,
     resolvePendingOffers(league, userId, lc),
     resolveAgentIdeas(league.id, userId),
+    loadTradeDeadlineCountdown(league.id).catch(() => null),
+    loadPickTradeDeadlineView(league.id).catch(() => null),
   ])
 
   const base = {
@@ -772,8 +775,8 @@ export async function getTradesData(
     ...pendingOffers,
     grades,
     deadline: resolveDeadline(league.settings),
-    deadlineCountdown: await loadTradeDeadlineCountdown(league.id).catch(() => null),
-    pickTradeDeadline: await loadPickTradeDeadlineView(league.id).catch(() => null),
+    deadlineCountdown,
+    pickTradeDeadline,
     ...agentIdeas,
   }
 

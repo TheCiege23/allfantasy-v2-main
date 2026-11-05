@@ -1160,12 +1160,16 @@ function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
-function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string }) {
+function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
-    <section className="af-frame af-mt-check" aria-label={m.lineupCheck} data-clear={check.items.length === 0 && !check.unresolved}>
+    <section
+      className={embedded ? 'af-mt-check af-mt-check--embedded' : 'af-frame af-mt-check'}
+      aria-label={m.lineupCheck}
+      data-clear={check.items.length === 0 && !check.unresolved}
+    >
       <h2 className="af-label">
         {/* Shown only under the redraft stamp (af-core-redraft-myteam.css); the words carry the meaning. */}
         <span className="af-mt-check-icon" aria-hidden>
@@ -1725,6 +1729,14 @@ export function MyTeam({ data }: MyTeamProps) {
     data.bench.available ? data.bench.data : [],
     decisionNow,
   )
+  /*
+   * ONE LINEUP CARD, NOT TWO. "Lineup decision" named the most urgent slot and "Lineup check" sat
+   * directly below it listing every slot, the first of which was the same one — so a bye read
+   * "Cover Logan Kowalski's bye" and then "Logan Kowalski is on bye — find a replacement". The
+   * check now renders inside the decision card as its list. Both were already shown only outside
+   * Best Ball, so no league loses either.
+   */
+  const lineupCheck = !bestBall && data.starters.available ? summariseLineupCheck(data.starters.data, decisionNow) : null
 
 
 
@@ -1948,6 +1960,15 @@ export function MyTeam({ data }: MyTeamProps) {
                 ? m.decisionCoverage(proj.week, proj.afProjected, proj.projected + proj.unprojected)
                 : copy('Projection coverage unavailable')}
             </small>
+            {lineupCheck ? (
+              <LineupCheckCard
+                embedded
+                check={lineupCheck}
+                platform={platform}
+                leagueId={data.league.id}
+                fixHref={data.league.sourceLink?.href ?? null}
+              />
+            ) : null}
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
@@ -2106,15 +2127,7 @@ export function MyTeam({ data }: MyTeamProps) {
 
       </div>
       <div className="af-mt-main">
-      {/* ── Lineup check: the whole roster's verdict in one place ─────── */}
-      {!bestBall && data.starters.available ? (
-        <LineupCheckCard
-          check={summariseLineupCheck(data.starters.data, decisionNow)}
-          platform={platform}
-          leagueId={data.league.id}
-          fixHref={data.league.sourceLink?.href ?? null}
-        />
-      ) : null}
+      {/* ── Lineup check: rendered inside the decision card above. ─────── */}
       {/* ── Best lineup: every open seat solved at once ──────────────── */}
       {!bestBall && data.lineupOptimizer ? (
         <LineupOptimizerCard result={data.lineupOptimizer} platform={platform} fixHref={data.league.sourceLink?.href ?? null} />

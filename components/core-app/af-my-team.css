@@ -2590,6 +2590,43 @@ li[data-kind='questionable'] .af-mt-check-tag {
   .af-core .af-mt-tiles { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-left: 0; }
   .af-core .af-mt-tile { min-width: 0; padding: 7px; }
   .af-core .af-mt-tile-value { font-size: 19px; }
+  /*
+   * The source link takes its own full row. The rule above it in this file caps it at 260px, and a
+   * capped flex item fits beside the name, so the name was squeezed to one letter per line.
+   */
+  .af-core .af-mt-source { flex: 1 1 100%; max-width: none; }
+}
+
+/*
+ * ── Phone header tiles: the projection gets the whole row (2026-11-05) ────────────────────────
+ * The rule above splits the tiles into three equal columns at this width, while the lead tile's own
+ * rule (the 500px container block near "Compare projections") lays it out as value + label on the
+ * left and the toggle on the right, across the full row. Inside a 108px column that left column
+ * computed to 0px and "Compare projections" was drawn on top of "PROJECTED · SLEEPER · YOUR LEAGUE".
+ * Now the projection group spans the row it was written for, and Record and Roster value share
+ * the row below — half-width each, so the roster-value reason no longer runs to seven lines.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-core .af-mt-tiles > .af-mt-projgroup { grid-column: 1 / -1; }
+}
+
+/*
+ * The lineup check, inside the decision card: its list, without a second frame around it. The
+ * `.af-mt-decision` step outranks the redraft stamp's own `.af-mt-check` panel, which loads after
+ * this file and otherwise drew a yellow box inside the card.
+ */
+.af-core .af-mt-decision .af-mt-check--embedded,
+.af-core.af-shell[data-format=redraft] .af-mt-decision .af-mt-check--embedded {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* With the list inside, the card is tall: its buttons stay level with the headline, not mid-card. */
+.af-core .af-mt-decision {
+  align-items: flex-start;
 }
 
 /* ── Best lineup this week (lib/core-app/lineupOptimizer.ts) ───────────── */

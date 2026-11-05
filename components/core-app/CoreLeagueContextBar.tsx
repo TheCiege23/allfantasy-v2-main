@@ -76,6 +76,11 @@ export type CoreLeagueContextBarProps = {
    */
   decisionSlot?: ReactNode
   recommendationSlot?: ReactNode
+  /**
+   * "Open League ↗" (LeagueTabs `OpenLeagueLink`), drawn after the identity line so it does not
+   * cost a row of its own above this bar (2026-11-05 navigation cleanup).
+   */
+  workspaceLink?: ReactNode
 }
 
 /**
@@ -147,6 +152,7 @@ export default function CoreLeagueContextBar({
   surface,
   decisionSlot,
   recommendationSlot,
+  workspaceLink = null,
 }: CoreLeagueContextBarProps) {
   const { language, surfaceLabel, concept } = useBarCopy()
   const m = useMessages(leagueContextBarMessages)
@@ -346,6 +352,7 @@ export default function CoreLeagueContextBar({
         ) : null}
         {!showEditor ? <small className="af-lctx-typestatus" role="status" aria-live="polite">{typeStatusText}</small> : null}
       </div>
+      {workspaceLink}
 
       <details className="af-lctx-details"><summary>{m.leagueDetails}</summary>
       <div className="af-lctx-statuses">

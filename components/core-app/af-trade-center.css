@@ -3038,3 +3038,77 @@ html[data-mode='light'] .af-core .af-tc {
     display: none;
   }
 }
+
+/*
+ * ── Batch 2 (2026-11-05): folded phone rosters, position chips, one balance bar ───────────────
+ * Appended at the end, outside every existing @media block, like the sections above.
+ */
+
+/* Position colour in the headshot circle when there is no headshot. */
+.af-tc-headshot[data-pos] .af-tc-headshot-fallback {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.af-tc-headshot[data-pos='qb'] { background: color-mix(in srgb, #f472b6 22%, transparent); }
+.af-tc-headshot[data-pos='rb'] { background: color-mix(in srgb, #34d399 22%, transparent); }
+.af-tc-headshot[data-pos='wr'] { background: color-mix(in srgb, #38bdf8 22%, transparent); }
+.af-tc-headshot[data-pos='te'] { background: color-mix(in srgb, #fb923c 22%, transparent); }
+.af-tc-headshot[data-pos='dl'] { background: color-mix(in srgb, #fbbf24 22%, transparent); }
+.af-tc-headshot[data-pos='lb'] { background: color-mix(in srgb, #a3e635 22%, transparent); }
+.af-tc-headshot[data-pos='db'] { background: color-mix(in srgb, #818cf8 22%, transparent); }
+.af-tc-headshot[data-pos] .af-tc-headshot-fallback { color: var(--text); }
+
+/* The position label beside the team, in the light theme: the pastel inks are dark-theme colours. */
+html[data-mode='light'] .af-tc-pos[data-pos='qb'] { color: #be185d; }
+html[data-mode='light'] .af-tc-pos[data-pos='rb'] { color: #047857; }
+html[data-mode='light'] .af-tc-pos[data-pos='wr'] { color: #0369a1; }
+html[data-mode='light'] .af-tc-pos[data-pos='te'] { color: #c2410c; }
+html[data-mode='light'] .af-tc-pos[data-pos='dl'] { color: #a16207; }
+html[data-mode='light'] .af-tc-pos[data-pos='lb'] { color: #4d7c0f; }
+html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
+
+/* The roster's fold: a chevron, and "Browse roster" while it is closed. */
+.af-tc-roster-head {
+  align-items: center;
+}
+.af-tc-roster-chev {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  margin-right: 4px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.af-tc-roster[open] > .af-tc-roster-head .af-tc-roster-chev {
+  transform: rotate(-135deg);
+}
+.af-tc-roster-browse {
+  display: none;
+}
+.af-tc-roster:not([open]) > .af-tc-roster-head .af-tc-roster-hint {
+  display: none;
+}
+.af-tc-roster:not([open]) > .af-tc-roster-head .af-tc-roster-browse {
+  display: inline;
+  color: var(--accent);
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  /* A thumb-sized row while folded, so "Browse roster" is a target and not a caption. */
+  .af-tc-roster-head {
+    min-height: 44px;
+  }
+}
+
+/* The desktop balance: the phone meter's single bar, a little taller. */
+.af-tc-balance-meter .af-tc-meter-track {
+  height: 8px;
+}
+.af-tc-balance-ends [data-side='give'],
+.af-tc-balance-ends [data-side='get'] {
+  color: var(--muted);
+}

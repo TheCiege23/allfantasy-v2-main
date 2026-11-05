@@ -12,6 +12,8 @@ import {
   type EliminationZones,
 } from '@/components/core-app/standings/StandingsBoardView'
 import '@/components/core-app/af-standings.css'
+import '@/components/core-app/af-empty-state.css'
+// The redraft overrides load last, after every stylesheet of this screen's own.
 import '@/components/core-app/af-core-redraft-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
@@ -389,6 +391,11 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
+/** The board is refused only because no week has been scored or synced yet — it will fill in on its own. */
+export function standingsWaitForScores(reason: string): boolean {
+  return /\b(scored|synced)\b/i.test(reason)
+}
+
 export function Standings({
   data,
   freshness,
@@ -420,11 +427,20 @@ export function Standings({
           <h1 className="af-display af-st-title">{copy('Standings')}</h1>
           {chip}
         </header>
-        <div className="af-st-blocked">
-          <span className="af-st-blocked-mark af-num" aria-hidden>
+        {/*
+          A titled "nothing yet" card. The loader's reason is already a full explanation, but on its
+          own — lowercase, beside a dash — it read as a fault. When the board is only waiting for a
+          scored week, say that it will fill in, and when.
+        */}
+        <div className="af-empty-card af-st-blocked" data-testid="standings-empty">
+          <span className="af-empty-card-mark" aria-hidden>
             —
           </span>
-          <p className="af-st-blocked-body">{copy(data.reason)}</p>
+          <div className="af-empty-card-text">
+            <p className="af-empty-card-title">{m.emptyTitle}</p>
+            <p className="af-empty-card-body af-st-blocked-body">{copy(data.reason)}</p>
+            {standingsWaitForScores(data.reason) ? <p className="af-empty-card-hint">{m.emptyHintScores}</p> : null}
+          </div>
         </div>
         {/* An offseason dynasty league is exactly when its history matters most. */}
         {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}

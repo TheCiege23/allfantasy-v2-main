@@ -12,6 +12,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { rivalryRadarMessages } from '@/lib/core-app/messages/rivalryRadar'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 
 /**
  * 24b — Rivalry Radar.
@@ -194,35 +195,35 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
 
   return (
     <div className="af-wk af-rr">
-      <header className="af-wk-head">
-        <div>
-          <p className="af-wk-eyebrow af-label">
-            {data.season && data.week ? `${data.season} · ${copy('Week')} ${data.week}` : copy('Rivalry Radar')}
-          </p>
-          <h1 className="af-display af-wk-title">{copy('Rivalry Radar')}</h1>
-          <p className="af-wk-sub">
-            {anything ? (
-              <>
-                {/* Every opponent with a completed meeting is listed, plus this week's — not only this week's. */}
-                {t.subIntro}
-                <span className="af-num">{data.totals.meetings}</span> {t.meetings(data.totals.meetings)} {t.across}{' '}
-                <span className="af-num">{data.totals.seasons}</span>{' '}
-                {t.seasons(data.totals.seasons)} {t.and}{' '}
-                <span className="af-num">{data.totals.platforms}</span>{' '}
-                {t.platforms(data.totals.platforms)}.{' '}
-                <TopicTip topic="rivalrySeries" />
-              </>
-            ) : (
-              copy('No head-to-head history is on file yet.')
-            )}
-          </p>
-        </div>
-        <div className="af-wk-headactions">
+      <PageHeader
+        className="af-wk-head"
+        titleClassName="af-wk-title"
+        subClassName="af-wk-sub"
+        actionsClassName="af-wk-headactions"
+        eyebrow={data.season && data.week ? `${data.season} · ${copy('Week')} ${data.week}` : copy('Rivalry Radar')}
+        title={copy('Rivalry Radar')}
+        sub={
+          anything ? (
+            <>
+              {/* Every opponent with a completed meeting is listed, plus this week's — not only this week's. */}
+              {t.subIntro}
+              <span className="af-num">{data.totals.meetings}</span> {t.meetings(data.totals.meetings)} {t.across}{' '}
+              <span className="af-num">{data.totals.seasons}</span>{' '}
+              {t.seasons(data.totals.seasons)} {t.and}{' '}
+              <span className="af-num">{data.totals.platforms}</span>{' '}
+              {t.platforms(data.totals.platforms)}.{' '}
+              <TopicTip topic="rivalrySeries" />
+            </>
+          ) : (
+            copy('No head-to-head history is on file yet.')
+          )
+        }
+        actions={
           <Link href={weekHref} className="af-btn af-wk-btn af-wk-btn--ghost">
             {copy('All matchups')}
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       {/*
         "The one to watch". The selection rule is stated in the panel rather than

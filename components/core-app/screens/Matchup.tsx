@@ -5,6 +5,7 @@ import '@/components/core-app/af-matchup.css'
 import '@/components/core-app/af-matchup-pulse.css'
 // Redraft batch B3: the broadcast score bug, scoped to the /core shell's data-format="redraft".
 import '@/components/core-app/af-core-redraft-matchup.css'
+import '@/components/core-app/af-empty-state.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import Link from 'next/link'
@@ -1056,9 +1057,9 @@ export function Matchup({ data }: MatchupProps) {
           <span className="af-label af-mu-week-label">
             {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guilly' : 'Guilly')}
           </span>
-        ) : (
+        ) : data.teams.available || data.lineups.available ? (
           <span className="af-mu-unavailable">{matchupReasonText(data.week.reason, language)}</span>
-        )}
+        ) : null /* the empty card below says it once */}
 
       </header>
 
@@ -1103,7 +1104,29 @@ export function Matchup({ data }: MatchupProps) {
         </div>
       ) : null}
 
-      {data.league.elimination ? (
+      {!data.league.elimination && !data.teams.available && !data.lineups.available ? (
+        /*
+          No matchup resolved yet — before the draft, before the schedule syncs. The head-to-head
+          card, the slot board and "what decides it" each used to print the same refusal in turn
+          ("no matchup resolved, so…") down an otherwise empty page. One titled card says it once,
+          and says when the matchup will appear.
+        */
+        <div className="af-empty-card" data-testid="matchup-empty">
+          <span className="af-empty-card-mark" aria-hidden>
+            vs
+          </span>
+          <div className="af-empty-card-text">
+            <p className="af-empty-card-title">{m.noMatchupTitle}</p>
+            {/* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */}
+            <p className="af-empty-card-hint">{m.noMatchupHint}</p>
+            <p className="af-empty-card-links">
+              <Link href={`/core/my-team?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
+                {copy('Check your lineup')} →
+              </Link>
+            </p>
+          </div>
+        </div>
+      ) : data.league.elimination ? (
         /*
           🛑 NO VERSUS FOR AN ELIMINATION LEAGUE. The lowest score each week goes home, so the
           question is "am I above the chop line", which is a standings question — not "am I beating
