@@ -84,7 +84,7 @@ function extractRawSlotMap(sport: string, leagueSettings: unknown): Record<strin
    * carried no `roster.config.sections` was validated against `starter_slots` or the static defaults
    * while the lineup screen showed this layout. Football keeps its existing order.
    */
-  if (isDailyRedraftSport(sport)) {
+  if (isDailyRedraftSport(sport) || String(sport).trim().toUpperCase() === 'NCAAB') {
     const sportConfigKey = `${String(sport).trim().toLowerCase()}_roster_config`
     const custom = isRecord(s[sportConfigKey]) ? (s[sportConfigKey] as Record<string, unknown>) : null
     const slots = numericSlotMap(custom?.slots)

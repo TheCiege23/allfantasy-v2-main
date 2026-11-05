@@ -47,6 +47,9 @@ export const NCAAB_ROSTER_SLOTS: RosterSlotDef[] = [
 
 export const NCAAB_SLOT_MAP = new Map(NCAAB_ROSTER_SLOTS.map((s) => [s.key, s]))
 
+export const NCAAB_ZOMBIE_STARTERS = { G: 2, F: 2, C: 1 }
+export const NCAAB_ZOMBIE_BENCH = 3
+
 export const NCAAB_ROSTER_TEMPLATES: NcaabRosterTemplate[] = [
   { key: 'redraft', label: 'Redraft', leagueTypes: ['redraft'], description: 'Standard NCAAB redraft with broad G/F/C grouping.',
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 5, IL: 2 } },
@@ -65,7 +68,7 @@ export const NCAAB_ROSTER_TEMPLATES: NcaabRosterTemplate[] = [
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Standard survivor roster.',
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 5 } },
   { key: 'zombie', label: 'Zombie', leagueTypes: ['zombie'], description: 'Lean zombie roster.',
-    slots: { G: 2, F: 2, C: 1, UTIL: 4, BN: 4 } },
+    slots: { ...NCAAB_ZOMBIE_STARTERS, BN: NCAAB_ZOMBIE_BENCH } },
   { key: 'tournament', label: 'Tournament', leagueTypes: ['tournament'], description: 'Tournament roster.',
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 4 } },
   { key: 'big_brother', label: 'Big Brother', leagueTypes: ['big_brother'], description: 'Big Brother roster.',

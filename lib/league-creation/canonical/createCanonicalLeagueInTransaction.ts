@@ -518,6 +518,15 @@ export async function createCanonicalLeagueInTransaction(
     mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: plan.endWeek + 1 }
   }
 
+  if (sport === 'NCAAB' && formatId === 'zombie') {
+    mergedSettings.ncaab_roster_config = {
+      slots: {
+        ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
+        BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
+      },
+    }
+  }
+
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
   if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format

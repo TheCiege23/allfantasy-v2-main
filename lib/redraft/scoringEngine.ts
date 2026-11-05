@@ -8,6 +8,7 @@ import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/sco
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { campusSport } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
+import { scoreStatsWithCategories } from '@/lib/scoring-runtime/categoryMath'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
@@ -59,63 +60,9 @@ export function calculateFantasyPoints(
   return sum
 }
 
-function bonusBaseYardsKey(catKey: string): string | null {
-  if (catKey.includes('pass_') && catKey.includes('bonus')) return 'pass_yds'
-  if (catKey.includes('rush_') && catKey.includes('bonus')) return 'rush_yds'
-  if (catKey.includes('rec_') && catKey.includes('bonus')) return 'rec_yds'
-  return null
-}
-
-export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string, number>): number {
-  const pts = cat.defaultPoints
-  if (cat.minForBonus != null) {
-    const base = bonusBaseYardsKey(cat.key)
-    if (!base) return 0
-    const yards = rawStats[base] ?? 0
-    return yards >= cat.minForBonus ? pts : 0
-  }
-  // Threshold-tier categories (team-defense points/yards allowed): award the
-  // tier's points when the single tier stat falls within [tierMin, tierMax].
-  // The stat must be present — a real 0 (shutout) is a valid tier value, so
-  // distinguish "absent" from "0" via a key check rather than `?? 0`.
-  if (cat.tierStatKey != null) {
-    if (!(cat.tierStatKey in rawStats)) return 0
-    const value = rawStats[cat.tierStatKey]
-    if (!Number.isFinite(value)) return 0
-    const min = cat.tierMin ?? Number.NEGATIVE_INFINITY
-    const max = cat.tierMax ?? Number.POSITIVE_INFINITY
-    return value >= min && value <= max ? pts : 0
-  }
-  // Explicit role counts supersede the legacy aggregate conversion count.
-  if (cat.sport === 'NCAAF' && cat.key === 'two_pt' && ['pass_2pt', 'rush_2pt', 'rec_2pt'].some(k => k in rawStats)) return 0
-  const raw = rawStats[cat.key] ?? 0
-  if (cat.unit === 'per_yard' || cat.unit === 'per_inning') {
-    return raw * pts
-  }
-  return raw * pts
-}
+export { pointsForCategory, scoreStatsWithCategories } from '@/lib/scoring-runtime/categoryMath'
 
 export { applyScoringPresetToRecPoints }
-
-/**
- * Pure scorer: sum fantasy points for one player's raw weekly stats against a
- * resolved scoring-category list, honoring per-category commissioner overrides
- * and yardage-threshold bonuses. This is the authoritative scoring math; both
- * the live engine (`calculateScoreFromSportConfig`) and the contract tests run
- * through it so what we test is exactly what scores.
- */
-export function scoreStatsWithCategories(
-  categories: ScoringCategory[],
-  rawStats: Record<string, number>,
-  overrides: Record<string, number> = {},
-): number {
-  let sum = 0
-  for (const cat of categories) {
-    const mult = overrides[cat.key] ?? cat.defaultPoints
-    sum += pointsForCategory({ ...cat, defaultPoints: mult }, rawStats)
-  }
-  return sum
-}
 
 /**
  * Slots that NEVER count toward a matchup score. Mirrors the non-starter set in
