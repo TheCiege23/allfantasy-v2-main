@@ -1057,9 +1057,9 @@ export function Matchup({ data }: MatchupProps) {
           <span className="af-label af-mu-week-label">
             {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guilly' : 'Guilly')}
           </span>
-        ) : (
+        ) : data.teams.available || data.lineups.available ? (
           <span className="af-mu-unavailable">{matchupReasonText(data.week.reason, language)}</span>
-        )}
+        ) : null /* the empty card below says it once */}
 
       </header>
 
@@ -1117,7 +1117,7 @@ export function Matchup({ data }: MatchupProps) {
           </span>
           <div className="af-empty-card-text">
             <p className="af-empty-card-title">{m.noMatchupTitle}</p>
-            <p className="af-empty-card-body">{matchupReasonText(data.teams.reason, language)}</p>
+            {/* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */}
             <p className="af-empty-card-hint">{m.noMatchupHint}</p>
             <p className="af-empty-card-links">
               <Link href={`/core/my-team?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>

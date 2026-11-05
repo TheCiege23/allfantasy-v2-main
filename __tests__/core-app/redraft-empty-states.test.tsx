@@ -98,6 +98,8 @@ describe('Matchup with no matchup resolved', () => {
     const { container } = render(<Matchup data={noMatchup()} />)
     expect(screen.getByTestId('matchup-empty').textContent).toContain('No matchup to show yet')
     expect(container.querySelector('.af-mu-h2h')).toBeNull()
-    expect(container.textContent?.match(/no matchup resolved/gi)?.length).toBe(1)
+    // The title and hint say it; no raw reason fragment repeats it, and the week line stays quiet.
+    expect(container.textContent).not.toMatch(/no matchup resolved/i)
+    expect(container.textContent).not.toMatch(/no weekly results stored/i)
   })
 })
