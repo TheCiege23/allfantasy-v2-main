@@ -71,6 +71,10 @@ export const draftRoomRedesignMessages = defineMessages({
     clockBarRoster: 'Roster',
     clockBarChat: 'Chat',
     clockBarHelper: 'AI helper',
+    mockPickLabel: (pick: number): string => `Pick #${pick}`,
+    mockSecondsLeft: (seconds: number): string => `${seconds}s left`,
+    mockStatusPaused: 'Paused',
+    mockStatusComplete: 'Draft complete',
   },
   es: {
     modeOfflineLabel: 'Draft presencial',
@@ -131,5 +135,9 @@ export const draftRoomRedesignMessages = defineMessages({
     clockBarRoster: 'Roster',
     clockBarChat: 'Chat',
     clockBarHelper: 'Asistente de IA',
+    mockPickLabel: (pick: number): string => `Selección n.º ${pick}`,
+    mockSecondsLeft: (seconds: number): string => `Quedan ${seconds} s`,
+    mockStatusPaused: 'En pausa',
+    mockStatusComplete: 'Draft terminado',
   },
 })

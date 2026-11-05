@@ -28,6 +28,7 @@ import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
+import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
 
 export type DraftTopBarProps = {
   leagueName: string
@@ -208,14 +209,8 @@ function formatPoolReadinessLabel(
   return t('draftRoom.topBar.poolPreparing').replace('{{sport}}', sport)
 }
 
-/**
- * How much of the pick clock is left, as a 0–100 width for the bar under the timer. Null when there
- * is nothing honest to draw: an untimed draft, or no remaining time to compare against.
- */
-export function clockProgressPercent(remainingSeconds: number | null | undefined, totalSeconds: number | null | undefined): number | null {
-  if (remainingSeconds == null || !totalSeconds || totalSeconds <= 0) return null
-  return Math.max(0, Math.min(100, Math.round((remainingSeconds / totalSeconds) * 100)))
-}
+/** Shared with the mock room (lib/draft-room/clockProgress.ts); re-exported for existing callers. */
+export { clockProgressPercent }
 
 /** Dynasty skin tokens, always with the fallback so the room works before the token sheet lands. */
 const DYN = {
