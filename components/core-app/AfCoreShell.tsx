@@ -2617,7 +2617,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   ) : null}
                   <strong>{copy('Display')}</strong>
                   <div className="af-data-menu-display-row">
-                    <ModeToggle className="af-mode-chip" />
+                    <ModeToggle variant="picker" />
                     <CoreLanguageChip className="af-mode-chip" />
                   </div>
                 </div>
@@ -2664,7 +2664,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <strong className="af-account-section">{copy('Display')}</strong>
                 <div className="af-account-row">
                   {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
-                  <ModeToggle className="af-mode-chip af-topbar-chip" />
+                  <ModeToggle variant="picker" />
                   {/* Language beside it, so switching never means leaving /core for /settings. */}
                   <CoreLanguageChip className="af-mode-chip af-topbar-chip" />
                 </div>
