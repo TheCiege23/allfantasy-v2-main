@@ -60,11 +60,33 @@ describe('Waivers — the KPI strip', () => {
     expect(c2.querySelector('.af-wv-tile[data-tile="faab"] .af-wv-tile-of')).toBeNull()
   })
 
-  it('puts FAAB, priority, the next run, claims and players held in that order', () => {
+  it('says the next run once: the sticky line, not a second tile in the strip', () => {
     const { container } = renderWaivers(data())
     const order = [...container.querySelectorAll('.af-wv-tiles > .af-wv-tile')].map((t) => t.getAttribute('data-tile'))
+    expect(order).toEqual(['faab', 'priority', 'claims', 'held'])
+    expect(screen.getByTestId('waiver-next-run')).toBeTruthy()
+    expect(screen.queryByTestId('waiver-next-run-tile')).toBeNull()
+    expect(container.querySelector('.af-wv-tiles')?.getAttribute('data-count')).toBe('4')
+  })
+
+  it('has no FAAB tile in a league known not to bid, and the strip counts what is left', () => {
+    const { container } = renderWaivers(
+      data({ waiverType: { available: true, data: { kind: 'rolling', label: 'Rolling waiver priority', budget: null } } }),
+    )
+    expect(container.querySelector('.af-wv-tile[data-tile="faab"]')).toBeNull()
+    expect(container.querySelector('.af-wv-tiles')?.getAttribute('data-count')).toBe('3')
+  })
+
+  it('keeps the FAAB tile while the waiver type is unread, and the next-run tile while there is no schedule', () => {
+    const { container } = renderWaivers(
+      data({
+        waiverType: { available: false, reason: 'not read' },
+        processTime: { available: false, reason: 'this league has not published a schedule' },
+      }),
+    )
+    const order = [...container.querySelectorAll('.af-wv-tiles > .af-wv-tile')].map((t) => t.getAttribute('data-tile'))
     expect(order).toEqual(['faab', 'priority', 'next-run', 'claims', 'held'])
-    expect(screen.getByTestId('waiver-next-run-tile').textContent).toContain('Wednesday')
+    expect(container.querySelector('.af-wv-tiles')?.getAttribute('data-count')).toBe('5')
   })
 
   it('a schedule we have not read is the loader’s sentence, never a guessed day', () => {
