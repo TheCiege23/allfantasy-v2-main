@@ -75,11 +75,13 @@ describe('the shell in a Survivor league', () => {
     const survivor = shell({ leagueTheme: 'survivor' })
     expect(survivor.headings).toContain('The island')
     expect(survivor.headings).toContain('This episode')
-    expect(survivor.headings).not.toContain('This league')
+    // The league groups' standard names (leagueDestinations.ts) give way to the show's.
+    expect(survivor.headings).not.toContain('League')
+    expect(survivor.headings).not.toContain('This week')
     expect(survivor.root.getAttribute('data-league-theme')).toBe('survivor')
 
     const standard = shell({})
-    expect(standard.headings).toContain('This league')
+    expect(standard.headings).toContain('League')
     expect(standard.root.hasAttribute('data-league-theme')).toBe(false)
   })
 })

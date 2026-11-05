@@ -69,6 +69,9 @@ const spanish: Record<string, string> = {
   'This week': 'Esta semana',
   'Your record': 'Tu historial',
   Manage: 'Administrar',
+  // The rail's grouped headings (lib/core-app/leagueDestinations.ts, 2026-11-05).
+  'Plan ahead': 'Planificar',
+  Commish: 'Comisionado',
   'Create a league': 'Crear una liga',
   'Exile Island': 'Isla del Exilio',
   'Dynasty league': 'Liga dinastía',

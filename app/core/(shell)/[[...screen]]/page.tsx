@@ -239,7 +239,7 @@ import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
 import { warRoomIssueHref } from '@/lib/core-app/warRoomIssueHref'
-import LeagueTabs from '@/components/core-app/LeagueTabs'
+import LeagueTabs, { OpenLeagueLink } from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { loadDynastyStandingsHistory } from '@/lib/core-app/dynastyStandingsHistoryLoader'
@@ -1688,6 +1688,10 @@ export default async function AfCorePage({
   // ONE read shared by the bar's two streamed slots (the promise, not two calls).
   const leagueOs =
     showContextBar && selectedLeagueId ? resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null) : null
+  // Decided once: the bar renders on exactly this, and the tab row hands it Open League when it does.
+  const contextBarShown = Boolean(
+    showContextBar && selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) && leagueOs,
+  )
 
   return (
     <AfCoreShell
@@ -1794,6 +1798,8 @@ export default async function AfCorePage({
       {selectedRailLeague?.hub && selectedLeagueId ? <ConnectedLeagueContext hub={selectedRailLeague.hub} selectedLeagueId={selectedLeagueId} /> : null}
       {selectedLeagueId && selectedLeagueName ? (
         <LeagueTabs
+          /* The context bar carries Open League when it is drawn, so this row can take no space. */
+          workspaceLinkElsewhere={contextBarShown}
           commissionerHref={playedLeagues.some(l => l.id === selectedLeagueId && l.isCommissioner) ? `/core/commissioner?league=${encodeURIComponent(selectedLeagueId!)}` : null}
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
@@ -1813,11 +1819,13 @@ export default async function AfCorePage({
         />
       ) : null}
 
-      {showContextBar && selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) && leagueOs ? (
+      {/* The repeated checks narrow types for the props below; `contextBarShown` is the same decision. */}
+      {contextBarShown && selectedLeagueId && selectedLeagueName && isCoreSurfaceKey(activeKey) && leagueOs ? (
         <CoreLeagueContextBar
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeaguePlatform ?? 'manual')}
+          workspaceLink={<OpenLeagueLink leagueId={selectedLeagueId} platform={platformLabel(selectedLeaguePlatform)} />}
           /*
            * The source chip opens the Overview's "what's on file" panel, from any tab. Only for an
            * imported league: a native one has no panel, and a link to a missing anchor lands on the

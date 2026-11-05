@@ -613,3 +613,29 @@
   /* A phone's chip is a touch target. */
   .af-core button.af-lctx-typechip { min-height: 44px; }
 }
+
+/*
+ * One list, one navigation (2026-11-05, lib/core-app/leagueDestinations.ts). Inside the shell the
+ * rail (desktop), the icon nav (tablet) and the bottom bar + More sheet (phone, league-first's Me
+ * sheet included) already list every league view, so the row's view links are hidden there and the
+ * row keeps only the Open League pill. Outside the shell (the dev previews) `display: contents`
+ * leaves the links laid out exactly as before.
+ */
+.af-core .af-lt-views { display: contents; }
+.af-core .af-lt .af-lt-views > a { flex: 0 0 auto; }
+.af-core.af-shell .af-lt-views { display: none; }
+.af-core.af-shell .af-lt { padding-bottom: 0; margin-bottom: 8px; }
+@media (max-width: 720px) {
+  /* Alone on its row, the pill needs its words back: a bare ↗ says nothing without the tabs beside it. */
+  .af-core.af-shell .af-lt .af-lt-workspace-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+/* Open League at the end of the context bar's identity line, when the page draws the bar there. */
+.af-core .af-lctx .af-lt-workspace-open {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-line); border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 750; text-decoration: none;
+}
+.af-core .af-lctx .af-lt-workspace-open:hover,
+.af-core .af-lctx .af-lt-workspace-open:focus-visible { background: var(--accent); color: var(--accent-ink); }
+/* With the views and the pill elsewhere, an empty row takes no space; the "why a view is missing" notes still show. */
+.af-core.af-shell .af-lt:not(:has(.af-lt-absent, .af-lt-workspace-note, .af-lt-workspace-open)) { display: none; }
