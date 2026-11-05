@@ -17,6 +17,7 @@ import { CareerHallView } from '@/components/core-app/boards/CareerViews'
 import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 import { CareerFilterBar, CareerTabs } from '@/components/core-app/career/CareerChrome'
 import { CareerProgressChart } from '@/components/core-app/career/CareerProgressChart'
+import { SeasonBars } from '@/components/core-app/career/SeasonBars'
 import {
   AccomplishmentStrip,
   AwardBadge,
@@ -50,6 +51,8 @@ import '@/components/core-app/af-career-live.css'
 // Last on purpose: the phone/tablet layer overrides the three sheets above.
 import '@/components/core-app/af-career-devices.css'
 import '@/components/core-app/af-career-wall.css'
+/* The 2026-11 redesign (board: Career) — overview only, after the stylesheets it restyles. */
+import '@/components/core-app/af-career-redesign.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -799,6 +802,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
       {/* ── 1: what you have won, before anything else ───────────────────── */}
       <AccomplishmentStrip data={data} />
       <BestSeasons seasons={data.accomplishments.bestSeasons} filterHref={leagueHref} />
+      <SeasonBars seasons={data.seasons} />
 
       {/* ── live half: what is still in play, and Chimmy on your own numbers ── */}
       <CareerLive data={data} awards={awards} />
