@@ -19,7 +19,7 @@ import {
   type CareerTradeCount,
 } from '@/lib/core-app/careerProfile'
 import { computeCareerAwards, type CareerAward } from '@/lib/core-app/careerAwards'
-import { getCareerRecords, WEEKLY_MISSING } from '@/lib/core-app/careerRecords'
+import { getCareerRecords, WEEKLY_MISSING, type CareerRival } from '@/lib/core-app/careerRecords'
 import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
 import {
   draftRecords,
@@ -92,6 +92,12 @@ export type CareerScreenData = {
   coverage: CareerCoverageExtras | null
   /** `?view=compare` only (live-career plan, phase 5): two slices of this career side by side. */
   compare?: CareerCompare | null
+  /**
+   * Overview only: your most-played opponents, from the CACHED records summary (`careerRecordsSummary`)
+   * and never a live read — the overview is the landing view and the weekly book reads every game you
+   * have played. Null when unfiltered summaries are off, the summary is not built yet, or a filter is set.
+   */
+  rivals?: CareerRival[] | null
   /** `?view=hall` only: `?layout=wall|list`, or null to let the device decide (af-career-wall.css). */
   hallLayout?: HallLayout
 }
@@ -253,7 +259,12 @@ export async function getCareerScreen(
 
   const hallLayout = view === 'hall' ? parseHallLayout(sp.layout) : null
 
-  return { view, data, awards, trades, profile, timeline, records, peers, coverage, compare, hallLayout }
+  const rivals =
+    view === 'overview' && isUnfiltered(filter) && isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+      ? ((await readCareerRecordsSummary(userId).catch(() => null))?.data?.rivals ?? null)
+      : null
+
+  return { view, data, awards, trades, profile, timeline, records, peers, coverage, compare, hallLayout, rivals }
 }
 
 /**
