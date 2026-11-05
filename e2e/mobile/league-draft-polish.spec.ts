@@ -1,25 +1,32 @@
 import { expect, test } from '@playwright/test'
 
-test('league section picker and switcher stay tappable through rotation', async ({ page }, testInfo) => {
+test('league bottom bar, More menu and switcher stay tappable through rotation', async ({ page }, testInfo) => {
   await page.route('**/api/chat/unread', route => route.fulfill({ json: { byLeague: {} } }))
   await page.goto('/dev/league-mobile-preview')
-  const section = page.getByRole('combobox', { name: 'League section', exact: true })
-  await expect(section).toBeVisible({ timeout: 60_000 })
-  await section.selectOption('roster')
+  const team = page.getByTestId('nl-bottom-tab-roster')
+  await expect(team).toBeVisible({ timeout: 60_000 })
+  await team.tap()
   await expect(page.getByRole('heading', { name: 'roster', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Sunday Night Dynasty, switch league' }).tap()
   await expect(page.getByRole('dialog', { name: 'Switch league' })).toBeVisible()
   await page.getByRole('button', { name: 'Close league switcher' }).tap()
-  await page.getByRole('button', { name: 'Open league navigation' }).tap()
+  const more = page.getByTestId('nl-bottom-more')
+  await more.tap()
+  await expect(more).toHaveAttribute('aria-expanded', 'true')
   const original = page.viewportSize()!
   await page.setViewportSize({ width: 900, height: 420 })
   await expect(page.locator('.nl-menu-open')).toHaveCount(0)
   await page.setViewportSize(original)
-  await expect(page.getByRole('button', { name: 'Open league navigation' })).toHaveAttribute('aria-expanded', 'false')
-  await section.selectOption('draft')
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+  for (const id of ['nl-bottom-tab-native_home', 'nl-bottom-tab-draft', 'nl-bottom-more']) {
+    const box = await page.getByTestId(id).boundingBox()
+    expect(box!.width).toBeGreaterThanOrEqual(44)
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+  }
+  await page.getByTestId('nl-bottom-tab-draft').tap()
   await expect(page.getByRole('heading', { name: 'draft', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await section.selectOption('native_home')
+  await page.getByTestId('nl-bottom-tab-native_home').tap()
   await testInfo.attach('league-mobile', { body: await page.screenshot(), contentType: 'image/png' })
 })
 

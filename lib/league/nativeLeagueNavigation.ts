@@ -41,6 +41,23 @@ const SURVIVOR_NAV_LABELS: Record<string, [string, string]> = {
 /** Group ids are stable across languages; `title` is what the reader sees. */
 export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'week' | 'more'
 
+/** Keep aliases out of More when a primary screen already covers them. */
+function duplicateOfPrimary(id: string, used: ReadonlySet<string>) {
+  if (id === 'home') return used.has('native_home')
+  if (id === 'team') return used.has('roster') || used.has('squad')
+  return id === 'redraft' || id === 'draft_intel'
+}
+
+const MORE_LABELS: Record<string, [string, string]> = {
+  players: ['league.nav.more.playerResearch', 'Player research'],
+  league: ['league.nav.more.leagueOverview', 'League overview'],
+  commissioner: ['league.nav.more.commissionerHub', 'Commissioner hub'],
+  finance: ['league.nav.more.leagueDues', 'League dues'],
+  ai_coaching: ['league.nav.more.chimmyCoaching', 'Chimmy coaching'],
+  history: ['league.nav.more.pastSeasons', 'Past seasons'],
+  legacy: ['league.nav.more.leagueHistory', 'League history'],
+}
+
 export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
   const tr = translator(t)
   const used = new Set<string>()
@@ -84,7 +101,12 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
   ]
   // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
-  const more = tabs.filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner')).map(tab => ({ ...tab, icon: 'more' }))
+  const more = tabs
+    .filter(tab => !used.has(tab.id) && tab.id !== 'settings' && (commissioner || tab.id !== 'commissioner') && !duplicateOfPrimary(tab.id, used))
+    .map(tab => {
+      const copy = MORE_LABELS[tab.id]
+      return { ...tab, label: copy ? tr(copy[0], copy[1]) : tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'more' }
+    })
   const groups: Array<{ id: NativeNavGroupId; title: string; items: WorkspaceNavItem[] }> = [
     { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: primary },
     { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: dynasty },
@@ -93,6 +115,31 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     { id: 'more', title: tr('league.nav.group.moreTools', 'More tools'), items: more },
   ]
   return groups.filter(group => group.items.length)
+}
+
+/** Five daily phone destinations from the league's registered tabs. */
+export function nativeLeagueBottomTabs(groups: ReadonlyArray<{ items: WorkspaceNavItem[] }>, phase: string, t?: NavTranslate): WorkspaceNavItem[] {
+  const tr = translator(t)
+  const all = groups.flatMap(group => group.items)
+  const find = (...ids: string[]) => ids.map(id => all.find(item => item.id === id)).find(Boolean)
+  const preDraft = phase === 'Setup' || phase === 'Draft'
+  const slots: Array<[WorkspaceNavItem | undefined, string]> = [
+    [find('native_home', 'home'), tr('nativeLeague.bottom.league', 'League')],
+    preDraft && find('draft') ? [find('draft'), tr('nativeLeague.bottom.draft', 'Draft')] : [find('guillotine', 'survivor', 'matchups', 'matchup', 'fixtures'), ''],
+    [find('roster', 'team', 'squad'), tr('nativeLeague.bottom.team', 'Team')],
+    [find('waivers', 'players'), tr('nativeLeague.bottom.players', 'Players')],
+    [find('league_chat'), tr('nativeLeague.bottom.chat', 'Chat')],
+  ]
+  const short: Record<string, string> = {
+    guillotine: tr('league.nav.guilly', 'Guilly'), survivor: tr('league.nav.survivor.island', 'Island'),
+    matchups: tr('nativeLeague.bottom.matchup', 'Matchup'), matchup: tr('nativeLeague.bottom.matchup', 'Matchup'),
+    fixtures: tr('league.nav.fixtures', 'Fixtures'),
+  }
+  const out: WorkspaceNavItem[] = []
+  for (const [item, label] of slots) {
+    if (item && !out.some(row => row.id === item.id)) out.push({ ...item, label: label || short[item.id] || item.label })
+  }
+  return out
 }
 
 /** The "Your record" group heading (see nativeLeagueRecordLinks). */
