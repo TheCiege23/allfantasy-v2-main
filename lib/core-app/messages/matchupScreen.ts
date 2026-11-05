@@ -35,6 +35,8 @@ export const matchupScreenMessages = defineMessages({
 
     // Matchup
     guillyBasis: 'In a Guilly league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.',
+    noMatchupTitle: 'No matchup to show yet',
+    noMatchupHint: 'Your opponent and both lineups appear here once this week’s schedule is on file — in a new league, that is after the draft.',
     meetingsOnFile: (you: number, them: number, week: number) =>
       `meetings on file; last: ${you > them ? 'W' : you < them ? 'L' : 'T'} ${you.toFixed(1)}–${them.toFixed(1)} (wk ${week})`,
     builtWithout: (you: number, opponent: number) =>
@@ -119,6 +121,8 @@ export const matchupScreenMessages = defineMessages({
       `Calculado con ${yoursFrom} de tus ${yoursOf} titulares y ${theirsFrom} de sus ${theirsOf}; ambos totales pueden ser bajos en distinta medida.`,
 
     guillyBasis: 'En una liga Guilly compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.',
+    noMatchupTitle: 'Todavía no hay enfrentamiento',
+    noMatchupHint: 'Tu rival y las dos alineaciones aparecerán aquí cuando el calendario de esta semana esté registrado; en una liga nueva, eso ocurre después del draft.',
     meetingsOnFile: (you, them, week) =>
       `enfrentamientos registrados; último: ${you.toFixed(1)}–${them.toFixed(1)} (sem. ${week})`,
     builtWithout: (you, opponent) =>

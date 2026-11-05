@@ -1832,7 +1832,7 @@ export default async function AfCorePage({
       */}
       <CoreScreenArea>
         <CoreScreenErrorBoundary resetKey={errorResetKey}>
-          <Suspense key={screenKey} fallback={<CoreScreenSkeleton />}>
+          <Suspense key={screenKey} fallback={<CoreScreenSkeleton screen={segment} />}>
             {body}
           </Suspense>
         </CoreScreenErrorBoundary>
