@@ -1,0 +1,53 @@
+/* /pricing, restyled toward the Plans board (2026-11-05). Layered over af-pricing.css and scoped to the
+   page's redesign stamp. /core tokens only, except the account banner, which is dark in every mode
+   like the board's .af-keep-dark section. */
+
+/* Account banner: which plan you are on, when it renews, your tokens, billing. */
+.af-pr[data-redesign='plans'] .af-pr-account {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  padding: 18px 20px; border-radius: 18px; background: #11181c; color: #ffffff;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-mark {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border-radius: 13px; background: var(--accent); color: #ffffff;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 320px; min-width: 0; }
+.af-pr[data-redesign='plans'] .af-pr-account-title { font-size: 17px; font-weight: 800; }
+.af-pr[data-redesign='plans'] .af-pr-account-detail { font: 500 12px/1.4 'JetBrains Mono', ui-monospace, monospace; color: #a9b4b8; }
+.af-pr[data-redesign='plans'] .af-pr-account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-pr[data-redesign='plans'] .af-pr-account-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px;
+  border-radius: 10px; border: 1px solid #3c474d; background: transparent; color: #ffffff;
+  font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
+
+/* Cards: the board's 18px radius, a kicker row, a big mono price, roomier features. */
+.af-pr[data-redesign='plans'] .af-pr-grid { gap: 14px; }
+.af-pr[data-redesign='plans'] .af-pr-card { gap: 12px; padding: 20px; border-radius: 18px; border-color: var(--line); }
+.af-pr[data-redesign='plans'] .af-pr-card[data-yours='true'] { border: 2px solid var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.af-pr[data-redesign='plans'] .af-pr-kicker-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.af-pr[data-redesign='plans'] .af-pr-kicker {
+  font: 600 11px/1.2 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.af-pr[data-redesign='plans'] .af-pr-yours {
+  flex: none; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+  font: 600 11px/1.3 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.af-pr[data-redesign='plans'] .af-pr-yours[data-status='included'] { background: var(--chip); color: var(--text2); }
+.af-pr[data-redesign='plans'] .af-pr-name { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.af-pr[data-redesign='plans'] .af-pr-desc { font-size: 14px; line-height: 1.4; color: var(--text2); }
+.af-pr[data-redesign='plans'] .af-pr-amount { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; letter-spacing: -0.03em; }
+/* Flex so a link-styled CTA ("Go to my leagues") centres its label like the buttons do. */
+.af-pr[data-redesign='plans'] .af-pr-cta {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-height: 48px; border-radius: 12px; font-size: 15px;
+}
+.af-pr[data-redesign='plans'] .af-pr-features { gap: 9px; }
+.af-pr[data-redesign='plans'] .af-pr-features li { font-size: 14px; line-height: 1.4; }
+
+@media (max-width: 760px) {
+  .af-pr[data-redesign='plans'] .af-pr-account { padding: 16px; }
+  .af-pr[data-redesign='plans'] .af-pr-account-actions { width: 100%; }
+  .af-pr[data-redesign='plans'] .af-pr-account-btn { flex: 1 1 auto; }
+}

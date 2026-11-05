@@ -7,6 +7,10 @@ import { getPlanPresentations, describeYearlySavings } from "@/lib/monetization/
 import { buildSeoMeta } from "@/lib/seo";
 import { pricingIntentRedirect } from "@/lib/monetization/upgradeDestination";
 import { authOptions } from "@/lib/auth";
+import { aiAccessResolver } from "@/lib/ai-access/AIAccessResolver";
+import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access";
+import { getDisplayPlanName } from "@/lib/subscription/feature-access";
+import type { PricingAccount } from "@/lib/core-app/pricingAccount";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -90,12 +94,38 @@ export default async function PricingPage(
     tokenAmount: t.tokenAmount,
   }));
 
+  /*
+   * The Plans board's account layer: which plan the signed-in viewer is on, when it renews and their
+   * token balance — the same resolver the /core shell's plan chip reads. A failed read is null and
+   * the page renders exactly as it did before (no banner, no YOUR PLAN chip), rather than telling a
+   * paying viewer they are on Free.
+   */
+  const userId = session?.user?.id ?? null;
+  let account: PricingAccount | null = null;
+  if (userId) {
+    const access = await aiAccessResolver
+      .resolveForUser({ userId, userEmail: session?.user?.email, now: new Date() })
+      .catch(() => null);
+    if (isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)) {
+      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null };
+    } else if (access) {
+      const planIds = access.hasSubscription ? access.subscription.plans : [];
+      account = {
+        planIds,
+        planName: planIds[0] ? getDisplayPlanName(planIds[0]) : null,
+        renewsAt: access.hasSubscription ? access.subscription.currentPeriodEnd : null,
+        tokenBalance: access.tokenBalance,
+      };
+    }
+  }
+
   return (
     <PricingV4
       plans={plans}
       packs={packs}
       savingsHeadline={describeYearlySavings(presentations)}
       signedIn={Boolean(session?.user?.id)}
+      account={account}
     />
   );
 }
