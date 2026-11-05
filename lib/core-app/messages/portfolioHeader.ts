@@ -13,6 +13,7 @@ export const portfolioHeaderMessages = defineMessages({
     importLeague: 'Import a league',
     createOne: 'Create one from scratch',
     groupCount: (n: number) => `${n} ${n === 1 ? 'league' : 'leagues'}`,
+    emptyTitle: 'No claimed teams to show yet',
   },
   es: {
     title: 'Cartera',
@@ -21,5 +22,6 @@ export const portfolioHeaderMessages = defineMessages({
     importLeague: 'Importar una liga',
     createOne: 'Crear una desde cero',
     groupCount: (n: number) => `${n} ${n === 1 ? 'liga' : 'ligas'}`,
+    emptyTitle: 'Aún no hay equipos reclamados que mostrar',
   },
 })

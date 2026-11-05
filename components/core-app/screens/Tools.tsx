@@ -13,6 +13,8 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { useMessages } from '@/components/i18n/useMessages'
 import { toolsScreenMessages } from '@/lib/core-app/messages/toolsScreen'
 import { matchesToolPlanFilter, toolPlanStatus, type ToolPlanFilter, type ToolPlanStatus } from '@/lib/core-app/toolsPlan'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 
 /**
  * 25a — Tools, grouped by the job you came here to do.
@@ -178,27 +180,30 @@ export function Tools({ data, viewerPlan = null }: ToolsProps) {
   const filterLabel: Record<ToolPlanFilter, string> = { all: m.filterAll, included: m.filterIncluded, upgrade: m.filterUpgrade }
   return (
     <div className="af-tl" data-redesign="tools">
-      <header className="af-tl-head">
-        <p className="af-tl-eyebrow">{m.eyebrow}</p>
-        <h1 className="af-tl-title">
-          {copy('Tools')}
-          {/* Replaces two per-card `title=`s ("Tokens per run", "Opens the full page") a phone never showed — the cards are links, so the key lives here. */}
-          {hasCardMarks ? (
-            <>
-              {' '}
-              <TopicTip topic="tokenCost" />
-            </>
-          ) : null}
-        </h1>
-        <p className="af-tl-sub">
-          {copy('Grouped by what you came to do. Anything with a deadline shows it here, before you open it.')}
-        </p>
-        {viewerPlan ? (
-          <Link href="/pricing" className="af-tl-planchip" data-testid="tools-plan-chip">
-            {m.planChip(viewerPlan.name ?? m.planFree)}
-          </Link>
-        ) : null}
-      </header>
+      <PageHeader
+        className="af-tl-head"
+        eyebrow={m.eyebrow}
+        title={
+          <>
+            {copy('Tools')}
+            {/* Replaces two per-card `title=`s ("Tokens per run", "Opens the full page") a phone never showed — the cards are links, so the key lives here. */}
+            {hasCardMarks ? (
+              <>
+                {' '}
+                <TopicTip topic="tokenCost" />
+              </>
+            ) : null}
+          </>
+        }
+        sub={copy('Grouped by what you came to do. Anything with a deadline shows it here, before you open it.')}
+        actions={
+          viewerPlan ? (
+            <Link href="/pricing" className="af-tl-planchip" data-testid="tools-plan-chip">
+              {m.planChip(viewerPlan.name ?? m.planFree)}
+            </Link>
+          ) : null
+        }
+      />
 
       <section className="af-tl-chimmy" aria-labelledby="af-tl-chimmy-title">
         <span className="af-tl-chimmy-mark" aria-hidden>
@@ -218,13 +223,14 @@ export function Tools({ data, viewerPlan = null }: ToolsProps) {
       </section>
 
       {held ? (
-        <div className="af-tl-filters" role="group" aria-label={m.filterAria}>
-          {FILTERS.map((f) => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`tools-filter-${f}`}>
-              {filterLabel[f]}
-            </button>
-          ))}
-        </div>
+        <FilterChips
+          className="af-tl-filters"
+          ariaLabel={m.filterAria}
+          scrollOnPhone
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((f) => ({ id: f, label: filterLabel[f], testId: `tools-filter-${f}` }))}
+        />
       ) : null}
 
       {groups.length === 0 ? <p className="af-tl-empty">{m.empty}</p> : null}

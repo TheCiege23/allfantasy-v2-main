@@ -25,18 +25,7 @@
   margin-bottom: 18px;
 }
 
-.af-ml-title {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-}
-
-.af-ml-sub {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
+/* The title and the line under it are the shared PageHeader's (primitives/af-primitives.css). */
 
 .af-ml-sub strong {
   color: var(--text);
@@ -830,10 +819,6 @@
 @media (max-width: 720px) {
   .af-ml {
     padding: 16px 14px 56px;
-  }
-
-  .af-ml-title {
-    font-size: 24px;
   }
 
   /* Chips scroll horizontally rather than wrapping into a tall block. */
