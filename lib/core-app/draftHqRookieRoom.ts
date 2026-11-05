@@ -219,7 +219,10 @@ export function buildRookieDraftRoom(input: {
     }
   }
 
-  const status = live ? session.status : session && !DONE.has(session.status.toLowerCase()) ? session.status : null
+  // Read from `raw`, not `session`: the type guard held in `live` narrows `session` to null wherever
+  // `live` is false, which typed this as `never` (TS2339). Same result: a live session, or one not done.
+  const raw: RookieRoomSession | null = input.session
+  const status = raw == null ? null : live || !DONE.has(raw.status.toLowerCase()) ? raw.status : null
   const showSessionFacts = live || (session != null && status != null)
   const taxi = input.taxi && (input.taxi.slots > 0 || input.taxi.count > 0) ? input.taxi : null
   const inDraft = status != null && ['in_progress', 'paused'].includes(status.toLowerCase())
