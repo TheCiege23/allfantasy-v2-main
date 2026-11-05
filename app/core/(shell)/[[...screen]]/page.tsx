@@ -1613,6 +1613,7 @@ export default async function AfCorePage({
     <CoreScreenBody
       ctx={{
         chimmyMovesRead,
+        toolsViewerPlan,
         screen,
         sp,
         segment,
@@ -1934,6 +1935,8 @@ async function ScreenShellSignals({
 type CoreScreenContext = {
   /** League-first: Chimmy's one-tap moves for the selected league, started beside the shell reads. */
   chimmyMovesRead: Promise<ChimmyMoves | null>
+  /** The Tools board's plan chip and filter; null when the plan read failed. */
+  toolsViewerPlan: { held: string[]; name: string | null } | null
   screen: string[] | undefined
   sp: Record<string, string | string[] | undefined>
   segment: string
@@ -2013,6 +2016,7 @@ type CoreScreenContext = {
 async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const {
     chimmyMovesRead,
+    toolsViewerPlan,
     screen,
     sp,
     segment,
