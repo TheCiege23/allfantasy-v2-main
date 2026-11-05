@@ -1,6 +1,7 @@
 'use client'
 
 import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -168,6 +169,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           )}
         </p>
       ) : (
+        <DynastyMarkersScope markers={board.dynastyMarkers}>
         <WaiverFilteredList candidates={board.candidates} query={query} pos={pos} onQuery={setQuery} onPos={setPos}>
           {(shown) => (
         <ul className="af-wlb-list">
@@ -187,6 +189,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                 {c.position ?? '—'}
               </span>
               <span className="af-wlb-who">
+                {/* Dynasty leagues: age / ROOKIE chips after the name (renders the name alone otherwise). */}
+                <DynastyNameLine markerKey={c.sleeperId}>
                 <span className="af-wlb-name">
                   {/*
                     Opens the player card in this league's context (handoff STATE 7). Outside the
@@ -203,6 +207,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                     leagueId={leagueId}
                   />
                 </span>
+                </DynastyNameLine>
                 <span className="af-wlb-meta">
                   <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
                   {c.team ? `${c.team} · ` : ''}{m.proj}{' '}
@@ -282,6 +287,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         </ul>
           )}
         </WaiverFilteredList>
+        </DynastyMarkersScope>
       )}
 
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (

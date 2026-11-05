@@ -84,6 +84,7 @@ import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { readFinderDynastyMarkers } from '@/lib/core-app/dynastyMarkerRead'
 import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
@@ -2413,6 +2414,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const playerSport = normalizeFinderSport(sp.sport)
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
+  /*
+   * A held DYNASTY league (the shell's own `dynastyEra`): age / ROOKIE / PROSPECT chips on the results,
+   * from ONE batched SportsPlayer read for every match (lib/core-app/dynastyMarkerRead.ts). The league
+   * row comes from the shell's context, so no extra league query. Nothing for any other league.
+   */
+  const finderDynastyMarkers =
+    activeKey === 'players' && dynastyEra && leagueCtx && playerMatches.length > 0
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? readFinderDynastyMarkers(prisma, { league, matches: playerMatches }) : null))
+          .catch(() => null)
+      : null
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
    * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
@@ -5096,6 +5109,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           depthAccess={corePaywall?.player_depth ?? null}
           depth={playerDepth}
           triage={gameDayTriage}
+          dynastyMarkers={finderDynastyMarkers}
           nowIso={new Date().toISOString()}
         />
       ) : activeKey === 'week' ? (

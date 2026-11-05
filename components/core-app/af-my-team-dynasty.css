@@ -1,4 +1,5 @@
-/* My Team dynasty roster markers (components/core-app/screens/DynastyRosterMarkers.tsx).
+/* Dynasty roster markers (components/core-app/screens/DynastyRosterMarkers.tsx) — My Team, Waivers,
+ * Player Finder and the player card.
  *
  * Mounted only for a dynasty league's rows, so nothing here reaches any other league. The tones are
  * the Home deck's age gauge in miniature — teal rising, gold prime, ember past the position's usual
@@ -16,8 +17,16 @@
  * the markers were pushed past the clip. With markers present the row may wrap, so they drop under the
  * name instead of disappearing. */
 .af-mt-player-name:has(.af-mt-dyn){flex-wrap:wrap;row-gap:4px}
+/* And the group itself may wrap: "20 PROSPECT" is wider than a desktop bench name column (~90px), so a
+ * group that could not shrink was clipped mid-word. It now takes at most the line and breaks between
+ * chips; each chip keeps its own width. */
+.af-mt-dyn{flex-wrap:wrap;row-gap:4px;max-width:100%}
+.af-mt-dyn > *{flex:none}
 
-.af-mt-dyn-age{--tone:var(--accent);display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 6px;border-radius:999px;box-sizing:border-box;
+/* Prime reads the dynasty shell's own gold (bronze in light) before the screen's --accent: Player Finder
+ * redefines --accent as its cyan, which made a prime chip look like a rising one. On My Team the two
+ * are the same value (af-core-dynasty.css points --accent at --dyn-accent-text). */
+.af-mt-dyn-age{--tone:var(--dyn-accent-text,var(--accent));display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 6px;border-radius:999px;box-sizing:border-box;
   color:var(--tone);background:color-mix(in srgb,var(--tone) 14%,transparent);border:1px solid color-mix(in srgb,var(--tone) 45%,transparent);
   font:800 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
 .af-mt-dyn-age[data-tone=rising]{--tone:#5eead4}
@@ -28,7 +37,25 @@ html[data-mode='light'] .af-mt-dyn-age[data-tone=aging]{--tone:#b4441a}
 /* ROOKIE: a solid gold tab, the one filled mark on the row, so a stash is findable at a glance. */
 .af-mt-dyn-rookie{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--dyn-gold,#D4A24C);color:var(--dyn-ink,#0B0F17);
   font:800 11px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.08em;text-transform:uppercase}
-html[data-mode='light'] .af-mt-dyn-rookie{background:var(--accent);color:var(--accent-ink)}
+/* The dynasty bronze first, as for the prime chip above: Player Finder's --accent is its cyan. */
+html[data-mode='light'] .af-mt-dyn-rookie{background:var(--dyn-accent-text,var(--accent));color:var(--dyn-accent-ink,var(--accent-ink))}
+
+/* PROSPECT (devy / C2C): the same tab as ROOKIE in violet — a college player has not turned pro, which
+ * is a different fact from "no pro season yet", so it gets its own colour, not gold.
+ * ⚠ CONTRAST, MEASURED: #0B0F17 on #a78bfa 7.9:1 (dark/AF); #fff on #6d28d9 7.1:1 (light). */
+.af-mt-dyn-prospect{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:#a78bfa;color:#0B0F17;
+  font:800 11px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.08em;text-transform:uppercase}
+html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
+
+/* ── The same chips on other surfaces (Waivers "Worth adding", Player Finder results, the player card).
+ * Each wraps the name in a line that only exists when a marker does, so a non-dynasty row's DOM is
+ * untouched. The name truncates; the chips never shrink, and drop under the name when the row is too
+ * narrow for both (My Team's flex-wrap rule, above). */
+.af-dyn-name-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.af-dyn-name-line > :first-child{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-dyn-name-line > .af-mt-dyn{margin-left:0}
+/* The player card's meta line: the chips sit after position · team. */
+.af-pc-meta .af-mt-dyn{margin-left:8px}
 
 /* The key under the Starters heading. */
 .af-mt-dyn-key{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 10px;color:var(--muted);font-size:12px;line-height:1.3}
