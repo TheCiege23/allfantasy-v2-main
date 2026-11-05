@@ -2815,10 +2815,6 @@ html[data-mode='light'] .af-core .af-tc {
 }
 
 @media (max-width: 720px) {
-  /* KTC order on a phone: what you get, then what it costs you. */
-  .af-tc-builder .af-tc-team[data-side='get'] {
-    order: -1;
-  }
   .af-tc-team {
     gap: 8px;
     padding: 12px;
@@ -2931,4 +2927,77 @@ html[data-mode='light'] .af-core .af-tc {
     box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.35);
   }
   .af-tcp-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/*
+ * ── League trade evaluator on the all-leagues hub (2026-11-05) ─────────────
+ *
+ * A league dropdown, then that league's own builder (TradeCenter embedded).
+ * Appended at the end of the file, outside every existing `@media` block —
+ * see the warning near the top about inserting a query inside another.
+ */
+.af-tc-hub-evaluator {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.af-tc-hub-league-select {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  color: var(--text);
+  font-weight: 700;
+}
+.af-tc-hub-league-select select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+/* The embedded builder is a section of the hub, not a second page inside it. */
+.af-tc-hub-evaluator > .af-tc {
+  padding: 0;
+  max-width: none;
+}
+
+/* The manager's league image at the head of each team. */
+.af-tc-team-head .af-tc-team-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  align-self: center;
+}
+.af-tc-team-head {
+  align-items: center;
+}
+
+/* Team B's manager dropdown, in its own card under the team head. */
+.af-tc-team-picker {
+  display: block;
+}
+.af-tc-team-picker select {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  /* The phone hides the ranked chips, and the pick itself lives in Team B's card: nothing is left here. */
+  .af-tc-partner {
+    display: none;
+  }
 }

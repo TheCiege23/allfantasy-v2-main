@@ -517,8 +517,9 @@ describe('stylesheet', () => {
     expect(CSS).not.toContain('[data-mstep]')
   })
 
-  it('on a phone, "You get" is ordered above "You send"', () => {
-    expect(phoneBlockWith(CSS, "[data-side='get']")).toMatch(/\.af-tc-builder \.af-tc-team\[data-side='get'\] \{\n    order: -1;/)
+  it('Team A (you) comes before Team B at every width — no phone rule reorders the sides', () => {
+    // 2026-11-05: Team A is your roster, Team B the manager you pick, in that order everywhere.
+    expect(CSS).not.toMatch(/\.af-tc-team\[data-side='get'\] \{\n\s*order:/)
   })
 
   it('🛑 the action row is not sticky to the bottom', () => {

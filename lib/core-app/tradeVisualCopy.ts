@@ -2,6 +2,12 @@ import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
 export const tradeVisualSpanish: Record<string,string> = {
+  // The league trade evaluator on the all-leagues hub (2026-11-05).
+  "Trade evaluator":"Evaluador de intercambios",
+  "Build a trade in one of your leagues":"Arma un intercambio en una de tus ligas",
+  "League":"Liga",
+  "Outside offer — no league":"Oferta externa — sin liga",
+  "Team A is your roster and picks in this league. Choose the manager for Team B.":"El equipo A es tu plantilla y tus selecciones en esta liga. Elige al mánager del equipo B.",
   // The calculator trade builder (2026-10-31).
   "Search your players, picks or FAAB":"Busca tus jugadores, selecciones o FAAB",
   "Search their players or picks":"Busca sus jugadores o selecciones",

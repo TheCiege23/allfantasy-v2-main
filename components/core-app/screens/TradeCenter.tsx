@@ -398,6 +398,18 @@ const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string
   { key: 'byeNotes', tone: 'bye', title: 'Bye-week collisions' },
 ]
 
+/** "NFL · 18 teams" → 18. The strip's meta is display text, so anything unreadable is null, never a guess. */
+function teamCountFromMeta(meta: string | null | undefined): number | null {
+  const match = /(\d+)\s+teams?\b/i.exec(meta ?? '')
+  return match ? Number(match[1]) : null
+}
+
+/** "NFL · 18 teams" → "NFL", only when the first token is a sport this app grades. */
+function sportFromMeta(meta: string | null | undefined): string | null {
+  const first = (meta ?? '').split('·')[0]?.trim().toUpperCase() ?? ''
+  return ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(first) ? first : null
+}
+
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
@@ -407,6 +419,14 @@ function AllLeaguesTradeHub(props: {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const [query, setQuery] = useState('')
+  /*
+   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
+   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
+   * from somewhere AllFantasy cannot see.
+   */
+  const OUTSIDE = 'outside'
+  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
+  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
@@ -422,7 +442,44 @@ function AllLeaguesTradeHub(props: {
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
 
-      <GenericTradeAnalyzer viewerId={props.viewerId} />
+      <section className="af-tc-hub-evaluator" aria-label={copy('Trade evaluator')}>
+        <div className="af-tc-hub-section-head">
+          <div>
+            <div className="af-label">{copy('Trade evaluator')}</div>
+            <h2>{copy('Build a trade in one of your leagues')}</h2>
+          </div>
+        </div>
+        <label className="af-tc-hub-league-select">
+          <span>{copy('League')}</span>
+          <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
+            {props.leagues.map((league) => (
+              <option key={league.id} value={league.id}>
+                {league.name}{league.meta ? ` · ${league.meta}` : ''}
+              </option>
+            ))}
+            <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
+          </select>
+        </label>
+        {evalLeague ? (
+          <>
+            <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
+            {/*
+              The league's own Trade Center builder, keyed by league so switching leagues starts a
+              clean deal instead of carrying one team's players into another league.
+            */}
+            <TradeCenter
+              key={evalLeague.id}
+              embedded
+              viewerId={props.viewerId}
+              league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
+              platform={evalLeague.platform}
+              sport={sportFromMeta(evalLeague.meta)}
+            />
+          </>
+        ) : (
+          <GenericTradeAnalyzer viewerId={props.viewerId} />
+        )}
+      </section>
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
       {props.valueActions.length > 0 ? (
@@ -590,6 +647,13 @@ export function TradeCenter(props: {
    * (`components/trades/SleeperOffersNotice.tsx`, `?enter=offer`). Applied once, on arrival.
    */
   startWithOfferEntry?: boolean
+  /**
+   * Rendered inside another page (the all-leagues hub's evaluator) rather than as the league's own
+   * Trade Center. Drops what belongs to that page — its header and league line, the ranked partner
+   * chips, trade ideas, offers and drafts, the proposal panels, value alerts, the trade list and the
+   * finder — and keeps the deal: Team A, Team B, the balance, Analyze and the verdict.
+   */
+  embedded?: boolean
 }) {
   const language = useOptionalLanguage().language
   const tcm = useMessages(tradeCenterMessages)
@@ -1581,6 +1645,7 @@ export function TradeCenter(props: {
     <div className="af-tc">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
+      {props.embedded ? null : (
       <header className="af-tc-head">
         <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
         <h1>{copy('Trade Center')}</h1>
@@ -1610,8 +1675,9 @@ export function TradeCenter(props: {
           </div>
         ) : null}
       </header>
+      )}
 
-      {props.league ? (
+      {props.league && !props.embedded ? (
         <div className="af-tc-context">
           {props.platform ? (
             <span
@@ -1730,37 +1796,13 @@ export function TradeCenter(props: {
       {/*
         Naming the other side is not decoration. It is what turns on the whole
         counterparty half of the ledger, and what lets each column offer the
-        picks that roster actually holds. One scrolling row of names above the
-        builder, because the "You get" side is empty until one is chosen.
+        picks that roster actually holds. The pick itself is the dropdown in Team B's
+        card; this row is the ranked shortcut to the same choice, on the league page only.
       */}
       <div ref={builderTopRef} aria-hidden />
-      {otherRosters.length > 0 ? (
+      {otherRosters.length > 0 && !props.embedded ? (
         <div className="af-tc-partner">
           <span className="af-label">{copy('Trading with')}</span>
-          {/*
-            Every other team in ONE control, in name order, as the owner asked for ("a list of managers
-            from that league"). The ranked chips below stay on wide screens; on a phone this is the picker.
-          */}
-          <label className="af-tc-partner-select">
-            <span className="sr-only">{partnerSelectCopy.allManagers}</span>
-            <select
-              value={partnerRosterId ?? ''}
-              onChange={(e) => {
-                setPartnerRosterId(e.target.value || null)
-                /* The verdict belonged to the previous counterparty. */
-                setResult(null)
-              }}
-            >
-              <option value="">{partnerSelectCopy.chooseManager}</option>
-              {[...otherRosters]
-                .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
-                .map((r) => (
-                  <option key={r.rosterId} value={r.rosterId}>
-                    {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
-                  </option>
-                ))}
-            </select>
-          </label>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
               <button
@@ -1792,7 +1834,7 @@ export function TradeCenter(props: {
 
       <div className="af-tc-builder">
         {([
-          { side: 'give' as const, label: copy('Your team'), handle: '@you', isYou: true, lines: give },
+          { side: 'give' as const, label: myRoster?.ownerName ?? copy('Your team'), handle: '@you', isYou: true, lines: give },
           {
             side: 'get' as const,
             label: theirLabel,
@@ -1803,8 +1845,31 @@ export function TradeCenter(props: {
         ]).map((side) => (
           <div key={side.side} className="af-tc-team" data-side={side.side}>
             <div className="af-tc-team-head">
+              {/*
+                The manager's league image beside their name, so the two teams read as two people
+                before anything is added. Only once that roster is known: an unpicked "You get" side
+                has no manager to show, and a placeholder face would claim one.
+              */}
+              {(() => {
+                const r = side.isYou ? myRoster : partnerRoster
+                if (!r) return null
+                const initial = (r.ownerName ?? '?').slice(0, 1).toUpperCase()
+                return (
+                  <span className="af-tc-manager-avatar af-tc-team-avatar" aria-hidden="true">
+                    {r.avatarUrl ? (
+                      <FallbackImg
+                        src={r.avatarUrl}
+                        alt=""
+                        loading="lazy"
+                        fallback={<span className="af-tc-headshot-fallback">{initial}</span>}
+                      />
+                    ) : (
+                      <span className="af-tc-headshot-fallback">{initial}</span>
+                    )}
+                  </span>
+                )
+              })()}
               <span className="af-tc-team-name">{side.label}</span>
-              {side.handle ? <span className="af-tc-team-handle">{side.handle}</span> : null}
               {side.isYou ? <span className="af-tc-you">{copy('YOU')}</span> : null}
               {props.platform ? (
                 <>
@@ -1819,6 +1884,33 @@ export function TradeCenter(props: {
                 </>
               ) : null}
             </div>
+            {/*
+              TEAM B IS CHOSEN HERE, in the card it fills: every other manager in the league, in name
+              order, and never you — `otherRosters` already excludes the viewer's own team. Choosing one
+              loads that manager's players and picks below, under their name and league image.
+            */}
+            {!side.isYou && otherRosters.length > 0 ? (
+              <label className="af-tc-partner-select af-tc-team-picker">
+                <span className="sr-only">{partnerSelectCopy.allManagers}</span>
+                <select
+                  value={partnerRosterId ?? ''}
+                  onChange={(e) => {
+                    setPartnerRosterId(e.target.value || null)
+                    /* The verdict belonged to the previous counterparty. */
+                    setResult(null)
+                  }}
+                >
+                  <option value="">{partnerSelectCopy.chooseManager}</option>
+                  {[...otherRosters]
+                    .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
+                    .map((r) => (
+                      <option key={r.rosterId} value={r.rosterId}>
+                        {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
             {/*
               The side's label and running total in one bar, KTC-style, so the two numbers being
               compared sit at the top of each side instead of below a roster list.
@@ -2108,7 +2200,7 @@ export function TradeCenter(props: {
         attention. Children stay mounted while closed, so the inbox still loads and still reports
         its count.
       */}
-      {otherRosters.length > 0 ? (
+      {otherRosters.length > 0 && !props.embedded ? (
         <details className="af-tc-fold af-tc-ideas">
           <summary>
             <span>{copy('Trade ideas')}</span>
@@ -2131,6 +2223,7 @@ export function TradeCenter(props: {
         </details>
       ) : null}
 
+      {props.embedded ? null : (
       <details
         className="af-tc-fold af-tc-offers"
         open={offersOpen}
@@ -2216,6 +2309,7 @@ export function TradeCenter(props: {
           ))}
         </div>
       </details>
+      )}
 
       {/*
         ⚠ THE VERDICT IS SUPPRESSED WHEN THE FORMAT BLOCKS THE DEAL. A score
@@ -2517,6 +2611,8 @@ export function TradeCenter(props: {
         Wrapped rather than tagged: the panel owns its own root element. `display: contents` on the
         wrapper (stylesheet) keeps it out of the page's flex gap on every width.
       */}
+      {props.embedded ? null : (
+        <>
       <div className="af-tc-mstep-wrap">
       <TradeProposePanel
         leagueId={props.league?.id ?? null}
@@ -2541,6 +2637,8 @@ export function TradeCenter(props: {
         }}
       />
       </div>
+        </>
+      )}
 
       {/* Additive context. Never merged with the verdict above. */}
       {result ? (
@@ -2694,11 +2792,13 @@ export function TradeCenter(props: {
         ⚠ Its root reuses `.af-tc-dos`, the same class as the Decision OS section above, which is
         why that section carries `data-section="breakdown"` and neither is selected by class alone.
       */}
-      <div className="af-tc-mstep-wrap">
-        <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
-          <TradeFinderPanel leagueId={props.league?.id ?? null} />
-        </CoreDepthGate>
-      </div>
+      {props.embedded ? null : (
+        <div className="af-tc-mstep-wrap">
+          <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
+            <TradeFinderPanel leagueId={props.league?.id ?? null} />
+          </CoreDepthGate>
+        </div>
+      )}
 
       <div className="af-tc-actions">
         <p className="af-tc-caption">{copy(" Grades here are projected, not realized — they price the deal as it stands today rather than how it turns out. ")}</p>
@@ -2736,7 +2836,7 @@ export function TradeCenter(props: {
         Construction and analysis lead the page after pending offers. The unified timeline and
         imported history follow the builder, including below the verdict on the phone's Review step.
       */}
-      {valueActions.length > 0 ? (
+      {valueActions.length > 0 && !props.embedded ? (
         <details className="af-tc-value-actions">
           <summary><span>{copy("Value change alerts")}</span><b>{valueActions.length}{copy(" players across your leagues")}</b></summary>
           {/* Not in the <summary>: a tap there toggles the panel. */}
@@ -2760,10 +2860,10 @@ export function TradeCenter(props: {
           </div>
         </details>
       ) : null}
-      {props.league?.id ? (
+      {props.league?.id && !props.embedded ? (
         <ProposeTradeLaunch rosterData={rosterData} onOpen={() => setProposeOpen(true)} />
       ) : null}
-      {proposeOpen && props.league?.id && rosterData?.viewerRosterId ? (
+      {proposeOpen && !props.embedded && props.league?.id && rosterData?.viewerRosterId ? (
         <ProposeTradeFlow
           leagueId={props.league.id}
           rosters={rosterData.rosters}
@@ -2778,7 +2878,7 @@ export function TradeCenter(props: {
           the engine's own accept / decline / counter / cancel and veto-vote routes. History is the
           unified timeline this slot used to render on its own.
         */}
-        {props.league?.id ? (
+        {props.league?.id && !props.embedded ? (
           <TradeCenterPanel
             leagueId={props.league.id}
             onLoad={loadOffer}
