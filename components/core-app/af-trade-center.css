@@ -2978,26 +2978,54 @@ html[data-mode='light'] .af-core .af-tc {
   align-items: center;
 }
 
-/* Team B's manager dropdown, in its own card under the team head. */
+/*
+ * Team B's name IS its manager dropdown: it sits in the team head where Team A's name sits, at the
+ * same size and weight, with a chevron so it still reads as a control.
+ */
 .af-tc-team-picker {
+  position: relative;
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .af-tc-team-picker select {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   max-width: none;
   min-width: 0;
   min-height: 44px;
-  padding: 9px 11px;
+  padding: 8px 34px 8px 11px;
   border: 1px solid var(--accent-line);
   border-radius: 10px;
   background: var(--surface2);
   color: var(--text);
   font: inherit;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.af-tc-team-picker::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
 }
 @media (max-width: 720px) {
   /* The phone hides the ranked chips, and the pick itself lives in Team B's card: nothing is left here. */
   .af-tc-partner {
+    display: none;
+  }
+  /* The pinned balance bar's button grades the deal at this width; one analyze button, not two. */
+  .af-core .af-tc-actions .af-tc-actions-analyze,
+  .af-tc-actions .af-tc-actions-analyze {
     display: none;
   }
 }

@@ -99,9 +99,21 @@ describe('the hub evaluator', () => {
     // No manager yet: Team B shows no face rather than a placeholder one.
     expect(side('get').querySelector('.af-tc-team-avatar')).toBeNull()
     fireEvent.change(select, { target: { value: 'r2' } })
-    expect(side('get').querySelector('.af-tc-team-name')!.textContent).toBe('Matt Jones')
+    // Team B's name is the dropdown itself: the chosen option names the manager.
+    expect(select.selectedOptions[0]?.textContent).toContain('Matt Jones')
     expect(side('get').querySelector('.af-tc-team-avatar img')?.getAttribute('src')).toBe('https://img.test/matt.png')
     expect(side('get').textContent).toContain('Christian McCaffrey')
+  })
+
+  it('names Team B once: the dropdown sits in the team head, with no second name above or below it', async () => {
+    hub()
+    const select = await partnerSelect()
+    fireEvent.change(select, { target: { value: 'r2' } })
+    const head = side('get').querySelector('.af-tc-team-head') as HTMLElement
+    expect(head.contains(select)).toBe(true)
+    expect(side('get').querySelector('.af-tc-team-name')).toBeNull()
+    // Team A has no dropdown — it is always you.
+    expect(side('give').querySelector('select')).toBeNull()
   })
 
   it('a manager with no league image gets their initial, not an empty circle', async () => {

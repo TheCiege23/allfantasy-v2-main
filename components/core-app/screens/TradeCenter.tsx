@@ -1869,7 +1869,36 @@ export function TradeCenter(props: {
                   </span>
                 )
               })()}
-              <span className="af-tc-team-name">{side.label}</span>
+              {/*
+                TEAM B'S NAME IS THE DROPDOWN. Every other manager in the league, in name order, and
+                never you — `otherRosters` already excludes the viewer's own team. Choosing one loads
+                that manager's players and picks below, under their name and league image. It used to
+                be a second control under a heading that said the same name; one is enough.
+              */}
+              {!side.isYou && otherRosters.length > 0 ? (
+                <label className="af-tc-partner-select af-tc-team-picker">
+                  <span className="sr-only">{partnerSelectCopy.allManagers}</span>
+                  <select
+                    value={partnerRosterId ?? ''}
+                    onChange={(e) => {
+                      setPartnerRosterId(e.target.value || null)
+                      /* The verdict belonged to the previous counterparty. */
+                      setResult(null)
+                    }}
+                  >
+                    <option value="">{partnerSelectCopy.chooseManager}</option>
+                    {[...otherRosters]
+                      .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
+                      .map((r) => (
+                        <option key={r.rosterId} value={r.rosterId}>
+                          {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : (
+                <span className="af-tc-team-name">{side.label}</span>
+              )}
               {side.isYou ? <span className="af-tc-you">{copy('YOU')}</span> : null}
               {props.platform ? (
                 <>
@@ -1884,33 +1913,6 @@ export function TradeCenter(props: {
                 </>
               ) : null}
             </div>
-            {/*
-              TEAM B IS CHOSEN HERE, in the card it fills: every other manager in the league, in name
-              order, and never you — `otherRosters` already excludes the viewer's own team. Choosing one
-              loads that manager's players and picks below, under their name and league image.
-            */}
-            {!side.isYou && otherRosters.length > 0 ? (
-              <label className="af-tc-partner-select af-tc-team-picker">
-                <span className="sr-only">{partnerSelectCopy.allManagers}</span>
-                <select
-                  value={partnerRosterId ?? ''}
-                  onChange={(e) => {
-                    setPartnerRosterId(e.target.value || null)
-                    /* The verdict belonged to the previous counterparty. */
-                    setResult(null)
-                  }}
-                >
-                  <option value="">{partnerSelectCopy.chooseManager}</option>
-                  {[...otherRosters]
-                    .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
-                    .map((r) => (
-                      <option key={r.rosterId} value={r.rosterId}>
-                        {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
-                      </option>
-                    ))}
-                </select>
-              </label>
-            ) : null}
             {/*
               The side's label and running total in one bar, KTC-style, so the two numbers being
               compared sit at the top of each side instead of below a roster list.
@@ -2802,9 +2804,13 @@ export function TradeCenter(props: {
 
       <div className="af-tc-actions">
         <p className="af-tc-caption">{copy(" Grades here are projected, not realized — they price the deal as it stands today rather than how it turns out. ")}</p>
+        {/*
+          Hidden at phone width by the stylesheet: there the pinned balance bar carries the one
+          button that grades the deal, and a second one down here read as a different action.
+        */}
         <button
           type="button"
-          className="af-btn"
+          className="af-btn af-tc-actions-analyze"
           onClick={analyze}
           disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
         >
