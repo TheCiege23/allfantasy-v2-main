@@ -240,6 +240,8 @@ import { warRoomIssueHref } from '@/lib/core-app/warRoomIssueHref'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import { loadDynastyStandingsHistory } from '@/lib/core-app/dynastyStandingsHistoryLoader'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { getStandingsLineups } from '@/lib/core-app/standingsLineups'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
@@ -3538,6 +3540,23 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'standings' && selectedLeagueId && standings?.available && leagueCtx
       ? await leagueCtx.league().catch(() => null)
       : null
+  /*
+   * Dynasty history (rafters + every franchise's all-time record) — a DYNASTY league only, by the same
+   * `usesDynastyBackground` rule as the shell's Dynasty Era stamp; every other league gets null and the
+   * screen is unchanged. Postgres only (lib/core-app/dynastyStandingsHistoryLoader.ts); a failed read
+   * costs the section and nothing else. Drawn on the unavailable branch too: an offseason dynasty
+   * league is exactly when its history matters.
+   */
+  const standingsDynasty =
+    activeKey === 'standings' && selectedLeagueId && standings && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) =>
+            league && usesDynastyBackground(league) ? loadDynastyStandingsHistory(selectedLeagueId, userId, league.season ?? null) : null,
+          )
+          .catch(() => null)
+      : null
+
   const [standingsEfficiency, standingsDraftOrder] =
     standings?.available && standingsLeagueRow
       ? await Promise.all([
@@ -5209,6 +5228,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             odds={standingsOdds}
             efficiency={standingsEfficiency}
             draftOrder={standingsDraftOrder}
+            dynasty={standingsDynasty}
             elimination={
               standingsEliminated && selectedLeagueId
                 ? {
