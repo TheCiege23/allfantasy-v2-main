@@ -34,6 +34,8 @@ export type SettingsSubPageId =
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Who has paid the league's dues. Tracking only: AllFantasy never holds entry fees or pays winnings. */
+  | 'dues'
   /** Lock areas of the rules for the season; unlocking mid-season takes a league vote (lib/league/settingsLock). */
   | 'settings-lock'
   /** Manual point adjustments per matchup, with a reason (lib/score-adjustments). */
@@ -288,6 +290,9 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
         { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
+        // Waivers sit with the league's format, not the draft (owner's call, 2026-11-01): how claims run is
+        // part of what kind of league this is.
+        { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
       ],
     },
     {
@@ -320,12 +325,9 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       ],
     },
     {
-      id: 'waivers-trades',
-      title: 'Waivers & trades',
-      rows: [
-        { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
-        { id: 'trades', label: 'Trades', value: formatTrades(league), ...edit('trades') },
-      ],
+      id: 'trades',
+      title: 'Trades',
+      rows: [{ id: 'trades', label: 'Trades', value: formatTrades(league), ...edit('trades') }],
     },
   ]
 
@@ -429,7 +431,8 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'Commissioner tools',
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
-        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls and league history', target: 'commissioner-tools' },
+        { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
         { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
         { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)

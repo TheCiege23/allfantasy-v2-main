@@ -17,6 +17,7 @@ const CommsDrawer = dynamic(() => import('./CommsDrawer'), {
 const SupportModal = dynamic(() => import('@/components/core-app/support/SupportModal'), { ssr: false })
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { useChatBadge } from './useChatBadge'
+import { useCommsTabCounts } from './useCommsTabCounts'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -216,6 +217,9 @@ export function CommsDock({
   const launcher = useDraggableLauncher(launchRef, !open)
   /* The server's count, kept current between page loads — see useChatBadge. */
   const badge = useChatBadge(unread, mentions, open)
+  /* The open drawer's per-tab counts, re-read on every tab switch — see useCommsTabCounts. */
+  const [drawerTab, setDrawerTab] = useState<CommsTab | null>(null)
+  const tabCounts = useCommsTabCounts(open, drawerTab)
 
   return (
     <>
@@ -280,6 +284,8 @@ export function CommsDock({
         initialDraft={prefill}
         leagueDraft={leagueDraft}
         openRequest={openRequest}
+        tabCounts={tabCounts}
+        onTabChange={setDrawerTab}
       />}
 
       {supportOpen && <SupportModal

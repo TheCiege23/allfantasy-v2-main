@@ -1,0 +1,84 @@
+/*
+ * My Leagues, restyled to the My Leagues board (2026-11-05).
+ *
+ * Layered after af-my-leagues.css and scoped to `.af-core.af-ml`, so it only moves what the board
+ * draws differently: a mono eyebrow over the title, roomier 16px cards with a 44px initials tile and
+ * a 16px name, platform/format meta in mono, the blocking reason as a pill, and a taller search.
+ * Every colour is an af-core token, so light, dark and AF modes follow without a literal.
+ */
+
+.af-core.af-ml .af-ml-eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font: 600 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.af-core.af-ml .af-ml-title { font-weight: 800; }
+
+.af-core.af-ml .af-ml-btn { border-radius: 10px; font-size: 14px; font-weight: 700; }
+
+.af-core.af-ml .af-ml-search { min-height: 48px; padding: 0 14px; }
+.af-core.af-ml .af-ml-search-input { font-size: 15px; }
+
+/* Section heads: the board's 17px title with a plain mono count, not a boxed chip. */
+.af-core.af-ml .af-ml-tier-title { font-weight: 800; align-items: baseline; gap: 10px; }
+.af-core.af-ml .af-ml-tier-n {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Cards: 16px corners and padding, a 44px tile, a 16px name. */
+.af-core.af-ml .af-ml-card { gap: 12px; padding: 16px; border-radius: 16px; }
+.af-core.af-ml .af-ml-card-top { gap: 12px; }
+.af-core.af-ml .af-ml-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 15px;
+}
+.af-core.af-ml .af-ml-card-name { font-size: 16px; }
+/* With a bigger tile, the PRIVATE / COMMISH badges wrap under the name instead of truncating it. */
+.af-core.af-ml .af-ml-card-top { flex-wrap: wrap; }
+.af-core.af-ml .af-ml-card-id { flex: 1 1 150px; }
+.af-core.af-ml .af-ml-card-meta {
+  margin-top: 3px;
+  font: 600 11px/1.35 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+
+/* The blocking reason reads as the board's next-action pill, in its tone. */
+.af-core.af-ml .af-ml-reason {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: var(--chip);
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.af-core.af-ml .af-ml-reason[data-tone='bad'] { background-color: var(--bad-soft); }
+.af-core.af-ml .af-ml-reason[data-tone='warn'] { background-color: var(--warn-soft); }
+
+/* The quiet grid keeps its 6-up density but needs room for the larger tile and name. */
+.af-core.af-ml .af-ml-grid[data-view='grid'][data-tier='quiet'] {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* Phone: header actions fill the row, one card per row, as the board's phone layout. */
+@media (max-width: 760px) {
+  .af-core.af-ml .af-ml-actions { width: 100%; }
+  .af-core.af-ml .af-ml-actions > * { flex: 1 1 auto; }
+  .af-core.af-ml .af-ml-grid[data-view='grid'] { grid-template-columns: minmax(0, 1fr); }
+  .af-core.af-ml .af-ml-title { font-size: 26px; }
+  /* The sort select's longest option ran 59px past a 390px screen; each select takes its own row. */
+  .af-core.af-ml .af-ml-select { flex: 1 1 100%; min-width: 0; }
+  .af-core.af-ml .af-ml-select select { flex: 1 1 auto; min-width: 0; width: 100%; }
+}

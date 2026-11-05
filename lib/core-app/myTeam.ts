@@ -45,6 +45,8 @@ import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type St
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isGuillotineLeague, isTeamEliminated } from './teamElimination'
 import { loadDynastyOutlook, type DynastyOutlook } from './dynastyOutlook'
+import { buildDynastyRosterMarkers, type DynastyRosterMarker } from './dynastyRosterMarkers'
+import { isDynastyLeague as isDynastyFormatLeague } from '@/lib/league/isDynastyLeague'
 import { getTeamActivity, type TeamActivity } from './teamActivity'
 import {
   BENCH_SWAP_POINTS,
@@ -308,6 +310,12 @@ export type MyTeamData = {
   unidentified?: { bench: number; ir: number; taxi: number }
   /** Draft capital and lineup age — dynasty leagues only (`dynastyOutlook.ts`). Absent otherwise. */
   dynasty?: DynastyOutlook | null
+  /**
+   * Per-row age and rookie markers, keyed by `LineupPlayer.sleeperId` — dynasty leagues only
+   * (lib/core-app/dynastyRosterMarkers.ts). Absent otherwise; a player with nothing agreed on file
+   * has no entry and his row shows no marker.
+   */
+  dynastyMarkers?: Record<string, DynastyRosterMarker> | null
   /** Your own recent trades, claims and adds/drops in this league. Null when the feed could not be read. */
   teamActivity?: TeamActivity | null
   starters: SectionState<LineupSlot[]>
@@ -1714,6 +1722,22 @@ async function loadMyTeamData(
     league: { id: leagueId, platform: league.platform ?? null, platformLeagueId: league.platformLeagueId ?? null, sport },
     team: { externalId: String(myTeamRow.externalId ?? ''), platformUserId: myTeamRow.platformUserId ?? null, claimedByUserId: userId },
   }).catch(() => null)
+  /*
+   * Row markers use the shared dynasty predicate (lib/league/isDynastyLeague.ts) — the same one the
+   * /core shell's gold identity uses — so every league dressed as dynasty also gets its markers.
+   */
+  const markerPlayers = isDynastyFormatLeague({ isDynasty: league.isDynasty, leagueType: league.leagueType, leagueVariant: league.leagueVariant })
+    ? [...new Map([...resolved.values()].map((p) => [p.sleeperId, p])).values()]
+    : []
+  const dynastyMarkersRead = markerPlayers.length
+    ? prisma.sportsPlayer
+        .findMany({
+          where: { sport: sport.toUpperCase(), sleeperId: { in: markerPlayers.map((p) => p.sleeperId) } },
+          select: { sleeperId: true, name: true, position: true, age: true, yearsExp: true },
+        })
+        .then((rows) => buildDynastyRosterMarkers(markerPlayers.map(asPlayer), rows, sport))
+        .catch(() => null)
+    : Promise.resolve(null)
   const dynastyRead = isDynastyLeague
     ? loadDynastyOutlook({
         league: {
@@ -1767,6 +1791,7 @@ async function loadMyTeamData(
     team,
     starterGameDay,
     dynasty: await dynastyRead,
+    dynastyMarkers: await dynastyMarkersRead,
     teamActivity: await teamActivityRead,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,

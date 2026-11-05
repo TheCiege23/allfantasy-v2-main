@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { loadTeamFuturePicks, type FuturePickCoverage } from '@/lib/league-trade-engine/importedFuturePicks'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
-import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
+import { agingThreshold } from './dynastyAging'
 
 /**
  * My Team's dynasty view: the draft capital you hold, and how old the lineup you are starting is.
@@ -41,27 +41,9 @@ export type DynastyOutlook = {
     | { available: false; reason: string }
 }
 
-/** Dynasty consensus (NFL): the age a position's production usually starts to decline. */
-export const AGING_FROM: Readonly<Record<string, number>> = { QB: 34, RB: 27, WR: 29, TE: 30 }
-
-/** Sports whose decline age comes from `getPeakAgeRange` rather than the NFL table above. */
-const PEAK_RANGE_SPORTS = new Set(['NBA', 'MLB', 'NHL'])
-
-/**
- * The age at which `position` is flagged as aging, in `sport`.
- *
- * NFL (and a call with no sport) reads `AGING_FROM` exactly as before. NBA/MLB/NHL used to fall
- * through the NFL-only table, so no basketball, baseball or hockey starter was ever flagged; they now
- * use the first age past the sport's peak (`getPeakAgeRange(sport, position).peakEnd + 1`) — the same
- * rule of thumb, from the sport's own peak-age range.
- */
-export function agingThreshold(sport: string | null | undefined, position: string): number | undefined {
-  const pos = String(position ?? '').toUpperCase()
-  const s = String(sport ?? '').trim().toUpperCase()
-  if (!pos) return undefined
-  if (PEAK_RANGE_SPORTS.has(s)) return getPeakAgeRange(s, pos).peakEnd + 1
-  return AGING_FROM[pos]
-}
+// The aging rule of thumb lives in a pure module so client components (the My Team row markers) can
+// read it without pulling this server-only loader into the browser bundle.
+export { AGING_FROM, agingThreshold } from './dynastyAging'
 
 type Player = { sleeperId: string; name: string; position: string | null }
 

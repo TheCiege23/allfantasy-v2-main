@@ -18,6 +18,7 @@ import {
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core-boards.css'
+import '@/components/core-app/af-draft-hq-redesign.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -343,7 +344,6 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             sev={row.queuedCount > 0 ? 'accent' : undefined}
           />
         </div>
-        <p className="af-bd-note"><TopicTip topic="draftCardStats" /></p>
 
         {/*
           The live tail, only for a draft that is actually running and only when
@@ -368,7 +368,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
   /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
   if (totalLeagues === 0) {
     return (
-      <div className="af-bd">
+      <div className="af-bd af-bd--drafts">
         <BoardHead eyebrow="Core · Draft HQ" title="Draft HQ" blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come." />
         <NoLeaguesYet what="Once one is, every draft you are in shows here, ranked by the clock. A mock draft works right now, with no league at all." />
       </div>
@@ -376,7 +376,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
   }
 
   return (
-    <div className="af-bd">
+    <div className="af-bd af-bd--drafts">
       <BoardHead
         eyebrow="Core · Draft HQ"
         title="Draft HQ"
@@ -390,6 +390,11 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
             id="af-dh-board"
             label={`Top ${rows.length} · ranked by clock`}
             count={`${data.counts.live} live · ${data.counts.upcoming} upcoming · ${data.counts.done} complete`}
+            /*
+             * Once for the list, beside the heading. It sat in its own bordered box on every card,
+             * ten "?" boxes down the page with nothing else in them (live /core, 2026-11-05).
+             */
+            info={<TopicTip topic="draftCardStats" />}
           />
           <ul className="af-bd-cards af-bd-cards--rich">
             {rows.map((r) => (

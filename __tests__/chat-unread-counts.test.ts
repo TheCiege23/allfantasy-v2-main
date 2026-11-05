@@ -33,13 +33,13 @@ beforeEach(() => {
 
 describe('getChatUnread', () => {
   it('is zero for a signed-out visitor without querying', async () => {
-    expect(await getChatUnread(null)).toEqual({ total: 0, mentions: 0, mutedUnread: 0 })
+    expect(await getChatUnread(null)).toEqual({ total: 0, mentions: 0, mutedUnread: 0, byThreadType: { dm: 0, group: 0 } })
     expect(h.memberFindMany).not.toHaveBeenCalled()
   })
 
   it('is zero for somebody in no threads', async () => {
     h.memberFindMany.mockResolvedValue([])
-    expect(await getChatUnread('u1')).toEqual({ total: 0, mentions: 0, mutedUnread: 0 })
+    expect(await getChatUnread('u1')).toEqual({ total: 0, mentions: 0, mutedUnread: 0, byThreadType: { dm: 0, group: 0 } })
   })
 
   it('counts messages newer than the read watermark', async () => {
@@ -117,6 +117,29 @@ describe('getChatUnread', () => {
     expect(await getChatUnread('u1')).toMatchObject({ total: 5, mentions: 1 })
   })
 
+  /*
+   * The drawer badges DMs and Huddle as separate tabs (2026-11-05). An `ai` or `league` thread is no
+   * tab's, so it stays in the bubble's total and in neither half; a muted thread is in none of them.
+   */
+  it('splits the total into DMs and huddles by thread type', async () => {
+    h.memberFindMany.mockResolvedValue([
+      membership({ threadId: 't1', thread: { threadType: 'dm' } }),
+      membership({ threadId: 't2', thread: { threadType: 'group' } }),
+      membership({ threadId: 't3', thread: { threadType: 'ai' } }),
+      membership({ threadId: 't4', thread: { threadType: 'group' }, isMuted: true }),
+    ])
+    h.msgCount
+      .mockResolvedValueOnce(2).mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(3).mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(4).mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(5)
+
+    const out = await getChatUnread('u1')
+
+    expect(out).toMatchObject({ total: 9, mutedUnread: 5, byThreadType: { dm: 2, group: 3 } })
+    expect(h.memberFindMany.mock.calls[0][0].select.thread).toEqual({ select: { threadType: true } })
+  })
+
   it('skips the mention query when a thread has nothing unread', async () => {
     h.msgCount.mockResolvedValue(0)
     await getChatUnread('u1')
@@ -131,6 +154,6 @@ describe('getChatUnread', () => {
   /* A page that failed to render because a badge could not be counted is worse. */
   it('degrades to zero rather than throwing', async () => {
     h.memberFindMany.mockRejectedValue(new Error('db down'))
-    expect(await getChatUnread('u1')).toEqual({ total: 0, mentions: 0, mutedUnread: 0 })
+    expect(await getChatUnread('u1')).toEqual({ total: 0, mentions: 0, mutedUnread: 0, byThreadType: { dm: 0, group: 0 } })
   })
 })

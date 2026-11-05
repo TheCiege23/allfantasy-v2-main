@@ -1,0 +1,47 @@
+/* My Team dynasty roster markers (components/core-app/screens/DynastyRosterMarkers.tsx).
+ *
+ * Mounted only for a dynasty league's rows, so nothing here reaches any other league. The tones are
+ * the Home deck's age gauge in miniature — teal rising, gold prime, ember past the position's usual
+ * peak — so the two screens speak one colour language. Gold reads /core's --accent, which
+ * af-core-dynasty.css points at the measured dynasty gold (dark/AF) or bronze (light).
+ *
+ * ⚠ CONTRAST, MEASURED on /core's --surface and --surface2:
+ *   dark/AF  #5eead4 ≥ 11:1, #f6a27f ≥ 8:1, --accent (#E8C07A) ≥ 10:1 — each on its own 14% tint too.
+ *   light    #0f766e ≥ 5.0:1, #b4441a ≥ 4.9:1, --accent (#7A5310) ≥ 6.1:1 on --surface2.
+ * ⚠ 11px IS THE TYPE FLOOR (__tests__/core-app/type-floor.test.ts).
+ * ⚠ ONE TOP-LEVEL @media BLOCK, NOT NESTED IN ANYTHING (CLAUDE.md). */
+
+.af-mt-dyn{display:inline-flex;align-items:center;gap:5px;margin-left:6px;vertical-align:middle;flex:none}
+/* The name row is a one-line flex box that clips; on a narrow lineup column the name alone fills it and
+ * the markers were pushed past the clip. With markers present the row may wrap, so they drop under the
+ * name instead of disappearing. */
+.af-mt-player-name:has(.af-mt-dyn){flex-wrap:wrap;row-gap:4px}
+
+.af-mt-dyn-age{--tone:var(--accent);display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 6px;border-radius:999px;box-sizing:border-box;
+  color:var(--tone);background:color-mix(in srgb,var(--tone) 14%,transparent);border:1px solid color-mix(in srgb,var(--tone) 45%,transparent);
+  font:800 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-mt-dyn-age[data-tone=rising]{--tone:#5eead4}
+.af-mt-dyn-age[data-tone=aging]{--tone:#f6a27f}
+html[data-mode='light'] .af-mt-dyn-age[data-tone=rising]{--tone:#0f766e}
+html[data-mode='light'] .af-mt-dyn-age[data-tone=aging]{--tone:#b4441a}
+
+/* ROOKIE: a solid gold tab, the one filled mark on the row, so a stash is findable at a glance. */
+.af-mt-dyn-rookie{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--dyn-gold,#D4A24C);color:var(--dyn-ink,#0B0F17);
+  font:800 11px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.08em;text-transform:uppercase}
+html[data-mode='light'] .af-mt-dyn-rookie{background:var(--accent);color:var(--accent-ink)}
+
+/* The key under the Starters heading. */
+.af-mt-dyn-key{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 10px;color:var(--muted);font-size:12px;line-height:1.3}
+.af-mt-dyn-key-label{color:var(--accent);font:800 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.14em;text-transform:uppercase}
+.af-mt-dyn-key-item{display:inline-flex;align-items:center;gap:6px}
+
+/* The dynasty outlook card picks up the same gold edge as the Home deck's cards. */
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty{position:relative;overflow:hidden;border-color:var(--dyn-accent-line,rgba(212,162,76,.42))}
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 20%,transparent))}
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty .af-label{color:var(--accent)}
+
+@media (max-width:720px){
+  /* Phone: the name line is narrow, so the markers drop under the name rather than squeeze it. */
+  .af-mt-dyn{margin-left:0}
+  .af-mt-dyn-key{gap:6px 10px}
+}

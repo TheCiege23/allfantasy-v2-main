@@ -23,7 +23,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
      * hub uses for redraft (lib/core-app/commissioner/leagueArt.ts). The shield above stays the
      * create-league card; as a league crest it read as one more "AF" letter mark (user call, 2026-10-30).
      */
-    defaultLeagueImageUrl: '/af-robot-king.png',
+    defaultLeagueImageUrl: '/league-art/af-robot-king.webp',
     selectionVideo: '/media/create-league/concept/videos/Redraft.mp4',
     introVideo: '/media/create-league/concept/videos/Redraft.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -31,7 +31,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   dynasty: {
     label: 'Dynasty',
     thumbnail: '/league-type-dynasty.png',
-    defaultLeagueImageUrl: '/league-type-dynasty.png',
+    defaultLeagueImageUrl: '/league-art/league-type-dynasty.webp',
     selectionVideo: '/league-type-dynasty.mp4',
     introVideo: '/league-type-dynasty-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -39,7 +39,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   keeper: {
     label: 'Keeper',
     thumbnail: '/league-type-keeper.png',
-    defaultLeagueImageUrl: '/league-type-keeper.png',
+    defaultLeagueImageUrl: '/league-art/league-type-keeper.webp',
     selectionVideo: '/league-type-keeper.mp4',
     introVideo: '/league-type-keeper-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -47,7 +47,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   best_ball: {
     label: 'Best Ball',
     thumbnail: '/league-type-best-ball.png',
-    defaultLeagueImageUrl: '/league-type-best-ball.png',
+    defaultLeagueImageUrl: '/league-art/league-type-best-ball.webp',
     selectionVideo: '/league-type-best-ball.mp4',
     introVideo: '/league-type-best-ball-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -55,7 +55,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   guillotine: {
     label: 'Guilly',
     thumbnail: '/league-type-guillotine.png',
-    defaultLeagueImageUrl: '/league-type-guillotine.png',
+    defaultLeagueImageUrl: '/league-art/league-type-guillotine.webp',
     selectionVideo: '/league-type-guillotine.mp4',
     introVideo: '/league-type-guillotine-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -63,7 +63,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   pirate: {
     label: 'Pirate League',
     thumbnail: '/images/league-types/pirate-hero.png',
-    defaultLeagueImageUrl: '/images/league-types/pirate-hero.png',
+    defaultLeagueImageUrl: '/league-art/pirate-hero.webp',
     selectionVideo: '/media/league-intros/pirate-claim.mp4',
     introVideo: '/media/league-intros/pirate-claim.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -71,7 +71,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   survivor: {
     label: 'Survivor',
     thumbnail: '/league-type-survivor.png',
-    defaultLeagueImageUrl: '/league-type-survivor.png',
+    defaultLeagueImageUrl: '/league-art/league-type-survivor.webp',
     selectionVideo: '/league-type-survivor.mp4',
     introVideo: '/league-type-survivor-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -79,7 +79,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   tournament: {
     label: 'Tournament',
     thumbnail: '/league-type-tournament.png',
-    defaultLeagueImageUrl: '/league-type-tournament.png',
+    defaultLeagueImageUrl: '/league-art/league-type-tournament.webp',
     selectionVideo: '/league-type-tournament.mp4',
     introVideo: '/league-type-tournament.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -87,7 +87,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   devy: {
     label: 'Devy',
     thumbnail: '/league-type-devy.png',
-    defaultLeagueImageUrl: '/league-type-devy.png',
+    defaultLeagueImageUrl: '/league-art/league-type-devy.webp',
     selectionVideo: '/league-type-devy.mp4',
     introVideo: '/league-type-devy-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -95,7 +95,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   c2c: {
     label: 'Campus to Canton (C2C)',
     thumbnail: '/league-type-c2c.png',
-    defaultLeagueImageUrl: '/league-type-c2c.png',
+    defaultLeagueImageUrl: '/league-art/league-type-c2c.webp',
     selectionVideo: '/league-type-c2c.mp4',
     introVideo: '/league-type-c2c-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -103,7 +103,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   zombie: {
     label: 'Zombie',
     thumbnail: '/league-type-zombie.png',
-    defaultLeagueImageUrl: '/league-type-zombie.png',
+    defaultLeagueImageUrl: '/league-art/league-type-zombie.webp',
     selectionVideo: '/league-type-zombie.mp4',
     introVideo: '/league-type-zombie-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -111,7 +111,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   salary_cap: {
     label: 'Salary Cap',
     thumbnail: '/league-type-salary-cap.png',
-    defaultLeagueImageUrl: '/league-type-salary-cap.png',
+    defaultLeagueImageUrl: '/league-art/league-type-salary-cap.webp',
     selectionVideo: '/league-type-salary-cap.mp4',
     introVideo: '/league-type-salary-cap-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -119,7 +119,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   big_brother: {
     label: 'Big Brother',
     thumbnail: '/league-type-big-brother.png',
-    defaultLeagueImageUrl: '/league-type-big-brother.png',
+    defaultLeagueImageUrl: '/league-art/league-type-big-brother.webp',
     selectionVideo: '/league-type-big-brother.mp4',
     introVideo: '/league-type-big-brother-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
@@ -127,7 +127,7 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   idp: {
     label: 'IDP',
     thumbnail: '/league-type-idp.png',
-    defaultLeagueImageUrl: '/league-type-idp.png',
+    defaultLeagueImageUrl: '/league-art/league-type-idp.webp',
     selectionVideo: '/league-type-idp.mp4',
     introVideo: '/league-type-idp-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,

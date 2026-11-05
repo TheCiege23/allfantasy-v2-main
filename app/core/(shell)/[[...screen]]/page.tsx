@@ -1334,6 +1334,8 @@ export default async function AfCorePage({
    */
   const selectedLeagueRecord = await selectedLeagueRead
   const selectedLeaguePlatform = selectedLeagueRecord?.platform ?? selectedLeagueRow?.platform ?? null
+  /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
+  const dynastyEra = coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)
 
   // The Updates menu's "Fix lineup in <platform> ↗" for an imported league (lib/core-app/shellLineupHandoff.ts).
   const lineupHandoff =
@@ -1642,6 +1644,7 @@ export default async function AfCorePage({
         errorResetKey,
         leagueHeaderShown: showContextBar,
         selectedLeagueRecord,
+        dynastyEra,
         leagueCtx,
         homeScope,
         favoriteIds,
@@ -1685,7 +1688,7 @@ export default async function AfCorePage({
       /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
       redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
       /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
-      dynastyEra={coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)}
+      dynastyEra={dynastyEra}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1970,6 +1973,12 @@ type CoreScreenContext = {
   /** The selected league's row, read once by the shell. Null with no league or on a failed read. */
   selectedLeagueRecord: LeagueDataCoverageRecord | null
   /**
+   * A dynasty `?league=` (lib/core-app/coreShellDynasty.ts), decided once from the list row and the
+   * fresh league record — the shell's gold identity and the Trades draft-capital panel read the same
+   * answer. The record type above carries no format columns, so the screen body cannot recompute it.
+   */
+  dynastyEra: boolean
+  /**
    * The same row, plus the viewer's claimed team, for the screen's loaders — the context the shell
    * read it through, so a loader awaiting it costs no query. Null with no league selected.
    */
@@ -2034,6 +2043,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     errorResetKey,
     leagueHeaderShown,
     selectedLeagueRecord,
+    dynastyEra,
     leagueCtx,
     homeScope,
     favoriteIds,
@@ -3010,6 +3020,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       })
     : null
   const draftArchiveSlot = draftArchive ? <DraftArchive {...draftArchive} /> : null
+  /*
+   * The reader came for the archive — a `?draft=` link, an archive page, or a search — so it leads.
+   * ⚠ NOT `draftArchive.detail`: in a league the archive opens the current draft by default, so a
+   * plain Draft HQ visit has a detail too, and that is exactly the visit this ordering is for.
+   */
+  const draftArchiveFirst = Boolean(
+    draftArchive && ['draft', 'archivePage', 'archiveQuery', 'archiveSeason'].some((k) => typeof sp[k] === 'string' && sp[k] !== ''),
+  )
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
@@ -4732,6 +4750,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
+              dynasty={dynastyEra}
               sport={tradeLeagueRow?.sport ?? null}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
               leagues={tradeStripLeagues}
@@ -4857,28 +4876,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 said "no draft has been set up" — three times above Draft HQ's own record of the
                 draft the league already ran. */}
             {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
-            {draftArchiveSlot}
+            {/*
+              ⚠ THE ARCHIVE GOES LAST UNLESS ONE OF ITS DRAFTS IS OPEN. Above Draft HQ it put
+              ~2,400px of past-draft records between the live board and this league's own picks
+              (live /core, 2026-11-05). A `?draft=` link asks for the archive, so it leads then.
+            */}
+            {draftArchiveFirst ? draftArchiveSlot : null}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
+            {draftArchiveFirst ? null : draftArchiveSlot}
           </>
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
-          <>{draftArchiveSlot}<PickALeague
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<PickALeague
             tabKey="draft-hq"
             title="Draft HQ"
             blurb="Draft order, pick slots and board settings are all per-league."
             issues={issues}
             leagues={rail}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         ) : (
-          <>{draftArchiveSlot}<DraftHqBoard
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<DraftHqBoard
             data={homeDrafts}
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
             picks={liveDraftPicks}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         )
       ) : activeKey === 'war-room' ? (
         /*
