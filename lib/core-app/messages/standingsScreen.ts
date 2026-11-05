@@ -80,6 +80,8 @@ export const standingsScreenMessages = defineMessages({
     barsWeekPrefix: 'W',
     barsCaption: (best: number, now: number, ordinal: (n: number) => string) =>
       `Taller bar = better rank. Best ${ordinal(best)} · now ${ordinal(now)}. Positions only move on final results, never estimated between weeks.`,
+    emptyTitle: 'No standings to show yet',
+    emptyHintScores: 'The table fills in here once the first week of the season has been scored.',
   },
   es: {
     gamesUnit: (abs) => (abs === 1 ? 'partido' : 'partidos'),
@@ -123,6 +125,8 @@ export const standingsScreenMessages = defineMessages({
     barsWeekPrefix: 'S',
     barsCaption: (best, now) =>
       `Una barra más alta indica mejor posición. Mejor: ${best}; ahora: ${now}. Las posiciones solo cambian con resultados finales.`,
+    emptyTitle: 'Todavía no hay clasificación',
+    emptyHintScores: 'La tabla aparecerá aquí en cuanto se puntúe la primera semana de la temporada.',
   },
 })
 
