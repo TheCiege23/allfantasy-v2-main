@@ -14,6 +14,7 @@ import { draftHqUiCopy } from '@/lib/core-app/draftHqUiCopy'
 import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens'
+import { DraftHqRookieRoom } from './DraftHqRookieRoom'
 
 /**
  * Screen 8 — Draft HQ.
@@ -59,8 +60,17 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
   const language = useOptionalLanguage().language
   const copy = (value: string) => draftHqUiCopy(value, language)
   const m = useMessages(draftScreensMessages)
+  /*
+   * A dynasty league's draft room (data.rookieRoom — absent for every other league). When it carries
+   * your exact picks from this session, Draft HQ's own "Your picks" list would repeat them word for
+   * word, so that section steps aside; the room carries the traded-away line and the sync note.
+   */
+  const room = data.rookieRoom ?? null
+  const roomHasPicks = Boolean(room?.picks?.exact)
   return (
-    <div className="af-dh">
+    <div className="af-dh" data-dynasty-room={room ? 'true' : undefined}>
+      {room ? <DraftHqRookieRoom room={room} leagueId={data.league.id} /> : null}
+
       {/* ── Board settings ──────────────────────────────────────────── */}
       <section className="af-frame af-dh-board">
         {data.session.available ? (
@@ -125,7 +135,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
         Left out when it would only repeat the board's own sentence word for word ("no upcoming
         draft is scheduled…" printed twice, one card under the other).
       */}
-      {!data.pickSlots.available &&
+      {roomHasPicks ? null : !data.pickSlots.available &&
       !data.session.available &&
       data.pickSlots.reason === data.session.reason ? null : (
       <section className="af-frame af-dh-section">
