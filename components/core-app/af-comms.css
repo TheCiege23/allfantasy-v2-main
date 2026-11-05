@@ -4416,3 +4416,23 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
 @media (prefers-reduced-motion: no-preference) {
   .af-cm .af-chat-moremenu { animation: af-cm-msg-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 }
+
+/*
+ * Chimmy's league row (2026-11-05): the picker and "Open full-page analysis" share ONE line — the link
+ * was a band of its own above the picker. The icon is a 44px square that matches the picker's height.
+ */
+.af-cm .af-cm-scope > .af-cm-scope-row { display: flex; flex: 1 1 100%; align-items: center; gap: 8px; min-width: 0; }
+.af-cm .af-cm-scope-row > .af-cm-league-picker { flex: 1; min-width: 0; }
+.af-cm .af-cm-expand.af-cm-expand-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+}
+.af-cm .af-cm-expand.af-cm-expand-icon:hover { background: var(--accent-soft); }
