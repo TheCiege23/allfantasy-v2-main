@@ -2500,7 +2500,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <ScopeSwitcher
               leagues={props.scope.leagues.map((league) => {
                 const row = leagues.find((r) => r.id === league.id)
-                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf }
+                /* The rail row's own rule: a field race's line is its place among the survivors, so no W-L there. */
+                const m = row ? railRowState(row).m : null
+                const record = m?.guillotine || m?.standing?.elimination ? null : props.railRecords?.[league.id] ?? null
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf, record }
               })}
               scopeValue={props.scope.value}
               label={props.scope.label}
