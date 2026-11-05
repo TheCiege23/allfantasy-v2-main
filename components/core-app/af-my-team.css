@@ -942,6 +942,18 @@
   gap: 6px;
   min-width: 0;
 }
+
+/*
+ * Above the phone layout the name WRAPS rather than clipping. With the right-hand column open, the
+ * player column on a 1440px screen is ~110px, and a one-line nowrap name was cut mid-word with no
+ * ellipsis ("Sawyer Montc"), because text-overflow does not apply inside a flex row. A second line is
+ * cheaper than a name you cannot read. Phones keep their own one-line rule (the 720px block below,
+ * which carries the 44px tap-target fix).
+ */
+@media (min-width: 721px) {
+  .af-core .af-mt-player-name { flex-wrap: wrap; row-gap: 2px; overflow: visible; white-space: normal; }
+  .af-core .af-mt-player-name > .af-pc-trigger { display: block; min-width: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+}
 .af-mt-player-name .af-mt-bye {
   margin-left: 0;
   flex: 0 0 auto;

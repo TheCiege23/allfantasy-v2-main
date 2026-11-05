@@ -890,6 +890,8 @@ export default async function AfCorePage({
     syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
     // The same flag the More menu's "Commissioner N" counts — see CommissionerBadge.
     isCommissioner: Boolean(l.isCommissioner),
+    // A gold crown on the tile — the same dynasty rule the shell's gold identity uses (coreShellDynasty).
+    dynasty: coreShellDynasty(l),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     /*
      * ⚠ THE LOADER ALREADY SELECTS avatarUrl AND logoUrl — this mapping used to

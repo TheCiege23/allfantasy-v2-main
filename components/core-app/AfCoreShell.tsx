@@ -25,6 +25,7 @@ import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
+import { Crown } from 'lucide-react'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import LeagueSwipe from '@/components/core-app/LeagueSwipe'
@@ -133,6 +134,11 @@ export type RailLeague = {
   alertTone?: 'bad' | 'warn'
   /** The viewer commissions this league — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
+  /**
+   * A dynasty league (lib/core-app/coreShellDynasty.ts) — draws a small gold crown on the tile, so a
+   * dynasty league is recognisable in the rail before it is opened, not only once it is.
+   */
+  dynasty?: boolean
   /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
   sport?: string | null
   /** This is an Exile Island league; the id is its Survivor league (attachSurvivorExileLinks). */
@@ -2191,6 +2197,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {railDrag.reorderMode ? <span className="af-rail-drag-handle" aria-hidden>⠿</span> : null}
                 <span className="af-rail-tile-art">
                   <RailMark src={l.imageUrl} letter={l.mark} />
+                  {l.dynasty ? (
+                    <span className="af-rail-crown" data-testid="rail-dynasty-crown" title={copy('Dynasty league')}>
+                      <Crown size={11} strokeWidth={2.4} aria-hidden />
+                    </span>
+                  ) : null}
                   {alertTone ? (
                     <span className="af-rail-dot" data-tone={alertTone} />
                   ) : null}
@@ -2694,7 +2705,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           <GeoRestrictionNotice />
           {active === 'home' ? (
-            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
               <div className="af-core-bracket-promo-copy">
                 <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
                 <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>

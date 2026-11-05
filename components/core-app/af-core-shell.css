@@ -3936,6 +3936,23 @@ html[data-mode='light'] .af-core {
   .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
 }
 
+/*
+ * Inside a league, on a phone, the promo is one slim row. Full size it took the whole first screen of
+ * every league Home (kicker, headline, body, two buttons), so the league's own identity — the dynasty
+ * era band, the redraft season race — started below the fold. The kicker and the button stay, so the
+ * entry point is still one tap away; the headline is kept for screen readers only. Its own top-level
+ * @media, appended — never nested inside the block above.
+ */
+@media (max-width: 720px) {
+  .af-core .af-core-bracket-promo[data-in-league='true'] { flex-wrap: nowrap; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border-radius: 12px; }
+  .af-core .af-core-bracket-promo[data-in-league='true'] .af-core-bracket-promo-copy { flex: 1 1 auto; }
+  .af-core .af-core-bracket-promo[data-in-league='true'] h2 { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .af-core .af-core-bracket-promo[data-in-league='true'] .af-core-bracket-promo-copy > p:not(.af-core-bracket-promo-kicker),
+  .af-core .af-core-bracket-promo[data-in-league='true'] .af-core-bracket-promo-browse { display: none; }
+  .af-core .af-core-bracket-promo[data-in-league='true'] .af-core-bracket-promo-actions { flex: 0 0 auto; }
+  .af-core .af-core-bracket-promo[data-in-league='true'] .af-core-bracket-promo-button { flex: 0 0 auto; min-height: 44px; padding: 0 14px; }
+}
+
 /* ── Phone header: theme and language live in the ↻ menu ─────────────────────
  * The default (not league-first) phone header kept the theme and language chips in the top
  * row. With the crest, the scope pill, the ↻ menu and the search icon that is ~520px of

@@ -12,7 +12,7 @@ import { dynastyHomeFixture } from './fixture'
  */
 export default function DynastyCoreHomeHarnessClient({ identityOff, sparse }: { identityOff: boolean; sparse: boolean }) {
   const data = dynastyHomeFixture({ identity: !identityOff, sparse })
-  const league = { id: data.league.id, name: data.league.name, platform: 'sleeper', mark: 'TD', sport: 'NFL' }
+  const league = { id: data.league.id, name: data.league.name, platform: 'sleeper', mark: 'TD', sport: 'NFL', dynasty: !identityOff }
   const other = { id: 'e2e-dynasty-core-home-2', name: 'Sunday Night Redraft', platform: 'sleeper', mark: 'SN', sport: 'NFL' }
   const dynastyEra = !identityOff && coreShellDynasty({ isDynasty: true, leagueType: 'dynasty', format: 'dynasty' })
   return (
