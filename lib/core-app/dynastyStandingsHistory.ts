@@ -118,13 +118,16 @@ const int = (v: unknown): number => {
 class Links {
   private parent = new Map<string, string>()
   find(k: string): string {
-    let p = this.parent.get(k)
-    if (p == null) {
+    const first = this.parent.get(k)
+    if (first == null) {
       this.parent.set(k, k)
       return k
     }
+    // Typed explicitly: inferred, `p` and `gp` reference each other and tsc gives up (TS7022).
+    let p: string = first
     while (p !== k) {
-      const gp = this.parent.get(p)!
+      // Every value in `parent` is itself a key (union only links roots `find` already registered).
+      const gp: string = this.parent.get(p) ?? p
       this.parent.set(k, gp)
       k = p
       p = gp
