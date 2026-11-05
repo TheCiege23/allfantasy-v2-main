@@ -3002,6 +3002,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       })
     : null
   const draftArchiveSlot = draftArchive ? <DraftArchive {...draftArchive} /> : null
+  /*
+   * The reader came for the archive — a `?draft=` link, an archive page, or a search — so it leads.
+   * ⚠ NOT `draftArchive.detail`: in a league the archive opens the current draft by default, so a
+   * plain Draft HQ visit has a detail too, and that is exactly the visit this ordering is for.
+   */
+  const draftArchiveFirst = Boolean(
+    draftArchive && ['draft', 'archivePage', 'archiveQuery', 'archiveSeason'].some((k) => typeof sp[k] === 'string' && sp[k] !== ''),
+  )
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
@@ -4850,28 +4858,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 said "no draft has been set up" — three times above Draft HQ's own record of the
                 draft the league already ran. */}
             {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
-            {draftArchiveSlot}
+            {/*
+              ⚠ THE ARCHIVE GOES LAST UNLESS ONE OF ITS DRAFTS IS OPEN. Above Draft HQ it put
+              ~2,400px of past-draft records between the live board and this league's own picks
+              (live /core, 2026-11-05). A `?draft=` link asks for the archive, so it leads then.
+            */}
+            {draftArchiveFirst ? draftArchiveSlot : null}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
+            {draftArchiveFirst ? null : draftArchiveSlot}
           </>
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
-          <>{draftArchiveSlot}<PickALeague
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<PickALeague
             tabKey="draft-hq"
             title="Draft HQ"
             blurb="Draft order, pick slots and board settings are all per-league."
             issues={issues}
             leagues={rail}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         ) : (
-          <>{draftArchiveSlot}<DraftHqBoard
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<DraftHqBoard
             data={homeDrafts}
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
             picks={liveDraftPicks}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         )
       ) : activeKey === 'war-room' ? (
         /*
