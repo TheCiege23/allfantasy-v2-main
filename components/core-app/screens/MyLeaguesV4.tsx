@@ -13,6 +13,7 @@ import { leagueSportCounts, leagueSportKey, leagueSportLabel } from '@/lib/core-
 import { hasLeagueSortMetric, isLeagueSortMode, LEAGUE_SORT_OPTIONS, LEAGUE_SORT_STORAGE_KEY, sortLeagues, type LeagueSortMode } from '@/lib/league-list/sortLeagues'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
 // the --p-* platform pairs …) that every rule in af-my-leagues.css reads. This screen
 // renders at /leagues inside ProductShellLayout rather than inside AfCoreShell, so
@@ -237,25 +238,29 @@ export function MyLeaguesV4({
 
   return (
     <div className="af-core af-ml">
-      <header className="af-ml-head">
-        <div className="af-ml-headline">
-          {/*
-            The board's eyebrow: the account summed in one mono line. Sports come from the same
-            tabs the filter uses, so the two can never disagree; a zero part is left out rather than
-            printed as "0 need you".
-          */}
-          <p className="af-ml-eyebrow" data-testid="my-leagues-eyebrow">
-            {[
-              rd.leagues(counts.live),
-              sportTabs.length > 1 ? rd.sports(sportTabs.length) : null,
-              counts.needs > 0 ? rd.needYou(counts.needs) : null,
-              counts.commissioner > 0 ? rd.commissioner(counts.commissioner) : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-          <h1 className="af-ml-title">{copy('My leagues')}</h1>
-          <p className="af-ml-sub">
+      <PageHeader
+        className="af-ml-head"
+        headlineClassName="af-ml-headline"
+        titleClassName="af-ml-title"
+        subClassName="af-ml-sub"
+        actionsClassName="af-ml-actions"
+        eyebrowTestId="my-leagues-eyebrow"
+        /*
+          The board's eyebrow: the account summed in one mono line. Sports come from the same
+          tabs the filter uses, so the two can never disagree; a zero part is left out rather than
+          printed as "0 need you".
+        */
+        eyebrow={[
+          rd.leagues(counts.live),
+          sportTabs.length > 1 ? rd.sports(sportTabs.length) : null,
+          counts.needs > 0 ? rd.needYou(counts.needs) : null,
+          counts.commissioner > 0 ? rd.commissioner(counts.commissioner) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+        title={copy('My leagues')}
+        sub={
+          <>
             <strong>{counts.live}</strong> live
             {counts.history > 0 ? (
               <>
@@ -263,10 +268,10 @@ export function MyLeaguesV4({
                 {counts.history === 1 ? '' : 's'} in history
               </>
             ) : null}
-          </p>
-        </div>
-
-        <div className="af-ml-actions">
+          </>
+        }
+        actions={
+          <>
           <Link href="/brackets/my" className="af-ml-btn af-ml-btn--ghost">
             {language?.startsWith('es') ? 'Mis cuadros' : 'My brackets'}
           </Link>
@@ -296,8 +301,9 @@ export function MyLeaguesV4({
           <Link href={importHref} className="af-ml-btn">
             {copy('Import more')}
           </Link>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* ── Controls: search · platform · live/history · grid/list ───────── */}
       <div className="af-ml-controls">

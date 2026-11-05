@@ -1,6 +1,7 @@
 'use client'
 
 import { useMessages } from '@/components/i18n/useMessages'
+import { StatStrip } from '@/components/core-app/primitives/StatStrip'
 import { yourWeekGlanceMessages } from '@/lib/core-app/messages/yourWeekGlance'
 import type { YourWeekProgress } from '@/lib/core-app/yourWeekProgress'
 
@@ -33,21 +34,17 @@ export function YourWeekProgressBar({ progress }: { progress: YourWeekProgress }
 export function YourWeekGlance({ progress }: { progress: YourWeekProgress }) {
   const m = useMessages(yourWeekGlanceMessages)
   if (progress.headToHead === 0) return null
-  const tiles = [
-    { key: 'coin', label: m.coinFlips, value: progress.coinFlips, sub: m.coinFlipsSub, tone: 'warn' },
-    { key: 'live', label: m.live, value: progress.live, sub: m.liveSub, tone: 'accent' },
-    { key: 'todo', label: m.notStarted, value: progress.notStarted, sub: m.notStartedSub, tone: undefined },
-    { key: 'done', label: m.decided, value: progress.decided, sub: m.decidedSub, tone: 'good' },
-  ]
   return (
-    <section className="af-wk-glance" aria-label={m.glanceAria} data-testid="your-week-glance">
-      {tiles.map((t) => (
-        <div key={t.key} className="af-wk-glance-tile" data-tone={t.tone}>
-          <span className="af-wk-glance-label">{t.label}</span>
-          <span className="af-wk-glance-value af-num">{t.value}</span>
-          <span className="af-wk-glance-sub">{t.sub}</span>
-        </div>
-      ))}
-    </section>
+    <StatStrip
+      className="af-wk-glance"
+      ariaLabel={m.glanceAria}
+      testId="your-week-glance"
+      items={[
+        { key: 'coin', label: m.coinFlips, value: progress.coinFlips, sub: m.coinFlipsSub, tone: 'warn' },
+        { key: 'live', label: m.live, value: progress.live, sub: m.liveSub, tone: 'accent' },
+        { key: 'todo', label: m.notStarted, value: progress.notStarted, sub: m.notStartedSub },
+        { key: 'done', label: m.decided, value: progress.decided, sub: m.decidedSub, tone: 'good' },
+      ]}
+    />
   )
 }

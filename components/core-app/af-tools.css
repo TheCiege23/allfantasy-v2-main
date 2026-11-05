@@ -2,13 +2,7 @@
 .af-tl { display: flex; flex-direction: column; gap: 26px; }
 
 .af-tl-head { display: flex; flex-direction: column; gap: 6px; }
-.af-tl-title {
-  margin: 0;
-  font: 900 26px/1.15 'Archivo', system-ui, sans-serif;
-  letter-spacing: -0.03em;
-  color: var(--text);
-}
-.af-tl-sub { margin: 0; font-size: 13px; color: var(--muted); max-width: 62ch; }
+/* The title and sub are the shared PageHeader's (primitives/af-primitives.css). */
 
 .af-tl-group { display: flex; flex-direction: column; gap: 10px; }
 
