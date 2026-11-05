@@ -18,6 +18,8 @@ import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 import { CareerFilterBar, CareerTabs } from '@/components/core-app/career/CareerChrome'
 import { CareerProgressChart } from '@/components/core-app/career/CareerProgressChart'
 import { SeasonBars } from '@/components/core-app/career/SeasonBars'
+import { CareerRivalsCard } from '@/components/core-app/career/CareerRivalsCard'
+import type { CareerRival } from '@/lib/core-app/careerRecordBook'
 import {
   AccomplishmentStrip,
   AwardBadge,
@@ -681,7 +683,7 @@ function CareerDesktop({
       ) : view === 'coverage' ? (
         <CoverageView data={data} extras={screen.coverage} />
       ) : (
-        <CareerOverview data={data} awards={screen.awards} />
+        <CareerOverview data={data} awards={screen.awards} rivals={screen.rivals} />
       )}
     </div>
   )
@@ -762,7 +764,7 @@ function CareerLive({ data, awards }: { data: CareerData; awards: CareerAward[] 
 }
 
 /** Career overview — handoff 13a's banner and three columns, accomplishments first. */
-function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAward[] }) {
+function CareerOverview({ data, awards, rivals = null }: { data: CareerData; awards: CareerAward[]; rivals?: CareerRival[] | null }) {
   const { prestige, legacy, titles, activeLeagues, leagueCounts, currentSeason } = data
   const openSlot = activeLeagues[0] ?? null
   const leagueHref = (key: string) => careerHref({ ...data.filter, league: key })
@@ -803,6 +805,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
       <AccomplishmentStrip data={data} />
       <BestSeasons seasons={data.accomplishments.bestSeasons} filterHref={leagueHref} />
       <SeasonBars seasons={data.seasons} />
+      {rivals?.length ? <CareerRivalsCard rivals={rivals} ledgerHref={careerHref(data.filter, { view: 'records' })} /> : null}
 
       {/* ── live half: what is still in play, and Chimmy on your own numbers ── */}
       <CareerLive data={data} awards={awards} />
