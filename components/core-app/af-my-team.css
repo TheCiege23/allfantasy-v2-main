@@ -2590,4 +2590,9 @@ li[data-kind='questionable'] .af-mt-check-tag {
   .af-core .af-mt-tiles { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-left: 0; }
   .af-core .af-mt-tile { min-width: 0; padding: 7px; }
   .af-core .af-mt-tile-value { font-size: 19px; }
+  /*
+   * The source link takes its own full row. The rule above it in this file caps it at 260px, and a
+   * capped flex item fits beside the name, so the name was squeezed to one letter per line.
+   */
+  .af-core .af-mt-source { flex: 1 1 100%; max-width: none; }
 }
