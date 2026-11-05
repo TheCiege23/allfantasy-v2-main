@@ -42,7 +42,14 @@ import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 import { myRosterCandidates, rosterPlayerIds } from './myRoster'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
-import { buildDynastyHomeDeck, starterIdsOf, taxiIdsOf, type DynastyHomeDeck } from './dynastyLeagueHome'
+import {
+  buildDynastyHomeDeck,
+  isSeasonOverStage,
+  starterIdsOf,
+  taxiIdsOf,
+  type DynastyHomeDeck,
+  type DynastyOffseasonInput,
+} from './dynastyLeagueHome'
 import { loadDynastyOutlook } from './dynastyOutlook'
 import { loadChampionHistory } from '@/lib/league/dynastyChampionRafters'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
@@ -951,7 +958,14 @@ export async function getLeagueHomeData(
     leagueVariant: league.leagueVariant,
     guillotineMode: league.guillotineMode,
   })
-    ? await loadDynastyHomeDeck({ league, rosterRows, yours, userId }).catch(() => null)
+    ? await loadDynastyHomeDeck({
+        league,
+        rosterRows,
+        yours,
+        userId,
+        stage,
+        draftRow: draftSummaryRead.then(([all]) => all?.rows?.[0] ?? null).catch(() => null),
+      }).catch(() => null)
     : null
 
   // One league through the shared aggregator — three set-based queries, and the
@@ -1301,6 +1315,11 @@ async function loadDynastyHomeDeck(args: {
   rosterRows: Array<{ platformUserId: string; playerData: unknown }>
   yours: { platformUserId: string | null; externalId: string | null } | null
   userId: string
+  /** `resolveLeagueStage(league)`, computed once above. */
+  stage: string | null
+  /** This league's Draft HQ row (the read already in flight above), for a live / waiting rookie draft. */
+  draftRow: Promise<{ phase: string; modeLabel: string | null } | null>
+  now?: Date
 }): Promise<DynastyHomeDeck> {
   const { league } = args
   const candidates = args.yours ? myRosterCandidates(args.yours, args.userId) : []
@@ -1349,11 +1368,89 @@ async function loadDynastyHomeDeck(args: {
       : Promise.resolve(null),
   ])
 
+  const offseason = await loadDynastyOffseasonInput({
+    league,
+    stage: args.stage,
+    firstSeasonOnFile: history.firstSeason,
+    draftRow: args.draftRow,
+    now: args.now ?? new Date(),
+  }).catch(() => null)
+
   return buildDynastyHomeDeck({
     league: { season: league.season, sport: league.sport, createdAt: league.createdAt, settings: league.settings, platform: league.platform },
     firstSeasonOnFile: history.firstSeason,
     rafters: history.rafters,
     outlook,
     taxi: mine ? { count: taxiIdsOf(mine.playerData).length, slots: Math.max(0, Number(league.taxiSlots ?? 0) || 0) } : null,
+    offseason,
   })
+}
+
+/**
+ * The offseason state's reads — ONLY for a league between seasons, so an in-season Home pays no extra
+ * query and its deck is built exactly as before. Every value is a stored row or setting; nothing is
+ * derived from a sport's usual calendar:
+ *
+ *   rookie draft   League.settings draft_start / draftStartTime / draft_date (leagueCalendar), else
+ *                  LeagueSettings.draftDateUtc; live / waiting from this league's Draft HQ row when that
+ *                  row is a rookie draft. The builder drops a start already past (an earlier draft's).
+ *   keeper         the open KeeperSelectionSession's deadline, else League.settings keeper_deadline_at.
+ *   rollover       RedraftSeason `setup` for the next season — when it was created (native leagues).
+ *   kickoff        the next season's first regular-season SportsGame on file, when one is stored.
+ *
+ * No contract-deadline read: no column or setting stores one for a league.
+ */
+async function loadDynastyOffseasonInput(args: {
+  league: { id: string; sport: string | null; season: number | null; settings: unknown }
+  stage: string | null
+  firstSeasonOnFile: number | null
+  draftRow: Promise<{ phase: string; modeLabel: string | null } | null>
+  now: Date
+}): Promise<DynastyOffseasonInput | null> {
+  const { league, stage, now } = args
+  const season = league.season
+  if (season == null || !Number.isInteger(season)) return null
+  const over = isSeasonOverStage(stage)
+  const rolled = isPreDraftOrDrafting({ status: stage }) && args.firstSeasonOnFile != null && args.firstSeasonOnFile < season
+  if (!over && !rolled) return null
+  const nextSeason = over ? season + 1 : season
+
+  const settingsEvents = leagueCalendar(league.settings)
+  const fromSettings = (key: string) => {
+    const at = settingsEvents.find((e) => e.key === key)?.at
+    return at ? new Date(at) : null
+  }
+  const sportRaw = String(league.sport ?? '').trim()
+  const sports = sportRaw ? [...new Set([sportRaw, sportRaw.toUpperCase(), sportRaw.toLowerCase()])] : []
+
+  const [row, leagueSettings, keeperSession, setupSeason, firstGame] = await Promise.all([
+    args.draftRow.catch(() => null),
+    prisma.leagueSettings.findUnique({ where: { leagueId: league.id }, select: { draftDateUtc: true } }).catch(() => null),
+    prisma.keeperSelectionSession
+      .findFirst({ where: { leagueId: league.id, status: 'open', deadline: { gt: now } }, orderBy: { deadline: 'asc' }, select: { deadline: true } })
+      .catch(() => null),
+    prisma.redraftSeason
+      .findFirst({ where: { leagueId: league.id, status: 'setup', season: nextSeason }, select: { createdAt: true } })
+      .catch(() => null),
+    sports.length
+      ? prisma.sportsGame
+          .findFirst({
+            where: { sport: { in: sports }, season: nextSeason, seasonType: 'regular', startTime: { gt: now } },
+            orderBy: { startTime: 'asc' },
+            select: { startTime: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+  ])
+  const rookieRow = row && String(row.modeLabel ?? '').toLowerCase() === 'rookie' ? row : null
+  return {
+    stage,
+    now,
+    draftAt: fromSettings('draft') ?? leagueSettings?.draftDateUtc ?? null,
+    draftLive: rookieRow?.phase === 'live',
+    draftScheduled: rookieRow?.phase === 'upcoming',
+    keeperDeadlineAt: keeperSession?.deadline ?? fromSettings('keeper'),
+    rolledOverAt: setupSeason?.createdAt ?? null,
+    nextSeasonStartAt: firstGame?.startTime ?? null,
+  }
 }
