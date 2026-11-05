@@ -1,0 +1,121 @@
+import { defineMessages } from '@/lib/i18n/messages'
+
+const yearList = (seasons: number[]) => seasons.join(', ')
+
+/** The dynasty history on /core's Standings (components/core-app/screens/DynastyStandingsHistory.tsx). */
+export const dynastyStandingsMessages = defineMessages({
+  en: {
+    sectionLabel: 'Dynasty history',
+    eyebrow: 'Dynasty',
+    bandTitle: 'The franchise record book',
+    bandTagline: 'Every season this league has on file, one franchise at a time.',
+    rafters: 'The rafters',
+    you: 'You',
+    open: 'Open',
+    unnamed: 'Champion',
+    pennantAria: (season: number, name: string) => `${season} champion: ${name}`,
+    openAria: (season: number) => `${season}: title still open`,
+    myTitles: (n: number) => (n === 1 ? '1 title is yours' : `${n} titles are yours`),
+    noTitlesYet: 'No banner of yours yet',
+    tableTitle: 'Dynasty table',
+    tableLabel: 'All-time record of every franchise',
+    seasonsOnFile: (first: number, last: number, count: number) =>
+      count === 1 ? `${first} season on file` : `${first}–${last} · ${count} seasons on file`,
+    inProgress: (season: number) => `${season} is still being played; its games so far are counted.`,
+    sortBy: 'Sort by',
+    colRank: '#',
+    colFranchise: 'Franchise',
+    colTitles: 'Titles',
+    colRecord: 'W-L',
+    colWinPct: 'Win %',
+    colPointsFor: 'PF',
+    colRunnerUp: '2nd',
+    colPlayoffs: 'Playoffs',
+    colSeasons: 'Seasons',
+    sortTitles: 'Titles',
+    sortWinPct: 'Win %',
+    sortWins: 'Wins',
+    sortPointsFor: 'Points for',
+    sortSeasons: 'Seasons',
+    sortedBy: (col: string) => `Sorted by ${col}`,
+    youTag: 'You',
+    titlesAria: (n: number, seasons: number[]) =>
+      n === 0 ? 'No titles' : `${n} ${n === 1 ? 'title' : 'titles'}: ${yearList(seasons)}`,
+    noGames: 'No games',
+    noPoints: '—',
+    seasonsCount: (n: number) => `${n}`,
+    pfPartial: 'Points are blank where a season on file is missing them.',
+    runnerUpNote: 'Runner-up finishes are counted where the season recorded one.',
+    playoffsNote: 'Playoffs counts seasons with a playoff seed on file.',
+    noPlayoffs: 'Playoff trips are not stored for every season, so they are not shown.',
+    titleOnlySeasons: (seasons: number[]) =>
+      `${yearList(seasons)}: only the champion is on file, so ${seasons.length === 1 ? 'that season adds' : 'those seasons add'} titles but no record.`,
+    unattributed: (n: number, seasons: number[]) =>
+      `${n === 1 ? 'One title' : `${n} titles`} (${yearList(seasons)}) ${n === 1 ? 'names' : 'name'} a champion that no stored team or owner id ties to a franchise, so ${n === 1 ? 'it hangs' : 'they hang'} in the rafters but ${n === 1 ? 'is' : 'are'} not counted here.`,
+    unmatched: (n: number) =>
+      `${n === 1 ? 'One team-season' : `${n} team-seasons`} on file ${n === 1 ? 'has' : 'have'} no stored owner or team id and ${n === 1 ? 'is' : 'are'} left out rather than matched by name.`,
+    titlesOnlyWhy:
+      'Season-by-season team records are not on file for this league — its history import kept the champions but not each team’s wins and losses — so only titles can be counted.',
+    emptyWhy:
+      'No past seasons are on file for this league yet. Once its history is imported or a season is archived, every franchise’s all-time record shows here.',
+    titlesHead: 'Titles on file',
+    identityNote: 'Franchises are matched across seasons by owner and team ids, never by name.',
+  },
+  es: {
+    sectionLabel: 'Historial de la dinastía',
+    eyebrow: 'Dinastía',
+    bandTitle: 'El libro de récords de las franquicias',
+    bandTagline: 'Cada temporada que esta liga tiene registrada, franquicia por franquicia.',
+    rafters: 'Los estandartes',
+    you: 'Tú',
+    open: 'Abierto',
+    unnamed: 'Campeón',
+    pennantAria: (season, name) => `Campeón ${season}: ${name}`,
+    openAria: (season) => `${season}: título aún en juego`,
+    myTitles: (n) => (n === 1 ? '1 título es tuyo' : `${n} títulos son tuyos`),
+    noTitlesYet: 'Aún no tienes un estandarte',
+    tableTitle: 'Tabla de la dinastía',
+    tableLabel: 'Récord histórico de cada franquicia',
+    seasonsOnFile: (first, last, count) =>
+      count === 1 ? `Temporada ${first} registrada` : `${first}–${last} · ${count} temporadas registradas`,
+    inProgress: (season) => `La temporada ${season} aún se está jugando; se cuentan sus partidos hasta ahora.`,
+    sortBy: 'Ordenar por',
+    colRank: '#',
+    colFranchise: 'Franquicia',
+    colTitles: 'Títulos',
+    colRecord: 'G-P',
+    colWinPct: '% vict.',
+    colPointsFor: 'PF',
+    colRunnerUp: '2.º',
+    colPlayoffs: 'Playoffs',
+    colSeasons: 'Temporadas',
+    sortTitles: 'Títulos',
+    sortWinPct: '% de victorias',
+    sortWins: 'Victorias',
+    sortPointsFor: 'Puntos a favor',
+    sortSeasons: 'Temporadas',
+    sortedBy: (col) => `Ordenado por ${col}`,
+    youTag: 'Tú',
+    titlesAria: (n, seasons) =>
+      n === 0 ? 'Sin títulos' : `${n} ${n === 1 ? 'título' : 'títulos'}: ${yearList(seasons)}`,
+    noGames: 'Sin partidos',
+    noPoints: '—',
+    seasonsCount: (n) => `${n}`,
+    pfPartial: 'Los puntos quedan en blanco donde a una temporada registrada le faltan.',
+    runnerUpNote: 'Los subcampeonatos se cuentan donde la temporada registró uno.',
+    playoffsNote: 'Playoffs cuenta las temporadas con un sembrado de playoffs registrado.',
+    noPlayoffs: 'Las clasificaciones a playoffs no están guardadas para cada temporada, así que no se muestran.',
+    titleOnlySeasons: (seasons) =>
+      `${yearList(seasons)}: solo el campeón está registrado, así que ${seasons.length === 1 ? 'esa temporada suma' : 'esas temporadas suman'} títulos pero no récord.`,
+    unattributed: (n, seasons) =>
+      `${n === 1 ? 'Un título' : `${n} títulos`} (${yearList(seasons)}) ${n === 1 ? 'nombra' : 'nombran'} a un campeón que ningún id de equipo o dueño guardado vincula con una franquicia, así que ${n === 1 ? 'cuelga' : 'cuelgan'} en los estandartes pero no ${n === 1 ? 'se cuenta' : 'se cuentan'} aquí.`,
+    unmatched: (n) =>
+      `${n === 1 ? 'Una temporada de equipo' : `${n} temporadas de equipo`} registrada${n === 1 ? '' : 's'} no ${n === 1 ? 'tiene' : 'tienen'} id de dueño ni de equipo y se ${n === 1 ? 'deja' : 'dejan'} fuera en lugar de emparejarse por nombre.`,
+    titlesOnlyWhy:
+      'Los récords de cada equipo por temporada no están registrados para esta liga — su importación de historial guardó a los campeones pero no las victorias y derrotas de cada equipo — así que solo se pueden contar los títulos.',
+    emptyWhy:
+      'Esta liga aún no tiene temporadas pasadas registradas. Cuando se importe su historial o se archive una temporada, aquí aparecerá el récord histórico de cada franquicia.',
+    titlesHead: 'Títulos registrados',
+    identityNote: 'Las franquicias se emparejan entre temporadas por ids de dueño y de equipo, nunca por nombre.',
+  },
+})

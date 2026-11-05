@@ -28,6 +28,8 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen'
+import { DynastyStandingsHistory } from '@/components/core-app/screens/DynastyStandingsHistory'
+import type { DynastyStandingsHistory as DynastyHistory } from '@/lib/core-app/dynastyStandingsHistory'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -82,6 +84,12 @@ export type StandingsProps = {
    * The table then reads Safe / On the bubble / Eliminated — such a league has no playoffs.
    */
   elimination?: EliminationZones | null
+  /**
+   * Dynasty history — the rafters and every franchise's all-time record across the seasons on file
+   * (`loadDynastyStandingsHistory`). Passed ONLY for a dynasty league (`coreShellDynasty`, the shell
+   * stamp's rule); absent for every other league, which then renders exactly as before.
+   */
+  dynasty?: DynastyHistory | null
 }
 
 function n1(v: number): string {
@@ -390,6 +398,7 @@ export function Standings({
   efficiency = null,
   draftOrder = null,
   elimination = null,
+  dynasty = null,
 }: StandingsProps) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -417,6 +426,8 @@ export function Standings({
           </span>
           <p className="af-st-blocked-body">{copy(data.reason)}</p>
         </div>
+        {/* An offseason dynasty league is exactly when its history matters most. */}
+        {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
         {/* The live board cannot be drawn, but the imported seasons still can. */}
         <SeasonHistory rows={data.history} />
       </div>
@@ -507,6 +518,8 @@ export function Standings({
       <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} efficiency={efficiency} elimination={elimination} />
 
       {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
+
+      {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
 
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
