@@ -32,9 +32,14 @@ export type ChatUnread = {
   mentions: number
   /** Unread in threads you muted — a real state, deliberately not badged. */
   mutedUnread: number
+  /**
+   * `total` split by the thread's kind, for the chat drawer's DMs and Huddle tab badges (2026-11-05).
+   * `ai` and `league` threads are in `total` but in neither number: no tab lists them.
+   */
+  byThreadType: { dm: number; group: number }
 }
 
-const EMPTY: ChatUnread = { total: 0, mentions: 0, mutedUnread: 0 }
+const EMPTY: ChatUnread = { total: 0, mentions: 0, mutedUnread: 0, byThreadType: { dm: 0, group: 0 } }
 
 /**
  * How many unread messages this person has across their DMs and huddles.
@@ -49,7 +54,7 @@ export async function getChatUnread(userId: string | null | undefined): Promise<
   try {
     const memberships = await prisma.platformChatThreadMember.findMany({
       where: { userId, isBlocked: false },
-      select: { threadId: true, lastReadAt: true, isMuted: true },
+      select: { threadId: true, lastReadAt: true, isMuted: true, thread: { select: { threadType: true } } },
       take: 200,
     })
 
@@ -58,6 +63,7 @@ export async function getChatUnread(userId: string | null | undefined): Promise<
     let total = 0
     let mentions = 0
     let mutedUnread = 0
+    const byThreadType = { dm: 0, group: 0 }
 
     /*
      * One query per thread rather than one clever query over all of them: the
@@ -85,6 +91,8 @@ export async function getChatUnread(userId: string | null | undefined): Promise<
       }
 
       total += count
+      const kind = m.thread?.threadType
+      if (kind === 'dm' || kind === 'group') byThreadType[kind] += count
 
       const mentioned = await prisma.platformChatMessage
         .count({ where: { ...where, mentionedUserIds: { has: userId } } })
@@ -92,7 +100,7 @@ export async function getChatUnread(userId: string | null | undefined): Promise<
       mentions += mentioned
     }
 
-    return { total, mentions, mutedUnread }
+    return { total, mentions, mutedUnread, byThreadType }
   } catch {
     return EMPTY
   }

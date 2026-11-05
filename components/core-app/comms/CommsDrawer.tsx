@@ -7,6 +7,7 @@ import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Radio, Sparkles, 
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
+import { tabBadgeText, type CommsTabCounts } from './useCommsTabCounts'
 import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPanel'
@@ -123,6 +124,13 @@ export type CommsDrawerProps = {
    * wherever the user happened to be last.
    */
   rememberPlace?: boolean
+  /**
+   * Unread per tab, badged on every tab but the open one. Read by the chat bubble (CommsDock, via
+   * useCommsTabCounts) rather than here, so the drawer itself makes no request just for opening.
+   */
+  tabCounts?: CommsTabCounts
+  /** Told on every tab switch — the bubble re-reads `tabCounts`, since opening a tab is what clears it. */
+  onTabChange?: (tab: CommsTab) => void
 }
 
 /* PUBLIC_ANSWER_NOTICE lives in ./ChimmyPanel beside the answers that carry it; LeaguePanel below uses it too. */
@@ -516,6 +524,8 @@ export function CommsDrawer({
   initialDraft = null,
   openRequest = null,
   rememberPlace = false,
+  tabCounts,
+  onTabChange,
   userId,
 }: CommsDrawerProps) {
   const { language } = useOptionalLanguage()
@@ -670,6 +680,13 @@ export function CommsDrawer({
   /* The composer must stay above the on-screen keyboard — see the hook. */
   useCommsKeyboardInset(panelRef, open)
 
+  /* The bubble owns the tab counts; it needs to know which tab is open to re-read them. */
+  useEffect(() => {
+    onTabChange?.(tab)
+    // Keyed on the tab alone: a new callback identity is not a tab switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
   if (!open) return null
 
   const scopeName = leagues.find((l) => l.id === scopeId)?.name ?? null
@@ -751,6 +768,8 @@ export function CommsDrawer({
           >
             {TABS.map((t) => {
               const Icon = TAB_ICONS[t.id]
+              /* Not on the tab you are already reading: that number is what you are looking at. */
+              const badge = tab === t.id ? null : tabBadgeText(tabCounts?.[t.id])
               return (
                 <button
                   key={t.id}
@@ -763,9 +782,15 @@ export function CommsDrawer({
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
                   title={coreUiCopy(t.audience, language)}
+                  aria-label={badge ? `${coreUiCopy(t.label, language)}, ${badge} unread` : undefined}
                 >
                   <Icon size={14} aria-hidden />
                   <span>{coreUiCopy(t.label, language)}</span>
+                  {badge ? (
+                    <b className="af-cm-tabcount" data-testid={`comms-tab-count-${t.id}`} aria-hidden="true">
+                      {badge}
+                    </b>
+                  ) : null}
                 </button>
               )
             })}
