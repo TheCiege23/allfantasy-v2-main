@@ -16,6 +16,14 @@ import CommsDrawer from '@/components/core-app/comms/CommsDrawer'
  * spends nothing. Sending is a separate, deliberate act because every send can cost tokens.
  */
 
+/*
+ * The first answer in a fresh file waits on a cold mount of the whole drawer, which on a busy machine
+ * can outlast the default 1s find (measured 2026-11-05: 2 of 4 failed on `main` under load, 4 of 4
+ * passed alone). A timed-out first test also leaked its answer into the next, which then counted two
+ * Chimmy calls. The answer is still awaited; it just gets time.
+ */
+const COLD_MOUNT = { timeout: 5000 }
+
 const chimmyCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
   fetchMock.mock.calls.filter(([url]) => String(url) === '/api/chat/chimmy')
 
@@ -71,14 +79,14 @@ describe('Chimmy follow-up chips', () => {
 
   it('renders the server\'s follow-ups under the answer, dropping anything malformed', async () => {
     ask('Set my best lineup for this week')
-    const group = await screen.findByRole('group', { name: 'Ask next' })
+    const group = await screen.findByRole('group', { name: 'Ask next' }, COLD_MOUNT)
     const labels = Array.from(group.querySelectorAll('button')).map((b) => b.textContent)
     expect(labels).toEqual(['How does my matchup look this week?', 'What are my playoff odds?'])
   })
 
   it('fills the box on tap and sends nothing', async () => {
     const box = ask('Set my best lineup for this week')
-    fireEvent.click(await screen.findByRole('button', { name: /What are my playoff odds\?/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /What are my playoff odds\?/ }, COLD_MOUNT))
     expect(box.value).toBe('What are my playoff odds?')
     expect(chimmyCalls(fetchMock)).toHaveLength(1)
   })
@@ -103,7 +111,7 @@ describe('Chimmy follow-up chips', () => {
       return { ok: true, status: 200, json: async () => ({ refreshed: 1, busy: 0 }) }
     })
     ask('should I spend FAAB this week?', 'l0')
-    const line = await screen.findByText(/Read from KBFL · synced 5 hr ago/)
+    const line = await screen.findByText(/Read from KBFL · synced 5 hr ago/, {}, COLD_MOUNT)
     expect(line.closest('.af-cm-grounding')!.getAttribute('data-stale')).toBe('true')
     // The refresh appears once the answer has settled (the panel is no longer busy).
     fireEvent.click(await screen.findByRole('button', { name: 'Refresh league data' }))
@@ -115,7 +123,7 @@ describe('Chimmy follow-up chips', () => {
 
   it('labels the new analyst tools as readable sources', async () => {
     ask('Set my best lineup for this week')
-    await screen.findByRole('group', { name: 'Ask next' })
+    await screen.findByRole('group', { name: 'Ask next' }, COLD_MOUNT)
     fireEvent.click(await screen.findByRole('button', { name: 'What is this based on?' }))
     expect(await screen.findByText("Your best lineup, scored under your league's rules")).toBeTruthy()
   })
