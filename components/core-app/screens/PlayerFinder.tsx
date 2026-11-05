@@ -5,6 +5,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
+import '@/components/core-app/af-player-finder-redesign.css'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
@@ -68,6 +69,8 @@ import { FollowButton } from '@/components/core-app/player-finder/FollowButton'
 import { LeagueActionCards } from '@/components/core-app/player-finder/LeagueActionCards'
 import { PhoneFold } from '@/components/core-app/player-finder/PhoneFold'
 import { PhoneSearchDock } from '@/components/core-app/player-finder/PhoneSearchDock'
+import { MatchPositionFilter, matchPositions } from '@/components/core-app/player-finder/MatchPositionFilter'
+import { redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { buildLeagueCards } from '@/lib/core-app/leagueActions'
 import { ExposureChip, FormSpark } from '@/components/core-app/player-finder/PlayerFunChips'
 import { CoinFlips, type FlipLink } from '@/components/core-app/player-finder/CoinFlips'
@@ -461,6 +464,7 @@ export function PlayerFinder({
 }: PlayerFinderProps) {
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
+  const [matchPos, setMatchPos] = useState<string | null>(null)
   /** A loader's reason, in the reader's language (whole, or English as written). */
   const why = (reason: string) => reasonText(reason, language)
   const depthLocked = depthAccess?.unlocked === false
@@ -676,10 +680,16 @@ export function PlayerFinder({
     ? matches.filter((m) => !(m.externalId === detail.player.externalId && m.sport === detail.player.sport))
     : matches
 
+  const sheet = Boolean(detail && signedIn)
+  const sheetCloseHref = `/core/players${query.trim() ? `?q=${encodeURIComponent(query)}${leagueParam}` : selectedLeagueId ? `?league=${encodeURIComponent(selectedLeagueId)}` : ''}`
+  const posOptions = matchPositions(matches)
+  // A new search keeps the component mounted; a pick that matches nobody in it falls back to All.
+  const activePos = matchPos && posOptions.includes(matchPos) ? matchPos : null
+  const shownMatches = activePos ? matches.filter((m) => (m.position ?? '').trim().toUpperCase() === activePos) : matches
   return (
-    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)}>
-      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar owns that lane. */}
-      {detail && leagueView ? null : <PhoneSearchDock />}
+    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)} data-sheet={sheet || undefined}>
+      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar and the sheet own that lane. */}
+      {(detail && leagueView) || sheet ? null : <PhoneSearchDock />}
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -718,8 +728,10 @@ export function PlayerFinder({
                 {query.trim().length < 2 ? t.typeTwo : t.noMatch(query)}
               </p>
             ) : (
+              <>
+              {posOptions.length > 1 ? <MatchPositionFilter options={posOptions} value={activePos} onChange={setMatchPos} total={matches.length} /> : null}
               <ul className="af-pf-match-list">
-                {matches.map((m) => (
+                {shownMatches.map((m) => (
                   <li key={`${m.sport}-${m.externalId}`} className="af-pf-match-li">
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
@@ -730,6 +742,9 @@ export function PlayerFinder({
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
                       }
                     >
+                      <span className="af-pf-match-pos" data-rd-pos={redraftCorePosTone(m.sport, m.position) ?? undefined}>
+                        {m.position ?? '–'}
+                      </span>
                       <PlayerAvatar src={m.imageUrl} name={m.name} size={32} />
                       <span className="af-pf-match-text">
                         <span className="af-pf-match-name">{m.name}</span>
@@ -761,6 +776,7 @@ export function PlayerFinder({
                   </li>
                 ))}
               </ul>
+              </>
             )}
           </section>
         ) : null}
@@ -846,6 +862,16 @@ export function PlayerFinder({
         <p className="af-pf-rail-foot af-pf-d-only">{t.railFoot}</p>
       </aside>
 
+      {sheet ? <Link className="af-pf-psheet-backdrop" href={sheetCloseHref} aria-hidden tabIndex={-1} /> : null}
+      <div className="af-pf-psheet" data-open={sheet || undefined}>
+      {sheet ? (
+        <div className="af-pf-psheet-bar">
+          <span className="af-pf-psheet-grip" aria-hidden />
+          <Link className="af-pf-psheet-close" href={sheetCloseHref}>
+            {t.backToResults}
+          </Link>
+        </div>
+      ) : null}
       <section className="af-pf-main" aria-label={t.mainLabel}>
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
@@ -1564,6 +1590,7 @@ export function PlayerFinder({
           <SwapCandidates impact={impactRows} kickoffs={detail.kickoffs ?? {}} nowIso={nowIso} />
         </aside>
       ) : null}
+      </div>
     </div>
   )
 }

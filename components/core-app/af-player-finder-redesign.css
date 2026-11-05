@@ -1,0 +1,200 @@
+/*
+ * Player Finder — the redesign layer (PlayerFinder.tsx): position chips on the matches, the position
+ * filter over them, the search field, and on a phone the open player as a sheet over the search.
+ *
+ * Loaded after af-player-finder.css and af-core-redraft-waivers-finder.css, so it restyles rather
+ * than rebuilds: no rule here changes what a row says, only how it sits. Everything is a token, so
+ * light, dark and AF modes each come from their own token set.
+ *
+ * ⚠ ONE `@media` BLOCK, AT THE BOTTOM. af-player-finder.css records why: a query inserted inside
+ * another one closes it early and moves every rule below into the narrower band, silently.
+ */
+
+/* ── Search field ────────────────────────────────────────────────────── */
+
+.af-core.af-pf .af-pf-search {
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--line2, var(--line));
+  background: var(--surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.af-core.af-pf .af-pf-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Matches: a position column, then the player ─────────────────────── */
+
+.af-core.af-pf .af-pf-match-list {
+  gap: 0;
+}
+
+.af-core.af-pf .af-pf-match-li + .af-pf-match-li {
+  border-top: 1px solid var(--line);
+}
+
+.af-core.af-pf .af-pf-match {
+  border-radius: 10px;
+}
+
+.af-core.af-pf .af-pf-match-pos {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--pf-pos, var(--text2)) 42%, transparent);
+  background: color-mix(in srgb, var(--pf-pos, var(--text2)) 9%, var(--surface2));
+  color: var(--pf-pos, var(--text2));
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* The tone is the sport-correct one My team uses (redraftCorePosTone): C is a centre or a catcher. */
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='red'] { --pf-pos: var(--bad); }
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='green'] { --pf-pos: var(--good); }
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='blue'] { --pf-pos: var(--tier-blue-fg); }
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='amber'] { --pf-pos: var(--warn); }
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='violet'] { --pf-pos: var(--p-yahoo-fg); }
+.af-core.af-pf .af-pf-match-pos[data-rd-pos='slate'] { --pf-pos: var(--text2); }
+
+/* ── Position filter ─────────────────────────────────────────────────── */
+
+.af-core.af-pf .af-pf-posfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.af-core.af-pf .af-pf-posfilter-chip {
+  min-width: 44px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.af-core.af-pf .af-pf-posfilter-chip:hover {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
+.af-core.af-pf .af-pf-posfilter-chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.af-core.af-pf .af-pf-posfilter-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Player card ─────────────────────────────────────────────────────── */
+
+.af-core.af-pf .af-pf-detail {
+  border-radius: 16px;
+}
+
+/* ── The phone sheet ─────────────────────────────────────────────────── */
+
+/* Off a phone the wrapper is invisible to layout: the grid places the player and decision columns as
+   it always has. */
+.af-core.af-pf .af-pf-psheet {
+  display: contents;
+}
+
+.af-core.af-pf .af-pf-psheet-backdrop,
+.af-core.af-pf .af-pf-psheet-bar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* The page behind holds still while the sheet scrolls. */
+  html:has(.af-core.af-pf[data-sheet]) {
+    overflow: hidden;
+  }
+
+  .af-core.af-pf .af-pf-psheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 37;
+    background: rgba(2, 4, 12, 0.55);
+  }
+
+  /*
+   * ⚠ NO TRANSFORM ON THE SHEET. A transformed ancestor becomes the containing block for `position:
+   * fixed` children, and the league-mode action bar (.af-pf-stickybar) is one: it would stop pinning
+   * to the screen and scroll away with the card.
+   */
+  .af-core.af-pf .af-pf-psheet[data-open] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 48px;
+    bottom: var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px)));
+    z-index: 38;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 96px;
+    border-top: 1px solid var(--line);
+    border-radius: 20px 20px 0 0;
+    background: var(--bg);
+    box-shadow: 0 -16px 40px rgba(2, 4, 12, 0.32);
+  }
+
+  .af-core.af-pf .af-pf-psheet-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 8px 16px 4px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .af-core.af-pf .af-pf-psheet-grip {
+    align-self: center;
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line2, var(--line));
+  }
+
+  .af-core.af-pf .af-pf-psheet-close {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    min-height: 44px;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .af-core.af-pf .af-pf-psheet[data-open] .af-pf-main {
+    padding-top: 4px;
+  }
+}
