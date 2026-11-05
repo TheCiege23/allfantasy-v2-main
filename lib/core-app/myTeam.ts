@@ -49,6 +49,7 @@ import { prospectIdsOf, type DynastyRosterMarker } from './dynastyRosterMarkers'
 import { readDynastyMarkers } from './dynastyMarkerRead'
 import { isDynastyLeague as isDynastyFormatLeague } from '@/lib/league/isDynastyLeague'
 import { getTeamActivity, type TeamActivity } from './teamActivity'
+import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -337,6 +338,12 @@ export type MyTeamData = {
    * fine". Null when every id resolved.
    */
   identityNote: string | null
+  /**
+   * The whole-lineup best answer this week (lib/core-app/lineupOptimizer.ts). Null when it cannot be
+   * answered honestly — best ball, every seat locked, or an open starter we cannot price. Optional so
+   * every other constructor of MyTeamData keeps compiling unchanged.
+   */
+  lineupOptimizer?: LineupOptimization | null
   bench: SectionState<LineupPlayer[]>
   /**
    * Injured reserve and taxi squad, kept apart.
@@ -1866,6 +1873,7 @@ async function loadMyTeamData(
       starters.length > 0
         ? { available: true, data: starters }
         : { available: false, reason: 'no starting lineup recorded on this roster' },
+    lineupOptimizer: optimizeLineup({ starters, bench: benchPlayers, sport, bestBall: Boolean(base.league.bestBall), now: new Date(adviceAt) }),
     /*
      * Counted over filled starting slots only. An EMPTY slot is a hole in the
      * lineup, not an id we failed to resolve, and folding the two together
