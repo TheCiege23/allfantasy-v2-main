@@ -1358,3 +1358,200 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
     overflow: hidden;
   }
 }
+
+/* ── Redraft Rankings board (2026-11-01): hero, level card, board head, avatars ──────────────────
+ * Tokens only. The level card is a dark card in every mode, on the scoreboard tokens (--mu-sb-*)
+ * the Matchup and Live scores dark cards already use, so its contrast was settled there.
+ * Rules first, then one top-level @media per width, after every rule — see the @media-insertion
+ * note above.
+ */
+.af-rk-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 16px 24px;
+}
+.af-rk-hero-main { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.af-rk-hero-eyebrow {
+  margin: 0;
+  color: var(--faint);
+  font: 600 11px/1.3 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-rk-hero-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.af-rk-hero .af-rk-title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+.af-rk-hero-intro { margin: 0; max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
+.af-rk-hero-intro strong { color: var(--text); }
+.af-rk-pills { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.af-rk-pills li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 13px;
+}
+.af-rk-pills b {
+  color: var(--accent);
+  font: 700 14px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-rk-levelcard {
+  flex: 1 1 300px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px solid var(--mu-sb-line);
+  border-radius: 18px;
+  background: var(--mu-sb-bg);
+  color: var(--mu-sb-text);
+  box-sizing: border-box;
+}
+.af-rk-levelcard-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mu-sb-muted);
+  font: 600 11px/1.2 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-rk-levelcard-top span:last-child { color: var(--mu-sb-accent); }
+.af-rk-levelcard-name { margin: 0; font: 800 20px/1.15 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -0.01em; }
+.af-rk-levelcard-xp { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; }
+.af-rk-levelcard-xp b { font: 700 22px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.af-rk-levelcard-xp span { color: var(--mu-sb-text2); font-size: 13px; }
+.af-rk-levelcard-bar { height: 8px; border-radius: 999px; background: var(--mu-sb-track); overflow: hidden; }
+.af-rk-levelcard-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--mu-sb-accent); }
+.af-rk-earn { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.af-rk-earn li {
+  padding: 4px 9px;
+  border: 1px solid var(--mu-sb-line);
+  border-radius: 999px;
+  background: var(--mu-sb-raise);
+  color: var(--mu-sb-text2);
+  font-size: 12px;
+}
+.af-rk-earn b { color: var(--mu-sb-good); font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; }
+.af-rk-levelcard-note { margin: 0; color: var(--mu-sb-muted); font-size: 12px; line-height: 1.45; }
+
+/* Scope tabs: one segmented control instead of four separate cards. */
+.af-rk-scopes { gap: 4px; padding: 4px; border-radius: 14px; background: var(--chip); }
+.af-rk-scope-tab { border-color: transparent; background: transparent; border-radius: 11px; padding: 9px 14px; }
+.af-rk-scope-tab:hover { background: var(--surface); }
+.af-rk-scope-tab[aria-current="page"] { border-color: var(--line2); background: var(--surface); box-shadow: 0 1px 2px var(--line); }
+
+.af-rk-boardhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.af-rk-boardhead-main { flex: 999 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-rk-boardhead-title { margin: 0; color: var(--text); font: 800 19px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -0.01em; }
+.af-rk-boardhead-explain { margin: 0; max-width: 70ch; color: var(--text2); font-size: 13.5px; line-height: 1.5; }
+.af-rk-boardhead-pop {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--faint);
+  font: 600 11px/1.3 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-rk-boardhead-pop span:last-child:not(:first-child) { color: var(--accent); }
+.af-rk-legend { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; }
+.af-rk-legend-eq {
+  color: var(--faint);
+  font: 600 11px/1.3 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-rk-legend ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.af-rk-legend li { display: inline-flex; align-items: center; gap: 6px; color: var(--text2); font-size: 13px; }
+.af-rk-legend li b { color: var(--text); font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; font-weight: 600; }
+.af-rk-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--chart-1); }
+.af-rk-legend li[data-tone="2"] i { background: var(--chart-2); }
+.af-rk-legend li[data-tone="3"] i { background: var(--chart-3); }
+.af-rk-legend li[data-tone="4"] i { background: var(--chart-4); }
+
+/* Manager cell: a two-letter avatar chip beside the name. */
+.af-rk-namecell { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.af-rk-namebody { display: inline-flex; flex-direction: column; min-width: 0; }
+.af-rk-av {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--text2);
+  font: 700 11px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+.af-rk-row-you .af-rk-av { background: var(--accent); color: var(--accent-ink); }
+/* "Why" as a small outlined button rather than a bare underlined word. */
+.af-rk-cellbtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: 700 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-rk-cellbtn:hover { border-color: var(--accent-line); color: var(--accent); }
+
+/* Tablet and desktop: rank and manager stay put while the stat columns scroll under them, so the
+ * left side of a wide board never scrolls out of view at a narrow width. */
+@media (min-width: 721px) {
+  .af-rk-tablewrap .af-rk-grid-table tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 44px;
+    min-width: 44px;
+    box-sizing: border-box;
+    background: var(--surface);
+  }
+  .af-rk-tablewrap .af-rk-grid-table tr > :nth-child(2) {
+    position: sticky;
+    left: 44px;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--line);
+  }
+  .af-rk-tablewrap .af-rk-grid-table thead tr > :first-child,
+  .af-rk-tablewrap .af-rk-grid-table thead tr > :nth-child(2) { z-index: 3; }
+  /* Your row keeps its tint on the pinned cells: the tint is translucent, so it is laid over the surface. */
+  .af-rk-tablewrap .af-rk-grid-table .af-rk-row-you > :first-child,
+  .af-rk-tablewrap .af-rk-grid-table .af-rk-row-you > :nth-child(2) {
+    background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
+  }
+  .af-rk-tablewrap .af-rk-grid-table .af-rk-vspacer > :first-child,
+  .af-rk-tablewrap .af-rk-grid-table .af-rk-vspacer > :nth-child(2) { position: static; background: transparent; box-shadow: none; }
+}
+
+@media (max-width: 720px) {
+  .af-rk-hero .af-rk-title { font-size: 26px; }
+  .af-rk-levelcard { max-width: none; }
+  .af-rk-av { display: none; }
+  .af-rk-namecell { display: inline; }
+  .af-rk-namebody { display: inline; }
+}

@@ -46,6 +46,10 @@ export type RankCell = {
   title?: string
   tone?: 'good' | 'bad' | 'warn' | 'accent' | 'muted'
   sub?: string
+  /** Two-letter avatar chip drawn before the text (the manager column). Hidden on phones. */
+  initials?: string
+  /** Draw the link as a small outlined button (the "Why" column). */
+  button?: boolean
 }
 
 export type RankRow = {
@@ -297,10 +301,10 @@ function Row({
           [col?.align ? `af-rk-${col.align}` : '', col?.hideOnPhone ? 'af-rk-hide-phone' : '', cell.tone ? `af-rk-tone-${cell.tone}` : '']
             .join(' ')
             .trim() || undefined
-        const body = (
+        const text = (
           <>
             {cell.href ? (
-              <Link href={cell.href} scroll={false} className="af-rk-celllink">
+              <Link href={cell.href} scroll={false} className={cell.button ? 'af-rk-celllink af-rk-cellbtn' : 'af-rk-celllink'}>
                 {cell.text}
               </Link>
             ) : (
@@ -308,6 +312,16 @@ function Row({
             )}
             {cell.sub ? <span className="af-rk-cellsub">{cell.sub}</span> : null}
           </>
+        )
+        const body = cell.initials ? (
+          <span className="af-rk-namecell">
+            <span className="af-rk-av" aria-hidden="true">
+              {cell.initials}
+            </span>
+            <span className="af-rk-namebody">{text}</span>
+          </span>
+        ) : (
+          text
         )
         return ci === rowHeaderIndex ? (
           <th key={col?.key ?? ci} scope="row" className={cls} title={cell.title} data-card={card} data-label={label}>
