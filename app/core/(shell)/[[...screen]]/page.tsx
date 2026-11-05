@@ -4987,8 +4987,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
             {draftArchiveFirst ? null : draftArchiveSlot}
           </>
-        ) : selectedLeagueId && draftArchiveSlot ? (
-          draftArchiveSlot
+        ) : selectedLeagueId && draftArchive ? (
+          /* No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it carries the title. */
+          <DraftArchive {...draftArchive} asDraftHq />
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
