@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 const STORAGE_KEY_PREFIX = 'guillotine_post_draft_intro_seen_'
-const INTRO_VIDEO_SRC = '/guillotine/Guillotine%20League%20Intro.mp4'
+const INTRO_VIDEO_SRC = '/media/create-league/concept/videos/Guillotine.mp4'
 
 export interface GuillotinePostDraftIntroProps {
   leagueId: string
