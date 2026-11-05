@@ -114,7 +114,10 @@ export async function applyDailySportToLineup(
       }
       const form = outlook?.byKey.get(id)
       if (!form) continue
-      if (player.afProjectedPoints == null) player.afProjectedPoints = player.ruledOut ? 0 : form.projectedPoints
+      if (player.afProjectedPoints == null) {
+        player.afProjectedPoints = player.ruledOut ? 0 : form.projectedPoints
+        player.projectionSource = 'allfantasy'
+      }
       player.gameContext ??= dailyGameContext(player.team, form, 'week')
     }
     return outlook?.period ? { kind: 'week', day: null, week: outlook.period.week } : null
@@ -131,7 +134,11 @@ export async function applyDailySportToLineup(
   for (const [id, p] of pending) {
     const o = outlook.byKey.get(id)
     if (!o) continue
-    if (p.afProjectedPoints == null) p.afProjectedPoints = p.ruledOut ? 0 : o.projectedPoints
+    if (p.afProjectedPoints == null) {
+      // AllFantasy's daily-form model priced him, not a vendor — the column must not say Sleeper.
+      p.afProjectedPoints = p.ruledOut ? 0 : o.projectedPoints
+      p.projectionSource = 'allfantasy'
+    }
     if (p.gameContext == null) p.gameContext = dailyGameContext(p.team, o, kind)
     /*
      * The period's slate WAS read for him and holds no game for his team: an off day (daily lineup) or
