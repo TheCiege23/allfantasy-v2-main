@@ -1,0 +1,272 @@
+/*
+ * Scout — "the room at a glance" grid and your strongest / weakest tiles (Scout.tsx `RoomGrid`), plus the
+ * War Room eyebrow over the header.
+ *
+ * Scoped under `.af-core`, like af-scout.css, and for the same reason: an unscoped rule would leak into
+ * pages that do not carry the token set.
+ *
+ * ⚠ ONE SEQUENTIAL HUE. Rank is magnitude, so the shade is one accent, light to dark — never a rainbow
+ * and never the reserved good / bad tones, which the tiles beside it use for "strongest" and "weakest".
+ * Each step mixes the accent over --surface, so light, dark and AF modes each get their own steps from
+ * their own tokens; the cell text stays --text in every mode, which those mixes were kept light enough
+ * to carry.
+ *
+ * ⚠ AND EXACTLY ONE `@media` BLOCK, AT THE BOTTOM — af-scout.css's rule, for af-scout.css's reason.
+ */
+
+.af-core .af-sc-eyebrow {
+  margin: 0 0 4px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-sc-room {
+  --sc-room-hue: var(--rd-accent, var(--accent));
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-core .af-sc-room-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.af-core .af-sc-room-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.af-core .af-sc-room-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.af-core .af-sc-room-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-core .af-sc-room-legend > span:first-child {
+  margin-right: 4px;
+}
+
+.af-core .af-sc-room-legend > span:last-child {
+  margin-left: 4px;
+}
+
+.af-core .af-sc-room-swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+.af-core :is(.af-sc-room-swatch, .af-sc-room-cell)[data-tier='1'] {
+  background: color-mix(in srgb, var(--sc-room-hue) 46%, var(--surface));
+}
+.af-core :is(.af-sc-room-swatch, .af-sc-room-cell)[data-tier='2'] {
+  background: color-mix(in srgb, var(--sc-room-hue) 32%, var(--surface));
+}
+.af-core :is(.af-sc-room-swatch, .af-sc-room-cell)[data-tier='3'] {
+  background: color-mix(in srgb, var(--sc-room-hue) 20%, var(--surface));
+}
+.af-core :is(.af-sc-room-swatch, .af-sc-room-cell)[data-tier='4'] {
+  background: color-mix(in srgb, var(--sc-room-hue) 10%, var(--surface));
+}
+.af-core :is(.af-sc-room-swatch, .af-sc-room-cell)[data-tier='5'] {
+  background: var(--surface2);
+}
+
+.af-core .af-sc-room-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 14px;
+  align-items: start;
+}
+
+.af-core .af-sc-room-body:not(:has(.af-sc-room-tiles)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A long team name or a narrow phone scrolls the grid, never the page. */
+.af-core .af-sc-room-scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.af-core .af-sc-room-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  font-size: 13px;
+}
+
+.af-core .af-sc-room-table thead th {
+  padding: 0 4px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.af-core .af-sc-room-table thead th.af-sc-room-team-h {
+  text-align: left;
+}
+
+.af-core .af-sc-room-team {
+  padding: 0 8px 0 0;
+  text-align: left;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.af-core .af-sc-room-name {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.af-core .af-sc-room-you {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  background: var(--text);
+  color: var(--surface);
+}
+
+.af-core .af-sc-room-cell {
+  min-width: 44px;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Your row, outlined in full so it reads across every column at once. */
+.af-core .af-sc-room-table tr[data-you] .af-sc-room-cell {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.af-core .af-sc-room-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-sc-room-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--good);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.af-core .af-sc-room-tile[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+
+.af-core .af-sc-room-tile-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-sc-room-tile-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.af-core .af-sc-room-tile-rank {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.af-core .af-sc-room-tile-of {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-core .af-sc-room-tile-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────── */
+/* The file's ONLY media query, kept last. */
+
+@media (max-width: 760px) {
+  .af-core .af-sc-room {
+    padding: 14px;
+  }
+
+  /* The tiles lead on a phone: your reading first, the room it came from below. */
+  .af-core .af-sc-room-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-core .af-sc-room-tiles {
+    order: -1;
+    flex-direction: row;
+  }
+  .af-core .af-sc-room-tile {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Four rank columns and a name fit 360px only if the headings may wrap and the cells shrink. */
+  .af-core .af-sc-room-table {
+    border-spacing: 2px;
+  }
+  .af-core .af-sc-room-table thead th {
+    padding: 0 2px 4px;
+    white-space: normal;
+    letter-spacing: 0.02em;
+    vertical-align: bottom;
+  }
+  .af-core .af-sc-room-team {
+    padding-right: 4px;
+  }
+  .af-core .af-sc-room-name {
+    max-width: 104px;
+  }
+  .af-core .af-sc-room-cell {
+    min-width: 36px;
+    padding: 0 2px;
+  }
+}
