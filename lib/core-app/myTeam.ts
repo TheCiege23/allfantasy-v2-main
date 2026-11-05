@@ -137,6 +137,13 @@ export type LineupPlayer = {
    */
   afEngineProjectedPoints?: number | null
   /**
+   * Who made `afProjectedPoints`: the `fantasy_projections.source` of the feed row (`sleeper`, or a
+   * provider-chain name), or `allfantasy` when AllFantasy's own model priced him (the NBA/NHL/MLB
+   * daily-form outlook, college snapshots). The screen names its column from the sources present
+   * instead of assuming Sleeper — Sleeper projects no NHL, yet NHL rows carried that label.
+   */
+  projectionSource?: string | null
+  /**
    * He plays indoors this week, so weather is not a factor.
    *
    * Resolved from the HOME TEAM, not from `SportsGame.venue` — the rows that
@@ -764,6 +771,7 @@ async function resolvePlayers(
           ? null
           : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
+      projectionSource: leagueScored ? projection?.source ?? null : null,
       afEngineProjectedPoints: ruledOut
         ? 0
         : afEngineForLeague(afEngine.get(sleeperId), feedProjection, leagueScored?.points ?? null, scoringSettings),
@@ -856,7 +864,7 @@ async function resolvePlayers(
         const player = out.get(id)
         if (!player || !projection.componentStats) continue
         const scored = computeLeagueProjectedPoints(projection.componentStats, scoringSettings)
-        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points })
+        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points, projectionSource: 'allfantasy' })
       }
     }
 

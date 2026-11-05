@@ -52,6 +52,11 @@ export type PlayerProjection = {
   seasonLong?: true
   /** Baseline points per game, without a game-specific opponent or weather adjustment. */
   perGame?: true
+  /**
+   * Who wrote the row: `fantasy_projections.source` (`sleeper`, or a provider-chain name). The
+   * screens label the column from the sources actually present — see projectionSourceLabel.ts.
+   */
+  source?: string | null
 }
 
 type ProjectionStats = {
@@ -65,6 +70,7 @@ function toProjection(row: {
   playerId: string
   projectedPoints: number
   stats: unknown
+  source?: string | null
 }): PlayerProjection {
   const s = (row.stats ?? {}) as ProjectionStats
   const inner = s.stats
@@ -78,6 +84,7 @@ function toProjection(row: {
       inner && typeof inner === 'object' && !Array.isArray(inner)
         ? (inner as Record<string, unknown>)
         : null,
+    ...(row.source !== undefined ? { source: row.source } : {}),
   }
 }
 
@@ -168,7 +175,7 @@ export async function lookupProjections(
 
   const rows = await prisma.fantasyProjection.findMany({
     where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' } },
-    select: { playerId: true, projectedPoints: true, stats: true },
+    select: { playerId: true, projectedPoints: true, stats: true, source: true },
   })
   const out = new Map(rows.map((r) => [r.playerId, toProjection(r)]))
 

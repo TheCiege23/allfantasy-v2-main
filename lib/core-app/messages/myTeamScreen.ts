@@ -222,6 +222,19 @@ export const myTeamScreenMessages = defineMessages({
     startersTotalCoverage: (priced: number, starters: number) => `${priced} of ${starters} priced for this league`,
     goToMatchup: 'Go to matchup',
 
+    // The provider-projection column when its source is not one name (projectionSourceLabel.ts)
+    projNeutralColumn: 'PROJ.',
+    projNeutralTitle: 'Projection on file, scored under YOUR league’s rules',
+    projNeutralTile: 'Projected · your league',
+    projNeutralTileBestBall: 'Listed starters · your league',
+    projNeutralKeyAria: 'What PROJ., AF, OWN and START mean',
+    projNeutralExplainer:
+      'PROJ. is the projection on file for each player, re-scored under YOUR league’s settings. ' +
+      'AF is AllFantasy’s own projection engine, adjusted to the same settings.',
+    projNeutralMatchupExplainer:
+      'The large number is the projection on file for each lineup, re-scored under your league’s settings. ' +
+      'AF beneath it is AllFantasy’s own engine on the same lineup and the same settings.',
+
     // MyTeam starters note
     startersNoteNative: 'Native AllFantasy lineup. Save eligible changes in Roster decisions; server rules and locks apply.',
     startersNoteBestBall: (platform: string) => `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.`,
@@ -386,6 +399,18 @@ export const myTeamScreenMessages = defineMessages({
     startersTotal: 'Total de titulares',
     startersTotalCoverage: (priced, starters) => `${priced} de ${starters} valorados para esta liga`,
     goToMatchup: 'Ir al enfrentamiento',
+
+    projNeutralColumn: 'PROY.',
+    projNeutralTitle: 'Proyección registrada, puntuada con las reglas de TU liga',
+    projNeutralTile: 'Proyección · tu liga',
+    projNeutralTileBestBall: 'Titulares listados · tu liga',
+    projNeutralKeyAria: 'Qué significan PROY., AF, PROP. y TIT.',
+    projNeutralExplainer:
+      'PROY. es la proyección registrada de cada jugador, recalculada con los ajustes de TU liga. ' +
+      'AF es el motor de proyección propio de AllFantasy, ajustado a los mismos ajustes.',
+    projNeutralMatchupExplainer:
+      'El número grande es la proyección registrada de cada alineación, recalculada con los ajustes de tu liga. ' +
+      'AF debajo es el motor propio de AllFantasy sobre la misma alineación y los mismos ajustes.',
 
     startersNoteNative: 'Liga nativa AllFantasy. Guarda cambios válidos en Decisiones de plantilla; se aplican las reglas y cierres del servidor.',
     startersNoteBestBall: (platform) => `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.`,

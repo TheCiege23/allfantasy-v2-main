@@ -343,6 +343,24 @@ const OFFICIAL_RANK_PLATFORMS = new Set(['yahoo', 'fantrax'])
  * the "top N make it" line here and the odds there would come to name different fields. It now reads
  * through that function; Season Outlook's "default" is this screen's "assumed".
  */
+/**
+ * Whether the standings season is over — not merely "nothing unscored is on file".
+ *
+ * 🛑 AN IMPORT HOLDS THE WEEKS PLAYED SO FAR, NOT THE SEASON. A Fantrax NHL league with weeks 1–6 on
+ * file, all scored, read "season complete after week 6" while its week 7 was being played (live check
+ * 2026-11-05). Complete only when every week on file is scored AND the league's last regular-season week
+ * is on file; when the league states no end, it is never called complete — "results through week N" is
+ * true either way.
+ */
+export function standingsSeasonComplete(
+  weeks: ReadonlyArray<{ week: number; scored: number; rows: number }>,
+  regularSeasonEnd: number | null,
+): boolean {
+  if (weeks.length === 0 || regularSeasonEnd == null) return false
+  if (weeks.some((w) => w.scored < w.rows)) return false
+  return Math.max(...weeks.map((w) => w.week)) >= regularSeasonEnd
+}
+
 export function readPlayoffTeams(settings: unknown, teamCount: number): { teams: number; source: 'league' | 'assumed' } {
   const format = readPlayoffFormat(settings, teamCount)
   return { teams: format.playoffTeams, source: format.playoffTeamsSource === 'league' ? 'league' : 'assumed' }

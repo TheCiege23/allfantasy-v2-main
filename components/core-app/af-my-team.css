@@ -497,6 +497,56 @@
   opacity: 1;
 }
 
+/*
+ * A column with no value in ANY row of its table leaves the grid, header included
+ * (`emptyProjectionColumns`, set per section as data-proj-engine / data-proj-market).
+ * A Fantrax NHL roster carried three columns of em dashes (live check 2026-11-05). The
+ * cells stay in the DOM — the narrow rules below hide headers by position — so each
+ * width restates its template here, after its base rule, at a higher specificity.
+ */
+.af-mt-section[data-proj-engine='off'] .af-mt-proj--engine,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead--engine,
+.af-mt-section[data-proj-market='off'] .af-mt-share,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead--market {
+  display: none;
+}
+.af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead {
+  grid-template-columns: 54px 44px 46px;
+}
+.af-mt-section[data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px 46px;
+}
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px;
+}
+@media (max-width: 720px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
+}
+@container af-mt (max-width: 500px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
+}
+
 /* ── Game context marks ──────────────────────────────────────────────── */
 .af-mt-venue {
   margin-left: 6px;
