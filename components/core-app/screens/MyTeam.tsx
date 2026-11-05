@@ -1905,8 +1905,6 @@ export function MyTeam({ data }: MyTeamProps) {
         </section>
       ) : null}
 
-
-      <TeamRosterWorkspace data={data} />
      {/* ── Team header ─────────────────────────────────────────────── */}
 
 
@@ -2178,6 +2176,13 @@ export function MyTeam({ data }: MyTeamProps) {
           <UnidentifiedNote count={data.unidentified?.taxi ?? 0} />
         </section>
       ) : null}
+
+      {/*
+        ⚠ ROSTER DECISIONS COME AFTER THE ROSTER (owner, 2026-11-05). Above the tables, its seven
+        panels put the starters about three screens down on a 1440px desktop; the lineup is what
+        this page is opened for, and the panels compare players the tables have just shown.
+      */}
+      <TeamRosterWorkspace data={data} />
 
       <MyTeamRecentClips data={data} />
       <MyTeamHighlights data={data} />

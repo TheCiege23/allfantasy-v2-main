@@ -33,6 +33,7 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import GamesCountWeekPanel from './GamesCountWeekPanel'
+import { DynastyMarkerChips } from '@/components/core-app/screens/DynastyRosterMarkers'
 import { isGamesCountSport } from '@/lib/redraft/gamesCount'
 
 /**
@@ -475,6 +476,8 @@ export default function PlayerCardSheet({
                     {p?.number != null ? ` #${p.number}` : ''}
                   </span>
                 ) : null}
+                {/* Opened inside a dynasty league: age on the career arc, ROOKIE / PROSPECT (DynastyRosterMarkers.tsx). */}
+                <DynastyMarkerChips mark={data?.dynastyMarker} />
               </div>
 
               {league ? (

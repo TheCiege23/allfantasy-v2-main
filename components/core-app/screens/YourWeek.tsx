@@ -19,6 +19,10 @@ import { settleBadge } from '@/lib/core-app/eliminationSettle'
  */
 import { rosterLabel } from '@/lib/core-app/managerName'
 import '@/components/core-app/af-week.css'
+// The Your Week board restyle (2026-11-05), layered over af-week.css.
+import '@/components/core-app/af-week-redesign.css'
+import { YourWeekGlance, YourWeekProgressBar } from '@/components/core-app/YourWeekGlance'
+import { yourWeekProgress } from '@/lib/core-app/yourWeekProgress'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { yourWeekMessages } from '@/lib/core-app/messages/yourWeek'
@@ -162,6 +166,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
         kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
+  const progress = yourWeekProgress(data)
 
   return (
     <div className="af-wk">
@@ -179,6 +184,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
         </div>
 
         <div className="af-wk-headactions">
+          <YourWeekProgressBar progress={progress} />
           <Link href={rivalriesHref} className="af-btn af-wk-btn">
             {copy('Rivalry Radar')}
           </Link>
@@ -199,6 +205,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
           ) : null}
         </div>
       </header>
+
+      <YourWeekGlance progress={progress} />
 
       {data.coinFlips.length > 0 ? (
         <section className="af-wk-section">

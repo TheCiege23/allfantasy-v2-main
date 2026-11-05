@@ -25,6 +25,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { scopeSwitcherMessages } from '@/lib/core-app/messages/scopeSwitcher'
+import { railRowMessages } from '@/lib/core-app/messages/railRow'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
 import '@/components/core-app/af-scope-switcher.css'
 
 /**
@@ -74,6 +76,11 @@ export type ScopeSwitcherLeague = {
   isCommissioner?: boolean
   /** On an Exile Island: its Survivor league's id. The list draws the island under that league. */
   exileOf?: string
+  /**
+   * Your record and place — the rail row's "6-3 · 2nd" (lib/core-app/railRecords.ts). Null for a
+   * league with no record to state, and for a Guillotine or elimination race, where W-L says nothing.
+   */
+  record?: RailRecord | null
 }
 
 type Props = {
@@ -127,6 +134,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
    */
   const { language } = useOptionalLanguage()
   const m = useMessages(scopeSwitcherMessages)
+  const railMsg = useMessages(railRowMessages)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set(favoriteIds))
@@ -365,6 +373,13 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         </span>
                         <span className="af-scope-league-meta">
                           {league.sport} · {platformLabel(league.platform)}
+                          {/* Same words as the rail row (RailRowBody), so the two lists agree. */}
+                          {league.record ? (
+                            <span className="af-scope-league-record af-num" data-testid="scope-league-record">
+                              {league.record.wins}-{league.record.losses}{league.record.ties ? `-${league.record.ties}` : ''}
+                              {league.record.rank != null ? ` · ${railMsg.rank(league.record.rank)}` : ''}
+                            </span>
+                          ) : null}
                         </span>
                       </Link>
                     </li>

@@ -13,6 +13,12 @@ import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
 import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
+import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
+import { DraftModeBanner } from '@/components/app/draft-room/DraftModeBanner'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
+import '@/components/core-app/af-core.css'
+import '@/components/app/draft-room/af-draft-room.css'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -454,6 +460,19 @@ function getOnTheClockSlot(teams: TeamSlot[], settings: DraftSettings, overallPi
   return orderedTeams[pickIndex - 1]?.slot ?? teams[0]?.slot ?? 1
 }
 
+/**
+ * Picks between the one on the clock and the given slot's next turn: 0 when that slot is on the
+ * clock, null when it has no turn left. Walks the same order `getOnTheClockSlot` assigns, so a snake
+ * draft's turn at the end of a round is counted correctly.
+ */
+export function mockPicksUntilSlot(teams: TeamSlot[], settings: DraftSettings, currentPick: number, slot: number): number | null {
+  const total = settings.teamCount * settings.rounds
+  for (let k = 0; currentPick + k <= total && k <= settings.teamCount * 2; k += 1) {
+    if (getOnTheClockSlot(teams, settings, currentPick + k) === slot) return k
+  }
+  return null
+}
+
 function createOpenMockTeams(settings: DraftSettings): TeamSlot[] {
   return Array.from({ length: settings.teamCount }, (_, index) => {
     const slot = index + 1
@@ -748,6 +767,31 @@ export default function MockDraftSleeperRoomClient({
   )
 
   const isUserTurn = Boolean(onTheClockTeam?.isUser && draftState?.status === 'drafting')
+  /*
+   * The live room's clock language, in the mock room (2026-11-05): the pick, who is on the clock,
+   * how far away your turn is, and a bar for the time left. The timer only ticks on your own turn
+   * (the AI picks at once), so the time and its bar are shown then and nowhere else.
+   */
+  const roomCopy = useMessages(draftRoomRedesignMessages)
+  const userSlot = draftState?.teams.find((team) => team.isUser)?.slot ?? null
+  const picksUntilUser =
+    draftState && userSlot != null && draftState.status !== 'complete'
+      ? mockPicksUntilSlot(draftState.teams, draftState.settings, draftState.currentPick, userSlot)
+      : null
+  const clockProgress =
+    draftState && isUserTurn && draftState.settings.speed > 0 ? clockProgressPercent(draftState.timerSeconds, draftState.settings.speed) : null
+  const clockUrgent = Boolean(draftState && isUserTurn && draftState.settings.speed > 0 && draftState.timerSeconds <= 5)
+  const clockStatus = !draftState
+    ? null
+    : draftState.status === 'complete'
+      ? roomCopy.mockStatusComplete
+      : draftState.status === 'paused'
+        ? roomCopy.mockStatusPaused
+        : isUserTurn
+          ? roomCopy.clockBarYouOnClock
+          : picksUntilUser != null && picksUntilUser > 0
+            ? `~${roomCopy.clockBarPicksUntil(picksUntilUser)}`
+            : null
 
   const queuePlayers = useMemo(() => {
     if (!draftState) return []
@@ -2084,6 +2128,17 @@ export default function MockDraftSleeperRoomClient({
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/60">
                 {draftState.settings.scoring} · {draftState.settings.teamCount} teams · {draftState.settings.rounds} rounds · {draftState.settings.draftType}
               </div>
+              <div className="af-core af-dr af-dr-hclock max-lg:hidden" role="status" aria-label={roomCopy.clockBarAria} data-testid="mock-draft-header-clock">
+                <span className="af-dr-hclock-pick">{roomCopy.mockPickLabel(draftState.currentPick)}</span>
+                <span className="af-dr-hclock-team">{onTheClockTeam?.managerName ?? ''}</span>
+                {clockStatus ? <span className="af-dr-hclock-status" data-on-clock={isUserTurn ? 'true' : undefined}>{clockStatus}</span> : null}
+                {clockProgress != null ? (
+                  <>
+                    <span className="af-dr-hclock-time" data-urgent={clockUrgent ? 'true' : undefined}>{roomCopy.mockSecondsLeft(draftState.timerSeconds)}</span>
+                    <span className="af-dr-clock-progress" aria-hidden><span style={{ width: `${clockProgress}%` }} /></span>
+                  </>
+                ) : null}
+              </div>
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 {draftState.status === 'drafting' ? (
                   <button
@@ -2145,6 +2200,10 @@ export default function MockDraftSleeperRoomClient({
 
         <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 max-lg:flex max-lg:min-h-0 max-lg:w-full max-lg:flex-1 max-lg:flex-col max-lg:px-0 max-lg:pb-0 max-lg:pt-2">
           {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200 max-lg:px-3">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
+          {/* Desktop only: on a phone the header's "Open Mock" line names the mode, and the board needs the rows. */}
+          <div className="mb-3 hidden lg:block">
+            <DraftModeBanner mode="mock" />
+          </div>
           <div className="hidden min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1424] lg:flex lg:flex-col" data-testid="mock-draft-desktop-layout">
             <div className="max-h-[min(50vh,600px)] min-h-[240px] min-w-0 overflow-auto">{boardNode}</div>
             <div className="grid h-[min(50vh,560px)] min-h-[320px] grid-cols-[minmax(0,1fr)_minmax(320px,35%)] border-t border-white/[0.06]">
@@ -2158,15 +2217,36 @@ export default function MockDraftSleeperRoomClient({
             className="relative flex min-h-0 flex-1 flex-col lg:hidden"
             data-testid="mock-draft-mobile-layout"
           >
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
-            <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
-                <span data-testid="mock-draft-current-pick">
-                  Pick #{draftState.currentPick} · {onTheClockTeam?.managerName ?? 'Unknown'}
+            {/*
+              The live room's dark phone clock bar. Its Search / Queue / Roster / Chat buttons are not
+              repeated here: this room's tab bar under the board already carries Players, Roster and
+              Chat, two rows below, and the queue lives in the Players panel.
+            */}
+            <div className="af-core af-dr af-dr-clockbar shrink-0" role="region" aria-label={roomCopy.clockBarAria} data-testid="mock-draft-clockbar">
+              <div className="af-dr-clockbar-top">
+                <span className="af-dr-clockbar-pick" data-testid="mock-draft-current-pick">
+                  {roomCopy.mockPickLabel(draftState.currentPick)}
+                  <small>{onTheClockTeam?.managerName ?? ''}</small>
                 </span>
-                <span>{draftState.status}</span>
-                {draftState.settings.speed > 0 && isUserTurn ? <span data-testid="mock-draft-clock">{draftState.timerSeconds}s remaining</span> : null}
+                {clockProgress != null ? (
+                  <span className="af-dr-clockbar-time" data-urgent={clockUrgent ? 'true' : undefined} data-testid="mock-draft-clock">
+                    {roomCopy.mockSecondsLeft(draftState.timerSeconds)}
+                  </span>
+                ) : null}
               </div>
+              {clockStatus ? (
+                <span className="af-dr-clockbar-status" data-on-clock={isUserTurn ? 'true' : undefined} data-testid="mock-draft-clock-status">
+                  {clockStatus}
+                </span>
+              ) : null}
+              {clockProgress != null ? (
+                <span className="af-dr-clockbar-progress" aria-hidden>
+                  <span style={{ width: `${clockProgress}%` }} />
+                </span>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
+            <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
               {boardNode}
             </div>
             </div>

@@ -663,3 +663,106 @@
     flex: 1 1 100%;
   }
 }
+
+/* ── Mock room: header pick clock, and the phone clock bar's time and progress (2026-11-05) ──
+ *
+ * The mock room (MockDraftSleeperRoomClient) runs on its own engine, so it borrows the live room's
+ * clock language rather than its components: the same scoreboard tokens, the same
+ * `.af-dr-clock-progress` bar under the header clock, and the same `.af-dr-clockbar` on a phone.
+ * The room root carries `.af-draft-dark`, so these stay dark in every mode.
+ */
+.af-core.af-dr-hclock {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 14px 10px;
+  border: 1px solid var(--mu-sb-line);
+  border-radius: 14px;
+  background: var(--mu-sb-bg);
+  color: var(--mu-sb-text);
+}
+
+.af-dr-hclock-pick {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mu-sb-accent);
+  white-space: nowrap;
+}
+
+.af-dr-hclock-team {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mu-sb-text2);
+}
+
+.af-dr-hclock-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mu-sb-muted);
+  white-space: nowrap;
+}
+
+.af-dr-hclock-status[data-on-clock='true'] {
+  color: var(--mu-sb-good);
+}
+
+.af-dr-hclock-time,
+.af-dr-clockbar-time {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--mu-sb-text);
+  white-space: nowrap;
+}
+
+.af-dr-hclock-time[data-urgent='true'],
+.af-dr-clockbar-time[data-urgent='true'] {
+  color: var(--mu-sb-bad);
+}
+
+.af-dr-hclock .af-dr-clock-progress {
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  color: var(--mu-sb-accent);
+}
+
+.af-dr-clockbar-progress {
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--mu-sb-track);
+  overflow: hidden;
+}
+
+.af-dr-clockbar-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mu-sb-accent);
+  transition: width 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-dr-clockbar-progress > span {
+    transition: none;
+  }
+}
+
+/* Below lg the phone clock bar carries the pick, so the header pill would say it twice. Compound
+   selector: Tailwind's `max-lg:hidden` (0,1,0) loses to `.af-core.af-dr-hclock` above. */
+@media (max-width: 1023px) {
+  .af-core.af-dr-hclock {
+    display: none;
+  }
+}

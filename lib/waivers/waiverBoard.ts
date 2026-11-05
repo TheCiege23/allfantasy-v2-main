@@ -7,8 +7,13 @@ import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import type { DynastyRosterMarker } from '@/lib/core-app/dynastyRosterMarkers'
+import { readDynastyMarkers } from '@/lib/core-app/dynastyMarkerRead'
+
 import { projectFromRecentForm } from './recentFormProjection'
 import { waiverSportPlan, type WaiverValueBasis } from './waiverSportBasis'
+import type { WaiverCrowd } from './waiverCrowdLine'
 
 /**
  * What a waiver add is actually worth: how much it improves YOUR starting lineup.
@@ -96,11 +101,22 @@ export interface WaiverBoard {
   sport?: string
   basis?: WaiverValueBasis
   /**
+   * How synced Sleeper leagues see each candidate: rostered in how many, added in how many this week.
+   * NFL only, attached by the route (lib/waivers/waiverCrowd.ts); absent or null when not read.
+   */
+  crowd?: WaiverCrowd | null
+  /**
    * What your roster needs this week and in the next few — empty slots, positions with no backup,
    * upcoming byes. NFL only (the schedule and slot shapes are football's); absent when it could not
    * be read, never a guess.
    */
   needs?: RosterNeeds
+  /**
+   * Dynasty leagues only: the age / ROOKIE markers for the candidates shown, keyed by `sleeperId`
+   * (lib/core-app/dynastyRosterMarkers.ts) — so a young stash stands out on the wire. One batched read
+   * for the whole board; absent for every other league, and for a candidate with nothing agreed on file.
+   */
+  dynastyMarkers?: Record<string, DynastyRosterMarker>
 }
 
 const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
@@ -153,13 +169,13 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const league =
     (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true, sport: true } })
+      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true, sport: true, isDynasty: true, leagueType: true, leagueVariant: true } })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true, platform: true, sport: true },
+        select: { id: true, settings: true, platform: true, sport: true, isDynasty: true, leagueType: true, leagueVariant: true },
       })
       .catch(() => null))
   if (!league) return EMPTY('no_scoring_settings')
@@ -655,13 +671,25 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   /* A failed read costs the needs card and nothing else — the ranking above is already settled. */
-  const needs = await readRosterNeeds(args.prisma, {
-    readable,
-    myIds,
-    slots,
-    unfilled: base.unfilled,
-    week: onNext ? nextWeek : null,
-  }).catch(() => null)
+  /*
+   * Dynasty leagues only (the shared `isDynastyLeague`): the candidates' age / ROOKIE markers, in ONE
+   * read for the whole board, beside the needs read. A failure costs the chips and nothing else.
+   */
+  const markerPlayers = isDynastyLeague(league)
+    ? shown.flatMap((c) => (c.sleeperId ? [{ sleeperId: c.sleeperId, name: c.name, position: c.position }] : []))
+    : []
+  const [needs, dynastyMarkers] = await Promise.all([
+    readRosterNeeds(args.prisma, {
+      readable,
+      myIds,
+      slots,
+      unfilled: base.unfilled,
+      week: onNext ? nextWeek : null,
+    }).catch(() => null),
+    markerPlayers.length > 0
+      ? readDynastyMarkers(args.prisma, { sport: league.sport ?? 'NFL', players: markerPlayers }).catch(() => null)
+      : Promise.resolve(null),
+  ])
 
   return {
     state: 'ok',
@@ -671,6 +699,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     candidates: shown,
     notes,
     ...(needs ? { needs } : {}),
+    ...(dynastyMarkers && Object.keys(dynastyMarkers).length > 0 ? { dynastyMarkers } : {}),
   }
 }
 

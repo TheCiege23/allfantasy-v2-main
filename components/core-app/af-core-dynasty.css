@@ -53,6 +53,17 @@ html[data-mode='light'] .af-core.af-shell[data-dynasty-background=true]{
 .af-core.af-shell[data-dynasty-background=true] .af-scope-btn{border-color:var(--dyn-accent-line)}
 .af-core.af-shell[data-dynasty-background=true] .af-nav{border-right-color:var(--dyn-accent-line)}
 
+/* Chat launcher: af-comms.css paints it a literal #22d3ee (not --accent), so it stayed cyan on a gold
+ * page. Gold fill with ink is 8.3:1 and reads on both the dark and the light page. */
+.af-core.af-shell[data-dynasty-background=true] .af-cm-launch{background:var(--dyn-gold);color:var(--dyn-ink);box-shadow:0 20px 40px -16px rgba(212,162,76,.55)}
+.af-core.af-shell[data-dynasty-background=true] .af-cm-launch[data-dragging='true']{box-shadow:0 24px 48px -16px rgba(212,162,76,.7)}
+
+/* Rail: a small gold crown on a dynasty league's tile, on EVERY page (not only inside a dynasty league),
+ * so the league is recognisable before it is opened. Bottom-left INSIDE the tile (its art clips with
+ * overflow:hidden), clear of the alert dot (top-right)
+ * and the unread count. Literal gold, not a --dyn token: the rail renders outside any dynasty stamp. */
+.af-rail-crown{position:absolute;left:1px;bottom:1px;display:grid;place-items:center;width:17px;height:17px;border-radius:999px;background:#D4A24C;color:#0B0F17;border:2px solid var(--rail,#0b0f17);pointer-events:none}
+
 @media (max-width:720px){
   /* Phone: the nav column is a top strip (af-core-shell.css), so its rule moves to the bottom edge;
    * the tab bar takes a gold line on its top edge. The smaller art file is enough at this width. */

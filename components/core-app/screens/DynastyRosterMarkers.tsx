@@ -7,13 +7,14 @@ import { RISING_THROUGH, type DynastyRosterMarker } from '@/lib/core-app/dynasty
 import '@/components/core-app/af-my-team-dynasty.css'
 
 /**
- * My Team's dynasty roster markers (lib/core-app/dynastyRosterMarkers.ts): an age chip toned by the
- * player's career arc and a ROOKIE badge, on every row of a dynasty league's lineup, bench, IR and
- * taxi squad, plus the one-line key that explains the tones.
+ * Dynasty roster markers (lib/core-app/dynastyRosterMarkers.ts): an age chip toned by the player's
+ * career arc, a ROOKIE badge and — devy / C2C leagues — a violet PROSPECT tag, beside a player's name
+ * in a dynasty league, plus the one-line key that explains the tones.
  *
- * Provided once at the screen root rather than threaded through PlayerCell, BenchRow and every call
- * site — the same reasoning MyTeam gives for `PlayerCardLeagueScope`. A non-dynasty league provides
- * null, and every marker renders nothing.
+ * Provided once at the screen root rather than threaded through every row — the same reasoning MyTeam
+ * gives for `PlayerCardLeagueScope`. A non-dynasty league provides null, and every marker renders
+ * nothing. Used by My Team, the Waivers "Worth adding" board and Player Finder results; the player card
+ * carries its own marker in its payload and draws it with `DynastyMarkerChips`.
  */
 
 export const dynastyRosterMessages = defineMessages({
@@ -29,6 +30,9 @@ export const dynastyRosterMessages = defineMessages({
     keyPrime: 'Prime',
     keyAging: 'Past usual peak for the position',
     keyRookie: 'No pro season yet',
+    prospect: 'Prospect',
+    prospectTitle: 'College prospect on a devy roster: not yet in the pros.',
+    keyProspect: 'College prospect',
   },
   es: {
     rookie: 'Novato',
@@ -42,6 +46,9 @@ export const dynastyRosterMessages = defineMessages({
     keyPrime: 'Plenitud',
     keyAging: 'Pasado su mejor edad para la posición',
     keyRookie: 'Aún sin temporada profesional',
+    prospect: 'Prospecto',
+    prospectTitle: 'Prospecto universitario en una plantilla devy: aún no es profesional.',
+    keyProspect: 'Prospecto universitario',
   },
 })
 
@@ -57,11 +64,39 @@ export function useHasDynastyMarkers(): boolean {
   return !!markers && Object.keys(markers).length > 0
 }
 
-/** The markers for one row, beside the player's name. Nothing when there is nothing agreed on file. */
-export function DynastyRowMarkers({ sleeperId }: { sleeperId: string }) {
+/** This row's marker from the screen's scope, or null (non-dynasty league, or nothing agreed on file). */
+export function useDynastyMarker(key: string | null | undefined): DynastyRosterMarker | null {
   const markers = useContext(MarkersContext)
+  return key ? (markers?.[key] ?? null) : null
+}
+
+/** The markers for one row, beside the player's name. Nothing when there is nothing agreed on file. */
+export function DynastyRowMarkers({ sleeperId }: { sleeperId: string | null | undefined }) {
+  const mark = useDynastyMarker(sleeperId)
+  return <DynastyMarkerChips mark={mark} />
+}
+
+/**
+ * A player's name with the chips after it, for a list row (Waivers, Player Finder). Without a marker it
+ * renders `children` exactly as given — no wrapper — so a non-dynasty row's DOM is unchanged.
+ */
+export function DynastyNameLine({ markerKey, children }: { markerKey: string | null | undefined; children: ReactNode }) {
+  const mark = useDynastyMarker(markerKey)
+  if (!mark) return <>{children}</>
+  return (
+    <span className="af-dyn-name-line">
+      {children}
+      <DynastyMarkerChips mark={mark} />
+    </span>
+  )
+}
+
+/**
+ * The chips themselves, from one marker — for a surface that holds its marker directly rather than in a
+ * screen scope (the player card, whose payload carries its own). Null renders nothing.
+ */
+export function DynastyMarkerChips({ mark, className }: { mark: DynastyRosterMarker | null | undefined; className?: string }) {
   const m = useMessages(dynastyRosterMessages)
-  const mark = markers?.[sleeperId]
   if (!mark) return null
   const title =
     mark.age == null
@@ -72,13 +107,18 @@ export function DynastyRowMarkers({ sleeperId }: { sleeperId: string }) {
           ? m.risingTitle(mark.age)
           : m.primeTitle(mark.age)
   return (
-    <span className="af-mt-dyn" data-testid="dynasty-row-markers">
+    <span className={`af-mt-dyn${className ? ` ${className}` : ''}`} data-testid="dynasty-row-markers">
       {mark.age != null ? (
         <span className="af-mt-dyn-age" data-tone={mark.tone ?? undefined} title={title} aria-label={title ?? m.ageAria(mark.age)}>
           {mark.age}
         </span>
       ) : null}
-      {mark.rookie ? (
+      {/* A prospect has not turned pro, which is a different fact from "no pro season yet". */}
+      {mark.prospect ? (
+        <span className="af-mt-dyn-prospect" title={m.prospectTitle} data-testid="dynasty-prospect">
+          {m.prospect}
+        </span>
+      ) : mark.rookie ? (
         <span className="af-mt-dyn-rookie" title={m.rookieTitle}>
           {m.rookie}
         </span>
@@ -90,8 +130,10 @@ export function DynastyRowMarkers({ sleeperId }: { sleeperId: string }) {
 /** One line under the Starters heading that says what the tones mean. */
 export function DynastyAgeKey() {
   const has = useHasDynastyMarkers()
+  const markers = useContext(MarkersContext)
   const m = useMessages(dynastyRosterMessages)
   if (!has) return null
+  const hasProspect = Object.values(markers ?? {}).some((mk) => mk.prospect)
   return (
     <p className="af-mt-dyn-key" data-testid="dynasty-age-key">
       <span className="af-mt-dyn-key-label">{m.keyLabel}</span>
@@ -119,6 +161,15 @@ export function DynastyAgeKey() {
         </span>
         {m.keyRookie}
       </span>
+      {/* Devy / C2C only: shown when the screen has a prospect on it. */}
+      {hasProspect ? (
+        <span className="af-mt-dyn-key-item">
+          <span className="af-mt-dyn-prospect" aria-hidden>
+            {m.prospect}
+          </span>
+          {m.keyProspect}
+        </span>
+      ) : null}
     </p>
   )
 }

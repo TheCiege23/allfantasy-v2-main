@@ -32,6 +32,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
+import { expandPlansWithBundle, getDisplayPlanName } from '@/lib/subscription/feature-access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
@@ -84,6 +85,7 @@ import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { readFinderDynastyMarkers } from '@/lib/core-app/dynastyMarkerRead'
 import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
@@ -267,6 +269,7 @@ import CoreLeagueContextBar, {
 } from '@/components/core-app/CoreLeagueContextBar'
 import { touchLeaguesViewed, touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
+import { getLiveLeagueGames } from '@/lib/core-app/liveLeagueScoreboard'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
@@ -890,6 +893,8 @@ export default async function AfCorePage({
     syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
     // The same flag the More menu's "Commissioner N" counts — see CommissionerBadge.
     isCommissioner: Boolean(l.isCommissioner),
+    // A gold crown on the tile — the same dynasty rule the shell's gold identity uses (coreShellDynasty).
+    dynasty: coreShellDynasty(l),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     /*
      * ⚠ THE LOADER ALREADY SELECTS avatarUrl AND logoUrl — this mapping used to
@@ -1407,6 +1412,23 @@ export default async function AfCorePage({
     : null
 
   /*
+   * The Tools board's plan chip and "Included / Needs an upgrade" filter, from the same plan read.
+   * `held` is expanded for the Supreme bundle, so a Supreme viewer is never told a Pro tool needs an
+   * upgrade. The admin bypass holds every plan, as it does at the paywall. Null when the read failed:
+   * Tools then draws no chip and no filter rather than calling a paying viewer Free.
+   */
+  const toolsViewerPlan = access
+    ? isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
+      ? { held: expandPlansWithBundle(['supreme', 'pro', 'commissioner']), name: 'AF Supreme' }
+      : access.hasSubscription
+      ? {
+          held: expandPlansWithBundle(access.subscription.plans),
+          name: access.subscription.plans[0] ? getDisplayPlanName(access.subscription.plans[0]) : null,
+        }
+      : { held: [], name: null }
+    : null
+
+  /*
    * The launch countdown on the home (components/launch) — "Everything's free until Oct 15".
    * Same rule as the depth locks' "Free until" chip (`preLaunchFree` in coreDepthAccess): only
    * before the paywall, only for a viewer WITHOUT a plan — plan holders never see it. A failed plan
@@ -1595,6 +1617,7 @@ export default async function AfCorePage({
     <CoreScreenBody
       ctx={{
         chimmyMovesRead,
+        toolsViewerPlan,
         screen,
         sp,
         segment,
@@ -1916,6 +1939,8 @@ async function ScreenShellSignals({
 type CoreScreenContext = {
   /** League-first: Chimmy's one-tap moves for the selected league, started beside the shell reads. */
   chimmyMovesRead: Promise<ChimmyMoves | null>
+  /** The Tools board's plan chip and filter; null when the plan read failed. */
+  toolsViewerPlan: { held: string[]; name: string | null } | null
   screen: string[] | undefined
   sp: Record<string, string | string[] | undefined>
   segment: string
@@ -1995,6 +2020,7 @@ type CoreScreenContext = {
 async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const {
     chimmyMovesRead,
+    toolsViewerPlan,
     screen,
     sp,
     segment,
@@ -2413,6 +2439,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const playerSport = normalizeFinderSport(sp.sport)
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
+  /*
+   * A held DYNASTY league (the shell's own `dynastyEra`): age / ROOKIE / PROSPECT chips on the results,
+   * from ONE batched SportsPlayer read for every match (lib/core-app/dynastyMarkerRead.ts). The league
+   * row comes from the shell's context, so no extra league query. Nothing for any other league.
+   */
+  const finderDynastyMarkers =
+    activeKey === 'players' && dynastyEra && leagueCtx && playerMatches.length > 0
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? readFinderDynastyMarkers(prisma, { league, matches: playerMatches }) : null))
+          .catch(() => null)
+      : null
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
    * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
@@ -3197,6 +3235,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         })
       : null
   const liveMatchupStrip = buildMatchupStrip(liveMatchup, liveMatchupFailed)
+  /*
+   * The rest of the held league's games, for the week your matchup is in — the same Postgres
+   * scoreboard League Home draws (lib/core-app/liveLeagueScoreboard.ts). Your own game is left out:
+   * it is the scoreboard card already on screen. A failed read is null and the section stays away.
+   */
+  const liveLeagueGames =
+    activeKey === 'live' && !liveGameId && selectedLeagueId && liveMatchup?.week.available
+      ? await getLiveLeagueGames({
+          leagueId: selectedLeagueId,
+          userId,
+          seasonYear: liveMatchup.week.data.season,
+          week: liveMatchup.week.data.week,
+        }).catch((e: unknown) => {
+          console.error('[core/live] league scoreboard read failed', e)
+          return null
+        })
+      : null
+  const liveLeagueWeekFinal = liveMatchup?.week.available ? liveMatchup.week.data.isFinal : false
 
   const liveScores =
     activeKey === 'live' && !liveGameId
@@ -5110,6 +5166,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           depthAccess={corePaywall?.player_depth ?? null}
           depth={playerDepth}
           triage={gameDayTriage}
+          dynastyMarkers={finderDynastyMarkers}
           nowIso={new Date().toISOString()}
         />
       ) : activeKey === 'week' ? (
@@ -5276,6 +5333,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             data={liveScores}
             selectedLeagueId={selectedLeagueId}
             matchupStrip={liveMatchupStrip}
+            leagueGames={liveLeagueGames ? { ...liveLeagueGames, weekFinal: liveLeagueWeekFinal } : null}
             leagueWeek={{
               byLeague: ctx.weekLineups?.byLeague ?? null,
               leagues: playedLeagues.map((l) => ({
@@ -5375,6 +5433,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'tools' ? (
         <Tools
+          viewerPlan={toolsViewerPlan}
           data={buildToolsHub({
             issues,
             stats: {

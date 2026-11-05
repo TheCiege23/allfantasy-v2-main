@@ -6,6 +6,8 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import '@/components/core-app/af-player-finder-redesign.css'
+import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
+import { markerKeyFor, type DynastyRosterMarker } from '@/lib/core-app/dynastyRosterMarkers'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
@@ -273,6 +275,12 @@ export type PlayerFinderProps = {
    * Defaults to true so every existing signed-in call site is unchanged.
    */
   signedIn?: boolean
+  /**
+   * A held DYNASTY league only: age / ROOKIE chips (and, devy / C2C, PROSPECT) beside each match, filed
+   * under `markerKeyFor(match)`. One batched read by the page (lib/core-app/dynastyMarkerRead.ts); null
+   * everywhere else, and the results render exactly as before.
+   */
+  dynastyMarkers?: Record<string, DynastyRosterMarker> | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -461,6 +469,7 @@ export function PlayerFinder({
   nowIso = new Date().toISOString(),
   liveGame = null,
   signedIn = true,
+  dynastyMarkers = null,
 }: PlayerFinderProps) {
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
@@ -730,6 +739,7 @@ export function PlayerFinder({
             ) : (
               <>
               {posOptions.length > 1 ? <MatchPositionFilter options={posOptions} value={activePos} onChange={setMatchPos} total={matches.length} /> : null}
+              <DynastyMarkersScope markers={dynastyMarkers}>
               <ul className="af-pf-match-list">
                 {shownMatches.map((m) => (
                   <li key={`${m.sport}-${m.externalId}`} className="af-pf-match-li">
@@ -747,7 +757,10 @@ export function PlayerFinder({
                       </span>
                       <PlayerAvatar src={m.imageUrl} name={m.name} size={32} />
                       <span className="af-pf-match-text">
-                        <span className="af-pf-match-name">{m.name}</span>
+                        {/* Held dynasty league: age / ROOKIE / PROSPECT after the name (the name alone otherwise). */}
+                        <DynastyNameLine markerKey={markerKeyFor(m)}>
+                          <span className="af-pf-match-name">{m.name}</span>
+                        </DynastyNameLine>
                         <span className="af-pf-match-meta">
                           {m.position || m.team ? (
                             <>
@@ -776,6 +789,7 @@ export function PlayerFinder({
                   </li>
                 ))}
               </ul>
+              </DynastyMarkersScope>
               </>
             )}
           </section>

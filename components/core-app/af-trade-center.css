@@ -28,6 +28,15 @@
 html[data-mode='light'] .af-core .af-tc {
   --tc-grade-b: #0a746b;
   --tc-grade-d: #96500d;
+  /*
+   * The status literals above are dark-ground values: #fbbf24 amber on a white card is ~1.7:1, so the
+   * deadline chip, warn tags and banners were near-invisible in light mode for every league except
+   * redraft (af-core-redraft-trades.css already did this for its own stamp). /core's --good/--warn/--bad
+   * are measured for light mode in af-core.css.
+   */
+  --tc-good: var(--good);
+  --tc-warn: var(--warn);
+  --tc-bad: var(--bad);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */

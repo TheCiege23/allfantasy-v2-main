@@ -30,6 +30,10 @@ import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 // equivalent note. This screen was simply missed when those two were repaired.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
+import '@/components/core-app/af-pricing-redesign.css'
+import { useMessages } from '@/components/i18n/useMessages'
+import { plansScreenMessages } from '@/lib/core-app/messages/plansScreen'
+import { pricingCardStatus, type PricingAccount } from '@/lib/core-app/pricingAccount'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -88,6 +92,66 @@ export type PricingV4Props = {
   /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */
   savingsHeadline: string | null
   signedIn?: boolean
+  /**
+   * The signed-in viewer's plan, renewal and token balance (lib/core-app/pricingAccount.ts), read on the
+   * server. Null for a visitor or a failed read: no banner and no YOUR PLAN chip, exactly as before.
+   */
+  account?: PricingAccount | null
+}
+
+/** The Plans board's kicker over each lane: who the plan is for. Free sits outside the lane list. */
+const KICKER_KEY = {
+  af_pro: 'kickerPro',
+  af_commissioner: 'kickerCommissioner',
+  af_supreme: 'kickerSupreme',
+} as const
+
+/**
+ * The YOUR PLAN / "Included in AF Supreme" chip. Purely a marker: the checkout button beside it is
+ * untouched, because switching interval (monthly to yearly) on the plan you hold is a real purchase.
+ */
+function CardStatus({ status, supremeName }: { status: 'yours' | 'included' | null; supremeName: string }) {
+  const m = useMessages(plansScreenMessages)
+  if (status === 'yours') return <span className="af-pr-yours" data-status="yours">{m.yourPlan}</span>
+  if (status === 'included') return <span className="af-pr-yours" data-status="included">{m.includedIn(supremeName)}</span>
+  return null
+}
+
+/** The board's dark account banner: which plan you are on, when it renews, your tokens, and billing. */
+function AccountBanner({ account, nativeApp, onManageNative }: { account: PricingAccount; nativeApp: boolean; onManageNative: () => void }) {
+  const m = useMessages(plansScreenMessages)
+  const locale = getAppIntlLocale()
+  const renews = account.planName && account.renewsAt && !Number.isNaN(Date.parse(account.renewsAt))
+    ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(account.renewsAt))
+    : null
+  const detail = [
+    renews ? m.renews(renews) : null,
+    account.tokenBalance != null ? m.tokens(account.tokenBalance.toLocaleString(locale)) : null,
+  ].filter(Boolean).join(' · ')
+  return (
+    <section className="af-pr-account" data-testid="pricing-account" aria-label={account.planName ? m.youreOn(account.planName) : m.youreFree}>
+      <span className="af-pr-account-mark" aria-hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+      </span>
+      <span className="af-pr-account-text">
+        <span className="af-pr-account-title">{account.planName ? m.youreOn(account.planName) : m.youreFree}</span>
+        {detail ? <span className="af-pr-account-detail">{detail}</span> : null}
+      </span>
+      <span className="af-pr-account-actions">
+        <Link href="/tokens" className="af-pr-account-btn">{m.seeTokens}</Link>
+        {account.planName ? (
+          nativeApp ? (
+            <button type="button" className="af-pr-account-btn" onClick={onManageNative}>{m.manageBilling}</button>
+          ) : (
+            <Link href="/settings?tab=billing" className="af-pr-account-btn">{m.manageBilling}</Link>
+          )
+        ) : null}
+      </span>
+    </section>
+  )
 }
 
 type Interval = 'month' | 'year'
@@ -183,7 +247,8 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
 ]
 
-export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: PricingV4Props) {
+export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, account = null }: PricingV4Props) {
+  const pm = useMessages(plansScreenMessages)
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
@@ -269,7 +334,7 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: P
   }
 
   return (
-    <div className="af-core af-pr">
+    <div className="af-core af-pr" data-redesign="plans">
       {playError && <p role="status">{playError}</p>}
       {needsUpdate && <p role="status">Update the AllFantasy iOS app to make purchases.</p>}
       {/*
@@ -343,6 +408,14 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: P
         </div>
       </header>
 
+      {account ? (
+        <AccountBanner
+          account={account}
+          nativeApp={nativeApp}
+          onManageNative={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))}
+        />
+      ) : null}
+
       {blocked ? (
         <p className="af-pr-blocked">
           Paid plans are not available in your state. Everything free stays available.
@@ -359,7 +432,11 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: P
 
       <div className="af-pr-grid">
         {/* ── Free ─────────────────────────────────────────────── */}
-        <section className="af-pr-card">
+        <section className="af-pr-card" data-yours={pricingCardStatus('free', account) === 'yours' || undefined}>
+          <div className="af-pr-kicker-row">
+            <span className="af-pr-kicker">{pm.kickerFree}</span>
+            <CardStatus status={pricingCardStatus('free', account)} supremeName="AF Supreme" />
+          </div>
           <h2 className="af-pr-name">Free</h2>
           <p className="af-pr-desc">Create, import and run every league. No card, no trial clock.</p>
           <div className="af-pr-price">
@@ -390,10 +467,17 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false }: P
           const price = interval === 'month' ? plan.monthlyPrice : plan.yearlyPrice
           const best = plan.planFamily === 'af_supreme'
           const includes = PLAN_FAMILY_INCLUDES[plan.planFamily as PlanFamilyKey] ?? []
+          const status = pricingCardStatus(plan.planFamily, account)
+          const kickerKey = KICKER_KEY[plan.planFamily as keyof typeof KICKER_KEY]
+          const supremeName = ordered.find((p) => p.planFamily === 'af_supreme')?.name ?? 'AF Supreme'
 
           return (
-            <section key={plan.planFamily} className="af-pr-card" data-best={best}>
+            <section key={plan.planFamily} className="af-pr-card" data-best={best} data-yours={status === 'yours' || undefined}>
               {best ? <span className="af-pr-tab">Best value</span> : null}
+              <div className="af-pr-kicker-row">
+                {kickerKey ? <span className="af-pr-kicker">{pm[kickerKey]}</span> : <span />}
+                <CardStatus status={status} supremeName={supremeName} />
+              </div>
               {/* Named per interval so the card matches the App Store product it sells. */}
               <h2 className="af-pr-name">{plan.name} {interval === 'month' ? 'Monthly' : 'Yearly'}</h2>
               <p className="af-pr-desc">{plan.description}</p>
