@@ -137,6 +137,19 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
   /* The league's starting budget, when it was read — the denominator of the FAAB bar. */
   const faabBudget = isFaab && data.waiverType.available ? data.waiverType.data.budget : null
   const schedule = data.processTime.available ? data.processTime.data.schedule : null
+  /*
+   * A league KNOWN not to bid has no FAAB tile: "Your FAAB — this league does not use FAAB bidding"
+   * was a card spent saying nothing applies. An unread waiver type keeps the tile and its reason.
+   */
+  const showFaabTile = !(data.waiverType.available && data.waiverType.data.kind !== 'faab')
+  /*
+   * The next run is the sticky line above whenever there is a schedule; the tile said the same
+   * instant a second time in the same view. It stays only when there is no line — then it carries
+   * the loader's own sentence about why no day is shown.
+   */
+  const showNextRunTile = !schedule
+  /* How many tiles the strip holds, so it can lay out as one full row instead of 3 + an orphan 2. */
+  const tileCount = 3 + (showFaabTile ? 1 : 0) + (showNextRunTile ? 1 : 0)
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
     data.waiverType.available ? copy(data.waiverType.data.label) : null,
@@ -170,7 +183,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       <div className="af-wv-layout">
         <div className="af-wv-area-tiles">
           {/* ── Tiles ───────────────────────────────────────────────────── */}
-          <div className="af-wv-tiles">
+          <div className="af-wv-tiles" data-count={tileCount}>
+            {showFaabTile ? (
             <Tile
               label="Your FAAB"
               help="faab"
@@ -193,6 +207,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 }
               }}
             />
+            ) : null}
 
             <Tile
               label="Waiver priority"
@@ -206,22 +221,10 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             />
 
             {/*
-              The next run as a KPI beside the money it spends (the redesign's strip). The same instant
-              the sticky line above counts down, so on a phone — where that line is always on screen —
-              this tile is hidden (af-waivers.css) rather than said twice. A schedule we have not read is
-              the loader's own sentence, never a guessed day.
+              With a schedule the next run is the sticky line above, so it is not said again here. With
+              none, this tile is the only place it appears: the loader's own sentence, never a guessed day.
             */}
-            {schedule && data.processTime.available ? (
-              <div className="af-wv-tile" data-tile="next-run" data-testid="waiver-next-run-tile">
-                <div className="af-wv-tile-value">{copy(data.processTime.data.dayLabel)}</div>
-                <div className="af-label">{copy('Next waiver run')}</div>
-                <div className="af-wv-tile-sub">
-                  <WaiverRunClock schedule={schedule} compact />
-                </div>
-              </div>
-            ) : (
-              <Tile label="Next waiver run" tile="next-run" state={data.processTime} />
-            )}
+            {showNextRunTile ? <Tile label="Next waiver run" tile="next-run" state={data.processTime} /> : null}
 
             <Tile
               label="Claims queued"
