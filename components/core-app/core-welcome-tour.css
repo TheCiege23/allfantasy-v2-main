@@ -3,13 +3,16 @@
  * card at 24px, the bubble at `--af-fab-bottom` — so during the tour a tap on the bubble
  * hit the card. Keep the guide in document flow at every width so it cannot cover
  * the weekly playoff path or sharing controls on tablets and desktops either.
+ *
+ * ⚠ NO Z-INDEX. 170 was left over from the corner-anchored card; in flow it only lifted the
+ * guide over every top-bar dropdown (account menu at 60, data menu at 45), hiding their links.
+ * `position: relative` stays because the close button is positioned against it.
  */
 .af-welcome {
   flex: 0 0 auto;
   min-width: 0;
   scroll-margin-top: 90px;
   position: relative;
-  z-index: 170;
   width: 100%;
   margin-bottom: 18px;
   padding: 20px;
