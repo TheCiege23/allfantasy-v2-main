@@ -23,6 +23,7 @@ import { isBestBallLeagueRow } from './leagueBestBall'
 import { isTop25Sport, pollIsKnown, showCollegeGame } from '@/lib/live/collegeTop25'
 import { readFollowedTeams, readRankBook } from '@/lib/live/collegeTop25Store'
 import { bestBallDepthAlerts, type DepthAlert } from './bestBallDepth'
+import { slateWeekLabel } from './slateWeekLabel'
 import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
 import { coverOptions, type CoverCandidate, type CoverOptions } from './lineupCover'
 import { lookupProjections } from './playerProjections'
@@ -2190,10 +2191,7 @@ async function loadDash34Data(
      */
     valueBasis: valueBySleeperId.size > 0 ? { format: valueFormat, qbFormat: 'ONE_QB' as const } : null,
     legacyCount,
-    weekLabel:
-      nextGame && nextGameWeek != null
-        ? `${nextGame.sport}${nextGameSlate === 'pre' ? ' PRE' : nextGameSlate === 'post' ? ' POST' : ''} WK ${nextGameWeek}`
-        : null,
+    weekLabel: nextGame ? slateWeekLabel(nextGame.sport, nextGameSlate, nextGameWeek) : null,
     notice: everSynced
       ? null
       : {
