@@ -954,6 +954,7 @@ export function ThreadPanel({
           dropZoneRef={panelRef}
           onTypingChange={signalTyping}
           mentionMembers={mentionMembers}
+          toolsLayout="menu"
         />
 
         {kind === 'group' && huddleSheet === 'members' ? (
