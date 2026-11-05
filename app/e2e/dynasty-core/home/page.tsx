@@ -9,6 +9,7 @@ import DynastyCoreHomeHarnessClient from './DynastyCoreHomeHarnessClient'
  *   /e2e/dynasty-core/home                    ← the Dynasty Era identity and deck
  *   /e2e/dynasty-core/home?identity=off       ← Home as an imported dynasty league rendered before
  *   /e2e/dynasty-core/home?history=none       ← a league with no champions and no picks on file
+ *   /e2e/dynasty-core/home?phase=offseason    ← between seasons: Year N complete, the Offseason timeline
  */
 export default async function DynastyCoreHomeHarnessPage({
   searchParams,
@@ -17,5 +18,5 @@ export default async function DynastyCoreHomeHarnessPage({
 }) {
   if (process.env.NODE_ENV === 'production') notFound()
   const sp = await searchParams
-  return <DynastyCoreHomeHarnessClient identityOff={sp.identity === 'off'} sparse={sp.history === 'none'} />
+  return <DynastyCoreHomeHarnessClient identityOff={sp.identity === 'off'} sparse={sp.history === 'none'} offseason={sp.phase === 'offseason'} />
 }
