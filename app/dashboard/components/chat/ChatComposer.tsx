@@ -1,6 +1,6 @@
 'use client'
 
-import { Send } from 'lucide-react'
+import { BarChart3, Film, ImageIcon, Mic, Plus, Send, Smile, Video as VideoIcon } from 'lucide-react'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -115,6 +115,13 @@ type ChatComposerProps = {
    * which matchups are open and hides the tab when there are none (or the league is imported).
    */
   predictions?: { leagueId: string; onPosted: () => void } | null
+  /**
+   * `row` (the default): the box, then a row of every tool under it — the draft room's dock and its
+   * end-to-end specs drive these buttons directly. `menu` (the chat drawer and league chat, 2026-11-05,
+   * owner: "as simple as Sleeper or Discord"): ONE line — a "+" that opens GIF, Poll, Voice note,
+   * Photo and Video, the box, emoji, send. Every tool keeps its name and test id in both.
+   */
+  toolsLayout?: 'row' | 'menu'
 }
 
 /** Room a picker needs above the box before it is allowed to open inline. */
@@ -194,6 +201,7 @@ export function ChatComposer({
   testIds,
   pickerPlacement = 'inline',
   predictions,
+  toolsLayout = 'row',
 }: ChatComposerProps) {
   const [text, setText] = useState('')
   /** Photos on their way up. Shown as chips so a slow upload never looks like nothing happened. */
@@ -206,6 +214,8 @@ export function ChatComposer({
   /** `auto` placement only: null until measured, then 'inline' or where to float. */
   const [floatBox, setFloatBox] = useState<FloatingPickerBox | 'inline' | null>(null)
   const [isRecording, setIsRecording] = useState(false)
+  /** `menu` layout only: whether the "+" menu of tools is open. */
+  const [moreOpen, setMoreOpen] = useState(false)
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([])
   const [pendingGif, setPendingGif] = useState<PendingGif | null>(null)
   const [pollDraft, setPollDraft] = useState<PollDraft | null>(null)
@@ -741,6 +751,175 @@ export function ChatComposer({
 
   const showInlinePicker = pickerBody != null && (pickerPlacement === 'inline' || floatBox === 'inline')
 
+  /* Shared by both layouts: `row` puts it above the tools, `menu` puts it between "+" and send. */
+  const textareaEl = (
+    <textarea
+      ref={textareaRef}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        setCursorPos(e.target.selectionStart ?? 0)
+        onTypingChange?.(e.target.value.trim().length > 0)
+      }}
+      onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+      onFocus={() => setMoreOpen(false)}
+      onBlur={() => {
+        /* Walking away from a half-typed line is not "still typing". */
+        if (!text.trim()) onTypingChange?.(false)
+      }}
+      onPaste={(e) => {
+        /*
+         * A pasted screenshot goes through the same checks and the same preview
+         * row as the 📷 button. Pasted TEXT is left entirely to the browser.
+         */
+        const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
+        if (files.length === 0) return
+        e.preventDefault()
+        void addImages(files)
+      }}
+      onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+      onSelect={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          void handleSend()
+        }
+      }}
+      placeholder={placeholder}
+      rows={1}
+      className="w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-[1.4] text-white outline-none placeholder:text-white/30 min-h-[36px] max-h-[120px] overflow-y-auto"
+      data-testid={testIds?.input ?? 'league-chat-textarea'}
+      aria-label={chatType === 'draft' ? 'Chat message' : undefined}
+    />
+  )
+
+  const voiceRecorderEl = (
+    <VoiceRecorder
+      leagueId={leagueId}
+      threadId={threadId}
+      onComplete={(p) => {
+        setAttachments((a) => [
+          ...a,
+          {
+            type: 'voice',
+            url: p.url,
+            duration: p.duration,
+            mimeType: p.mimeType,
+            name: p.name,
+          },
+        ])
+        setIsRecording(false)
+      }}
+      onCancel={() => setIsRecording(false)}
+    />
+  )
+
+  const fileInputs = (
+    <>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        multiple
+        className="hidden"
+        onChange={onImageChange}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        className="hidden"
+        onChange={onVideoChange}
+      />
+    </>
+  )
+
+  const sendLabel = chatType === 'league' ? 'Send league message' : 'Send message'
+
+  /*
+   * `menu` layout (2026-11-05): ONE line, the way Sleeper and Discord draw it. The tools a message
+   * rarely needs sit behind "+", each keeping the name and test id the `row` layout gives it; emoji
+   * and send stay on the line. The menu opens ABOVE the line, inside the box, so nothing clips it.
+   */
+  const menuItem = (label: string, Icon: typeof Plus, onClick: () => void, testId?: string) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="af-chat-moreitem"
+      onClick={() => {
+        setMoreOpen(false)
+        onClick()
+      }}
+      aria-label={label}
+      data-testid={testId}
+    >
+      <Icon size={18} strokeWidth={2} aria-hidden />
+      <span aria-hidden>{label}</span>
+    </button>
+  )
+  const menuLayout = (
+    <>
+      {moreOpen ? (
+        <div className="af-chat-moremenu" role="menu" aria-label="Add to message">
+          {menuItem('GIF', Film, () => setActivePicker((p) => (p === 'gif' ? null : 'gif')), testIds?.gif)}
+          {menuItem('Poll', BarChart3, () => setActivePicker((p) => (p === 'poll' ? null : 'poll')), testIds?.poll)}
+          {menuItem('Photo', ImageIcon, () => imageInputRef.current?.click(), testIds?.photo)}
+          {menuItem('Video', VideoIcon, () => videoInputRef.current?.click(), testIds?.video)}
+          {menuItem('Voice note', Mic, () => setIsRecording(true))}
+          {onAskChimmy ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="af-chat-moreitem af-chat-ask-chimmy"
+              onClick={() => {
+                setMoreOpen(false)
+                onAskChimmy()
+              }}
+            >
+              <span aria-hidden className="af-chat-moreitem-spark">✦</span>
+              <span>Ask Chimmy</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {isRecording ? voiceRecorderEl : null}
+      <div className="af-chat-line">
+        <button
+          type="button"
+          className="af-chat-tool af-chat-more"
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-label="Add a GIF, poll, photo, video or voice note"
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
+        >
+          <Plus size={20} strokeWidth={2.2} aria-hidden />
+        </button>
+        <div className="af-chat-line-input">{textareaEl}</div>
+        <button
+          type="button"
+          className="af-chat-tool af-chat-emoji"
+          onClick={() => setActivePicker((p) => (p === 'emoji' ? null : 'emoji'))}
+          aria-label="Emoji"
+          aria-pressed={activePicker === 'emoji'}
+          data-testid={testIds?.emoji}
+        >
+          <Smile size={20} strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSend()}
+          disabled={!canSend || sending}
+          className="af-chat-send"
+          aria-label={sendLabel}
+          data-testid={testIds?.send ?? 'league-chat-send'}
+        >
+          <Send size={16} strokeWidth={2.2} aria-hidden />
+        </button>
+        {fileInputs}
+      </div>
+    </>
+  )
+
   const toolBtn = (active: boolean) =>
     `af-chat-tool px-1.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
       active ? 'text-cyan-400 bg-cyan-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.06]'
@@ -836,63 +1015,12 @@ export function ChatComposer({
               onDismiss={() => {}}
             />
           ) : null}
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value)
-              setCursorPos(e.target.selectionStart ?? 0)
-              onTypingChange?.(e.target.value.trim().length > 0)
-            }}
-            onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
-            onBlur={() => {
-              /* Walking away from a half-typed line is not "still typing". */
-              if (!text.trim()) onTypingChange?.(false)
-            }}
-            onPaste={(e) => {
-              /*
-               * A pasted screenshot goes through the same checks and the same preview
-               * row as the 📷 button. Pasted TEXT is left entirely to the browser.
-               */
-              const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
-              if (files.length === 0) return
-              e.preventDefault()
-              void addImages(files)
-            }}
-            onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
-            onSelect={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                void handleSend()
-              }
-            }}
-            placeholder={placeholder}
-            rows={1}
-            className="w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-[1.4] text-white outline-none placeholder:text-white/30 min-h-[36px] max-h-[120px] overflow-y-auto"
-            data-testid={testIds?.input ?? 'league-chat-textarea'}
-            aria-label={chatType === 'draft' ? 'Chat message' : undefined}
-          />
+          {toolsLayout === 'row' ? textareaEl : null}
 
-          {isRecording ? (
-            <VoiceRecorder
-              leagueId={leagueId}
-              threadId={threadId}
-              onComplete={(p) => {
-                setAttachments((a) => [
-                  ...a,
-                  {
-                    type: 'voice',
-                    url: p.url,
-                    duration: p.duration,
-                    mimeType: p.mimeType,
-                    name: p.name,
-                  },
-                ])
-                setIsRecording(false)
-              }}
-              onCancel={() => setIsRecording(false)}
-            />
+          {toolsLayout === 'menu' ? (
+            menuLayout
+          ) : isRecording ? (
+            voiceRecorderEl
           ) : (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">

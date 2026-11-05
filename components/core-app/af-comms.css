@@ -4352,3 +4352,67 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
   .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto); justify-content: space-between; }
   .af-cm .af-cm-tab { gap: 4px; padding: 0 4px; }
 }
+
+/*
+ * ── One-line message box (2026-11-05, ChatComposer toolsLayout="menu") ──
+ * Owner: "as simple as Sleeper or Discord". The box was two rows on a phone — the text, then six
+ * faint emoji-glyph tools (GIF 😀 📊 🎤 📷 🎥) — about 110px for a one-line message. Now it is one
+ * line: "+" (GIF, Poll, Photo, Video, Voice note), the text, emoji, send; the "+" menu opens above
+ * the line inside the box. The draft room keeps the tool row (toolsLayout="row").
+ */
+.af-cm .af-chat-box:has(> .af-chat-line) { border-radius: 24px; }
+.af-cm .af-chat-line { display: flex; align-items: flex-end; gap: 2px; padding: 2px; }
+.af-cm .af-chat-line-input { flex: 1; min-width: 0; }
+.af-cm .af-chat-line-input textarea { min-height: 44px; padding: 11px 6px; font-size: 16px; line-height: 1.4; }
+.af-cm .af-chat-line .af-chat-more,
+.af-cm .af-chat-line .af-chat-emoji,
+.af-cm .af-chat-line .af-chat-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-cm .af-chat-line .af-chat-more { background: var(--chip); color: var(--text2); }
+.af-cm .af-chat-line .af-chat-more[aria-expanded='true'] { background: var(--accent-soft); color: var(--accent); }
+.af-cm .af-chat-line .af-chat-emoji[aria-pressed='true'] { color: var(--accent); }
+.af-cm .af-chat-line .af-chat-send:disabled { background: transparent; color: var(--faint); }
+.af-cm .af-chat-line .af-chat-more:hover,
+.af-cm .af-chat-line .af-chat-emoji:hover { color: var(--text); }
+
+.af-cm .af-chat-moremenu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.af-cm .af-chat-moreitem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 64px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--chip);
+  color: var(--text2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm .af-chat-moreitem:hover { background: var(--accent-soft); color: var(--accent); }
+.af-cm .af-chat-moreitem-spark { color: var(--accent); font-size: 16px; line-height: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm .af-chat-moremenu { animation: af-cm-msg-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}
