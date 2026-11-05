@@ -32,6 +32,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
+import { expandPlansWithBundle, getDisplayPlanName } from '@/lib/subscription/feature-access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
@@ -1406,6 +1407,23 @@ export default async function AfCorePage({
           : 'Free',
         tokensLeft: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email) ? null : access.tokenBalance,
       }
+    : null
+
+  /*
+   * The Tools board's plan chip and "Included / Needs an upgrade" filter, from the same plan read.
+   * `held` is expanded for the Supreme bundle, so a Supreme viewer is never told a Pro tool needs an
+   * upgrade. The admin bypass holds every plan, as it does at the paywall. Null when the read failed:
+   * Tools then draws no chip and no filter rather than calling a paying viewer Free.
+   */
+  const toolsViewerPlan = access
+    ? isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
+      ? { held: expandPlansWithBundle(['supreme', 'pro', 'commissioner']), name: 'AF Supreme' }
+      : access.hasSubscription
+      ? {
+          held: expandPlansWithBundle(access.subscription.plans),
+          name: access.subscription.plans[0] ? getDisplayPlanName(access.subscription.plans[0]) : null,
+        }
+      : { held: [], name: null }
     : null
 
   /*
@@ -5409,6 +5427,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'tools' ? (
         <Tools
+          viewerPlan={toolsViewerPlan}
           data={buildToolsHub({
             issues,
             stats: {
