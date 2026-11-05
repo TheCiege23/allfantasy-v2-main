@@ -9,12 +9,17 @@ function recordLabel(row: { wins: number; losses: number; ties: number }) {
   return row.ties > 0 ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`
 }
 
-function cellTag(cell: CalendarCell): string | null {
-  if (cell.state === 'now') return 'Now'
-  if (cell.championship) return 'Final'
-  if (cell.deadline) return 'Deadline'
-  if (cell.playoffStart) return 'Playoffs'
-  if (cell.kind === 'playoff') return 'Playoff'
+/**
+ * A tile's tag in two lengths. `short` is what a narrow tile shows (a phone's tile is ~37px inside, and
+ * "Deadline" is ~53px of 11px mono): null hides the word there, because the dashed playoff border and the
+ * key below the grid already say it. `spoken` names the tile for screen readers at every width, and contains each visible word so voice control can say what it sees.
+ */
+function cellTag(cell: CalendarCell): { full: string; short: string | null; spoken: string } | null {
+  if (cell.state === 'now') return { full: 'Now', short: 'Now', spoken: 'now' }
+  if (cell.championship) return { full: 'Final', short: 'Final', spoken: 'final' }
+  if (cell.deadline) return { full: 'Deadline', short: 'Trade', spoken: 'trade deadline' }
+  if (cell.playoffStart) return { full: 'Playoffs', short: null, spoken: 'playoffs start' }
+  if (cell.kind === 'playoff') return { full: 'Playoff', short: null, spoken: 'playoff' }
   return null
 }
 
@@ -113,9 +118,10 @@ export function ScheduleView({
               disabled={!cell.selectable}
               onClick={() => setSelectedWeek(cell.week)}
               aria-pressed={cell.selectable ? cell.week === visibleWeek?.week : undefined}
+              aria-label={`W${cell.week}${tag ? `, ${tag.spoken}` : ''}`}
             >
               <span className="rdt-cal-wk">W{cell.week}</span>
-              {tag ? <span className="rdt-cal-tag">{tag}</span> : null}
+              {tag ? <span className="rdt-cal-tag" aria-hidden><span className="rdt-cal-tag-full">{tag.full}</span>{tag.short ? <span className="rdt-cal-tag-short">{tag.short}</span> : null}</span> : null}
             </button>
           )
         })}
