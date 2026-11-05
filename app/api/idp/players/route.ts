@@ -168,7 +168,8 @@ export async function GET(req: NextRequest) {
      * sport whose candidates carry a Sleeper id — and it never holds the board back: a failed read
      * returns the board without it.
      */
-    const ids = payload.state === 'ok' && (payload.sport ?? 'NFL') === 'NFL'
+    // `candidates` can be absent on a board that loaded without any; the board then goes out as-is.
+    const ids = payload.state === 'ok' && (payload.sport ?? 'NFL') === 'NFL' && Array.isArray(payload.candidates)
       ? payload.candidates.map((c) => c.sleeperId).filter((id): id is string => Boolean(id))
       : []
     const season = Number(payload.season)
