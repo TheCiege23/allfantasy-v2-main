@@ -87,6 +87,30 @@ export type PickedAsset =
  * accessible name. Visible text is kept for the deal itself: a league that rosters defenders would
  * otherwise print the same sentence on a third of every roster.
  */
+/**
+ * A pick off a real roster, as the deal builder holds it. ONE mapping for every surface that adds a
+ * roster pick — this picker's list and the dynasty draft-capital panel (DynastyPickCapitalPanel.tsx) —
+ * so a pick cannot be priced one way in one place and proposed another way in the other.
+ */
+export function rosterPickAsset(p: RosterPick, leagueId: string | null | undefined, book: TradePickPreviewBook | null | undefined): Extract<PickedAsset, { kind: 'pick' }> {
+  const value = leagueId
+    ? (p.round == null ? null : readPickPreviewValue({ leagueId, book, year: p.season ?? new Date().getFullYear(), round: p.round }))
+    : p.value
+  const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+  return {
+    kind: 'pick',
+    year: p.season ?? new Date().getFullYear(),
+    round: p.round ?? 1,
+    label: p.label,
+    // An imported pick's id is for display only; an offer must never reference it.
+    pickId: p.proposable === false ? null : p.pickId,
+    itemType: p.itemType,
+    value,
+    unpricedReason: reason,
+    proposable: p.proposable !== false,
+  }
+}
+
 export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
   const {copy,locale}=useTradeVisualCopy()
 
@@ -600,30 +624,15 @@ export function TradeAssetPicker(props: {
                     : 'Picks on this roster')}
               </span>
               {(props.rosterPicks ?? []).map((p) => {
-                const value = props.leagueId ? (p.round == null ? null : readPickPreviewValue({
-                  leagueId: props.leagueId, book: props.pickPreviewBook,
-                  year: p.season ?? new Date().getFullYear(), round: p.round,
-                })) : p.value
-                const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+                const asset = rosterPickAsset(p, props.leagueId, props.pickPreviewBook)
+                const value = asset.value
+                const reason = asset.unpricedReason ?? null
                 return (
                 <button
                   key={p.pickId}
                   type="button"
                   className="af-tc-row af-tc-row--button"
-                  onClick={() =>
-                    props.onPick({
-                      kind: 'pick',
-                      year: p.season ?? new Date().getFullYear(),
-                      round: p.round ?? 1,
-                      label: p.label,
-                      // An imported pick's id is for display only; an offer must never reference it.
-                      pickId: p.proposable === false ? null : p.pickId,
-                      itemType: p.itemType,
-                      value,
-                      unpricedReason: reason,
-                      proposable: p.proposable !== false,
-                    })
-                  }
+                  onClick={() => props.onPick(asset)}
                 >
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{p.label}</span>

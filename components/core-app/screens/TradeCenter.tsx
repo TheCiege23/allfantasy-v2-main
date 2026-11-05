@@ -87,6 +87,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
 
 /**
  * Screen 36a — Trade Center.
@@ -548,6 +549,11 @@ export function TradeCenter(props: {
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
   leagueType?: string | null
+  /**
+   * A dynasty league (lib/core-app/coreShellDynasty.ts — the rule the shell's gold identity uses).
+   * Shows "Your draft capital" above the builder (DynastyPickCapitalPanel.tsx). Absent: nothing.
+   */
+  dynasty?: boolean
   sport?: string | null
   /** Raw `League.leagueVariant` (zombie, survivor, …) — adds that format's asset classes. */
   leagueVariant?: string | null
@@ -1634,6 +1640,18 @@ export function TradeCenter(props: {
       ) : null}
       {/* Redraft /core shell only (batch B4): the deadline as a bar. Renders nothing for any other league. */}
       {props.league ? <RedraftTradeDeadlineBar countdown={props.deadlineCountdown} /> : null}
+
+      {/* Dynasty only: every pick you hold, by draft year; a tap puts it on your side of the deal. */}
+      {props.dynasty && props.league && myRoster ? (
+        <DynastyPickCapitalPanel
+          picks={myRoster.picks ?? []}
+          coverage={rosterData?.pickCoverage}
+          leagueId={props.league.id}
+          book={rosterData?.pickPreviewBook}
+          inDeal={new Set(giveAssets.flatMap((a) => (a.kind === 'pick' ? [pickDealKey(a)] : [])))}
+          onAdd={(asset) => addAsset('give', asset)}
+        />
+      ) : null}
 
       {/* Every league at a glance — folded to one line; see the strip's own header. */}
       {props.leagues && props.leagues.length > 0 ? (
