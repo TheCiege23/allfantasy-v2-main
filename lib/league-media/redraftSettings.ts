@@ -1,8 +1,8 @@
 /**
  * Redraft identity for the League Settings page (wave-2 A5, 2026-10-31): "how your season works".
  *
- * The page's sections already run in season order (General → Roster & scoring → Draft → Waivers &
- * trades → Playoffs → Members → Commissioner tools). For a native redraft league this module adds the
+ * The page's sections already run in season order (General → Roster & scoring → Draft → Trades →
+ * Playoffs → Members → Commissioner tools). For a native redraft league this module adds the
  * two things the approved mock layers on top of that list, both derived from data the page already
  * holds — nothing here fetches, and nothing is invented:
  *
@@ -37,7 +37,7 @@ const SECTION_POINT: Record<string, SeasonPoint> = {
   general: 'before',
   'roster-scoring': 'before',
   draft: 'draft',
-  'waivers-trades': 'season',
+  trades: 'season',
   playoffs: 'playoffs',
 }
 

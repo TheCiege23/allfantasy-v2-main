@@ -71,7 +71,7 @@ describe('formatters', () => {
 describe('LeagueSettingsHome — list', () => {
   it('renders every section with the current values', () => {
     renderHome(input())
-    for (const id of ['general', 'roster-scoring', 'draft', 'waivers-trades', 'guillotine', 'members', 'commissioner']) {
+    for (const id of ['general', 'roster-scoring', 'draft', 'trades', 'guillotine', 'members', 'commissioner']) {
       expect(screen.getByTestId(`lsh-section-${id}`)).toBeTruthy()
     }
     expect(rowValue('name')).toBe('The Ciege NBA Guilly')
@@ -88,6 +88,19 @@ describe('LeagueSettingsHome — list', () => {
     expect(rowValue('endgame')).toBe('Last team standing')
     expect(rowValue('managers')).toBe('2 / 16 joined')
     expect(screen.getByTestId('lsh-copy-invite')).toBeTruthy()
+  })
+
+  it('lists Waivers in General beside Format, and Dues & payouts as its own commissioner row', () => {
+    renderHome(input())
+    const general = screen.getByTestId('lsh-section-general')
+    expect([...general.querySelectorAll('[data-testid^="lsh-row-"]')].map((r) => r.getAttribute('data-testid'))).toEqual([
+      'lsh-row-name',
+      'lsh-row-teams',
+      'lsh-row-format',
+      'lsh-row-waivers',
+    ])
+    expect(screen.getByTestId('lsh-section-trades').querySelector('[data-testid="lsh-row-waivers"]')).toBeNull()
+    expect(screen.getByTestId('lsh-section-commissioner').querySelector('[data-testid="lsh-row-dues"]')).toBeTruthy()
   })
 
   it('🛑 guillotine section only for Guilly leagues; playoffs hidden for guillotine', () => {

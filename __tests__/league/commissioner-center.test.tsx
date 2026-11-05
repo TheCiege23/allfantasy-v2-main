@@ -72,7 +72,7 @@ describe('CommissionerCenter', () => {
     expect((screen.getByLabelText('Settings category') as HTMLSelectElement).value).toBe('pirate-rules')
     fireEvent.change(screen.getByLabelText('Settings category'), { target: { value: 'roster' } })
     expect(screen.getByText('editor for roster')).toBeTruthy()
-    expect(screen.getByTestId('cc-nav-roster').textContent).toBe('Roster settings')
+    expect(screen.getByTestId('cc-nav-roster').querySelector('.cc-nav-label')?.textContent).toBe('Roster settings')
   })
 
   it('a Survivor league gets the tribe setup entry (handoff §5.4)', () => {
@@ -85,6 +85,34 @@ describe('CommissionerCenter', () => {
     renderCenter(input({}, false))
     expect(screen.queryByTestId('cc-nav-draft')).toBeNull()
     expect(screen.queryByTestId('cc-tool-roster-locks')).toBeNull()
+  })
+
+  it('keeps Waivers with General and Format in the League group, not with the draft (owner, 2026-11-01)', () => {
+    renderCenter(input())
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' })
+    const groups = [...nav.querySelectorAll('section')].map((s) => ({
+      title: s.querySelector('h2')?.textContent,
+      ids: [...s.querySelectorAll('button')].map((b) => b.getAttribute('data-testid')),
+    }))
+    const league = groups.find((g) => g.title === 'League')!
+    expect(league.ids.slice(0, 3)).toEqual(['cc-nav-general', 'cc-nav-format', 'cc-nav-waivers'])
+    expect(groups.find((g) => g.title === 'Rules')!.ids).not.toContain('cc-nav-waivers')
+  })
+
+  it('gives every nav item a one-line summary and repeats it under the open section’s title', () => {
+    renderCenter(input())
+    expect(screen.getByTestId('cc-nav-draft').textContent).toBe('Draft settingsType, date, timer, order')
+    // The page opens on League settings (main's rule), so the pane repeats that section's line.
+    expect(screen.getByTestId('cc-pane-sub').textContent).toBe('Name, teams, timezone')
+    expect(screen.getByTestId('cc-eyebrow').textContent).toBe('Blah · Commissioner only')
+  })
+
+  it('opens Dues & payouts as its own section from the nav and from the tool', () => {
+    renderCenter(input())
+    fireEvent.click(screen.getByTestId('cc-tool-dues'))
+    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('dues')
+    expect(screen.getByText('editor for dues')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-dues').getAttribute('aria-current')).toBe('page')
   })
 
   it('shows managers joined against league size with the copy invite action', () => {
