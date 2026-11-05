@@ -9,6 +9,7 @@ import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 import { projectFromRecentForm } from './recentFormProjection'
 import { waiverSportPlan, type WaiverValueBasis } from './waiverSportBasis'
+import type { WaiverCrowd } from './waiverCrowdLine'
 
 /**
  * What a waiver add is actually worth: how much it improves YOUR starting lineup.
@@ -95,6 +96,11 @@ export interface WaiverBoard {
    */
   sport?: string
   basis?: WaiverValueBasis
+  /**
+   * How synced Sleeper leagues see each candidate: rostered in how many, added in how many this week.
+   * NFL only, attached by the route (lib/waivers/waiverCrowd.ts); absent or null when not read.
+   */
+  crowd?: WaiverCrowd | null
   /**
    * What your roster needs this week and in the next few — empty slots, positions with no backup,
    * upcoming byes. NFL only (the schedule and slot shapes are football's); absent when it could not

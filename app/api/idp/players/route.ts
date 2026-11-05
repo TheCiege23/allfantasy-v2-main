@@ -18,6 +18,7 @@ import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
 import { loadIdpPlayerCard } from '@/lib/idp-projections/idpPlayerCard'
 import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
+import { loadWaiverCrowd } from '@/lib/waivers/waiverCrowd'
 import { resolveWaiverClaimWeek } from '@/lib/core-app/waiverClaimWeek'
 
 export const dynamic = 'force-dynamic'
@@ -162,7 +163,17 @@ export async function GET(req: NextRequest) {
       // The same instant the claim week was decided on, for the kickoff locks.
       now: new Date(now),
     })
-    return NextResponse.json(payload)
+    /*
+     * Rostered % and adds this week, from Postgres (lib/waivers/waiverCrowd.ts). NFL only — the only
+     * sport whose candidates carry a Sleeper id — and it never holds the board back: a failed read
+     * returns the board without it.
+     */
+    const ids = payload.state === 'ok' && (payload.sport ?? 'NFL') === 'NFL'
+      ? payload.candidates.map((c) => c.sleeperId).filter((id): id is string => Boolean(id))
+      : []
+    const season = Number(payload.season)
+    const crowd = ids.length && Number.isInteger(season) ? await loadWaiverCrowd(ids, season, new Date(now)).catch(() => null) : null
+    return NextResponse.json(crowd ? { ...payload, crowd } : payload)
   }
   if (view === 'roster-week') {
     const payload = await loadRosterWeekPoints({ prisma, leagueId, userId })

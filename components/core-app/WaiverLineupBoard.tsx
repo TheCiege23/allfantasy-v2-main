@@ -15,6 +15,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
+import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -205,8 +206,12 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                 </span>
                 <span className="af-wlb-meta">
                   <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
-                  {c.team ? `${c.team} · ` : ''}{m.proj}{' '}
-                  <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  {c.team ? `${c.team} · ` : ''}
+                  {/* One unit: the chips after it must not leave "proj" at a line end without its number. */}
+                  <span className="af-wlb-proj">
+                    {m.proj}{' '}
+                    <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  </span>
                   {/* AllFantasy's own engine, beside the provider's figure. */}
                   {c.afProjectedPoints != null ? (
                     <>
@@ -242,6 +247,30 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                       {m.seasonRateChip}
                     </span>
                   ) : null}
+                  {/*
+                    How synced Sleeper leagues see him (NFL only): the share that roster him and how
+                    many added him this week. The population is named in each title — these are
+                    leagues synced to AllFantasy, not all of Sleeper — and below five leagues the row
+                    shows nothing rather than a share of two.
+                  */}
+                  {(() => {
+                    const crowd = crowdLine(board.crowd, c.sleeperId)
+                    if (!crowd) return null
+                    return (
+                      <>
+                        {crowd.rosteredPct != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="rostered" title={m.rosteredTitle(crowd.syncedLeagues)}>
+                            {m.rosteredChip(crowd.rosteredPct)}
+                          </span>
+                        ) : null}
+                        {crowd.addedIn != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="added" title={m.addedTitle(crowd.addedIn, crowd.activeLeagues)}>
+                            {m.addedChip(crowd.addedIn)}
+                          </span>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                   {/*
                     The bid, from the Waiver intelligence rule — the only bid source on this
                     screen. A player that rule has no market value for gets no figure, never a
