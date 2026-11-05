@@ -12,8 +12,9 @@ import {
   type EliminationZones,
 } from '@/components/core-app/standings/StandingsBoardView'
 import '@/components/core-app/af-standings.css'
-import '@/components/core-app/af-core-redraft-standings.css'
 import '@/components/core-app/af-empty-state.css'
+// The redraft overrides load last, after every stylesheet of this screen's own.
+import '@/components/core-app/af-core-redraft-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
