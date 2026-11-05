@@ -6,11 +6,11 @@ import { redraftPositionTone } from '@/lib/league-media/redraftScreens'
 import { useRedraftScreenContext } from './RedraftScreenParts'
 import './native-screens.css'
 
-export function ScreenHead({ eyebrow, title, sub, children }: { eyebrow: string; title: string; sub?: ReactNode; children?: ReactNode }) {
+export function ScreenHead({ eyebrow, title, sub, children }: { eyebrow?: string; title: string; sub?: ReactNode; children?: ReactNode }) {
   return (
     <header className="nls-head">
       <div className="nls-head-text">
-        <p className="nls-eyebrow">{eyebrow}</p>
+        {eyebrow ? <p className="nls-eyebrow">{eyebrow}</p> : null}
         <h2 className="nls-title">{title}</h2>
         {sub ? <p className="nls-sub">{sub}</p> : null}
       </div>

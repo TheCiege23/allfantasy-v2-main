@@ -58,7 +58,7 @@ export function NativeMatchupScreen(props: ScreenProps) {
   const state = String(props.league.lifecycleState ?? props.league.status ?? '').toLowerCase()
   if (['setup', 'pre_draft', 'drafting', 'in_progress'].includes(state)) {
     return <RedraftScreen identity={rd}><div className="nls" data-testid="native-matchup-screen">
-      <ScreenHead eyebrow={`${props.league.name} · Matchup`} title="Your season starts with the draft" />
+      <ScreenHead eyebrow="Matchup" title="Your season starts with the draft" />
       <Card label="Matchups are coming" tone="accent">
         <p>Finish the draft to fill your roster and get ready for weekly matchups.</p>
         <div className="nls-actions"><button type="button" className="nls-btn" data-variant="primary" onClick={() => props.onSelectTab('draft')}>Open Draft HQ</button></div>
@@ -73,11 +73,11 @@ export function NativeMatchupScreen(props: ScreenProps) {
  * pins both scores to 0 (`lib/redraft/scoringEngine.ts`) — so the head-to-head screen would show a
  * 0.0 vs 0.0 "matchup" and a win probability for a game nobody plays. Point at the standings instead.
  */
-function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
+function RotisserieMatchupScreen({ onSelectTab }: ScreenProps) {
   const rd = useRedraftScreenContext()
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Rotisserie`} title="No weekly matchup" />
+      <ScreenHead eyebrow="Rotisserie" title="No weekly matchup" />
       <Card label="How this league is decided" tone="accent">
         <p>
           This is a rotisserie league. Every week&apos;s stats add to your season totals, and teams are ranked in each
@@ -212,7 +212,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Matchup`} title={`Week ${week}`}>
+      <ScreenHead eyebrow="Matchup" title={`Week ${week}`}>
         {weekControls}
       </ScreenHead>
 

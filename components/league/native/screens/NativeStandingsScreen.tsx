@@ -170,7 +170,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   if (data?.scoringMode === 'roto') {
     return (
       <div className="nls" data-testid="native-standings-screen">
-        <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Rotisserie standings" />
+        <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Rotisserie standings" />
         <div className="nls-cols">
           <section className="nls-card nls-card-flush" aria-label="Standings">
             {!rows.length ? (
@@ -219,7 +219,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-standings-screen" data-rd-screen={rd ? 'standings' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Standings & playoffs">
+      <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Standings & playoffs">
         <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoff picture' }, { id: 'power', label: 'Power rankings' }]} />
       </ScreenHead>
 
