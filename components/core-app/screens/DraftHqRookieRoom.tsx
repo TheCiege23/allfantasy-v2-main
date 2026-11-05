@@ -22,8 +22,7 @@ import '@/components/core-app/af-draft-hq-dynasty.css'
 /** More taxi slots than this draw as a count only — a row of 20 dots says nothing a number does not. */
 const MAX_SLOT_DOTS = 8
 
-function formatWhen(at: string, kind: 'starts' | 'opens', language: string): string {
-  const locale = language === 'es' ? 'es-ES' : 'en-US'
+function formatWhen(at: string, kind: 'starts' | 'opens', locale: string): string {
   const d = new Date(at)
   // A fixed zone, so the server render and the browser agree. An open date is a calendar day (UTC).
   if (kind === 'opens') {
@@ -38,7 +37,7 @@ export function DraftHqRookieRoom({ room, leagueId }: { room: RookieDraftRoom; l
   const m = useMessages(draftHqRookieRoomMessages)
   const language = useOptionalLanguage().language ?? 'en'
   const { picks, taxi, board, date } = room
-  const when = date ? formatWhen(date.at, date.kind, language) : null
+  const when = date ? formatWhen(date.at, date.kind, m.intlLocale) : null
   const myTeamHref = `/core/my-team?league=${encodeURIComponent(leagueId)}`
 
   return (

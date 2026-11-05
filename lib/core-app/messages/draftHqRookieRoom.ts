@@ -3,6 +3,8 @@ import { defineMessages } from '@/lib/i18n/messages'
 /** Draft HQ's dynasty draft room (components/core-app/screens/DraftHqRookieRoom.tsx). */
 export const draftHqRookieRoomMessages = defineMessages({
   en: {
+    /** The Intl locale dates are formatted in (a catalog entry, not an inline language ternary). */
+    intlLocale: 'en-US',
     roomLabel: 'Rookie draft room',
     dynasty: 'Dynasty',
     title: (kind: 'rookie' | 'startup' | 'dispersal', season: number | null): string => {
@@ -47,6 +49,7 @@ export const draftHqRookieRoomMessages = defineMessages({
     myTeam: 'My team →',
   },
   es: {
+    intlLocale: 'es-ES',
     roomLabel: 'Sala del draft de novatos',
     dynasty: 'Dinastía',
     title: (kind, season) => {
