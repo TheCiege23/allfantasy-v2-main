@@ -151,9 +151,14 @@ export function LeagueActivityFeed({ onOpenLeague }: { onOpenLeague?: (leagueId:
               {/*
                 Named, or explicitly not. Never blank — a nameless row reads as
                 belonging to whichever league the reader last had open.
+
+                An injury row carries no league ON PURPOSE: rosterInjuryActivity emits one
+                row per player across every roster you have him on ("— on 4 of your
+                rosters"). "League not identified" read as a data bug on every such row
+                (owner screenshot, 2026-11-01); "Your rosters" is what the row is about.
               */}
               <span className="af-cm-act-league">
-                {item.leagueName ?? 'League not identified'}
+                {item.leagueName ?? (item.type === 'injury' ? 'Your rosters' : 'League not identified')}
               </span>
               <span className="af-cm-act-when">{whenLabel(item.timestamp)}</span>
             </span>

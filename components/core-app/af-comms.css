@@ -4060,3 +4060,264 @@ html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-sha
 @media (max-width: 520px) {
   .af-cm-move { margin-left: 0; max-width: 100%; }
 }
+
+/*
+ * ══ 2026-11-01 redesign — "an AF feel, as simple as Sleeper or Discord" ══
+ *
+ * Owner, with Sleeper's and Fantrax's league chats beside ours: "the bubble itself is fine, but when
+ * I open it, it looks crowded … every tab needs to be updated … especially mobile". The audit of the
+ * open drawer at 390px: a title row, five icon-over-label pills, a "Who sees this" row, a scope row,
+ * a boxed privacy paragraph and a footer — six bands of chrome before the first message.
+ *
+ *  - header: a short "Chat" title with the audience line UNDER it (one band, not two), and the
+ *    notification settings as a bell beside Close instead of a footer on every tab;
+ *  - tabs: labels on one row with an accent underline for the open tab, the way Sleeper and Discord
+ *    draw them. Only Chimmy keeps its sparkle — it is the one tab that is not people;
+ *  - the league picker reads as the league you are in, in bold, with the toolbar's actions as chips;
+ *  - the DM / Huddle / Discord privacy notes move UNDER the content as fine print;
+ *  - the footer is gone wherever the panel is compact (its fine print was already hidden there).
+ *
+ * ⚠ CONTRACTS UNTOUCHED, AS IN EVERY LAYER ABOVE. The audience line, the scope chip, the privacy
+ * notices (full text, every open), the public-answer notice and the cost note all still render — the
+ * comms tests pin each one, and this layer only moves and repaints them.
+ *
+ * Top level and appended last on purpose: no rule here sits inside an earlier query, and every
+ * selector carries `.af-cm` so it outranks the `.af-core .af-cm-*` block above on order.
+ */
+
+/* ── Header: title + audience, scope, bell, close ── */
+.af-cm .af-cm-head { padding: 8px 6px 0 18px; border-bottom: 0; background: var(--bg); }
+.af-cm .af-cm-headtop { align-items: center; gap: 2px; min-height: 52px; }
+.af-cm .af-cm-brand { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; min-width: 0; color: var(--text); }
+.af-cm .af-cm-title { margin: 0; font-family: inherit; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; text-transform: none; color: var(--text); }
+.af-cm .af-cm-brand .af-cm-audience { max-width: 100%; margin: 0; padding: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.af-cm .af-cm-brand .af-cm-audience > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.af-cm .af-cm-scopechip {
+  max-width: 132px;
+  margin-right: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.af-cm .af-cm-headbtn,
+.af-cm .af-cm-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-cm .af-cm-headbtn:hover,
+.af-cm .af-cm-close:hover { background: var(--chip); color: var(--text); }
+
+/* ── Tabs: one row of labels, underline on the open one ── */
+.af-cm .af-cm-tabs {
+  gap: 0;
+  margin: 4px -6px 0 -18px;
+  padding: 0 8px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line2);
+  background: transparent;
+}
+.af-cm .af-cm-tab {
+  flex-direction: row;
+  gap: 5px;
+  min-height: 46px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.af-cm .af-cm-tab:hover { background: transparent; color: var(--text); }
+.af-cm .af-cm-tab[data-on='true'] { background: transparent; color: var(--text); font-weight: 800; box-shadow: inset 0 -2px 0 var(--accent); }
+.af-cm .af-cm-tab:focus-visible { outline-offset: -3px; }
+.af-cm .af-cm-tab > svg { display: none; }
+.af-cm .af-cm-tab[data-tab='chimmy'] > svg { display: block; flex: none; color: var(--accent); }
+html[data-mode='light'] .af-cm .af-cm-tabs { background: transparent; }
+html[data-mode='light'] .af-cm .af-cm-tab[data-on='true'] { color: var(--text); }
+
+/* ── Scope rows (League, Chimmy, Discord): the league you are in, then chips ── */
+.af-cm .af-cm-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+.af-cm .af-cm-scope > .af-cm-league-picker,
+.af-cm .af-cm-scope > .af-cm-scope-note,
+.af-cm .af-cm-scope > .af-cm-franchise-scope,
+.af-cm .af-cm-scope > .af-cm-answer-mode,
+.af-cm .af-cm-scope > .af-cm-presence { flex: 1 1 100%; margin: 0; }
+.af-cm .af-cm-scope-note { font-size: 12px; color: var(--muted); }
+.af-cm .af-cm-league-picker select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 44px;
+  padding: 0 38px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238f97bd' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+html[data-mode='light'] .af-cm .af-cm-league-picker select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23484f69' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.af-cm .af-cm-league-search { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+
+/* @chimmy, Search chat and the draft-room toggle: one row of chips under the picker. */
+.af-cm .af-cm-scope > .af-cm-summon,
+.af-cm .af-cm-scope > .af-cm-draft-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-style: solid;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* A 36px pill for a mouse; a full 44px target for a thumb. */
+@media (pointer: coarse) {
+  .af-cm .af-cm-scope > .af-cm-summon,
+  .af-cm .af-cm-scope > .af-cm-draft-toggle { min-height: 44px; }
+}
+.af-cm .af-cm-scope > .af-cm-summon { min-width: 0; border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+.af-cm .af-cm-scope > .af-cm-draft-toggle[data-on='true'] { border-color: var(--accent-line); color: var(--accent); }
+/*
+ * Who's here sits BETWEEN the chips in the markup (toolbarLead, presence, Search, draft), which
+ * broke one row of chips into three. It goes last, under them, as a quiet line.
+ */
+.af-cm .af-cm-scope > .af-cm-presence { order: 1; gap: 4px 12px; }
+.af-cm .af-cm-presence-who { font-size: 11.5px; }
+
+/* Chimmy's "Open full-page analysis" sits as a quiet link at the top right, not a band. */
+.af-cm .af-cm-expand { padding: 8px 16px 0; font-size: 12.5px; font-weight: 600; }
+
+/* ── Cross-league activity (League tab, no league picked) ── */
+.af-cm .af-cm-thread > .af-cm-scope-label {
+  display: block;
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-cm .af-cm-act { min-height: 56px; padding: 10px 6px; border-bottom: 1px solid var(--line); border-radius: 0; }
+.af-cm .af-cm-act-type {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.af-cm .af-cm-act-type[data-type='injury'] { background: var(--warn-soft, rgba(245, 182, 66, 0.12)); color: var(--warn, #f5b642); }
+.af-cm .af-cm-act-league { font-size: 12px; font-weight: 600; color: var(--text2); }
+.af-cm .af-cm-act-when { font-size: 11.5px; color: var(--muted); }
+.af-cm .af-cm-act-desc { font-size: 14px; line-height: 1.4; color: var(--text); }
+.af-cm .af-cm-act-go { color: var(--muted); }
+
+/* ── DMs and Huddles ── */
+.af-cm .af-cm-pick { padding-inline: 14px; }
+/* `.af-core .af-cm-composer` paints the composer bar; the picker's form borrows that class and is not a bar. */
+.af-cm .af-cm-pick .af-cm-pick-form { padding: 12px 0 8px; border-top: 0; background: transparent; }
+.af-cm .af-cm-pick .af-cm-pick-input { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding-inline: 14px; }
+.af-cm .af-cm-pick .af-cm-pick-start { border-radius: 12px; font-weight: 800; }
+.af-cm .af-cm-thread:has(> .af-cm-dmrow) { gap: 0; padding: 4px 8px 8px; }
+.af-cm .af-cm-dmrow { padding: 10px 8px; border-radius: 12px; border-bottom: 0; }
+.af-cm .af-cm-dmrow + .af-cm-dmrow { box-shadow: 0 -1px 0 var(--line); }
+.af-cm .af-cm-dmrow:hover { background: var(--chip); }
+.af-cm .af-cm-dmrow .af-cm-threadrow-title { font-size: 15px; }
+.af-cm .af-cm-dmrow-preview { font-size: 13px; }
+
+/* ── Privacy notes as fine print under the content (DMs, Huddles, Discord) ── */
+.af-cm .af-cm-privacy.af-cm-privacy-foot {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 20px 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-cm .af-cm-privacy-foot > svg { flex: none; margin-top: 3px; color: var(--faint); }
+
+/* ── Empty states: one icon, a title, a sentence ── */
+.af-cm .af-cm-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-cm .af-cm-empty-icon[data-kind='discord'] { background: rgba(88, 101, 242, 0.16); color: #a9b2ff; }
+html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { background: rgba(88, 101, 242, 0.12); color: #4752c4; }
+.af-cm .af-cm-empty .af-cm-empty-b { max-width: 34ch; font-size: 14px; line-height: 1.5; color: var(--muted); }
+
+/* ── Footer: the fine print only, centred; gone when the panel is compact ── */
+.af-cm .af-cm-foot { justify-content: center; margin: 0; padding: 6px 16px 8px; border-top: 1px solid var(--line); }
+.af-cm .af-cm-footnote { font-size: 11px; text-align: center; color: var(--faint); }
+
+/* Range syntax on purpose: comms-drawer-fit.test.tsx finds the fit pass as the LAST "(max-width: 520px)" block. */
+@container af-cm (width <= 520px) {
+  .af-cm .af-cm-head { padding: 6px 4px 0 16px; }
+  .af-cm .af-cm-title { font-size: 19px; }
+  .af-cm .af-cm-tabs { margin: 2px -4px 0 -16px; padding: 0 4px; }
+  .af-cm .af-cm-tab { min-height: 44px; padding: 0 2px; font-size: 13.5px; }
+  .af-cm .af-cm-scope { gap: 8px 6px; padding: 8px 12px; }
+  /* Ask Chimmy, Search chat and Show draft room on ONE row of a 390px phone, not two. */
+  .af-cm .af-cm-scope > .af-cm-summon,
+  .af-cm .af-cm-scope > .af-cm-draft-toggle { gap: 5px; padding: 0 10px; font-size: 12px; }
+  /* Its fine print was already hidden at this width; with the link moved to the bell it is empty. */
+  .af-cm .af-cm-foot { display: none; }
+}
+/* Five labels and a sparkle overflow a phone's ~375px row at 13.5px — the sparkle steps aside first. */
+@container af-cm (width <= 400px) {
+  .af-cm .af-cm-tab[data-tab='chimmy'] > svg { display: none; }
+}
+@container af-cm (width <= 340px) {
+  .af-cm .af-cm-tab { font-size: 12.5px; }
+}

@@ -982,8 +982,6 @@ export function ThreadPanel({
 
   return (
     <div className="af-cm-panel">
-      <div className="af-cm-privacy">{privacy}</div>
-
       <PeoplePicker
         kind={kind}
         busy={busy}
@@ -1011,6 +1009,15 @@ export function ThreadPanel({
           threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
+      </div>
+
+      {/*
+        Contracts 2 and 3, in full, every time the list opens — as quiet fine print under the
+        conversations rather than a box above them (2026-11-01: "it looks crowded"). Same words.
+      */}
+      <div className="af-cm-privacy af-cm-privacy-foot">
+        <Lock size={12} aria-hidden />
+        {privacy}
       </div>
     </div>
   )
