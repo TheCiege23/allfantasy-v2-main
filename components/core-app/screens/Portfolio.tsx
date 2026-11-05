@@ -9,6 +9,10 @@ import { EMPTY_FILTER, type LineupSignal, type PortfolioFilter } from '@/lib/cor
 import { PortfolioBoard, type PortfolioViewKey } from '@/components/core-app/portfolio/PortfolioBoard'
 import '@/components/core-app/af-portfolio.css'
 import '@/components/core-app/af-core-boards.css'
+// The Portfolio board restyle (2026-11-05), layered over af-portfolio.css.
+import '@/components/core-app/af-portfolio-redesign.css'
+import { useMessages } from '@/components/i18n/useMessages'
+import { portfolioHeaderMessages } from '@/lib/core-app/messages/portfolioHeader'
 
 /**
  * Portfolio — every league you are in.
@@ -94,20 +98,21 @@ export function Portfolio({
   initialView = 'overview',
   importHref = '/import?returnTo=%2Fcore%2Fportfolio',
 }: PortfolioProps) {
+  const m = useMessages(portfolioHeaderMessages)
   if (!data.leagues.available) {
     return (
       <div className="af-pf">
         <header className="af-pf-head">
-          <h1 className="af-pf-title">Portfolio</h1>
+          <h1 className="af-pf-title">{m.title}</h1>
         </header>
         <div className="af-pf-empty">
           <p className="af-pf-empty-title">{data.leagues.reason}</p>
           <div className="af-pf-empty-actions">
             <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
-              Import a league
+              {m.importLeague}
             </Link>
             <Link href="/create-league" className="af-pf-btn">
-              Create one from scratch
+              {m.createOne}
             </Link>
           </div>
         </div>
@@ -121,7 +126,12 @@ export function Portfolio({
     <div className="af-pf">
       <header className="af-pf-head">
         <div>
-          <h1 className="af-pf-title">Portfolio</h1>
+          {/* The board's mono eyebrow over the title; the count line below is unchanged in meaning. */}
+          <p className="af-pf-eyebrow" data-testid="portfolio-eyebrow">
+            {m.teams(leagues.length)}
+            {data.commissionedCount > 0 ? ` · ${m.commission(data.commissionedCount)}` : ''}
+          </p>
+          <h1 className="af-pf-title">{m.title}</h1>
           {/*
             ⚠ "CLAIMED TEAMS", NOT "LEAGUES", AND THE DIFFERENCE IS REAL. This
             screen is one row per team you have CLAIMED — `getPortfolio` reads
@@ -129,15 +139,11 @@ export function Portfolio({
             absent however healthy its import, and two claimed teams in one
             league render as two rows BY DESIGN (a 32-team league is often two
             conferences). Calling the count "leagues" is what makes both of those
-            look like bugs.
+            look like bugs. (Since the 2026-11-05 restyle the count is the eyebrow above the title.)
           */}
-          <p className="af-pf-sub">
-            {leagues.length} claimed {leagues.length === 1 ? 'team' : 'teams'}
-            {data.commissionedCount > 0 ? ` · you commission ${data.commissionedCount}` : ''}
-          </p>
         </div>
-        <Link href={importHref} className="af-pf-btn">
-          Import a league
+        <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
+          {m.importLeague}
         </Link>
       </header>
 
@@ -197,6 +203,7 @@ function LeagueList({
   filtered: boolean
   importHref: string
 }) {
+  const m = useMessages(portfolioHeaderMessages)
   /*
    * ⚠ ONE OPEN AT A TIME, AND FETCHED ONLY WHEN OPENED. One production account
    * commissions 40 leagues. Rendering an invite panel per row would fire forty
@@ -229,7 +236,7 @@ function LeagueList({
               {PLATFORM_LABEL[platform] ?? platform}
             </span>
             <span className="af-pf-group-count">
-              {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
+              {m.groupCount(rows.length)}
             </span>
             <span className="af-pf-group-rule" aria-hidden />
           </header>
