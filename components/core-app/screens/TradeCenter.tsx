@@ -12,6 +12,8 @@ import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
 import {
   RosterPlayerRow,
+  positionGlyph,
+  positionTone,
   StockMark,
   TradeAssetPicker,
   type PickedAsset,
@@ -156,32 +158,6 @@ function platformMark(platform: string): string {
   return PLATFORM_MARK[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase()
 }
 
-/**
- * Position colour, the same assignment the league Trades tab uses for its
- * trade-block cards, so a WR reads the same colour on every trade surface.
- */
-const POSITION_TONE: Record<string, string> = {
-  QB: 'qb',
-  RB: 'rb',
-  WR: 'wr',
-  TE: 'te',
-  DL: 'dl',
-  DE: 'dl',
-  DT: 'dl',
-  NT: 'dl',
-  LB: 'lb',
-  DB: 'db',
-  CB: 'db',
-  S: 'db',
-  SS: 'db',
-  FS: 'db',
-  K: 'k',
-  DEF: 'def',
-  DST: 'def',
-}
-function positionTone(position: string): string {
-  return POSITION_TONE[position.toUpperCase()] ?? 'other'
-}
 
 type Line = {
   name: string
@@ -1620,6 +1596,15 @@ export function TradeCenter(props: {
    * information a turn earlier, as a control instead of a complaint — and never a dead button.
    * "You get" is checked first because it is the side shown first.
    */
+  /*
+   * ON A PHONE EACH ROSTER STARTS FOLDED. Both teams' full lists open at once meant scrolling past
+   * every one of your players before Team B's card began. Search still reaches every asset, and
+   * "Browse roster" opens the list. Read once at mount: after that the manager's toggle owns it.
+   * `matchMedia` is absent under jsdom and on the server, which both read as "not a phone".
+   */
+  const [rostersOpenAtStart] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 720px)').matches,
+  )
   const bothSides = giveAssets.length > 0 && getAssets.length > 0
   const analyzeLabel = busy ? 'Grading…' : result ? 'Grade again' : 'Grade with AF'
   const primary: { label: string; disabled: boolean; run: (opener: HTMLElement) => void } = bothSides
@@ -1900,18 +1885,6 @@ export function TradeCenter(props: {
                 <span className="af-tc-team-name">{side.label}</span>
               )}
               {side.isYou ? <span className="af-tc-you">{copy('YOU')}</span> : null}
-              {props.platform ? (
-                <>
-                  <span className="af-tc-spacer" />
-                  <span
-                    className="af-tc-mark af-tc-mark--sm af-platform"
-                    data-platform={props.platform.toLowerCase()}
-                    aria-hidden
-                  >
-                    {platformMark(props.platform)}
-                  </span>
-                </>
-              ) : null}
             </div>
             {/*
               The side's label and running total in one bar, KTC-style, so the two numbers being
@@ -1954,6 +1927,11 @@ export function TradeCenter(props: {
                           </span>
                         }
                       />
+                    </span>
+                  ) : kindOf(l) === 'player' && l.position ? (
+                    /* A player with no headshot reads the same here as in the roster list: position, in its colour. */
+                    <span className="af-tc-headshot" aria-hidden="true" data-pos={positionTone(l.position)}>
+                      <span className="af-tc-headshot-fallback">{positionGlyph(l.position, l.name)}</span>
                     </span>
                   ) : (
                     <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
@@ -2096,12 +2074,14 @@ export function TradeCenter(props: {
                 )
               }
               return (
-                <details className="af-tc-roster" open>
+                <details className="af-tc-roster" open={rostersOpenAtStart}>
                   <summary className="af-tc-roster-head">
                     <span className="af-label">
                       {copy(r.ownerName ? `${r.ownerName}'s roster` : 'On this roster')}{copy(" · ")}{players.length}
                     </span>
-                    <span className="af-tc-row-sub">{copy("Tap a player to add them")}</span>
+                    <span className="af-tc-row-sub af-tc-roster-hint">{copy("Tap a player to add them")}</span>
+                    <span className="af-tc-row-sub af-tc-roster-browse">{copy('Browse roster')}</span>
+                    <span className="af-tc-roster-chev" aria-hidden="true" />
                   </summary>
                   {/*
                     Capped and scrollable: two full rosters open at once would push the verdict —
@@ -2179,10 +2159,18 @@ export function TradeCenter(props: {
                   : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString(getAppIntlLocale())} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
             </span>
           </div>
-          {balance.givePct != null ? (
-            <div className="af-tc-balance-bar" aria-hidden>
-              <span className="af-tc-balance-give" style={{ width: `${balance.givePct}%` }} />
-              <span className="af-tc-balance-get" style={{ width: `${100 - balance.givePct}%` }} />
+          {/*
+            ONE BAR, THE PHONE METER'S READING. It was two colours meeting where the sides split —
+            red for what you send, green for what you get — which read as bad and good rather than
+            as a lean. Now the fill is your GET share against a middle tick, coloured by where the
+            deal leans, with the same words the phone bar uses.
+          */}
+          {balance.givePct != null && lean ? (
+            <div className="af-tc-meter af-tc-balance-meter" data-tone={lean.tone}>
+              <span className="af-tc-meter-track" aria-hidden>
+                <span className="af-tc-meter-fill" style={{ width: `${100 - balance.givePct}%` }} />
+              </span>
+              <span className="af-tc-meter-label">{copy(lean.text)}</span>
             </div>
           ) : null}
           <div className="af-tc-balance-ends af-num">

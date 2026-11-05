@@ -90,7 +90,7 @@ try {
       await page.goto(`${baseUrl}/e2e/trade-evaluator`, { waitUntil: 'load', timeout: 240_000 })
       const evaluator = page.locator('.af-tc-hub-evaluator')
       await evaluator.waitFor({ state: 'visible', timeout: 120_000 })
-      await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='give'] .af-tc-roster").first().waitFor({ timeout: 60_000 })
+      await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='give'] .af-tc-roster").first().waitFor({ state: 'attached', timeout: 60_000 })
       await page.evaluate(() => document.fonts?.ready)
       /*
        * VIEWPORT shots, scrolled to a part of the evaluator, not crops of the section: a crop drops
@@ -118,8 +118,12 @@ try {
         const value = await evaluator.locator('.af-tc-partner-select option', { hasText: 'Gridiron Ghosts' }).getAttribute('value')
         await evaluator.locator('.af-tc-partner-select select').selectOption(value)
       })
-      await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='get'] .af-tc-roster").first().waitFor({ timeout: 30_000 })
+      await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='get'] .af-tc-roster").first().waitFor({ state: 'attached', timeout: 30_000 })
       await shot('2-manager-chosen', ".af-tc-hub-evaluator .af-tc-team[data-side='get']")
+      // On a phone each roster starts folded behind "Browse roster" — open them, as a manager would.
+      // Re-query each time: opening one fold removes it from the `:not([open])` list.
+      const folded = evaluator.locator('details.af-tc-roster:not([open]) > summary')
+      while ((await folded.count()) > 0) await folded.first().click()
       await evaluator.getByLabel('Add Puka Nacua').first().click()
       await evaluator.getByLabel('Add Jahmyr Gibbs').first().click()
       await shot('3-deal-built', ".af-tc-hub-evaluator .af-tc-team[data-side='get']")
