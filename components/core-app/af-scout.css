@@ -222,6 +222,12 @@
 }
 
 .af-core .af-sc-team {
+  /*
+   * Named on the token, never inherited: the global heading colour in app/globals.css is the
+   * light-mode ink in AF mode, which painted these names at 1.09 contrast on the AF card (audit
+   * 2026-11-05). Same fix as the Player Finder compare headers.
+   */
+  color: var(--text);
   font-weight: 700;
   font-size: 14px;
   overflow: hidden;
