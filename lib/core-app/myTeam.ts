@@ -49,7 +49,7 @@ import { prospectIdsOf, type DynastyRosterMarker } from './dynastyRosterMarkers'
 import { readDynastyMarkers } from './dynastyMarkerRead'
 import { isDynastyLeague as isDynastyFormatLeague } from '@/lib/league/isDynastyLeague'
 import { getTeamActivity, type TeamActivity } from './teamActivity'
-import { optimizeLineup, type LineupOptimization } from './lineupOptimizer'
+import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,

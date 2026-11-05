@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-import { optimizeLineup } from '@/lib/core-app/lineupOptimizer'
+import { optimizeLineup } from '@/lib/decision-os/lineup/bestLineup'
 import { MyTeam } from '@/components/core-app/screens/MyTeam'
 import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 

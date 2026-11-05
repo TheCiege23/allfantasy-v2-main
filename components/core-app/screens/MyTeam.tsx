@@ -20,7 +20,7 @@ import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/
 import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
-import type { LineupOptimization } from '@/lib/core-app/lineupOptimizer'
+import type { LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'

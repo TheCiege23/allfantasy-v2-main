@@ -1,6 +1,6 @@
 import { computeOptimalLineup, type LineupSlotSpec } from '@/lib/lineup-optimizer/optimalLineup'
-import { BENCH_SWAP_POINTS, isEligibleForSlot } from './rosterSlots'
-import type { LineupPlayer, LineupSlot } from './myTeam'
+import { BENCH_SWAP_POINTS, isEligibleForSlot } from '@/lib/core-app/rosterSlots'
+import type { LineupPlayer, LineupSlot } from '@/lib/core-app/myTeam'
 
 /**
  * The whole-lineup answer to "what is my best lineup this week?" — recommendation only.
