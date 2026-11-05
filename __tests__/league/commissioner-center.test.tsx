@@ -40,11 +40,11 @@ function renderCenter(i: BuildSettingsHomeInput, inSeason = false) {
 }
 
 describe('CommissionerCenter', () => {
-  it('opens on Draft before the draft and shows that section’s existing editor', () => {
+  it('opens on League settings and shows that section’s existing editor', () => {
     renderCenter(input())
-    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('draft')
-    expect(screen.getByText('editor for draft')).toBeTruthy()
-    expect(screen.getByTestId('cc-nav-draft').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('general')
+    expect(screen.getByText('editor for general')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-general').getAttribute('aria-current')).toBe('page')
   })
 
   it('switches the pane from the nav and from a commissioner tool', () => {
@@ -63,6 +63,16 @@ describe('CommissionerCenter', () => {
   it('offers Survivor tribes only for a Survivor league', () => {
     renderCenter(input())
     expect(screen.queryByTestId('cc-nav-survivor-tribes')).toBeNull()
+  })
+
+  it('makes Pirate rules directly reachable in the sidebar and mobile category picker', () => {
+    renderCenter(input({ leagueVariant: 'pirate' }))
+    fireEvent.click(screen.getByTestId('cc-nav-pirate-rules'))
+    expect(screen.getByText('editor for pirate-rules')).toBeTruthy()
+    expect((screen.getByLabelText('Settings category') as HTMLSelectElement).value).toBe('pirate-rules')
+    fireEvent.change(screen.getByLabelText('Settings category'), { target: { value: 'roster' } })
+    expect(screen.getByText('editor for roster')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-roster').querySelector('.cc-nav-label')?.textContent).toBe('Roster settings')
   })
 
   it('a Survivor league gets the tribe setup entry (handoff §5.4)', () => {
@@ -91,8 +101,9 @@ describe('CommissionerCenter', () => {
 
   it('gives every nav item a one-line summary and repeats it under the open section’s title', () => {
     renderCenter(input())
-    expect(screen.getByTestId('cc-nav-draft').textContent).toBe('DraftType, date, timer, order')
-    expect(screen.getByTestId('cc-pane-sub').textContent).toBe('Type, date, timer, order')
+    expect(screen.getByTestId('cc-nav-draft').textContent).toBe('Draft settingsType, date, timer, order')
+    // The page opens on League settings (main's rule), so the pane repeats that section's line.
+    expect(screen.getByTestId('cc-pane-sub').textContent).toBe('Name, teams, timezone')
     expect(screen.getByTestId('cc-eyebrow').textContent).toBe('Blah · Commissioner only')
   })
 

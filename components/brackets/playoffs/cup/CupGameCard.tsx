@@ -7,6 +7,7 @@ import { TeamLogo } from "@/app/components/TeamLogo"
 import { getPlayoffPickResult, pointsForSeries } from "@/lib/playoffs/playoffScoring"
 import { cupGameDetail, cupGameProgress, cupGameState, cupLiveClock, cupTeamCode } from "@/lib/playoffs/nbaCupBoard"
 import { countdown, timeOnly, tipoffLabel } from "./cupFormat"
+import { useClientTime } from "./useClientTime"
 
 export type CupGameCardProps = {
   scoringExcludedReason?: "draft" | "late" | null
@@ -14,9 +15,10 @@ export type CupGameCardProps = {
   sport: string
   pick: string | null
   teamLogos: Record<string, string>
-  groupLabel: string | null
+  stageLabel?: string
+  groupLabel?: string | null
   /** Group-play record for a team, e.g. "2-1", or null when unknown. */
-  recordOf: (team: string) => string | null
+  recordOf?: (team: string) => string | null
   lockedReason: string | null
   saving: boolean
   onPick: (team: string) => void
@@ -30,7 +32,8 @@ export type CupGameCardProps = {
  *
  * Away is listed above home, the order a scoreboard reads.
  */
-export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel, recordOf, lockedReason, saving, onPick, onOpen, scoringExcludedReason }: CupGameCardProps) {
+export default function CupGameCard({ series, sport, pick, teamLogos, stageLabel, groupLabel, recordOf, lockedReason, saving, onPick, onOpen, scoringExcludedReason }: CupGameCardProps) {
+  const clientTime = useClientTime()
   const { language } = useOptionalLanguage(), copy = bracketCompanionCopy(language)
   const state = cupGameState(series)
   const detail = cupGameDetail(series)
@@ -61,7 +64,7 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
       else { result = `Your pick trails by ${-margin}`; tone = "bad" }
     }
   } else {
-    const left = countdown(series.startsAt)
+    const left = clientTime ? countdown(series.startsAt) : null
     result = lockedReason
       ? lockedReason
       : pick
@@ -75,10 +78,10 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
     tone = undefined
   }
 
-  const stage = groupLabel ? `Group Play · ${groupLabel}` : series.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || "Group Play"
-  const when = tipoffLabel(series.startsAt)
+  const stage = stageLabel ?? (groupLabel ? `Group Play · ${groupLabel}` : series.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || "Group Play")
+  const when = tipoffLabel(series.startsAt, { timeZone: clientTime ? undefined : "UTC" })
   const venue = [series.venue, series.location].filter(Boolean).join(" · ")
-  const groupLine = state === "final" && winner
+  const groupLine = state === "final" && winner && recordOf
     ? `Group now: ${sides.map((s) => `${cupTeamCode(s.name, s.abbr)} ${recordOf(s.name) ?? "—"}`).join(" · ")}`
     : null
 
@@ -91,7 +94,7 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
         ) : state === "final" ? (
           <span className="af-cup-chip af-cup-chip--final">{detail.detail && /^final\//i.test(detail.detail) ? detail.detail.toUpperCase() : "FINAL"}</span>
         ) : (
-          <span className="af-cup-chip af-cup-chip--time">{timeOnly(series.startsAt) ?? "Time TBA"}</span>
+          <span className="af-cup-chip af-cup-chip--time">{timeOnly(series.startsAt, clientTime ? undefined : "UTC") ?? "Time TBA"}</span>
         )}
       </div>
       {state === "live" ? <div className="af-cup-progress" aria-hidden="true"><span style={{ width: `${cupGameProgress(series)}%` }} /></div> : null}
@@ -99,9 +102,9 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
       <div className="af-cup-rows">
         {sides.map((side) => {
           const dim = (state === "final" && winner != null && winner !== side.name) || (state === "live" && leading != null && leading !== side.name)
-          const record = recordOf(side.name)
+          const record = recordOf?.(side.name)
           const sub = state === "scheduled"
-            ? record ? `${record} in group play` : "Group play"
+            ? record ? `${record} in group play` : stageLabel ?? "Group play"
             : side.leader ? `${state === "final" ? "Top scorer · " : ""}${side.leader.name} ${side.leader.points} PTS` : record ? `${record} in group play` : ""
           return (
             <div className="af-cup-row" key={side.name} data-dim={dim ? "true" : undefined}>
@@ -145,3 +148,4 @@ export default function CupGameCard({ series, sport, pick, teamLogos, groupLabel
     </article>
   )
 }
+

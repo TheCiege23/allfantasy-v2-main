@@ -13,6 +13,8 @@
 #   ./probe.sh roster <SPORT> <espn_team_id>
 #   ./probe.sh fantasy-league MLB <league_id> <season>
 #   ./probe.sh summary NFL <espn_event_id>
+#   ./probe.sh summary NCAAB <espn_event_id>
+#   ./probe.sh scoreboard NCAAB <YYYYMMDD>
 #   ./probe.sh scoreboard <NBA|NFL> <YYYYMMDD[-YYYYMMDD]>
 #
 # Examples:
@@ -64,7 +66,11 @@ case "$ENDPOINT" in
   scoreboard)
     if ! [[ "$TEAM_ID" =~ ^[0-9]{8}(-[0-9]{8})?$ ]]; then echo "usage: probe.sh scoreboard <NBA|NFL> <YYYYMMDD[-YYYYMMDD]>" >&2; exit 2; fi
     PATH_SEG="/${SPORT_PATH}/scoreboard"
-    QS="dates=${TEAM_ID}&limit=1000"
+    if [[ "$SPORT" == "NCAAB" ]]; then
+      QS="dates=${TEAM_ID}&groups=50&limit=1000"
+    else
+      QS="dates=${TEAM_ID}&limit=1000"
+    fi
     NAME="scoreboard.${SPORT}.${TEAM_ID}"
     ;;
   fantasy-league)

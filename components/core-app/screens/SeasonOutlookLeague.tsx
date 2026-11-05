@@ -194,13 +194,15 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
 
         <div className="af-olk-odds-row">
           <OddsTile
-            label="Playoffs"
+            icon="playoffs"
+            label={m.playoffsLabel}
             value={you.playoffPct}
             range={you.range?.playoff ?? null}
             sub={m.playoffsSub(league.playoffTeams, league.teams.length)}
           />
           {league.byeTeams > 0 ? (
             <OddsTile
+              icon="bye"
               label={m.byeLabel}
               value={you.byePct}
               range={you.range?.bye ?? null}
@@ -209,6 +211,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             />
           ) : null}
           <OddsTile
+            icon="title"
             label={m.title}
             value={you.titlePct}
             range={you.range?.title ?? null}
@@ -216,6 +219,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             tone="neutral"
           />
           <OddsTile
+            icon="miss"
             label={you.status === 'eliminated' ? m.eliminated : m.missPlayoffs}
             value={you.missPct}
             range={you.range ? { lo: 100 - you.range.playoff.hi, hi: 100 - you.range.playoff.lo } : null}
@@ -455,7 +459,7 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
         </h3>
         <span className="af-sol-clinch-note">
           {m.week} {swing.week}
-          {swing.opponentName ? ` · vs ${swing.opponentName}` : ''}
+          {swing.opponentName ? m.vsOpponent(swing.opponentName) : ''}
         </span>
       </header>
 
@@ -521,7 +525,7 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
               {m.pointsFor}
             </th>
             <th scope="col" className="af-sol-n">
-              Playoffs <TopicTip topic="outlookPlayoffOdds" />
+              {m.playoffsLabel} <TopicTip topic="outlookPlayoffOdds" />
             </th>
             {showBye ? (
               <th scope="col" className="af-sol-n">

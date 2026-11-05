@@ -5,6 +5,7 @@ import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { loadNhlHistoricalLineups, type NhlHistoricalLineupCoverage } from './nhlHistoricalLineup'
 
 export type ServerTradeParticipantDecision = {
   rosterId: string
@@ -39,6 +40,8 @@ export type ServerTradeDecisionResult = {
    * `trade_decision_snapshots` row, in the proposal's transaction — one receipt per trade, one table.
    */
   evaluationReceipt?: TradeEvaluationReceipt | null
+  lineupBasis?: 'historical_points_per_game'
+  lineupCoverage?: NhlHistoricalLineupCoverage[]
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -119,8 +122,36 @@ export async function evaluateServerTradeDecision(input: {
   gradeProposal?: typeof proposalOneGrade
   /** Injected in tests; defaults to the engine's own dependencies. */
   engineDeps?: Partial<EvaluateTradeDeps>
+  /** Read-only stored NHL actuals; injectable for boundary tests. */
+  historicalNhl?: typeof loadNhlHistoricalLineups
 }): Promise<ServerTradeDecisionResult> {
   const capturedAt = input.capturedAt ?? new Date().toISOString()
+  const historical = await (input.historicalNhl ?? loadNhlHistoricalLineups)({ ...input, capturedAt })
+    .catch(() => null)
+  const historicalResult = (market?: TradeEvaluationReceipt): ServerTradeDecisionResult => {
+    const reason = 'Market grades withheld: historical NHL lineup evidence does not establish asset values or projections.'
+    return { modelVersion: 'nhl-historical-lineup-v1', capturedAt, scope: 'market',
+      evaluatorSupported: true, reason: market?.grade.graded ? null : reason,
+      evaluationReceipt: market ?? null, lineupBasis: 'historical_points_per_game',
+      lineupCoverage: historical!, participants: historical!.map((row) => {
+        const grade = row.rosterId === input.proposerRosterId ? market?.grade : market?.partnerGrade
+        const base: ServerTradeParticipantDecision = { rosterId: row.rosterId,
+        grade: null, gradeWithheld: reason, action: 'review', recommendation: row.reason ?? reason,
+        valueGiven: null, valueReceived: null, valueDelta: null, fairnessScore: null,
+        confidenceScore: 0, coverageStatus: row.status === 'verified' ? 'partial' as const : 'blocked' as const,
+        coveragePct: row.rosterPlayers ? Math.floor(100 * row.scoredPlayers / row.rosterPlayers) : 0,
+        lineupPointsBefore: row.before, lineupPointsAfter: row.after, lineupPointsDelta: row.delta,
+        }
+        return grade?.graded ? { ...base, grade: grade.letter, gradeLabel: grade.label,
+          gradeWithheld: null, action: grade.action, recommendation: grade.recommendation,
+          valueGiven: grade.giveValue, valueReceived: grade.getValue,
+          valueDelta: grade.getValue - grade.giveValue, coverageStatus: 'complete' as const, coveragePct: 100 }
+          : base
+      }) }
+  }
+  const blockedHistoryRead = historical?.some((row) => row.reason === 'Stored NHL history is temporarily unavailable.' ||
+    row.reason === 'Stored roster contains malformed player references.')
+  if (historical && (input.participantRosterIds.length !== 2 || blockedHistoryRead)) return historicalResult()
   if (input.participantRosterIds.length !== 2) {
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: false,
@@ -172,6 +203,7 @@ export async function evaluateServerTradeDecision(input: {
     },
   )
   if (!receipt.canonical) {
+    if (historical) return historicalResult(receipt)
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: true,
       reason: receipt.canonicalError ?? 'Server trade evaluation unavailable.',
@@ -186,8 +218,10 @@ export async function evaluateServerTradeDecision(input: {
     evaluatorSupported: true,
     reason: null,
     evaluationReceipt: receipt,
+    ...(historical ? { lineupBasis: 'historical_points_per_game' as const, lineupCoverage: historical } : {}),
     participants: receipt.canonical.participants.map((evaluation) => {
       const rosterId = evaluation.rosterId
+      const history = historical?.find((row) => row.rosterId === rosterId)
       // The receiver's letter is the proposer's grade seen from the other side — the exact mirror.
       const g = rosterId === input.proposerRosterId ? receipt.grade : receipt.partnerGrade
       return {
@@ -204,9 +238,9 @@ export async function evaluateServerTradeDecision(input: {
         coveragePct: g.graded ? 100 : evaluation.coveragePct,
         gradeLabel: g.graded ? g.label : null,
         gradeWithheld: g.graded ? null : g.reason,
-        lineupPointsBefore: evaluation.rosterImpact?.startingPointsBefore ?? null,
-        lineupPointsAfter: evaluation.rosterImpact?.startingPointsAfter ?? null,
-        lineupPointsDelta: evaluation.rosterImpact?.startingPointsDelta ?? null,
+        lineupPointsBefore: historical ? history?.before ?? null : evaluation.rosterImpact?.startingPointsBefore ?? null,
+        lineupPointsAfter: historical ? history?.after ?? null : evaluation.rosterImpact?.startingPointsAfter ?? null,
+        lineupPointsDelta: historical ? history?.delta ?? null : evaluation.rosterImpact?.startingPointsDelta ?? null,
       }
     }),
   }

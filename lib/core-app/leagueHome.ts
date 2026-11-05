@@ -40,7 +40,12 @@ import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
-import { rosterPlayerIds } from './myRoster'
+import { myRosterCandidates, rosterPlayerIds } from './myRoster'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { buildDynastyHomeDeck, starterIdsOf, taxiIdsOf, type DynastyHomeDeck } from './dynastyLeagueHome'
+import { loadDynastyOutlook } from './dynastyOutlook'
+import { loadChampionHistory } from '@/lib/league/dynastyChampionRafters'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -142,6 +147,12 @@ export type LeagueHomeData = {
    * (lib/core-app/redraftLeagueHome.ts). Absent or null: every other league — Home renders as before.
    */
   redraft?: RedraftHomeDeck | null
+  /**
+   * The Dynasty Era deck for a dynasty league (lib/core-app/dynastyLeagueHome.ts): the season clock,
+   * the rafters, your draft capital, your starters' ages and your taxi squad. Absent or null: every
+   * other league — Home renders as before.
+   */
+  dynasty?: DynastyHomeDeck | null
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
   calendar?: LeagueCalendarEvent[]
@@ -934,6 +945,14 @@ export async function getLeagueHomeData(
       })
     : null
 
+  const dynasty = usesDynastyBackground({
+    isDynasty: league.isDynasty,
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    guillotineMode: league.guillotineMode,
+  })
+    ? await loadDynastyHomeDeck({ league, rosterRows, yours, userId }).catch(() => null)
+    : null
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
@@ -1012,6 +1031,7 @@ export async function getLeagueHomeData(
 
   return {
     redraft,
+    dynasty,
     stage,
     preSeason,
     teamDirectory: teams.map((team) => ({
@@ -1253,4 +1273,87 @@ export async function getLeagueHomeData(
     })(),
     syncAge: { label: age.label, stale: age.stale },
   }
+}
+
+/**
+ * The Dynasty Era deck's reads (lib/core-app/dynastyLeagueHome.ts). Every read is best-effort and only
+ * empties its own block: the history (rafters + first season), the outlook (future picks + starter
+ * ages, the SAME loader My Team uses), and the taxi count off the roster already read above.
+ *
+ * ⚠ AGES ONLY FOR SLEEPER-ID ROSTERS. `SportsPlayer.age` is keyed by Sleeper id. A Sleeper import and a
+ * native league store Sleeper ids on the roster; ESPN, Yahoo, MFL, Fantrax and Fleaflicker store their
+ * own ids, and a numeric id from one namespace can equal a different player's Sleeper id — so for those
+ * the age block is left empty rather than risk another player's age.
+ */
+async function loadDynastyHomeDeck(args: {
+  league: {
+    id: string
+    platform: string | null
+    sport: string | null
+    season: number | null
+    status: string | null
+    leagueType: string | null
+    isDynasty: boolean | null
+    settings: unknown
+    createdAt: Date | null
+    taxiSlots: number | null
+  }
+  rosterRows: Array<{ platformUserId: string; playerData: unknown }>
+  yours: { platformUserId: string | null; externalId: string | null } | null
+  userId: string
+}): Promise<DynastyHomeDeck> {
+  const { league } = args
+  const candidates = args.yours ? myRosterCandidates(args.yours, args.userId) : []
+  const mine =
+    candidates.map((id) => args.rosterRows.find((r) => r.platformUserId === id)).find((r) => r != null) ?? null
+  const platform = String(league.platform ?? '').trim().toLowerCase()
+  const sleeperIds = platform === 'sleeper' || isNativePlatform(league.platform)
+  const starterIds = mine && sleeperIds ? starterIdsOf(mine.playerData) : []
+  const rosterIds = mine && sleeperIds ? rosterPlayerIds(mine.playerData) : []
+
+  const sportRaw = String(league.sport ?? '').trim()
+  const positions = rosterIds.length
+    ? await prisma.sportsPlayer
+        .findMany({
+          where: {
+            sleeperId: { in: rosterIds },
+            ...(sportRaw ? { sport: { in: [...new Set([sportRaw, sportRaw.toUpperCase(), sportRaw.toLowerCase()])] } } : {}),
+          },
+          select: { sleeperId: true, position: true },
+          orderBy: { updatedAt: 'desc' },
+        })
+        .catch(() => [] as Array<{ sleeperId: string | null; position: string | null }>)
+    : []
+  const positionOf = new Map<string, string | null>()
+  for (const row of positions) if (row.sleeperId && !positionOf.has(row.sleeperId)) positionOf.set(row.sleeperId, row.position)
+  const asPlayer = (id: string) => ({ sleeperId: id, name: id, position: positionOf.get(id) ?? null })
+
+  const [history, outlook] = await Promise.all([
+    loadChampionHistory(league.id, args.userId, league.season).catch(() => ({ rafters: null, firstSeason: null })),
+    args.yours
+      ? loadDynastyOutlook({
+          league: {
+            id: league.id,
+            platform: league.platform,
+            leagueType: league.leagueType,
+            isDynasty: league.isDynasty,
+            season: league.season,
+            status: league.status,
+            sport: league.sport,
+          },
+          teamExternalId: args.yours.externalId,
+          rosterCandidates: candidates,
+          starters: starterIds.map(asPlayer),
+          roster: rosterIds.map(asPlayer),
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ])
+
+  return buildDynastyHomeDeck({
+    league: { season: league.season, sport: league.sport, createdAt: league.createdAt, settings: league.settings, platform: league.platform },
+    firstSeasonOnFile: history.firstSeason,
+    rafters: history.rafters,
+    outlook,
+    taxi: mine ? { count: taxiIdsOf(mine.playerData).length, slots: Math.max(0, Number(league.taxiSlots ?? 0) || 0) } : null,
+  })
 }

@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   espnSeason: vi.fn(() => true),
   espnTeamMap: vi.fn(async () => ({ skipped: 'fresh', unmatched: [] as string[] })),
   espnRosters: vi.fn(async (_opts: { deadlineAt: number }) => ({ blocked: false, identitiesCreated: 2, headshotsWritten: 3, errors: 0 })),
+  collegePool: vi.fn(async () => ({ candidates: 0, created: 0, updated: 0, skipped: 0, ambiguous: 0 })),
   heartbeats: [] as Array<{ jobName: string; outcome: Record<string, unknown> | null; threw: boolean }>,
   remainingMs: null as number | null,
 }))
@@ -52,6 +53,8 @@ vi.mock('@/lib/espn/ncaabEspnIngest', () => ({
   syncEspnNcaabTeamMapIfDue: h.espnTeamMap,
   syncEspnNcaabRosters: h.espnRosters,
 }))
+
+vi.mock('@/lib/devy/ncaabRosterPool', () => ({ materializeNcaabRosterPool: h.collegePool }))
 
 /* Faithful to the real contract: run fn, derive the outcome from its result, record, rethrow. */
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
@@ -95,6 +98,7 @@ beforeEach(() => {
   h.espnSeason.mockClear().mockReturnValue(true)
   h.espnTeamMap.mockClear()
   h.espnRosters.mockClear()
+  h.collegePool.mockClear()
   h.heartbeats.length = 0
   h.remainingMs = null
 })
@@ -191,7 +195,9 @@ describe('the ESPN college basketball phase shares the tick without starving the
     const body = await (await intelTick()).json()
 
     expect(h.espnRosters).toHaveBeenCalledTimes(1)
-    expect(h.espnRosters.mock.invocationCallOrder[0]).toBeLessThan(h.refresh.mock.invocationCallOrder[0])
+    expect(h.collegePool).toHaveBeenCalledTimes(1)
+    expect(h.espnRosters.mock.invocationCallOrder[0]).toBeLessThan(h.collegePool.mock.invocationCallOrder[0])
+    expect(h.collegePool.mock.invocationCallOrder[0]).toBeLessThan(h.refresh.mock.invocationCallOrder[0])
     expect(body.espnNcaab).toMatchObject({ rosters: { identitiesCreated: 2, headshotsWritten: 3 } })
     expect(h.heartbeats.find((b) => b.jobName === ESPN_JOB)?.outcome).toMatchObject({ rowsWritten: 5 })
   })

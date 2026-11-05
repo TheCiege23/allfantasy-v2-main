@@ -109,6 +109,7 @@ const ChimmyJsonRequestSchema = z.object({
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS).optional(),
   image: ChimmyImageSchema.optional(),
   userContext: z.object({
+    portfolioState: z.unknown().optional(),
     userId: z.string().trim().min(1).optional(),
     tier: z.enum(['free', 'pro']).optional(),
     sport: z.string().trim().min(1).max(32).optional(),
@@ -422,6 +423,7 @@ function buildForwardedRequest(
     formData.append('messages', JSON.stringify(payload.conversation))
   }
 
+  if (payload.userContext.portfolioState) formData.append('portfolioState', JSON.stringify(payload.userContext.portfolioState))
   if (payload.userContext.sport) {
     formData.append('sport', payload.userContext.sport)
   }

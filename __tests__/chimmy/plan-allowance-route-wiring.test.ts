@@ -73,7 +73,8 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('reports the allowance on every paid answer shape', () => {
-    expect(ROUTE.match(/\.\.\.\(planMeta \? \{ planAllowance: planMeta \} : \{\}\)/g)?.length).toBe(4)
+    // Portfolio comparisons are a fifth paid answer path and must show the same allowance.
+    expect(ROUTE.match(/\.\.\.\(planMeta \? \{ planAllowance: planMeta \} : \{\}\)/g)?.length).toBe(5)
     expect(ROUTE).toMatch(/\.\.\.\(searchPlanMeta \? \{ planAllowance: searchPlanMeta \} : \{\}\)/)
   })
 

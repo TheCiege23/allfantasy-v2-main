@@ -254,7 +254,10 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
 ## Known remaining risk
 
 **Guideline 4.2 (minimum functionality).** A WebView shell is the most common
-rejection for apps like this. The shell adds a native splash, a native status
-bar and a bundled offline screen. The strongest answer is native push
-notifications (APNs), which needs a server-side sender and is not built. If
-review rejects on 4.2, that is the next piece of work.
+rejection for apps like this. The shell adds a native splash and status bar.
+The bundled offline.html is intentionally not configured as Capacitor's
+server.errorPath: Capacitor 8.5.2 loads that page for every WKWebView navigation
+failure, including cancelled navigations. On 2026-11-01 App Review saw
+"You're offline" while the server returned HTTP 200 for /pricing and /upgrade.
+After rebuilding, test the Plans route on an iPad in TestFlight and confirm
+both StoreKit prices and purchases in the sandbox before resubmission.

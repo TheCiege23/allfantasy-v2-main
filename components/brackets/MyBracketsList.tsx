@@ -25,7 +25,7 @@ export default function MyBracketsList({ leagues, language, failed = false }: { 
                 <div><h3>{entry.name}</h3><p>{entry.finalizedAt ? copy.finalized : copy.draft} · {entry._count.picks} {copy.saved}</p></div>
                 <Link className="af-bx-btn af-bx-primary" aria-label={`${copy.open}: ${entry.name}`} href={`/brackets/leagues/${encodeURIComponent(league.id)}/entries/${encodeURIComponent(entry.id)}`}>{copy.open}<ArrowRight size={16} aria-hidden /></Link>
               </li>)}</ul> : <p>{copy.noEntry}</p>}
-              <Link className="af-bx-text-link" href={`/brackets/leagues/${encodeURIComponent(league.id)}`}>{copy.league}<ArrowRight size={14} aria-hidden /></Link>
+              <Link className="af-bx-btn" href={`/brackets/leagues/${encodeURIComponent(league.id)}`}>{copy.league}<ArrowRight size={14} aria-hidden /></Link>
             </div>
           </section>)}</div>}
     </div>

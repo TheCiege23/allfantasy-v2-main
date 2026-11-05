@@ -471,3 +471,179 @@
 .af-sol-table tbody tr[data-you='true'] th {
   background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
 }
+
+/* ── Redesign (2026-11): the forecast as four headline cards, the working as a pill row ──────
+ *
+ * Board: SeasonOutlook. Everything below is presentation over data that already arrives — no new
+ * figures. Scoped to `.af-sol` so the cross-league page, which shares OddsTile and af-outlook.css,
+ * keeps its own look. Prefixed `.af-core` where a base rule would otherwise win on specificity.
+ */
+
+.af-core .af-sol-head {
+  gap: 6px;
+  padding-bottom: 18px;
+}
+.af-core .af-sol-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.af-core .af-sol-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* The forecast card. */
+.af-core .af-sol .af-olk-hero {
+  gap: 16px;
+  padding: 22px;
+  border-radius: 18px;
+}
+.af-core .af-sol .af-olk-odds-row {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.af-core .af-sol .af-olk-odds {
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-core .af-sol .af-olk-odds-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.af-core .af-sol .af-olk-odds-ic {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-sol .af-olk-odds-l {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.af-core .af-sol .af-olk-odds-v {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.af-core .af-sol .af-olk-odds-s {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2, var(--muted));
+}
+.af-core .af-sol .af-olk-range-dot {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.af-core .af-sol .af-olk-decides {
+  font-size: 15px;
+}
+.af-core .af-sol .af-olk-next,
+.af-core .af-sol .af-olk-drivebox {
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+}
+
+/* The working: a pill row in place of the underlined tab strip. */
+.af-core .af-sol .af-olk-tabs {
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-core .af-sol .af-olk-tab {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.af-core .af-sol .af-olk-tab:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.af-core .af-sol .af-olk-tab[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+}
+
+/* In a redraft league the shell's sport identity (af-core-redraft-standings.css) paints the
+   selected tab with a sport-coloured underline and text. On a filled pill that text would sit on its
+   own colour, so the pill takes the sport fill and ink instead — same specificity, later source. */
+.af-core.af-shell[data-format=redraft] .af-sol .af-olk-tab[aria-selected='true'] {
+  background: var(--rd-accent);
+  color: var(--rd-accent-ink);
+  border-bottom-width: 0;
+}
+.af-core.af-shell[data-format=redraft] .af-sol .af-olk-odds-ic {
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent-text);
+}
+
+/* Each panel sits on its own card, like the board's sections. */
+.af-core .af-sol .af-olk-panel {
+  gap: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-core .af-sol .af-olk-panel > .af-label,
+.af-core .af-sol .af-olk-panel h3.af-label {
+  font-size: 12px;
+  color: var(--text);
+}
+.af-core .af-sol .af-sol-clinch {
+  border-radius: 16px;
+  padding: 20px;
+}
+.af-core .af-sol .af-sol-branch {
+  border-radius: 14px;
+}
+.af-core .af-sol .af-sol-branch-v {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 640px) {
+  .af-core .af-sol-title {
+    font-size: 26px;
+  }
+  .af-core .af-sol .af-olk-hero,
+  .af-core .af-sol .af-olk-panel {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .af-core .af-sol .af-olk-odds-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .af-core .af-sol .af-olk-odds {
+    padding: 14px;
+    gap: 8px;
+  }
+  .af-core .af-sol .af-olk-odds-ic {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+  .af-core .af-sol .af-olk-odds-v {
+    font-size: 26px;
+  }
+}

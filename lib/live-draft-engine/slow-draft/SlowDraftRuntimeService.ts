@@ -138,7 +138,7 @@ export async function tryQueueAutoPick(
 
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions)
+  const eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions, rosterRules?.sport)
 
   // Commit Q — pass `expectedOverall` to each submitPick attempt so the
   // Commit-M stale-overall guard short-circuits the candidate loop the

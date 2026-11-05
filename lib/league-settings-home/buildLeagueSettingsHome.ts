@@ -9,6 +9,7 @@
 
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { isPirateLeague, readPirateRules, type PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
 export type SettingsSubPageId =
@@ -24,6 +25,7 @@ export type SettingsSubPageId =
   | 'guillotine-chop-rules'
   /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
   | 'guillotine-rules'
+  | 'pirate-rules'
   | 'playoffs'
   | 'members'
   | 'team-settings'
@@ -61,6 +63,7 @@ export type SettingsHomeLeague = {
   sport?: string | null
   leagueSize?: number | null
   leagueVariant?: string | null
+  leagueType?: string | null
   survivorMode?: boolean | null
   guillotineMode?: boolean | null
   guillotineEndgame?: string | null
@@ -116,6 +119,8 @@ export type BuildSettingsHomeInput = {
   draft: SettingsHomeDraft | null
   /** null = loading (or not a guillotine league). */
   guillotine: SettingsHomeGuillotine | null
+  /** Rules saved in this page session, ahead of the next league-row refresh. */
+  pirateRules?: PirateRules | null
   inviteUrl: string
   /** Viewer's IANA zone; defaults to the runtime's. */
   viewerTimeZone?: string
@@ -273,6 +278,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const { league, teams, canEdit } = input
   const edit = (target: SettingsSubPageId) => (canEdit ? { target } : {})
   const guillotine = isGuillotineSettingsLeague(league)
+  const pirate = isPirateLeague(league)
   const teamCount = league.leagueSize ?? teams.length
   const joined = teams.filter((t) => Boolean(t.claimedByUserId)).length
 
@@ -324,6 +330,28 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [{ id: 'trades', label: 'Trades', value: formatTrades(league), ...edit('trades') }],
     },
   ]
+
+  if (pirate) {
+    const rules = input.pirateRules ?? readPirateRules(league.settings)
+    sections.splice(1, 0, {
+      id: 'pirate',
+      title: 'Pirate League',
+      rows: [
+        {
+          id: 'pirate-rules',
+          label: 'Pirate rules',
+          value: `${rules.protectionLimit} protected · ${rules.selectionHours}h to choose · ${rules.claimHours}h to respond`,
+          ...edit('pirate-rules'),
+        },
+        {
+          id: 'pirate-playoffs',
+          label: 'Steals in playoffs',
+          value: rules.playoffClaims ? 'On' : 'Off',
+          ...edit('pirate-rules'),
+        },
+      ],
+    })
+  }
 
   if (guillotine) {
     const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))

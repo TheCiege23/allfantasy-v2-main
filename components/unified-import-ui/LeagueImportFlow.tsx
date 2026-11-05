@@ -249,12 +249,14 @@ export function LeagueImportFlow({
     if (!supportsAccountDiscovery) return
     if (activeImportProvider !== 'sleeper' && activeImportProvider !== 'yahoo') return
     let cancelled = false
-    void discoverProviderLeagues(activeImportProvider, '', { sport: 'nfl' }).then((result) => {
+    void discoverProviderLeagues(activeImportProvider, '', { sport: activeImportProvider === 'sleeper' ? 'all' : 'nfl' }).then((result) => {
       if (cancelled || !result.ok) return
       const payload = result.data as {
         account?: { displayName?: string; accountIdentifier?: string }
         leagues?: ProviderLeagueDiscoveryItem[]
+        warning?: string
       }
+      if (payload.warning) setDiscoveryError(payload.warning)
       setDiscoveredAccountLabel(
         payload.account?.displayName?.trim() || payload.account?.accountIdentifier?.trim() || '',
       )
@@ -348,7 +350,7 @@ export function LeagueImportFlow({
 
     try {
       const result = await discoverProviderLeagues(provider, accountIdentifier, {
-        sport: 'nfl',
+        sport: provider === 'sleeper' ? 'all' : 'nfl',
       })
       if (!result.ok) {
         throw new Error(result.error || 'Failed to discover provider leagues.')
@@ -357,7 +359,9 @@ export function LeagueImportFlow({
       const payload = result.data as {
         account?: { displayName?: string; accountIdentifier?: string }
         leagues?: ProviderLeagueDiscoveryItem[]
+        warning?: string
       }
+      if (payload.warning) setDiscoveryError(payload.warning)
       setDiscoveredAccountLabel(
         payload.account?.displayName?.trim() ||
           payload.account?.accountIdentifier?.trim() ||
@@ -571,7 +575,7 @@ export function LeagueImportFlow({
                       <p className="mt-1 text-[12px] text-[#ffe9f1]/70">
                         {discoveryUsesConnectedAccount
                           ? 'Lists the NFL leagues on your connected Yahoo account. Connect Yahoo in Settings first if you have not yet.'
-                          : 'Use a provider account identifier to find an NFL league, then preview the canonical import before you commit it.'}
+                          : 'Use a provider account identifier to find your NFL and NBA leagues, then preview an import before you commit it.'}
                       </p>
                     </div>
                     <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">

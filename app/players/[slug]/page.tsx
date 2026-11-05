@@ -67,7 +67,9 @@ type Params = { params: Promise<{ slug: string }> }
 async function resolveIdentity(slug: string) {
   const parts = parsePlayerSlug(slug)
   if (!parts) return null
-  return resolvePublicPlayer(parts.sport, parts.sleeperId)
+  return 'source' in parts && parts.source
+    ? resolvePublicPlayer(parts.sport, parts.externalId, parts.source)
+    : resolvePublicPlayer(parts.sport, parts.sleeperId!)
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -122,9 +124,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (designation && !/^(active|healthy)$/i.test(designation.trim())) {
     bits.push(`Injury designation: ${designation}.`)
   }
-  bits.push(
-    'See his slot in every league you have connected on Sleeper, ESPN and Yahoo — AllFantasy is read-only.'
-  )
+  bits.push('Sign in to see this player in your connected leagues when a verified roster identity is available.')
 
   const description = bits.join(' ').slice(0, 300)
   const url = `${SITE}/players/${canonicalSlug}`
@@ -203,6 +203,7 @@ export default async function PublicPlayerPage({ params }: Params) {
      */
     leagueIds = leagues
       .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+      .filter((l) => String(l.sport ?? 'NFL').toUpperCase() === identity.sport)
       .map((l) => l.id)
   }
 
@@ -226,7 +227,7 @@ export default async function PublicPlayerPage({ params }: Params) {
     detail.player.sport,
     detail.player.team,
     detail.player.position,
-    identity.sleeperId
+    identity.sport === 'NFL' ? identity.sleeperId ?? '' : identity.externalId
   ).catch(() => [])
 
   /*
@@ -287,9 +288,8 @@ export default async function PublicPlayerPage({ params }: Params) {
         */}
         <p className="af-pf-seo-intro">
           {descriptor ? `${detail.player.name} — ${descriptor}.` : detail.player.name}{' '}
-          Slot, injury designation and projection across every fantasy league you have connected on
-          Sleeper, ESPN and Yahoo. AllFantasy is read-only: we show you which league and which screen
-          to make the change on.
+          Available stats, injury designation and projection. Sign in to see this player across
+          connected leagues with verified roster identities.
         </p>
 
         <PlayerFinder
@@ -319,7 +319,7 @@ export default async function PublicPlayerPage({ params }: Params) {
                 const href = playerPath(r)
                 if (!href) return null
                 return (
-                  <li key={`${r.sport}-${r.sleeperId}`}>
+                  <li key={`${r.sport}-${r.source}-${r.externalId}`}>
                     <Link href={href} className="af-pf-related-link">
                       {r.name}
                     </Link>

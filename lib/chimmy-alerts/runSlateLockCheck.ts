@@ -245,7 +245,8 @@ export async function runSlateLockCheck(
           leagueIds: found.map((f) => f.leagueId),
         },
         dedupePrefix,
-        skipChannels: { sms: true, email: true, push: Boolean(channels?.disablePush) },
+        smsBody: 'Your lineup has a fix to make before lock. Open AllFantasy to review it.',
+        skipChannels: { email: true, push: Boolean(channels?.disablePush) },
       })
       tally('sent')
     } catch (e) {

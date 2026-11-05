@@ -18,7 +18,7 @@ import {
 import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SelectionCheck } from '@/components/ui/selection-check'
-import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
+import { intlLocaleOrBrowserDefault, pickEnEs } from '@/lib/i18n/bilingual'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -31,6 +31,25 @@ type PreviewGrade = {
   giveValue: number | null
   getValue: number | null
   evaluationReceiptId: string | null
+  gradeScope?: 'zombie_future_scoring'
+  zombieEligibility?: { status: 'eligible' | 'blocked'; reason?: string }
+  zombieInventory?: { proposer: { before: number; after: number }; receiver: { before: number; after: number } }
+  zombieForecast?: { week: number; teams: Array<{
+    before: ZombieWeekOutcome; after: ZombieWeekOutcome; throughWeek: number
+    season?: { before: ZombiePeriodOutcome; after: ZombiePeriodOutcome }
+  }> }
+  dynastyMarket?: { giveValue: number; getValue: number; asOf: string | null } | null
+}
+
+type ZombiePeriodOutcome = { ledgerBalance: number; eligibleWeeks: number; eligiblePartners: number; cashPayoutCents: number | null }
+
+type ZombieWeekOutcome = {
+  points: number
+  infected: boolean
+  revived: boolean
+  inventoryAfter: number
+  weeklyWinnings: number
+  eligiblePartners: number
 }
 
 function initials(name: string): string {
@@ -810,7 +829,68 @@ export function TradeCenterModal({
                   </span>
                 ) : null}
               </div>
-              {serverGrade?.grade && serverGrade.giveValue != null && serverGrade.getValue != null ? (
+              {serverGrade?.zombieEligibility && (
+                <div role="status" className="rounded border border-white/20 bg-black/30 p-2 text-xs text-white">
+                  <strong>{serverGrade.zombieEligibility.status === 'blocked'
+                    ? pickEnEs({ en: 'Zombie trade blocked', es: 'Intercambio Zombie bloqueado' }, language)
+                    : pickEnEs({ en: 'Current Zombie eligibility verified', es: 'Elegibilidad Zombie actual verificada' }, language)}</strong>
+                  {serverGrade.zombieEligibility.reason && <p>{serverGrade.zombieEligibility.reason}</p>}
+                </div>
+              )}
+              {serverGrade?.zombieInventory && (
+                <section className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Projected item points · Before → After', es: 'Puntos proyectados de objetos · Antes → Después' }, language)}</h4>
+                  <dl className="mt-1 grid grid-cols-2 gap-2">
+                    <div><dt>{proposerName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.proposer.before} → {serverGrade.zombieInventory.proposer.after}</dd></div>
+                    <div><dt>{receiverName}</dt><dd className="tabular-nums">{serverGrade.zombieInventory.receiver.before} → {serverGrade.zombieInventory.receiver.after}</dd></div>
+                  </dl>
+                </section>
+              )}
+              {serverGrade?.zombieForecast && (
+                <section className="space-y-2 rounded border border-white/10 bg-black/20 p-2 text-xs text-white" data-testid="zombie-weekly-forecast">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Projected matchup · Before → After', es: 'Partido proyectado · Antes → Después' }, language)} · {serverGrade.zombieForecast.week}</h4>
+                  <p className="text-white/70">{pickEnEs({ en: 'One scenario using current roles and inventories, assuming no other changes before the projected week.', es: 'Un escenario con los roles e inventarios actuales, suponiendo que no haya otros cambios antes de la semana proyectada.' }, language)}</p>
+                  {serverGrade.zombieForecast.teams.map(({ before, after, throughWeek, season }, i) => {
+                    const number = new Intl.NumberFormat(language, { maximumFractionDigits: 2 })
+                    const yesNo = (value: boolean) => value ? pickEnEs({ en: 'Yes', es: 'Sí' }, language) : 'No'
+                    const rows = [
+                      [{ en: 'Matchup points', es: 'Puntos del partido' }, number.format(before.points), number.format(after.points)],
+                      [{ en: 'Infection', es: 'Infección' }, yesNo(before.infected), yesNo(after.infected)],
+                      [{ en: 'Revival', es: 'Reanimación' }, yesNo(before.revived), yesNo(after.revived)],
+                      [{ en: 'Items after settlement', es: 'Objetos tras la resolución' }, before.inventoryAfter, after.inventoryAfter],
+                      [{ en: 'Weekly ledger change', es: 'Cambio semanal en el registro' }, number.format(before.weeklyWinnings), number.format(after.weeklyWinnings)],
+                      [{ en: 'Eligible trade partners after settlement', es: 'Socios elegibles tras la resolución' }, before.eligiblePartners, after.eligiblePartners],
+                    ] as const
+                    return <div key={i}>
+                      <h5 className="font-semibold">{i === 0 ? proposerName : receiverName}</h5>
+                      <dl>{rows.map(([label, from, to]) => (
+                        <div key={label.en} className="flex justify-between gap-2">
+                          <dt>{pickEnEs(label, language)}</dt><dd className="shrink-0 tabular-nums">{from} → {to}</dd>
+                        </div>
+                      ))}</dl>
+                      {season && <>
+                      <p className="mt-2 text-white/70">{pickEnEs({ en: 'Through projected week', es: 'Hasta la semana proyectada' }, language)} {throughWeek}</p>
+                      <dl>
+                        <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Ledger balance', es: 'Saldo del registro' }, language)}</dt><dd>{number.format(season.before.ledgerBalance)} → {number.format(season.after.ledgerBalance)}</dd></div>
+                        <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Eligible weeks', es: 'Semanas elegibles' }, language)}</dt><dd>{season.before.eligibleWeeks} → {season.after.eligibleWeeks}</dd></div>
+                        <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Partners at end of forecast', es: 'Socios al final del pronóstico' }, language)}</dt><dd>{season.before.eligiblePartners} → {season.after.eligiblePartners}</dd></div>
+                        {season.before.cashPayoutCents != null && season.after.cashPayoutCents != null && (
+                          <div className="flex justify-between gap-2"><dt>{pickEnEs({ en: 'Conditional season cash award (USD)', es: 'Premio condicional de la temporada (USD)' }, language)}</dt><dd>{number.format(season.before.cashPayoutCents / 100)} → {number.format(season.after.cashPayoutCents / 100)}</dd></div>
+                        )}
+                      </dl>
+                      </>}
+                    </div>
+                  })}
+                </section>
+              )}
+              {serverGrade?.dynastyMarket && (
+                <section className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white">
+                  <h4 className="font-semibold">{pickEnEs({ en: 'Dynasty player market reference', es: 'Referencia de mercado de jugadores dynasty' }, language)}</h4>
+                  <p>{pickEnEs({ en: 'Player package sent → received', es: 'Paquete de jugadores enviado → recibido' }, language)}: {serverGrade.dynastyMarket.giveValue} → {serverGrade.dynastyMarket.getValue}</p>
+                  <p className="text-white/70">{pickEnEs({ en: 'Multi-season market units. Review alongside the Zombie season outcomes.', es: 'Unidades de mercado de varias temporadas. Revísalas junto con los resultados de la temporada Zombie.' }, language)}</p>
+                </section>
+              )}
+              {(serverGrade?.grade || serverGrade?.gradeScope === 'zombie_future_scoring') && serverGrade?.giveValue != null && serverGrade?.getValue != null ? (
                 <div className="grid grid-cols-2 gap-2 text-[11px]" data-testid="trade-value-grade-totals">
                   <div className="rounded border border-white/10 bg-black/20 p-2">
                     <p className="text-white/50">{tInterpolate('tradeCenter.modal.teamSends', { name: proposerName })}</p>
@@ -826,7 +906,17 @@ export function TradeCenterModal({
                   {tInterpolate('tradeCenter.modal.review.notGraded', { reason: serverGrade.gradeWithheld })}
                 </p>
               ) : null}
-              {serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
+              {serverGrade?.gradeScope === 'zombie_future_scoring'
+                ? <p className="text-[11px] text-white/70">{pickEnEs({ en: 'Future scoring estimate only', es: 'Solo estimación de puntos futuros' }, language)}</p>
+                : serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
+              {serverGrade?.gradeScope === 'zombie_future_scoring' ? (
+                <p className="text-[11px] text-amber-200/80" data-testid="zombie-item-preview-scope">
+                  {pickEnEs({
+                    en: 'Item estimates use current inventory and hold today’s Horde share constant. The full grade is withheld until infection, revival, loot and cash payouts can be priced.',
+                    es: 'La estimación de objetos usa el inventario actual y mantiene constante la proporción de zombis. La calificación completa se retiene hasta valorar infección, resurrección, botín y premios en efectivo.',
+                  }, language)}
+                </p>
+              ) : null}
               {/*
                 * Phase 6.2/6.3/6.4 — the derivation, not just the verdict. Everything below was
                 * already computed and stored by the engine and rendered nowhere, which made the

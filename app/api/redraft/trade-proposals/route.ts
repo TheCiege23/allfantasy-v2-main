@@ -16,6 +16,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createZombieNativeItemGrader } from '@/lib/decision-os/trade/zombieNativeItemGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -179,6 +180,8 @@ export async function GET(req: NextRequest) {
   // Built only when some proposal has assets to grade — a list with nothing to price reads no chart.
   let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
   const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+  let zombieItemGraderPromise: ReturnType<typeof createZombieNativeItemGrader> | null = null
+  const zombieItemGrader = () => (zombieItemGraderPromise ??= createZombieNativeItemGrader(leagueId))
   const graded = await Promise.all(
     proposals.map(async (p) => {
       const assets = Array.isArray(p.assets) ? p.assets : []
@@ -193,13 +196,15 @@ export async function GET(req: NextRequest) {
       const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
       const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
       const grade = assets.some(a => a.assetType === 'zombie_item')
-        ? { graded: false as const, reason: 'Zombie items require a rules-based review; player-only grades do not price them.', basis: null }
+        ? await zombieItemGrader().then(g => g.grade(p)).catch(() => ({ graded: false as const, reason: 'Zombie item values could not be loaded just now.', basis: null }))
         : assets.length === 0
         ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
         : await Promise.resolve()
             .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
             .catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.', basis: null }))
-      const receiptId = await receiptIdForGrade({
+      const hasZombieItems = assets.some(a => a.assetType === 'zombie_item')
+      // The generic receipt asset union has no item kind. Do not save these item lines as players.
+      const receiptId = hasZombieItems ? null : await receiptIdForGrade({
         surface: 'redraft-trade-list',
         leagueId,
         userId,
@@ -212,10 +217,17 @@ export async function GET(req: NextRequest) {
       return {
         ...p,
         tradeGrade: {
-          grade: grade.graded ? grade.letter : null,
-          partnerGrade: grade.graded ? grade.partnerLetter : null,
-          gradeWithheld: grade.graded ? null : grade.reason,
+          grade: hasZombieItems ? null : grade.graded ? grade.letter : null,
+          partnerGrade: hasZombieItems ? null : grade.graded ? grade.partnerLetter : null,
+          gradeWithheld: hasZombieItems && grade.graded
+            ? 'The future scoring estimate does not yet include infection, revival, loot, or cash payout outcomes.'
+            : grade.graded ? null : grade.reason,
           receiptId,
+          ...(hasZombieItems ? {
+            gradeScope: 'zombie_future_scoring' as const,
+            giveValue: grade.graded ? grade.giveValue : null,
+            getValue: grade.graded ? grade.getValue : null,
+          } : {}),
         },
       }
     }),

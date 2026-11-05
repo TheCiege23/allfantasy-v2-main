@@ -23,6 +23,9 @@ import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
 import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
 import { isBestBallSettings } from "@/lib/core-app/lineupMode"
+import { leagueVariantFor } from "@/lib/core-app/valueBook"
+import { readConfirmedLeagueConcept } from "@/lib/league/leagueConceptOptions"
+import { leagueTypeBasis } from "@/lib/league/leagueTypeGrading"
 import { sleeperIdWhere } from "@/lib/player-identity/externalIdNamespace"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
@@ -250,6 +253,10 @@ function firstBoolean(...values: unknown[]): boolean {
  */
 export function resolveSettings(league: Record<string, unknown>): LeagueGroundingSettings {
   const settings = asRecord(league.settings)
+  const storedType = typeof league.leagueType === 'string' ? league.leagueType : typeof league.format === 'string' ? league.format : null
+  const confirmedType = readConfirmedLeagueConcept(settings)
+  const type = leagueTypeBasis({ settings, leagueType: storedType }).type
+  const variant = leagueVariantFor(settings, storedType)
   const scoringSettings = asRecord(settings.scoringSettings ?? settings.scoring)
   const draftSettings = asRecord(settings.draftSettings ?? settings.draft)
   const rosterSettings = asRecord(settings.rosterSettings ?? settings.roster)
@@ -267,7 +274,7 @@ export function resolveSettings(league: Record<string, unknown>): LeagueGroundin
   const numTeams = firstNumber(league.numTeams, league.leagueSize, settings.numTeams, settings.teamCount, settings.leagueSize) ?? 12
   return {
     sport: String(league.sport ?? "NFL"),
-    leagueType: String(league.leagueType ?? league.format ?? "redraft"),
+    leagueType: type,
     scoringPreset,
     draftType,
     numTeams,
@@ -276,8 +283,8 @@ export function resolveSettings(league: Record<string, unknown>): LeagueGroundin
     isHalfPPR: scoring.includes("half_ppr") || scoring.includes("half-ppr"),
     isStandard: scoring.includes("std") || scoring.includes("standard"),
     isIDP: firstBoolean(league.idp, settings.idp, flags.isIDP) || scoring.includes("idp"),
-    isBestBall: isBestBallSettings(league.settings) || String(league.leagueType ?? "").includes("best_ball"),
-    isDynasty: firstBoolean(league.isDynasty, settings.isDynasty) || String(league.leagueType ?? "").includes("dynasty"),
+    isBestBall: type === 'best_ball' || (!confirmedType && (isBestBallSettings(league.settings) || league.bestBallMode === true)),
+    isDynasty: variant.dynasty || (!confirmedType && firstBoolean(league.isDynasty, settings.isDynasty)),
     /*
      * 🛑 THIS READ WAS FALSE FOR 100% OF PRODUCTION LEAGUES. It used to test only
      * `leagueType.includes("keeper")`, and `leagueType` holds exactly five values across all
@@ -290,9 +297,7 @@ export function resolveSettings(league: Record<string, unknown>): LeagueGroundin
      * blob by `buildImportedLeagueSettings`. The substring is kept as a fallback so a league
      * whose type a human confirms as keeper still reads true.
      */
-    isKeeper:
-      firstBoolean(league.isKeeper, settings.is_keeper, settings.isKeeper) ||
-      String(league.leagueType ?? "").includes("keeper"),
+    isKeeper: variant.keeper || (!confirmedType && firstBoolean(league.isKeeper, settings.is_keeper, settings.isKeeper)),
     playoffTeams: league.playoffTeams != null ? Number(league.playoffTeams) : null,
     playoffWeekStart: firstNumber(league.playoffWeekStart, league.playoffStartWeek),
     rosterSlots: firstNumber(league.rosterSlots, league.rosterSize, rosterSettings.rosterSize, rosterSettings.totalSlots),
@@ -393,6 +398,7 @@ async function loadLeagueRow(leagueId: string): Promise<Record<string, unknown> 
         scoring: true,
         scoringPresetId: true,
         isDynasty: true,
+        bestBallMode: true,
         rosterSize: true,
         status: true,
         season: true,

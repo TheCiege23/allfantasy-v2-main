@@ -1,0 +1,89 @@
+[
+  {
+    "id": "published-rule-conflict",
+    "message": "Explain my league rules for the trade deadline. Compare the stored league setting and the published constitution and state the week in each source.",
+    "sport": "NFL",
+    "leagueId": "chimmy-release-3164-rules-fixture",
+    "tools": [
+      "get_selected_league_rules"
+    ],
+    "contains": [
+      "week 9",
+      "week 10",
+      "constitution"
+    ]
+  },
+  {
+    "id": "historical-mlb-final",
+    "message": "Using the stored MLB result dated November 1, 2025 UTC, compare Toronto Blue Jays and Los Angeles Dodgers. State the winning club and both run totals, with the date.",
+    "sport": "MLB",
+    "tools": [
+      "get_real_game_results"
+    ],
+    "contains": [
+      "dodgers",
+      "blue jays",
+      "3",
+      "1"
+    ]
+  },
+  {
+    "id": "bracket-exact-alert",
+    "message": "What changed in my bracket entry \"Chimmy replay QA-final\" in pool \"Chimmy release 3164 QA-final\"? Change ref: 3f891fe3-a2b1-40b9-b630-072d8621e21a. Use that saved before-and-after result.",
+    "sport": "NCAAF",
+    "source": "bracket_change_alert",
+    "tools": [
+      "get_bracket_entry"
+    ],
+    "contains": [
+      "QA Harbor",
+      "QA Metro"
+    ]
+  },
+  {
+    "id": "locked-points-starter",
+    "message": "Should I start Avery Lockhart or Jordan Ashford?",
+    "sport": "NFL",
+    "leagueId": "chimmy-3164-qa-points",
+    "contains": [
+      "Avery Lockhart",
+      "already kicked off"
+    ],
+    "decisionGap": "players_locked"
+  },
+  {
+    "id": "points-trade-impact",
+    "message": "Should I trade Avery Lockhart for Morgan Westlake?",
+    "sport": "NFL",
+    "leagueId": "chimmy-3164-qa-points",
+    "contains": [
+      "Avery Lockhart",
+      "Morgan Westlake",
+      "14.0 before",
+      "16.0 after",
+      "No trade grade"
+    ],
+    "decisionGap": "trade_impact_incomplete"
+  },
+  {
+    "id": "category-ir-eligibility",
+    "message": "Should I start Casey Bellwood or Jordan Ashford?",
+    "sport": "NBA",
+    "leagueId": "chimmy-3164-qa-categories",
+    "contains": [
+      "Casey Bellwood",
+      "injured reserve"
+    ],
+    "decisionGap": "players_not_on_roster"
+  },
+  {
+    "id": "category-trade-coverage-gap",
+    "message": "Should I trade Avery Lockhart for Morgan Westlake?",
+    "sport": "NBA",
+    "leagueId": "chimmy-3164-qa-categories",
+    "contains": [
+      "No NBA projections"
+    ],
+    "decisionGap": "valuation_missing"
+  }
+]

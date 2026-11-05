@@ -1,7 +1,10 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
 import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { loadDailySportOutlook, type OutlookPlayerInput } from '@/lib/projections/dailySportOutlook'
+import { loadFinderCollegeSoccerOutlook } from '@/lib/projections/finderCollegeSoccerOutlook'
+import { normalizeNcaabGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import type { LineupPlayer } from './myTeam'
 
 /**
@@ -28,30 +31,95 @@ export async function applyDailySportToLineup(
   now: Date = new Date(),
 ): Promise<DailyLineupPeriod | null> {
   const sport = String(league.sport ?? '').trim().toUpperCase()
-  if (!isDailyFormSport(sport) || resolved.size === 0) return null
+  const fantrax = String(league.platform ?? '').trim().toLowerCase() === 'fantrax'
+  const collegeBasketball = fantrax && sport === 'NCAAB'
+  if ((!isDailyFormSport(sport) && !collegeBasketball) || resolved.size === 0) return null
 
   // The same object can sit under a roster id and a Sleeper id; price each one once, under every key.
   const pending = [...resolved.entries()].filter(([, p]) => p.afProjectedPoints == null || p.gameContext == null)
   if (pending.length === 0) return null
 
   const identityByFantraxId = new Map<string, string>()
-  if (String(league.platform ?? '').trim().toLowerCase() === 'fantrax') {
+  if (fantrax) {
     const rows = await prisma.playerIdentityMap
       .findMany({
         where: { sport, fantraxId: { in: pending.map(([id]) => id) } },
         select: { id: true, fantraxId: true },
       })
       .catch(() => [] as Array<{ id: string; fantraxId: string | null }>)
-    for (const r of rows) if (r.fantraxId) identityByFantraxId.set(r.fantraxId, r.id)
+    const ambiguous = new Set<string>()
+    for (const r of rows) {
+      if (!r.fantraxId) continue
+      if (identityByFantraxId.has(r.fantraxId)) ambiguous.add(r.fantraxId)
+      identityByFantraxId.set(r.fantraxId, r.id)
+    }
+    for (const id of ambiguous) identityByFantraxId.delete(id)
+  }
+
+  const sleeperNba = sport === 'NBA' && String(league.platform ?? '').trim().toLowerCase() === 'sleeper'
+  const identityBySleeperId = new Map<string, string>()
+  if (sleeperNba) {
+    const bridge = await bridgeImportedGameLogIds({
+      provider: 'sleeper',
+      sport,
+      rosterIds: pending.map(([id]) => id),
+    }).catch(() => null)
+    for (const identityId of bridge?.gameLogIds ?? []) {
+      const sleeperId = bridge?.rosterIdFor(identityId)
+      if (sleeperId) identityBySleeperId.set(sleeperId, identityId)
+    }
   }
 
   const players: OutlookPlayerInput[] = pending.map(([id, p]) => ({
     key: id,
-    lookupId: identityByFantraxId.get(id) ?? id,
+    lookupId: sleeperNba
+      ? identityBySleeperId.get(id) ?? `unbridged:${id}`
+      : identityByFantraxId.get(id) ?? id,
     team: p.team,
     injuryStatus: p.injuryStatus,
   }))
   const season = league.season == null || String(league.season).trim() === '' ? null : Number(league.season)
+  if (collegeBasketball) {
+    const identityIds = [...new Set(identityByFantraxId.values())]
+    const [outlook, logs] = await Promise.all([
+      loadFinderCollegeSoccerOutlook(prisma, {
+        league: { sport, season: Number.isInteger(season) ? season : null, settings: league.settings },
+        players: pending.map(([id, player]) => ({
+          key: id,
+          lookupId: identityByFantraxId.get(id) ?? null,
+          team: player.team,
+          position: player.position,
+          injuryStatus: player.injuryStatus,
+        })),
+        now,
+      }).catch(() => null),
+      identityIds.length && Number.isInteger(season)
+        ? prisma.playerGameStat.findMany({
+            where: { sportType: sport, season: season!, source: 'rolling_insights_live', playerId: { in: identityIds }, gameDate: { lte: now } },
+            orderBy: [{ gameDate: 'desc' }, { gameId: 'desc' }],
+            distinct: ['playerId'],
+            select: { playerId: true, gameDate: true, normalizedStatMap: true },
+          }).catch(() => [])
+        : [],
+    ])
+    const logsByIdentity = new Map(logs.map((log) => [log.playerId, log]))
+    for (const [id, player] of pending) {
+      const log = logsByIdentity.get(identityByFantraxId.get(id) ?? '')
+      if (log?.gameDate) {
+        const stats = normalizeNcaabGameStats(log.normalizedStatMap).stats
+        const box = ['pts', 'reb', 'ast', 'stl', 'blk', 'to'].flatMap((key) =>
+          typeof stats?.[key] === 'number' ? [{ key, value: stats[key] }] : [],
+        )
+        if (box.length) player.latestCollegeBoxScore = { date: log.gameDate.toISOString().slice(0, 10), stats: box }
+      }
+      const form = outlook?.byKey.get(id)
+      if (!form) continue
+      if (player.afProjectedPoints == null) player.afProjectedPoints = player.ruledOut ? 0 : form.projectedPoints
+      player.gameContext ??= dailyGameContext(player.team, form, 'week')
+    }
+    return outlook?.period ? { kind: 'week', day: null, week: outlook.period.week } : null
+  }
+
   const outlook = await loadDailySportOutlook(prisma, {
     league: { sport, season: Number.isInteger(season) ? season : null, settings: league.settings },
     players,

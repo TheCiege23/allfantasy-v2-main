@@ -273,7 +273,12 @@ export function playerNamesAgree(a: string | null | undefined, b: string | null 
       .replace(/[^a-z]/g, '')
       .replace(/(jr|sr|ii|iii|iv|v)$/, '')
   const x = norm(a)
-  return x.length > 0 && x === norm(b)
+  const y = norm(b)
+  if (!x || !y) return false
+  if (x === y) return true
+  // Coastal Carolina listed the same #23 RB as Dominic Knicely in its 2025 guide
+  // and Dominic Lee-Knicely on its 2026 roster. Keep this verified alias exact.
+  return [x, y].sort().join('|') === 'dominicknicely|dominicleeknicely'
 }
 
 /**

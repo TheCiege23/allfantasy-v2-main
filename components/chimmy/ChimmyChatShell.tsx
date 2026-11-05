@@ -18,6 +18,7 @@ import type { AIChatContext } from '@/lib/chimmy-chat'
 import { loadChimmyConversation } from '@/lib/chimmy-conversation-service'
 import { useAnalysisUnlock } from './useAnalysisUnlock'
 import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubble'
+import { readBracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'
 import ChimmyStrategyCard from './ChimmyStrategyCard'
@@ -276,7 +277,7 @@ export default function ChimmyChatShell({
   const transcriptRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
-  const initialPromptApplied = useRef(false)
+  const initialPromptApplied = useRef<string | null>(null)
   const analysisUnlock = useAnalysisUnlock((id, result) => {
     setMessages(all => all.map(message => message.id === id ? { ...message, content: result.response, meta: result.meta } : message))
   }, message => setInlineError(message), setIsTyping)
@@ -403,6 +404,13 @@ export default function ChimmyChatShell({
   const chimmyFeatureFlags = useMemo(() => getChimmyFeatureFlags(), [])
 
   useEffect(() => {
+    if (!chimmyFeatureFlags.aiKpiEvents || requestContext.source !== 'bracket_change_alert' || !initialPrompt.trim()) return
+    void trackChimmyAIEvent({ event_name: 'bracket_alert_open', surface: 'chimmy_chat',
+      action: 'bracket_alert_open', timestamp: new Date().toISOString(),
+      metadata: { source: requestContext.source } })
+  }, [chimmyFeatureFlags.aiKpiEvents, requestContext.source, initialPrompt])
+
+  useEffect(() => {
     if (!chimmyFeatureFlags.assistantModes) return
     if (typeof window === 'undefined') return
     const storageKey = `chimmy:assistant-mode:${threadStorageKey}`
@@ -468,9 +476,13 @@ export default function ChimmyChatShell({
   }, [elevenLabsVoiceId])
 
   useEffect(() => {
-    if (initialPrompt && !initialPromptApplied.current) {
+    if (!initialPrompt) {
+      initialPromptApplied.current = null
+      return
+    }
+    if (initialPromptApplied.current !== initialPrompt) {
       setInput(initialPrompt)
-      initialPromptApplied.current = true
+      initialPromptApplied.current = initialPrompt
       if (clearUrlPromptAfterUse && typeof window !== 'undefined') {
         const u = new URL(window.location.href)
         if (u.searchParams.has('prompt') || u.searchParams.has('from')) {
@@ -610,7 +622,10 @@ export default function ChimmyChatShell({
     [elevenLabsVoiceId, handleStopVoice, isVoicePlaying, ttsUnavailable, voiceConfig, voiceMessageId]
   )
 
+  const portfolioStateRef = useRef<import('@/lib/chimmy/portfolio/types').PortfolioState | undefined>(undefined)
+  useEffect(() => { portfolioStateRef.current = undefined }, [threadStorageKey])
   const handleFollowUp = useCallback((chip: ChimmyFollowUpChip) => {
+    portfolioStateRef.current = chip.portfolioState
     setInput(chip.prompt)
     setInlineError(null)
     if (!chimmyFeatureFlags.aiKpiEvents) return
@@ -754,7 +769,7 @@ export default function ChimmyChatShell({
         message: outgoingText,
         imageFile: image,
         conversation: [...conversationBeforeUser, userMsg],
-        context: requestContext,
+        context: { ...requestContext, portfolioState: portfolioStateRef.current },
         onChunk: (text) => {
           streamedAssistantHandled = true
           const partialAssistant: ChimmyChatMessage = {
@@ -806,6 +821,7 @@ export default function ChimmyChatShell({
           recommendedTool: result.meta?.recommendedTool,
           toolsUsed: result.meta?.toolsUsed,
           dataSources: result.meta?.dataSources,
+          bracketEvidence: readBracketEvidence(result.meta?.bracketEvidence) ?? undefined,
           sourceLinks: result.meta?.sourceLinks,
           syncFreshness: result.meta?.syncFreshness,
           quantData: result.meta?.quantData,

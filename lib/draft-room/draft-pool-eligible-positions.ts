@@ -20,11 +20,18 @@ export function normalizedPlayerPositionForDraftFilter(raw: string | undefined |
 export function draftPoolRowMatchesEligiblePositions(
   playerPositionRaw: string | undefined | null,
   eligible: Set<string> | null,
+  sport?: string | null,
 ): boolean {
   if (!eligible?.size) return true
   const norm = normalizedPlayerPositionForDraftFilter(playerPositionRaw)
   if (!norm) return false
   if (eligible.has(norm)) return true
+  if (['NBA', 'NCAAB'].includes(String(sport ?? '').toUpperCase())) {
+    if (norm === 'G' && (eligible.has('PG') || eligible.has('SG'))) return true
+    if (norm === 'F' && (eligible.has('SF') || eligible.has('PF'))) return true
+    if ((norm === 'PG' || norm === 'SG') && eligible.has('G')) return true
+    if ((norm === 'SF' || norm === 'PF') && eligible.has('F')) return true
+  }
   if (norm === 'DST' && eligible.has('DEF')) return true
   return false
 }
@@ -36,7 +43,8 @@ export function draftPoolRowMatchesEligiblePositions(
 export function filterEntriesByDraftEligiblePositions<T extends { position?: string | null }>(
   entries: readonly T[],
   draftEligiblePositions: Set<string> | null | undefined,
+  sport?: string | null,
 ): T[] {
   if (!draftEligiblePositions?.size) return [...entries]
-  return entries.filter((e) => draftPoolRowMatchesEligiblePositions(e.position, draftEligiblePositions))
+  return entries.filter((e) => draftPoolRowMatchesEligiblePositions(e.position, draftEligiblePositions, sport))
 }

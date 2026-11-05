@@ -51,6 +51,7 @@ describe('resolveLegacySettingsPanel: old settings entries → the League Settin
     // CommissionerOperationsWorkspace "Trade Settings" passes the singular
     ['trade', 'trades'],
     ['waivers', 'waivers'],
+    ['pirate-rules', 'pirate-rules'],
   ])('%s → %s', (panel, target) => {
     expect(resolveLegacySettingsPanel(panel)).toBe(target)
   })

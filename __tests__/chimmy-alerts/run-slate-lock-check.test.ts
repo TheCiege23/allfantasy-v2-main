@@ -228,7 +228,7 @@ describe('runSlateLockCheck', () => {
       type: 'chimmy_slate_lock_check',
       severity: 'high',
       leagueId: 'L1',
-      skipChannels: { sms: true, email: true, push: false },
+      skipChannels: { email: true, push: false },
     })
     expect(sent.title).toBe('Lineups lock in 60 min (8:15 PM ET): 1 fix in League L1')
     expect(sent.body).toContain('Jayden Reed')

@@ -1,4 +1,4 @@
-import { separateFixtureWhisperers } from './helpers/zombie-current-policy-fixture'
+import { separateFixtureWhisperers, acceptFixtureNflWhispererOffer } from './helpers/zombie-current-policy-fixture'
 /** Replay recorded game lines through the real scoring/finalizer/Zombie services on CI's disposable database.
  * Player names, IDs, lines and complete week slates are recorded facts. Fixture ownership,
  * one-player lineups and the pre-existing Horde member are controlled test setup.
@@ -10,6 +10,7 @@ import { prisma } from '../lib/prisma'
 import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
 import { ensureZombieSeasonActivated } from '../lib/zombie/activateNativeZombieLeague'
 import { runWeeklyResolution } from '../lib/zombie/weeklyResolutionEngine'
+import { trustedZombieWeekStart } from '../lib/zombie/zombieWeekGameStart'
 import { syncPlayerWeeklyScoresForRedraftSeason, normalizeNflWeeklyStats } from '../lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '../lib/redraft/scoringEngine'
 import { finalizeRedraftWeek } from '../lib/redraft/weekFinalizer'
@@ -136,7 +137,19 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       } })
       const activated = await ensureZombieSeasonActivated({ leagueId, redraftSeasonId: season.id })
       expect(activated.ok).toBe(true)
+      await acceptFixtureNflWhispererOffer(leagueId)
       const z = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
+      if (sport === 'NFL') {
+        // The recorded slate comes from TheSportsDB, while the production NFL
+        // combat clock requires the API-Sports calendar namespace. Supply an
+        // explicitly controlled clock fixture using the recorded slate's first
+        // kickoff. This is not an API-Sports recording or provider calibration.
+        const kickoff = new Date(Math.min(...recorded.slate.filter(g => g.sport === 'NFL' && g.week === 1).map(g => new Date(g.startTime).getTime())))
+        await prisma.sportsGame.create({ data: { sport: 'NFL', source: 'api_sports', externalId: `zombie-calendar:${leagueId}:1`,
+          homeTeam: 'CONTROLLED_CLOCK_HOME', awayTeam: 'CONTROLLED_CLOCK_AWAY', season: 2026, seasonType: 'regular', week: 1,
+          status: 'final', startTime: kickoff, expiresAt: new Date('2099-01-01') } })
+        expect(await trustedZombieWeekStart('NFL', 2026, 1)).not.toBeNull()
+      }
       expect(await prisma.zombieCoWhisperer.count({ where: { zombieLeagueId: z.id } })).toBe(whisperers - 1)
       await separateFixtureWhisperers(leagueId, season.id, 1)
       const pending = await runWeeklyResolution(z.id, 1)
@@ -249,6 +262,7 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       console.log(sport + ' recorded-provider replay: ' + sync.cacheRowsRead + ' game rows, 8 scores, 4 final matchups, infection, winnings and one report')
     }
   } finally {
+    if (leagueIds.length) await prisma.sportsGame.deleteMany({ where: { source: 'api_sports', externalId: { in: leagueIds.map(id => `zombie-calendar:${id}:1`) } } })
     // Weekly score rows are shared by player/sport/year, so remove only this replay's
     // recorded-player scores on the guarded disposable DB, including on failed attempts.
     await prisma.playerWeeklyScore.deleteMany({ where: {

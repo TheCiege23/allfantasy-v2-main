@@ -558,9 +558,16 @@
   padding: 0;
   list-style: none;
 }
+/*
+ * ⚠ TWO COLUMNS, NOT THREE (fixed 2026-11-02 from the live page). League | advice | buttons put
+ * the advice column beside the name even when a row had no advice, and in the home's two-column
+ * layout at 1280px that left the name ~70px: "33 1/…", "Four …", "Jacksonville Pr…". The advice
+ * now sits under the league at every width (it already did on tablet), and the name wraps to two
+ * lines rather than cutting off — a league name is how you know which row you are in.
+ */
 .af-triage-fix {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.4fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px 12px;
   padding: 8px 8px 8px 12px;
@@ -580,21 +587,26 @@
 }
 .af-triage-fix-league:hover .af-triage-fix-name { text-decoration: underline; }
 .af-triage-fix-name {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .af-triage-fix .af-triage-slot {
   flex: none;
   margin-left: 0;
 }
 .af-triage-fix-advice {
+  grid-row: 2;
+  grid-column: 1 / -1;
   min-width: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
 }
+.af-triage-fix-advice:empty { display: none; }
 .af-triage-fix-actions {
   display: flex;
   flex-wrap: wrap;
@@ -634,6 +646,17 @@
 
 /* Leagues that need nothing from you stay chips, under a quiet label. */
 .af-triage-row .af-triage-leagues { margin-top: 10px; align-items: center; }
+/*
+ * ⚠ THE CHIP CUT OFF ITS OWN SLOT TAG (fixed 2026-11-02 from the live page). The original chip
+ * caps at 220px with overflow hidden, and because the league name is a bare text node rather than
+ * its own box, a long name pushed "benched ✓" out of the chip — "Elimination Station 2 be". The
+ * slot is the half of the chip that answers "do I need to act here", so the chip now sizes to its
+ * content and the row wraps instead.
+ */
+.af-triage-row .af-triage-leagues .af-triage-league {
+  max-width: 100%;
+  overflow: visible;
+}
 .af-triage-also {
   margin-right: 2px;
   color: var(--muted);
@@ -646,15 +669,6 @@
   max-width: none;
 }
 
-/* Tablet: the advice drops under the league so the buttons keep their width. */
-@media (max-width: 960px) {
-  .af-triage-fix { grid-template-columns: minmax(0, 1fr) auto; }
-  .af-triage-fix-advice {
-    grid-row: 2;
-    grid-column: 1 / -1;
-  }
-  .af-triage-fix-advice:empty { display: none; }
-}
 
 /* Phone: one column per fix row, full-width 44px buttons (the authed-phone contract). */
 @media (max-width: 640px) {

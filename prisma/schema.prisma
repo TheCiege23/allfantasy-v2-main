@@ -371,6 +371,8 @@ model PlayerIdentityMap {
   currentTeam       String?
   dob               String?
   sleeperId         String?  @unique
+  /// NBA Sleeper ids live in a different namespace from NFL Sleeper ids.
+  sleeperNbaId      String?
   fantasyCalcId     String?
   rollingInsightsId String?
   apiSportsId       String?
@@ -407,6 +409,7 @@ model PlayerIdentityMap {
   fantraxId         String?
 
   @@index([normalizedName])
+  @@unique([sport, sleeperNbaId])
   @@index([fantasyCalcId])
   @@index([rollingInsightsId])
   @@index([apiSportsId])
@@ -6237,6 +6240,8 @@ enum LeagueLifecycleState {
 
 model League {
   id                                    String                                 @id @default(uuid())
+  pirateProtectionSets                  PirateProtectionSet[]
+  pirateClaims                          PirateClaim[]
   // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
   // docs/commissioner-os/TENANCY.md §5.
   //
@@ -10258,6 +10263,8 @@ model ZombieLeague {
   commissionerId           String?
   currentTeamCount         Int                      @default(0)
   currentWeek              Int                      @default(0)
+  correctionHoldFromWeek   Int?
+  latestCorrectionReviewId String?
   draftScheduledAt         DateTime?
   isPaid                   Boolean                  @default(false)
   isSingleLeague           Boolean                  @default(false)
@@ -10312,11 +10319,69 @@ model ZombieLeague {
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
   coWhisperers             ZombieCoWhisperer[]
+  roleWorkflows            ZombieRoleWorkflow[]
+  correctionReviews        ZombieCorrectionReview[]
 
   @@index([universeId])
   @@index([levelId])
   @@index([status])
   @@map("zombie_leagues")
+}
+
+/// Versioned Zombie season reviews, ownership history, ballots and acceptance evidence.
+model ZombieOperationsRecord {
+  id String @id @db.VarChar(180)
+  scope String @db.VarChar(100)
+  season Int
+  kind String @db.VarChar(32)
+  payload Json
+  actorUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([scope, season, kind])
+  @@map("zombie_operations_records")
+}
+
+model ZombieCorrectionReview {
+  id                 String       @id @default(uuid())
+  zombieLeagueId     String
+  fromWeek           Int
+  sourceHash         String       @db.VarChar(64)
+  status             String       @default("ready") @db.VarChar(24)
+  source             Json
+  plan               Json
+  requestedByUserId  String
+  approvedByUserId   String?
+  reason             String?
+  appliedAt          DateTime?
+  effectsPending     Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  league             ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@unique([zombieLeagueId, fromWeek, sourceHash], map: "zombie_correction_source_key")
+  @@index([effectsPending, updatedAt])
+  @@map("zombie_correction_reviews")
+}
+
+model ZombieRoleWorkflow {
+  id String @id @db.VarChar(160)
+  zombieLeagueId String
+  kind String @db.VarChar(32)
+  week Int?
+  actorUserId String?
+  targetUserId String?
+  status String @default("pending") @db.VarChar(24)
+  deadlineAt DateTime?
+  state Json
+  decision String? @db.VarChar(24)
+  decidedByUserId String?
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  league ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+  @@index([zombieLeagueId, status])
+  @@index([status, deadlineAt])
+  @@map("zombie_role_workflows")
 }
 
 model WhispererRecord {
@@ -14795,6 +14860,7 @@ model RedraftRosterMoveHistory {
 
 model RedraftMatchup {
   id               String            @id @default(cuid())
+  pirateClaims     PirateClaim[]
   seasonId         String
   leagueId         String
   week             Int
@@ -14821,6 +14887,69 @@ model RedraftMatchup {
   @@index([homeRosterId])
   @@index([awayRosterId])
   @@map("redraft_matchups")
+}
+
+/// One manager's protection declaration for one scoring period. A void set remains
+/// persisted so an attempted late/oversized change cannot silently restore locks.
+model PirateProtectionSet {
+  id            String   @id @default(cuid())
+  leagueId      String
+  seasonId      String
+  week          Int
+  rosterId      String
+  playerIds     Json     @default("[]")
+  lockAt        DateTime
+  status        String   @default("active") @db.VarChar(16)
+  voidReason    String?  @db.VarChar(64)
+  actorUserId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, seasonId, week, rosterId])
+  @@index([leagueId, seasonId, week])
+  @@map("pirate_protection_sets")
+}
+
+/// Exactly one optional steal for each final head-to-head matchup.
+model PirateClaim {
+  id               String          @id @default(cuid())
+  leagueId         String
+  seasonId         String
+  week             Int
+  matchupId        String?
+  playoffMatchupId String?
+  claimCycle       Int             @default(0)
+  winnerRosterId   String
+  loserRosterId    String
+  playerId         String?
+  offeredPlayerId  String?
+  counterPlayerId  String?
+  status           String          @default("awaiting_selection") @db.VarChar(32)
+  deadlineAt       DateTime?
+  selectionDeadlineAt DateTime?
+  settledReturnPlayerId String?
+  overflowGraceUntil DateTime?
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reversalReason   String?
+  selectedAt       DateTime?
+  respondedAt      DateTime?
+  transferredAt    DateTime?
+  resolutionNote   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  league           League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  matchup          RedraftMatchup? @relation(fields: [matchupId], references: [id], onDelete: Cascade)
+  playoffMatchup   RedraftPlayoffMatchup? @relation(fields: [playoffMatchupId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, seasonId, week])
+  @@unique([matchupId, winnerRosterId, claimCycle])
+  @@unique([playoffMatchupId, winnerRosterId, claimCycle])
+  @@index([status, deadlineAt])
+  @@index([status, selectionDeadlineAt])
+  @@index([loserRosterId, playerId, status])
+  @@map("pirate_claims")
 }
 
 model RedraftWaiverClaim {
@@ -15528,6 +15657,7 @@ model RedraftPlayoffSeed {
 }
 
 model RedraftPlayoffMatchup {
+  pirateClaims   PirateClaim[]
   id             String                  @id
   seasonId       String
   roundId        String

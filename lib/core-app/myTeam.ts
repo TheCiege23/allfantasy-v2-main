@@ -15,7 +15,7 @@ import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { isBestBallSettings } from './lineupMode'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences, hasIdpScoring, isIdpPosition } from './scoringNotes'
@@ -38,6 +38,7 @@ import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { lookupNcaafProjections } from './ncaafProjections'
 import { applyDailySportToLineup, type DailyLineupPeriod } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
@@ -187,6 +188,7 @@ export type LineupPlayer = {
    * unknown or the sport is football, which is not the same as "he plays" (myTeamDailySport.ts).
    */
   noGamePeriod?: 'day' | 'week'
+  latestCollegeBoxScore?: { date: string; stats: Array<{ key: string; value: number }> }
   /**
    * Weekly projection for this player, or null when the feed does not carry him.
    *
@@ -489,6 +491,7 @@ async function resolvePlayers(
    * someone's lineup — see `providerIdentityNames.ts`.
    */
   platform: string,
+  fantraxSnapshotId?: string | null,
 ): Promise<Map<string, LineupPlayer>> {
   /*
    * ⚠ IN AN IDP LEAGUE THE GENERIC NUMBER IS NOT A PROJECTION OF ANYTHING for a
@@ -838,6 +841,16 @@ async function resolvePlayers(
      * Same week window as the Sleeper path: `week` comes from `resolveSportsWeek(sport)`. A
      * missing directory or week leaves every fixture null, exactly as before.
      */
+    if (String(sport).toUpperCase() === 'NCAAF' && scoringSettings) {
+      const collegeProjections = await lookupNcaafProjections(ids, null, 'fantrax').catch(() => new Map())
+      for (const [id, projection] of collegeProjections) {
+        const player = out.get(id)
+        if (!player || !projection.componentStats) continue
+        const scored = computeLeagueProjectedPoints(projection.componentStats, scoringSettings)
+        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points })
+      }
+    }
+
     if (String(sport).toUpperCase() === 'NCAAF' && week) {
       const pending = [...out.entries()].filter(([, p]) => p.team && p.kickoff == null)
       const index = pending.length > 0 ? await loadCollegeTeamIndex().catch(() => null) : null
@@ -875,7 +888,7 @@ async function resolvePlayers(
 
   const unresolvedIds = ids.filter((id) => !out.has(id))
   const providerNames = unresolvedIds.length
-    ? await lookupProviderIdentityNames(platform, sport, unresolvedIds).catch(
+    ? await lookupProviderIdentityNames(platform, sport, unresolvedIds, fantraxSnapshotId).catch(
         () => new Map<string, { name: string }>(),
       )
     : new Map<string, { name: string }>()
@@ -1228,7 +1241,8 @@ async function loadMyTeamData(
     projectionWeek,
     sportsWeek,
     scoringSettings,
-    String(league.platform ?? '')
+    String(league.platform ?? ''),
+    league.platformLeagueId,
   ))
 
   // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
@@ -1641,7 +1655,7 @@ async function loadMyTeamData(
     const missing = [...new Set([...lineups.values()].flat())].filter((id) => !resolved.has(id))
     const extra =
       missing.length > 0
-        ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''))
+        ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''), league.platformLeagueId)
         : new Map<string, LineupPlayer>()
     if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
     // The opponent's starters get the same game-day read yours did, so the forecast knows who has played.
@@ -1821,6 +1835,9 @@ async function loadMyTeamData(
      * would report a manager's own unfilled FLEX as our identity failure.
      */
     identityNote: identityGapNote({
+      projectionGap: sport === 'NCAAB' && league.platform === 'fantrax' && hasScoringRules(scoringSettings)
+        ? 'Your Fantrax scoring rules are saved. No college basketball projections are available for this lineup, so the bench check is unavailable.'
+        : undefined,
       platform: String(league.platform ?? 'manual').toLowerCase(),
       total: starters.filter((sl) => !sl.empty).length,
       named: starters.filter((sl) => !sl.empty && sl.player != null).length,

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
+import '@/components/core-app/af-player-finder-redesign.css'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
@@ -16,6 +17,7 @@ import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
+import type { FinderSport } from '@/lib/core-app/finderSports'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
 import { GameDayBanner, type GameDayLeague } from '@/components/core-app/player-finder/GameDayBanner'
@@ -67,6 +69,8 @@ import { FollowButton } from '@/components/core-app/player-finder/FollowButton'
 import { LeagueActionCards } from '@/components/core-app/player-finder/LeagueActionCards'
 import { PhoneFold } from '@/components/core-app/player-finder/PhoneFold'
 import { PhoneSearchDock } from '@/components/core-app/player-finder/PhoneSearchDock'
+import { MatchPositionFilter, matchPositions } from '@/components/core-app/player-finder/MatchPositionFilter'
+import { redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { buildLeagueCards } from '@/lib/core-app/leagueActions'
 import { ExposureChip, FormSpark } from '@/components/core-app/player-finder/PlayerFunChips'
 import { CoinFlips, type FlipLink } from '@/components/core-app/player-finder/CoinFlips'
@@ -151,6 +155,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 export type PlayerFinderProps = {
   query: string
+  sport?: FinderSport | null
   matches: PlayerMatch[]
   detail: PlayerDetail | null
   leagueCount: number
@@ -423,6 +428,7 @@ function rowAction(r: LeagueRow, last: string, t: FinderCopy, language: string):
 
 export function PlayerFinder({
   query,
+  sport = null,
   matches,
   detail,
   leagueCount,
@@ -458,6 +464,7 @@ export function PlayerFinder({
 }: PlayerFinderProps) {
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
+  const [matchPos, setMatchPos] = useState<string | null>(null)
   /** A loader's reason, in the reader's language (whole, or English as written). */
   const why = (reason: string) => reasonText(reason, language)
   const depthLocked = depthAccess?.unlocked === false
@@ -470,6 +477,7 @@ export function PlayerFinder({
     !signedIn ? t.signInReason : why((state as { reason: string }).reason)
 
   const leagueParam = selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''
+  const sportParam = sport ? `&sport=${sport}` : ''
 
   // ── Derived, once, from the loaders' output ──────────────────────────────
   /*
@@ -493,12 +501,12 @@ export function PlayerFinder({
   const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId, detail.player.source) : null
   const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId, compare.player.source) : null
   const vsHref = (ref: string) =>
-    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${leagueParam}` : null
+    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${sportParam}${leagueParam}` : null
   const swapHref =
     detailRef && compareRef && compare
-      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${leagueParam}`
+      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}`
       : '/core/players'
-  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${leagueParam}` : '/core/players'
+  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}` : '/core/players'
 
   /** The trade visual's opening package, for the pitch on the trade-window card. */
   const pitchPackage: PitchPackage =
@@ -506,7 +514,7 @@ export function PlayerFinder({
       ? { give: tradeVisual.data.recommended.give.map((a) => a.name), fairness: tradeVisual.data.recommended.fairness }
       : null
   const allLeaguesHref = detail
-    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}`
+    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}`
     : '/core/players'
 
   const impactRows: LeagueImpact[] = (detail?.impact.available ? detail.impact.data : []).filter((i) =>
@@ -611,7 +619,7 @@ export function PlayerFinder({
       : []
   const stripLeagueHref = (leagueId: string) =>
     detail
-      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}&league=${encodeURIComponent(leagueId)}`
+      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}&league=${encodeURIComponent(leagueId)}`
       : '/core/players'
 
   /*
@@ -672,10 +680,16 @@ export function PlayerFinder({
     ? matches.filter((m) => !(m.externalId === detail.player.externalId && m.sport === detail.player.sport))
     : matches
 
+  const sheet = Boolean(detail && signedIn)
+  const sheetCloseHref = `/core/players${query.trim() ? `?q=${encodeURIComponent(query)}${leagueParam}` : selectedLeagueId ? `?league=${encodeURIComponent(selectedLeagueId)}` : ''}`
+  const posOptions = matchPositions(matches)
+  // A new search keeps the component mounted; a pick that matches nobody in it falls back to All.
+  const activePos = matchPos && posOptions.includes(matchPos) ? matchPos : null
+  const shownMatches = activePos ? matches.filter((m) => (m.position ?? '').trim().toUpperCase() === activePos) : matches
   return (
-    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)}>
-      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar owns that lane. */}
-      {detail && leagueView ? null : <PhoneSearchDock />}
+    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)} data-sheet={sheet || undefined}>
+      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar and the sheet own that lane. */}
+      {(detail && leagueView) || sheet ? null : <PhoneSearchDock />}
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -689,7 +703,7 @@ export function PlayerFinder({
           layered on top (2026-09-05). See PlayerSearchBox for the rate-limit
           behaviour and why the form never depends on the suggestions.
         */}
-        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
+        <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
 
         {/*
           ── Matches ─────────────────────────────────────────────────
@@ -714,18 +728,23 @@ export function PlayerFinder({
                 {query.trim().length < 2 ? t.typeTwo : t.noMatch(query)}
               </p>
             ) : (
+              <>
+              {posOptions.length > 1 ? <MatchPositionFilter options={posOptions} value={activePos} onChange={setMatchPos} total={matches.length} /> : null}
               <ul className="af-pf-match-list">
-                {matches.map((m) => (
+                {shownMatches.map((m) => (
                   <li key={`${m.sport}-${m.externalId}`} className="af-pf-match-li">
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
                       // sports and opened whichever athlete came back first.
-                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                       className="af-pf-match"
                       data-active={
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
                       }
                     >
+                      <span className="af-pf-match-pos" data-rd-pos={redraftCorePosTone(m.sport, m.position) ?? undefined}>
+                        {m.position ?? '–'}
+                      </span>
                       <PlayerAvatar src={m.imageUrl} name={m.name} size={32} />
                       <span className="af-pf-match-text">
                         <span className="af-pf-match-name">{m.name}</span>
@@ -744,6 +763,7 @@ export function PlayerFinder({
                           ) : (
                             t.noPosition
                           )}
+                          {m.sport !== 'NFL' ? ` · ${m.sport}` : ''}
                         </span>
                       </span>
                     </Link>
@@ -756,6 +776,7 @@ export function PlayerFinder({
                   </li>
                 ))}
               </ul>
+              </>
             )}
           </section>
         ) : null}
@@ -816,7 +837,7 @@ export function PlayerFinder({
             {otherMatches.slice(0, 4).map((m) => (
               <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
                 <Link
-                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                   className="af-chip af-pf-other"
                 >
                   {m.name}
@@ -841,6 +862,16 @@ export function PlayerFinder({
         <p className="af-pf-rail-foot af-pf-d-only">{t.railFoot}</p>
       </aside>
 
+      {sheet ? <Link className="af-pf-psheet-backdrop" href={sheetCloseHref} aria-hidden tabIndex={-1} /> : null}
+      <div className="af-pf-psheet" data-open={sheet || undefined}>
+      {sheet ? (
+        <div className="af-pf-psheet-bar">
+          <span className="af-pf-psheet-grip" aria-hidden />
+          <Link className="af-pf-psheet-close" href={sheetCloseHref}>
+            {t.backToResults}
+          </Link>
+        </div>
+      ) : null}
       <section className="af-pf-main" aria-label={t.mainLabel}>
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
@@ -1039,7 +1070,7 @@ export function PlayerFinder({
             {detailRef ? (
               <div className="af-pf-compare-entry">
                 <span className="af-label">{t.compareWith}</span>
-                <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
+                <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
               </div>
             ) : null}
 
@@ -1055,7 +1086,7 @@ export function PlayerFinder({
                 In league mode both tiles switch to the league's own scoring
                 (Guap, 2026-09-02). Standard scoring is the cross-league number.
               */}
-              {leagueProj ? (
+              {detail.player.sport !== 'NFL' && !leagueProj ? null : leagueProj ? (
                 <StatTile
                   label={leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek}
                   state={leagueProj}
@@ -1081,7 +1112,7 @@ export function PlayerFinder({
                 this league's scoring; across leagues it is the engine's standard-scoring number, like
                 the tile beside it.
               */}
-              {detail.afProjection ? (
+              {detail.player.sport === 'NFL' && detail.afProjection ? (
                 <StatTile
                   label={detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj}
                   state={detail.afProjection}
@@ -1089,6 +1120,17 @@ export function PlayerFinder({
                   tone="good"
                   tip={{ title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody }}
                   help={detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined}
+                  why={why}
+                />
+              ) : null}
+              {detail.player.sport !== 'NFL' && detail.afBaseline ? (
+                <StatTile
+                  label={t.afBaselineLabel}
+                  state={detail.afBaseline}
+                  value={detail.afBaseline.available ? detail.afBaseline.data.pointsPerGame.toFixed(1) : null}
+                  tone="good"
+                  tip={{ title: t.afBaselineLabel, body: t.afBaselineBody }}
+                  help={detail.afBaseline.available ? t.perGameSeason(detail.afBaseline.data.season) : undefined}
                   why={why}
                 />
               ) : null}
@@ -1240,7 +1282,7 @@ export function PlayerFinder({
                   </Link>
                 </>
               ) : detail.leagues.available ? (
-                shownRows.length === 0 ? (
+                shownRows.length === 0 && unmatched.length > 0 ? null : shownRows.length === 0 ? (
                   <p className="af-pf-unavailable">
                     {leagueRows.length > 0 ? t.notOnYourRosters : leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
@@ -1409,7 +1451,7 @@ export function PlayerFinder({
                 <DepthChartBackups
                   data={depthChart}
                   playerName={detail.player.name}
-                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
+                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${sportParam}${leagueParam}`}
                 />
               </PhoneFold>
             ) : null}
@@ -1548,6 +1590,7 @@ export function PlayerFinder({
           <SwapCandidates impact={impactRows} kickoffs={detail.kickoffs ?? {}} nowIso={nowIso} />
         </aside>
       ) : null}
+      </div>
     </div>
   )
 }

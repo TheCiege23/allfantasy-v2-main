@@ -72,7 +72,7 @@ export async function assertRosterTransactionsAllowed(params: {
     if (restriction) {
       return {
         ok: false,
-        error: 'Zombies cannot trade in this league.',
+        error: restriction === 'zombie_correction_hold' ? 'Trades are held during reviewed stat-correction recovery.' : 'Zombies cannot trade in this league.',
         code: 'ZOMBIE_TRADE_BLOCKED',
       }
     }

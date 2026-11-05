@@ -97,6 +97,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'namespace', why: 'OOXML chart, drawing and relationship identifiers in locally generated Excel files; never fetched', test: /^schemas\.openxmlformats\.org$/i },
   { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
+  { name: 'first-party', why: 'isolated AllFantasy Pirate rehearsal cron calls to our authenticated staging app', test: /^pirate-web-staging\.up\.railway\.app$/i },
+  { name: 'first-party', why: 'isolated AllFantasy Bracket staging gateway for authenticated Chimmy QA', test: /^bracket-qa-gateway-staging\.up\.railway\.app$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },
   // Exact rehearsal origin used by the staging-only cron runner to invoke our authenticated
   // import route. Provider reads remain inside that route's existing bounded importers.
@@ -434,6 +436,13 @@ describe('DB-first boundary — outbound host census', () => {
     expect(classify('api.x.com', monitored)).toBe('monitored')
     expect(classify('platform.twitter.com', monitored)).toBe('browser-only')
     expect(classify('syndication.twitter.com', monitored)).toBe('browser-only')
+  })
+
+  it('classifies only the reviewed Pirate staging origin as first-party', () => {
+    const monitored = monitoredPatterns()
+    expect(classify('pirate-web-staging.up.railway.app', monitored)).toBe('first-party')
+    expect(classify('bracket-qa-gateway-staging.up.railway.app', monitored)).toBe('first-party')
+    expect(classify('another-service.up.railway.app', monitored)).toBeNull()
   })
 
   it('every outbound host is classified', () => {

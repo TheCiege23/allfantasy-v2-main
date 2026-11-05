@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Save, Share2 } from 'lucide-react'
 import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
+import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 
 type SessionPick = {
@@ -223,7 +224,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-white/12 bg-black/25 p-4 text-sm text-white/70">
+      <div className="af-draft-dark rounded-2xl border border-white/12 bg-[#08101f] p-4 text-sm text-white/70">
         <Loader2 className="h-4 w-4 animate-spin" />
       </div>
     )
@@ -232,7 +233,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
   if (!draft) return null
 
   return (
-    <section className="space-y-3 rounded-2xl border border-white/12 bg-black/25 p-4 text-xs text-white/80" data-testid="mock-draft-session-board">
+    <section className="af-draft-dark space-y-3 rounded-2xl border border-white/12 bg-[#08101f] p-4 text-xs text-white/80" data-testid="mock-draft-session-board">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-white">
           Mock Session - {draft.settings.sport} - {draft.status.replace('_', ' ')}
@@ -250,6 +251,8 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
           </p>
         </div>
       </div>
+
+      <DraftModeBanner mode={resolveDraftRoomMode({ isMock: true })} />
 
       {draft.progress?.currentOverall && draft.status === 'in_progress' && (
         <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">

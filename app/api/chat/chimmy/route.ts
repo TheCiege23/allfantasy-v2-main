@@ -9,6 +9,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
 import { priorConversationTurns } from '@/lib/chimmy-chat/conversation-context'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
+import { preparePortfolioTurn } from '@/lib/chimmy/portfolio/service'
+import { readPortfolioEvidence, readPortfolioState } from '@/lib/chimmy/portfolio/types'
+import { portfolioEnvelope, persistPortfolioAnswer } from '@/lib/chimmy/portfolio/delivery'
+import { renderPortfolioAnswer } from '@/lib/chimmy/portfolio/render'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
 import { compoundDecision } from '@/lib/chimmy/decisionClauses'
 import { chimmyDecisionKind, decisionAnswerMeta, decisionAnswer as createDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
@@ -29,6 +33,7 @@ import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
+import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
 import {
@@ -45,6 +50,9 @@ import {
   type ChimmyLeagueGroundingFailure,
   type ChimmyLeagueSnapshot,
 } from '@/lib/chimmy/chimmy-league-snapshot'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
 import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -969,6 +977,9 @@ function buildLeagueGroundingLine(args: {
 }): string | undefined {
   if (args.leagueSnapshot) {
     const s = args.leagueSnapshot
+    const type = leagueTypeBasis({ settings: s.settings, leagueType: s.leagueType, platform: s.platform })
+    const variant = leagueVariantFor(s.settings, s.leagueType)
+    const formatCoverage = tradeFormatCoverage({ settings: s.settings, leagueType: s.leagueType })
 
     /*
      * 🛑 SCORING WAS ABSENT FROM THIS LINE AND IS THE REASON THIS FUNCTION
@@ -1007,7 +1018,12 @@ function buildLeagueGroundingLine(args: {
       seasonLine,
       scoring,
       s.leagueSize != null ? `teams=${s.leagueSize}` : null,
-      `dynasty=${s.isDynasty}`,
+      `leagueType=${type.type} (${type.source})`,
+      `dynasty=${variant.dynasty}`,
+      `keeper=${variant.keeper}`,
+      formatCoverage.gaps.length > 0 && type.type !== 'guillotine'
+        ? `shared proposal value limits=${formatCoverage.gaps.join(' ')} Do not claim these effects are priced.`
+        : null,
       s.leagueVariant ? `variant=${s.leagueVariant}` : null,
       `platform=${s.platform}`,
       `platformLeagueId=${s.platformLeagueId}`,
@@ -1073,6 +1089,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const url = new URL(req.url)
+  if (url.searchParams.get('view') === 'roster-portfolio') {
+    const limited = await runAiProtection(req, { action: 'chimmy', getUserId: async () => userId })
+    if (limited) return limited
+    const state = readPortfolioState(url.searchParams.get('state'))
+    const horizon = state?.horizon === 'week' ? 'this week' : state?.horizon === 'dynasty' ? 'dynasty outlook' : 'rest of this season'
+    const turn = await preparePortfolioTurn({ userId, question: 'Compare my teams for ' + horizon, previous: state, refresh: true,
+      scopeLeagueIds: url.searchParams.has('scope') ? url.searchParams.get('scope')!.split(',').filter(id => id.length <= 160).slice(0, 40) : undefined })
+    return NextResponse.json({ portfolio: turn?.kind === 'report' ? turn.evidence : null }, { headers: { 'Cache-Control': 'private, no-store' } })
+  }
   const requestId = url.searchParams.get('requestId')
   if (requestId) return (await import('@/lib/chimmy/requestDelivery')).getChimmyRequestResponse(userId, requestId)
   const attachment = url.searchParams.get('attachment')
@@ -1170,6 +1195,10 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (source.grounding && typeof source.grounding === 'object') out.grounding = source.grounding
   if (source.evidence && typeof source.evidence === 'object') out.evidence = source.evidence
+  const portfolio = readPortfolioEvidence(source.portfolio)
+  if (portfolio) { out.portfolio = portfolio; out.followUps = portfolio.followUps }
+  const portfolioState = readPortfolioState(source.portfolioState)
+  if (portfolioState) out.portfolioState = portfolioState
   if (typeof source.cost === 'number' && Number.isFinite(source.cost)) out.cost = source.cost
   if (typeof source.mode === 'string' && source.mode) out.mode = source.mode
   if (typeof source.imagePreview === 'string' && source.imagePreview.startsWith('/api/chat/chimmy?attachment=')) out.imagePreview = source.imagePreview
@@ -1344,7 +1373,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   const {
-    message,
+    message: submittedMessage,
     confirmTokenSpend,
     analysisUnlock,
     conversationId: explicitConversationId,
@@ -1375,6 +1404,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  let message = submittedMessage
   if (requestedLeagueId && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
     const access = await resolveLeagueAccess(requestedLeagueId, userId)
     if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -1416,9 +1446,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let leagueNameHint = requestedLeagueNameHint ?? null
   const conversation = markEarlierImageTurns(priorConversationTurns(parsedConversation, message, MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
+  // References from the client are re-authorized against current memberships on every turn.
+  const portfolioTurn = !hasImage ? await preparePortfolioTurn({ userId, question: message,
+    selectedLeagueId: leagueId, previous: readPortfolioState(formData.get('portfolioState')),
+    refresh: formData.get('portfolioRefresh') === 'true' }) : null
+  const portfolioReport = portfolioTurn?.kind === 'report' ? portfolioTurn.evidence : null
+  if (portfolioTurn?.kind === 'action') { leagueId = portfolioTurn.leagueId; message = portfolioTurn.question }
 
   const initialIntent = classifyPecrIntent(message)
-  const leagueGroundingRequired = requiresLeagueGrounding({
+  const leagueGroundingRequired = !portfolioReport && requiresLeagueGrounding({
     message,
     intent: initialIntent,
     source,
@@ -1637,6 +1673,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     explicitConversationId,
   })
   const sessionId = String(rawSessionId ?? `${userId}-${Date.now()}`)
+  if (portfolioReport?.status === 'blocked') {
+    question.tools.push('get_my_rosters')
+    await persistPortfolioAnswer({ userId, conversationId, question: submittedMessage, evidence: portfolioReport, mode: selectedAssistantMode, cost: 0 })
+    return NextResponse.json({ ...portfolioEnvelope(portfolioReport, selectedAssistantMode), sessionId })
+  }
   const behaviorRulesBlock = buildBehaviorRulesPrompt()
   const workingMemoryMessage = message || '[image-only request]'
   const { prompt: memPrompt, currentTags } = await prepareWorkingMemory({
@@ -1674,7 +1715,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   })
 
   const domainInput = [message, ...conversation.map((turn) => turn.content)].join(' ')
-  if (!hasSportsContent(domainInput, hasImage)) {
+  if (!portfolioReport && !hasSportsContent(domainInput, hasImage)) {
     /*
      * ⚠ THIS DEFLECTION USED TO BE INDISTINGUISHABLE FROM AN ANSWER. It replied
      * "I'm Chimmy, your fantasy sports assistant. I can help with trades,
@@ -1738,7 +1779,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * fallback sentence TRUE for a caller who named a league they may not read — it says a league was
    * requested without saying which, so `not_member` and `not_found` stay indistinguishable here too.
    */
-  const deterministic = chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(
+  const deterministic = portfolioReport || chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(
     message,
     requestLocale,
     leagueSnapshot?.id ?? null,
@@ -2494,7 +2535,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     )
   }
 
+  const selectedLeagueRules = leagueSnapshot && userId && /\b(?:rules?|constitution|bylaws?|scoring|tiebreakers?|playoff settings|roster slots?)\b/i.test(message)
+    ? await import('@/lib/chimmy/tools/selectedLeagueRules')
+        .then(({ buildSelectedLeagueRules }) => buildSelectedLeagueRules(leagueSnapshot.id, userId))
+        .catch(() => 'The selected league settings and constitution could not be verified.')
+    : null
   const combinedMemorySection = [
+    selectedLeagueRules,
     savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
@@ -2625,7 +2672,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           season: leagueSnapshot.season,
           leagueSize: leagueSnapshot.leagueSize,
           scoring: leagueSnapshot.scoring,
-          isDynasty: leagueSnapshot.isDynasty,
+          leagueType: leagueTypeBasis({ settings: leagueSnapshot.settings, leagueType: leagueSnapshot.leagueType, platform: leagueSnapshot.platform }).type,
+          isDynasty: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).dynasty,
+          isKeeper: leagueVariantFor(leagueSnapshot.settings, leagueSnapshot.leagueType).keeper,
           timezone: leagueSnapshot.timezone,
           lastSyncedAt: leagueSnapshot.lastSyncedAt?.toISOString() ?? null,
           importedAt: leagueSnapshot.importedAt?.toISOString() ?? null,
@@ -2924,7 +2973,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     })
   }
 
-  const decisionAnswer = tradeTargetResult?.status === 'decided'
+  const decisionAnswer = portfolioReport ? null : tradeTargetResult?.status === 'decided'
     ? null
     : hasImage && (!screenshotSummary || screenshotSummary.startsWith('Image uploaded;'))
       ? createDecisionAnswer({ kind: chimmyDecisionKind(message) ?? 'trade', status: 'needs_data', leagueId: leagueSnapshot?.id ?? null,
@@ -2947,7 +2996,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         dataSources: decisionAnswer.sources } })
   }
 
-  previewEngineAnswer = tradeTargetResult?.status === 'decided'
+  previewEngineAnswer = portfolioReport ? renderPortfolioAnswer(portfolioReport, selectedAssistantMode) : tradeTargetResult?.status === 'decided'
     ? renderTradeTargetVerdict(tradeTargetResult.verdict)
     : decisionAnswer?.status === 'ready' ? decisionAnswer.answer : null
   // A short complete engine result has no extra detail to sell. Return it without consuming an answer.
@@ -3058,6 +3107,17 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * The trade-target verdict, now that it has been paid for. Returned before the tool loop and PECR
    * so no model writes a second opinion over it — see the note above the spend.
    */
+  if (portfolioReport) {
+    question.tools.push('get_my_rosters')
+    const cost = spendLedger && tokenPreview ? tokenPreview.tokenCost : null
+    await persistPortfolioAnswer({ userId, conversationId, question: submittedMessage, evidence: portfolioReport, mode: selectedAssistantMode, cost })
+    return NextResponse.json({ ...portfolioEnvelope(portfolioReport, selectedAssistantMode, {
+      ...(planMeta ? { planAllowance: planMeta } : {}),
+      tokenSpend: spendLedger && tokenPreview ? { ruleCode: tokenPreview.ruleCode, tokenCost: tokenPreview.tokenCost,
+        balanceAfter: spendLedger.balanceAfter, ledgerId: spendLedger.id } : null,
+    }), sessionId })
+  }
+
   if (tradeTargetResult?.status === 'decided') {
     const v = tradeTargetResult.verdict
     const text = renderTradeTargetVerdict(v)
@@ -3168,7 +3228,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[] }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3186,9 +3246,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * the instructions because it changes every minute and Claude caches the instructions.
        */
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
-      groundingLine: decisionOsGrounding && leagueSnapshot
+      groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot
         ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
-        : null,
+        : null].filter(Boolean).join('\n\n') || null,
       clockLine: userTemporalContext.promptLine,
       /*
        * The user's saved Chimmy preferences (explanation style, risk, humor…). The fallback path has
@@ -3305,7 +3365,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loopGifLine.text })
         : loopGifLine.text
       const loopGif = isFunModeTone(tone) && loopGifLine.mood ? await resolveChimmyGif(loopGifLine.mood).catch(() => null) : null
-      const loopDelivery = judgeChimmyDelivery({ modelOutputs: [{ raw: loop.text }], answer: loopText })
+      const loopDelivery = judgeChimmyDelivery({ modelOutputs: [{ raw: loop.text }], answer: loopText, contextBlocked: (toolContext as { portfolioBlocked?: boolean }).portfolioBlocked })
       const settlement = await settleUndeliveredChimmyAnswer({
         delivery: loopDelivery, ledgerId: spendLedger?.id, included: Boolean(planIncluded && userId),
         refund: ({ spendLedgerId, idempotencyKey, reason }) => spendService.refundSpendByLedger({
@@ -3377,6 +3437,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       const loopSettleVerdict = lastSettle && boundLeague && lastSettle.leagueId === boundLeague.id ? eliminationSettleVerdict(lastSettle.settle) : null
       const loopVerdict = (lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null) ?? loopSettleVerdict
       const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
+      const uniqueBracketReads = [...new Map(toolContext.bracketEvidence.map((entry) => [entry.href, entry])).values()]
+      const singleBracketRead = uniqueBracketReads.length === 1 ? uniqueBracketReads[0] : null
       /* Stored like every other path's, so the history row can show the image the question came with. */
       const loopScreenshot = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
       const loopMeta = {
@@ -3420,11 +3482,14 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
           dataSources: [...loop.toolsUsed, ...(decisionOsGrounding ? ['decision_os_grounding_packet'] : [])],
+          ...(singleBracketRead ? { bracketEvidence: singleBracketRead } : {}),
           /*
            * The next questions worth asking — each one answerable by a tool, none of them sent until
            * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
            */
-          followUps: suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
+          followUps: singleBracketRead
+            ? bracketFollowUps(singleBracketRead)
+            : suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
           ...(planMeta ? { planAllowance: planMeta } : {}),
           ...(loopPlayers.length > 0 ? { players: loopPlayers } : {}),
           /*
@@ -3492,6 +3557,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   let pecrIntent = 'general'
+  let fallbackBracketEvidence: BracketEvidence | null = null
   let pecrGroundingText = ''
   /** Set inside `plan` when a described trade resolves against this league's rosters. */
   let scenarioForMeta: ReadyChimmyScenario | null = null
@@ -3546,6 +3612,21 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
 
           let legacyEnrichmentContext =
             legacyEnrichment.status === 'fulfilled' ? legacyEnrichment.value.context : ''
+
+          // The tool loop is the usual path, but its provider can fail. Keep bracket questions
+          // grounded on the fallback too, using the same owner-checked reader as the tools.
+          if (/\b(brackets?|march madness|world cup pool)\b/i.test(planInput.message)) {
+            const bracketContext = planInput.userId
+              ? await import('@/lib/chimmy/tools/bracketTool')
+                  .then(({ buildBracketEntryContext, buildMyBracketsContext, bracketSelectionFromQuestion }) =>
+                    /\bbrackets\b/i.test(planInput.message)
+                      ? buildMyBracketsContext(planInput.userId!)
+                      : buildBracketEntryContext(planInput.userId!, bracketSelectionFromQuestion(planInput.message),
+                          (evidence) => { fallbackBracketEvidence = evidence }))
+                  .catch(() => 'The signed-in user\'s bracket data could not be read. Do not invent picks, scores, ranks, or results.')
+              : 'No signed-in user was verified, so private bracket data could not be read. Ask the user to sign in.'
+            legacyEnrichmentContext = [legacyEnrichmentContext, bracketContext].filter(Boolean).join('\n\n')
+          }
 
           /*
            * Why the league trade-history block is or is not in this prompt.
@@ -4598,6 +4679,7 @@ ${describedTradeCtx}`
       recommendedTool: pecrOutput.recommendedTool,
       orchestration: chimmyOrchestrationMeta,
       dataSources: dataSources.length ? dataSources : undefined,
+      ...(fallbackBracketEvidence ? { bracketEvidence: fallbackBracketEvidence, followUps: bracketFollowUps(fallbackBracketEvidence) } : {}),
       sourceLinks: sourceReferences.length > 0 ? sourceReferences : undefined,
       staleness: {
         staleMinutes: staleness.staleMinutes,

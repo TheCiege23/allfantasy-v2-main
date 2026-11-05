@@ -125,6 +125,7 @@ export type CupResultDot = "W" | "L" | "live" | "todo"
 export type CupStatus =
   | "won_group" | "clinched_group" | "controls_path" | "needs_help"
   | "wild_card_only" | "wild_card" | "awaiting" | "eliminated"
+  | "schedule_pending" | "tiebreak_pending" | "qualified"
 
 export type CupTeamRow = {
   team: string
@@ -148,6 +149,7 @@ export type CupGroup = {
   label: string
   conference: "east" | "west"
   teams: CupTeamRow[]
+  scheduleComplete: boolean
   complete: boolean
 }
 
@@ -162,6 +164,9 @@ const STATUS_LABEL: Record<CupStatus, string> = {
   wild_card: "Wild card",
   awaiting: "Awaiting other groups",
   eliminated: "Eliminated",
+  schedule_pending: "Schedule pending",
+  tiebreak_pending: "Tiebreak pending",
+  qualified: "Qualified",
 }
 
 type Tally = { wins: number; losses: number; pf: number; pa: number }
@@ -183,8 +188,8 @@ function byStart(a: PlayoffSeriesView, b: PlayoffSeriesView): number {
  * Order a set of teams by the Cup tiebreakers this data can support: record,
  * head-to-head when exactly two are tied, point differential, points scored.
  * The league's last tiebreakers (prior-season record, a draw) are not in the
- * feed; a tie that deep is broken alphabetically and is rare enough not to
- * matter for a fun pool.
+ * feed. Alphabetical order keeps the display stable; it must never confirm
+ * qualification when the supported tiebreakers do not resolve a place.
  */
 function rank(teams: string[], tally: Map<string, Tally>, games: PlayoffSeriesView[]): string[] {
   const t = (name: string) => tally.get(name)!
@@ -201,13 +206,13 @@ function rank(teams: string[], tally: Map<string, Tally>, games: PlayoffSeriesVi
   return ordered
 }
 
-function shortDate(iso: string | null): string {
+function shortDate(iso: string | null, timeZone?: string): string {
   const ms = Date.parse(iso ?? "")
   if (!Number.isFinite(ms)) return "date TBA"
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(new Date(ms))
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone }).format(new Date(ms))
 }
 
-export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
+export function buildNbaCupGroups(series: PlayoffSeriesView[], timeZone?: string): CupGroup[] {
   const games = series.filter(isGroupGame).slice().sort(byStart)
   const parent = new Map<string, string>()
   const find = (x: string): string => {
@@ -246,7 +251,10 @@ export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
         if (g.winnerTeamName === g.homeTeamName) { home.wins++; away.losses++ } else { away.wins++; home.losses++ }
       }
       const remainingOf = (name: string) => own.filter((g) => !scored(g) && (g.homeTeamName === name || g.awayTeamName === name))
-      const complete = own.length > 0 && own.every(scored)
+      const pairs = new Set(own.map((game) => [game.homeTeamName, game.awayTeamName].sort().join("|")))
+      const scheduleComplete = teams.length === 5 && own.length === 10 && pairs.size === 10 &&
+        teams.every((name) => own.filter((game) => game.homeTeamName === name || game.awayTeamName === name).length === 4)
+      const complete = scheduleComplete && own.every(scored)
       const order = rank(teams, tally, own)
       const rows: CupTeamRow[] = order.map((name, position) => {
         const me = tally.get(name)!
@@ -262,7 +270,11 @@ export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
         const leaderWins = Math.max(0, ...others.map((o) => tally.get(o)!.wins))
 
         let status: CupStatus
-        if (complete) status = position === 0 ? "won_group" : "awaiting"
+        const tied = teams.filter((other) => tally.get(other)!.wins === me.wins)
+        if (!scheduleComplete) status = "schedule_pending"
+        // Multi-team tiebreaks need evidence this display does not resolve.
+        else if (complete && tied.length > 2) status = "tiebreak_pending"
+        else if (complete) status = position === 0 ? "won_group" : "awaiting"
         else if (me.wins > othersCeiling) status = "clinched_group"
         else if (maxWins > othersIfWinOut) status = "controls_path"
         else if (maxWins < leaderWins) status = "wild_card_only"
@@ -288,33 +300,54 @@ export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
         } : null
         return {
           team: name, conference: conf, wins: me.wins, losses: me.losses, pointsFor: me.pf, pointsAgainst: me.pa,
-          pointDiff: me.pf - me.pa, remaining: left.length, results, status, statusLabel: STATUS_LABEL[status],
-          path: pathLine(status, nextGame), live, nextGame,
+          pointDiff: me.pf - me.pa, remaining: scheduleComplete ? left.length : Math.max(0, 4 - me.wins - me.losses), results, status, statusLabel: STATUS_LABEL[status],
+          path: pathLine(status, nextGame, timeZone), live, nextGame,
         }
       })
-      groups.push({ id: `${conf}-${index + 1}`, label: `${conf === "east" ? "East" : "West"} Group ${index + 1}`, conference: conf, teams: rows, complete })
+      groups.push({ id: `${conf}-${index + 1}`, label: `${conf === "east" ? "East" : "West"} Group ${index + 1}`, conference: conf, teams: rows, scheduleComplete, complete })
     })
   }
 
   // Once every group in a conference is final, the wild card is decided too.
   for (const conf of ["east", "west"] as const) {
     const confGroups = groups.filter((g) => g.conference === conf)
-    if (!confGroups.length || !confGroups.every((g) => g.complete)) continue
-    const wild = wildCardRace(groups, conf)[0]?.team ?? null
+    if (!cupConferenceComplete(groups, conf) || confGroups.some((g) => g.teams[0].status !== "won_group")) continue
+    const race = wildCardRace(groups, conf)
+    // Do not let an alphabetical or provisional points tiebreak award a berth.
+    const wild = race[0] && (!race[1] || race[0].wins > race[1].wins) ? race[0].team : null
     for (const group of confGroups) {
       for (const row of group.teams.slice(1)) {
-        row.status = row.team === wild ? "wild_card" : "eliminated"
+        row.status = wild ? row.team === wild ? "wild_card" : "eliminated"
+          : row.wins === race[0]?.wins ? "tiebreak_pending" : "eliminated"
         row.statusLabel = STATUS_LABEL[row.status]
         row.path = pathLine(row.status, null)
       }
     }
   }
+  // A published knockout participant is authoritative even if some group
+  // games have not synced, or the available tiebreak data remains incomplete.
+  const qualifiers = new Set(series.filter((game) => game.round === "cup_quarterfinals")
+    .flatMap((game) => [game.homeTeamName, game.awayTeamName]).filter((team) => nbaCupLogoCode(team)))
+  for (const group of groups) for (const row of group.teams) {
+    if (!qualifiers.has(row.team)) continue
+    row.status = "qualified"; row.statusLabel = STATUS_LABEL.qualified; row.path = pathLine("qualified", null)
+  }
   return groups
 }
 
-function pathLine(status: CupStatus, next: CupTeamRow["nextGame"]): string {
-  const nextText = next ? ` Next: ${next.home ? "vs" : "at"} ${next.opponent}, ${shortDate(next.startsAt)}.` : ""
+/** All three five-team round robins must be present before conference decisions. */
+export function cupConferenceComplete(groups: CupGroup[], conference: "east" | "west"): boolean {
+  const own = groups.filter((group) => group.conference === conference)
+  return own.length === 3 && own.every((group) => group.scheduleComplete && group.complete && group.teams.length === 5) &&
+    new Set(own.flatMap((group) => group.teams.map((team) => team.team))).size === 15
+}
+
+function pathLine(status: CupStatus, next: CupTeamRow["nextGame"], timeZone?: string): string {
+  const nextText = next ? ` Next: ${next.home ? "vs" : "at"} ${next.opponent}, ${shortDate(next.startsAt, timeZone)}.` : ""
   switch (status) {
+    case "schedule_pending": return `The full group schedule is still syncing. Qualification is not confirmed.${nextText}`
+    case "tiebreak_pending": return "Qualification awaits verified tiebreaks or the confirmed quarterfinal field."
+    case "qualified": return "Confirmed in the quarterfinal field."
     case "won_group": return "Won the group. In the quarterfinals."
     case "clinched_group": return `Clinched the group and a quarterfinal spot.${nextText}`
     case "controls_path": return `Wins the group by winning out.${nextText}`
@@ -340,8 +373,15 @@ export function wildCardRace(groups: CupGroup[], conference: "east" | "west"): C
  */
 export function projectedQuarterfinalSeeds(groups: CupGroup[], conference: "east" | "west"): CupSeedSlot[] {
   const confGroups = groups.filter((g) => g.conference === conference && g.teams.length)
+  // Once the actual field is published, use the real knockout bracket rather
+  // than projecting a different field from incomplete group/tiebreak records.
+  if (confGroups.some((group) => group.teams.some((team) => team.status === "qualified"))) return []
   if (!confGroups.some((g) => g.teams.some((t) => t.wins + t.losses > 0))) return []
-  const confirmed = confGroups.every((g) => g.complete)
+  const race = wildCardRace(groups, conference)
+  const seedOrderResolved = confGroups.every((a, i) => confGroups.every((b, j) => i === j ||
+    a.teams[0].wins !== b.teams[0].wins || a.teams[0].pointDiff !== b.teams[0].pointDiff || a.teams[0].pointsFor !== b.teams[0].pointsFor))
+  const confirmed = cupConferenceComplete(groups, conference) && seedOrderResolved &&
+    confGroups.every((group) => group.teams[0].status === "won_group") && race[0]?.status === "wild_card"
   const leaders = confGroups.map((g) => ({ row: g.teams[0], label: g.label }))
     .sort((a, b) => b.row.wins - a.row.wins || b.row.pointDiff - a.row.pointDiff || b.row.pointsFor - a.row.pointsFor || a.row.team.localeCompare(b.row.team))
   const slots: CupSeedSlot[] = leaders.map((l, i) => ({ seed: i + 1, team: l.row.team, how: `${l.label} leader`, confirmed }))
@@ -354,3 +394,4 @@ export function projectedQuarterfinalSeeds(groups: CupGroup[], conference: "east
 export function groupForTeam(groups: CupGroup[], team: string): CupGroup | null {
   return groups.find((g) => g.teams.some((t) => t.team === team)) ?? null
 }
+

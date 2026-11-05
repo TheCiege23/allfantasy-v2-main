@@ -16,6 +16,8 @@
  */
 
 import { espnSiteApiUrl } from '@/lib/providers/espnUrls'
+import { parseEspnCollegeBoxScore } from './espnNcaabBoxScore'
+import { parseEspnCollegeScoreboard } from './espnNcaabScoreboard'
 
 const NCAAB_PATH = 'basketball/mens-college-basketball'
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -124,4 +126,17 @@ export async function fetchEspnNcaabRoster(
   if (!/^\d+$/.test(espnTeamId)) throw new Error(`not an ESPN team id: ${espnTeamId}`)
   const url = espnSiteApiUrl(`${NCAAB_PATH}/teams/${espnTeamId}/roster`)
   return parseEspnNcaabRoster(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS))
+}
+
+/** Authorized college game data is fetched only by scheduled ingestion; readers use the cache. */
+export async function fetchEspnCollegeBoxScore(eventId: string, opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
+  if (!/^\d+$/.test(eventId)) throw new Error('Invalid ESPN event ID')
+  const url = espnSiteApiUrl(`${NCAAB_PATH}/summary`, { event: eventId })
+  return parseEspnCollegeBoxScore(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS), eventId)
+}
+
+export async function fetchEspnCollegeScoreboard(day: string, opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(new Date(`${day}T00:00:00Z`).getTime())) throw new Error('Invalid scoreboard day')
+  const url = espnSiteApiUrl(`${NCAAB_PATH}/scoreboard`, { dates: day.replaceAll('-', ''), groups: 50, limit: 1000 })
+  return parseEspnCollegeScoreboard(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS))
 }

@@ -249,6 +249,7 @@
   color: var(--pb-text2);
 }
 .af-cup-status[data-status="won_group"],
+.af-cup-status[data-status="qualified"],
 .af-cup-status[data-status="clinched_group"],
 .af-cup-status[data-status="wild_card"] { background: var(--cup-gold); color: #241a00; }
 .af-cup-status[data-status="controls_path"] { background: var(--pb-accent); color: var(--pb-accent-ink); }
@@ -296,7 +297,9 @@
 .af-cup-note { color: var(--pb-muted); font-size: 11.5px; line-height: 1.5; padding: 4px 14px 10px; margin: 0; }
 
 /* ── matchup sheet ───────────────────────────────────────────────────── */
-.af-cup-sheet { position: fixed; inset: 0; z-index: 1000; overflow-y: auto; background: var(--pb-bg); color: var(--pb-text); }
+.af-pb-overlay.af-cup-sheet { position: fixed; inset: 0; z-index: 1000; display: block; padding: 0; overflow-y: auto; background: var(--pb-bg); color: var(--pb-text); }
+.af-cup-date-select { display: grid; gap: 6px; margin-bottom: 12px; color: var(--pb-text); font-weight: 700; }
+.af-cup-date-select select { min-height: 44px; max-width: 100%; padding: 8px 12px; color: var(--pb-text); background: var(--pb-surface); border: 1px solid var(--pb-line2); border-radius: 8px; }
 .af-cup-sheet-inner { position: relative; max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 22px; }
 .af-cup-back {
   align-self: flex-start;
@@ -496,13 +499,74 @@
 /* Knockout tree: a live NBA Cup game gets the live edge (MlbBracketBoard sets data-live). */
 .af-pb-match[data-live="true"] { border-color: rgba(255, 90, 95, 0.45); }
 
+.af-cup-disclosure > summary {
+  padding: 14px 16px;
+  cursor: pointer;
+  color: var(--pb-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.af-cup-knockout-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0 20px 20px;
+  padding-inline-start: 24px;
+  color: var(--pb-muted);
+  font-size: 13px;
+}
+
+.af-cup-date-nav { padding: 0 12px 16px; color: var(--pb-text); font-size: 14px; }
+.af-cup-date-nav > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.af-cup-date-nav a, .af-cup-next-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  color: var(--pb-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-cup-date-nav a { flex-direction: column; }
+.af-cup-date-nav small { color: var(--pb-muted); font-size: 12px; }
+.af-cup-next-date { align-self: flex-end; }
+.af-cup-day[id] { scroll-margin-top: 80px; }
+.af-cup-walkthrough {
+  margin: 0 12px 16px;
+  padding: 0 12px;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  color: var(--pb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.af-cup-walkthrough summary {
+  min-height: 44px;
+  padding-block: 11px;
+  cursor: pointer;
+  color: var(--pb-text);
+  font-weight: 700;
+}
+.af-cup-walkthrough ol { list-style: decimal; padding-inline-start: 22px; }
+.af-cup-walkthrough li + li { margin-top: 8px; }
+.af-cup-walkthrough p { margin: 12px 0; }
+
 /* ── breakpoints: keep every @media block below this line ───────────── */
 @media (max-width: 760px) {
   .af-cup-teams, .af-cup-leaders, .af-cup-split, .af-cup-stakes { grid-template-columns: minmax(0, 1fr); }
   .af-cup-team { min-height: 0; padding: 18px; }
   .af-cup-board { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
   .af-cup-board-side { padding: 16px; }
-  .af-cup-day, .af-cup-live-strip { padding-left: 14px; padding-right: 14px; }
+  .af-cup-day, .af-cup-live-strip, .af-pb-cup-group-heading { padding-left: 12px; padding-right: 12px; }
+  .af-cup-knockout-list .af-cup-grid { grid-template-columns: minmax(0, 1fr); }
+  .af-cup-filters { width: 100%; }
+  .af-cup-filter { flex: 1 1 auto; min-height: 44px; }
+  .af-cup-card-top { flex-wrap: wrap; }
+  .af-cup-details { min-height: 44px; }
 }
 
 @media (max-width: 640px) {
@@ -517,3 +581,4 @@
 @media (prefers-reduced-motion: reduce) {
   .af-cup-dot { animation: none; }
 }
+

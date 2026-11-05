@@ -161,12 +161,18 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     }
 
     if (sleeperRowsOnly) {
-      if (intelOnly || sports?.length !== 1 || sports[0] !== 'NFL') {
-        return NextResponse.json({ ok: false, error: 'sleeperRows requires sport=NFL and cannot combine with intel.' }, { status: 400 })
+      const sport = sports?.length === 1 ? sports[0] : undefined
+      if (intelOnly || (sport !== 'NFL' && sport !== 'NBA')) {
+        return NextResponse.json({ ok: false, error: 'sleeperRows requires a single sport (NFL or NBA) and cannot combine with intel.' }, { status: 400 })
       }
       const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
-      const result = await refreshSleeperPlayerRows({ sport: 'NFL', limit: 1500, isExhausted: () => budget.exhausted() })
-      return NextResponse.json({ ok: !result.feedUnavailable, sleeperRows: result, durationMs: Date.now() - startedAt })
+      const result = await refreshSleeperPlayerRows({ sport, limit: sport === 'NBA' ? 600 : 1500, isExhausted: () => budget.exhausted() })
+      const nbaIdentities = sport === 'NBA' && !result.feedUnavailable && !budget.exhausted()
+        ? await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
+          .then(({ reconcileSleeperNbaIdentities }) => reconcileSleeperNbaIdentities({ isExhausted: () => budget.exhausted() }))
+          .catch(() => ({ error: 'NBA identity reconciliation failed' }))
+        : { skipped: true }
+      return NextResponse.json({ ok: !result.feedUnavailable, sleeperRows: result, nbaIdentities, durationMs: Date.now() - startedAt })
     }
     if (intelOnly) {
       /*
@@ -358,19 +364,23 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const deadlineAt = Date.now() + allowanceMs
           const teamMap = await syncEspnNcaabTeamMapIfDue()
           const rosters = teamMap.skipped === 'blocked' ? null : await syncEspnNcaabRosters({ deadlineAt })
-          return { teamMap, rosters }
+          const pool = rosters && !rosters.blocked && deadlineAt - Date.now() > 3_000
+            ? await (await import('@/lib/devy/ncaabRosterPool')).materializeNcaabRosterPool(prisma, { now: new Date(), deadlineAt: deadlineAt - 2_000 }).catch((err: unknown) => ({ created: 0, updated: 0, error: err instanceof Error ? err.message.slice(0, 160) : 'college pool update failed' }))
+            : null
+          return { teamMap, rosters, pool }
         },
         (r) =>
           'skipped' in r
             ? { warnings: r.skipped === 'out of season' ? [] : [`skipped: ${r.skipped}`] }
             : {
-                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0),
+                rowsWritten: (r.rosters?.identitiesCreated ?? 0) + (r.rosters?.headshotsWritten ?? 0) + (r.rosters?.rosterSnapshotsStored ?? 0) + (r.pool?.created ?? 0) + (r.pool?.updated ?? 0),
                 warnings: [
                   ...(r.teamMap.skipped === 'blocked' || r.rosters?.blocked ? ['ESPN returned 403 — pass stopped'] : []),
                   ...(r.rosters && r.rosters.errors > 0 ? [`${r.rosters.errors} school/row errors`] : []),
                   ...(r.rosters && (r.rosters.rosterSnapshotsRejected ?? 0) > 0 ? [`${r.rosters.rosterSnapshotsRejected} roster snapshots rejected`] : []),
+                  ...(r.pool && 'error' in r.pool ? [`college pool: ${r.pool.error}`] : []),
                 ],
-                metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters },
+                metadata: { teamMap: { ...r.teamMap, unmatched: r.teamMap.unmatched.length }, rosters: r.rosters, pool: r.pool },
               },
       ).catch((err: unknown) => ({
         error: err instanceof Error ? err.message.slice(0, 160) : 'espn ncaab pass failed',
@@ -434,6 +444,19 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         error: err instanceof Error ? err.message.slice(0, 160) : 'profile refresh failed',
       }))
 
+      // Run this weekly identity bridge only on spare runway, after the existing intel work.
+      const ncaabFantraxIdentities = await withSyncJobRun(
+        { jobName: 'ncaab-fantrax-identities', sport: 'NCAAB', provider: 'fantrax', trigger: 'cron' },
+        async () => {
+          if (budget.remainingMs() < 60_000) return { skipped: 'deferred: run budget too low', proposed: 0, updated: 0 }
+          const { ingestNcaabFantraxIdentities } = await import('@/lib/player-identity/ingestNcaabFantraxIdentities')
+          return ingestNcaabFantraxIdentities()
+        },
+        result => ({ rowsWritten: result.updated,
+          warnings: 'skipped' in result && result.skipped?.startsWith('deferred') ? [result.skipped] : [],
+          metadata: result }),
+      ).catch(error => ({ error: error instanceof Error ? error.message.slice(0, 160) : 'NCAAB Fantrax identities failed' }))
+
       return NextResponse.json({
         ok: true,
         mode: 'intel',
@@ -442,8 +465,45 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         psychProfiles,
         // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.
         ncaabDevyPool,
+        ncaabFantraxIdentities,
         durationMs: Date.now() - startedAt,
       })
+    }
+
+    // Refresh NBA before the bulk import so it cannot be starved by the tail phases.
+    let sleeperNbaRows: unknown = { skipped: true }
+    let sleeperNbaIdentities: unknown = { skipped: true }
+    if (!dryRun && (!sports || sports.includes('NBA'))) {
+      const nbaBudget = createRunBudget(25_000, Date.now, signal)
+      if (budget.exhausted()) {
+        deferredPhases.push('sleeperNbaRows')
+      } else {
+        try {
+          const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+          const refreshed = await refreshSleeperPlayerRows({
+            sport: 'NBA',
+            limit: 600,
+            isExhausted: () => nbaBudget.exhausted() || budget.exhausted(),
+          })
+          sleeperNbaRows = refreshed
+          if (!refreshed.feedUnavailable) {
+            if (nbaBudget.exhausted() || budget.exhausted()) {
+              deferredPhases.push('sleeperNbaIdentities')
+            } else {
+              try {
+                const { reconcileSleeperNbaIdentities } = await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
+                sleeperNbaIdentities = await reconcileSleeperNbaIdentities({
+                  isExhausted: () => nbaBudget.exhausted() || budget.exhausted(),
+                })
+              } catch {
+                sleeperNbaIdentities = { error: 'NBA identity reconciliation failed' }
+              }
+            }
+          }
+        } catch (error) {
+          sleeperNbaRows = { error: error instanceof Error ? error.message.slice(0, 160) : 'Sleeper NBA refresh failed' }
+        }
+      }
     }
 
     /*
@@ -957,6 +1017,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
               injuryCleanup: result.injuryCleanup,
               // [] means "every phase ran", which is a different fact from a missing field.
               deferredPhases,
+              sleeperNbaRows,
+              sleeperNbaIdentities,
               budgetExhausted: budget.exhausted(),
               budgetElapsedMs: budget.elapsedMs(),
             }),
@@ -981,6 +1043,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntelSources,
       devyIntel,
       sleeperRows,
+      sleeperNbaRows,
+      sleeperNbaIdentities,
       canonicalBirthdays,
       espnIdentities,
       identityBridge,

@@ -8,6 +8,7 @@ import './commissioner-center.css'
 import './redraft-settings.css'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
@@ -17,10 +18,10 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * Commissioner center (native league handoff, Commissioner.png; restyled to the redraft Settings
- * board 2026-11-01), the desktop layout of the League Settings page for a commissioner: a section
- * nav on the left (League / Rules / Season ops), each item with a one-line summary, the chosen
- * section's EXISTING editor on the right, then the commissioner tools that already exist and the
- * managers card.
+ * board 2026-11-01), the League Settings page for a commissioner: a section nav on the left
+ * (League / Rules / Season ops), each item with a one-line summary — or, in a narrow container, a
+ * category picker — the chosen section's EXISTING editor on the right, then the commissioner tools
+ * that already exist and the managers card. Pirate leagues get Pirate rules pinned above the nav.
  *
  * ⚠ NOT A SECOND SETTINGS PAGE. Sections, values and editors all come from the caller — the same
  * `buildLeagueSettingsHome` rows and `renderSubPage` editors the phone list opens — so every save still
@@ -64,6 +65,8 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'guillotine-first-chop', key: 'firstChop' },
       { id: 'guillotine-chop-rules', key: 'chopRules' },
       { id: 'guillotine-rules', key: 'guillotineRules' },
+      // Listed here for the category picker; the sidebar pins it above the groups instead.
+      { id: 'pirate-rules', key: 'pirateRules' },
     ],
   },
   {
@@ -131,6 +134,7 @@ function CopyInvite({ url }: { url: string }) {
 }
 
 export function CommissionerCenter({
+  leagueId,
   leagueName,
   sections,
   renderSubPage,
@@ -142,6 +146,7 @@ export function CommissionerCenter({
   header,
   redraft = null,
 }: {
+  leagueId?: string
   leagueName?: string | null
   sections: SettingsHomeSection[]
   renderSubPage: (id: SettingsSubPageId) => SettingsSubPageRender | null
@@ -160,7 +165,7 @@ export function CommissionerCenter({
   const { t, tInterpolate } = useOptionalLanguage()
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
-  const fallback: SettingsSubPageId = allowed.has(inSeason ? 'general' : 'draft') ? (inSeason ? 'general' : 'draft') : groups[0]?.items[0]?.id ?? 'general'
+  const fallback: SettingsSubPageId = allowed.has('general') ? 'general' : groups[0]?.items[0]?.id ?? 'general'
   const [open, setOpen] = useState<SettingsSubPageId>(initialSubPage && allowed.has(initialSubPage) ? initialSubPage : fallback)
   const pane = useRef<HTMLDivElement | null>(null)
   const saveScope = useSaveScopeHandleRef()
@@ -189,14 +194,37 @@ export function CommissionerCenter({
         <p>{tInterpolate('lsh.cc.intro', { league })}</p>
       </header>
 
-      {header?.(select)}
+      <div className="cc-mobile-categories">
+        {allowed.has('pirate-rules') ? (
+          <button type="button" className="cc-primary cc-pirate-shortcut" onClick={() => select('pirate-rules')} aria-current={open === 'pirate-rules' ? 'page' : undefined}>
+            {t('lsh.cc.nav.pirateRules')} <span>{t('lsh.cc.sub.pirateRules')}</span>
+          </button>
+        ) : null}
+        <label htmlFor="cc-category">{t('lsh.cc.category')}</label>
+        <select id="cc-category" value={open} onChange={event => select(event.target.value as SettingsSubPageId)}>
+          {groups.map(group => <optgroup key={group.key} label={t(`lsh.cc.group.${group.key}`)}>
+            {group.items.map(item => <option key={item.id} value={item.id}>{t(`lsh.cc.nav.${item.key}`)}</option>)}
+          </optgroup>)}
+        </select>
+      </div>
 
       <div className="cc-grid">
         <nav className="cc-nav" aria-label={t('lsh.cc.navAria')}>
+          {allowed.has('pirate-rules') ? (
+            <section className="cc-pirate-nav">
+              <h2>{t('lsh.cc.group.pirate')}</h2>
+              <button type="button" onClick={() => select('pirate-rules')} aria-current={open === 'pirate-rules' ? 'page' : undefined} data-testid="cc-nav-pirate-rules">
+                <span className="cc-nav-text">
+                  <span className="cc-nav-label">{t('lsh.cc.nav.pirateRules')}</span>
+                  <span className="cc-nav-sub">{t('lsh.cc.sub.pirateRules')}</span>
+                </span>
+              </button>
+            </section>
+          ) : null}
           {groups.map(group => (
             <section key={group.key}>
               <h2>{t(`lsh.cc.group.${group.key}`)}</h2>
-              {group.items.map(item => (
+              {group.items.filter(item => item.id !== 'pirate-rules').map(item => (
                 <button
                   key={item.id}
                   type="button"
@@ -236,9 +264,13 @@ export function CommissionerCenter({
         </div>
       </div>
 
+      {header ? <details className="cc-setup-guide"><summary>{t('lsh.cc.setupChecklist')}</summary>{header(select)}</details> : null}
+
+      {leagueId ? <Link className="cc-activity-link" href={`/core/commissioner?league=${encodeURIComponent(leagueId)}&workspace=activity`}>{t('lsh.cc.activityLink')}</Link> : null}
+
       <div className="cc-foot">
-        <section className="cc-card cc-tools" aria-labelledby="cc-tools-title">
-          <p className="cc-label" id="cc-tools-title">{t('lsh.cc.tools.title')}</p>
+        <details className="cc-card cc-tools">
+          <summary id="cc-tools-title">{t('lsh.cc.tools.title')}</summary>
           <ul>
             {TOOLS.filter(tool => allowed.has(tool.target)).map(tool => {
               const ready = !tool.inSeasonOnly || inSeason
@@ -255,7 +287,7 @@ export function CommissionerCenter({
               )
             })}
           </ul>
-        </section>
+        </details>
 
         <section className="cc-card cc-managers" aria-labelledby="cc-managers-title">
           <p className="cc-label" id="cc-managers-title">{t('lsh.cc.managers.title')}</p>

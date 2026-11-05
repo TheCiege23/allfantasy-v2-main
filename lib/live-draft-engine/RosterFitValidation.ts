@@ -29,7 +29,7 @@ export async function validateRosterFitForDraftPick(input: RosterFitValidationIn
   const draftEligible = getDraftEligiblePositionsFromPayload(payload)
   const posUpper = (input.newPickPosition || '').trim().toUpperCase()
   if (!posUpper) return { valid: false, error: 'Position is required' }
-  if (!draftPoolRowMatchesEligiblePositions(input.newPickPosition, draftEligible)) {
+  if (!draftPoolRowMatchesEligiblePositions(input.newPickPosition, draftEligible, payload.sport)) {
     return {
       valid: false,
       error: `Position "${input.newPickPosition}" is not starter-eligible in this league draft. Allowed: ${[...draftEligible].sort().join(', ')}.`,
@@ -52,6 +52,7 @@ export async function validateRosterFitForDraftPick(input: RosterFitValidationIn
  */
 export async function getAllowedPositionsAndRosterSize(leagueId: string): Promise<{
   draftEligiblePositions: Set<string>
+  sport: string
   rosterUnionAllowedPositions: Set<string>
   totalRosterSize: number
 } | null> {
@@ -59,6 +60,7 @@ export async function getAllowedPositionsAndRosterSize(leagueId: string): Promis
   if (!payload) return null
   return {
     draftEligiblePositions: getDraftEligiblePositionsFromPayload(payload),
+    sport: payload.sport,
     rosterUnionAllowedPositions: new Set(payload.allowedPositions),
     totalRosterSize: payload.totalRosterSlots,
   }

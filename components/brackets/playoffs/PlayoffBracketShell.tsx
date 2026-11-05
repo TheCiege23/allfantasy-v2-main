@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -14,8 +14,11 @@ import {
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
+import { bracketInviteUrl } from "@/lib/brackets/inviteUrl"
+import AndroidBracketAppOption from "@/components/brackets/AndroidBracketAppOption"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
@@ -92,6 +95,25 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
   const rollingCup = safeChallenge.sport === "nba_cup" && !safeChallenge.isTestMode
   useNbaCupLiveView(safeChallenge.id, rollingCup, setView)
+  // The public live feed contains scores only. Refresh the dashboard view as
+  // well so entries finalized by other participants appear without a reload.
+  useEffect(() => {
+    if (!rollingCup) return
+    let stopped = false, pending = false
+    const refreshEntries = async () => {
+      if (stopped || pending || document.visibilityState !== "visible") return
+      pending = true
+      try {
+        const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+        if (!stopped) setView(latest)
+      } catch { /* Keep the last successful view if the refresh fails. */ }
+      finally { pending = false }
+    }
+    const timer = setInterval(() => { void refreshEntries() }, 30_000)
+    const onVisible = () => { void refreshEntries() }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible) }
+  }, [rollingCup, safeChallenge.id])
   const tournamentLocked = singleGameSport && !rollingCup && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
@@ -141,6 +163,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       .slice(0, 2)
     : []
   const hasScoredLeaderboard = leaderboardRows.some((row) => row.hasScoredResults)
+  const draftCount = entries.filter((entry) => !entry.isComplete).length
   const hasClientAdminAccess = hasPoolAdminAccess(session?.user)
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
   const hasAdminAccess = hasClientAdminAccess || hasServerAdminAccess
@@ -163,6 +186,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   function handleCreateEntry() {
+    if (!view.viewerUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}`)}`)
+      return
+    }
     startCreatingEntry(async () => {
       try {
         const nextEntryIndex = viewerEntryCount + 1
@@ -229,18 +256,18 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   async function copyInvite() {
     try {
-      const absoluteUrl = `${window.location.origin}${safeChallenge.inviteUrl}`
-      await navigator.clipboard.writeText(`${absoluteUrl}?code=${safeChallenge.inviteCode}`)
+      await navigator.clipboard.writeText(bracketInviteUrl(window.location.origin, safeChallenge.id, safeChallenge.inviteCode))
       toast.success(copy.inviteCopied)
     } catch {
       toast.error(copy.inviteCopyFailed)
+      document.getElementById("league-invite")?.scrollIntoView({ block: "center" })
     }
   }
 
   async function copyBestBracket() {
     if (!bestViewerRow) return
     try {
-      const path = `/brackets/leagues/${safeChallenge.id}/entries/${bestViewerRow.id}/view`
+      const path = `/brackets/leagues/${encodeURIComponent(safeChallenge.id)}/entries/${encodeURIComponent(bestViewerRow.id)}/view?view=bracket`
       await navigator.clipboard.writeText(`${window.location.origin}${path}`)
       toast.success(copy.bestCopied)
     } catch {
@@ -249,7 +276,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   return (
+    <>
+    <BracketQuickNav current="league" leagueId={safeChallenge.id} language={language} />
     <main className="af-bracket-experience af-pd">
+      <AndroidBracketAppOption />
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
         <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} className="af-pd-wordmark" />
@@ -312,7 +342,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 className="af-bx-btn af-bx-primary"
               >
                 <ArrowRightCircle className="h-4 w-4" aria-hidden />
-                {primaryButtonLabel}
+                {!view.viewerUserId && !primaryEntry ? (language === "es" ? "Inicia sesión para crear tu cuadro" : "Sign in to create your bracket") : primaryButtonLabel}
               </button>
               {primaryEntry && canCreateEntry ? (
                 <button type="button" onClick={handleCreateEntry} disabled={creatingEntry} className="af-bx-btn">
@@ -320,10 +350,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                   {copy.createAnother}
                 </button>
               ) : null}
-              {canManagePlayoffPool && (
+              {canManagePlayoffPool && safeChallenge.inviteCode && (
                 <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-btn" className="af-bx-btn">
                   <Clipboard className="h-4 w-4" aria-hidden />
-                  {copy.invite}
+                  {copy.copyLeagueInvite}
                 </button>
               )}
               {canSyncPlayoffPool ? (
@@ -371,7 +401,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           </article>
 
           {canManagePlayoffPool ? (
-            <article data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
+            <article id="league-invite" data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
               <h2 className="af-pd-h2">{copy.invitePanel}</h2>
               <p className="af-pd-muted">{copy.shareLink}</p>
               <div className="af-bx-invite af-pd-invite">
@@ -554,6 +584,13 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           <p className="af-pd-muted">
             {singleGameSport ? copy.boardSingle : hasScoredLeaderboard ? copy.boardScored : copy.boardPicks}
           </p>
+          {singleGameSport && draftCount > 0 ? (
+            <p className="af-pd-muted">
+              {language?.startsWith("es")
+                ? `${draftCount} cuadros guardados aún no aparecen en la clasificación porque no se han finalizado.`
+                : `${draftCount} saved ${draftCount === 1 ? "bracket is" : "brackets are"} not ranked yet because ${draftCount === 1 ? "it has" : "they have"} not been finalized.`}
+            </p>
+          ) : null}
           {leaderboardRows.length === 0 ? (
             <p className="af-pd-empty">{copy.noBoard}</p>
           ) : (
@@ -573,5 +610,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {singleGameSport && <p className="af-bx-disclaimer af-pd-disclaimer">{copy.disclaimer}</p>}
       </div>
     </main>
+    </>
   )
 }

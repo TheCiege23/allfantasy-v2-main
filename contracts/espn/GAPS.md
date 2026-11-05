@@ -32,6 +32,32 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-04` | Rate limits. ESPN documents none. A full roster sweep is 362 requests. | UNVERIFIED — spread the sweep across cron ticks; do not burst |
 | `E-05` | Image rights for hotlinking ESPN headshots. Precedent exists (college football devy headshots already use this CDN), but TheSportsDB's contract restricts headshots to CC-licensed images. | **RESOLVED 2026-10-01 — owner decision:** use them for NCAAB on the same basis as college football. |
 | `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
+| `E-07` | College basketball game and player box scores for fantasy scoring. | **Updated 2026-10-30:** owner confirmed permission to use ESPN box scores. One final-game summary and its daily scoreboard returned HTTP 200; a 403 must still stop the ingest pass. Scoring integration, schedule coverage, rate limits, and historical transfer handling remain to be verified. |
+
+**NCAAB contract captures, 2026-10-31:** `summary.NCAAB.event401825532.json` and
+`scoreboard.NCAAB.20260221.json` were captured using `scripts/probe.sh` and trimmed with the
+standard key-union tool. Their original counts are in `ENDPOINTS.yaml`. The trim retained all
+key paths but dropped array values needed to prove both teams, all stat labels, and complete
+box-score parsing. The scoreboard capture does not prove daily-slate completeness either.
+E-07 remains open for those semantic checks; do not infer that a zero-event day is complete.
+
+**Owner-authorized recapture, 2026-11-03:** the same scoreboard and summary were captured again via
+`probe.sh` after the owner explicitly approved the exception to the no-repeat rule. Full arrays are
+retained. The scoreboard contains 148 events and the target game; the final summary has two teams
+and 29 player rows. Parsed playing-player points sum to 94 and 95, matching the official team
+scores. This resolves the missing-array evidence for this historical game, not provider-wide or
+future/postseason schedule completeness. `__tests__/c2c/espn-captured-campus-scoring.test.ts`
+checks both production parsers and the current campus points scorer against the retained responses.
+The NCAAB engine's seven default categories omit double-double/triple-double bonuses even though
+a separate scoring-preset catalog lists them; any rule change requires reconciling those settings
+and historical scoring rather than assuming a bonus in this verification.
+
+College postseason schedule evidence (2026-10-30): the committed Rolling Insights 2025-26
+`schedule-season.NCAABB.json` contains 394 postseason games, including the NCAA title game
+on April 6; the existing schedule parser and sync preserve those rows. The cached 2026-27
+schedule currently ends March 7. Future tournament brackets have not yet been established by
+that cached range. A week beyond the published range must remain unfinalized until evidence
+covers it; neither an empty scoreboard nor the previous season proves a future slate is complete.
 
 ## Probe protocol
 

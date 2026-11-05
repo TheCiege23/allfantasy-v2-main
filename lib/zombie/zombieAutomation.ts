@@ -4,35 +4,17 @@ import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { processExpiredBashingDecisionsForAll } from '@/lib/zombie/bashingEngine'
 import { scheduleWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
 import { deliverPendingAnimations } from '@/lib/zombie/animationEngine'
+import { expireBetaRoleWorkflows } from './beta2025RoleWorkflows'
+import { retryZombieCorrectionEffects } from './correctionFollowup'
+import { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
+import { expireUniverseVotes, escalateOwnerContacts } from './seasonOperations'
 
-/**
- * Mark due scheduled announcements as posted (chat wiring can subscribe later).
- */
-export async function processZombieAnnouncementQueue(): Promise<number> {
-  const now = new Date()
-  /** Only rows with a scheduled time in the past — never auto-mark drafts with `scheduledFor: null`. */
-  const due = await prisma.zombieAnnouncement.findMany({
-    where: {
-      isPosted: false,
-      AND: [{ scheduledFor: { not: null } }, { scheduledFor: { lte: now } }],
-    },
-    take: 100,
-  })
-  let n = 0
-  for (const a of due) {
-    await prisma.zombieAnnouncement.update({
-      where: { id: a.id },
-      data: { isPosted: true, postedAt: new Date() },
-    })
-    n += 1
-  }
-  return n
-}
+export { processZombieAnnouncementQueue } from './scheduledAnnouncementDelivery'
 
 /**
  * Everything the zombie tick does besides resolving a week, for every active league:
  *   - a bashing decision whose window has passed defaults (spare),
- *   - due scheduled announcements are marked posted,
+ *   - due scheduled announcements reach chat or a private in-app notification,
  *   - a weekly update with a set day and hour posts in that hour,
  *   - animations older than a day are marked delivered.
  *
@@ -50,7 +32,13 @@ export async function runZombieHousekeeping(): Promise<{
   errors: string[]
 }> {
   const errors: string[] = []
+  try { await expireUniverseVotes() } catch { errors.push('Universe vote tally pending retry') }
+  try { await escalateOwnerContacts() } catch { errors.push('Owner contact escalation pending retry') }
   const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
+  try { errors.push(...await retryZombieCorrectionEffects()) }
+  catch { errors.push('Correction standings/report refresh: pending retry') }
+  try { errors.push(...await expireBetaRoleWorkflows()) }
+  catch { errors.push('role workflow expiry: pending retry') }
   try {
     await processExpiredBashingDecisionsForAll()
   } catch (e) {
@@ -59,7 +47,9 @@ export async function runZombieHousekeeping(): Promise<{
 
   let announcementsPosted = 0
   try {
-    announcementsPosted = await processZombieAnnouncementQueue()
+    const delivery = await processZombieAnnouncementQueue()
+    announcementsPosted = delivery.posted
+    errors.push(...delivery.errors)
   } catch (e) {
     errors.push(`announcements: ${why(e)}`)
   }

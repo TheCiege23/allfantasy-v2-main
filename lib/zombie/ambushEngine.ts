@@ -5,6 +5,7 @@ import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { trustedZombieWeekStart } from '@/lib/zombie/zombieWeekGameStart'
+import { previewBetaAmbush, executeBetaAmbush } from './beta2025Ambush'
 
 /** Current serum timing remains independent; serum registration has its own weekly rules. */
 export async function validateAmbushTiming(
@@ -69,10 +70,40 @@ export async function processAmbushFromChimmy(
   whispererUserId: string,
   rawMessage: string,
   week: number,
+  requestId?: string,
 ) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
   const label = targetLabel(rawMessage)
+  if (z.sport === 'NFL') {
+    if (!requestId || !label) throw new Error('Use the reviewed ambush editor in the Zombie tab, or ambush swap with an exact team name and request ID.')
+    const executedId = `ambush2025:${leagueId}:${whispererUserId}:${requestId}`
+    const executed = await prisma.zombieAmbushAction.findUnique({ where: { id: executedId } })
+    if (executed?.status === 'executed') {
+      return prisma.zombieChimmyAction.upsert({ where: { id: `ambush-command:${executedId}` }, create: {
+        id: `ambush-command:${executedId}`, leagueId, userId: whispererUserId, week: executed.week, actionType: 'ambush_invoke', rawMessage,
+        isValid: true, resolvedAt: new Date(), privateResponse: 'This ambush request was already saved. Nothing else was spent.', effect: { ambushActionId: executedId },
+      }, update: {} })
+    }
+    const preview = await previewBetaAmbush(leagueId, whispererUserId)
+    const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId, season: z.season } })
+    const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true, teamName: true } })
+    const target = rosters.filter(r => r.teamName?.toLowerCase() === label.toLowerCase())
+    const own = rosters.find(r => r.ownerId === whispererUserId)
+    const first = own && preview.matches.find(m => m.homeRosterId === own.id || m.awayRosterId === own.id)
+    const second = target.length === 1 && preview.matches.find(m => m.homeRosterId === target[0].id || m.awayRosterId === target[0].id)
+    if (!own || !first || !second || first.id === second.id) throw new Error('Choose one exact team in a different matchup, or use the full remap editor.')
+    const oldOpponent = first.homeRosterId === own.id ? first.awayRosterId : first.homeRosterId
+    const pairs = preview.matches.map(m => m.id === first.id ? { homeRosterId: own.id, awayRosterId: target[0].id } :
+      m.id === second.id ? { homeRosterId: m.homeRosterId === target[0].id ? oldOpponent : m.homeRosterId, awayRosterId: m.awayRosterId === target[0].id ? oldOpponent : m.awayRosterId } :
+      { homeRosterId: m.homeRosterId, awayRosterId: m.awayRosterId })
+    const result = await executeBetaAmbush({ leagueId, userId: whispererUserId, week, requestId, previewHash: preview.previewHash, pairs })
+    return prisma.zombieChimmyAction.upsert({ where: { id: `ambush-command:${result.actionId}` }, create: {
+      id: `ambush-command:${result.actionId}`, leagueId, userId: whispererUserId, week, actionType: 'ambush_invoke', rawMessage,
+      isValid: true, resolvedAt: new Date(), privateResponse: result.scoreRefreshPending ? 'Ambush saved once. Score refresh is pending.' : 'Ambush saved. Review the updated matchups.',
+      effect: { ambushActionId: result.actionId },
+    }, update: {} })
+  }
   const log = await prisma.zombieChimmyAction.create({
     data: { leagueId, userId: whispererUserId, week, actionType: 'ambush_invoke', rawMessage, isValid: false },
   })

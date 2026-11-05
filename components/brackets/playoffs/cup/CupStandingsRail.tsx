@@ -6,6 +6,7 @@ import { TeamLogo } from "@/app/components/TeamLogo"
 import { pointsForSeries } from "@/lib/playoffs/playoffScoring"
 import { cupGameState, projectedQuarterfinalSeeds, wildCardRace, type CupGroup, type CupTeamRow } from "@/lib/playoffs/nbaCupBoard"
 import { tipoffLabel } from "./cupFormat"
+import { useClientTime } from "./useClientTime"
 import "./af-nba-cup.css"
 
 export type CupStandingsRailProps = {
@@ -28,6 +29,7 @@ function diff(n: number): string {
  * between says what the team needs, not what we think will happen.
  */
 export default function CupStandingsRail({ groups, series, sport, teamLogos }: CupStandingsRailProps) {
+  const clientTime = useClientTime()
   const defaultGroup = useMemo(() => {
     const withLive = groups.find((g) => g.teams.some((t) => t.live))
     return (withLive ?? groups[0])?.id ?? null
@@ -47,7 +49,7 @@ export default function CupStandingsRail({ groups, series, sport, teamLogos }: C
     const rows = knockout(round)
     const own = teamName ? rows.find((s) => s.homeTeamName === teamName || s.awayTeamName === teamName) : null
     const any = own ?? rows.filter((s) => s.startsAt).sort((a, b) => Date.parse(a.startsAt!) - Date.parse(b.startsAt!))[0]
-    return any?.startsAt ? tipoffLabel(any.startsAt) : "Date TBA"
+    return any?.startsAt ? tipoffLabel(any.startsAt, { timeZone: clientTime ? undefined : "UTC" }) : "Date TBA"
   }
   const pts = (round: string) => pointsForSeries({ round } as PlayoffSeriesView, sport)
 
@@ -62,7 +64,7 @@ export default function CupStandingsRail({ groups, series, sport, teamLogos }: C
 
   const road = selected ? (() => {
     const s = selected.status
-    const through = ["won_group", "clinched_group", "wild_card"].includes(s)
+    const through = ["won_group", "clinched_group", "wild_card", "qualified"].includes(s)
     const out = s === "eliminated"
     const seed = seeds.find((slot) => slot.team === selected.team)
     const qfRow = knockout("cup_quarterfinals").find((r) => r.homeTeamName === selected.team || r.awayTeamName === selected.team)
@@ -191,8 +193,11 @@ export default function CupStandingsRail({ groups, series, sport, teamLogos }: C
             })}
             <p className="af-cup-note">1 v 4 and 2 v 3. The higher seed hosts. Knockout picks open when the matchups are confirmed.</p>
           </>
-        ) : <p className="af-cup-note">Projections start after the first group games are final.</p>}
+        ) : <p className="af-cup-note">{groups.some((g) => g.conference === conference && g.teams.some((row) => row.status === "qualified"))
+          ? "Confirmed matchups appear in the knockout bracket."
+          : "Projections start after the first group games are final."}</p>}
       </section>
     </>
   )
 }
+

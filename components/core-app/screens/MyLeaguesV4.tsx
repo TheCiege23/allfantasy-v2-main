@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import { leagueSportCounts, leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
+import { hasLeagueSortMetric, isLeagueSortMode, LEAGUE_SORT_OPTIONS, LEAGUE_SORT_STORAGE_KEY, sortLeagues, type LeagueSortMode } from '@/lib/league-list/sortLeagues'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
@@ -24,11 +25,8 @@ import '@/components/core-app/af-my-leagues.css'
 /**
  * Screen 21a — "My Leagues, at 61 live".
  *
- * ⚠ SORT ORDER IS URGENCY AND MUST NOT REGRESS TO ALPHABETICAL — the handoff's
- * first copy-contract line. The order is not computed here: the server hands
- * these rows over already ranked by the 34a ranker, and every filter below is
- * `Array.prototype.filter`, which is order-preserving. There is no `.sort()` in
- * this file, deliberately.
+ * The server's urgency order remains the default. Explicit sort choices show one
+ * ordered list across all urgency tiers, so a sport or name sort is truly global.
  *
  * ⚠ THREE THINGS THE HANDOFF DRAWS ARE ABSENT, AND THE SCREEN SAYS SO RATHER
  * THAN FILLING THEM IN. The design's "Playing now" cards carry a live score vs
@@ -135,8 +133,23 @@ export function MyLeaguesV4({
   const [sport, setSport] = useState<string | null | undefined>(undefined)
   const [showHistory, setShowHistory] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
+  const [sortMode, setSortMode] = useState<LeagueSortMode>('default')
   const [chip, setChip] = useState<ChipKey | null>(null)
   const [expanded, setExpanded] = useState<Partial<Record<MyLeaguesTier, boolean>>>({})
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(LEAGUE_SORT_STORAGE_KEY)
+      if (isLeagueSortMode(saved)) setSortMode(saved)
+    } catch {}
+  }, [])
+
+  const changeSort = (mode: LeagueSortMode) => {
+    setSortMode(mode)
+    try { window.localStorage.setItem(LEAGUE_SORT_STORAGE_KEY, mode) } catch {}
+  }
+
+  const effectiveSort = hasLeagueSortMetric(leagues, sortMode) ? sortMode : 'default'
 
   const q = query.trim().toLowerCase()
   const hiddenKey = hiddenIds.join('.')
@@ -164,6 +177,7 @@ export function MyLeaguesV4({
       return true
     })
   }, [leagues, platform, sport, q, chip, hiddenSet])
+  const sortedFiltered = useMemo(() => sortLeagues(filtered, effectiveSort), [filtered, effectiveSort])
 
   /*
    * Sport tabs. Counted over every live league the account holds (hidden ones included, as the
@@ -201,6 +215,10 @@ export function MyLeaguesV4({
     for (const l of groupLeagueHubs(filtered.filter((row) => !paired.has(row.id)))) map[l.tier].push(l)
     return { byTier: map, islandsOf }
   }, [filtered])
+  const sortedCards = useMemo(() => {
+    const paired = new Set([...islandsOf.values()].flat().map((league) => league.id))
+    return groupLeagueHubs(sortedFiltered.filter((league) => !paired.has(league.id)))
+  }, [sortedFiltered, islandsOf])
 
   const nothingMatches = filtered.length === 0 && filteredHistory.length === 0
 
@@ -230,6 +248,9 @@ export function MyLeaguesV4({
         </div>
 
         <div className="af-ml-actions">
+          <Link href="/brackets/my" className="af-ml-btn af-ml-btn--ghost">
+            {language?.startsWith('es') ? 'Mis cuadros' : 'My brackets'}
+          </Link>
           <Link href="/create-league" className="af-ml-btn">
             Create a league
           </Link>
@@ -292,6 +313,25 @@ export function MyLeaguesV4({
                 {platformLabel(p)}
               </option>
             ))}
+          </select>
+        </label>
+
+        <label className="af-ml-select">
+          <span className="af-ml-select-label">{copy('Sort')}</span>
+          <select
+            value={effectiveSort}
+            onChange={(event) => changeSort(event.target.value as LeagueSortMode)}
+            aria-label={copy('Sort leagues')}
+          >
+            {LEAGUE_SORT_OPTIONS.map((option) => {
+              const available = hasLeagueSortMetric(leagues, option.value)
+              return (
+                <option key={option.value} value={option.value} disabled={!available}>
+                  {copy(option.value === 'default' ? 'Needs you first' : option.label)}
+                  {available ? '' : ` (${copy('data unavailable')})`}
+                </option>
+              )
+            })}
           </select>
         </label>
 
@@ -427,8 +467,35 @@ export function MyLeaguesV4({
         </div>
       ) : null}
 
-      {/* ── The three tiers ──────────────────────────────────────────────── */}
-      {tiers.map((tier) => {
+      {effectiveSort !== 'default' && sortedCards.length > 0 ? (
+        <section className="af-ml-tier" id="af-ml-sorted" data-tier="quiet">
+          <div className="af-ml-tier-head">
+            <h2 className="af-ml-tier-title">
+              {copy('All leagues')} <span className="af-ml-tier-n af-num">{filtered.length}</span>
+            </h2>
+          </div>
+          <div className="af-ml-grid" data-tier="quiet" data-view={view}>
+            {sortedCards.map((league) => {
+              const islands = islandsOf.get(league.id)
+              if (!islands) return <LeagueCard key={league.id} league={league} tier={league.tier} view={view} />
+              return (
+                <div key={league.id} className="af-ml-exile-pair">
+                  <LeagueCard league={league} tier={league.tier} view={view} />
+                  {islands.map((island) => (
+                    <Fragment key={island.id}>
+                      <div className="af-ml-exile-link" title={`${copy('Exile Island for')} ${league.name}`} aria-hidden>↕</div>
+                      <LeagueCard league={island} tier={island.tier} view={view} exile />
+                    </Fragment>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── The three urgency tiers remain the default view ─────────────── */}
+      {effectiveSort === 'default' ? tiers.map((tier) => {
         const all = byTier[tier]
         if (all.length === 0) return null
         const cap = TIER_CAP[tier]
@@ -494,7 +561,7 @@ export function MyLeaguesV4({
             ) : null}
           </section>
         )
-      })}
+      }) : null}
 
       {/* ── Hidden ─────────────────────────────────────────────────────────── */}
       {hiddenLeagues.length > 0 ? (
@@ -509,7 +576,7 @@ export function MyLeaguesV4({
             </p>
           </summary>
           <div className="af-ml-grid" data-tier="quiet" data-view={view}>
-            {hiddenLeagues.map((l) => (
+            {sortLeagues(hiddenLeagues, effectiveSort).map((l) => (
               <LeagueCard key={l.id} league={l} tier={l.tier} view={view} />
             ))}
           </div>

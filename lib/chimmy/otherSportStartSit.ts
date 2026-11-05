@@ -24,7 +24,7 @@ import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { aggregateNcaafWeek } from '@/lib/scoring-runtime/ncaafStatNormalization'
-import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { dailySportWeekForInstant, resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { loadOpponentScoreAdjustments } from './opponentStrength'
 
@@ -46,7 +46,7 @@ export async function buildOtherSportStartSit(args: {
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
   const provider = String(world.provenance?.provider ?? '').toLowerCase()
-  const imported = provider === 'espn' || isForeignIdSpace(provider)
+  const imported = provider === 'espn' || (provider === 'sleeper' && sport === 'NBA') || isForeignIdSpace(provider)
   const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
   if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
   if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', league.season, { db: prisma }).catch(() => null)
@@ -101,9 +101,12 @@ export async function buildOtherSportStartSit(args: {
   const scorer = category ? null : buildLeagueStatScorer(league)
   if (!category && !scorer) return missing(`The ${sport} scoring categories could not be resolved for this league.`)
   const now = new Date()
+  // NBA's latest scored week can still be the previous period until the first game is final.
+  const periodWeek = sport === 'NBA' ? dailySportWeekForInstant(sport, league.season, now) : world.league.currentWeek ?? 1
+  if (periodWeek == null) return missing('No current NBA scoring period is verified for this league season.')
   const scheduleSports = sport === 'NCAAF' ? ['NCAAF', 'NCAAFB'] : sport === 'NCAAB' ? ['NCAAB', 'NCAABB'] : [sport]
   const schedule = await loadOtherSportPeriodSchedule({ sport, season: league.season,
-    week: world.league.currentWeek ?? 1, teams: ids.map((id) => metadata.get(id)?.team ?? ''), now })
+    week: periodWeek, teams: ids.map((id) => metadata.get(id)?.team ?? ''), now })
   if (!schedule) return missing('No complete current scoring-period schedule is verified for this league season. An old season or partial slate cannot support a start/sit call.')
   const sportKeys = [...new Set(scheduleSports.flatMap((key) => [key, key.toLowerCase()]))]
   const bridge = imported
@@ -176,7 +179,7 @@ export async function buildOtherSportStartSit(args: {
   if (injuries?.ambiguous.length) injuryNotes.push(`ambiguous injury identities: ${injuries.ambiguous.join(', ')}`)
   const remaining = perPlayer.map((p) => schedule.byTeam.get(p!.team ?? '') ?? { count: 0, opponents: [], verified: false })
   if (remaining.some((r) => !r.verified)) return missing('The current-period games could not be matched to both players’ teams. No schedule-adjusted start/sit call was made.')
-  const locks = await checkStartedGames({ sport, season: league.season, week: world.league.currentWeek ?? 1,
+  const locks = await checkStartedGames({ sport, season: league.season, week: periodWeek,
     players: perPlayer.map((p) => ({ playerId: p!.id, name: p!.name, team: p!.team, gameTime: null })) })
   if (ids.some((id) => locks.started.has(id))) return missing('At least one player has already started a game in the current scoring window. Verify lineup locks before changing a starter.')
   if (ids.some((id) => locks.unverified.includes(id))) return missing('A current game could not be verified for both players, so no start/sit call was made. Check the league schedule and ask again.')

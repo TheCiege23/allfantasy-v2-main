@@ -5,6 +5,7 @@ import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { cupGameDetail, cupGameState, cupLiveClock, cupTeamCode, groupForTeam, type CupGroup } from "@/lib/playoffs/nbaCupBoard"
 import CupGameCard from "./CupGameCard"
 import { dayHeading, localDayKey } from "./cupFormat"
+import { useClientTime } from "./useClientTime"
 import "./af-nba-cup.css"
 
 type Filter = "next" | "results" | "all"
@@ -36,6 +37,8 @@ function startMs(game: PlayoffSeriesView): number {
  */
 export default function CupGroupPlaySection({ games, groups, sport, picks, teamLogos, savingId, lockedReasonFor, onPick, onOpen, scoringExcludedReasonFor }: CupGroupPlaySectionProps) {
   const [filter, setFilter] = useState<Filter>("next")
+  const [selectedDay, setSelectedDay] = useState("all")
+  const clientTime = useClientTime()
   const live = useMemo(() => games.filter((g) => cupGameState(g) === "live").sort((a, b) => startMs(a) - startMs(b)), [games])
   const finals = games.filter((g) => cupGameState(g) === "final").length
 
@@ -52,7 +55,7 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
     })
     const byDay = new Map<string, PlayoffSeriesView[]>()
     for (const game of shown) {
-      const key = localDayKey(game.startsAt)
+      const key = localDayKey(game.startsAt, clientTime ? undefined : "UTC")
       byDay.set(key, [...(byDay.get(key) ?? []), game])
     }
     const keys = [...byDay.keys()].sort((a, b) => (a === "tba" ? 1 : b === "tba" ? -1 : a.localeCompare(b)))
@@ -68,18 +71,25 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
         liveCount ? `${liveCount} live` : null,
         finalCount && picked ? `${correct} of ${picked} picks right` : null,
       ].filter(Boolean)
-      return { key, heading: dayHeading(key), sub: bits.join(" · "), list }
+      return { key, heading: dayHeading(key, undefined, clientTime ? undefined : "UTC", clientTime), sub: bits.join(" · "), list }
     })
-  }, [games, filter, picks])
+  }, [games, filter, picks, clientTime])
 
   const groupLabel = (game: PlayoffSeriesView) => groupForTeam(groups, game.homeTeamName)?.label ?? null
+  const schedule = days.map((day) => {
+    const open = day.list.filter((game) => !lockedReasonFor(game))
+    return { ...day, openCount: open.length, savedCount: open.filter((game) => picks.has(game.id)).length }
+  })
+  const visibleSchedule = schedule.some((day) => day.key === selectedDay)
+    ? schedule.filter((day) => day.key === selectedDay)
+    : schedule
 
   return (
     <section className="af-pb-card af-pb-cup-group af-cup" aria-label="NBA Cup Group Play">
       <div className="af-pb-cup-group-heading">
         <div>
           <h2>Group Play</h2>
-          <p>1 point per correct pick · each game locks at tipoff · scores update live during games</p>
+          <p>Pick any confirmed date below. Each game locks at its own tipoff, and each correct pick earns 1 point.</p>
         </div>
         <div className="af-cup-filters" role="group" aria-label="Group Play filter">
           <button type="button" className="af-cup-filter" aria-pressed={filter === "next"} onClick={() => setFilter("next")}>
@@ -89,6 +99,37 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
           <button type="button" className="af-cup-filter" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All games</button>
         </div>
       </div>
+
+      <details className="af-cup-walkthrough">
+        <summary>How to fill out your NBA Cup bracket</summary>
+        <ol>
+          <li><strong>Pick Group Play winners.</strong> Use the date shortcuts to pick every available game. You can pick ahead across dates, and each game locks at its own tipoff.</li>
+          <li><strong>Finalize picks.</strong> Use the button at the top of your entry before your first picked game starts. After that, changes to upcoming picks save automatically.</li>
+          <li><strong>Come back for the knockout rounds.</strong> Quarterfinal picks open after Group Play ends and the NBA confirms the teams and tipoff times.</li>
+        </ol>
+        <p>Use My Brackets to return to your entry. League owners can use Invite friends to share the league.</p>
+      </details>
+
+      {schedule.length > 1 ? (
+        <nav className="af-cup-date-nav" aria-label="Jump to a Group Play date">
+          <label className="af-cup-date-select">
+            <span>Show games by date</span>
+            <select value={schedule.some((day) => day.key === selectedDay) ? selectedDay : "all"} onChange={(event) => setSelectedDay(event.target.value)}>
+              <option value="all">All dates</option>
+              {schedule.map((day) => <option key={day.key} value={day.key}>{day.heading} · {day.list.length} games</option>)}
+            </select>
+          </label>
+          {visibleSchedule.length === schedule.length ? <><strong>Jump to a game date</strong>
+          <div>
+            {schedule.map((day) => (
+              <a key={day.key} href={`#cup-day-${day.key}`}>
+                {day.heading}
+                {day.openCount ? <small>{day.savedCount}/{day.openCount} saved</small> : null}
+              </a>
+            ))}
+          </div></> : null}
+        </nav>
+      ) : null}
 
       {live.length ? (
         <div className="af-cup-live-strip" aria-label="Live games">
@@ -104,9 +145,17 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
         </div>
       ) : null}
 
-      {days.length ? days.map((day) => (
-        <div className="af-cup-day" key={day.key}>
-          <div className="af-cup-day-head"><h3>{day.heading}</h3><span>{day.sub}</span></div>
+      {visibleSchedule.length ? visibleSchedule.map((day, index) => (
+        <div className="af-cup-day" key={day.key} id={`cup-day-${day.key}`}>
+          <div className="af-cup-day-head">
+            <h3>{day.heading}</h3>
+            <span>{day.sub}{day.openCount ? ` · ${day.savedCount}/${day.openCount} open picks saved` : ""}</span>
+          </div>
+          {visibleSchedule[index + 1] ? (
+            <a className="af-cup-next-date" href={`#cup-day-${visibleSchedule[index + 1].key}`}>
+              Next date: {visibleSchedule[index + 1].heading} →
+            </a>
+          ) : null}
           <div className="af-cup-grid">
             {day.list.map((game) => (
               <CupGameCard
@@ -136,3 +185,4 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
     </section>
   )
 }
+

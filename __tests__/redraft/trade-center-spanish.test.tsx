@@ -215,6 +215,45 @@ function renderModal(extra: Partial<React.ComponentProps<typeof TradeCenterModal
 }
 
 describe('redraft Trade Center modal — Spanish, every step', () => {
+  it.each(['eligible', 'blocked'] as const)('shows the Zombie preview when eligibility is %s', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ snapshot: null, tradeGrade: {
+        gradeScope: 'zombie_future_scoring',
+        zombieEligibility: { status },
+        zombieInventory: status === 'eligible'
+          ? { proposer: { before: 10, after: 32 }, receiver: { before: 32, after: 10 } }
+          : undefined,
+        zombieForecast: status === 'eligible' ? { week: 4, teams: [{
+          before: { points: 90, infected: true, revived: false, inventoryAfter: 0, weeklyWinnings: 0, eligiblePartners: 0 },
+          after: { points: 105, infected: false, revived: false, inventoryAfter: 2, weeklyWinnings: 4, eligiblePartners: 3 },
+          throughWeek: 8,
+          season: {
+            before: { ledgerBalance: 2, eligibleWeeks: 0, eligiblePartners: 0, cashPayoutCents: 4900 },
+            after: { ledgerBalance: 6, eligibleWeeks: 5, eligiblePartners: 3, cashPayoutCents: 10000 },
+          },
+        }] } : undefined,
+        dynastyMarket: status === 'eligible' ? { giveValue: 4000, getValue: 4500, asOf: null } : null,
+      } }),
+    })))
+    renderModal({ currentWeek: 3, initialReceiverRosterId: 'r2' })
+    await waitFor(() => expect(screen.getByTestId('trade-asset-player-p2')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('trade-asset-player-p1'))
+    fireEvent.click(screen.getByTestId('trade-asset-player-p2'))
+    fireEvent.click(screen.getByTestId('trade-step-next'))
+    if (status === 'eligible') {
+      expect(await screen.findByText('Elegibilidad Zombie actual verificada')).toBeTruthy()
+      expect(screen.getByText('10 → 32')).toBeTruthy()
+      expect(screen.getByText('32 → 10')).toBeTruthy()
+      expect(screen.getByText('Hasta la semana proyectada 8')).toBeTruthy()
+      expect(screen.getByText('49 → 100')).toBeTruthy()
+      expect(screen.getByText('Referencia de mercado de jugadores dynasty')).toBeTruthy()
+    } else {
+      expect(await screen.findByText('Intercambio Zombie bloqueado')).toBeTruthy()
+      expect(screen.queryByText('10 → 32')).toBeNull()
+    }
+  })
+
   it('partner → assets → review → sent, two teams', async () => {
     renderModal()
     // Step 1.

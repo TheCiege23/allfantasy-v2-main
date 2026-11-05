@@ -123,7 +123,7 @@ describe('2026-09-19 league audit reproductions', () => {
       serverCounts: LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport[c.id]?.NFL,
     }))
     console.log('AUDIT_NFL_MATRIX', JSON.stringify(matrix))
-    expect(matrix).toHaveLength(12)
+    expect(matrix).toHaveLength(13)
   })
 
   // ✅ FIXED 2026-09-24: the bootstrap now seeds the chosen preset (see

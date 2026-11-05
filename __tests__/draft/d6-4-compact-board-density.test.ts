@@ -111,16 +111,12 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 6. DraftBoardCell height — tighter tiles
+// 6. DraftBoardCell shape
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — Sleeper-style tiles (2026-10-28)', () => {
-  // Matched to Sleeper's board at the user's request: short, wide, flat tiles across the full
-  // width, solid position colours once filled. (A square-tile version shipped first and was
-  // replaced the same day.)
-  it('tiles are short and wide: a fixed 50px height, full column width', () => {
-    expect(cellSrc).toMatch(/flex h-\[50px\] w-full flex-col/)
-    expect(cellSrc).not.toMatch(/aspect-square/)
+describe('DraftBoardCell — square AllFantasy tiles', () => {
+  it('uses square tiles with a cap for very wide columns', () => {
+    expect(cellSrc).toMatch(/flex aspect-square w-full max-w-\[144px\] flex-col/)
   })
 
   it('board columns fill the width with a 84px floor, and gaps are 2px', () => {

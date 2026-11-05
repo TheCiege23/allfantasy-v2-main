@@ -1,5 +1,6 @@
 import Link from "next/link"
 import BracketExperienceHub from "@/components/brackets/BracketExperienceHub"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import { bracketExperienceCopy } from "@/lib/brackets/bracketExperienceCopy"
 import Image from "next/image"
 import {
@@ -160,6 +161,8 @@ export default async function BracketsHomePage() {
 
   return (
     // Scoped colors preserve the approved dark canvas in light, dark and AF modes.
+    <>
+    <BracketQuickNav current="hub" language={language} />
     <main className="af-bracket-experience relative min-h-screen overflow-hidden">
       {/* Top brand strip — subtle wordmark + language toggle + Dashboard link */}
       <div className="af-bx-top relative z-10 mx-auto flex w-full items-center justify-between">
@@ -383,5 +386,6 @@ export default async function BracketsHomePage() {
         </footer>
       </div>
     </main>
+    </>
   )
 }

@@ -1,4 +1,6 @@
 import { readDeepAnalysisPreview } from "@/lib/chimmy/deepAnalysisPreview"
+import { readBracketEvidence } from "@/lib/chimmy/bracketEvidence"
+import { readPortfolioEvidence } from "@/lib/chimmy/portfolio/types"
 import type {
   AIChatContext,
   ChimmyAnswerContract,
@@ -65,7 +67,7 @@ export type SendChimmyMessageResult = {
 function toConversationPayload(conversation: ChimmyThreadMessage[] = []) {
   return conversation.slice(-10).map((m) => ({
     role: m.role,
-    content: m.content,
+    content: m.content.slice(0, 4000),
   }))
 }
 
@@ -87,6 +89,7 @@ function fileToDataUrl(file: File): Promise<string> {
 function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
   if (!rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) return undefined
   const meta = rawMeta as Record<string, unknown>
+  const bracketEvidence = readBracketEvidence(meta.bracketEvidence)
   const responseStructureRaw =
     meta.responseStructure && typeof meta.responseStructure === "object" && !Array.isArray(meta.responseStructure)
       ? (meta.responseStructure as Record<string, unknown>)
@@ -171,6 +174,8 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
       : undefined
 
   return {
+    bracketEvidence: bracketEvidence ?? undefined,
+    portfolio: readPortfolioEvidence(meta.portfolio) ?? undefined,
     analysisPreview: readDeepAnalysisPreview(meta.analysisPreview) ?? undefined,
     mode: modeRaw ? normalizeChimmyAssistantMode(modeRaw) : undefined,
     answerContract,
@@ -280,6 +285,7 @@ export async function sendChimmyMessage(
         }
       : undefined,
     userContext: {
+      portfolioState: input.context?.portfolioState ?? [...(input.conversation ?? [])].reverse().map(m => readPortfolioEvidence(m.meta?.portfolio)?.state).find(Boolean),
       leagueId: input.context?.leagueId,
       leagueName: input.context?.leagueName,
       sportScope: input.context?.sportScope,

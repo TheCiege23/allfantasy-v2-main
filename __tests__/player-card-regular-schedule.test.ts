@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ games: [] as any[], findMany: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsGame: { findMany: h.findMany } } }))
+vi.mock('@/lib/sport-teams/collegeTeamIndexStore', () => ({
+  loadCollegeTeamIndex: vi.fn(async () => ({ byAlias: new Map([
+    ['mississippi state', { id: 1, school: 'Mississippi State' }],
+    ['vanderbilt', { id: 2, school: 'Vanderbilt' }],
+    ['auburn', { id: 3, school: 'Auburn' }],
+  ]), ambiguous: new Map() })),
+}))
 
 import { loadSchedule } from '@/lib/core-app/playerCard'
 
@@ -74,5 +81,19 @@ describe('player-card bye coverage', () => {
   it('does not label a missing kickoff as a bye when the club has a fixture', async () => {
     h.games = [...fullSlate(), game({ startTime: null })]
     expect(await loadSchedule('NYJ', 2026, 3, null, null)).toMatchObject({ schedule: { available: false }, byeWeek: null })
+  })
+})
+
+describe('college player schedule', () => {
+  it('finds a school by its university spelling and never invents later BYEs', async () => {
+    h.games = [
+      game({ week: 10, homeTeam: 'Mississippi State', awayTeam: 'Vanderbilt' }),
+      game({ week: 11, homeTeam: 'Auburn', awayTeam: 'Vanderbilt' }),
+    ]
+    const result = await loadSchedule('Mississippi State University', 2026, 10, null, null, 2, null, null, 'NCAAF')
+    expect(h.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ sport: 'NCAAF' }) }))
+    expect(result).toMatchObject({ schedule: { available: true, data: { weeks: [
+      { week: 10, opponent: 'Vanderbilt', home: true, bye: false },
+    ] } }, byeWeek: null })
   })
 })

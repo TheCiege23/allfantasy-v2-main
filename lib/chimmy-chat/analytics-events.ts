@@ -3,6 +3,9 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 export const CHIMMY_AI_EVENT_NAMES = [
+  'bracket_entry_cta_click',
+  'bracket_alert_opt_in',
+  'bracket_alert_open',
   'chip_click',
   'followup_click',
   'mode_change',

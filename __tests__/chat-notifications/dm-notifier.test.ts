@@ -114,10 +114,10 @@ beforeEach(() => {
   dm()
 })
 
-describe('a DM alerts the other person — bell, push, email, SMS through the dispatcher', () => {
+describe('a DM alerts the other person — bell and push through the dispatcher', () => {
   it('dispatches ONE direct_messages alert to the recipient, never the sender', async () => {
     const r = await send()
-    expect(r.recipients).toEqual([{ userId: 'bob', outcome: 'alerted', email: true }])
+    expect(r.recipients).toEqual([{ userId: 'bob', outcome: 'alerted', email: false }])
     expect(h.dispatch).toHaveBeenCalledTimes(1)
     const call = h.dispatch.mock.calls[0][0]
     expect(call).toMatchObject({
@@ -156,13 +156,11 @@ describe('a DM alerts the other person — bell, push, email, SMS through the di
     expect(JSON.stringify(call)).not.toContain('dana@example.org')
   })
 
-  it('the email is the designed DM template, with the preview and a way to the conversation', async () => {
+  it('excludes email and SMS from a DM dispatch', async () => {
     await send()
     const call = h.dispatch.mock.calls[0][0]
-    expect(call.skipChannels).toBeUndefined()
-    expect(call.emailOverride.subject).toBe('DanaDynasty sent you a message')
-    expect(call.emailOverride.html).toContain('you up for a Kelce trade?')
-    expect(call.emailOverride.html).toContain('https://af.test/messages?thread=thread-1&amp;message=msg-1')
+    expect(call.skipChannels).toEqual({ email: true, sms: true })
+    expect(call.emailOverride).toBeUndefined()
   })
 
   it('a muted conversation is skipped', async () => {
@@ -196,7 +194,7 @@ describe('a DM alerts the other person — bell, push, email, SMS through the di
   })
 })
 
-describe('🛑 a burst is ONE alert, and email is rarer still', () => {
+describe('🛑 a burst is ONE alert', () => {
   it('second message 3 minutes later, unread: throttled on every channel', async () => {
     await send()
     const later = new Date(NOW.getTime() + 3 * 60_000)
@@ -205,7 +203,7 @@ describe('🛑 a burst is ONE alert, and email is rarer still', () => {
     expect(h.dispatch).toHaveBeenCalledTimes(1)
   })
 
-  it('after Bob reads it, the next message alerts again — but without a second email inside the hour', async () => {
+  it('after Bob reads it, the next message alerts again', async () => {
     await send()
     const readAt = new Date(NOW.getTime() + 2 * 60_000)
     dm([member('sender'), member('bob', { lastReadAt: readAt })])
@@ -213,7 +211,7 @@ describe('🛑 a burst is ONE alert, and email is rarer still', () => {
     const r = await send({ messageId: 'msg-2', createdAt: later, now: later })
     expect(r.recipients[0]).toEqual({ userId: 'bob', outcome: 'alerted', email: false })
     const second = h.dispatch.mock.calls[1][0]
-    expect(second.skipChannels).toEqual({ email: true })
+    expect(second.skipChannels).toEqual({ email: true, sms: true })
     expect(second.emailOverride).toBeUndefined()
   })
 
@@ -224,17 +222,11 @@ describe('🛑 a burst is ONE alert, and email is rarer still', () => {
     expect(h.dispatch).toHaveBeenCalledTimes(1)
   })
 
-  it('an unsubscribed address gets no email, but the bell and push still go', async () => {
-    h.unsubscribed.add('bob@example.org')
-    await send()
-    expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ email: true })
-  })
-
-  it('a throttle store that is down fails OPEN for the alert and CLOSED for email', async () => {
+  it('a throttle store that is down fails open for the alert', async () => {
     h.cacheBroken = true
     const r = await send()
     expect(r.recipients[0]).toEqual({ userId: 'bob', outcome: 'alerted', email: false })
-    expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ email: true })
+    expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ email: true, sms: true })
   })
 })
 
@@ -298,7 +290,8 @@ describe('league chat is opt-in', () => {
       category: 'league_chat',
       leagueId: 'L1',
       title: 'DanaDynasty · Pirate League',
-      actionHref: '/league/L1',
+      actionHref: '/league/L1?openChat=league&message=lm1',
+      skipChannels: { email: true, sms: true },
     })
   })
 

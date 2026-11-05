@@ -902,3 +902,22 @@ describe('lineup decision card', () => {
     expect(card(data({ bestBall: true }))).toBe('')
   })
 })
+
+it('renders the latest verified college basketball box score', () => {
+  const college = player({
+    sport: 'NCAAB',
+    latestCollegeBoxScore: {
+      date: '2026-11-02',
+      stats: [{ key: 'pts', value: 14 }, { key: 'reb', value: 0 }],
+    },
+  })
+  const { container } = render(<MyTeam data={data({
+    starters: { available: true, data: [
+      { slotLabel: 'G', player: college, empty: false, unresolvedId: null },
+    ] },
+  })} />)
+  expect(container.textContent).toContain('Last game')
+  expect(container.textContent).toContain('2026-11-02')
+  expect(container.textContent).toContain('14 PTS')
+  expect(container.textContent).toContain('0 REB')
+})

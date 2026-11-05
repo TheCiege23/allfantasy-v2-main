@@ -1,15 +1,18 @@
 /**
- * Tools that read only the real world — stats, schedules, pro standings — or merely resolve a league
- * by name. None of them looks inside the user's league. Names match `CHIMMY_TOOL_SPECS`.
+ * Tools that do not read the selected fantasy league: real-world stats, league discovery,
+ * and the signed-in user's separate bracket entries. Names match `CHIMMY_TOOL_SPECS`.
  */
 export const WORLD_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'find_league_by_name',
   'find_open_leagues',
+  'get_my_brackets',
+  'get_bracket_entry',
   'get_player_game_log',
   'get_player_season_stats',
   'get_season_stat_leaders',
   'get_stat_leaders',
   'get_upcoming_games',
+  'get_real_game_results',
   'get_real_standings',
 ])
 

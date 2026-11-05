@@ -31,6 +31,11 @@ export interface UserLeague {
   leagueVariant?: string | null
   /** Prisma `League.leagueType` when provided (redraft, dynasty, keeper, …). */
   leagueType?: string | null
+  /** Viewer team results, null when no scored result has been imported. */
+  viewerWins?: number | null
+  viewerLosses?: number | null
+  viewerTies?: number | null
+  viewerPlayoffOdds?: number | null
   /** Prisma `League.guillotineMode` when provided */
   guillotineMode?: boolean | null
   /** Prisma `League.keeperPhaseActive` when provided */

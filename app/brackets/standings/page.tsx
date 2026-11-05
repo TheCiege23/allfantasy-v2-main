@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { championshipTotal, rankBrackets, scoreAndPotential } from "@/lib/playoffs/playoffCompetition"
 import type { PlayoffSport } from "@/lib/playoffs/types"
 import { eligibleNbaCupPicks } from "@/lib/playoffs/nbaCupTournament"
+import RefreshBracketStandings from "@/components/brackets/RefreshBracketStandings"
 
 export const dynamic = "force-dynamic"
 
@@ -47,6 +48,7 @@ export default async function UniversalBracketStandings(props: {
   const title = sport === "ncaaf" ? "College Football Playoff" : sport === "nfl" ? "NFL Playoffs" : "NBA Cup"
 
   return <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
+    <RefreshBracketStandings />
     <div className="mx-auto max-w-6xl">
       <Link href="/brackets" className="text-sm font-semibold text-teal-300">← Brackets</Link>
       <div className="mt-7 flex flex-wrap items-end justify-between gap-4">

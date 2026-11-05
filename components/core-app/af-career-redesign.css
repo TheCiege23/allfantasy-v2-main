@@ -1,0 +1,177 @@
+/*
+ * AF Core — Career overview, the 2026-11 redesign (board: Career).
+ *
+ * Scoped to the desktop frame's overview (`.af-c13[data-view='overview']`) so the other Career
+ * tabs, the phone overview (`.af-crm`) and the share card keep their own look. Loaded after
+ * af-career.css / af-career-brief.css, so equal-specificity rules here win on source order.
+ */
+
+/* ── Headline tiles: the board's mono label over a large mono figure ─────── */
+
+.af-c13[data-view='overview'] .af-crx-acc-tile {
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  border-color: var(--line);
+}
+.af-c13[data-view='overview'] .af-crx-acc-l {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.af-c13[data-view='overview'] .af-crx-acc-v {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* ── Cards: 18px corners and more air, like the board's sections ────────── */
+
+.af-c13[data-view='overview'] .af-c13-card {
+  padding: 22px;
+  border-radius: 18px;
+  border-color: var(--line);
+}
+.af-c13[data-view='overview'] .af-c13-banner {
+  padding: 24px 26px;
+  border-radius: 20px;
+}
+
+/* ── Season by season ─────────────────────────────────────────────────── */
+
+.af-crs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.af-crs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.af-crs-headtext {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-crs-title {
+  margin: 0;
+  font: 800 18px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.af-crs-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-crs-best {
+  font: 600 12px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  color: var(--text2);
+}
+
+.af-crs-plot {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+}
+.af-crs-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 180px;
+  margin-top: 24px;
+  font: 500 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  color: var(--faint);
+  text-align: right;
+}
+.af-crs-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--af-crs-n, 8), minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  /* Room above a full-height bar for its title star. */
+  padding: 24px 0 0;
+  list-style: none;
+  min-width: 0;
+}
+.af-crs-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+.af-crs-track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 180px;
+  border-bottom: 1px solid var(--line2);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% 50%;
+}
+.af-crs-bar {
+  width: min(100%, 40px);
+  border-radius: 6px 6px 2px 2px;
+  background: var(--accent);
+}
+.af-crs-col[data-titles] .af-crs-bar {
+  background: var(--warn);
+}
+.af-crs-star {
+  position: absolute;
+  left: 50%;
+  margin-bottom: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-crs-none {
+  align-self: center;
+  font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  color: var(--faint);
+  text-align: center;
+}
+.af-crs-year,
+.af-crs-val {
+  font: 600 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  text-align: center;
+}
+.af-crs-year {
+  color: var(--text2);
+}
+.af-crs-val {
+  color: var(--muted);
+}
+
+/* A long career on a phone: the bars scroll in their own box, never the page. */
+@media (max-width: 640px) {
+  .af-c13[data-view='overview'] .af-crx-acc-v {
+    font-size: 24px;
+  }
+  .af-c13[data-view='overview'] .af-c13-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .af-crs-plot {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .af-crs-bars {
+    overflow-x: auto;
+    grid-template-columns: repeat(var(--af-crs-n, 8), minmax(38px, 1fr));
+  }
+  .af-crs-axis,
+  .af-crs-track {
+    height: 140px;
+  }
+}

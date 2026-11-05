@@ -1,9 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { DraftPlayerCard } from './DraftPlayerCard'
-import type { AuctionSessionSnapshot, AuctionState } from '@/lib/live-draft-engine/types'
-import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
+import '@/components/core-app/af-core.css'
+import './af-draft-room.css'
+import { useState, useEffect, useMemo } from 'react'
+import type { AuctionSessionSnapshot, AuctionState, DraftPickSnapshot } from '@/lib/live-draft-engine/types'
+import { getAuctionMaxBid } from '@/lib/mock-draft/draft-engine'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
 export type AuctionSpotlightPanelProps = {
   auction: AuctionSessionSnapshot
@@ -19,26 +24,101 @@ export type AuctionSpotlightPanelProps = {
   resolveLoading?: boolean
   /** When true (incomplete roster schema), hide bid controls even if a nomination is live. */
   rosterGateBlocksAuctionActions?: boolean
+  /** Roster size (the session's round count). With `picks`, gives each team's open spots and max bid. */
+  rosterSize?: number | null
+  /** Picks so far: open spots per team, and the "Recently won" list (picks carrying a winning bid). */
+  picks?: DraftPickSnapshot[] | null
+  /** The league's minimum bid; the server reserves this much per open spot. */
+  minimumBid?: number
 }
 
-const PRESET_BIDS = [1, 2, 3, 5, 10, 15, 20, 25, 30, 50]
+export type AuctionTeamLine = {
+  rosterId: string
+  displayName: string
+  left: number
+  /** Null when the roster size is unknown, so no max is drawn rather than a wrong one. */
+  max: number | null
+  spots: number | null
+  /** Share of the starting budget still unspent, 0–100. */
+  leftPct: number
+}
+
+/**
+ * Budget, max bid and open spots per team, in nomination order. Max bid is the server's own rule
+ * (`getAuctionMaxBid`): keep the minimum bid in reserve for every open spot after this one.
+ */
+export function buildAuctionTeamLines(input: {
+  auction: Pick<AuctionSessionSnapshot, 'nominationOrder' | 'budgets' | 'budgetPerTeam'>
+  rosterSize?: number | null
+  picks?: Pick<DraftPickSnapshot, 'rosterId' | 'playerName'>[] | null
+  minimumBid?: number
+}): AuctionTeamLine[] {
+  const filled = new Map<string, number>()
+  for (const pick of input.picks ?? []) {
+    if (!pick.playerName?.trim()) continue
+    filled.set(pick.rosterId, (filled.get(pick.rosterId) ?? 0) + 1)
+  }
+  const total = input.auction.budgetPerTeam > 0 ? input.auction.budgetPerTeam : 1
+  return input.auction.nominationOrder.map((entry) => {
+    const left = input.auction.budgets[entry.rosterId] ?? input.auction.budgetPerTeam
+    const spots = input.rosterSize != null && input.rosterSize > 0 ? Math.max(0, input.rosterSize - (filled.get(entry.rosterId) ?? 0)) : null
+    const max = spots == null ? null : getAuctionMaxBid({ budget: left, rosterSlotsRemaining: spots, minimumBid: input.minimumBid ?? 1 })
+    return {
+      rosterId: entry.rosterId,
+      displayName: entry.displayName ?? '—',
+      left,
+      max,
+      spots,
+      leftPct: Math.max(0, Math.min(100, Math.round((left / total) * 100))),
+    }
+  })
+}
+
+/**
+ * Nomination turns until the viewer nominates: 0 means it is their turn now. While a player is on
+ * the block the current index is the team that nominated it, so the viewer's own live nomination
+ * counts as a full lap away. Null for a spectator.
+ */
+export function nominationTurnsUntil(input: {
+  order: { rosterId: string }[]
+  currentIndex: number
+  viewerRosterId: string | null
+  nominationLive: boolean
+}): number | null {
+  const n = input.order.length
+  if (!input.viewerRosterId || n === 0) return null
+  const mine = input.order.findIndex((e) => e.rosterId === input.viewerRosterId)
+  if (mine < 0) return null
+  const current = ((input.currentIndex % n) + n) % n
+  const turns = (mine - current + n) % n
+  return turns === 0 && input.nominationLive ? n : turns
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '—'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase()
+}
 
 export function AuctionSpotlightPanel({
   auction,
   currentUserRosterId,
   isCommissioner,
-  onNominate,
   onBid,
   onResolve,
   timerRemainingSeconds,
   timerStatus,
-  nominateLoading = false,
   bidLoading = false,
   resolveLoading = false,
   rosterGateBlocksAuctionActions = false,
+  rosterSize = null,
+  picks = null,
+  minimumBid = 1,
 }: AuctionSpotlightPanelProps) {
-  const [bidAmount, setBidAmount] = useState('')
+  const m = useMessages(draftRoomRedesignMessages)
   const state: AuctionState = auction.auctionState
+  const [bidAmount, setBidAmount] = useState(() => String(state.minNextBid ?? 1))
   const nomination = state.currentNomination
   const currentNominator = auction.nominationOrder[state.nominationOrderIndex]
   const isMyTurnToNominate = currentUserRosterId != null && currentNominator?.rosterId === currentUserRosterId
@@ -50,10 +130,37 @@ export function AuctionSpotlightPanel({
     currentUserRosterId != null &&
     myBudget >= minNextBid
 
+  const teamLines = useMemo(
+    () => buildAuctionTeamLines({ auction, rosterSize, picks, minimumBid }),
+    [auction, rosterSize, picks, minimumBid],
+  )
+  const mine = teamLines.find((line) => line.rosterId === currentUserRosterId) ?? null
+  const myMax = mine?.max ?? null
+  const turns = nominationTurnsUntil({
+    order: auction.nominationOrder,
+    currentIndex: state.nominationOrderIndex,
+    viewerRosterId: currentUserRosterId,
+    nominationLive: nomination != null,
+  })
+  const nameOf = (rosterId: string | null | undefined) =>
+    auction.nominationOrder.find((e) => e.rosterId === rosterId)?.displayName ?? '—'
+  const recentWins = useMemo(
+    () =>
+      (picks ?? [])
+        .filter((p) => p.amount != null && p.playerName.trim())
+        .sort((a, b) => b.overall - a.overall)
+        .slice(0, 6),
+    [picks],
+  )
+
   useEffect(() => {
     setBidAmount(String(minNextBid))
   }, [minNextBid])
 
+  const withinMax = (amount: number) => myMax == null || amount <= myMax
+  const placeBid = (amount: number) => {
+    if (!Number.isNaN(amount) && amount >= minNextBid) onBid(amount)
+  }
   const handleBid = () => {
     const amt = parseInt(bidAmount, 10)
     if (!Number.isNaN(amt) && amt >= minNextBid) {
@@ -61,150 +168,229 @@ export function AuctionSpotlightPanel({
       setBidAmount(String(amt + 1))
     }
   }
+  const nextOne = Math.max(minNextBid, state.currentBid + 1)
+  const nextFive = Math.max(minNextBid, state.currentBid + 5)
 
   const timerExpired = timerStatus === 'expired' || (timerRemainingSeconds != null && timerRemainingSeconds <= 0)
   const showResolve = (timerExpired || isCommissioner) && nomination != null
+  const tint = nomination ? positionTintHex(nomination.position) : null
 
   return (
-    <section
-      className="flex flex-col gap-3 border-b border-white/10 bg-black/30 p-3"
-      aria-label="Auction spotlight"
-      data-auction-spotlight
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-white">Auction</h2>
-        <span className="text-[11px] text-white/60" data-testid="auction-current-nominator">
-          Nominator: {currentNominator?.displayName ?? '—'}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-white/70">
-          {auction.nominationOrder.map((entry) => (
-            <span
-              key={entry.rosterId}
-              className={`rounded px-1.5 py-0.5 ${
-                entry.rosterId === currentNominator?.rosterId
-                  ? 'bg-cyan-500/30 text-cyan-200'
-                  : 'bg-white/10 text-white/60'
-              }`}
-              title={entry.displayName}
-            >
-              {entry.displayName?.slice(0, 8) ?? '—'}
+    <section className="af-core af-dr af-dr-auction" aria-label={m.auctionAria} data-auction-spotlight>
+      {currentUserRosterId != null ? (
+        <div className="af-dr-stats" data-testid="auction-viewer-stats">
+          <div className="af-dr-stat">
+            <span className="af-dr-label">{m.statBudget}</span>
+            <span className="af-dr-stat-value">{m.statBudgetValue(myBudget, auction.budgetPerTeam)}</span>
+          </div>
+          <div className="af-dr-stat">
+            <span className="af-dr-label">{m.statMaxBid}</span>
+            <span className="af-dr-stat-value" data-testid="auction-viewer-max-bid">
+              {myMax != null ? `$${myMax}` : '—'}
             </span>
-          ))}
+          </div>
+          <div className="af-dr-stat" data-tone={turns === 0 ? 'now' : undefined}>
+            <span className="af-dr-label">{m.statNominate}</span>
+            <span className="af-dr-stat-value" data-testid="auction-viewer-nominate-in">
+              {turns == null ? m.nominateNever : turns === 0 ? m.nominateNow : m.nominateIn(turns)}
+            </span>
+          </div>
         </div>
+      ) : null}
+
+      <div className="af-dr-order" role="list" aria-label={m.nominationOrderAria}>
+        <span className="af-dr-label" data-testid="auction-current-nominator">
+          {m.nominatorLabel}: {currentNominator?.displayName ?? '—'}
+        </span>
+        {auction.nominationOrder.map((entry) => (
+          <span
+            key={entry.rosterId}
+            role="listitem"
+            className="af-dr-order-chip"
+            data-current={entry.rosterId === currentNominator?.rosterId ? 'true' : undefined}
+            data-me={entry.rosterId === currentUserRosterId ? 'true' : undefined}
+            title={entry.displayName ?? undefined}
+          >
+            {entry.displayName?.slice(0, 10) ?? '—'}
+          </span>
+        ))}
       </div>
 
-      {/* Nominated player card */}
-      <div className="min-h-[80px] rounded-xl border border-white/12 bg-black/40 p-3">
+      <div className="af-dr-block">
+        <div className="af-dr-block-head">
+          <span className="af-dr-label">{m.onTheBlock}</span>
+          {timerStatus === 'running' && timerRemainingSeconds != null ? (
+            <span className="af-dr-block-clock" aria-live="polite">
+              {m.secondsLeft(timerRemainingSeconds)}
+            </span>
+          ) : timerStatus === 'paused' ? (
+            <span className="af-dr-block-clock" data-paused="true">
+              {m.paused}
+            </span>
+          ) : null}
+        </div>
+
         {nomination ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <DraftPlayerCard
-              display={buildDraftPlayerDisplayModel({
-                playerName: nomination.playerName,
-                position: nomination.position,
-                team: nomination.team ?? null,
-                playerId: nomination.playerId ?? null,
-                byeWeek: nomination.byeWeek ?? null,
-              })}
-              name={nomination.playerName}
-              position={nomination.position}
-              team={nomination.team}
-              byeWeek={nomination.byeWeek ?? null}
-              variant="card"
-              isDrafted={false}
-            />
-            <div className="flex flex-1 flex-col gap-1">
-              <p className="text-xs text-white/60">
-                High bid: <strong className="text-white">${state.currentBid || '—'}</strong>
-                {state.currentBidderRosterId && (
-                  <span className="ml-1">
-                    ({auction.nominationOrder.find((e) => e.rosterId === state.currentBidderRosterId)?.displayName ?? '—'})
+          <>
+            <div className="af-dr-block-main">
+              <div className="af-dr-player">
+                <span
+                  className="af-dr-avatar"
+                  style={tint ? { backgroundColor: tint, color: SKIN_ON_FILL } : { background: 'var(--surface2)', color: 'var(--text)' }}
+                  aria-hidden
+                >
+                  {initialsOf(nomination.playerName)}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span className="af-dr-player-name">{nomination.playerName}</span>
+                  <span className="af-dr-player-meta">
+                    {[nomination.position, nomination.team].filter(Boolean).join(' · ')}
                   </span>
-                )}
-              </p>
-              <p className="text-[11px] text-white/55" data-testid="auction-highest-bidder">
-                Highest bidder: {state.currentBidderRosterId
-                  ? (auction.nominationOrder.find((e) => e.rosterId === state.currentBidderRosterId)?.displayName ?? '—')
-                  : 'No bids yet'}
-              </p>
-              <p className="text-[11px] text-white/50">
-                Min next bid: ${minNextBid}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                {timerStatus === 'running' && timerRemainingSeconds != null && (
-                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-200" aria-live="polite">
-                    {timerRemainingSeconds}s
-                  </span>
-                )}
-                {timerStatus === 'paused' && (
-                  <span className="rounded bg-white/10 px-2 py-0.5 text-xs text-white/70">Paused</span>
-                )}
-                {canBid && (
+                </span>
+              </div>
+              <div className="af-dr-bidbox">
+                <span className="af-dr-label">{m.currentBid}</span>
+                <span className="af-dr-bid" data-testid="auction-current-bid">
+                  {state.currentBid > 0 ? `$${state.currentBid}` : '—'}
+                </span>
+                <span className="af-dr-bid-leader" data-testid="auction-highest-bidder">
+                  {state.currentBidderRosterId ? m.highBidder(nameOf(state.currentBidderRosterId)) : m.noBidsYet}
+                </span>
+              </div>
+            </div>
+
+            {canBid || showResolve ? (
+              <div className="af-dr-bids">
+                {canBid ? (
                   <>
-                    <input
-                      type="number"
-                      min={minNextBid}
-                      value={bidAmount}
-                      onChange={(e) => setBidAmount(e.target.value)}
-                      className="w-20 rounded border border-white/20 bg-black/40 px-2 py-1 text-sm text-white"
-                      aria-label="Bid amount"
-                        data-testid="auction-bid-input"
-                    />
                     <button
                       type="button"
-                      onClick={handleBid}
-                      disabled={bidLoading}
-                        data-testid="auction-bid-button"
-                      className="rounded bg-cyan-500/30 px-3 py-1 text-sm text-cyan-200 hover:bg-cyan-500/40 disabled:opacity-50"
+                      className="af-dr-quick"
+                      onClick={() => placeBid(nextOne)}
+                      disabled={bidLoading || !withinMax(nextOne)}
+                      data-testid="auction-quick-bid-1"
                     >
-                      {bidLoading ? '…' : 'Bid'}
+                      +$1 <small>{m.bidCaps} ${nextOne}</small>
                     </button>
+                    <button
+                      type="button"
+                      className="af-dr-quick"
+                      onClick={() => placeBid(nextFive)}
+                      disabled={bidLoading || !withinMax(nextFive)}
+                      data-testid="auction-quick-bid-5"
+                    >
+                      +$5 <small>{m.bidCaps} ${nextFive}</small>
+                    </button>
+                    <div className="af-dr-custom">
+                      <label>
+                        <span className="af-dr-label">{m.customBid}</span>
+                        <input
+                          type="number"
+                          min={minNextBid}
+                          max={myMax ?? undefined}
+                          value={bidAmount}
+                          onChange={(e) => setBidAmount(e.target.value)}
+                          aria-label={m.bidAmountAria}
+                          data-testid="auction-bid-input"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="af-dr-btn"
+                        onClick={handleBid}
+                        disabled={bidLoading}
+                        data-testid="auction-bid-button"
+                      >
+                        {bidLoading ? m.bidding : m.bid}
+                      </button>
+                    </div>
                   </>
-                )}
-                {showResolve && (
+                ) : null}
+                {showResolve ? (
                   <button
                     type="button"
+                    className="af-dr-btn"
+                    data-variant="resolve"
                     onClick={onResolve}
                     disabled={resolveLoading}
                     data-testid="auction-resolve-button"
-                    className="rounded bg-emerald-500/30 px-3 py-1 text-sm text-emerald-200 hover:bg-emerald-500/40 disabled:opacity-50"
                   >
-                    {resolveLoading ? '…' : isCommissioner ? 'Sell / Pass' : 'Resolve'}
+                    {resolveLoading ? m.bidding : isCommissioner ? m.sellOrPass : m.resolve}
                   </button>
-                )}
+                ) : null}
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-4 text-center">
-            <p className="text-sm text-white/70">
-              {isMyTurnToNominate
-                ? 'Your turn to nominate. Select a player from the list and click Nominate.'
-                : `Waiting for ${currentNominator?.displayName ?? 'nominator'} to nominate.`}
+            ) : null}
+
+            <p className="af-dr-note">
+              {m.minNextBid(minNextBid)}
+              {canBid && myMax != null && mine?.spots != null && mine.spots > 0 ? ` · ${m.maxBidNote(myMax, mine.spots, minimumBid)}` : ''}
             </p>
-            {timerStatus === 'running' && timerRemainingSeconds != null && (
-              <p className="mt-1 text-[11px] text-white/50" data-testid="auction-nomination-timer">
-                Nomination window: {timerRemainingSeconds}s
+          </>
+        ) : (
+          <div>
+            <p className="af-dr-waiting">
+              {isMyTurnToNominate
+                ? m.yourTurnNominate
+                : currentNominator?.displayName
+                  ? m.waitingFor(currentNominator.displayName)
+                  : m.waitingForUnknown}
+            </p>
+            {timerStatus === 'running' && timerRemainingSeconds != null ? (
+              <p className="af-dr-note" style={{ textAlign: 'center' }} data-testid="auction-nomination-timer">
+                {m.nominationWindow(timerRemainingSeconds)}
               </p>
-            )}
+            ) : null}
           </div>
         )}
       </div>
 
-      {/* Remaining budgets */}
-      <div className="flex flex-wrap gap-2">
-        {auction.nominationOrder.map((entry) => (
-          <div
-            key={entry.rosterId}
-            className={`rounded-lg border px-2 py-1 text-[11px] ${
-              entry.rosterId === currentUserRosterId
-                ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'
-                : 'border-white/10 bg-white/5 text-white/70'
-            }`}
-          >
-            <span className="font-medium">{entry.displayName?.slice(0, 10) ?? '—'}</span>
-            <span className="ml-1">${auction.budgets[entry.rosterId] ?? auction.budgetPerTeam}</span>
+      <div className="af-dr-lower">
+        {recentWins.length > 0 ? (
+          <div className="af-dr-card" data-testid="auction-recently-won">
+            <div className="af-dr-card-head">
+              <h3 className="af-dr-card-title">{m.recentlyWon}</h3>
+            </div>
+            {recentWins.map((pick) => (
+              <div key={pick.id} className="af-dr-row">
+                <span style={{ minWidth: 0 }}>
+                  <span className="af-dr-row-name" style={{ display: 'block' }}>
+                    {pick.playerName}
+                  </span>
+                  <span className="af-dr-row-sub">
+                    {[pick.position, pick.team, pick.displayName ?? nameOf(pick.rosterId)].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+                <span className="af-dr-num" style={{ fontWeight: 800, color: 'var(--text)' }}>
+                  ${pick.amount}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
+        ) : null}
+
+        <div className="af-dr-card" data-testid="auction-budgets" style={recentWins.length > 0 ? undefined : { gridColumn: '1 / -1' }}>
+          <div className="af-dr-card-head">
+            <h3 className="af-dr-card-title">{m.budgets}</h3>
+            <span className="af-dr-label">{m.budgetCols}</span>
+          </div>
+          {teamLines.map((line) => (
+            <div key={line.rosterId} className="af-dr-budget" data-me={line.rosterId === currentUserRosterId ? 'true' : undefined}>
+              <div className="af-dr-row">
+                <span className="af-dr-row-name">
+                  {line.rosterId === currentUserRosterId ? `${line.displayName} · ${m.you}` : line.displayName}
+                </span>
+                <span className="af-dr-budget-nums">
+                  <strong>${line.left}</strong>
+                  {line.max != null ? <span>${line.max}</span> : null}
+                  {line.spots != null ? <span>{m.spotsLeft(line.spots)}</span> : null}
+                </span>
+              </div>
+              <div className="af-dr-track" aria-hidden>
+                <span style={{ width: `${line.leftPct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   )

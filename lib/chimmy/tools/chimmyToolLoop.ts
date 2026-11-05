@@ -6,8 +6,8 @@ import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
 import { anthropicTokenUsage, recordLlmCall } from '@/lib/telemetry/llm-usage'
-import { getDeepSeekConfigFromEnv } from '@/lib/provider-config'
-import { resolveDeepSeekModel } from '@/lib/ai/providerProfiles'
+import { getDeepSeekConfigFromEnv, getOpenAIConfigFromEnv } from '@/lib/provider-config'
+import { resolveDeepSeekModel, resolveOpenAIModel } from '@/lib/ai/providerProfiles'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -94,7 +94,7 @@ const CLAUDE_TURN_TIMEOUT_MS = 40_000
 /** Whole-loop ceiling, so three slow turns cannot hold a request for two minutes. */
 const CLAUDE_LOOP_BUDGET_MS = 75_000
 
-export type ChimmyToolLoopProvider = 'claude' | 'grok' | 'deepseek'
+export type ChimmyToolLoopProvider = 'claude' | 'grok' | 'deepseek' | 'openai'
 
 export type ChimmyToolLoopResult = {
   text: string
@@ -124,8 +124,8 @@ function hasDeepSeekKey(): boolean {
 }
 
 /**
- * Every provider the loop may use, in the order it tries them: Claude, then Grok, then DeepSeek,
- * each only when its key is set. `CHIMMY_TOOL_LOOP_PROVIDER=grok|deepseek` pins one — useful while
+ * Providers retain their established order: Claude, Grok, DeepSeek, then OpenAI.
+ * Each needs a configured key. `CHIMMY_TOOL_LOOP_PROVIDER=grok|deepseek|openai` pins one — useful while
  * the providers ahead of it have dead keys, so no request spends time on their failed calls first.
  * Read at call time, never at import, so a key rotated into the environment takes effect without
  * a rebuild.
@@ -134,10 +134,12 @@ export function chimmyToolLoopProviders(): ChimmyToolLoopProvider[] {
   const pinned = process.env.CHIMMY_TOOL_LOOP_PROVIDER?.trim().toLowerCase()
   if (pinned === 'grok') return hasXaiKey() ? ['grok'] : []
   if (pinned === 'deepseek') return hasDeepSeekKey() ? ['deepseek'] : []
+  if (pinned === 'openai') return getOpenAIConfigFromEnv() ? ['openai'] : []
   const chain: ChimmyToolLoopProvider[] = []
   if (hasAnthropicKey()) chain.push('claude')
   if (hasXaiKey()) chain.push('grok')
   if (hasDeepSeekKey()) chain.push('deepseek')
+  if (getOpenAIConfigFromEnv()) chain.push('openai')
   return chain
 }
 
@@ -186,6 +188,12 @@ function deepseekClient(): OpenAI | null {
   const cfg = getDeepSeekConfigFromEnv()
   if (!cfg) return null
   return new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl })
+}
+
+function openaiClient(): OpenAI | null {
+  if (!isAiSpendEnabled()) return null
+  const cfg = getOpenAIConfigFromEnv()
+  return cfg ? new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl }) : null
 }
 
 function grokClient(): OpenAI | null {
@@ -461,11 +469,12 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
 }
 
 /** Grok and DeepSeek: both speak the OpenAI chat-completions shape, function calling included. */
-async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok' | 'deepseek'): Promise<ProviderLoopOutcome> {
-  const client = provider === 'grok' ? grokClient() : deepseekClient()
+async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok' | 'deepseek' | 'openai'): Promise<ProviderLoopOutcome> {
+  const client = provider === 'grok' ? grokClient() : provider === 'deepseek' ? deepseekClient() : openaiClient()
   if (!client) return null
-  // `args.model` names a Grok model when a caller passes one; DeepSeek runs its own published id.
-  const model = provider === 'grok' ? args.model?.trim() || DEFAULT_MODEL : resolveDeepSeekModel('standard')
+  // `args.model` names a Grok model; the other providers use their own configured profile.
+  const model = provider === 'grok' ? args.model?.trim() || DEFAULT_MODEL
+    : provider === 'deepseek' ? resolveDeepSeekModel('standard') : resolveOpenAIModel('standard')
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
@@ -499,7 +508,7 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
       // per-request helper, and the catch below already reports a provider failure.
       recordLlmCall({
         feature: 'chimmy_tool_loop',
-        provider: provider === 'grok' ? 'xai' : 'deepseek',
+        provider: provider === 'grok' ? 'xai' : provider,
         model: response.model || model,
         userId: args.context.userId,
         leagueId: args.context.leagueId,

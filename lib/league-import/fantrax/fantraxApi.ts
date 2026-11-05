@@ -67,7 +67,7 @@ export const FANTRAX_ENDPOINTS = [
  * MLB/CFB. A map that fails to load fails soft (the import needs only the league's own sport to
  * load), so a wrong assumption costs NBA/NHL detection and nothing else. contracts/fantrax/GAPS.md.
  */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
 
 export type FantraxFailure = {
   /**
@@ -304,20 +304,23 @@ function fxeaRetryDelay(attempt: number): Promise<void> {
  * — check the id exactly as it appears in the league URL.` An outage was presented to the
  * user as a typo in their league id, and to the collector as a league that is not there.
  */
-async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
+async function fxeaGet<T>(path: string, timeoutMs = FXEA_TIMEOUT_MS): Promise<FantraxResult<T>> {
   let res: Response
-  let text: string
+  let text = ''
 
   for (let attempt = 0; ; attempt++) {
     const isLastAttempt = attempt === FXEA_RETRIES - 1
     try {
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), FXEA_TIMEOUT_MS)
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
         res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, {
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
+        if (!isTransientFantraxStatus(res.status)) {
+          text = await res.text()
+        }
       } finally {
         clearTimeout(timer)
       }
@@ -346,7 +349,6 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
       }
     }
 
-    text = await res.text().catch(() => '')
     break
   }
 
@@ -390,6 +392,13 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
 
 export function getFantraxLeagueInfo(leagueId: string): Promise<FantraxResult<FantraxLeagueInfo>> {
   return fxeaGet<FantraxLeagueInfo>(`/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}`)
+}
+
+export function getFantraxLeagueTeams(leagueId: string) {
+  return fxeaGet<Pick<FantraxLeagueInfo, 'leagueName' | 'seasonYear' | 'teamInfo'>>(
+    `/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}&excludePlayerInfo=true`,
+    25_000,
+  )
 }
 
 /**

@@ -168,7 +168,8 @@ jobs:
     # context, so a promotion has to list all four.
     name: Unit tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Allow dependency installation and the full shard to finish on slower runners.
+    timeout-minutes: 35
     strategy:
       # One shard failing must not cancel the others: the first CI run of this
       # suite is a measurement, and a partial picture is worth much less.
@@ -188,7 +189,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow package.json's supported major; floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       - name: Staging data runner contracts
         if: matrix.shard == 1

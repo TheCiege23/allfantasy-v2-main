@@ -1,7 +1,7 @@
 "use client"
 import { eligibleCoachPick } from "@/lib/playoffs/bracketCoach"
 
-import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import "./af-playoff-bracket.css"
 import type { PlayoffChallengeView, PlayoffSeriesView } from "@/lib/playoffs/types"
@@ -30,9 +30,11 @@ import { TeamLogo } from "@/app/components/TeamLogo"
 import { nbaCupLockedReason } from "@/lib/playoffs/nbaCupTournament"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
 import { buildNbaCupGroups, cupGameState, cupLiveClock } from "@/lib/playoffs/nbaCupBoard"
+import CupGameCard from "./cup/CupGameCard"
 import CupGroupPlaySection from "./cup/CupGroupPlaySection"
 import CupStandingsRail from "./cup/CupStandingsRail"
 import CupPhaseTrack from "./cup/CupPhaseTrack"
+import { useClientTime } from "./cup/useClientTime"
 import BracketCoachPanel from "./BracketCoachPanel"
 
 /**
@@ -168,6 +170,7 @@ export default function MlbBracketBoard({
   backHref,
   backLabel,
 }: MlbBracketBoardProps) {
+  const clientTime = useClientTime()
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [liveNode, setLiveNode] = useState<string | null>(null)
@@ -177,6 +180,28 @@ export default function MlbBracketBoard({
   const teamLogos = view.teamLogos ?? {}
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup" || sport === "nfl")
   const rollingCup = singleGame && sport === "nba_cup"
+  const [compactCup, setCompactCup] = useState(false)
+  const [tipoffTick, setTipoffTick] = useState(0)
+  useEffect(() => {
+    if (!rollingCup) return
+    if (!window.matchMedia) return
+    const viewport = window.matchMedia("(max-width: 760px)")
+    const update = () => setCompactCup(viewport.matches)
+    update()
+    viewport.addEventListener("change", update)
+    return () => viewport.removeEventListener("change", update)
+  }, [rollingCup])
+  useEffect(() => {
+    if (!rollingCup) return
+    const now = Date.now()
+    const nextTipoff = view.series.reduce((earliest, game) => {
+      const tipoff = Date.parse(game.startsAt ?? "")
+      return tipoff > now && tipoff < earliest ? tipoff : earliest
+    }, Infinity)
+    if (!Number.isFinite(nextTipoff)) return
+    const timeout = window.setTimeout(() => setTipoffTick((tick) => tick + 1), Math.min(nextTipoff - now, 2_147_483_647))
+    return () => window.clearTimeout(timeout)
+  }, [rollingCup, tipoffTick, view.series])
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
   const tournamentLocked = singleGame && !rollingCup && firstStart != null && Date.now() >= firstStart
   const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nfl")
@@ -191,7 +216,11 @@ export default function MlbBracketBoard({
   )
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
-  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(groupGames) : [], [rollingCup, groupGames])
+  const knockoutPublished = rollingCup && view.series.some((game) =>
+    game.round !== "cup_group_play" && isOfficial(game.homeTeamName) && isOfficial(game.awayTeamName) &&
+    Number.isFinite(Date.parse(game.startsAt ?? "")),
+  )
+  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(view.series, clientTime ? undefined : "UTC") : [], [rollingCup, view.series, clientTime])
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()
@@ -309,7 +338,7 @@ export default function MlbBracketBoard({
     // NBA Cup knockout cards carry the live clock and score, the same as Group Play.
     const cupState = rollingCup ? cupGameState(s) : null
     const showScore = cupState === "live" || cupState === "final"
-    const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"
+    const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: clientTime ? undefined : "UTC" }) : "Time TBA"
     return (
       <div id={`playoff-series-${s.id}`} className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
         {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></button> : null}
@@ -470,8 +499,8 @@ export default function MlbBracketBoard({
               {sport === "nba_cup" ? "30 teams · Group Play + 8-team knockout" : sport === "nfl" ? "14 teams · AFC and NFC · the 1 seeds start on a bye" : `12 teams · ${view.rounds.length} rounds`} · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
-            {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
-            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Changes to upcoming games save automatically; locked picks and earned points stay in place." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
+            {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString(undefined, { timeZone: clientTime ? undefined : "UTC" })}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
+            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Pick each new round as its matchups are confirmed. Saved picks lock at each game’s tipoff." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
           </div>
           <div className="af-pb-status">
             {!bracketReady ? "Field or schedule pending" : tournamentLocked ? "Brackets locked" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
@@ -504,15 +533,15 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
-          <BracketCoachPanel view={view} />
-          {rollingCup ? <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
-          {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
+          {!rollingCup ? <BracketCoachPanel view={view} /> : null}
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure" aria-label="NBA Cup scoring">
+            <summary>Scoring rules</summary>
             <div className="af-pb-cup-group-heading"><div>
               <h2>NBA Cup scoring</h2>
               <p>Each correct Group Play winner earns {pointsForSeries({ round: "cup_group_play" }, sport)} point. Group Play and knockout points both count toward your league and universal standings.</p>
             </div></div>
             {scoringTiles}
-          </section> : null}
+          </details> : null}
           {rollingCup ? (
             <CupGroupPlaySection
               scoringExcludedReasonFor={scoringExcludedReasonFor}
@@ -528,7 +557,47 @@ export default function MlbBracketBoard({
             />
           ) : null}
           <section className="af-pb-card">
-            {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>Quarterfinals → Semifinals → Championship. Matchups open as qualifiers are confirmed.</p></div></div> : null}
+            {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>{knockoutPublished ? "Pick each matchup once its teams and tipoff are confirmed. Each game locks at tipoff." : "Knockout picks open after Group Play ends and the NBA confirms the quarterfinal teams and tipoff times."}</p></div></div> : null}
+            {rollingCup && !knockoutPublished ? (
+              <ol className="af-cup-knockout-steps" aria-label="Knockout rounds">
+                <li>Quarterfinals</li><li>Semifinals</li><li>Championship</li>
+              </ol>
+            ) : rollingCup && compactCup ? (
+              <div className="af-cup-knockout-list">
+                {(["cup_quarterfinals", "cup_semifinals", "cup_championship"] as const).map((round) => {
+                  const games = view.series.filter((game) => game.round === round)
+                  if (!games.length) return null
+                  const open = games.filter((game) => !lockedReasonFor(game))
+                  const saved = open.filter((game) => picksBySeries.has(game.id)).length
+                  const label = roundLabel(sport, round)
+                  return (
+                    <section key={round} aria-label={label} className="af-cup-day">
+                      <div className="af-cup-day-head">
+                        <h3>{label}</h3>
+                        {open.length ? <span>{saved}/{open.length} open picks saved</span> : null}
+                      </div>
+                      <div className="af-cup-grid">
+                        {games.map((game) => (
+                          <CupGameCard
+                            key={game.id}
+                            series={game}
+                            sport={sport}
+                            stageLabel={label}
+                            pick={picksBySeries.get(game.id) ?? null}
+                            teamLogos={teamLogos}
+                            lockedReason={lockedReasonFor(game)}
+                            scoringExcludedReason={scoringExcludedReasonFor(game)}
+                            saving={saving === game.id}
+                            onPick={(team) => { void savePick(game, team) }}
+                            onOpen={() => setLiveNode(game.id)}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
+            ) : <>
             {/* Seeding strip */}
             <div className="af-pb-seeds">
               {[graph.sides.left, graph.sides.right].filter(Boolean).map((conf) => {
@@ -611,17 +680,26 @@ export default function MlbBracketBoard({
               </div>
             </div>
 
+            </>}
+
             <p className="af-pb-footnote">
               {singleGame
                 ? rollingCup ? "Each NBA Cup game locks at tipoff. Finalize before your first selected game begins; later changes to upcoming games save automatically. AllFantasy offers no prizes or gambling." : "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
                 : "Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each league hold a bye and enter at the Division round, so their opponent stays unknown until the Wild Card round resolves. The bracket scrolls sideways on a phone."}
             </p>
           </section>
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure">
+            <summary>Chimmy insights and reminders</summary>
+            <BracketCoachPanel view={view} />
+          </details> : null}
         </div>
 
         <aside className="af-pb-rail">
-          {rollingCup ? <CupStandingsRail groups={cupGroups} series={view.series} sport={sport} teamLogos={teamLogos} /> : null}
-          <PlayoffDecisionRail view={view} graph={graph} sport={sport} />
+          {rollingCup ? <details className="af-pb-card af-cup-disclosure">
+            <summary>Group standings and qualification</summary>
+            <CupStandingsRail groups={cupGroups} series={view.series} sport={sport} teamLogos={teamLogos} />
+            <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} />
+          </details> : <PlayoffDecisionRail view={view} graph={graph} sport={sport} />}
         </aside>
       </div>
 
@@ -648,3 +726,4 @@ export default function MlbBracketBoard({
     </div>
   )
 }
+

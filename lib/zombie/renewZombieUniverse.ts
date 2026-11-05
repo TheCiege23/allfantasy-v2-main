@@ -135,6 +135,13 @@ async function loadPlan(tx: Tx, universeId: string, season: number, actor: strin
   // The fingerprint covers copied rules as well as membership/results: an edited rule requires a fresh preview.
   const policies = await renewalPolicies(tx, sources, season, drafts)
   const assignments = withFaab(placement!.assignments, sources, placement.pools)
+  const replacements = await tx.zombieOperationsRecord.findMany({ where: { scope: { in: sources.map(z => `l:${z.leagueId}`) }, season, kind: 'replacement' } })
+  const lateOwners = new Set(replacements.flatMap(row => {
+    const r = row.payload as { newUserId?: string; mustStartGamma?: boolean }
+    return r.mustStartGamma && r.newUserId ? [r.newUserId] : []
+  }))
+  const gamma = universe.levels.find(l => (l.tierLabel ?? l.name).toLowerCase() === 'gamma')
+  if (assignments.some(a => lateOwners.has(a.userId) && a.destinationLevelId !== gamma?.id)) fail('RENEWAL_LATE_ENTRY_GAMMA_REQUIRED: place owners who joined after Week 9 in Gamma using the reviewed placement editor.')
   const plan = { version: 1, universeId, season, nextSeason: season+1, ...placement!, assignments,
     openSeats:placement.pools.reduce((n,p)=>n+p.seats,0)-assignments.length,
     ...(options.proposal?{proposal:options.proposal,recordedMovement}:{}),

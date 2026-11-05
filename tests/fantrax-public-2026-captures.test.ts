@@ -73,12 +73,13 @@ describe('real Fantrax captures — scoring', () => {
 
   it('NHL: skater and goalie rules map to hockey keys — a goalie save is not a baseball save', () => {
     expect(rules(nhl)).toEqual({
-      g: 4, a: 3, sog: 0.5, ppp: 1, shg: 2, hits: 0.3, blks: 0.5, pim: 0.2,
-      g_win: 3, g_sv: 0.15, g_ga: -1, g_so: 3,
+      goals: 4, assists: 3, shots_on_goal: 0.5, power_play_points: 1,
+      short_handed_goals: 2, hits: 0.3, blocked_shots: 0.5, penalty_minutes: 0.2,
+      goalie_wins: 3, saves: 0.15, goals_against: -1, shutouts: 3,
+      goalie_penalty_minutes: 0.5, goalie_assists: 3,
     })
     expect(rules(nhl)).not.toHaveProperty('sv')
-    // Goalie penalty minutes (0.5) and skater penalty minutes (0.2) share one rule here, so it is reported.
-    expect(fantraxScoringRules(info(nhl)).gaps).toEqual(['Penalty Minutes is worth 0.5 here but shares one rule worth 0.2'])
+    expect(fantraxScoringRules(info(nhl)).gaps).toEqual([])
   })
 
   it('NFL: interceptions thrown, fumbles lost, kicking and IDP now carry over; only rare kick-block plays remain gaps', () => {
@@ -137,7 +138,7 @@ describe('real Fantrax captures — a league that has not drafted yet', () => {
     serve(epl as unknown as Capture)
     const outcome = await importFantraxLeague({ leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' })
     expect(outcome).toMatchObject({ ok: false })
-    expect((outcome as { error: string }).error).toMatch(/do not match the college, NFL, MLB, NBA or NHL player lists/)
+    expect((outcome as { error: string }).error).toMatch(/do not match .* player lists, so it was not imported\. Nothing was saved\./)
     expect(h.upsert).not.toHaveBeenCalled()
   })
 })

@@ -130,6 +130,12 @@ describe('PATCH /api/zombie/settings Whisperer selection', () => {
 })
 
 describe('commissioner Zombie rule persistence contract', () => {
+  it('rejects a non-2025 NFL ambush budget before any writes', async () => {
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    expect((await PATCH(patch({ whispererAmbushCount: 5 }))).status).toBe(400)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
+    expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+  })
   it.each(['NFL', 'NBA', 'NHL', 'MLB'])('saves ambush and serum settings for %s and regenerates rules', async sport => {
     h.zombieLeagueFindUnique.mockResolvedValue({
       id: 'zombie-1', leagueId: 'league-1', status: 'setup',
@@ -137,13 +143,13 @@ describe('commissioner Zombie rule persistence contract', () => {
     })
     const { PATCH } = await import('@/app/api/zombie/settings/route')
     const response = await PATCH(patch({
-      whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: 5,
+      whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: sport === 'NFL' ? 2 : 5,
       ambushCountPerWeek: 2, serumReviveCount: sport === 'NFL' ? 2 : 3, autoSerumRevive: true,
     }))
     expect(response.status).toBe(200)
     expect(h.zombieLeagueUpdate).toHaveBeenCalledWith({
       where: { id: 'zombie-1' },
-      data: { whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: 5 },
+      data: { whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: sport === 'NFL' ? 2 : 5 },
     })
     expect(h.zombieLeagueConfigUpsert).toHaveBeenCalledWith({
       where: { leagueId: 'league-1' },

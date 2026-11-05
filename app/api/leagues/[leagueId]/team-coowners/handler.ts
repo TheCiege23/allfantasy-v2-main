@@ -23,6 +23,10 @@ async function ownsTeam(leagueId: string, userId: string) {
   ])
   return Boolean(roster || team)
 }
+async function zombieCoOwnerLock(leagueId: string) {
+  const zombie = await prisma.zombieLeague?.findUnique({ where: { leagueId }, select: { status: true } })
+  return Boolean(zombie && !['setup', 'registering'].includes(zombie.status))
+}
 
 export async function GET(req: NextRequest, ctx: Context) {
   const userId = await actor()
@@ -42,6 +46,7 @@ export async function POST(req: NextRequest, ctx: Context) {
   const userId = await actor()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
+  if (await zombieCoOwnerLock(leagueId)) return NextResponse.json({ error: 'Zombie co-managers are unavailable after the draft.' }, { status: 409 })
   const body = await req.json().catch(() => ({})) as { rosterId?: unknown; username?: unknown }
   const rosterId = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
   const username = typeof body.username === 'string' ? body.username.trim() : ''
@@ -71,6 +76,7 @@ export async function PATCH(req: NextRequest, ctx: Context) {
   const userId = await actor()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
+  if (await zombieCoOwnerLock(leagueId)) return NextResponse.json({ error: 'Zombie co-managers are unavailable after the draft.' }, { status: 409 })
   const body = await req.json().catch(() => ({})) as { action?: unknown }
   if (body.action !== 'accept') return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   const invitation = await prisma.teamCoOwner.findUnique({ where: { leagueId_userId: { leagueId, userId } }, select: { id: true, rosterId: true, rosterOwnerKey: true, claimedOwnerId: true, roster: { select: { leagueId: true, platformUserId: true } } } })

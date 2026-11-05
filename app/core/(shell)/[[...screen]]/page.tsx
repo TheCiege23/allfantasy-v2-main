@@ -24,6 +24,7 @@ import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
+import { coreShellDynasty } from '@/lib/core-app/coreShellDynasty'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -83,6 +84,7 @@ import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
@@ -1664,6 +1666,8 @@ export default async function AfCorePage({
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
       /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
       redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
+      /* Dynasty Era identity for a dynasty ?league=, native or imported (lib/core-app/coreShellDynasty.ts). */
+      dynastyEra={coreShellDynasty(selectedLeagueRow, selectedLeagueRecord)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -2397,7 +2401,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const finderScope = resolveLeagueScope(playedLeagues.map((l) => l.id), finderSavedPicks)
   const finderLeagueIds = finderScope.leagueIds
 
-  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
+  const playerSport = normalizeFinderSport(sp.sport)
+  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
    * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
@@ -2418,6 +2423,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           { includeMoves: playerDepthOpen },
         ).catch(() => null)
       : null
+  const finderPlayerLeagueIds = playerDetail
+    ? finderLeagueIds.filter((id) => playedLeagues.some((l) => l.id === id && String(l.sport ?? 'NFL').toUpperCase() === playerDetail.player.sport))
+    : finderLeagueIds
 
   /*
    * Phase 1, the deeper card (2026-09-27): this season against the projection, next games with the
@@ -2440,7 +2448,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           sleeperId: playerDetail.player.sleeperId ?? null,
           freeLeagueIds: freeLeagueIds(
-            selectedLeagueId ? [selectedLeagueId] : finderLeagueIds,
+            selectedLeagueId ? finderPlayerLeagueIds.filter((id) => id === selectedLeagueId) : finderPlayerLeagueIds,
             playerDetail.leagues.data,
             playerDetail.rosterCoverage.unmatched,
           ),
@@ -3676,6 +3684,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           language: hubLanguage,
         }).catch(() => null)
       : null
+
+  // A native commissioner starts with the league's actual settings editors.
+  // The existing activity workspace remains reachable from that page.
+  if (commissionerHub?.allowed && commissionerHub.league.native && sp.workspace !== 'activity') {
+    redirect(`/league/${encodeURIComponent(commissionerHub.league.id)}?view=commissioner`)
+  }
 
   /*
    * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
@@ -5040,9 +5054,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'players' ? (
         <PlayerFinder
           query={playerQuery}
+          sport={playerSport}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={finderScope.count}
+          leagueCount={finderPlayerLeagueIds.length}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
           following={playerFollowing}
@@ -5050,8 +5065,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           weeklyMvp={weeklyMvp}
           trendingFreeIn={trendingFreeIn}
           leagueShares={playerLeagueShares}
-          pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
-          savedPicks={finderScope.picked ? finderLeagueIds : null}
+          pickLeagues={playedLeagues.filter((l) => !playerDetail || String(l.sport ?? 'NFL').toUpperCase() === playerDetail.player.sport).map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
+          savedPicks={finderScope.picked ? finderPlayerLeagueIds : null}
           freeAgentBids={freeAgentBids}
           liveGame={playerLiveGame}
           depthChart={depthChart}

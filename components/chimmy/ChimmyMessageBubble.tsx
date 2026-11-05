@@ -14,6 +14,9 @@ import { buildSmartFollowUpChips, type ChimmyFollowUpChip } from '@/lib/chimmy-c
 import ChimmyResponseStructure from './ChimmyResponseStructure'
 import { ChimmyOrchestrationPanel } from './ChimmyOrchestrationPanel'
 import ChimmyTrustPanel from './ChimmyTrustPanel'
+import { BracketEvidenceCard } from './BracketEvidenceCard'
+import { ChimmyPortfolioCard } from './ChimmyPortfolioCard'
+import { readPortfolioEvidence } from '@/lib/chimmy/portfolio/types'
 
 export type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 
@@ -212,6 +215,8 @@ export default function ChimmyMessageBubble({
           </div>
         )}
 
+        {!isUser && meta?.bracketEvidence && <BracketEvidenceCard evidence={meta.bracketEvidence} />}
+        {!isUser && readPortfolioEvidence(meta?.portfolio) && <ChimmyPortfolioCard evidence={readPortfolioEvidence(meta?.portfolio)!} onAsk={(prompt, portfolioState) => onFollowUpClick?.({ label: prompt, prompt, portfolioState, origin: 'fallback' })} />}
         {!isUser && meta && showTrustPanel && (
           <ChimmyTrustPanel
             confidencePct={meta.confidencePct}

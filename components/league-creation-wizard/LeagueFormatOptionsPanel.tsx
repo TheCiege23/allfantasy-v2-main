@@ -82,6 +82,37 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
         help={<>Specialty formats need a few extra inputs so defaults, hubs, and social layers match your concept.</>}
       />
 
+      {leagueType === 'pirate' && (
+        <div className="space-y-4 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-[#14233a] via-[#0b1729] to-[#06111e] p-5 shadow-[0_16px_45px_rgba(0,0,0,.28)]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[.2em] text-amber-300">The captain's code</p>
+            <h4 className="mt-1 text-xl font-black text-white">Protect your crew. Win the booty.</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-300">Each scoring period, managers lock players before the first game. A matchup winner may claim one unlocked player from the loser.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Protection slots
+              <Select value={String(v.pirateProtectionLimit)} onValueChange={(x) => onChange({ pirateProtectionLimit: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[1, 2, 3, 4, 5, 6].map((n) => <SelectItem key={n} value={String(n)}>{n} players</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Automatic claim deadline
+              <Select value={String(v.pirateClaimHours)} onValueChange={(x) => onChange({ pirateClaimHours: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[12, 24, 36, 48, 72].map((n) => <SelectItem key={n} value={String(n)}>{n} hours</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+          </div>
+          <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white">
+            <input type="checkbox" checked={v.piratePlayoffClaims} onChange={(e) => onChange({ piratePlayoffClaims: e.target.checked })} className={CHECKBOX_CLASS} />
+            Allow steals during playoffs
+          </label>
+          <p className="text-xs leading-5 text-amber-100/70">Unused protection slots expire at lock. More than the limit, or a change after lock, voids all protection for that period.</p>
+        </div>
+      )}
+
       {leagueType === 'tournament' && (
         <div
           className="space-y-4 rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-950/35 to-[#040915]/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"

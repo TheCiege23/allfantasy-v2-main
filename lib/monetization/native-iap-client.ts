@@ -4,7 +4,7 @@ import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 export function useNativeIapPrices() {
   const apple = useAppleIapPrices(), play = useGooglePlayPrices()
   return { nativeApp: apple.appleApp || play.playApp, prices: play.playApp ? play.prices : apple.prices,
-    needsUpdate: apple.needsUpdate, storeLabel: play.playApp ? "Google Play" : "Apple", playApp: play.playApp, error: play.error }
+    needsUpdate: apple.needsUpdate, storeLabel: play.playApp ? "Google Play" : "Apple", playApp: play.playApp, error: play.playApp ? play.error : apple.error }
 }
 export const restoreNativePurchases = () => isTrustedWebActivity() ? restoreGooglePlayPurchases() : restoreApplePurchases()
 export async function manageNativeSubscriptions() {
