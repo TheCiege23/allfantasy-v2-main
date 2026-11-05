@@ -39,6 +39,11 @@
 /* Sidebar: a sport rule down the nav column's edge, beside the active item's inset mark. */
 .af-core.af-shell[data-format=redraft] .af-nav{border-right-color:var(--rd-accent-line)}
 
+/* Chat launcher: af-comms.css paints it a literal #22d3ee, not --accent, so it stayed cyan in every
+ * sport. The foundation's fill/ink pair is measured for both modes (redraftIdentityContrast.test.ts). */
+.af-core.af-shell[data-format=redraft] .af-cm-launch{background:var(--rd-accent);color:var(--rd-accent-ink);box-shadow:0 20px 40px -16px color-mix(in srgb,var(--rd-accent) 55%,transparent)}
+.af-core.af-shell[data-format=redraft] .af-cm-launch[data-dragging='true']{box-shadow:0 24px 48px -16px color-mix(in srgb,var(--rd-accent) 70%,transparent)}
+
 @media (max-width:720px){
   /* Phone: the nav column is a top strip here (af-core-shell.css), so its rule moves to the bottom
    * edge; the tab bar takes a sport line on its top edge. */
