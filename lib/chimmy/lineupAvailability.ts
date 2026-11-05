@@ -3,6 +3,7 @@ import 'server-only'
 import { readInjuryStatusById } from '@/lib/core-app/injuryStatusById'
 import { isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 import { rosterDesignation } from '@/lib/injuries/rosterDesignation'
+import { isFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 
 export type LineupMetadata = {
   name: string | null
@@ -34,8 +35,18 @@ export async function enrichLineupAvailability(
    * record's injury column or Sleeper's roster status, and a player with no live row is usually one
    * who healed and dropped off the reports — exactly when his last "Out" or "Inactive" is false.
    * Only a roster designation the feeds do not carry (IR, PUP, NFI, Suspended) survives the fallback.
+   *
+   * 🛑 AND A PLAYER WITH NO NFL TEAM CANNOT PLAY (2026-10-20). Sleeper's "Inactive" is dropped above
+   * as bookkeeping, which left a released or retired player looking healthy — and the lineup check
+   * emailed "start Bobby Wagner … Joey Bosa" with three of the four on no roster at all. A free agent
+   * drops off the injury reports for the same reason a healed player does, so the team on his record
+   * is the signal, not a stored status. NFL only: other feeds leave `team` empty for rostered players.
    */
+  const teamless = (player: LineupMetadata) => sport.toUpperCase() === 'NFL' && Boolean(player.name) && isFreeAgentTeam(player.team, sport)
   return new Map([...metadata].map(([id, player]) => [id, {
-    ...player, injury: lineupDesignation(injury.has(id) ? injury.get(id) : rosterDesignation(player.injury)),
+    ...player,
+    injury: lineupDesignation(
+      injury.has(id) ? injury.get(id) : rosterDesignation(player.injury) ?? (teamless(player) ? 'Inactive' : null),
+    ),
   }]))
 }

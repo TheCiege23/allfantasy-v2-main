@@ -57,6 +57,7 @@ import {
   type RecipeFacts,
 } from '@/lib/core-app/commissioner/recipes'
 import { Prisma } from '@prisma/client'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 const SEEN_PREFIX = 'commissioner-recipe:v1:'
 const SEEN_TTL_MS = 400 * 24 * 60 * 60 * 1000
@@ -97,6 +98,9 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       settings: true,
       starters: true,
       lastSyncedAt: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
     },
   })
   if (!league?.userId) return null
@@ -162,7 +166,9 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
     !native && (!league.lastSyncedAt || now.getTime() - league.lastSyncedAt.getTime() > 2 * 24 * 60 * 60 * 1000)
   const byOwner = new Map(teams.filter((t) => t.platformUserId).map((t) => [t.platformUserId as string, t]))
 
-  const emptyLineups = rosters.flatMap((r) => {
+  // Best ball sets every lineup itself, so a "check your lineup" post names a call nobody can make.
+  const bestBall = isBestBallLeagueRow(league)
+  const emptyLineups = bestBall ? [] : rosters.flatMap((r) => {
     const slots = starterSlots(r.playerData)
     const team = byOwner.get(r.platformUserId)
     if (!slots || slots.length === 0 || !team) return []
