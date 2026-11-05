@@ -7,7 +7,8 @@
  *   node scripts/trade-evaluator-capture.mjs --base-url http://localhost:3000 --out <dir> [--modes light,dark]
  *
  * For each mode and width it captures the evaluator as it opens (Team A loaded, Team B unchosen),
- * then after choosing a manager for Team B, then after adding one asset to each side.
+ * then Team B after choosing its manager, then after adding one asset to each side, then the
+ * action row. Each is a viewport screenshot, scrolled to that part of the evaluator.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -91,11 +92,23 @@ try {
       await evaluator.waitFor({ state: 'visible', timeout: 120_000 })
       await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='give'] .af-tc-roster").first().waitFor({ timeout: 60_000 })
       await page.evaluate(() => document.fonts?.ready)
-      const shot = async (step) => {
-        await evaluator.scrollIntoViewIfNeeded()
+      /*
+       * VIEWPORT shots, scrolled to a part of the evaluator, not crops of the section: a crop drops
+       * the page's own padding and paints the pinned balance bar wherever the capture happened to
+       * be scrolled, which once made a fine header look flush to the screen edge.
+       */
+      const shot = async (step, anchor = '.af-tc-hub-evaluator') => {
+        await page.evaluate((sel) => {
+          const el = document.querySelector(sel)
+          if (!el) throw new Error(`no ${sel}`)
+          // INSTANT: the shell scrolls smoothly, and a shot taken mid-animation lands short.
+          el.scrollIntoView({ block: 'start', behavior: 'instant' })
+          // Clear the pinned bars at the top of the viewport.
+          window.scrollBy({ top: -120, behavior: 'instant' })
+        }, anchor)
         await page.waitForTimeout(400)
         const file = path.join(out, `evaluator-${step}-${mode}-${label}.png`)
-        await evaluator.screenshot({ path: file })
+        await page.screenshot({ path: file })
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
         console.log(`${overflow > 0 ? 'OVERFLOW ' + overflow + 'px ' : ''}${file}`)
         if (overflow > 0) failures++
@@ -106,10 +119,11 @@ try {
         await evaluator.locator('.af-tc-partner-select select').selectOption(value)
       })
       await page.locator(".af-tc-hub-evaluator .af-tc-team[data-side='get'] .af-tc-roster").first().waitFor({ timeout: 30_000 })
-      await shot('2-manager-chosen')
+      await shot('2-manager-chosen', ".af-tc-hub-evaluator .af-tc-team[data-side='get']")
       await evaluator.getByLabel('Add Puka Nacua').first().click()
       await evaluator.getByLabel('Add Jahmyr Gibbs').first().click()
-      await shot('3-deal-built')
+      await shot('3-deal-built', ".af-tc-hub-evaluator .af-tc-team[data-side='get']")
+      await shot('4-actions', '.af-tc-hub-evaluator .af-tc-actions')
     }
     await context.close()
   }
