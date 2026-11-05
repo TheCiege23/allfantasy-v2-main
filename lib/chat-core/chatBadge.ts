@@ -28,6 +28,8 @@ export type ChatBadge = {
   chimmy: number
   /** `league` split per league id, for the league rail's unread badges. Zero-count leagues are absent. */
   byLeague?: Record<string, number>
+  /** `dm` split into one-to-one DMs and huddles, for the drawer's DMs and Huddle tab badges. */
+  byThreadType?: { dm: number; group: number }
 }
 
 export const CHIMMY_PROACTIVE_TYPES = ['chimmy_lineup_check', 'chimmy_waiver_check'] as const
@@ -41,7 +43,7 @@ const ZERO: ChatBadge = { total: 0, mentions: 0, dm: 0, league: 0, chimmy: 0 }
 export async function getChatBadge(userId: string | null | undefined, now: Date = new Date()): Promise<ChatBadge> {
   if (!userId) return ZERO
   const [dm, league, chimmy] = await Promise.all([
-    getChatUnread(userId).catch(() => ({ total: 0, mentions: 0, mutedUnread: 0 })),
+    getChatUnread(userId).catch(() => ({ total: 0, mentions: 0, mutedUnread: 0, byThreadType: { dm: 0, group: 0 } })),
     leagueUnread(userId, now).catch(() => ({ count: 0, mentions: 0, byLeague: {} as Record<string, number> })),
     chimmyUnread(userId, now).catch(() => 0),
   ])
@@ -52,6 +54,7 @@ export async function getChatBadge(userId: string | null | undefined, now: Date 
     league: league.count,
     chimmy,
     byLeague: league.byLeague,
+    byThreadType: dm.byThreadType,
   }
 }
 

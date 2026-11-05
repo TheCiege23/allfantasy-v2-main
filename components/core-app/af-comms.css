@@ -4321,3 +4321,34 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
 @container af-cm (width <= 340px) {
   .af-cm .af-cm-tab { font-size: 12.5px; }
 }
+
+/*
+ * ── Tab unread counts (2026-11-05) ── the approved design's "League 4", "DMs 2". A small pill after the
+ * label, never on the tab you are already reading (CommsDrawer hides it there). `flex: none` because
+ * the label span beside it is allowed to shrink and ellipsise; the count is not.
+ */
+.af-cm .af-cm-tabcount {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/*
+ * Five equal columns are 73px each on a 390px phone; "Chimmy" plus a count needs ~76px, so the label
+ * truncated to "Chim…" whenever Chimmy had something waiting. Compact panels size each tab to its own
+ * label and badge and spread the five evenly instead — the way Sleeper and Discord lay theirs out.
+ */
+@container af-cm (width <= 520px) {
+  .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto); justify-content: space-between; }
+  .af-cm .af-cm-tab { gap: 4px; padding: 0 4px; }
+}
