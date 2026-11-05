@@ -1679,8 +1679,9 @@ export function MyTeam({ data }: MyTeamProps) {
    * It said Sleeper on every hockey player of a Fantrax NHL league (live check 2026-11-05).
    */
   const rosterPlayers = [
-    ...(data.starters.available ? data.starters.data.map((slot) => slot.player) : []),
-    ...(data.bench.available ? data.bench.data : []),
+    // Optional reads: a preseason screen can arrive without starters or bench at all.
+    ...(data.starters?.available ? data.starters.data.map((slot) => slot.player) : []),
+    ...(data.bench?.available ? data.bench.data : []),
     ...(data.ir?.available ? data.ir.data : []),
     ...(data.taxi?.available ? data.taxi.data : []),
   ]
@@ -2098,7 +2099,7 @@ export function MyTeam({ data }: MyTeamProps) {
         />
       ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
-      <section id="af-mt-starters" className="af-frame af-mt-section" {...offColumns(data.starters.available ? data.starters.data.map((slot) => slot.player) : [])}>
+      <section id="af-mt-starters" className="af-frame af-mt-section" {...offColumns(data.starters?.available ? data.starters.data.map((slot) => slot.player) : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
           <LineupPeriodChip period={data.lineupPeriod} />
@@ -2149,7 +2150,7 @@ export function MyTeam({ data }: MyTeamProps) {
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section" {...offColumns(data.bench.available ? data.bench.data : [])}>
+      <section className="af-frame af-mt-section" {...offColumns(data.bench?.available ? data.bench.data : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
