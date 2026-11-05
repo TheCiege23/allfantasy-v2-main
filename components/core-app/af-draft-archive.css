@@ -40,3 +40,13 @@
 .af-record-card{border:1px solid var(--line);border-radius:8px;padding:.4rem .6rem;background:var(--surface2)}
 .af-record-empty{color:var(--text2)}
 @media(max-width:767px){.af-record-dl>div{grid-template-columns:1fr;gap:.1rem}}
+/* Every league's drafts (no league held): a grid of rows, name over details, status as a chip —
+   not one " · "-joined link per line, 275 lines deep (live /core, 2026-11-05). */
+.af-archive-list{list-style:none;margin:.75rem 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:8px}
+.af-archive .af-archive-list li{margin:0}
+.af-archive a.af-archive-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"name status" "meta status";gap:2px 10px;align-items:center;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);color:var(--text);text-decoration:none}
+.af-archive a.af-archive-row:hover{border-color:var(--accent)}
+.af-archive-row b{grid-area:name;min-width:0;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-archive-row-meta{grid-area:meta;min-width:0;font-size:12px;color:var(--text2)}
+.af-archive-row-status{grid-area:status;padding:4px 8px;border-radius:999px;background:var(--chip);color:var(--text2);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',monospace);letter-spacing:.06em;text-transform:uppercase}
+.af-archive-row-status:is([data-status='complete'],[data-status='completed']){background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}

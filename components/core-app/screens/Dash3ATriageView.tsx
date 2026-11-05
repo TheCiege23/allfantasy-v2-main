@@ -208,7 +208,7 @@ function DepthChecks({ alerts, language }: { alerts: TriageViewDepthAlert[]; lan
                   {a.leagueName}
                 </Link>
               </div>
-              <div className="af-depth-count af-num">{depthLine(a, m)}</div>
+              <div className="af-depth-count">{depthLine(a, m)}</div>
               <div className="af-depth-names">
                 {a.flagged.map((f) => (
                   <span key={f.name} className="af-depth-name">

@@ -92,6 +92,44 @@
 html[data-mode='light'] .af-lh-dy-stats dd[data-tone=young]{color:#0f766e}
 html[data-mode='light'] .af-lh-dy-stats dd[data-tone=aging]{color:#b4441a}
 
+/* ── Offseason (deck[data-phase=offseason]) ─────────────────────────────
+ * Every selector below names a class or attribute only the offseason state renders, so an in-season
+ * deck is untouched (pinned by __tests__/core-app/__snapshots__/dynasty-home-in-season.html). */
+.af-lh-dy-phase{display:inline-block;margin-left:8px;padding:3px 8px 2px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dyn-gold,#D4A24C) 60%,transparent);background:rgba(212,162,76,.14);color:#F3D79F;font-size:11px;letter-spacing:.2em;vertical-align:1px}
+/* "Year N complete" is long enough to wrap beside the rafters, so the season sits on its own line. */
+.af-lh-dy-year .af-lh-dy-year-season{display:block;margin-top:8px}
+.af-lh-dy-champ{display:flex;align-items:center;gap:10px;margin:14px 0 0;color:#f6f0e2;font-size:16px;line-height:1.35;font-weight:700}
+.af-lh-dy-champ svg{flex:none;color:var(--dyn-gold,#D4A24C);filter:drop-shadow(0 0 8px rgba(212,162,76,.45))}
+.af-lh-dy-champ span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.af-lh-dy-champ small{color:#cfc6b2;font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.18em;text-transform:uppercase}
+.af-lh-dy-champ[data-mine=true]{color:var(--dyn-gold-soft,#F3D79F)}
+
+/* The timeline: one card, milestones left to right joined by a gold rule — solid where done, dashed
+ * ahead. */
+.af-lh-dy-off{position:relative;display:flex;flex-direction:column;gap:16px;min-width:0;padding:16px 18px 18px;border-radius:14px;background:var(--surface);border:1px solid var(--line2);overflow:hidden}
+.af-lh-dy-off::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 20%,transparent))}
+.af-lh-dy-ms{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0;margin:0;padding:0;list-style:none}
+.af-lh-dy-ms-step{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:28px 16px 0 0}
+.af-lh-dy-ms-step::before{content:'';position:absolute;top:8px;left:18px;right:0;height:2px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--dyn-gold,#D4A24C) 55%,transparent) 0 6px,transparent 6px 11px)}
+.af-lh-dy-ms-step[data-state=done]::before{background:var(--dyn-gold,#D4A24C)}
+.af-lh-dy-ms-step:last-child::before{display:none}
+.af-lh-dy-ms-dot{position:absolute;top:1px;left:0;width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:2.5px solid var(--dyn-gold,#D4A24C);background:var(--surface)}
+.af-lh-dy-ms-step[data-state=done] .af-lh-dy-ms-dot{background:var(--dyn-gold,#D4A24C)}
+.af-lh-dy-ms-step[data-state=live] .af-lh-dy-ms-dot{background:var(--dyn-gold,#D4A24C);box-shadow:0 0 0 4px var(--accent-soft)}
+.af-lh-dy-ms-step[data-undated=true] .af-lh-dy-ms-dot{border-style:dashed}
+.af-lh-dy-ms-title{color:var(--text);font-size:15px;line-height:1.3;font-weight:800}
+.af-lh-dy-ms-date{color:var(--text2);font:600 13px/1.3 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-lh-dy-ms-step[data-undated=true] .af-lh-dy-ms-date{color:var(--muted);font-style:italic;font-family:inherit}
+.af-lh-dy-ms-when{margin-top:2px;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font:800 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+.af-lh-dy-ms-step[data-state=done] .af-lh-dy-ms-when{background:var(--surface2);color:var(--muted)}
+
+/* Draft capital between seasons: the next rookie draft's row is lit, and the year column is wide
+ * enough for its "Next draft" tag on one line. */
+.af-lh-dy[data-phase=offseason] .af-lh-dy-drafts li{grid-template-columns:74px minmax(0,1fr)}
+.af-lh-dy-drafts li[data-next=true]{margin:0 -8px;padding:8px;border-radius:10px;background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--dyn-gold,#D4A24C)}
+.af-lh-dy-drafts li[data-next=true] .af-lh-dy-draft-year{display:flex;flex-direction:column;gap:3px;color:var(--accent)}
+.af-lh-dy-draft-year small{color:var(--accent);font:800 11px/1.15 system-ui,sans-serif;letter-spacing:0;white-space:normal}
+
 @media (max-width:1100px){
   /* Tablet: capital across the top, age and taxi side by side under it. */
   .af-lh-dy-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
@@ -113,4 +151,12 @@ html[data-mode='light'] .af-lh-dy-stats dd[data-tone=aging]{color:#b4441a}
   .af-lh-dy-grid{grid-template-columns:minmax(0,1fr)}
   .af-lh-dy-card{padding:14px 14px}
   .af-lh-dy-big strong{font-size:30px}
+  /* Offseason: the timeline turns vertical, the rule running down the dots. */
+  .af-lh-dy-champ{font-size:15px}
+  .af-lh-dy-off{padding:14px 14px 14px}
+  .af-lh-dy-ms{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:minmax(0,1fr)}
+  .af-lh-dy-ms-step{padding:0 0 16px 28px}
+  .af-lh-dy-ms-step:last-child{padding-bottom:0}
+  .af-lh-dy-ms-step::before{top:20px;bottom:-1px;left:7px;right:auto;width:2px;height:auto;background:repeating-linear-gradient(180deg,color-mix(in srgb,var(--dyn-gold,#D4A24C) 55%,transparent) 0 6px,transparent 6px 11px)}
+  .af-lh-dy-ms-step[data-state=done]::before{background:var(--dyn-gold,#D4A24C)}
 }

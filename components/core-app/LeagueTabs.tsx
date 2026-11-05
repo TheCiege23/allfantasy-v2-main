@@ -142,12 +142,6 @@ export function LeagueTabs({
         what this league can show, used for both, rather than a prewarm list
         that can drift out of step with the tabs it is meant to anticipate.
       */}
-      <div className="af-lt-workspace">
-        <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)}>
-          {m.openLeague} <span aria-hidden>↗</span>
-        </Link>
-        <span>{leagueWorkspaceMode(platform, language).description}</span>
-      </div>
       <LeagueTabsPrewarm
         leagueId={leagueId}
         activeKey={activeKey}
@@ -176,6 +170,15 @@ export function LeagueTabs({
         }
         const restActive = rest.some((t) => t.key === activeKey)
         const restActiveTab = rest.find((t) => t.key === activeKey)
+        /*
+         * ⚠ ONE ROW, NOT THREE (2026-11-05). Measured on allfantasy.ai at 375px, this nav was a
+         * full-width "Open League" button, its explainer, five tabs that cut off at "Mo…", and
+         * Live / More wrapped onto a row of their own — the whole first screen before any content.
+         * "Open League" is now the row's last item, a compact pill whose explainer travels as its
+         * title everywhere and is printed only on the Overview, the one screen that is ABOUT the
+         * league. The destination itself is unchanged.
+         */
+        const workspace = leagueWorkspaceMode(platform, language).description
         return (
           <div className="af-lt-compact" data-compact={compact}>
             <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, m.compactTab(t.key, t.label)))}</LeagueTabsScroller>
@@ -188,9 +191,13 @@ export function LeagueTabs({
                 <div className="af-lt-more-list" onClick={() => { if (moreRef.current) moreRef.current.open = false }}>{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
             ) : null}
+            <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)} title={workspace}>
+              <span className="af-lt-workspace-label">{m.openLeague}</span> <span aria-hidden>↗</span>
+            </Link>
           </div>
         )
       })()}
+      {activeKey === 'home' ? <p className="af-lt-workspace-note">{leagueWorkspaceMode(platform, language).description}</p> : null}
 
       {/*
         🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.

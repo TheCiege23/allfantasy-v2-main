@@ -4894,3 +4894,27 @@ button.af-rail-sport:focus-visible {
      the account — a third copy in a 390px header is the crowding this redesign removes. */
   .af-core .af-account-menu { display: none; }
 }
+
+/*
+ * ── The bracket entry is a strip, not a hero (2026-11-05) ──────────────────────
+ * Measured on live /core at 1280×900: the bracket card, the welcome guide and the streak card put
+ * "Top decisions" two-thirds of the way down the first screen. The entry keeps its kicker, title and
+ * both links; it drops the body line and most of its padding, so the work starts higher.
+ */
+.af-core .af-core-bracket-promo { gap: 8px 16px; margin-bottom: 14px; padding: 10px 14px; }
+.af-core .af-core-bracket-promo-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.af-core .af-core-bracket-promo h2 { margin: 0; font-size: 16px; }
+.af-core .af-core-bracket-promo-copy > p:not(.af-core-bracket-promo-kicker) { display: none; }
+.af-core .af-core-bracket-promo-actions { flex: 0 0 auto; }
+.af-core .af-core-bracket-promo-button { min-height: 38px; padding: 0 14px; }
+
+@media (max-width: 720px) {
+  .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; }
+  .af-core .af-core-bracket-promo-button { min-height: 44px; }
+  /*
+   * The league-first rule above (owner's call, 2026-10-02: no floating controls but the chat) now
+   * covers every /core phone shell. On the default shell the purple back-to-top stacked above the
+   * chat bubble and sat on "Around your leagues"' X POSTS chip (live, 2026-11-05).
+   */
+  body:has(.af-core.af-shell) [data-af-back-to-top] { display: none; }
+}

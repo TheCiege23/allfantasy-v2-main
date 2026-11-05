@@ -363,10 +363,15 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
 }
+/*
+ * Position badge | text, with the "Find a QB" action on its own row under the text. Beside the
+ * text it left ~100px for the league name and the count at desktop and tablet (live, 2026-11-05).
+ */
 .af-depth-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 12px;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -398,20 +403,27 @@
   min-width: 0;
   flex: 1;
 }
+/*
+ * Two lines, then an ellipsis. One line cut "Dynasty BestBall League!" to "Dynasty BestBal" on a
+ * tablet's two-column grid (live /core, 2026-11-05). The platform badge stays inline at the start.
+ */
 .af-depth-league {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: -webkit-box;
   max-width: 100%;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
   color: var(--text);
   text-decoration: none;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
+.af-depth-league .af-triage-league-platform { margin-right: 6px; vertical-align: 1px; }
+/* A sentence, not a number column: body font, tabular digits (it dropped `af-num` for this). */
 .af-depth-count {
+  font-variant-numeric: tabular-nums;
   margin-top: 1px;
   font-size: 12.5px;
   font-weight: 700;
@@ -431,7 +443,8 @@
   color: var(--warn);
 }
 .af-depth-cta {
-  flex-shrink: 0;
+  grid-column: 2;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   min-height: 36px;

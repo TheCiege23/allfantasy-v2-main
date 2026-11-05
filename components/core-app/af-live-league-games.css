@@ -1,0 +1,38 @@
+/* Live scores · "around the league" rows (LiveLeagueGames.tsx). /core tokens only. */
+.af-core .af-llg {
+  margin: 16px 0 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); color: var(--text);
+}
+.af-core .af-llg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.af-core .af-llg-title { margin: 0; }
+.af-core .af-llg-more { color: var(--accent); font-size: 13px; font-weight: 700; text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+.af-core .af-llg-more:hover { text-decoration: underline; }
+.af-core .af-llg-note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.af-core .af-llg-list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
+}
+.af-core .af-llg-game {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2, var(--surface));
+}
+.af-core .af-llg-game[data-state='live'] { border-color: color-mix(in srgb, var(--bad, #e11d48) 45%, var(--line)); }
+.af-core .af-llg-teams { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.af-core .af-llg-team { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+.af-core .af-llg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); font-size: 13.5px; font-weight: 600; }
+.af-core .af-llg-pts { flex: none; color: var(--text2); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.af-core .af-llg-team[data-lead='true'] .af-llg-name,
+.af-core .af-llg-team[data-lead='true'] .af-llg-pts { color: var(--text); font-weight: 800; }
+.af-core .af-llg-proj { color: var(--muted); font-size: 11px; font-weight: 600; }
+.af-core .af-llg-chip {
+  flex: none; align-self: center; padding: 3px 7px; border-radius: 6px;
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--chip); color: var(--muted);
+}
+.af-core .af-llg-chip[data-state='live'] { background: color-mix(in srgb, var(--bad, #e11d48) 18%, transparent); color: var(--bad, #e11d48); }
+.af-core .af-llg-chip[data-state='final'] { background: var(--text); color: var(--bg); }
+@media (max-width: 480px) {
+  .af-core .af-llg { padding: 14px; }
+  .af-core .af-llg-list { grid-template-columns: minmax(0, 1fr); }
+}

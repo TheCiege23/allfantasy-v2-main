@@ -104,6 +104,7 @@ export default function CommsDrawerPreviewClient({ tab, league, mode }: { tab: s
           chimmyTokenCost={10}
           initialTab={tab as CommsTab}
           userId={ME}
+          tabCounts={{ league: 4, chimmy: 1, huddle: 3, dms: 2 }}
         />
       </div>
     </SessionProvider>

@@ -267,6 +267,7 @@ import CoreLeagueContextBar, {
 } from '@/components/core-app/CoreLeagueContextBar'
 import { touchLeaguesViewed, touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
+import { getLiveLeagueGames } from '@/lib/core-app/liveLeagueScoreboard'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
@@ -3004,6 +3005,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       })
     : null
   const draftArchiveSlot = draftArchive ? <DraftArchive {...draftArchive} /> : null
+  /*
+   * The reader came for the archive — a `?draft=` link, an archive page, or a search — so it leads.
+   * ⚠ NOT `draftArchive.detail`: in a league the archive opens the current draft by default, so a
+   * plain Draft HQ visit has a detail too, and that is exactly the visit this ordering is for.
+   */
+  const draftArchiveFirst = Boolean(
+    draftArchive && ['draft', 'archivePage', 'archiveQuery', 'archiveSeason'].some((k) => typeof sp[k] === 'string' && sp[k] !== ''),
+  )
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
@@ -3191,6 +3200,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         })
       : null
   const liveMatchupStrip = buildMatchupStrip(liveMatchup, liveMatchupFailed)
+  /*
+   * The rest of the held league's games, for the week your matchup is in — the same Postgres
+   * scoreboard League Home draws (lib/core-app/liveLeagueScoreboard.ts). Your own game is left out:
+   * it is the scoreboard card already on screen. A failed read is null and the section stays away.
+   */
+  const liveLeagueGames =
+    activeKey === 'live' && !liveGameId && selectedLeagueId && liveMatchup?.week.available
+      ? await getLiveLeagueGames({
+          leagueId: selectedLeagueId,
+          userId,
+          seasonYear: liveMatchup.week.data.season,
+          week: liveMatchup.week.data.week,
+        }).catch((e: unknown) => {
+          console.error('[core/live] league scoreboard read failed', e)
+          return null
+        })
+      : null
+  const liveLeagueWeekFinal = liveMatchup?.week.available ? liveMatchup.week.data.isFinal : false
 
   const liveScores =
     activeKey === 'live' && !liveGameId
@@ -4852,28 +4879,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 said "no draft has been set up" — three times above Draft HQ's own record of the
                 draft the league already ran. */}
             {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
-            {draftArchiveSlot}
+            {/*
+              ⚠ THE ARCHIVE GOES LAST UNLESS ONE OF ITS DRAFTS IS OPEN. Above Draft HQ it put
+              ~2,400px of past-draft records between the live board and this league's own picks
+              (live /core, 2026-11-05). A `?draft=` link asks for the archive, so it leads then.
+            */}
+            {draftArchiveFirst ? draftArchiveSlot : null}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
+            {draftArchiveFirst ? null : draftArchiveSlot}
           </>
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
-          <>{draftArchiveSlot}<PickALeague
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<PickALeague
             tabKey="draft-hq"
             title="Draft HQ"
             blurb="Draft order, pick slots and board settings are all per-league."
             issues={issues}
             leagues={rail}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         ) : (
-          <>{draftArchiveSlot}<DraftHqBoard
+          <>{draftArchiveFirst ? draftArchiveSlot : null}<DraftHqBoard
             data={homeDrafts}
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
             picks={liveDraftPicks}
-          /></>
+          />{draftArchiveFirst ? null : draftArchiveSlot}</>
         )
       ) : activeKey === 'war-room' ? (
         /*
@@ -5264,6 +5297,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             data={liveScores}
             selectedLeagueId={selectedLeagueId}
             matchupStrip={liveMatchupStrip}
+            leagueGames={liveLeagueGames ? { ...liveLeagueGames, weekFinal: liveLeagueWeekFinal } : null}
             leagueWeek={{
               byLeague: ctx.weekLineups?.byLeague ?? null,
               leagues: playedLeagues.map((l) => ({

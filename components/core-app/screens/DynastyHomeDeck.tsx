@@ -4,7 +4,11 @@ import Link from 'next/link'
 import { Crown, Trophy } from 'lucide-react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { dynastyHomeDeckMessages } from '@/lib/core-app/messages/dynastyHomeDeck'
-import type { DynastyHomeDeck as Deck } from '@/lib/core-app/dynastyLeagueHome'
+import type {
+  DynastyHomeDeck as Deck,
+  DynastyOffseason as Offseason,
+  DynastyOffseasonMilestone as Milestone,
+} from '@/lib/core-app/dynastyLeagueHome'
 import '@/components/core-app/af-league-home-dynasty.css'
 
 /**
@@ -25,20 +29,125 @@ const at = (age: number) => `${(Math.min(GAUGE_MAX, Math.max(GAUGE_MIN, age)) - 
 /** More taxi slots than this draw as a count only — a row of 20 dots says nothing a number does not. */
 const MAX_SLOT_DOTS = 8
 
+type Messages = typeof dynastyHomeDeckMessages.en
+
+/**
+ * A stored date as members read it. Pinned to US Eastern — the zone AllFantasy announces draft times
+ * in (describeRookieDraftStart) — so the server render and the browser agree on the day.
+ */
+function formatDay(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(new Date(iso))
+}
+
+function milestoneTitle(ms: Milestone, m: Messages): string {
+  if (ms.key === 'rollover') return m.msRollover(ms.season)
+  if (ms.key === 'keeper_deadline') return m.msKeeper
+  if (ms.key === 'rookie_draft') return m.msRookieDraft(ms.season)
+  return m.msKickoff(ms.season)
+}
+
+function milestoneWhen(ms: Milestone, m: Messages): string | null {
+  if (ms.state === 'done') return m.done
+  if (ms.state === 'live') return m.live
+  if (ms.daysAway == null) return null
+  return ms.daysAway === 0 ? m.today : ms.daysAway === 1 ? m.tomorrow : m.inDays(ms.daysAway)
+}
+
+/** The era band's heading and the line under it, between seasons. */
+function OffseasonEra({ off, clock, m }: { off: Offseason; clock: Deck['clock']; m: Messages }) {
+  const complete = off.phase === 'season_complete'
+  const year = clock?.year ?? null
+  const season = clock?.season ?? (complete ? off.completedSeason : off.nextSeason)
+  const champ = off.champion
+  return (
+    <>
+      <h2 className="af-lh-dy-year" data-testid="dynasty-home-clock">
+        {year != null ? (
+          <>
+            {complete ? m.yearComplete(year) : m.yearBegins(year)} <span className="af-lh-dy-year-season">{m.season(season)}</span>
+          </>
+        ) : complete ? (
+          m.seasonComplete(season)
+        ) : (
+          m.seasonBegins(season)
+        )}
+      </h2>
+      {champ ? (
+        <p className="af-lh-dy-champ" data-mine={champ.mine || undefined} data-testid="dynasty-home-champion">
+          <Trophy size={18} aria-hidden />
+          <span>
+            {!complete ? <small>{m.reigning}</small> : null}
+            {champ.mine ? m.youWon(champ.season) : m.championWon(champ.label ?? m.unnamed, champ.season)}
+          </span>
+        </p>
+      ) : (
+        <p className="af-lh-dy-tagline">{complete ? m.championPending(off.completedSeason) : m.offseasonTagline(off.nextSeason)}</p>
+      )}
+    </>
+  )
+}
+
+/** The Offseason timeline: each stored milestone in order; one without a stored date says so. */
+function OffseasonTimeline({ off, q, m }: { off: Offseason; q: string; m: Messages }) {
+  return (
+    <section className="af-lh-dy-off" aria-labelledby="af-lh-dy-off" data-testid="dynasty-home-offseason">
+      <header className="af-lh-dy-card-head">
+        <h3 id="af-lh-dy-off">{m.timeline}</h3>
+        <Link href={`/core/draft-hq${q}`}>{m.draftHq}</Link>
+      </header>
+      <ol className="af-lh-dy-ms" aria-label={m.timelineLabel(off.nextSeason)}>
+        {off.milestones.map((ms) => {
+          const when = milestoneWhen(ms, m)
+          return (
+            <li
+              key={ms.key}
+              className="af-lh-dy-ms-step"
+              data-key={ms.key}
+              data-state={ms.state}
+              data-undated={ms.at ? undefined : 'true'}
+              data-testid="dynasty-home-milestone"
+            >
+              <span className="af-lh-dy-ms-dot" aria-hidden />
+              <span className="af-lh-dy-ms-title">{milestoneTitle(ms, m)}</span>
+              {ms.at ? (
+                <time className="af-lh-dy-ms-date" dateTime={ms.at}>
+                  {formatDay(ms.at, m.locale)}
+                </time>
+              ) : ms.state === 'upcoming' ? (
+                <span className="af-lh-dy-ms-date">{m.noDate}</span>
+              ) : null}
+              {when ? <span className="af-lh-dy-ms-when">{when}</span> : null}
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
 export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: string }) {
   const m = useMessages(dynastyHomeDeckMessages)
   const q = `?league=${encodeURIComponent(leagueId)}`
-  const { clock, rafters, picks, ages, taxi } = deck
+  const { clock, rafters, picks, ages, taxi, offseason: off } = deck
+  const nextPicks = off && picks ? (picks.seasons.find((s) => s.season === off.nextDraftSeason) ?? null) : null
   return (
-    <section className="af-lh-dy" aria-label={m.deckLabel} data-testid="dynasty-home-deck">
+    <section className="af-lh-dy" aria-label={m.deckLabel} data-testid="dynasty-home-deck" data-phase={off ? 'offseason' : undefined}>
       <div className="af-lh-dy-hero">
         <div className="af-lh-dy-era">
           <span className="af-lh-dy-crest" aria-hidden>
             <Crown size={26} strokeWidth={1.8} />
           </span>
           <div className="af-lh-dy-era-text">
-            <p className="af-lh-dy-eyebrow">{m.dynasty}</p>
-            {clock ? (
+            {off ? (
+              <p className="af-lh-dy-eyebrow">
+                {m.dynasty} <span className="af-lh-dy-phase">{m.offseason}</span>
+              </p>
+            ) : (
+              <p className="af-lh-dy-eyebrow">{m.dynasty}</p>
+            )}
+            {off ? (
+              <OffseasonEra off={off} clock={clock} m={m} />
+            ) : clock ? (
               <h2 className="af-lh-dy-year" data-testid="dynasty-home-clock">
                 {clock.year != null ? (
                   <>
@@ -49,7 +158,7 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                 )}
               </h2>
             ) : null}
-            <p className="af-lh-dy-tagline">{m.tagline}</p>
+            {off ? null : <p className="af-lh-dy-tagline">{m.tagline}</p>}
           </div>
         </div>
 
@@ -81,6 +190,8 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
         ) : null}
       </div>
 
+      {off ? <OffseasonTimeline off={off} q={q} m={m} /> : null}
+
       {picks || ages || taxi ? (
         <div className="af-lh-dy-grid">
           {picks ? (
@@ -89,14 +200,24 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                 <h3 id="af-lh-dy-capital">{m.capital}</h3>
                 <Link href={`/core/trades${q}`}>{m.tradePicks}</Link>
               </header>
-              <p className="af-lh-dy-big">
-                <strong>{picks.total}</strong> <span>{m.picksTotal(picks.total)}</span>
-                {picks.firstRounders > 0 ? <em>{m.firstRounders(picks.firstRounders)}</em> : null}
-              </p>
+              {nextPicks && off ? (
+                <p className="af-lh-dy-big" data-testid="dynasty-home-next-draft">
+                  <strong>{nextPicks.picks.length}</strong> <span>{m.inNextDraft(nextPicks.picks.length, off.nextDraftSeason)}</span>
+                  <em>{m.heldInAll(picks.total)}</em>
+                </p>
+              ) : (
+                <p className="af-lh-dy-big">
+                  <strong>{picks.total}</strong> <span>{m.picksTotal(picks.total)}</span>
+                  {picks.firstRounders > 0 ? <em>{m.firstRounders(picks.firstRounders)}</em> : null}
+                </p>
+              )}
               <ul className="af-lh-dy-drafts">
                 {picks.seasons.map((s) => (
-                  <li key={s.season}>
-                    <span className="af-lh-dy-draft-year">{s.season}</span>
+                  <li key={s.season} data-next={off && s.season === off.nextDraftSeason ? 'true' : undefined}>
+                    <span className="af-lh-dy-draft-year">
+                      {s.season}
+                      {off && s.season === off.nextDraftSeason ? <small>{m.nextDraft}</small> : null}
+                    </span>
                     <span className="af-lh-dy-chips">
                       {s.picks.map((p, i) => (
                         <span key={`${p.round}-${i}`} className="af-lh-dy-chip" data-round={p.round === 1 ? '1' : undefined} title={p.via ? m.via(p.via) : undefined}>
@@ -108,6 +229,7 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                   </li>
                 ))}
               </ul>
+              {off && !nextPicks ? <p className="af-lh-dy-note">{m.noNextDraftPicks(off.nextDraftSeason)}</p> : null}
               {picks.partial ? <p className="af-lh-dy-note">{m.partial}</p> : null}
             </section>
           ) : null}

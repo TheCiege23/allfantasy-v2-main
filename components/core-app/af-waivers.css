@@ -395,6 +395,10 @@
   .af-wv-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* An odd count leaves one tile alone on the last row; it takes the full width instead. */
+  .af-wv-tiles > .af-wv-tile:last-child:nth-child(odd) {
+    grid-column: span 2;
+  }
 }
 
 /* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
@@ -492,16 +496,27 @@
     grid-template-areas: 'tiles tiles' 'main side';
     column-gap: 16px;
   }
-  /* Five figures in one row. */
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 24px; }
 }
-/* A tablet-width page: three over two, on a six-column grid so the second row fills the width too. */
-@container af-wv (min-width: 600px) and (max-width: 899px) {
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tile { grid-column: span 2; }
-  .af-core .af-wv-area-tiles .af-wv-tile:nth-child(n + 4) { grid-column: span 3; }
+/*
+ * The strip holds 3–5 tiles (FAAB only where the league bids, the next run only where there is no
+ * sticky line), so it is laid out BY COUNT — `data-count` on .af-wv-tiles — and always fills its row.
+ * It used to be five columns from 900px and three-over-two below, so a ~1000px content column (1440
+ * with the rail open) could land in the 3 + 2 band and leave a ragged second row.
+ *
+ * From 760px of container width every tile shares one row, whatever the count.
+ */
+@container af-wv (min-width: 760px) {
+  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+}
+/* Narrower than that, but not a phone: full rows only — three over two, two by two, or three across. */
+@container af-wv (min-width: 600px) and (max-width: 759px) {
   .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
+  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile { grid-column: span 2; }
+  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile:nth-child(n + 4) { grid-column: span 3; }
+  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='4'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container af-wv (min-width: 1180px) {
   .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -651,10 +666,6 @@
 .af-core .af-wv-track { display: block; height: 6px; margin-top: 9px; border-radius: 999px; background: var(--chip); overflow: hidden; }
 .af-core .af-wv-track-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 
-/* The phone already shows the next run in the sticky line above; the tile would say it twice. */
-@container af-wv (max-width: 599px) {
-  .af-core .af-wv-tile[data-tile='next-run'] { display: none; }
-}
 
 /* ── The filter bar: search + position chips, the width of the card ── */
 .af-core .af-wlb-filter {
