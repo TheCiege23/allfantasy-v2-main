@@ -3,7 +3,8 @@
 import ThreadPanel from './ThreadPanel'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
-import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
+import { Bell, Eye, Hash, Lock, Maximize2, MessageCircle, MessagesSquare, Minimize2, Radio, Sparkles, Users, X } from 'lucide-react'
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
@@ -13,7 +14,7 @@ import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPanel'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { messagesFor } from '@/lib/i18n/messages'
 import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
@@ -162,6 +163,69 @@ const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
   huddle: Users,
   dms: MessageCircle,
   discord: Radio,
+}
+
+/**
+ * The expanded view's left pane: every league, its unread count, and "All leagues" (the cross-league
+ * activity). Labels are the app's one rule for same-named leagues, as in the dropdown it stands in for.
+ */
+function LeagueList({
+  leagues,
+  value,
+  counts,
+  onPick,
+}: {
+  leagues: CommsLeague[]
+  value: string | null
+  counts?: Record<string, number>
+  onPick: (id: string | null) => void
+}) {
+  const labels = useMemo(() => distinctLeagueLabels(leagues), [leagues])
+  const row = (id: string | null, label: string, n: number | undefined) => {
+    const badge = tabBadgeText(n)
+    return (
+      <button
+        key={id ?? 'all'}
+        type="button"
+        className="af-cm-leaguerow"
+        data-on={value === id || undefined}
+        aria-current={value === id ? 'true' : undefined}
+        aria-label={badge ? `${label}, ${badge} unread` : label}
+        onClick={() => onPick(id)}
+      >
+        <span className="af-cm-leaguerow-av" aria-hidden="true">
+          {id ? initialsOf(label) : <MessagesSquare size={16} />}
+        </span>
+        <span className="af-cm-leaguerow-name" aria-hidden="true">{label}</span>
+        {badge ? <b className="af-cm-tabcount" aria-hidden="true">{badge}</b> : null}
+      </button>
+    )
+  }
+  return (
+    <nav className="af-cm-leaguelist" aria-label="Your leagues">
+      {row(null, 'All leagues', undefined)}
+      {leagues.map((l) => row(l.id, labels.get(l.id) ?? l.name, counts?.[l.id]))}
+    </nav>
+  )
+}
+
+function initialsOf(name: string): string {
+  const words = name.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean)
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '#'
+}
+
+/** A touch that starts here is not a tab swipe: the header, typing, a sideways-scrolling strip, a sheet. */
+function swipeBlocked(target: HTMLElement): boolean {
+  if (target.closest('.af-cm-head, input, textarea, select, [contenteditable="true"], [data-no-swipe], .af-chat-picker, .af-cm-sheet, .af-cm-viewer')) {
+    return true
+  }
+  for (let el: HTMLElement | null = target; el && !el.classList.contains('af-cm'); el = el.parentElement) {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      const overflowX = getComputedStyle(el).overflowX
+      if (overflowX === 'auto' || overflowX === 'scroll') return true
+    }
+  }
+  return false
 }
 
 // ── League chat panel ──────────────────────────────────────────────────
@@ -533,6 +597,12 @@ export function CommsDrawer({
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
   const [dismissedLeagueDraft, setDismissedLeagueDraft] = useState<string | null>(null)
+  /*
+   * Expanded (2026-11-05, desktop only — the button is hidden under 1024px and the layout falls back
+   * there): a wider panel, and the League tab becomes two panes — your leagues with their unread
+   * counts on the left, the conversation on the right — the way Discord and Slack use a big screen.
+   */
+  const [wide, setWide] = useState(false)
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
@@ -687,6 +757,56 @@ export function CommsDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
+  /*
+   * ONE underline that slides to the open tab (2026-11-05), instead of each tab drawing its own and
+   * the line jumping. Measured, because compact tabs size to their label and badge, so no two are the
+   * same width. Re-measured when the row resizes (a badge appears, the panel narrows).
+   */
+  const tabsRef = useRef<HTMLElement | null>(null)
+  const [tabLine, setTabLine] = useState<{ left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    const nav = tabsRef.current
+    if (!open || !nav) return
+    const measure = () => {
+      const on = nav.querySelector<HTMLElement>('[role="tab"][data-on="true"]')
+      setTabLine(on ? { left: on.offsetLeft, width: on.offsetWidth } : null)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(nav)
+    return () => ro.disconnect()
+  }, [open, tab, tabCounts])
+
+  /*
+   * Swipe left / right on the panel body to move between tabs — on a phone that is how Discord and
+   * Sleeper move between channels. Deliberately narrow so it never steals a gesture: a clearly
+   * horizontal flick (70px+, under 40px of drift, under 600ms), not starting in the header, a text box,
+   * a horizontally scrollable strip, or anything marked `data-no-swipe` (sheets, pickers).
+   */
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  const onSwipeStart = (e: ReactTouchEvent) => {
+    const target = e.target as HTMLElement | null
+    if (e.touches.length !== 1 || !target || swipeBlocked(target)) {
+      swipeStart.current = null
+      return
+    }
+    const t = e.touches[0]!
+    swipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() }
+  }
+  const onSwipeEnd = (e: ReactTouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    const t = e.changedTouches[0]
+    if (!start || !t) return
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) < 70 || Math.abs(dy) > 40 || Date.now() - start.t > 600) return
+    const at = TABS.findIndex((item) => item.id === tab)
+    const next = dx < 0 ? at + 1 : at - 1
+    if (next >= 0 && next < TABS.length) setTab(TABS[next]!.id)
+  }
+
   if (!open) return null
 
   const scopeName = leagues.find((l) => l.id === scopeId)?.name ?? null
@@ -706,11 +826,14 @@ export function CommsDrawer({
       <aside
         className="af-cm"
         data-mode={mode}
+        data-wide={mode === 'overlay' && wide ? 'true' : undefined}
         ref={panelRef}
         tabIndex={-1}
         role={mode === 'overlay' ? 'dialog' : 'complementary'}
         aria-modal={mode === 'overlay' ? true : undefined}
         aria-label={coreUiCopy('Communications', language)}
+        onTouchStart={onSwipeStart}
+        onTouchEnd={onSwipeEnd}
       >
         {/*
           2026-11-01 redesign (owner: "when I open it, it looks crowded … as simple as Sleeper or
@@ -735,6 +858,18 @@ export function CommsDrawer({
             <span className="af-cm-scopechip" data-global={scopeId == null}>
               {scopeName ?? m.commsDrawerGlobal}
             </span>
+            {mode === 'overlay' ? (
+              <button
+                type="button"
+                className="af-cm-headbtn af-cm-widebtn"
+                onClick={() => setWide((v) => !v)}
+                aria-pressed={wide}
+                aria-label={wide ? 'Shrink chat' : 'Expand chat'}
+                title={wide ? 'Shrink chat' : 'Expand chat'}
+              >
+                {wide ? <Minimize2 size={17} aria-hidden /> : <Maximize2 size={17} aria-hidden />}
+              </button>
+            ) : null}
             <Link
               href="/settings?tab=notifications"
               className="af-cm-headbtn"
@@ -749,7 +884,9 @@ export function CommsDrawer({
           </div>
 
           <nav
+            ref={tabsRef}
             className="af-cm-tabs"
+            data-line={tabLine ? 'true' : undefined}
             role="tablist"
             aria-label={m.commsDrawerChannels}
             onKeyDown={(event) => {
@@ -794,19 +931,38 @@ export function CommsDrawer({
                 </button>
               )
             })}
+            {tabLine ? (
+              <span
+                className="af-cm-tabline"
+                aria-hidden="true"
+                style={{ width: tabLine.width, transform: `translateX(${tabLine.left}px)` }}
+              />
+            ) : null}
           </nav>
         </header>
 
         {tab === 'league' ? (
-          <LeaguePanel
-            leagueDraft={leagueDraft?.leagueId === scopeId && leagueDraft.id !== dismissedLeagueDraft ? leagueDraft : undefined}
-            leagues={leagues}
-            scopeId={scopeId}
-            onScope={id => { setScopeId(id); if (leagueDraft) setDismissedLeagueDraft(leagueDraft.id) }}
-            chimmyTokenCost={chimmyTokenCost}
-            chimmyPlanAllowance={chimmyPlanAllowance}
-            userId={userId}
-          />
+          <div className="af-cm-split" data-wide={wide || undefined}>
+            {wide ? (
+              <LeagueList
+                leagues={leagues}
+                value={scopeId}
+                counts={tabCounts?.byLeague}
+                onPick={(id) => { setScopeId(id); if (leagueDraft) setDismissedLeagueDraft(leagueDraft.id) }}
+              />
+            ) : null}
+            <div className="af-cm-split-main">
+              <LeaguePanel
+                leagueDraft={leagueDraft?.leagueId === scopeId && leagueDraft.id !== dismissedLeagueDraft ? leagueDraft : undefined}
+                leagues={leagues}
+                scopeId={scopeId}
+                onScope={id => { setScopeId(id); if (leagueDraft) setDismissedLeagueDraft(leagueDraft.id) }}
+                chimmyTokenCost={chimmyTokenCost}
+                chimmyPlanAllowance={chimmyPlanAllowance}
+                userId={userId}
+              />
+            </div>
+          </div>
         ) : tab === 'chimmy' ? (
           <ChimmyPanel
             key={userId ?? 'anonymous'}
