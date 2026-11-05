@@ -772,3 +772,21 @@
   .af-core .af-wlb-search { min-height: 44px; }
 }
 
+
+/* Rostered % and adds this week (lib/waivers/waiverCrowd.ts): facts about the wider pool, so muted,
+   never in the warn or good tones that carry this row's own verdicts. */
+.af-core .af-wlb-crowd {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  background: var(--chip, rgba(255, 255, 255, 0.06));
+  white-space: nowrap;
+}
+.af-core .af-wlb-crowd[data-kind='added'] {
+  color: var(--accent);
+  background: var(--accent-soft, rgba(34, 211, 238, 0.12));
+}
+.af-core .af-wlb-proj { white-space: nowrap; }
