@@ -30,6 +30,15 @@ import {
   type FutureWeekLine,
   type FutureWeekStatus,
 } from '@/lib/projections/futureWeekProjections'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import {
+  buildDynastyRosterMarkers,
+  isCollegeProspect,
+  isDevyFormatLeague,
+  markerKeyFor,
+  prospectIdsOf,
+  type DynastyRosterMarker,
+} from './dynastyRosterMarkers'
 
 /**
  * The player card pop-up — STATE 6 / STATE 7 of the 2026-09-07 design handoff
@@ -363,6 +372,8 @@ export type PlayerCardLeague = {
    * lives on the league section rather than beside `bio`.
    */
   watched: boolean
+  /** He sits in his team's devy section here (devy / C2C leagues) — a college prospect. Absent otherwise. */
+  devy?: true
   /**
    * This player on this league's trade block.
    *
@@ -420,6 +431,12 @@ export type PlayerCardData = {
    * reading the emptied sections as "none".
    */
   depth?: CoreDepthAccess | null
+  /**
+   * Dynasty leagues only (opened with a dynasty league in context): his age chip, ROOKIE and — devy /
+   * C2C — PROSPECT, built by lib/core-app/dynastyRosterMarkers.ts from the rows the card already read.
+   * Absent for every other card, and when nothing agreed is on file.
+   */
+  dynastyMarker?: DynastyRosterMarker | null
 }
 
 /* ── tuning ──────────────────────────────────────────────────────────────── */
@@ -1433,6 +1450,8 @@ async function loadLeague(
     }
   }
   const holderKey = holder?.platformUserId ?? null
+  /* A devy / C2C roster's devy section holds its college prospects (also in `players`, so `slot` reads BENCH). */
+  const inDevy = holder != null && sleeperId != null && prospectIdsOf(holder.playerData).has(sleeperId)
 
   /*
    * ⚠ THE SAME THREE-CANDIDATE PREDICATE EVERY OTHER OWNERSHIP READ HERE USES.
@@ -1621,6 +1640,7 @@ async function loadLeague(
     playoffSchedule,
     watched,
     tradeBlock,
+    ...(inDevy ? { devy: true as const } : {}),
   }
 }
 
@@ -1730,7 +1750,11 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
    */
   const leagueBookRow = req.leagueId
     ? await prisma.league
-        .findUnique({ where: { id: req.leagueId }, select: { settings: true, leagueType: true } })
+        .findUnique({
+          where: { id: req.leagueId },
+          // The format columns too: the dynasty marker (below) is gated on them — no extra query.
+          select: { settings: true, leagueType: true, isDynasty: true, leagueVariant: true, sport: true },
+        })
         .catch(() => null)
     : null
   const book = leagueBookRow
@@ -1868,6 +1892,28 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       : null
   const follow = following === null ? null : { following }
 
+  /*
+   * Dynasty leagues only: the age chip, ROOKIE and (devy / C2C) PROSPECT for the card's header. NO NEW
+   * READ — the rows are the anchor and its same-Sleeper-id siblings already read above, put through the
+   * same builder (id AND normalised name must match, rows must agree) the roster screens use. He is a
+   * prospect when a team here holds him in its devy section, or when he is a college player shown in a
+   * pro devy league.
+   */
+  const dynastyMarker =
+    leagueBookRow && isDynastyLeague(leagueBookRow)
+      ? (() => {
+          const key = markerKeyFor(player)
+          const rows = [anchor, ...siblings].map((r) => ({ ...r, sleeperId: markerKeyFor(r) }))
+          const prospect =
+            league?.devy === true || (isDevyFormatLeague(leagueBookRow) && isCollegeProspect(player.sport, leagueBookRow.sport))
+          return (
+            buildDynastyRosterMarkers([{ sleeperId: key, name: player.name, position: player.position }], rows, leagueBookRow.sport ?? player.sport, {
+              prospectIds: prospect ? new Set([key]) : null,
+            })[key] ?? null
+          )
+        })()
+      : null
+
   return {
     context: league ? 'league' : 'universal',
     player: identity,
@@ -1905,5 +1951,6 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league,
     ...(follow ? { follow } : {}),
+    ...(dynastyMarker ? { dynastyMarker } : {}),
   }
 }

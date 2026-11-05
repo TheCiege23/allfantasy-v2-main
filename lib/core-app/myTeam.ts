@@ -45,7 +45,8 @@ import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type St
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isGuillotineLeague, isTeamEliminated } from './teamElimination'
 import { loadDynastyOutlook, type DynastyOutlook } from './dynastyOutlook'
-import { buildDynastyRosterMarkers, type DynastyRosterMarker } from './dynastyRosterMarkers'
+import { prospectIdsOf, type DynastyRosterMarker } from './dynastyRosterMarkers'
+import { readDynastyMarkers } from './dynastyMarkerRead'
 import { isDynastyLeague as isDynastyFormatLeague } from '@/lib/league/isDynastyLeague'
 import { getTeamActivity, type TeamActivity } from './teamActivity'
 import {
@@ -1729,14 +1730,17 @@ async function loadMyTeamData(
   const markerPlayers = isDynastyFormatLeague({ isDynasty: league.isDynasty, leagueType: league.leagueType, leagueVariant: league.leagueVariant })
     ? [...new Map([...resolved.values()].map((p) => [p.sleeperId, p])).values()]
     : []
+  /*
+   * Devy / C2C: the roster's devy section (`prospectIdsOf`) holds its college prospects. They are also in
+   * `players`, so they draw as bench rows — the PROSPECT tag is what tells them apart. Keyed by the
+   * roster's id OR the resolved Sleeper id, since a translated roster holds the provider's.
+   */
+  const rosterProspects = markerPlayers.length ? prospectIdsOf(pd) : new Set<string>()
+  const prospectIds = new Set(
+    [...resolved.entries()].filter(([rid, p]) => rosterProspects.has(rid) || rosterProspects.has(p.sleeperId)).map(([, p]) => p.sleeperId),
+  )
   const dynastyMarkersRead = markerPlayers.length
-    ? prisma.sportsPlayer
-        .findMany({
-          where: { sport: sport.toUpperCase(), sleeperId: { in: markerPlayers.map((p) => p.sleeperId) } },
-          select: { sleeperId: true, name: true, position: true, age: true, yearsExp: true },
-        })
-        .then((rows) => buildDynastyRosterMarkers(markerPlayers.map(asPlayer), rows, sport))
-        .catch(() => null)
+    ? readDynastyMarkers(prisma, { sport, players: markerPlayers.map(asPlayer), prospectIds }).catch(() => null)
     : Promise.resolve(null)
   const dynastyRead = isDynastyLeague
     ? loadDynastyOutlook({
