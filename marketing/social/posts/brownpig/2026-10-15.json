@@ -1,0 +1,165 @@
+{
+  "date": "brownpig-2026-10-15",
+  "theme": "brownpig",
+  "title": "Brown Pig LLC posts",
+  "accounts": [
+    [
+      "instagram",
+      "Instagram",
+      "(your handle)"
+    ],
+    [
+      "tiktok",
+      "TikTok (photo mode)",
+      "(your handle)"
+    ],
+    [
+      "facebook",
+      "Facebook",
+      "(your page)"
+    ],
+    [
+      "x",
+      "X",
+      "(your handle)"
+    ]
+  ],
+  "posts": [
+    {
+      "brand": "Brown Pig LLC",
+      "accent": "pig",
+      "kind": "list",
+      "eyebrow": "Meet the family",
+      "title": "We take things apart and [build them back better.]",
+      "bullets": [
+        [
+          "StoryVault",
+          "Keep the family stories before they are gone"
+        ],
+        [
+          "PetPass",
+          "Every pet record, vet visit and reminder"
+        ],
+        [
+          "Parent Playbook",
+          "Practical plays for sports parents"
+        ],
+        [
+          "Gooby",
+          "Social discovery for people and their dogs"
+        ],
+        [
+          "SideQuest",
+          "Turn the side hustle into a finishable quest"
+        ],
+        [
+          "Cafe Con Chimmy",
+          "Culture, coffee and conversation"
+        ]
+      ],
+      "cta": "LINK IN BIO →",
+      "caption": {
+        "instagram": "The kid who took apart his Nintendo to see how it worked never stopped. 🔧\n\nBrown Pig LLC is a husband-and-wife company. We build apps that capture what people can't afford to lose: family stories, pet records, the side project you keep meaning to finish.\n\nSix apps, one family. Which one should we break down first? 👇\n\n#buildinpublic #smallbusiness #familybusiness #founders #brownpigllc",
+        "tiktok": "POV: you took apart your Nintendo as a kid and never stopped. Now we build apps. Six of them. Which one do you want the breakdown on? 👇\n\n#buildinpublic #smallbusiness #founderstory #brownpigllc",
+        "facebook": "Meet Brown Pig LLC 🐷\n\nWe're a husband-and-wife company building apps that capture what people can't afford to lose: StoryVault, PetPass, Parent Playbook, Gooby, SideQuest and Cafe Con Chimmy (plus AllFantasy).\n\nOur whole approach fits in one line: we take things apart and build them back better. Which one do you want to hear about first?",
+        "x": "We take things apart and build them back better.\n\nBrown Pig LLC: a husband-and-wife company, 6 apps that capture what people can't afford to lose.\n\nStoryVault. PetPass. Parent Playbook. Gooby. SideQuest. Cafe Con Chimmy.\n\nWhich one first? #buildinpublic"
+      },
+      "dense": true,
+      "titleSize": "sm"
+    },
+    {
+      "brand": "StoryVault",
+      "accent": "amber",
+      "kind": "hero",
+      "eyebrow": "StoryVault",
+      "title": "What isn’t captured [disappears.]",
+      "lead": "Record and keep the family stories before they’re gone.",
+      "cta": "STORYVAULT.CHIMAURA.COM",
+      "caption": {
+        "instagram": "Last year I lost my grandmother's stories. Not the photos. The stories. The ones only she could tell. 🕯️\n\nThat's why we're building StoryVault: record and keep your family's stories before they're gone.\n\nWho's the storyteller in your family? Call them this week.\n\n#familyhistory #familystories #legacy #storytelling #storyvault",
+        "tiktok": "Call the storyteller in your family this week. Record it. I didn't, and now her stories are gone. That's why we're building StoryVault. 🕯️\n\n#familystories #legacy #grandma #storyvault",
+        "facebook": "Last year I lost my grandmother's stories. Not the photos, the stories. The ones only she could tell.\n\nThat's why we're building StoryVault: a place to record and keep your family's stories before they're gone.\n\nWho's the storyteller in your family? Tag them, then call them this week. https://storyvault.chimaura.com",
+        "x": "Lost my grandmother's stories last year. Not the photos. The stories.\n\nWhat isn't captured disappears. That's why we're building StoryVault.\n\nWho's the storyteller in your family? Call them this week."
+      }
+    },
+    {
+      "brand": "PetPass",
+      "accent": "teal",
+      "kind": "hero",
+      "eyebrow": "PetPass",
+      "big": "🐾",
+      "title": "Where’s your pet’s [vaccine record] right now?",
+      "lead": "Every pet record, vet visit and reminder in one pass.",
+      "cta": "PETPASS.CHIMAURA.COM",
+      "caption": {
+        "instagram": "Quick test: your dog's vaccine record. Where is it right now? 🐾\n\nIf the answer is \"a folder somewhere\" or \"the vet has it,\" you're not alone. PetPass keeps every pet record, vet visit and reminder in one place.\n\nDrop your pet's name below 👇\n\n#dogsofinstagram #catsofinstagram #petparents #petcare #petpass",
+        "tiktok": "Where's your pet's vaccine record right now? Be honest 😅 PetPass puts every record, vet visit and reminder in one pass. Drop your pet's name 👇\n\n#petparents #dogtok #cattok #petpass",
+        "facebook": "Quick test 🐾 Your pet's vaccine record: where is it right now?\n\nIf you had to think about it, PetPass is for you. Every pet record, vet visit and reminder in one pass.\n\nDrop your pet's name in the comments 👇 https://petpass.chimaura.com",
+        "x": "Quick test: where's your pet's vaccine record right now? 🐾\n\nIf you had to think about it, that's the problem PetPass fixes. Every record, vet visit and reminder in one pass."
+      }
+    },
+    {
+      "brand": "Parent Playbook",
+      "accent": "field",
+      "kind": "hero",
+      "eyebrow": "Parent Playbook",
+      "title": "My son is 6. [First year of tackle football.]",
+      "lead": "I’m learning this too. Practical plays for parents, one situation at a time.",
+      "cta": "PLAYBOOK.CHIMAURA.COM",
+      "caption": {
+        "instagram": "My son is 6 and in his first year of tackle football. 🏈 I'm learning right alongside him: what to say after a bad game, when to coach and when to just be Dad.\n\nThat's Parent Playbook: practical plays for parents, one situation at a time.\n\nSports parents: what's the one thing you wish someone told you in year one? 👇\n\n#sportsparents #youthfootball #footballdad #youthsports #parentplaybook",
+        "tiktok": "First year of tackle football for my 6-year-old. I'm learning too. 🏈 Sports parents: what do you wish someone told you in year one? 👇\n\n#footballdad #youthsports #sportsparents #parentplaybook",
+        "facebook": "My son is 6 and in his first year of tackle football 🏈\n\nI'm learning right alongside him: what to say after a tough game, when to coach and when to just be Dad. That's why we're building Parent Playbook: practical plays for parents, one situation at a time.\n\nSports parents, what's the one thing you wish someone told you in year one? https://playbook.chimaura.com",
+        "x": "My son is 6. First year of tackle football.\n\nI'm learning too: when to coach, when to just be Dad.\n\nSports parents: what's the one thing you wish someone told you in year one? 👇"
+      }
+    },
+    {
+      "brand": "Gooby",
+      "accent": "dog",
+      "kind": "hero",
+      "eyebrow": "Gooby",
+      "big": "🐕",
+      "title": "Your dog needs [friends] too.",
+      "lead": "Social discovery for people and their dogs.",
+      "cta": "GOGOOBY.COM",
+      "caption": {
+        "instagram": "Your dog needs friends too. 🐕\n\nGooby is social discovery for people and their dogs: find the pups (and the people) who match your dog's energy.\n\nTag the dog who'd be your dog's best friend 👇\n\n#dogsofinstagram #dogfriends #doglife #puppylove #gooby",
+        "tiktok": "Your dog needs friends too 🐕 Gooby = social discovery for people and their dogs. Tag your dog's future best friend 👇\n\n#dogtok #doglife #dogfriends #gooby",
+        "facebook": "Your dog needs friends too 🐕\n\nGooby is social discovery for people and their dogs. Tag the dog who'd be your dog's best friend 👇 https://gogooby.com",
+        "x": "Your dog needs friends too. 🐕\n\nGooby: social discovery for people and their dogs.\n\nTag your dog's future best friend 👇"
+      }
+    },
+    {
+      "brand": "SideQuest",
+      "accent": "quest",
+      "kind": "hero",
+      "eyebrow": "SideQuest",
+      "big": "🗺️",
+      "title": "Side hustles you started this year? [How many did you finish?]",
+      "lead": "SideQuest turns the side hustle into a tracked, finishable quest.",
+      "cta": "SIDEQUEST.CHIMAURA.COM",
+      "caption": {
+        "instagram": "Be honest: how many side hustles did you start this year? And how many did you finish? 🗺️\n\nStarting is easy. Finishing is the whole game. SideQuest turns the side hustle into a tracked, finishable quest.\n\nDrop your numbers: started / finished 👇\n\n#sidehustle #entrepreneur #buildinpublic #productivity #sidequest",
+        "tiktok": "Started vs finished side hustles this year. Drop your numbers 👇 (no judgment, mine are ugly too) 🗺️\n\n#sidehustle #entrepreneur #buildinpublic #sidequest",
+        "facebook": "Be honest 👇 How many side hustles did you start this year, and how many did you finish?\n\nStarting is easy. Finishing is the whole game. SideQuest turns the side hustle into a tracked, finishable quest. https://sidequest.chimaura.com",
+        "x": "Side hustles started this year: ?\nSide hustles finished: ?\n\nStarting is easy. Finishing is the whole game.\n\nThat's what SideQuest is for. Drop your numbers 👇"
+      }
+    },
+    {
+      "brand": "Cafe Con Chimmy",
+      "accent": "coffee",
+      "kind": "hero",
+      "eyebrow": "Cafe Con Chimmy",
+      "big": "☕",
+      "title": "Culture, coffee and [conversation.]",
+      "lead": "From the Chimmy world. Pull up a chair.",
+      "cta": "CAFECONCHIMMY.COM",
+      "caption": {
+        "instagram": "Pull up a chair. ☕\n\nCafe Con Chimmy is culture, coffee and conversation from the Chimmy world: the food, the stories and the people around the table.\n\nHow do you take your coffee? 👇\n\n#coffee #coffeelover #culture #familyfood #cafeconchimmy",
+        "tiktok": "Pull up a chair ☕ Culture, coffee and conversation. How do you take yours? 👇\n\n#coffeetok #coffee #culture #cafeconchimmy",
+        "facebook": "Pull up a chair ☕\n\nCafe Con Chimmy is culture, coffee and conversation from the Chimmy world. How do you take your coffee? 👇 https://cafeconchimmy.com",
+        "x": "Culture, coffee and conversation. ☕\n\nCafe Con Chimmy. Pull up a chair.\n\nHow do you take yours? 👇"
+      }
+    }
+  ]
+}

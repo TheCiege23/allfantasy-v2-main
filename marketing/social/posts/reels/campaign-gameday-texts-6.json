@@ -1,0 +1,45 @@
+{
+  "name": "campaign-gameday-texts-6",
+  "slot": "Sun 10/25 · reel",
+  "accent": "#FFC94D",
+  "seconds": 11,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "It's\n[game day.]",
+      "size": "h1",
+      "pop": true,
+      "top": 160,
+      "emoji": "🏈"
+    },
+    {
+      "in": 2.6,
+      "out": 4.8,
+      "text": "Go enjoy\n[brunch.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🥞"
+    },
+    {
+      "in": 5.0,
+      "out": 7.8,
+      "text": "Starter ruled out?\n[We'll text you.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📲"
+    }
+  ],
+  "end": {
+    "in": 8.0,
+    "line": "Phone down.\n[We've got this.]"
+  },
+  "caption": {
+    "instagram": "It's game day. Go enjoy brunch. 🥞\n\nIf one of your starters gets ruled out before kickoff, AllFantasy sends you one text with who's out, who to start, and a link to fix it.\n\nTexts not on yet? Settings → Notifications. Link in bio.\n\n#fantasyfootball #nflsunday #gameday #fantasyfootballcommunity #allfantasy",
+    "tiktok": "Game day. Phone down. We'll text you if a starter gets ruled out 📲 Link in bio.\n\n#fantasyfootball #nflsunday #allfantasy",
+    "youtube": "Game day. Phone down. We'll text you if a starter gets ruled out 📲 allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Game day! If one of your starters gets ruled out before kickoff, AllFantasy sends one text with who's out, who to start and a link to fix it. Texts not on yet? Settings → Notifications. https://allfantasy.ai"
+  }
+}

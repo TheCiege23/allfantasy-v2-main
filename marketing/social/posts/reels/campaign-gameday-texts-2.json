@@ -1,0 +1,44 @@
+{
+  "name": "campaign-gameday-texts-2",
+  "slot": "Wed 10/21 · reel",
+  "accent": "#3BC4FF",
+  "seconds": 11,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.6,
+      "text": "He played\n[Thursday.]",
+      "size": "h1",
+      "pop": true,
+      "top": 160,
+      "emoji": "🏈"
+    },
+    {
+      "in": 2.8,
+      "out": 5.0,
+      "text": "So his slot\n[is locked.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🔒"
+    },
+    {
+      "in": 5.2,
+      "out": 8.0,
+      "text": "We won't tell you\n[to start him Sunday.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200
+    }
+  ],
+  "end": {
+    "in": 8.2,
+    "line": "Every tip is\n[a real move.]"
+  },
+  "caption": {
+    "instagram": "Nothing worse than advice you can't use. 🔒\n\nIf your bench guy played Thursday night, he can't come in on Sunday. AllFantasy knows that, so he never shows up in your swap tips. Every suggestion is a move you can actually make.\n\nLink in bio.\n\n#fantasyfootball #fantasyfootballadvice #startsit #thursdaynightfootball #allfantasy",
+    "tiktok": "Your bench guy played Thursday. We won't tell you to start him Sunday 🔒 Link in bio.\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+    "youtube": "Your bench guy played Thursday. We won't tell you to start him Sunday 🔒 allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "If a bench player already played (say, on Thursday night), his spot is locked and you can't start him. AllFantasy leaves those players out of its swap tips, so every suggestion is a move you can actually make. https://allfantasy.ai"
+  }
+}

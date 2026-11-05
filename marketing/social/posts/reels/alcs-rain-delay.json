@@ -1,0 +1,76 @@
+{
+  "name": "alcs-rain-delay",
+  "accent": "#FF5A6E",
+  "seconds": 15,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "🌧️",
+      "text": "ALCS Game 4\n[rained out]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 0.6,
+      "out": 2.4,
+      "text": "Guardians vs. Rays never got started Friday.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 2.6,
+      "out": 5.0,
+      "emoji": "⚾",
+      "text": "Game 4 is\n[tonight]\n8 PM ET",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 5.2,
+      "out": 7.6,
+      "emoji": "🗓️",
+      "text": "Game 5 is\n[Sunday]\n5 PM ET",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 7.8,
+      "out": 10.2,
+      "emoji": "🛡️",
+      "text": "Guardians\nlead [2-1]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 8.2,
+      "out": 10.2,
+      "text": "The winner faces the Brewers in the World Series.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 10.4,
+      "out": 12.6,
+      "emoji": "🤔",
+      "text": "Guardians\nin 5? Or do\nthe [Rays] rally?",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    }
+  ],
+  "end": {
+    "in": 12.8,
+    "line": "Drop your\n[pick] 👇"
+  },
+  "caption": {
+    "instagram": "🌧️ Rain pushed ALCS Game 4 to tonight at 8 PM ET, and Game 5 moves to Sunday at 5 PM ET.\n\nCleveland leads Tampa Bay 2-1. The winner meets the Brewers in the World Series.\n\nGuardians in 5, or do the Rays rally? 👇\n\n#MLB #ALCS #Guardians #Rays #WorldSeries #allfantasy",
+    "tiktok": "ALCS Game 4 got rained out 🌧️ Tonight 8 ET, Game 5 Sunday. Guardians up 2-1. Your pick? 👇 #MLB #ALCS #Guardians #Rays",
+    "youtube": "ALCS Game 4 was rained out: now tonight at 8 PM ET, Game 5 Sunday at 5 PM ET. Guardians lead the Rays 2-1. #MLB #ALCS #shorts",
+    "facebook": "🌧️ ALCS Game 4 was rained out. Guardians vs. Rays is now tonight at 8 PM ET, Game 5 Sunday at 5 PM ET. Cleveland leads 2-1 and the winner faces the Brewers. Your pick? 👇"
+  }
+}

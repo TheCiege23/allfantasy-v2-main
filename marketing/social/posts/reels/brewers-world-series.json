@@ -1,0 +1,74 @@
+{
+  "name": "brewers-world-series",
+  "accent": "#FF5A6E",
+  "seconds": 13,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "⚾",
+      "text": "Brewers are\n[WS-bound]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.6,
+      "out": 5.0,
+      "emoji": "🧹",
+      "text": "Swept the\n[Dodgers] 4-0",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 3.0,
+      "out": 5.0,
+      "text": "A clean sweep in the NLCS.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 5.2,
+      "out": 7.6,
+      "emoji": "🤔",
+      "text": "Guardians\nor [Rays?]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 5.6,
+      "out": 7.6,
+      "text": "The ALCS winner faces Milwaukee.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 7.8,
+      "out": 10.2,
+      "emoji": "🗓️",
+      "text": "Game 1 is\n[Oct. 23]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 8.2,
+      "out": 10.2,
+      "text": "The World Series starts Friday.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 10.4,
+    "line": "Who faces\n[Milwaukee?] 👇"
+  },
+  "caption": {
+    "instagram": "⚾ The Brewers are going to the World Series after sweeping the Dodgers 4-0 in the NLCS.\n\nThe World Series opens Friday, Oct. 23. Guardians or Rays: who are you taking to face Milwaukee? 👇\n\n#MLB #Brewers #WorldSeries #ALCS #allfantasy",
+    "tiktok": "Brewers swept the Dodgers and are World Series bound ⚾ Guardians or Rays to face them? 👇 #MLB #Brewers #WorldSeries #allfantasy",
+    "youtube": "The Brewers swept the Dodgers 4-0 and are going to the World Series, starting Oct. 23. Guardians or Rays? #MLB #Brewers #shorts",
+    "facebook": "⚾ The Brewers swept the Dodgers 4-0 and are headed to the World Series, which opens Friday, Oct. 23. Guardians or Rays: who faces Milwaukee? https://allfantasy.ai"
+  }
+}

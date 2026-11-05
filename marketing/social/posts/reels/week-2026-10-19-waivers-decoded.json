@@ -1,0 +1,62 @@
+{
+  "name": "week-2026-10-19-waivers-decoded",
+  "slot": "Mon Oct 19 · 6 PM",
+  "accent": "#38E08F",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "text": "Waivers,\n[decoded.]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.4,
+      "out": 4.0,
+      "text": "[Rolling:] claim, then drop to the back",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🔄"
+    },
+    {
+      "in": 4.2,
+      "out": 5.8,
+      "text": "[Reverse:] worst record picks first",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📉"
+    },
+    {
+      "in": 6.0,
+      "out": 7.6,
+      "text": "[FAAB:] blind bids, season budget",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "💰"
+    },
+    {
+      "in": 7.8,
+      "out": 9.4,
+      "text": "[Free agents:] instant add",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "⚡"
+    }
+  ],
+  "end": {
+    "in": 9.6,
+    "line": "Mix them\n[by day.]"
+  },
+  "caption": {
+    "instagram": "Waivers, decoded 🔄\n\n🔄 Rolling: claim, then drop to the back\n📉 Reverse: worst record picks first\n💰 FAAB: blind bids with a season budget\n⚡ Free agents: instant add\n\nOn AllFantasy, commissioners can set the rule for each day of the week. Link in bio.\n\n#fantasyfootball #waiverwire #faab #allfantasy",
+    "tiktok": "Rolling vs reverse vs FAAB vs free agents 🔄 Which does your league use? 👇\n\n#fantasyfootball #waiverwire #fantasyfootballtok #allfantasy",
+    "youtube": "Fantasy waivers decoded: rolling, reverse, FAAB, free agents. allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Waivers, decoded 🔄 Rolling, reverse, FAAB and free agents. On AllFantasy, commissioners can set the rule for each day of the week: https://allfantasy.ai"
+  }
+}

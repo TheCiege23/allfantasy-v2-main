@@ -1,0 +1,122 @@
+{
+  "name": "fun-six-managers",
+  "accent": "#B48CFF",
+  "seconds": 16,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "👀",
+      "text": "Every league has\n[these 6]\nmanagers",
+      "size": "h1",
+      "pop": true,
+      "top": 160
+    },
+    {
+      "in": 2.5,
+      "out": 4.2,
+      "emoji": "🕐",
+      "text": "The [12:59]\nSunday Setter",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.75,
+      "out": 4.2,
+      "text": "Locks his lineup one minute before kickoff",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 4.25,
+      "out": 5.95,
+      "emoji": "📱",
+      "text": "The Trade\n[Spammer]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 4.5,
+      "out": 5.95,
+      "text": "3-for-1 offers at 2 AM",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 6.0,
+      "out": 7.7,
+      "emoji": "👻",
+      "text": "The\n[Ghost]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 6.25,
+      "out": 7.7,
+      "text": "Last move: Week 2",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 7.75,
+      "out": 9.45,
+      "emoji": "📊",
+      "text": "The [Spreadsheet]\nGuy",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 8.0,
+      "out": 9.45,
+      "text": "Has a tab for your team",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 9.5,
+      "out": 11.2,
+      "emoji": "🍀",
+      "text": "The\n[Lucky] One",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 9.75,
+      "out": 11.2,
+      "text": "Autodrafted. First place.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 11.25,
+      "out": 12.95,
+      "emoji": "🧂",
+      "text": "The Group Chat\n[Lawyer]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 11.5,
+      "out": 12.95,
+      "text": "Quotes the rulebook. Daily.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 13.1,
+    "line": "Which one\n[are you?]"
+  },
+  "caption": {
+    "instagram": "Every league has these 6 managers 😂 Which one are you? Comment your number 👇 and tag your Ghost.\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #ffl #allfantasy",
+    "tiktok": "Every league has these 6 😂 which one are you? 👇 #fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+    "youtube": "Every fantasy league has these 6 managers 😂 Which one are you? #fantasyfootball #shorts",
+    "facebook": "Every league has these 6 managers 😂 Which one are you? Tag your Ghost 👇 https://allfantasy.ai"
+  }
+}

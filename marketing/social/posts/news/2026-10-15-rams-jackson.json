@@ -1,0 +1,22 @@
+{
+  "date": "news-2026-10-15-rams-jackson",
+  "title": "AllFantasy news post",
+  "posts": [
+    {
+      "slot": "News · suspension",
+      "kind": "list",
+      "accent": "red",
+      "pill": "⛔ Suspension update",
+      "title": "Alaric Jackson's ban\n[cut to 1 game.]",
+      "titleSize": "sm",
+      "lead": "The Rams left tackle won his appeal. His 2-game suspension is now 1.",
+      "bullets": [
+        ["Out Sunday vs. the Cardinals", "David Quessenberry is slated to start at LT"],
+        ["Eligible to return Week 7", "vs. the Raiders"],
+        ["Fantasy note", "One week without their starting LT. Don't panic-bench your Rams."]
+      ],
+      "cta": "#NFL · #RAMS",
+      "caption": "Rams' Alaric Jackson has suspension cut to 1 game following appeal #NFL #Rams"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "date": "carousel-2026-10-19-nba-draft-cheat-sheet",
+  "carousel": true,
+  "name": "Nba Draft Cheat Sheet",
+  "slot": "Mon Oct 19 · 12 PM",
+  "caption": {
+    "instagram": "Drafting tonight? Read this first 🏀 The NBA season tips off tomorrow, Tuesday, Oct 20.\n\n1️⃣ Know your scoring\n2️⃣ Games played matter\n3️⃣ Punting is a strategy\n4️⃣ Stay active\n\nNo league yet? Start one on AllFantasy tonight, free. Link in bio.\n\n#fantasybasketball #nbafantasy #fantasybball #nba #allfantasy",
+    "tiktok": "Fantasy basketball draft tonight? 4 rules before you pick 🏀 NBA tips off tomorrow. Save this 👇\n\n#fantasybasketball #nba #nbatok #allfantasy",
+    "facebook": "Drafting tonight? 🏀 The NBA season tips off tomorrow, Tuesday, Oct 20.\n\n1. Know your scoring\n2. Games played matter\n3. Punting is a strategy (category leagues)\n4. Stay active all season\n\nNo league yet? Start one tonight, free: https://allfantasy.ai",
+    "x": "Fantasy basketball draft tonight? 🏀\n\n1. Know your scoring\n2. Games played matter\n3. Punting is a strategy\n4. Stay active\n\nNBA tips off tomorrow, Oct 20. No league yet? allfantasy.ai #FantasyBasketball"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "eyebrow": "Fantasy basketball",
+      "title": "Drafting tonight?\n[Read this first.]",
+      "titleSize": "xl",
+      "lead": "The NBA season tips off tomorrow, Tuesday, Oct 20.",
+      "accent": "orange"
+    },
+    {
+      "kind": "hero",
+      "big": "1",
+      "title": "Know your [scoring.]",
+      "lead": "Points leagues and category leagues reward different players. Check your settings before your first pick.",
+      "accent": "orange"
+    },
+    {
+      "kind": "hero",
+      "big": "2",
+      "title": "Games played [matter.]",
+      "lead": "A star who sits out back-to-backs gives you fewer games. Volume wins weeks.",
+      "accent": "orange"
+    },
+    {
+      "kind": "hero",
+      "big": "3",
+      "title": "Punting is a [strategy.]",
+      "lead": "In category leagues, giving up one category on purpose can win you the rest.",
+      "accent": "orange"
+    },
+    {
+      "kind": "hero",
+      "big": "4",
+      "title": "Stay [active.]",
+      "lead": "Basketball rewards managers who pay attention: more games, more lineup calls, more chances to win your week.",
+      "accent": "orange"
+    },
+    {
+      "kind": "hero",
+      "big": "🏀",
+      "title": "No league yet?\n[Start one tonight.]",
+      "lead": "Run an NBA league on AllFantasy, free.",
+      "cta": "START FREE · LINK IN BIO →",
+      "accent": "orange"
+    }
+  ]
+}

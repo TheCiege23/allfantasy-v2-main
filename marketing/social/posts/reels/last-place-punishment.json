@@ -1,0 +1,65 @@
+{
+  "name": "last-place-punishment",
+  "accent": "#B48CFF",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "emoji": "💀",
+      "text": "Last place\n[pays up]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.4,
+      "out": 10.6,
+      "text": "Pick the\n[punishment]",
+      "size": "h2",
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 10.6,
+      "text": "🧇 [A]  Waffle House",
+      "size": "h2",
+      "pop": true,
+      "top": 280
+    },
+    {
+      "in": 4.4,
+      "out": 10.6,
+      "text": "👕 [B]  Loser jersey",
+      "size": "h2",
+      "pop": true,
+      "top": 460
+    },
+    {
+      "in": 5.800000000000001,
+      "out": 10.6,
+      "text": "📝 [C]  Season recap",
+      "size": "h2",
+      "pop": true,
+      "top": 640
+    },
+    {
+      "in": 7.200000000000001,
+      "out": 10.6,
+      "text": "🎤 [D]  Karaoke night",
+      "size": "h2",
+      "pop": true,
+      "top": 820
+    }
+  ],
+  "end": {
+    "in": 10.8,
+    "line": "Tag who's\n[earning it] 👇"
+  },
+  "caption": {
+    "instagram": "Your league's last-place punishment. Pick one 👇\n\nA 🧇 24 hours in a Waffle House\nB 👕 Wear the loser jersey all week\nC 📝 Write the season recap for the group chat\nD 🎤 Karaoke in public\n\nTag the manager who's earning it this year.\n\n#fantasyfootball #fantasyfootballmemes #fantasypunishment #fantasyfootballcommunity #allfantasy",
+    "tiktok": "Pick your league's last-place punishment 👇 A, B, C or D? Tag who's earning it. #fantasyfootball #fantasypunishment #fantasyfootballtok #allfantasy",
+    "youtube": "Pick your league's last-place punishment: Waffle House, loser jersey, season recap or public karaoke? #fantasyfootball #shorts",
+    "facebook": "Pick your league's last-place punishment 👇\n\nA 🧇 24 hours in a Waffle House\nB 👕 Loser jersey\nC 📝 Write the season recap\nD 🎤 Public karaoke\n\nTag who's earning it."
+  }
+}

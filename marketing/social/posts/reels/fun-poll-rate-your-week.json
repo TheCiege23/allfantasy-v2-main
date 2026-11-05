@@ -1,0 +1,64 @@
+{
+  "name": "fun-poll-rate-your-week",
+  "accent": "#B48CFF",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "text": "Rate your\nfantasy [week]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.4,
+      "out": 10.6,
+      "text": "Rate your\nfantasy [week]",
+      "size": "h2",
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 10.6,
+      "text": "🔥 [A]  Undefeated",
+      "size": "h2",
+      "pop": true,
+      "top": 280
+    },
+    {
+      "in": 4.4,
+      "out": 10.6,
+      "text": "😐 [B]  Mid. Survived.",
+      "size": "h2",
+      "pop": true,
+      "top": 460
+    },
+    {
+      "in": 5.800000000000001,
+      "out": 10.6,
+      "text": "💀 [C]  Time machine",
+      "size": "h2",
+      "pop": true,
+      "top": 640
+    },
+    {
+      "in": 7.200000000000001,
+      "out": 10.6,
+      "text": "🗑️ [D]  Next season",
+      "size": "h2",
+      "pop": true,
+      "top": 820
+    }
+  ],
+  "end": {
+    "in": 10.8,
+    "line": "Comment\n[A, B, C or D] 👇"
+  },
+  "caption": {
+    "instagram": "Rate your fantasy week. Be honest 👇 A, B, C or D?\n\nA 🔥 Undefeated energy\nB 😐 Mid. Survived.\nC 💀 Need a time machine\nD 🗑️ Planning next season\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #ffl #allfantasy",
+    "tiktok": "Rate your fantasy week. A, B, C or D? Be honest 👇 #fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+    "youtube": "Rate your fantasy week: A, B, C or D? 👇 #fantasyfootball #shorts",
+    "facebook": "Rate your fantasy week. Be honest 👇 A, B, C or D?\n\nA 🔥 Undefeated energy\nB 😐 Mid. Survived.\nC 💀 Need a time machine\nD 🗑️ Planning next season\n\nhttps://allfantasy.ai"
+  }
+}

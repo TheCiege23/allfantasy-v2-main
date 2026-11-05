@@ -1,0 +1,20 @@
+{
+  "name": "2026-10-24-ask-chimmy",
+  "accent": "#4DD4FF",
+  "seconds": 14,
+  "beats": [
+    { "in": 0.2, "out": 2.6, "emoji": "🤖", "text": "Stuck on a\n[start/sit?]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 0.6, "out": 2.6, "text": "Ask Chimmy. It knows your leagues.", "size": "p", "top": 1000 },
+    { "in": 2.8, "out": 5.2, "emoji": "💬", "text": "Who do I\n[start?]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 5.4, "out": 7.8, "emoji": "🔁", "text": "Is this trade\n[fair?]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 8.0, "out": 10.6, "emoji": "🗂️", "text": "Who do I\n[pick up?]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 2.8, "out": 10.6, "text": "Ask about your actual roster.", "size": "p", "top": 1000 }
+  ],
+  "end": { "in": 10.8, "line": "2 free questions\n[a day]" },
+  "caption": {
+    "instagram": "Stuck on a start/sit? Ask Chimmy 🤖\n\nThe AI assistant inside AllFantasy knows your leagues. Ask who to start, if a trade is fair, or who to pick up. Free accounts get 2 questions a day. Link in bio.\n\n#fantasyfootball #startsit #fantasyfootballadvice #allfantasy",
+    "tiktok": "Stuck on a start/sit? Ask Chimmy 🤖 2 free questions a day. #fantasyfootball #startsit #fantasyfootballtok #allfantasy",
+    "youtube": "Chimmy, the AI inside AllFantasy, answers start/sit, trade and waiver questions about your own league. #fantasyfootball #shorts",
+    "facebook": "Stuck on a start/sit? Chimmy, the AI assistant inside AllFantasy, knows your leagues. Free accounts get 2 questions a day. https://allfantasy.ai"
+  }
+}

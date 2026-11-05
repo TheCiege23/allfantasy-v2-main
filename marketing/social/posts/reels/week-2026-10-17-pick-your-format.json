@@ -1,0 +1,71 @@
+{
+  "name": "week-2026-10-17-pick-your-format",
+  "slot": "Sat Oct 17 · 6 PM",
+  "accent": "#FF5A6E",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "text": "Your league is\n[boring.]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.4,
+      "out": 4.0,
+      "text": "[Guillotine:] lowest score each week gets chopped",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🪓"
+    },
+    {
+      "in": 4.2,
+      "out": 5.8,
+      "text": "[Zombie:] lose and you turn",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🧟"
+    },
+    {
+      "in": 6.0,
+      "out": 7.6,
+      "text": "[Survivor:] tribes, votes, idols",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🏝️"
+    },
+    {
+      "in": 7.8,
+      "out": 9.4,
+      "text": "[Big Brother:] nominations, veto, eviction",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🏠"
+    },
+    {
+      "in": 9.6,
+      "out": 11.2,
+      "text": "[Devy:] draft college prospects",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🎓"
+    }
+  ],
+  "end": {
+    "in": 11.4,
+    "line": "Which one is\n[your league playing?]"
+  },
+  "caption": {
+    "instagram": "Your league is boring. Fix it 👇\n\n🪓 Guillotine: lowest score each week gets chopped\n🧟 Zombie: lose and you turn\n🏝️ Survivor: tribes, votes, idols\n🏠 Big Brother: nominations, veto, eviction\n🎓 Devy: draft college prospects\n\nTag your commish. Start any format free, link in bio.\n\n#fantasyfootball #fantasyfootballleague #guillotineleague #devyfantasy #allfantasy",
+    "tiktok": "5 fantasy formats that make every week matter 🪓🧟🏝️🏠🎓 Which one is your league trying? 👇\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+    "youtube": "5 fantasy league formats: Guillotine, Zombie, Survivor, Big Brother, Devy. Which one is your league playing? allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Your league is boring 😴 Guillotine, Zombie, Survivor, Big Brother or Devy: which one is your league trying next? Tag your commish 👇 https://allfantasy.ai"
+  }
+}

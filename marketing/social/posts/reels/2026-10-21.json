@@ -1,0 +1,24 @@
+{
+  "name": "2026-10-21-chop-odds",
+  "accent": "#4DD4FF",
+  "seconds": 14,
+  "art": "league-type-guillotine.png",
+  "stage": "top:700px",
+  "beats": [
+    { "in": 0.2, "out": 2.6, "emoji": "🪓", "text": "Will you get\n[chopped?]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 0.6, "out": 2.6, "text": "Guillotine leagues: lowest score each week is out.", "size": "p", "top": 560 },
+    { "in": 2.8, "out": 5.4, "emoji": "📊", "text": "Your odds\n[this week]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 3.2, "out": 5.4, "text": "And your odds of surviving every chop after.", "size": "p", "top": 560 },
+    { "in": 5.6, "out": 8.2, "emoji": "🛡️", "text": "Your [safe]\nscore", "size": "h1", "pop": true, "top": 0 },
+    { "in": 6.0, "out": 8.2, "text": "At 50%, 80% and 95% confidence.", "size": "p", "top": 560 },
+    { "in": 8.4, "out": 11.0, "emoji": "🥇", "text": "Odds at the\n[#1 pick]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 8.8, "out": 11.0, "text": "From the same simulations as your playoff odds.", "size": "p", "top": 560 }
+  ],
+  "end": { "in": 11.2, "line": "Know before\nyou get [chopped]", "top": 60 },
+  "caption": {
+    "instagram": "Will you get chopped this week? 🪓\n\nGuillotine leagues on AllFantasy now show your survival odds, the score that keeps you safe, and your odds at the #1 pick.\n\nStart a guillotine league free, link in bio.\n\n#fantasyfootball #guillotineleague #fantasyfootballleague #allfantasy",
+    "tiktok": "Know the score that keeps you safe before the chop 🪓 Link in bio. #fantasyfootball #guillotineleague #fantasyfootballtok #allfantasy",
+    "youtube": "Guillotine leagues on AllFantasy now show your chop odds and the score that keeps you safe. #fantasyfootball #shorts",
+    "facebook": "Guillotine leagues on AllFantasy now show your odds of getting chopped, the score that keeps you safe, and your odds at the #1 pick. https://allfantasy.ai"
+  }
+}

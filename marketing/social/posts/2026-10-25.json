@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-25",
+  "posts": [
+    {
+      "slot": "9 AM · Site update",
+      "kind": "shipped",
+      "accent": "cyan",
+      "pill": "Just shipped",
+      "title": "Too much on\n[your home?]",
+      "titleSize": "sm",
+      "lead": "Settings now has a Home page tab. One switch per section, and every tap saves right away.",
+      "bullets": [
+        ["Hide what you don't use", "Off hides that section from your home"],
+        ["Its alerts go quiet too", "Turning a section off stops the notifications that come from it"],
+        ["Follows you everywhere", "Your switches carry to every device you sign in on"]
+      ],
+      "cta": "SETTINGS → HOME PAGE · LINK IN BIO →",
+      "caption": {
+        "instagram": "Too much on your home? Turn it off. 🎛️\n\nSettings now has a Home page tab:\n✅ One switch per home section\n🔕 Turning a section off also stops the alerts that come from it\n📱 Your choices follow you to every device\n\nEvery tap saves right away. Settings → Home page.\n\n#fantasyfootball #fantasyfootballcommunity #fantasysports #allfantasy",
+        "tiktok": "Your fantasy home, your way 🎛️ Switch off any section and its alerts go quiet too. Settings → Home page. #fantasyfootball #fantasyfootballtok #allfantasy",
+        "facebook": "New in AllFantasy: a Home page tab in Settings. Switch off any home section you don't use, and the notifications that come from it stop too. Your choices follow you to every device. https://allfantasy.ai",
+        "x": "Too much on your home? 🎛️\n\nNew Home page tab in Settings:\n• One switch per section\n• Off also stops that section's alerts\n• Saves instantly, on every device\n\nallfantasy.ai #FantasyFootball",
+        "youtube": "What's the first thing you'd switch off on your fantasy home? 🎛️👇"
+      }
+    },
+    {
+      "slot": "11 AM · NFL Sunday",
+      "kind": "list",
+      "accent": "gold",
+      "eyebrow": "Before you lock it",
+      "title": "Check the\n[inactives.]",
+      "lead": "NFL teams post their inactive lists about 90 minutes before kickoff. Three things to check then:",
+      "bullets": [
+        ["Questionable tags", "Find out who is actually playing"],
+        ["Late-game starters", "Keep a flexible spot for later kickoffs"],
+        ["Your bench backup", "Have a swap ready before kickoff"]
+      ],
+      "cta": "SET YOUR LINEUP · LINK IN BIO →",
+      "caption": {
+        "instagram": "🏈 Before you lock it: check the inactives.\n\nNFL teams post inactive lists about 90 minutes before kickoff. Use that window to:\n1️⃣ Settle your questionable players\n2️⃣ Keep a flex open for later kickoffs\n3️⃣ Have your bench swap ready\n\nWho's your game-time decision today? 👇\n\n#fantasyfootball #NFLSunday #fantasyfootballadvice #allfantasy",
+        "tiktok": "Inactives drop about 90 min before kickoff 🏈 Check them before you lock your lineup. Who's your game-time call? 👇 #fantasyfootball #fantasyfootballtok #allfantasy",
+        "facebook": "NFL Sunday tip: inactive lists come out about 90 minutes before kickoff. Check your questionable players then, keep a flex spot open for later games, and have a bench swap ready.",
+        "x": "🏈 Sunday rule: check the inactives.\n\nThey drop ~90 min before kickoff.\n• Settle your questionables\n• Keep a late flex open\n• Have a swap ready\n\nWho's your game-time call? #FantasyFootball",
+        "youtube": "Who's your game-time decision this Sunday? 🏈👇"
+      }
+    },
+    {
+      "slot": "2 PM · Fantasy basketball",
+      "kind": "list",
+      "accent": "green",
+      "eyebrow": "Fantasy basketball",
+      "title": "Count the\n[games.]",
+      "lead": "In weekly fantasy basketball, a player who plays four times usually beats a better one who plays twice.",
+      "bullets": [
+        ["Check each team's week", "Some play four games, some only two"],
+        ["Stream the busy teams", "Use your last roster spot on a four-game player"],
+        ["Mind your game limits", "Some leagues cap how many games count"]
+      ],
+      "cta": "NBA LEAGUES · LINK IN BIO →",
+      "caption": {
+        "instagram": "🏀 Fantasy basketball tip: count the games.\n\nIn weekly leagues, volume wins:\n1️⃣ Check how many games each team plays this week\n2️⃣ Stream a four-game player in your last spot\n3️⃣ Watch your league's game limits\n\nDo you stream or hold? 👇\n\n#fantasybasketball #NBA #fantasybball #allfantasy",
+        "tiktok": "Fantasy basketball tip 🏀 Four games beats two. Stream the busy teams. Stream or hold? 👇 #fantasybasketball #NBA #allfantasy",
+        "facebook": "Fantasy basketball tip: count the games. In weekly leagues, a player with four games usually beats a better one with two. Stream the busy teams with your last roster spot, and watch your league's game limits.",
+        "x": "🏀 Fantasy hoops tip: count the games.\n\nFour games > two games.\n• Check each team's week\n• Stream the busy teams\n• Mind your game limits\n\nStreamers or holders? #FantasyBasketball",
+        "youtube": "Fantasy basketball: do you stream or hold? 🏀👇"
+      }
+    },
+    {
+      "slot": "5 PM · MLB",
+      "kind": "hero",
+      "accent": "red",
+      "big": "2-0",
+      "eyebrow": "World Series · Brewers lead",
+      "title": "Milwaukee\n[comes back.]",
+      "lead": "Down 4-0 after the first, the Brewers beat the Rays 5-4 in Game 2. Sal Frelick's homer tied it in the sixth, and Aaron Ashby got the final five outs. Next stop: Tampa Bay.",
+      "cta": "MLB LEAGUES · LINK IN BIO →",
+      "caption": {
+        "instagram": "⚾ Down 4-0. Won 5-4.\n\nThe Brewers came back on the Rays in Game 2. Sal Frelick's solo homer tied it in the sixth, Cooper Pratt's single put Milwaukee ahead, and Aaron Ashby recorded the final five outs.\n\nMilwaukee leads the World Series 2-0, and it heads to Tampa Bay. Can the Rays answer at home? 👇\n\n#WorldSeries #MLB #Brewers #Rays #allfantasy",
+        "tiktok": "Down 4-0, Brewers win 5-4 ⚾ Milwaukee up 2-0 in the World Series. Can the Rays answer at home? 👇 #WorldSeries #MLB #Brewers #Rays",
+        "facebook": "⚾ The Brewers trailed 4-0 after one inning and beat the Rays 5-4 in Game 2. Sal Frelick tied it with a homer in the sixth and Aaron Ashby closed it out. Milwaukee leads the World Series 2-0 as it moves to Tampa Bay.",
+        "x": "⚾ Down 4-0 after one. Brewers 5, Rays 4.\n\nFrelick ties it in the 6th. Ashby gets the last five outs.\n\nMilwaukee leads 2-0. On to Tampa Bay. #WorldSeries #MLB",
+        "youtube": "Brewers come back from 4-0 down to take a 2-0 World Series lead ⚾ Can the Rays answer? 👇"
+      }
+    },
+    {
+      "slot": "8 PM · Poll",
+      "kind": "poll",
+      "accent": "purple",
+      "eyebrow": "Sunday night check-in",
+      "title": "How's your\n[week going?]",
+      "options": [
+        ["😎", "Up big"],
+        ["🙏", "Need a miracle on MNF"],
+        ["💀", "Already lost"],
+        ["🫠", "Forgot to set my lineup"]
+      ],
+      "cta": "VOTE IN THE COMMENTS →",
+      "caption": {
+        "instagram": "Sunday night check-in: how's your week going? 👇\n\nA 😎 Up big\nB 🙏 Need a miracle on Monday night\nC 💀 Already lost\nD 🫠 Forgot to set my lineup\n\nNo judgment for D. Okay, a little.\n\n#fantasyfootball #fantasyfootballcommunity #NFLSunday #allfantasy",
+        "tiktok": "How's your fantasy week going? A, B, C or D 👇 No judgment for D. #fantasyfootball #fantasyfootballtok #allfantasy",
+        "facebook": "Sunday night check-in: how's your fantasy week? A) Up big B) Need a Monday night miracle C) Already lost D) Forgot to set my lineup 👇",
+        "x": "How's your fantasy week going?\n\n😎 Up big\n🙏 Need an MNF miracle\n💀 Already lost\n🫠 Forgot my lineup\n\n#FantasyFootball",
+        "youtube": "How's your fantasy week going? Up big, need a miracle, already lost, or forgot your lineup? 👇"
+      }
+    }
+  ]
+}
