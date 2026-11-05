@@ -4523,3 +4523,14 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
 }
 .af-cm .af-cm-leaguerow[data-on='true'] .af-cm-leaguerow-av { color: var(--accent); }
 .af-cm .af-cm-leaguerow-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Huddles' "This week" / "Earlier" headings (ThreadPanel, 2026-11-05). */
+.af-cm .af-cm-section-label {
+  margin: 12px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-cm .af-cm-section-label:first-child { margin-top: 4px; }
