@@ -11,6 +11,8 @@ import { buildLeaguesAtAGlance, type LeagueRef } from '@/lib/live/leaguesAtAGlan
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import { gameStage, groupByStage } from '@/lib/live/gameStage'
 import type { MatchupStrip } from '@/lib/live/matchupStrip'
+import type { LiveLeagueGames as LiveLeagueGamesData } from '@/lib/core-app/liveLeagueScoreboard'
+import { LiveLeagueGames } from '@/components/core-app/screens/LiveLeagueGames'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import LocalDateTime from '@/components/core-app/LocalDateTime'
 import { liveWorkspace, playBelongsToGame } from '@/lib/live/liveWorkspace'
@@ -170,6 +172,8 @@ export type LiveScoresProps = {
    * says nothing rather than claiming a quiet week.
    */
   leagueWeek?: { byLeague: Record<string, RailMatchup> | null; leagues: LeagueRef[] } | null
+  /** The held league's OTHER games this week (your own is the strip above). Null: not read, or no league held. */
+  leagueGames?: (LiveLeagueGamesData & { weekFinal: boolean }) | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -186,7 +190,7 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null, leagueGames = null }: LiveScoresProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -598,6 +602,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       ) : (
         <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} />
       )}
+
+      {selectedLeagueId && leagueGames ? <LiveLeagueGames leagueId={selectedLeagueId} data={leagueGames} /> : null}
 
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
