@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { aggregateBehaviorSignals } from './BehaviorSignalAggregator'
+import type { LeagueDraftFactsCache } from './leagueDraftFactsCache'
 import { resolveProfileLabels, resolveScores } from './ProfileLabelResolver'
 import { buildEvidenceFromSignals } from './ProfileEvidenceBuilder'
 import { normalizeSportForPsych, isSupportedPsychSport } from './SportBehaviorResolver'
@@ -54,6 +55,8 @@ export interface PsychEngineInput {
    * exactly as before; only the SNAPSHOT decision changes.
    */
   seasonInferred?: boolean
+  /** One per league refresh, shared by its managers, so league draft facts are read once. */
+  draftFactsCache?: LeagueDraftFactsCache
 }
 
 export interface PsychEngineResult {
@@ -77,6 +80,7 @@ export async function runPsychologicalProfileEngine(
     sleeperUsername: input.sleeperUsername,
     rosterId: input.rosterId,
     season: input.season,
+    draftFactsCache: input.draftFactsCache,
   })
 
   const labels = resolveProfileLabels(signals)

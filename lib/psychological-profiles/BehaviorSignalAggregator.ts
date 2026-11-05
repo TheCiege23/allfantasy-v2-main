@@ -4,6 +4,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { readOptimizationEnabled } from '@/lib/perf/readOptimizations'
+import { cached, type LeagueDraftFactsCache } from './leagueDraftFactsCache'
 import { getBehaviorCalibration, normalizeSportForPsych } from './SportBehaviorResolver'
 
 export interface BehaviorSignalsOutput {
@@ -131,8 +133,15 @@ export async function aggregateBehaviorSignals(
   leagueId: string,
   managerId: string,
   sport: string,
-  options?: { sleeperUsername?: string; rosterId?: string; season?: number | null }
+  options?: {
+    sleeperUsername?: string
+    rosterId?: string
+    season?: number | null
+    /** Shared across the managers of one league refresh; see LeagueDraftFactsCache. */
+    draftFactsCache?: LeagueDraftFactsCache
+  }
 ): Promise<BehaviorSignalsOutput> {
+  const draftCache = readOptimizationEnabled('draft-facts') ? options?.draftFactsCache : undefined
   const sportNorm = normalizeSportForPsych(sport) ?? sport
   const calibration = normalizeSportForPsych(sportNorm)
     ? getBehaviorCalibration(normalizeSportForPsych(sportNorm)!)
@@ -365,14 +374,17 @@ export async function aggregateBehaviorSignals(
   //
   // What IS a trait is drafting earlier than your own leaguemates, so every
   // draft claim below is relative to this league's own distribution.
-  const leagueDraftFacts = await prisma.draftFact.findMany({
-    where: {
-      leagueId,
-      sport: sportNorm,
-      ...seasonThrough(options?.season),
-    },
-    select: { playerId: true, round: true, managerId: true },
-  })
+  const draftKey = JSON.stringify([leagueId, sportNorm, options?.season ?? null])
+  const leagueDraftFacts = await cached(draftCache?.facts, draftKey, () =>
+    prisma.draftFact.findMany({
+      where: {
+        leagueId,
+        sport: sportNorm,
+        ...seasonThrough(options?.season),
+      },
+      select: { playerId: true, round: true, managerId: true },
+    }),
+  )
   const draftFacts = leagueDraftFacts.filter(
     (d) => d.managerId != null && managerCandidates.has(d.managerId)
   )
@@ -386,29 +398,35 @@ export async function aggregateBehaviorSignals(
   // every manager in this league. Canonical Player carries `sleeperId`, so try
   // both key spaces before giving up.
   const positionCounts = new Map<string, number>()
-  const leaguePositionById = new Map<string, string>()
+  let leaguePositionById = new Map<string, string>()
   let resolvedPickCount = 0
   if (draftFacts.length > 0) {
-    const ids = [...new Set(leagueDraftFacts.map((d) => d.playerId))]
-    const [playerRows, sportsRows] = await Promise.all([
-      prisma.player.findMany({
-        where: { id: { in: ids } },
-        select: { id: true, position: true },
-      }),
-      // SportsPlayer is the table keyed by Sleeper id, which is the id space
-      // draft facts actually use.
-      prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: ids } },
-        select: { sleeperId: true, position: true },
-      }),
-    ])
+    // The ids come from the league's facts, not this manager's, so the positions are a property
+    // of the league read above and are shared under the same key. Callers only read the map.
+    leaguePositionById = await cached(draftCache?.positions, draftKey, async () => {
+      const ids = [...new Set(leagueDraftFacts.map((d) => d.playerId))]
+      const [playerRows, sportsRows] = await Promise.all([
+        prisma.player.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, position: true },
+        }),
+        // SportsPlayer is the table keyed by Sleeper id, which is the id space
+        // draft facts actually use.
+        prisma.sportsPlayer.findMany({
+          where: { sleeperId: { in: ids } },
+          select: { sleeperId: true, position: true },
+        }),
+      ])
+      const posById = new Map<string, string>()
+      for (const row of playerRows) {
+        if (row.position) posById.set(row.id, row.position.toUpperCase())
+      }
+      for (const row of sportsRows) {
+        if (row.sleeperId && row.position) posById.set(row.sleeperId, row.position.toUpperCase())
+      }
+      return posById
+    })
     const posById = leaguePositionById
-    for (const row of playerRows) {
-      if (row.position) posById.set(row.id, row.position.toUpperCase())
-    }
-    for (const row of sportsRows) {
-      if (row.sleeperId && row.position) posById.set(row.sleeperId, row.position.toUpperCase())
-    }
     for (const d of draftFacts) {
       // An unresolved pick is NOT a position. It used to be bucketed as 'UNK',
       // which meant every unresolvable draft collapsed into one bucket and
