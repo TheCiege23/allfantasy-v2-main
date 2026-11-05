@@ -1,0 +1,117 @@
+/* Draft HQ as a dynasty draft room (components/core-app/screens/DraftHqRookieRoom.tsx).
+ *
+ * Built on the Dynasty Era house style (af-league-home-dynasty.css):
+ *   - the BAND is a night scene in every mode — hall art under an ink veil, gold on ink — because it is
+ *     the one thing that has to say "rookie draft" before anything is read;
+ *   - the CARDS sit on /core's --surface and follow light / dark / AF, with a 3px gold top edge. Gold
+ *     TEXT is var(--accent), which af-core-dynasty.css re-points to measured gold (dark/AF) or bronze
+ *     (light); --dyn-gold is a fill and line colour only. Text on a gold FILL is --dyn-ink (8.3:1).
+ *
+ * Every --dyn-* read carries its fallback, so the room looks the same outside the shell's stamp.
+ *
+ * ⚠ 11px IS THE TYPE FLOOR (__tests__/core-app/type-floor.test.ts).
+ * ⚠ TOP-LEVEL @media BLOCKS ONLY, NONE NESTED (CLAUDE.md, af-matchup.css 2026-08-30). */
+
+.af-dh-dy{display:flex;flex-direction:column;gap:12px;min-width:0}
+
+/* ── Band ───────────────────────────────────────────────────────────── */
+.af-dh-dy-band{position:relative;display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:18px;min-height:176px;padding:24px 26px 22px;border-radius:18px;overflow:hidden;color:#f6f0e2;
+  background-color:var(--dyn-ink,#0B0F17);
+  background-image:linear-gradient(90deg,rgba(7,9,16,.97) 0%,rgba(7,9,16,.88) 45%,rgba(7,9,16,.5) 80%,rgba(7,9,16,.35) 100%),url('/artwork/dynasty/dynasty-hall-1600.webp');
+  background-size:cover;background-position:center,70% 40%;
+  border:1px solid color-mix(in srgb,var(--dyn-gold,#D4A24C) 38%,transparent);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--dyn-gold,#D4A24C) 30%,transparent),0 18px 40px -24px rgba(0,0,0,.7)}
+.af-dh-dy-band::after{content:'';position:absolute;left:26px;right:26px;bottom:0;height:2px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 10%,transparent))}
+
+.af-dh-dy-era{display:flex;align-items:flex-start;gap:16px;min-width:0}
+.af-dh-dy-crest{flex:none;display:inline-grid;place-items:center;width:54px;height:60px;color:var(--dyn-ink,#0B0F17);background:linear-gradient(160deg,#F3D79F,var(--dyn-gold,#D4A24C) 55%,#9A6F22);clip-path:polygon(0 0,100% 0,100% 72%,50% 100%,0 72%);box-shadow:0 6px 18px rgba(212,162,76,.35)}
+.af-dh-dy-era-text{min-width:0}
+.af-dh-dy-eyebrow{margin:0 0 4px;color:var(--dyn-gold-soft,#F3D79F);font:800 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.32em;text-transform:uppercase}
+.af-dh-dy-title{margin:0;color:#fbf5e6;font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:900;font-size:clamp(28px,3.2vw,40px);line-height:1.02;letter-spacing:-.01em;text-shadow:0 2px 18px rgba(0,0,0,.55)}
+.af-dh-dy-tagline{margin:10px 0 0;max-width:44ch;color:#d9d1bf;font-size:14px;line-height:1.45}
+
+/* Facts: the countdown leads when a date is stored; rounds, teams and status follow. */
+.af-dh-dy-facts{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:10px;margin:0}
+.af-dh-dy-fact{display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:4px;min-width:74px;padding:10px 14px;border-radius:12px;background:rgba(7,9,16,.6);box-shadow:inset 0 0 0 1px rgba(243,215,159,.26)}
+.af-dh-dy-fact dt{color:#cfc6b2;font:700 11px/1.25 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.14em;text-transform:uppercase}
+.af-dh-dy-fact dd{margin:0;display:flex;align-items:baseline;gap:6px;color:#fbf5e6}
+.af-dh-dy-fact strong{font:900 30px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-variant-numeric:tabular-nums}
+.af-dh-dy-fact dd span{color:#d9d1bf;font-size:13px;font-weight:600}
+.af-dh-dy-fact dd .af-dh-dy-status{display:inline-block;padding-top:6px;color:#fbf5e6;font-size:16px;font-weight:800}
+.af-dh-dy-fact[data-status=in_progress] dd .af-dh-dy-status{color:var(--dyn-teal,#2DD4BF)}
+/* The countdown is the one gold box: the date is what a manager plans around. */
+.af-dh-dy-countdown{background:linear-gradient(160deg,rgba(212,162,76,.24),rgba(7,9,16,.7));box-shadow:inset 0 0 0 1px rgba(243,215,159,.55)}
+.af-dh-dy-countdown strong{color:var(--dyn-gold-soft,#F3D79F)}
+.af-dh-dy-countdown dt{color:#f3e6c6;letter-spacing:.04em;text-transform:none;font-family:system-ui,sans-serif;font-size:12px}
+
+/* ── Cards ──────────────────────────────────────────────────────────── */
+.af-dh-dy-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
+.af-dh-dy-grid[data-single=true]{grid-template-columns:minmax(0,1fr)}
+.af-dh-dy-card{position:relative;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px 18px;border-radius:14px;background:var(--surface);border:1px solid var(--line2);overflow:hidden}
+.af-dh-dy-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 20%,transparent))}
+.af-dh-dy-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.af-dh-dy-card-head h3{margin:0;color:var(--accent);font:800 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.16em;text-transform:uppercase}
+.af-dh-dy-card-head a{flex:none;color:var(--text2);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+.af-dh-dy-card-head a:hover{color:var(--accent)}
+.af-dh-dy-card-head a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.af-dh-dy-big{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0;color:var(--muted);font-size:13px}
+.af-dh-dy-big strong{color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:900;font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.af-dh-dy-big em{font-style:normal;color:var(--accent);font-weight:700}
+
+/* Your picks: every chip is yours, so every chip is gold — a first-rounder is FILLED gold. */
+.af-dh-dy-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.af-dh-dy-chip{display:inline-flex;flex-direction:column;justify-content:center;min-height:40px;min-width:62px;padding:5px 12px;border-radius:9px;border:1.5px solid var(--dyn-gold,#D4A24C);background:var(--accent-soft);color:var(--accent);max-width:100%}
+.af-dh-dy-chip-label{font:900 17px/1.05 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:96%;font-variant-numeric:tabular-nums;letter-spacing:.01em;text-transform:uppercase}
+.af-dh-dy-chip small{color:var(--text2);font:600 11px/1.25 system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.af-dh-dy-chip[data-round="1"]{background:linear-gradient(170deg,#F3D79F,var(--dyn-gold,#D4A24C) 60%);border-color:var(--dyn-gold,#D4A24C);color:var(--dyn-ink,#0B0F17);box-shadow:0 4px 14px -6px rgba(212,162,76,.6)}
+.af-dh-dy-chip[data-round="1"] small{color:#3a2a0c}
+.af-dh-dy-away{margin:0;color:var(--text2);font-size:13px;line-height:1.45}
+.af-dh-dy-away span{color:var(--muted);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase;margin-right:6px}
+.af-dh-dy-note{margin:auto 0 0;color:var(--muted);font-size:12px;line-height:1.4}
+
+/* Taxi squad: one slot per allowed stash; gold = filled. */
+.af-dh-dy-slots{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.af-dh-dy-slots li{width:34px;height:44px;border-radius:8px;border:1.5px dashed var(--line2);background:transparent}
+.af-dh-dy-slots li[data-filled=true]{border:1.5px solid var(--dyn-gold,#D4A24C);background:linear-gradient(180deg,var(--accent-soft),transparent)}
+
+/* ── Board: one column per round (a rookie draft is a few rounds deep), picks top to bottom in pick
+ * order; yours gold, your first-rounders gold-filled. Rounds per row are set inline (--af-dh-dy-wide / --af-dh-dy-narrow) so no round is stranded alone;
+ * a phone reads two rounds side by side and the page never scrolls sideways. ── */
+.af-dh-dy-rounds{display:grid;grid-template-columns:repeat(var(--af-dh-dy-wide,4),minmax(0,1fr));gap:12px 10px;min-width:0}
+.af-dh-dy-round{display:flex;flex-direction:column;gap:6px;min-width:0}
+.af-dh-dy-round-label{padding:0 2px 2px;border-bottom:1px solid var(--line2);color:var(--text2);font:700 11px/1.6 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.af-dh-dy-cells{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none;min-width:0}
+.af-dh-dy-cell{display:grid;grid-template-columns:38px minmax(0,1fr);align-items:baseline;column-gap:6px;min-width:0;padding:6px 8px;border-radius:7px;border:1px solid var(--line2);background:var(--surface2)}
+.af-dh-dy-cell-label{color:var(--muted);font:800 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-dh-dy-cell-team{color:var(--text);font-size:12px;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-dh-dy-cell-via{grid-column:2;color:var(--muted);font-size:11px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-dh-dy-cell[data-you=true]{border:1.5px solid var(--dyn-gold,#D4A24C);background:var(--accent-soft)}
+.af-dh-dy-cell[data-you=true] .af-dh-dy-cell-label,.af-dh-dy-cell[data-you=true] .af-dh-dy-cell-team{color:var(--accent);font-weight:800}
+.af-dh-dy-cell[data-you=true][data-round="1"]{background:linear-gradient(170deg,#F3D79F,var(--dyn-gold,#D4A24C) 65%);border-color:var(--dyn-gold,#D4A24C)}
+.af-dh-dy-cell[data-you=true][data-round="1"] .af-dh-dy-cell-label,.af-dh-dy-cell[data-you=true][data-round="1"] .af-dh-dy-cell-team{color:var(--dyn-ink,#0B0F17)}
+.af-dh-dy-cell[data-you=true][data-round="1"] .af-dh-dy-cell-via{color:#3a2a0c}
+
+@media (max-width:1100px){
+  /* Tablet: two or three rounds per row, never one round stranded on its own. */
+  .af-dh-dy-rounds{grid-template-columns:repeat(var(--af-dh-dy-narrow,2),minmax(0,1fr))}
+}
+
+@media (max-width:720px){
+  /* Phone: tighter band, the veil runs top-to-bottom, one card per row; the board's rounds scroll
+   * sideways inside the card (never the page). */
+  .af-dh-dy-band{min-height:0;padding:18px 16px 18px;border-radius:14px;gap:14px;
+    background-image:linear-gradient(180deg,rgba(7,9,16,.95) 0%,rgba(7,9,16,.84) 60%,rgba(7,9,16,.66) 100%),url('/artwork/dynasty/dynasty-hall-900.webp');background-position:center,72% 40%}
+  .af-dh-dy-band::after{left:16px;right:16px}
+  .af-dh-dy-crest{width:44px;height:50px}
+  .af-dh-dy-crest svg{width:22px;height:22px}
+  .af-dh-dy-tagline{font-size:13px}
+  .af-dh-dy-facts{gap:8px}
+  .af-dh-dy-fact{min-width:0;flex:1 1 auto;padding:9px 11px}
+  .af-dh-dy-fact strong{font-size:26px}
+  .af-dh-dy-countdown{flex-basis:100%}
+  .af-dh-dy-grid{grid-template-columns:minmax(0,1fr)}
+  .af-dh-dy-card{padding:14px}
+  .af-dh-dy-rounds{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .af-dh-dy-cell{grid-template-columns:34px minmax(0,1fr);padding:6px 7px}
+}
