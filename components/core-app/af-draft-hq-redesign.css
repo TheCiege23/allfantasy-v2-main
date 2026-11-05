@@ -1,0 +1,88 @@
+/*
+ * Draft HQ — the redesign layer (DraftHqBoard.tsx, DraftHq.tsx), 2026-11-05.
+ *
+ * Loaded after af-core-boards.css and af-draft-hq.css, so it restyles rather than rebuilds: no rule
+ * here changes what a card or section says, only how it sits. Every colour is a token, so light,
+ * dark and AF modes each come from their own set.
+ *
+ * Measured on live /core at 1440px before this: ten full-width draft cards took 2,571px, each with
+ * its own bordered box holding nothing but a "?" tip; and in a league, five empty sections (grades,
+ * Competitive Edge, board, lottery, queue/keepers) were five framed blocks of one sentence each.
+ *
+ * ⚠ ONE `@media` BLOCK PER BREAKPOINT, AT THE BOTTOM. A query inserted inside another closes it
+ * early and silently moves every rule below it into the narrower band (CLAUDE.md, af-matchup.css).
+ */
+
+/* ── Every draft (no league held): the clock first, two up ─────────────── */
+
+.af-core .af-bd--drafts .af-bd-cards--rich .af-bd-card[data-live='true'] {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.af-core .af-bd--drafts .af-bd-cards--rich .af-bd-card[data-sev='bad'] {
+  border-color: color-mix(in srgb, var(--bad) 55%, var(--line));
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+
+/* ── In a league: a section with nothing in it is one line, not a framed block ── */
+
+.af-core .af-dh > .af-dh-section:is(
+  :has(> .af-dh-section-head + .af-dh-unavailable:last-child),
+  :has(> .af-dh-section-head + .af-dh-empty:last-child)
+),
+.af-core .af-dh-pair > .af-dh-section:has(> .af-label + .af-dh-unavailable:last-child) {
+  display: flex;
+  /* ⚠ ROW, SAID OUT LOUD: these sections are already column flex, and there the 260px basis
+     below is a HEIGHT — the first preview made every one-line section 304px tall. */
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.af-core .af-dh > .af-dh-section:has(> .af-dh-section-head + :is(.af-dh-unavailable, .af-dh-empty):last-child) > .af-dh-section-head,
+.af-core .af-dh-pair > .af-dh-section:has(> .af-label + .af-dh-unavailable:last-child) > .af-label {
+  /* Shrinks and wraps: "Competitive Edge · how the others draft" at 390px pushed its ? off the card. */
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+}
+.af-core .af-dh > .af-dh-section:has(> .af-dh-section-head + :is(.af-dh-unavailable, .af-dh-empty):last-child) :is(.af-dh-unavailable, .af-dh-empty-text),
+.af-core .af-dh-pair > .af-dh-section:has(> .af-label + .af-dh-unavailable:last-child) > .af-dh-unavailable {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+}
+.af-core .af-dh > .af-dh-section:has(> .af-dh-section-head + .af-dh-empty:last-child) .af-dh-empty {
+  flex: 1 1 260px;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.af-core .af-dh > .af-dh-section:has(> .af-dh-section-head + .af-dh-empty:last-child) .af-dh-empty-mark { display: none; }
+
+/* ── Desktop: drafts not on the clock sit two up; a live one keeps the full width ── */
+
+@media (min-width: 1100px) {
+  .af-core .af-bd--drafts .af-bd-cards--rich {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .af-core .af-bd--drafts .af-bd-cards--rich > li:has(> .af-bd-card[data-live='true']) { grid-column: 1 / -1; }
+  /* Half a row is ~440px: six stats with dividers wrapped raggedly, so they become a 3×2 grid. */
+  .af-core .af-bd--drafts .af-bd-cards--rich .af-bd-card:not([data-live='true']) .af-bd-kvrow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+  .af-core .af-bd--drafts .af-bd-cards--rich .af-bd-card:not([data-live='true']) .af-bd-kvrow .af-bd-kv {
+    padding: 0;
+    border-left: 0;
+  }
+}
