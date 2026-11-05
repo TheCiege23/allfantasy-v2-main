@@ -21,6 +21,9 @@ import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 // same two-part fix as PricingV4, LandingV4 and AuthV4, each of which carries the note.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-my-leagues.css'
+// The My Leagues board restyle (2026-11-05): layered on top so the screen's own rules stay the base.
+import '@/components/core-app/af-my-leagues-redesign.css'
+import { myLeaguesRedesignMessages } from '@/lib/core-app/messages/myLeaguesRedesign'
 
 /**
  * Screen 21a — "My Leagues, at 61 live".
@@ -127,6 +130,7 @@ export function MyLeaguesV4({
 }: MyLeaguesV4Props) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const rd = useMessages(myLeaguesRedesignMessages)
   const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState<string>('all')
   /** `undefined` = all sports; `null` = the leagues with no sport recorded ("Other"). */
@@ -235,6 +239,21 @@ export function MyLeaguesV4({
     <div className="af-core af-ml">
       <header className="af-ml-head">
         <div className="af-ml-headline">
+          {/*
+            The board's eyebrow: the account summed in one mono line. Sports come from the same
+            tabs the filter uses, so the two can never disagree; a zero part is left out rather than
+            printed as "0 need you".
+          */}
+          <p className="af-ml-eyebrow" data-testid="my-leagues-eyebrow">
+            {[
+              rd.leagues(counts.live),
+              sportTabs.length > 1 ? rd.sports(sportTabs.length) : null,
+              counts.needs > 0 ? rd.needYou(counts.needs) : null,
+              counts.commissioner > 0 ? rd.commissioner(counts.commissioner) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
           <h1 className="af-ml-title">{copy('My leagues')}</h1>
           <p className="af-ml-sub">
             <strong>{counts.live}</strong> live
