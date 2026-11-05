@@ -20,6 +20,7 @@ import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/
 import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
+import type { LineupOptimization } from '@/lib/core-app/lineupOptimizer'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
@@ -1209,6 +1210,56 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
 }
 
 /**
+ * The whole-lineup best answer (lib/core-app/lineupOptimizer.ts): the total gain once, then each
+ * seat that changes. Recommendation only; the platform link is where the lineup is actually set.
+ */
+function LineupOptimizerCard({ result, platform, fixHref }: { result: LineupOptimization; platform: string; fixHref: string | null }) {
+  const m = useMessages(myTeamScreenMessages)
+  const pts = (n: number) => n.toFixed(1)
+  return (
+    <section className="af-frame af-mt-opt" aria-label={m.optimizerTitle} data-state={result.state} data-testid="mt-optimizer">
+      <header className="af-mt-opt-head">
+        <h2 className="af-label">{m.optimizerTitle}</h2>
+        {result.state === 'improve' ? (
+          <span className="af-mt-opt-gain af-num" data-verdict={result.verdict}>{m.optimizerGain(pts(result.gain))}</span>
+        ) : null}
+      </header>
+      {result.state === 'optimal' ? (
+        <p className="af-mt-opt-clear">{m.optimizerOptimal(pts(result.currentTotal))}</p>
+      ) : (
+        <>
+          <p className="af-mt-opt-totals af-num">{m.optimizerTotals(pts(result.currentTotal), pts(result.bestTotal))}</p>
+          {result.verdict === 'close' ? <p className="af-mt-opt-close">{m.optimizerClose}</p> : null}
+          <ul className="af-mt-opt-list">
+            {result.changes.map((c) => (
+              <li key={c.slotIndex} data-testid="mt-optimizer-change">
+                <span className="af-mt-opt-slot af-num">{c.slotLabel}</span>
+                <span className="af-mt-opt-out">
+                  {c.outName ?? m.optimizerEmptySeat}
+                  {c.outProjected != null ? <span className="af-num"> {pts(c.outProjected)}</span> : null}
+                </span>
+                <span className="af-mt-opt-arrow" aria-hidden>→</span>
+                <span className="af-mt-opt-in">
+                  <strong>{c.inName}</strong>
+                  <span className="af-num"> {pts(c.inProjected)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {fixHref ? (
+            <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+              {m.fixInPlatform(platform)}
+            </a>
+          ) : null}
+        </>
+      )}
+      {result.lockedSeats > 0 ? <p className="af-mt-footnote">{m.optimizerLocked(result.lockedSeats)}</p> : null}
+      <p className="af-mt-footnote">{m.optimizerFootnote}</p>
+    </section>
+  )
+}
+
+/**
  * A catalog sentence with `{token}` placeholders, each replaced by its node. The bench-check
  * sentences put the bench name in a <strong> and both projections in number spans, and the two
  * languages order those pieces differently — so the order lives in the catalog, not here.
@@ -2063,6 +2114,10 @@ export function MyTeam({ data }: MyTeamProps) {
           leagueId={data.league.id}
           fixHref={data.league.sourceLink?.href ?? null}
         />
+      ) : null}
+      {/* ── Best lineup: every open seat solved at once ──────────────── */}
+      {!bestBall && data.lineupOptimizer ? (
+        <LineupOptimizerCard result={data.lineupOptimizer} platform={platform} fixHref={data.league.sourceLink?.href ?? null} />
       ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
       <section id="af-mt-starters" className="af-frame af-mt-section">
