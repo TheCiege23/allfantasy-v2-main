@@ -20,6 +20,8 @@ export const tradesScreenMessages = defineMessages({
     gradingIntro: 'Grades and recommendations on this page are calculated against ',
     regularSeason: (weeks: number) => `of a ${weeks}-week regular season`,
     sharePct: (pct: number | null) => `received ${pct}% of the traded value`,
+    /** Read aloud while the completed-trade history streams in under the Trade Center (TradesHistorySection). */
+    historyLoading: 'Loading completed trades…',
   },
   es: {
     perspectiveAria: (manager) => `Intercambio desde la perspectiva de ${manager ?? 'el primer mánager'}`,
@@ -29,5 +31,6 @@ export const tradesScreenMessages = defineMessages({
     gradingIntro: 'Las calificaciones y recomendaciones usan las reglas de ',
     regularSeason: (weeks) => `de una temporada regular de ${weeks} semanas`,
     sharePct: (pct) => `recibió el ${pct}% del valor intercambiado`,
+    historyLoading: 'Cargando intercambios completados…',
   },
 })
