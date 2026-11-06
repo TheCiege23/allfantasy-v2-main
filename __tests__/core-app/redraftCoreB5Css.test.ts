@@ -112,7 +112,7 @@ describe('af-core-redraft-waivers-finder.css', () => {
 
 describe('mutation controls: the same checker fails the real file once it is broken', () => {
   const css = read(FILE)
-  const firstScoped = `${SCOPE} .af-wv-tile{`
+  const firstScoped = `${SCOPE} .af-wv-track{`
 
   it('the mutation targets exist in the shipped file (or every control below is a no-op)', () => {
     expect(css).toContain(firstScoped)
@@ -121,9 +121,9 @@ describe('mutation controls: the same checker fails the real file once it is bro
   })
 
   it('an unscoped rule is reported', () => {
-    const mutated = css.replace(firstScoped, '.af-wv-tile{')
+    const mutated = css.replace(firstScoped, '.af-wv-track{')
     expect(mutated).not.toBe(css)
-    expect(violations(mutated)).toContain('unscoped: .af-wv-tile')
+    expect(violations(mutated)).toContain('unscoped: .af-wv-track')
   })
 
   it('a hex colour and an rgba() are reported', () => {

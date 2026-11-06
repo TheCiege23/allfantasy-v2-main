@@ -3,6 +3,9 @@
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { finderCopy } from '@/lib/core-app/playerFinderCopy'
 import type { PlayerMatch } from '@/lib/core-app/playerFinder'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+
+const ALL = '__all__'
 
 /**
  * The matches' positions, in the order they first appear — the chips the filter offers. Only positions
@@ -34,20 +37,14 @@ export function MatchPositionFilter({
 }) {
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
-  const chips: Array<{ key: string | null; label: string }> = [{ key: null, label: t.posAll }, ...options.map((p) => ({ key: p, label: p }))]
+  /* The shared FilterChips: "All" is a chip of its own, so `null` travels as an id no position has. */
   return (
-    <div className="af-pf-posfilter" role="group" aria-label={t.posFilterAria(total)}>
-      {chips.map((c) => (
-        <button
-          key={c.key ?? 'all'}
-          type="button"
-          className="af-pf-posfilter-chip"
-          aria-pressed={value === c.key}
-          onClick={() => onChange(c.key)}
-        >
-          {c.label}
-        </button>
-      ))}
-    </div>
+    <FilterChips
+      className="af-pf-posfilter"
+      ariaLabel={t.posFilterAria(total)}
+      value={value ?? ALL}
+      onChange={(next) => onChange(next === ALL ? null : next)}
+      options={[{ id: ALL, label: t.posAll }, ...options.map((p) => ({ id: p, label: p }))]}
+    />
   )
 }

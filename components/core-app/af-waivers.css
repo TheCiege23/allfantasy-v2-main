@@ -22,7 +22,7 @@
 
 .af-wv-context {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line);
   background: var(--accent-soft);
 }
@@ -36,50 +36,7 @@
   color: var(--text);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────── */
-
-.af-wv-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px;
-}
-
-.af-wv-tile {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.af-wv-tile-value {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-/*
- * A missing value is smaller and --faint. A large grey "$0" would read as a
- * budget of zero; this has to read as "no figure".
- */
-.af-wv-tile[data-missing='true'] .af-wv-tile-value {
-  font-size: 18px;
-  color: var(--faint);
-}
-
-.af-wv-tile-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.af-wv-tile-why {
-  margin-top: 5px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--faint);
-}
+/* ── Tiles: the shared StatStrip (primitives/af-primitives.css), laid out by count, value first. ── */
 
 /* ── Sections ────────────────────────────────────────────────────────── */
 
@@ -162,7 +119,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px dashed var(--line2);
   background: var(--surface2);
 }
@@ -365,7 +322,7 @@
 }
 .af-wv-edge-rival {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -386,21 +343,6 @@
   color: var(--text2);
 }
 
-/*
- * The four header tiles, two by two on a phone (2026-10-01 audit). `minmax(190px, 1fr)` fits
- * one column in a 343px row, so four small figures took four full-width rows (~380px).
- * Its own top-level block at end of file — nothing here can be carried into another band.
- */
-@media (max-width: 560px) {
-  .af-wv-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  /* An odd count leaves one tile alone on the last row; it takes the full width instead. */
-  .af-wv-tiles > .af-wv-tile:last-child:nth-child(odd) {
-    grid-column: span 2;
-  }
-}
-
 /* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
    Own top-level blocks at end of file, so nothing can be carried into another band. */
 .af-core .af-wv-next {
@@ -410,7 +352,7 @@
   align-items: baseline;
   gap: 4px 10px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
   font-size: 14px;
@@ -457,7 +399,7 @@
 .af-core .af-wlb-priority {
   margin: 10px 0 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text2);
@@ -496,27 +438,6 @@
     grid-template-areas: 'tiles tiles' 'main side';
     column-gap: 16px;
   }
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 24px; }
-}
-/*
- * The strip holds 3–5 tiles (FAAB only where the league bids, the next run only where there is no
- * sticky line), so it is laid out BY COUNT — `data-count` on .af-wv-tiles — and always fills its row.
- * It used to be five columns from 900px and three-over-two below, so a ~1000px content column (1440
- * with the rail open) could land in the 3 + 2 band and leave a ragged second row.
- *
- * From 760px of container width every tile shares one row, whatever the count.
- */
-@container af-wv (min-width: 760px) {
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-}
-/* Narrower than that, but not a phone: full rows only — three over two, two by two, or three across. */
-@container af-wv (min-width: 600px) and (max-width: 759px) {
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile { grid-column: span 2; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile:nth-child(n + 4) { grid-column: span 3; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='4'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container af-wv (min-width: 1180px) {
   .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -568,8 +489,6 @@
 }
 
 /* ── Readability: the 11px grey reasons are the first thing a phone shrinks to unreadable ── */
-.af-core .af-wv-tile-sub,
-.af-core .af-wv-tile-why,
 .af-core .af-wv-section-note,
 .af-core .af-wlb-meta,
 .af-core .af-wlb-note,
@@ -578,7 +497,6 @@
 .af-core .af-wlb-why,
 .af-core .af-wv-edge-note,
 .af-core .af-wv-footnote { font-size: 12.5px; }
-.af-core .af-wv-tile-why,
 .af-core .af-wv-rule-why,
 .af-core .af-wlb-note,
 .af-core .af-wv-footnote { color: var(--muted); }
@@ -598,7 +516,7 @@
 .af-core .af-wvai-box {
   margin-top: 10px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
   background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
 }
@@ -616,7 +534,7 @@
 .af-core .af-wvai-results { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .af-core .af-wvai-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
 .af-core .af-wvai-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.af-core .af-wvai-rec { padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
+.af-core .af-wvai-rec { padding: 12px; border-radius: var(--af-radius-inner, 12px); border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
 .af-core .af-wvai-rec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .af-core .af-wvai-rec-title { margin: 0; font-size: 14px; color: var(--text); }
 .af-core .af-wvai-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -661,7 +579,7 @@
 
 /* "$64 / $100": the league budget beside what is left, quieter than the figure itself. */
 .af-core .af-wv-tile-of { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
-.af-core .af-wv-tile[data-tile='next-run'] .af-wv-tile-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
+.af-core .af-wv-tile[data-tile='next-run'] .af-pg-stat-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
 /* The budget bar for every league now, not only the redraft stamp: a share of two real figures. */
 .af-core .af-wv-track { display: block; height: 6px; margin-top: 9px; border-radius: 999px; background: var(--chip); overflow: hidden; }
 .af-core .af-wv-track-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
@@ -675,7 +593,7 @@
   gap: 8px 10px;
   margin-top: 4px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2, var(--surface));
 }
@@ -684,7 +602,7 @@
   min-width: 0;
   min-height: 40px;
   padding: 0 12px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2, var(--line));
   background: var(--bg);
   color: var(--text);
@@ -693,22 +611,7 @@
 }
 .af-core .af-wlb-search::placeholder { color: var(--faint); }
 .af-core .af-wlb-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.af-core .af-wlb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.af-core .af-wlb-chip-btn {
-  min-height: 40px;
-  min-width: 44px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text2);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 800;
-  cursor: pointer;
-}
-.af-core .af-wlb-chip-btn[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent-line, var(--accent)); color: var(--text); }
-.af-core .af-wlb-chip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The position chips are the shared FilterChips (primitives/af-primitives.css); the pressed one takes its position colour below. */
 .af-core .af-wlb-count { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
 .af-core .af-wlb-clear {
   min-height: 44px;
@@ -752,11 +655,11 @@
   background: var(--mu-pos-flex-bg);
   color: var(--mu-pos-flex-fg);
 }
-.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chip-btn[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
-.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chip-btn[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
-.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chip-btn[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
-.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chip-btn[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
-.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chip-btn[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
+.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
+.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
+.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chips .af-pg-chip[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
+.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chips .af-pg-chip[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
+.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chips .af-pg-chip[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
 /* The badge says the position; the meta line keeps it in text for a screen reader, not on screen. */
 .af-core .af-wlb-meta-pos {
   position: absolute;
@@ -773,13 +676,11 @@
   .af-core .af-wlb-head { display: none; }
   .af-core .af-wlb-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
   .af-core .af-wlb-over { grid-column: 2 / -1; text-align: left; }
-  .af-core .af-wlb-chip-btn,
   .af-core .af-wlb-search { min-height: 44px; }
   .af-core .af-wlb-count { margin-left: 0; }
 }
 
 @media (pointer: coarse) {
-  .af-core .af-wlb-chip-btn,
   .af-core .af-wlb-search { min-height: 44px; }
 }
 

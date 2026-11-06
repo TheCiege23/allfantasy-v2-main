@@ -34,7 +34,7 @@ const tileText = (count: number) => {
   vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as never)
   const { container } = render(<Waivers data={data(count)} edge={null} edgeAccess={null} />)
   const tile = [...container.querySelectorAll('[data-tile="claims"], .af-wv-tile')].find((t) => /Claims queued/i.test(t.textContent ?? ''))
-  return tile?.querySelector('.af-wv-tile-sub')?.textContent ?? null
+  return tile?.querySelector('.af-wv-tile-sub, .af-pg-stat-sub')?.textContent ?? null
 }
 
 describe('Waivers — Claims queued tile', () => {

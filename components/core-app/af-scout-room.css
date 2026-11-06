@@ -179,7 +179,7 @@
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--good);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
 }
 

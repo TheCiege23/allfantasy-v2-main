@@ -133,7 +133,7 @@ describe('the Standings screen tile in an elimination league', () => {
       board: board(),
     }) as unknown as LeagueStandingsResult
 
-  const tile = (container: HTMLElement) => container.querySelector('.af-st-tile .af-st-tile-s')?.textContent ?? ''
+  const tile = (container: HTMLElement) => container.querySelector('.af-st-tile .af-pg-stat-sub')?.textContent ?? ''
 
   it('says where the week’s cut leaves you — never "outside the playoffs"', () => {
     const { container } = render(<Standings data={data()} elimination={ZONES} />)

@@ -1150,7 +1150,7 @@ describe('Player Finder — AllFantasy projection', () => {
   it('shows the AF tile across leagues at standard scoring', () => {
     renderCore({ detail: { ...DETAIL, afProjection: AF } })
     const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
-    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe('14.5')
+    expect(tile.querySelector('.af-pg-stat-value')?.textContent).toBe('14.5')
     expect(tile.textContent).toContain('Standard scoring')
   })
 
@@ -1175,7 +1175,7 @@ describe('Player Finder — AllFantasy projection', () => {
     renderCore({ detail: { ...DETAIL, afProjection: AF }, selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
     const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
     // League provider 9.8 against generic 13.8.
-    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe(carry(9.8).toFixed(1))
+    expect(tile.querySelector('.af-pg-stat-value')?.textContent).toBe(carry(9.8).toFixed(1))
     expect(tile.textContent).toContain('this league’s scoring')
   })
 

@@ -35,7 +35,7 @@
 
 .af-st-noteam {
   padding: 13px 15px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   font-size: 12.5px;
@@ -43,36 +43,7 @@
   color: var(--muted);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────── */
-
-.af-st-tiles {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-.af-st-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 17px 18px;
-  border-radius: 13px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.af-st-tile-v {
-  font-size: 28px;
-  font-weight: 900;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.af-st-tile .af-label {
-  color: var(--faint);
-}
-.af-st-tile-s {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
-}
+/* ── Tiles: the shared StatStrip (primitives/af-primitives.css); the move marker below is the board's ── */
 
 .af-st-move {
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -99,7 +70,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 18px;
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--chimmy);
   border: 1px solid var(--accent-line);
 }
@@ -157,7 +128,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px;
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -266,7 +237,7 @@
 /* ── Board ───────────────────────────────────────────────────────────── */
 
 .af-st-tablewrap {
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
   /* Five columns do not compress below ~620px; the table scrolls inside its own
@@ -357,24 +328,12 @@
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
 @media (max-width: 1000px) {
-  .af-st-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .af-st-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 560px) {
-  .af-st-tiles {
-    gap: 10px;
-  }
-  .af-st-tile {
-    padding: 14px;
-  }
-  .af-st-tile-v {
-    font-size: 23px;
-  }
   .af-st-proj-v > .af-num:first-child {
     font-size: 25px;
   }
@@ -503,31 +462,6 @@
  * layer over 38a·7.
  */
 
-.af-st-tile {
-  gap: 7px;
-  padding: 16px;
-}
-.af-st-tile .af-label {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-}
-.af-st-tile-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.af-st-tile-v {
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 28px;
-  font-weight: 900;
-}
-.af-st-tile-v[data-tone='good'] { color: var(--good); }
-.af-st-tile-v[data-tone='bad'] { color: var(--bad); }
-.af-st-tile-v[data-tone='accent'] { color: var(--accent); }
-.af-st-tile-row .af-st-move,
-.af-st-tile-row .af-stb-move { font-size: 12px; }
-.af-st-tile-s { font-size: 11px; }
-
 .af-st-section {
   display: flex;
   flex-direction: column;
@@ -640,7 +574,7 @@
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-st-projrow[data-tone='good'] { background: var(--good-soft); }
 .af-st-projrow[data-tone='bad'] { background: var(--bad-soft); }
@@ -740,7 +674,7 @@
   display: inline-flex;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-stb-seg button {
@@ -792,7 +726,7 @@
 
 .af-stb-kind {
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
   font-size: 12.5px;
@@ -807,7 +741,7 @@
 .af-stb-pending {
   margin: 0;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   color: var(--text);
   font-size: 12.5px;
@@ -884,7 +818,7 @@
   position: relative;
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-stb-table {
@@ -1127,7 +1061,7 @@
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--stb-zone, var(--line));
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-stb-card[data-zone='bye'] { --stb-zone: var(--tier-blue); }
@@ -1193,7 +1127,7 @@
   gap: 8px;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-stb-why h3 { margin: 0; }
@@ -1231,7 +1165,7 @@
   margin: 0;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-stb-chart-title { display: grid; gap: 3px; }
@@ -1441,12 +1375,10 @@
 }
 
 @container af-st (max-width: 760px) {
-  .af-st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-st-split { grid-template-columns: minmax(0, 1fr); }
 }
 
 @container af-st (max-width: 420px) {
-  .af-st-tile-v { font-size: 22px; }
   .af-st-recent li { grid-template-columns: 40px minmax(0, 1fr) auto; }
   .af-st-recent-r {
     grid-column: 2 / -1;
@@ -1590,7 +1522,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 18px;
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -1648,7 +1580,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
 }
 .af-st-stakes-game h3,
@@ -1739,7 +1671,7 @@
 .af-stb-asif {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px dashed var(--warn);
   background: var(--warn-soft);
   font-size: 12px;
@@ -1771,7 +1703,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line, var(--line));
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
@@ -1845,7 +1777,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 18px;
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -1858,7 +1790,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   font-size: 13px;
 }
@@ -1910,7 +1842,7 @@
   transition: transform 0.15s ease;
 }
 .af-stb-cardfold[open] > .af-stb-cardsum::after { transform: rotate(225deg) translateY(-2px); }
-.af-stb-cardsum:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.af-stb-cardsum:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--af-radius-inner, 12px); }
 .af-stb-cardsum .af-stb-cardhead {
   flex: 1;
   min-width: 0;
@@ -2043,7 +1975,7 @@
   gap: 10px;
   min-height: 44px;
   padding: 8px 12px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -2084,7 +2016,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   border: 1px solid var(--line);
   background: var(--surface2, var(--surface));
 }

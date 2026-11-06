@@ -64,7 +64,7 @@
   padding: 22px;
   background: var(--surface);
   border: 1px solid var(--accent-line);
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 .af-wl-hero[data-empty='true'] {
@@ -288,7 +288,7 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border-left: 3px solid var(--line);
 }
@@ -349,7 +349,7 @@
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 
 .af-wl-card-row {
