@@ -23,8 +23,7 @@ import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict, isRosterSnapshotConflict, rosterSnapshotWhere } from './claim-snapshot'
-import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
-import { randomUUID } from 'crypto'
+import { withLeagueWaiverLock } from './leagueWaiverLock'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
@@ -77,11 +76,6 @@ type ProcessWaiverOpts = {
   onSkip?: (reason: WaiverRunSkipReason) => void
 }
 
-/** Long enough for the slowest league run; a crashed holder frees the league after this. */
-const PROCESS_LOCK_TTL_MS = 10 * 60_000
-const PROCESS_LOCK_WAIT_ATTEMPTS = 8
-const PROCESS_LOCK_WAIT_MS = 750
-
 /**
  * 🛑 ONLY THE CRON TOOK A LOCK, SO TWO RUNS FOR ONE LEAGUE COULD OVERLAP. `processLeagueWaiversJob`
  * holds `waiver:league:{id}`, but the commissioner's "Process waivers", the manual process route,
@@ -101,29 +95,11 @@ export async function processWaiverClaimsForLeague(
   leagueId: string,
   opts?: ProcessWaiverOpts,
 ): Promise<ProcessedClaimResult[]> {
-  const lockKey = `waiver:process:${leagueId}`
-  const owner = `waiver-process:${randomUUID()}`
-  const acquire = () => acquireAutomationLock(lockKey, { owner, ttlMs: PROCESS_LOCK_TTL_MS })
-  const busy = (r: { ok: boolean; reason?: string }) => !r.ok && String(r.reason ?? '').startsWith('Lock held')
-  let lock = await acquire()
-  for (let i = 0; i < PROCESS_LOCK_WAIT_ATTEMPTS && busy(lock); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, PROCESS_LOCK_WAIT_MS))
-    lock = await acquire()
-  }
-  if (!lock.ok) {
-    if (busy(lock)) {
-      console.info(`[waiver-process] league ${leagueId} skipped: another waiver run is in progress; pending claims stay pending`)
-      opts?.onSkip?.('run_in_progress')
-      return []
-    }
-    console.warn(`[waiver-process] league ${leagueId}: run lock unavailable (${lock.reason}); processing without it`)
-    return processWaiverClaimsForLeagueLocked(leagueId, opts)
-  }
-  try {
-    return await processWaiverClaimsForLeagueLocked(leagueId, opts)
-  } finally {
-    await releaseAutomationLock(lockKey, owner).catch(() => undefined)
-  }
+  const out = await withLeagueWaiverLock(leagueId, 'waiver-process', () => processWaiverClaimsForLeagueLocked(leagueId, opts))
+  if (out.ran) return out.value
+  console.info(`[waiver-process] league ${leagueId} skipped: another waiver run is in progress; pending claims stay pending`)
+  opts?.onSkip?.('run_in_progress')
+  return []
 }
 
 async function processWaiverClaimsForLeagueLocked(
