@@ -5456,6 +5456,7 @@ export function DraftRoomPageClient({
             rosterGateBlocksAuctionActions={draftRoomState.rosterConfigurationIncomplete}
             rosterSize={session.rounds ?? null}
             picks={session.picks ?? null}
+            leagueId={leagueId}
           />
         ) : undefined
       }

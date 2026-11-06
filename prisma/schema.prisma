@@ -13070,12 +13070,35 @@ model DraftSession {
   league                     League                        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   warRoomSnapshots           WarRoomSnapshot[]
   liveAutopickPreferences    LiveDraftAutopickPreference[]
+  auctionBids                AuctionBid[]
 
   @@index([leagueId])
   @@index([status])
   @@index([leagueId, sportType])
   @@index([sportType, status])
   @@map("draft_sessions")
+}
+
+/// One ACCEPTED bid in an AllFantasy-run auction draft room (lib/live-draft-engine/auction). Written
+/// best-effort after the engine accepts the bid (auctionBidLog.ts) and read for the room's bid ladder.
+/// The bid never depends on this row: a missing table or failed write is caught and skipped.
+/// `playerKey` is `id:<playerId>` or `name:<normalized name>` (lib/draft-room/auctionBidLadder.ts), so
+/// the player on the block and the pick that sold him resolve to the same rows.
+model AuctionBid {
+  id             String       @id @default(cuid())
+  draftSessionId String       @map("draft_session_id")
+  leagueId       String       @map("league_id")
+  playerKey      String       @map("player_key") @db.VarChar(191)
+  playerId       String?      @map("player_id")
+  playerName     String       @map("player_name")
+  rosterId       String       @map("roster_id")
+  amount         Int
+  createdAt      DateTime     @default(now()) @map("created_at")
+  draftSession   DraftSession @relation(fields: [draftSessionId], references: [id], onDelete: Cascade)
+
+  @@index([draftSessionId, playerKey, createdAt])
+  @@index([draftSessionId, createdAt])
+  @@map("auction_bids")
 }
 
 /// Commissioner pick editor audit trail (Neon/Postgres).
