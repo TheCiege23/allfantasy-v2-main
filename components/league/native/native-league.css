@@ -384,3 +384,8 @@
 .nl-workspace[data-dynasty-background=true] .nl-league-heading>.nl-button{background:rgba(8,12,19,.65)}
 /* Season clock pill — "Year N · YYYY", Archivo condensed, gold-soft on a gold wash (AA on the heading). */
 .nl-workspace[data-dynasty-background=true] .nl-dyn-clock{color:var(--dyn-gold-soft,#F3D79F);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 42%,transparent);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+/* Phone, dynasty: the banner is an art-backed CARD (rule above), so it needs a card's padding. The generic phone rules
+   (.nl-league-heading{padding:10px 0 0}, .nl-workspace .nl-league-heading{padding-top:0}) are written for the
+   transparent redraft heading and put this card's title 0px from its top edge. __tests__/dynasty/dynastyBannerPhone.test.ts */
+@media(max-width:767px){.nl-workspace[data-dynasty-background=true] .nl-league-heading{padding:14px}}
