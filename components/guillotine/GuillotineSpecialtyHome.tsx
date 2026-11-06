@@ -330,11 +330,19 @@ export function GuillotineSpecialtyHome({
             .reverse()
             .slice(0, 4)
             .map((r) => (
-              <li key={r.rosterId} className={sp.row} style={r.tier === 'chop_zone' ? { borderColor: 'rgba(224,64,46,.45)' } : undefined}>
+              <li
+                key={r.rosterId}
+                className={sp.row}
+                data-testid="guillotine-zone-row"
+                style={r.tier === 'chop_zone' ? { borderColor: 'rgba(224,64,46,.45)' } : undefined}
+              >
                 <Avatar id={r.rosterId} name={r.name} />
-                <span className={gl.name} style={{ flex: 1 }}>{r.isMe ? 'You' : r.name}</span>
+                {/* The tier tag sits under the name: beside it, it took 86px of a 306px row and truncated the name. */}
+                <span className={gl.who} data-testid="guillotine-zone-who">
+                  <span className={gl.name}>{r.isMe ? 'You' : r.name}</span>
+                  <SpecialtyTag tone={TONE[r.tier]}>{tierLabel(r.tier)}</SpecialtyTag>
+                </span>
                 <span className={`${sp.num} ${gl.pts}`}>{fmt(r.points)}</span>
-                <SpecialtyTag tone={TONE[r.tier]}>{tierLabel(r.tier)}</SpecialtyTag>
               </li>
             ))}
         </ul>
