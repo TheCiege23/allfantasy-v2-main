@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { projectionSportScope } from '@/lib/core-app/playerProjections'
 import {
   computeWinProbability,
   KNOWN_LIMITATION_INDEPENDENCE,
@@ -78,7 +79,7 @@ export async function computeGroundedTradeDelta(args: {
 
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },
-    select: { id: true, platformLeagueId: true, settings: true },
+    select: { id: true, platformLeagueId: true, settings: true, sport: true },
   })
   if (!league) return refuse('league not found')
   if (!league.platformLeagueId) {
@@ -157,7 +158,10 @@ export async function computeGroundedTradeDelta(args: {
 
   const weekList = remaining.map((r) => r.week)
   const feed = await prisma.fantasyProjection.findMany({
-    where: { season: String(latest.seasonYear), week: { in: weekList } },
+    /* A Sleeper NBA league's ids are another namespace that collides with NFL ids, and this board is
+       matched by id and by name: a non-NFL league reads only its own sport's rows (`projectionSportScope`),
+       none today, and refuses with "the projection feed holds nothing". NFL sends the read it always did. */
+    where: { season: String(latest.seasonYear), week: { in: weekList }, ...projectionSportScope(league.sport) },
     select: { playerId: true, week: true, stats: true },
   })
   if (feed.length === 0) {
