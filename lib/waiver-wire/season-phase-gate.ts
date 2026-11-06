@@ -17,9 +17,12 @@ import {
 import {
   resolveWaiverPhasePolicy,
   resolveWaiverSeasonPhase,
+  type BestBallRosterPolicy,
   type WaiverPhasePolicy,
   type WaiverSeasonPhase,
 } from './season-phase-policy'
+import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
 export type WaiverPhaseContext = {
   phase: WaiverSeasonPhase
@@ -28,6 +31,35 @@ export type WaiverPhaseContext = {
   dynastyFamily: boolean
   /** The latest native season, for the title-bracket read. */
   seasonId: string | null
+  /** A native Classic Best Ball league's saved waiver / free-agency switches; null for every other league. */
+  bestBallRoster?: BestBallRosterPolicy | null
+}
+
+/**
+ * The saved transaction policy of a NATIVE CLASSIC Best Ball league, or null.
+ *
+ * ⚠ GUILLY + BEST BALL IS DELIBERATELY NULL. Its lineups are automatic but its survivors claim the
+ * chopped rosters through waivers/FAAB; it is stored as `guillotineMode` + `settings.best_ball` with
+ * `bestBallMode` false (lib/guillotine/guillotineBestBall.ts), and the guard below also refuses any
+ * guillotine-flagged row in case both flags are ever set. An imported league is the platform's call,
+ * the same rule `tradeSettingsResolver` applies to best ball trades.
+ */
+export function resolveBestBallRosterPolicy(league: {
+  platform?: string | null
+  bestBallMode?: boolean | null
+  leagueVariant?: string | null
+  leagueType?: string | null
+  guillotineMode?: boolean | null
+  bbWaiversEnabled?: boolean | null
+  bbFaEnabled?: boolean | null
+}): BestBallRosterPolicy | null {
+  const bestBall = isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
+  if (!bestBall) return null
+  if (league.guillotineMode === true) return null
+  const kind = `${league.leagueVariant ?? ''} ${league.leagueType ?? ''}`.toLowerCase()
+  if (kind.includes('guillotine')) return null
+  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+  return { waiversEnabled: league.bbWaiversEnabled === true, freeAgencyEnabled: league.bbFaEnabled === true }
 }
 
 const REGULAR: WaiverPhaseContext = {
@@ -43,7 +75,11 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
     const [league, row, latest, completed] = await Promise.all([
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { lifecycleState: true, status: true, leagueType: true, isDynasty: true },
+        select: {
+          lifecycleState: true, status: true, leagueType: true, isDynasty: true,
+          platform: true, bestBallMode: true, leagueVariant: true, guillotineMode: true,
+          bbWaiversEnabled: true, bbFaEnabled: true,
+        },
       }),
       prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } }),
       prisma.redraftSeason.findFirst({
@@ -67,6 +103,7 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
       playoffRule: readPlayoffWaiverRule(config.playoff_waiver_rules),
       dynastyFamily: isDynastyFamilyLeague(league),
       seasonId: latest?.id ?? null,
+      bestBallRoster: resolveBestBallRosterPolicy(league),
     }
   } catch {
     return { ...REGULAR, phase: 'pre_draft' }

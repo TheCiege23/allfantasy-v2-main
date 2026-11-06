@@ -140,7 +140,18 @@ export function computeOptimalLineup(input: {
    * zero, and an unstable tiebreak makes the same inputs produce different (equally optimal)
    * lineups across runs — which is fine for the total and fatal for a fingerprint.
    */
-  const players = [...input.players].sort(
+  /*
+   * 🛑 ONE PLAYER, ONE SEAT — ENFORCED HERE, NOT ASSUMED OF THE CALLER. Seats are matched by array
+   * index, so the same `playerId` arriving twice (two active `redraft_roster_players` rows: the table
+   * has no unique (rosterId, playerId)) was seated twice and scored twice — `{WR_A 30, WR_A 30}` into
+   * WR + FLEX totalled 60. Keep the highest-scoring row per player; ties keep the first seen.
+   */
+  const bestByPlayer = new Map<string, OptimizerPlayerInput>()
+  for (const p of input.players) {
+    const prev = bestByPlayer.get(p.playerId)
+    if (!prev || p.points > prev.points) bestByPlayer.set(p.playerId, p)
+  }
+  const players = [...bestByPlayer.values()].sort(
     (a, b) => b.points - a.points || (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0),
   )
 
