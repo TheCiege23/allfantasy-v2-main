@@ -3112,3 +3112,30 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
 .af-tc-balance-ends [data-side='get'] {
   color: var(--muted);
 }
+
+/*
+ * The roster fold's heading on a phone. The name, count, hint and chevron shared one line, so a
+ * longer team name ("GRIDIRON GHOSTS' ROSTER · 5") squeezed "Tap a player to add them" into a
+ * two-line column beside it. The name keeps one line (truncating rather than wrapping), the
+ * chevron stays on that line at the right, and the hint drops to its own line underneath.
+ */
+@media (max-width: 720px) {
+  .af-core .af-tc-roster-head {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .af-core .af-tc-roster-head .af-tc-roster-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core .af-tc-roster-head .af-tc-roster-chev {
+    order: 2;
+  }
+  .af-core .af-tc-roster-head .af-tc-roster-hint {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
