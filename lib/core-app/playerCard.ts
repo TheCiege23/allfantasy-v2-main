@@ -20,6 +20,15 @@ import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
+import {
+  DAILY_LOOKAHEAD_DAYS,
+  DAILY_LOOKBACK_DAYS,
+  dailyTeamCode,
+  isDailyGamesCardSport,
+  selectDailyNextGames,
+  type DailyGameRow,
+} from './dailyNextGames'
+import { LIVE_SCORE_SOURCES } from '@/lib/scores/liveSourceSelection'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 import type { CoreDepthAccess } from './coreDepthAccess'
@@ -165,13 +174,40 @@ export type PlayerCardWeek = {
   afProjection?: number | null
 }
 
-/** The schedule section's payload. */
+/** The schedule section's payload — the WEEKLY strip (NFL, NCAAF). */
 export type PlayerCardSchedule = {
+  /** Absent on every weekly payload, so the NFL strip's shape is unchanged; see PlayerCardDailySchedule. */
+  kind?: 'weekly'
   weeks: PlayerCardWeek[]
   season: number
   projectedWeek: number | null
   /** Present only when later-week projections were consulted (the future-week tables exist). */
   futureWeeks?: { enabled: true }
+}
+
+/** One upcoming game on a daily-sport card (NBA, NHL, MLB). */
+export type PlayerCardGame = {
+  /** ISO instant; the sheet prints it on the US Eastern clock like the rest of /core. */
+  startTime: string
+  /** His club's opponent — the team code where we recognise the club, else the feed's own name. */
+  opponent: string
+  home: boolean
+}
+
+/**
+ * The schedule section for NBA, NHL and MLB: his next games by DATE (`loadDailySchedule`). These
+ * clubs play several times a week and have no byes, so there is no week strip and no bye here.
+ */
+export type PlayerCardDailySchedule = {
+  kind: 'daily'
+  /** Up to `DAILY_NEXT_GAMES`, soonest first, all from one feed. */
+  games: PlayerCardGame[]
+  /**
+   * His club's games in the current fantasy week (the sport's Eastern-day week window). Null when the
+   * week cannot be told — no recorded opener, between weeks, the week's slate is not on file, or MLB,
+   * whose `SportsGame` slate is incomplete (weekGames.ts `RI_SCHEDULE_SLATE_SPORTS`). Never a guessed 0.
+   */
+  gamesThisWeek: number | null
 }
 
 /** This player's later-week projections, as `loadSchedule` consumes them. */
@@ -403,7 +439,8 @@ export type PlayerCardData = {
   bio: PlayerCardBio
   market: SectionState<PlayerCardMarket>
   ownership: SectionState<PlayerCardOwnership>
-  schedule: SectionState<PlayerCardSchedule>
+  /** The weekly strip for football; `kind: 'daily'` (next games by date) for NBA / NHL / MLB. */
+  schedule: SectionState<PlayerCardSchedule | PlayerCardDailySchedule>
   byeWeek: number | null
   trades: SectionState<PlayerCardTrade[]>
   comps: SectionState<PlayerCardComp[]>
@@ -777,6 +814,47 @@ export async function loadSchedule(
   const data: PlayerCardSchedule = { weeks, season, projectedWeek }
   if (future && projectedWeek != null) data.futureWeeks = { enabled: true }
   return { schedule: { available: true, data }, byeWeek: bye }
+}
+
+/** A preseason game counts for nothing in a fantasy league, so it is not one of "his next games". */
+const PRESEASON_TYPES = ['pre', 'PRE', 'preseason', 'Preseason', 'PRESEASON']
+
+/**
+ * NBA, NHL and MLB: his club's next `DAILY_NEXT_GAMES` games by date, and how many he plays in the
+ * current fantasy week — see dailyNextGames.ts for the team key and the one-feed rule. One indexed read
+ * (`SportsGame [sport, startTime]`) of the sport's slate around now; no provider call.
+ *
+ * No games on file for his club keeps the honest note (`NON_WEEKLY_SCHEDULE`) — never another club's.
+ */
+export async function loadDailySchedule(
+  team: string | null,
+  sport: string,
+  now: Date = new Date(),
+): Promise<SectionState<PlayerCardDailySchedule>> {
+  const key = String(sport ?? '').trim().toUpperCase()
+  if (!dailyTeamCode(key, team)) {
+    return unavailable('No club on file for this player, so his fixtures cannot be looked up.')
+  }
+  const DAY = 86_400_000
+  const rows = await prisma.sportsGame
+    .findMany({
+      where: {
+        sport: key,
+        startTime: {
+          gte: new Date(now.getTime() - DAILY_LOOKBACK_DAYS * DAY),
+          lt: new Date(now.getTime() + DAILY_LOOKAHEAD_DAYS * DAY),
+        },
+        // Only ranked feeds, as every live-score and week read does (liveSourceSelection.ts).
+        source: { in: [...LIVE_SCORE_SOURCES] },
+        OR: [{ seasonType: null }, { seasonType: { notIn: PRESEASON_TYPES } }],
+      },
+      select: { homeTeam: true, awayTeam: true, startTime: true, status: true, source: true, fetchedAt: true, season: true },
+      orderBy: { startTime: 'asc' },
+    })
+    .catch(() => [] as DailyGameRow[])
+  const { games, gamesThisWeek } = selectDailyNextGames(rows, { sport: key, team, now })
+  if (games.length === 0) return unavailable(NON_WEEKLY_SCHEDULE)
+  return { available: true, data: { kind: 'daily', games, gamesThisWeek } }
 }
 
 /* ── trades ──────────────────────────────────────────────────────────────── */
@@ -1977,18 +2055,23 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       ? { weeks: future.weeks, lines: future.lines.get(player.sleeperId) ?? new Map() }
       : null
 
-  const { schedule, byeWeek } = await loadSchedule(
-    player.team,
-    projWeek ? Number(projWeek.season) : new Date().getFullYear(),
-    projWeek ? projWeek.week : 1,
-    projWeek ? projWeek.week : null,
-    projected,
-    SCHEDULE_WEEKS,
-    futureForCard,
-    afProjected,
-    // Without it every player was looked up among NFL clubs (see isWeeklyScheduleSport).
-    String(player.sport ?? 'NFL').trim().toUpperCase(),
-  )
+  const cardSport = String(player.sport ?? 'NFL').trim().toUpperCase()
+  // NBA / NHL / MLB list his next games by date; every other sport keeps the week strip (or its note).
+  const { schedule, byeWeek }: { schedule: PlayerCardData['schedule']; byeWeek: number | null } =
+    isDailyGamesCardSport(cardSport)
+      ? { schedule: await loadDailySchedule(player.team, cardSport), byeWeek: null }
+      : await loadSchedule(
+          player.team,
+          projWeek ? Number(projWeek.season) : new Date().getFullYear(),
+          projWeek ? projWeek.week : 1,
+          projWeek ? projWeek.week : null,
+          projected,
+          SCHEDULE_WEEKS,
+          futureForCard,
+          afProjected,
+          // Without it every player was looked up among NFL clubs (see isWeeklyScheduleSport).
+          cardSport,
+        )
 
   const comps =
     market.available && player.sleeperId
