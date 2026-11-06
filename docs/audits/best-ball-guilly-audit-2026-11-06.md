@@ -25,8 +25,8 @@ Nothing here touched a database, a live league, a draft, a claim, or a notificat
 
 **In one line:** the scoring core (the exact optimizer, final-only sealing, chop locking) is the strongest
 part. The weak parts are setup (the wizard silently defaults everything), transaction enforcement (fixed for
-the server in this branch), scheduled drafts, roster-as-of-week scoring, and the member-facing explanation
-of who counted.
+the server in this branch), scheduled drafts, and the member-facing explanation of who counted.
+Roster-as-of-week scoring is also fixed in this branch.
 
 ---
 
@@ -59,7 +59,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Player never counted twice | **Fixed** | A duplicate roster row used to be seated twice (60 instead of 40). The optimizer now dedupes by `playerId`. |
 | Negative scores, unfilled slots, deterministic ties | W (Verified) | A required seat takes a negative player only as a last resort. Unfilled seats are reported. Ties break on `playerId`. |
 | IR/IL/taxi exclusion | W | Uses that week's saved lineup (`scoringEngine.ts:738-745`). |
-| Roster *as of the scoring week* | **B (Verified)** | `droppedAt: null` means the current roster (`scoringEngine.ts:734-736`). See finding P0-3. |
+| Roster *as of the scoring week* | **Fixed** | It was the current roster (`droppedAt: null`). Now a player counts for whoever held him at his first game lock that week (`lib/redraft/bestBallWeekRoster.ts`). Native leagues only; the scorer and the week finalizer share it. See P0-3. |
 | Weekly vs daily | P | One lineup over weekly totals (the best-ball branch returns before the daily branch, `scoringEngine.ts:305` vs `:318`). The UI, rules and AI say "daily" (`lib/bestball/rules.ts:147,171,197`; `sportConfig.ts:81,112,139`). |
 | Rule/settings version stored with a result | M | Assignments and unfilled seats are stored in `lineupSnapshots`. The algorithm id, slot config and scoring version are not. Rescoring an old week uses current settings (`scoringEngine.ts:212-219,805`). |
 | Position-change effective dates | M | Current position everywhere. |
@@ -95,8 +95,8 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Guilly: survivors keep FAAB/waivers | W | Nothing disables them. This branch explicitly exempts Guilly from the new gate. |
 | FAAB ordering, $0 bids, minimum bid, roster space, blind bids | W | `process-engine.ts:398-431,686-707`. Members see only their own claims. |
 | Concurrent waiver runs | **B** | Only the cron path takes the `waiver:league:{id}` mutex. Commissioner "process", the manual process route and FCFS-immediate run without it, and the processor writes an absolute `faabRemaining` (`process-engine.ts:180,500`). |
-| No retroactive points for acquisitions | **B** | See P0-3. |
-| Ownership history | W (data) / B (use) | `addedAt`/`droppedAt` exist; best ball scoring ignores them. |
+| No retroactive points for acquisitions | **Fixed (best ball)** | See P0-3. The standard weekly (non-daily) lineup path still reads the current roster; its starters are locked per game, so the exposure there is smaller. |
+| Ownership history | W | `addedAt`/`droppedAt` are now read by best ball scoring. A trade moves the row and keeps `addedAt`, so trades are not split by week; best ball refuses trades. |
 
 ### Guilly automation
 
@@ -150,9 +150,11 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
    - Repro (pre-fix): in a native best ball league, `POST /api/waiver-wire/leagues/{id}/add-drop`.
 2. **The redraft trade path ignored Best Ball / Guilly "trades off"** *(Verified, fixed in branch)*.
    - Where: `lib/redraft/tradeProposalValidation.ts`, behind `/api/redraft/trade-proposals` and `/api/redraft/trade-runtime`.
-3. **Best ball scoring uses the roster as it is now, not as it was that week** *(Verified, not fixed — needs a policy decision)*.
-   - Where: `lib/redraft/scoringEngine.ts:734-736` (best ball) and `:321-326` (standard weekly).
-   - Impact in Guilly+BB: the chop runs 24–48h after the week. Anyone added in that window counts for the closed week, and anyone dropped is erased from it — enough to change who is eliminated. The daily-lineup path already does this correctly with `daysOnRoster` (`lib/redraft/dailyLineups.ts:211-229`). Best ball skips that path.
+3. **Best ball scoring used the roster as it is now, not as it was that week** *(Verified, fixed in branch)*.
+   - Where: `lib/redraft/scoringEngine.ts` (best ball). The standard weekly path at `:321-326` still reads the current roster.
+   - Impact in Guilly+BB: the chop runs 24–48h after the week. Anyone added in that window counted for the closed week, and anyone dropped was erased from it — enough to change who is eliminated.
+   - Fix: a player counts for whoever held him at his team's first kickoff that week (`lib/redraft/bestBallWeekRoster.ts`). The week finalizer seals the same set, so the week can still go final.
+   - The daily path's per-day rule (`daysOnRoster`) could not be reused: per-day stat rows exist only for daily-lineup leagues.
 4. **Chopped Guilly teams could still add free agents and trade** *(Verified, fixed in branch)*.
    - Where: `lib/roster-legality/rosterTransactionGates.ts` checked only `survivorGuillotineChop`.
 5. **Classic Best Ball scheduled drafts never auto-start** *(code-read, not fixed)*.
@@ -204,8 +206,12 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 **Policies to publish with every preset:**
 
 - **Zero/inactive:** an inactive player scores 0 and can still fill a seat. Unfilled seats score 0 and are shown as unfilled.
-- **Acquisitions:** an acquisition counts from the first game that locks after he is added (the daily rule `daysOnRoster` already implements this).
-- **Drops:** a drop keeps the points already earned.
+- **Weekly ownership (implemented for best ball):** a player counts for the whole week for the team that held him at his team's first game of that week.
+  - Added before that game: counts this week.
+  - Added at or after it: counts from next week, so no points from games already played.
+  - Dropped at or after it: still counts this week, so earned points stay.
+  - Drafted and kept players count from season start.
+  - If the schedule cannot be read, the current roster counts, as before.
 - **Corrections:** a correction after a week is final changes standings but never reverses a chop or a crowned champion.
 
 ---
@@ -239,9 +245,9 @@ draft, pressing "process" on waivers, applying stat corrections, and noticing a 
 
 1. **Land this branch.** It enforces Classic waivers/FA, the redraft trade path, chopped-team transactions,
    and optimizer dedup.
-2. **Roster-as-of-week for best ball scoring** (P0-3). Decide the acquisition policy above, then score best
-   ball from per-day stats through `daysOnRoster` for NBA/NHL/MLB, and from roster ownership at each game's
-   lock for NFL. Re-score nothing already sealed.
+2. **Roster-as-of-week for best ball scoring** (P0-3) — **done in this branch**, with the weekly ownership
+   rule above. Weeks already sealed are not re-scored. Still open: the standard weekly lineup path, and a
+   per-day split for NBA/NHL/MLB if per-day stats are ever written for every league.
 3. **Scheduled draft start for Classic Best Ball**, and turn on server autopick with a starter-coverage guard
    on every autopick branch.
 4. **Wire the live wizard to the existing Best Ball settings model**, and show a rules summary (lineup
@@ -261,7 +267,7 @@ draft, pressing "process" on waivers, applying stat corrections, and noticing a 
 
 ## 7. Checks performed, changes made, limitations
 
-**Changes** (branch `fix/best-ball-transaction-gates`, uncommitted; the Zombie test mock got one added
+**Changes** (branch `fix/best-ball-transaction-gates`, PR #3321; the Zombie test mock got one added
 delegate):
 
 | File | Change |
@@ -272,6 +278,10 @@ delegate):
 | `lib/redraft/tradeProposalValidation.ts` | Refuses `TRADES_DISABLED` for best ball/guillotine leagues whose resolved trade settings disallow trades. |
 | `lib/lineup-optimizer/optimalLineup.ts` | Dedupes players by `playerId` before seating. |
 | `__tests__/bestball/best-ball-audit-2026-11.test.ts` | 19 tests. |
+| `lib/redraft/bestBallWeekRoster.ts` (new) | The weekly ownership rule, shared by the scorer and the finalizer. |
+| `lib/redraft/scoringEngine.ts` | `scoreRosterBestBall` reads the roster as of each player's lock (native leagues). |
+| `lib/redraft/weekFinalizer.ts` | Best ball seals the same week roster it scores. |
+| `__tests__/bestball/best-ball-week-roster.test.ts` | 12 tests: the ownership rule, the loader, the scorer end to end and the finalizer. Controls: switching the scorer wiring off fails 1; disabling the ownership filter fails 4; reverting the finalizer fails 1, sealing `wLate` instead of `wDrop`. |
 
 **The 19 tests cover:**
 

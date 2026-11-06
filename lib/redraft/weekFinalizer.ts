@@ -14,6 +14,7 @@ import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { dailySlotFor, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups } from './dailyLineups'
 import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 
 /**
@@ -517,7 +518,22 @@ export async function finalizeRedraftWeek(
       if (started) starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
     }
   } else {
-    for (const p of rosterPlayers) {
+    /*
+     * ⚠ BEST BALL SEALS THE ROSTER IT SCORES: the week's roster as of each player's lock
+     * (`bestBallWeekRoster.ts`), which keeps a player dropped after his game and leaves out one added
+     * after it. Sealing the current roster instead left the dropped player's row unsealed — and the
+     * matchup, which now scores him, could never go final.
+     */
+    const sealRows = bestBall && rosterIds.length
+      ? await loadBestBallWeekRosterRows(prisma, {
+          rosterIds,
+          sport,
+          season: season.season,
+          week: params.week,
+          platform: league?.platform ?? null,
+        })
+      : rosterPlayers
+    for (const p of sealRows) {
       if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
       starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
     }

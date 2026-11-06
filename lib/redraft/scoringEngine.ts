@@ -41,6 +41,7 @@ import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, 
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { writeNativePlayerWeeklyScores, type NativePlayerPoints } from './nativePlayerWeeklyScores'
 
 export function calculateFantasyPoints(
@@ -280,7 +281,11 @@ export type RosterScoreSummary = {
   playerPoints?: NativePlayerPoints[]
 }
 
-type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[] }
+/**
+ * `platform` decides whether the roster is read as of the week (`bestBallWeekRoster.ts`): a native
+ * league is, an imported one keeps the current-roster read. Absent (an older caller) reads as before.
+ */
+type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[]; platform?: string | null; asOfWeek?: boolean }
 
 export type MatchupScoreUpdateSummary = {
   matchupId: string
@@ -731,9 +736,16 @@ async function scoreRosterBestBall(args: {
   /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
   includeBench?: boolean
 }): Promise<RosterScoreSummary> {
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: args.rosterId, droppedAt: null },
-  })
+  // The roster as it stood at each player's first game lock of THIS week, not as it is now.
+  const players = args.bestBall.asOfWeek
+    ? await loadBestBallWeekRosterRows(prisma, {
+        rosterIds: [args.rosterId],
+        sport: args.bestBall.sport,
+        season: args.seasonYear,
+        week: args.week,
+        platform: args.bestBall.platform,
+      })
+    : await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -798,11 +810,11 @@ async function scoreRosterBestBall(args: {
 async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true, platform: true },
   })
   if (!league || !leagueIsBestBall(league)) return null
   const sport = String(league.sport ?? 'NFL')
-  return { sport, slots: buildBestBallSlots(sport, league.settings) }
+  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, asOfWeek: true }
 }
 
 /**
