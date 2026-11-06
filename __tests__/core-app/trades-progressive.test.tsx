@@ -120,6 +120,9 @@ describe('the streamed history renders what the page rendered before', () => {
     render(section)
     const card = screen.getByRole('alert')
     expect(card.textContent).toContain('Trades did not load')
+    // One section of a page that already has its h1: the card's title is an h2, not a second h1.
+    expect(card.querySelector('h1')).toBeNull()
+    expect(card.querySelector('h2')?.textContent).toContain('Trades did not load')
     expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toBe('/core/trades?league=l1')
     expect(document.querySelector('.af-tr-history')).toBeNull()
     expect(log).toHaveBeenCalledWith('[core/trades] history read failed', expect.any(Error))

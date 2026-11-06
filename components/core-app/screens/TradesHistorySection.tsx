@@ -39,7 +39,7 @@ export async function TradesHistorySection({
     resolved = await data
   } catch (e: unknown) {
     console.error('[core/trades] history read failed', e)
-    return <ScreenLoadError screen={screen} retryHref={retryHref} language={language} />
+    return <ScreenLoadError screen={screen} retryHref={retryHref} language={language} headingLevel={2} />
   }
   return <Trades data={resolved} hidePending />
 }
