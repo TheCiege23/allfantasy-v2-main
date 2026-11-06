@@ -167,7 +167,13 @@ export const myTeamScreenMessages = defineMessages({
     optimizerClose: 'Inside the projection’s margin — your lineup is fine either way.',
     optimizerOptimal: (total: string) => `Your lineup is already the best one we can find (${total} projected).`,
     optimizerEmptySeat: 'Empty seat',
-    optimizerLocked: (n: number) => `${n} ${n === 1 ? 'starter has' : 'starters have'} kicked off and stay where they are.`,
+    optimizerStart: 'Start',
+    optimizerBench: 'Bench',
+    optimizerEmptySeatAt: (slot: string) => `${slot} · empty seat`,
+    optimizerMoves: (list: string) => `Seat moves: ${list}.`,
+    optimizerMove: (name: string, from: string, to: string) => `${name} ${from} → ${to}`,
+    optimizerLocked: (n: number) =>
+      n === 1 ? '1 starter has kicked off and stays where he is.' : `${n} starters have kicked off and stay where they are.`,
     optimizerFootnote: 'Every open seat solved at once, each player counted once, using this league’s scoring. Recommendation only — AllFantasy never sets your lineup.',
 
     // BenchCheckStrip
@@ -362,6 +368,11 @@ export const myTeamScreenMessages = defineMessages({
     optimizerClose: 'Dentro del margen de la proyección: tu alineación está bien de cualquier forma.',
     optimizerOptimal: (total) => `Tu alineación ya es la mejor que encontramos (${total} proyectados).`,
     optimizerEmptySeat: 'Puesto vacío',
+    optimizerStart: 'Titular',
+    optimizerBench: 'A la banca',
+    optimizerEmptySeatAt: (slot) => `${slot} · puesto vacío`,
+    optimizerMoves: (list) => `Cambios de puesto: ${list}.`,
+    optimizerMove: (name, from, to) => `${name} ${from} → ${to}`,
     optimizerLocked: (n) => `${n} ${n === 1 ? 'titular ya empezó su partido y se queda en su puesto' : 'titulares ya empezaron su partido y se quedan en su puesto'}.`,
     optimizerFootnote: 'Resolvemos todos los puestos abiertos a la vez, contando a cada jugador una sola vez y con la puntuación de esta liga. Solo es una recomendación: AllFantasy nunca cambia tu alineación.',
 

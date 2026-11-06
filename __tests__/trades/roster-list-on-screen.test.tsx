@@ -136,6 +136,18 @@ describe('🛑 the screen shows what each team holds', () => {
     expect(document.body.textContent).toContain('2')
   })
 
+  it("a team name ending in s takes an apostrophe, not 's", () => {
+    rosterData.current = {
+      rosters: [roster('r1', 'Gridiron Ghosts', [player('p1', 'DK Metcalf')])],
+      viewerRosterId: 'r1',
+      viewerTeamRosterId: 'r1',
+    }
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    const label = container.querySelector('.af-tc-roster-head .af-tc-roster-label')
+    expect(label?.textContent).toContain("Gridiron Ghosts' roster")
+    expect(document.body.textContent).not.toContain("Ghosts's")
+  })
+
   it('🛑 clicking a player puts him in that side of the deal', () => {
     /*
      * "the ability to click them and add them to the trade" — asserted through the real click
