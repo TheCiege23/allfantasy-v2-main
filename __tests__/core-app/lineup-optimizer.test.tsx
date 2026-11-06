@@ -150,7 +150,9 @@ describe('the Best lineup card', () => {
     const card = container.querySelector('[data-testid="mt-optimizer"]')!
     expect(card.textContent).toContain('+13.0 projected')
     expect(card.textContent).toContain('19.0 now → 32.0 with these changes')
-    expect(card.querySelectorAll('[data-testid="mt-optimizer-change"]')).toHaveLength(2)
+    // Two seats change: two players start and the two they replace go to the bench.
+    expect(card.querySelectorAll('[data-kind="start"]')).toHaveLength(2)
+    expect(card.querySelectorAll('[data-kind="bench"]')).toHaveLength(2)
     expect(card.querySelector('a.af-mt-check-fix')?.getAttribute('href')).toBe('https://example.test/lineup')
   })
 
