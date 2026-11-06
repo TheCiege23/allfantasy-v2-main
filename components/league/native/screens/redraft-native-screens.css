@@ -268,6 +268,12 @@
   .nls-rd-bug-vs { padding-bottom: 8px; }
   .nls-rd-bug-meter p { flex-direction: column; gap: 4px; }
   .nls-rd-wire > div { padding: 14px 16px; }
+  /* My team's three header buttons as a grid: two equal halves, then "Optimize lineup" across the full
+   * width, instead of wrapping to two odd widths and one orphan (121 + 98 then 130px at 390). DOM order
+   * is kept, so focus order matches what you see. */
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions > .nls-btn { min-width: 0; padding: 0 12px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions > .nls-btn[data-variant=primary] { grid-column: 1 / -1; }
   .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-aside { display: flex; align-items: stretch; }
   .nl-workspace[data-format=redraft] [data-rd-screen=matchup] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
   .nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
