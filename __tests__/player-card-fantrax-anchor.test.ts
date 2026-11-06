@@ -49,7 +49,7 @@ vi.mock('@/lib/core-app/archivedTradeGrade', () => ({ gradeArchivedTradeRows: vi
 vi.mock('@/lib/core-app/playerTradeVisual', () => ({ marketContextFor: () => ({ teams: 12 }) }))
 vi.mock('@/lib/trade-intel/marketValueService', () => ({ getMarketValues: vi.fn(async () => null), playerValue: () => null }))
 
-import { anchorLookupFor, getPlayerCard } from '@/lib/core-app/playerCard'
+import { anchorLookupFor, getPlayerCard, isWeeklyScheduleSport, NON_WEEKLY_SCHEDULE, slotOfRosterId } from '@/lib/core-app/playerCard'
 
 const SORO = {
   source: 'rolling_insights',
@@ -108,7 +108,7 @@ describe('player card anchor in a Fantrax league', () => {
   it('prefers the linked Sleeper id for an NFL Fantrax row', async () => {
     leagueOn('fantrax', 'NFL')
     identities([{ fantraxId: '06k5m', sleeperId: '4984', rollingInsightsId: '77' }])
-    await expect(anchorLookupFor({ sport: 'NFL', sleeperId: '06k5m', leagueId: 'L1' })).resolves.toEqual({ sleeperId: '4984' })
+    await expect(anchorLookupFor({ sport: 'NFL', sleeperId: '06k5m', leagueId: 'L1' })).resolves.toEqual({ sleeperId: '4984', rosterId: '06k5m' })
   })
 
   it('an id the registry cannot link is a miss, never retried as a Sleeper id', async () => {
@@ -126,6 +126,45 @@ describe('player card anchor in a Fantrax league', () => {
       { fantraxId: '04yla', rollingInsightsId: '2222' },
     ])
     await expect(anchorLookupFor({ sport: 'NHL', sleeperId: '04yla', leagueId: 'L1' })).resolves.toBeNull()
+  })
+})
+
+describe('the card a Fantrax hockey player opens to (live, 2026-11-06)', () => {
+  it('says the weekly strip is football-only instead of calling every week a bye', async () => {
+    leagueOn('fantrax')
+    identities([{ fantraxId: '04yla', rollingInsightsId: '1114' }])
+    // A plausible NFL slate on file: before the fix the card searched it for NYI and found a bye.
+    overrides.sportsGame = {
+      findMany: async () =>
+        Array.from({ length: 14 }, (_, i) => ({ homeTeam: `H${i}`, awayTeam: `A${i}`, startTime: new Date(), seasonType: 'regular', venue: null, week: 9 })),
+    }
+    const card = await getPlayerCard({ sport: 'NHL', sleeperId: '04yla', leagueId: 'L1' })
+    expect(card?.byeWeek).toBeNull()
+    expect(card?.schedule).toEqual({ available: false, reason: NON_WEEKLY_SCHEDULE })
+  })
+
+  it("finds who rosters him by the league's own id, not UNREADABLE", async () => {
+    leagueOn('fantrax')
+    identities([{ fantraxId: '04yla', rollingInsightsId: '1114' }])
+    overrides.roster = {
+      findMany: async () => [
+        { id: 'r1', platformUserId: 'u1', playerData: { players: ['zz999'], starters: ['zz999'] } },
+        { id: 'r2', platformUserId: 'u2', playerData: { players: [{ id: '04yla' }, { id: '05abc' }], starters: [{ id: '04yla' }] } },
+      ],
+    }
+    const card = await getPlayerCard({ sport: 'NHL', sleeperId: '04yla', leagueId: 'L1' })
+    expect(card?.league?.slot).toBe('STARTER')
+  })
+
+  it('weekly sports keep the strip; daily ones do not', () => {
+    expect(['NFL', 'ncaaf', null].map(isWeeklyScheduleSport)).toEqual([true, true, true])
+    expect(['NBA', 'NHL', 'MLB'].map(isWeeklyScheduleSport)).toEqual([false, false, false])
+  })
+
+  it('slotOfRosterId matches bare ids and platform-id objects, exactly', () => {
+    expect(slotOfRosterId({ players: ['04yla'], reserve: [] }, '04yla')).toBe('BENCH')
+    expect(slotOfRosterId({ players: [{ fantraxId: '04yla' }], ir: [{ fantraxId: '04yla' }] }, '04yla')).toBe('IR SLOT')
+    expect(slotOfRosterId({ players: ['04ylaX'] }, '04yla')).toBeNull()
   })
 })
 
