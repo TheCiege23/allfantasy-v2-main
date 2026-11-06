@@ -75,9 +75,9 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Scheduled auto-start, Classic BB | **B** | The tick starts `leagueType:'redraft'` only (`startScheduledRedraftDrafts.ts:145`, `redraftScheduledStart.ts:39`). Survivor/Guilly start only with autostart on. |
+| Scheduled auto-start, Classic BB | **Fixed** | The tick started `leagueType:'redraft'` only. `SCHEDULED_SEASONAL_LEAGUE_TYPES` (`redraftScheduledStart.ts`) now adds `best_ball` under redraft's rule: the draft time is the commitment. The tick's query and the settings UI read the same list. Guilly start still needs Autostart on. |
 | Server autopick when nobody is online | P / U | Needs `DRAFT_TICK_CRON_ENABLED==='true'`, which defaults off (`app/api/cron/draft-tick/route.ts:40-42`). Production value unverified. |
-| Autopick keeps a usable roster | **B** | `mustFillStarter` guards only the final best-available branch. Queue-first, draft-as-me and the orphan/Chimmy path skip it. |
+| Autopick keeps a usable roster | **Fixed** | One guard (`lib/live-draft-engine/autopickStarterGuard.ts`) now covers the queue, draft-as-me, need-based, best available and the Chimmy/orphan drafter. It bites only once the team's remaining picks just cover its open starting spots. |
 | Rounds = draftable capacity | P | NFL is correct (18). NBA/NHL/MLB use the generic registry (13/17/24 against 18/21/26 seats; code-read, not executed). |
 | No double-drafting under concurrency | W | Transaction re-reads the pick count; `@@unique([sessionId, overall])` (`PickSubmissionService.ts:413-428`). |
 | Exactly-once finalization | P | `completeDraftSession` updates without a status condition, so draft-ended notifications can duplicate (`DraftSessionService.ts:1217-1247`). |
@@ -157,16 +157,17 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
    - The daily path's per-day rule (`daysOnRoster`) could not be reused: per-day stat rows exist only for daily-lineup leagues.
 4. **Chopped Guilly teams could still add free agents and trade** *(Verified, fixed in branch)*.
    - Where: `lib/roster-legality/rosterTransactionGates.ts` checked only `survivorGuillotineChop`.
-5. **Classic Best Ball scheduled drafts never auto-start** *(code-read, not fixed)*.
-   - Where: `lib/draft/startScheduledRedraftDrafts.ts:145`.
-   - Impact: the draft waits for the commissioner to press Start. Combined with server autopick being off by default, "automatic" drafting is not delivered.
+5. **Classic Best Ball scheduled drafts never auto-started** *(fixed in branch)*.
+   - Where: `lib/draft/startScheduledRedraftDrafts.ts` filtered `leagueType: 'redraft'`.
+   - Now: Best Ball drafts start at their scheduled time, like redraft.
+   - ⚠ Server autopick for absent managers still needs `DRAFT_TICK_CRON_ENABLED=true` on the worker. It defaults off, and its production value is unverified; it was not changed here because setting a Railway variable redeploys the service.
 6. **The live wizard has no Best Ball setup** *(code-read)*. Every Best Ball choice the brief lists is silently defaulted, and the rules summary does not exist.
 7. **The Best Ball tab reads tables native scoring never writes** *(code-read)*. Members of AF-hosted leagues cannot see which players counted.
 
 ### P1 — integrity, automation and correctness gaps
 
 8. **Overlapping waiver runs** can award the same player twice or lose FAAB (`process-engine.ts:180,500`; only the cron takes the mutex).
-9. **Autopick can draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches.
+9. **Autopick could draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches *(fixed in branch)*. The orphan branch's wiring is covered by the shared guard's unit tests only, not by an end-to-end test.
 10. **NBA/NHL/MLB draft rounds below roster capacity** (code-read: 13/17/24 rounds against 18/21/26 seats).
 11. **The Guilly calendar is not validated** against teams − 1 or Final N length.
 12. **Missing stats seal as zero** up to the 80% coverage floor, and post-seal corrections are never applied (Guilly: `statCorrectionHandler.ts` stub).
@@ -220,7 +221,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 
 | Routine task | Trigger | Recovery | Remaining human work |
 |---|---|---|---|
-| Draft start (Classic BB) | **none** | — | Commissioner presses Start |
+| Draft start (Classic BB) | `draft-tick` every minute (fixed in branch) | Conditional claim on the session; setup blockers are retried each tick | None |
 | Draft start (Guilly) | `draft-tick` every minute, only with autostart on | Conditional claim on the session | Turn autostart on |
 | Autopick when away | `draft-tick`, only if `DRAFT_TICK_CRON_ENABLED` | Expired-pick processor | Unverified in production |
 | Stat ingestion | `import-player-game-stats` daily; `import-scores` every 2 min; score-sync pulls each week | Next tick | None |
@@ -236,8 +237,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 | Renewal | Commissioner POST | Duplicate guard | Selecting returning managers (intended) |
 
 **Manager strategy decisions** (intended to stay human): the draft, queue and rankings; FAAB bids in Guilly.
-**Commissioner administration that should not be needed but is today:** pressing Start on a scheduled Classic
-draft, pressing "process" on waivers, applying stat corrections, and noticing a stalled tournament.
+**Commissioner administration that should not be needed but is today:** pressing "process" on waivers, applying stat corrections, and noticing a stalled tournament.
 
 ---
 
@@ -248,8 +248,8 @@ draft, pressing "process" on waivers, applying stat corrections, and noticing a 
 2. **Roster-as-of-week for best ball scoring** (P0-3) — **done in this branch**, with the weekly ownership
    rule above. Weeks already sealed are not re-scored. Still open: the standard weekly lineup path, and a
    per-day split for NBA/NHL/MLB if per-day stats are ever written for every league.
-3. **Scheduled draft start for Classic Best Ball**, and turn on server autopick with a starter-coverage guard
-   on every autopick branch.
+3. **Scheduled draft start for Classic Best Ball** and **the starter guard on every autopick branch** —
+   **done in this branch**. Still open: confirm or set `DRAFT_TICK_CRON_ENABLED` on the worker (the user's call).
 4. **Wire the live wizard to the existing Best Ball settings model**, and show a rules summary (lineup
    automation, transaction policy, season window, champion rule).
 5. **Make the Best Ball tab read `RedraftMatchup.lineupSnapshots`**, label lineups provisional or final,
@@ -282,6 +282,9 @@ delegate):
 | `lib/redraft/scoringEngine.ts` | `scoreRosterBestBall` reads the roster as of each player's lock (native leagues). |
 | `lib/redraft/weekFinalizer.ts` | Best ball seals the same week roster it scores. |
 | `__tests__/bestball/best-ball-week-roster.test.ts` | 12 tests: the ownership rule, the loader, the scorer end to end and the finalizer. Controls: switching the scorer wiring off fails 1; disabling the ownership filter fails 4; reverting the finalizer fails 1, sealing `wLate` instead of `wDrop`. |
+| `lib/draft/redraftScheduledStart.ts`, `lib/draft/startScheduledRedraftDrafts.ts` | Classic Best Ball drafts start at their scheduled time. |
+| `lib/live-draft-engine/autopickStarterGuard.ts` (new), `autopickBestAvailableSubmit.ts`, `slow-draft/SlowDraftRuntimeService.ts`, `lib/orphan-ai-manager/OrphanAIManagerService.ts` | One starter guard for every autopick branch. |
+| `__tests__/live-draft-engine/autopick-starter-guard-all-branches.test.ts` (new), plus cases added to `autopick-fills-starters`, `scheduled-redraft-draft-start` and `redraft-scheduled-start-predicate` | Controls: reverting scheduled start fails 9+; removing the queue guard fails 2; reverting the resolver fails 1. The scan test was updated because it pinned `leagueType: 'redraft'`. |
 
 **The 19 tests cover:**
 
