@@ -236,7 +236,7 @@ export async function PATCH(
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
       const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
-      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : saved.error
+      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : ('message' in saved && saved.message) || saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }
     if (before) {

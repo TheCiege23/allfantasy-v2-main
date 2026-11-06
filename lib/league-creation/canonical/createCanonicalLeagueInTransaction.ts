@@ -26,6 +26,8 @@ import { getRedraftSportIntegration } from '@/lib/redraft-creation/sport-config'
 import type { SoccerPipeline } from '@/lib/redraft-creation/sport-config'
 import { soccerPipelineToPrismaVariant } from '@/lib/redraft-creation/create-redraft-league'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineCalendarFit, planGuillotineChopSchedule } from '@/lib/guillotine/calendarFit'
+import { ADVANCED_KEY, readAdvanced } from '@/lib/guillotine/chopSchedule'
 import type { PresetEngineOutput } from '@/lib/league-creation/canonical/types'
 import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
@@ -525,6 +527,32 @@ export async function createCanonicalLeagueInTransaction(
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
+  /*
+   * 🛑 A LARGE GUILLY COULD NOT FINISH. The config below is one chop a week from week 1 to the sport's
+   * last regular-season week, whatever the team count, so an NFL league of 20+ ended week 18 with
+   * several teams alive. When that schedule cannot reach the endgame, plan the fewest opening
+   * double-chop weeks that can (lib/guillotine/calendarFit.ts) — the "double-elimination weeks" the
+   * team-count limits already promise. Refuse only when even four chops every week cannot finish.
+   */
+  if (isGuillotine && guillotineProfile?.regularSeasonWeeks) {
+    const calendar = {
+      teamCount: managerCount,
+      startWeek: 1,
+      endWeek: guillotineProfile.regularSeasonWeeks,
+      baseChops: 1,
+      threshold: guillotineEndgame.threshold,
+      finalPeriods: guillotineEndgame.cumulativePeriods,
+    }
+    if (!guillotineCalendarFit({ ...calendar, advanced: readAdvanced(mergedSettings) }).fits) {
+      const planned = planGuillotineChopSchedule(calendar)
+      if (!planned) {
+        throw new Error(
+          `A ${managerCount}-team Guilly league cannot reach a champion in ${calendar.endWeek} weeks, even with four chops every week. Choose fewer teams.`,
+        )
+      }
+      mergedSettings[ADVANCED_KEY] = planned
+    }
+  }
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
   const playoffSettings = foundationDefaults.playoffSettings

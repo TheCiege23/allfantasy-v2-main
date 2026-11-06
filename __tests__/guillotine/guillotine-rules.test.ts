@@ -8,6 +8,8 @@ const getGuillotineConfig = vi.fn()
 const upsertGuillotineConfig = vi.fn()
 const hasFirstChopHappened = vi.fn()
 const evaluateUserFeatureAccess = vi.fn()
+// Teams in the league, for the calendar check (lib/guillotine/calendarFit.ts). 0 skips the check.
+const rosterCount = vi.fn(async () => 0)
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/guillotine/weeklyRecap', () => ({ hasGuillotineAiRecapPlan: async () => false }))
@@ -20,6 +22,7 @@ vi.mock('@/lib/prisma', () => {
     prisma: {
       ...tx,
       guillotineLeagueConfig: { findUnique: (...a: unknown[]) => configFindUnique(...a) },
+      roster: { count: (...a: unknown[]) => rosterCount(...(a as [])) },
       $transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     },
   }
@@ -182,6 +185,15 @@ describe('saveGuillotineRules', () => {
     const r = await saveGuillotineRules('L1', 'u1', { teamsPerChop: 2, statCorrectionHours: 12 })
     expect(r.ok).toBe(true)
     expect(upsertGuillotineConfig).toHaveBeenCalledWith('L1', { teamsPerChop: 2, statCorrectionHours: 12 })
+  })
+
+  it('refuses a calendar that cannot reach a champion, naming why, and saves nothing', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    rosterCount.mockResolvedValueOnce(24)
+    const r = await saveGuillotineRules('L1', 'u1', { eliminationEndWeek: 14 })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'eliminationEndWeek' })
+    expect((r as { error: string }).error).toMatch(/still has [0-9]+ alive after week 14/)
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
   })
 
   it('writes the endgame where resolveGuillotineEndgame reads it first (settings.guillotineEndgame) and keeps the column in step', async () => {
