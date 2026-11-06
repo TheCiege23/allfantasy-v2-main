@@ -318,7 +318,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     let resultsObservedAt: string | null = null;
     let weeklyOutcomes:ReturnType<typeof import('./weeklyOutcomeModel').weeklyOutcomes>|undefined;
     if (choice.source === 'imported' && choice.sport === 'NFL') {
-        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
+        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = { ...observation.report, teams: observation.report.teams.map(t => t.name === 'Team ' + t.rosterId ? { ...t, name: providerTeamName(t.rosterId) ?? t.name } : t) }; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
