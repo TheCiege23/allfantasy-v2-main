@@ -1,6 +1,6 @@
 /* Guillotine specialty home + chop moment. Layered on components/league/specialty/specialty.module.css. */
 .big { font-family: 'Bebas Neue', 'Archivo', sans-serif; letter-spacing: .02em; font-weight: 400; }
-.rank { width: 22px; flex: none; text-align: right; font: 700 12px 'JetBrains Mono', monospace; color: #7d84a3; }
+.rank { width: 22px; flex: none; text-align: right; font: 700 12px 'JetBrains Mono', monospace; color: var(--sp-t3, #7d84a3); }
 .name { flex: 0 1 190px; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pts { width: 64px; flex: none; text-align: right; font-weight: 700; }
 .delta { width: 64px; flex: none; text-align: right; font-size: 12px; }
@@ -11,12 +11,12 @@
   position: absolute; right: 0; top: -12px; white-space: nowrap; padding: 1px 8px; border-radius: 4px;
   background: #e0402e; color: #fff; font: 700 11px 'Archivo', sans-serif; letter-spacing: .08em;
 }
-.chopChip>s { color: #8d93ad; }
-.chopChip>span { color: #ff9a8a; }
+.chopChip>s { color: var(--sp-muted, #8d93ad); }
+.chopChip>span { color: var(--sp-zone, #ff9a8a); }
 .list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.survBig { font-size: 40px; line-height: 1; color: #bff3d0; }
-.survBigDanger { color: #ffd59a; }
-.survBigZone { color: #ffb0a4; }
+.survBig { font-size: 40px; line-height: 1; color: var(--gl-safe-big, #bff3d0); }
+.survBigDanger { color: var(--gl-danger-big, #ffd59a); }
+.survBigZone { color: var(--gl-zone-big, #ffb0a4); }
 
 /* ---------- phone vs desktop ---------- */
 .desktopOnly { display: contents; }
@@ -36,7 +36,7 @@
 .phoneHeadText { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .phoneTitle { margin: 0; font-size: 32px; line-height: 1; color: #fff; }
 .phoneStatus { text-align: center; padding: 20px 18px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-.phoneMargin { font-size: 64px; line-height: 1; color: #bff3d0; }
+.phoneMargin { font-size: 64px; line-height: 1; color: var(--gl-safe-big, #bff3d0); }
 .phoneCtas { display: flex; flex-direction: column; gap: 12px; }
 .phoneCtas>* { min-height: 52px; width: 100%; }
 
@@ -83,4 +83,14 @@
 @media (prefers-reduced-motion: reduce) {
   .blade, .slash, .card { transition: none; }
   .stamp, .released, .chopped .target { animation: none; }
+}
+
+/* Light mode (2026-11-06): the Guilly-only tokens. Set on .home (the shell root, via className) and reset inside the
+ * hero and .stayDark by components/league/specialty/specialty.module.css. */
+:global(html[data-mode='light']) .home {
+  --gl-safe-big: #097352;
+  --gl-danger-big: #8d5905;
+  --gl-zone-big: #a3260f;
+  --gl-me-row: #e8edf8;
+  --gl-me-line: rgba(11, 16, 32, .22);
 }
