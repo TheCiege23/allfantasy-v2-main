@@ -570,6 +570,33 @@ function toInput(a: PickedAsset) {
   return { kind: 'faab' as const, amount: a.amount }
 }
 
+/**
+ * `completedHistory` as a list, whether the caller passed one or a promise of one.
+ *
+ * ⚠ RESOLVED INTO STATE, NOT `use()`d. Suspending on it would hold the whole Trade Center — header,
+ * builder and all — behind the one read it was split out to stop waiting for. Until a promise lands
+ * the offers and timeline render without the imported rows (the timeline's own native rows are read
+ * client-side regardless), and `ready` stays false so nothing decides "this trade is not in the
+ * history" on a list that has not arrived. A rejected promise counts as an empty list.
+ */
+export function useCompletedHistory(
+  source: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]> | undefined,
+): { ready: boolean; list: readonly TradeRecord[] | undefined } {
+  const pending = source != null && typeof (source as PromiseLike<unknown>).then === 'function'
+  const [landed, setLanded] = useState<{ from: unknown; list: readonly TradeRecord[] } | null>(null)
+  useEffect(() => {
+    if (!pending) return
+    let live = true
+    Promise.resolve(source as PromiseLike<readonly TradeRecord[]>).then(
+      (list) => { if (live) setLanded({ from: source, list }) },
+      () => { if (live) setLanded({ from: source, list: [] }) },
+    )
+    return () => { live = false }
+  }, [source, pending])
+  if (!pending) return { ready: true, list: source as readonly TradeRecord[] | undefined }
+  return landed && landed.from === source ? { ready: true, list: landed.list } : { ready: false, list: undefined }
+}
+
 export function TradeCenter(props: {
   /** Authenticated account identity, supplied by the server for device draft isolation. */
   viewerId?: string | null
@@ -615,7 +642,12 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
-  completedHistory?: readonly TradeRecord[]
+  /**
+   * The league's completed Sleeper trades, merged into the offers fold and the timeline. A promise
+   * when the page streams them (`/core/trades`: the history read is the slow one, so the Trade Center
+   * paints without it and merges them in when they land); a list when the caller already has them.
+   */
+  completedHistory?: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]>
   /**
    * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
@@ -694,11 +726,14 @@ export function TradeCenter(props: {
    * agree on the first paint, and before the focus hook scrolls.
    */
   const [offersOpen, setOffersOpen] = useState(false)
+  const completedHistory = useCompletedHistory(props.completedHistory)
   useEffect(() => {
+    // ⚠ Not before a streamed history has landed: "not in the history" is unknowable until then.
+    if (!completedHistory.ready) return
     const tradeId = new URLSearchParams(window.location.search).get('trade')
     if (!tradeId) return
-    if (!props.completedHistory?.some((trade) => trade.transactionId === tradeId)) setOffersOpen(true)
-  }, [props.completedHistory])
+    if (!completedHistory.list?.some((trade) => trade.transactionId === tradeId)) setOffersOpen(true)
+  }, [completedHistory.ready, completedHistory.list])
   /* The control that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
@@ -2284,7 +2319,7 @@ export function TradeCenter(props: {
             screenshotDone={screenshotRead.done ?? null}
             onCounter={startCounter}
             reloadToken={inboxReloadToken}
-            importedHistory={props.completedHistory}
+            importedHistory={completedHistory.list}
             onNeedsYouCount={setNeedsYou}
           />
         </div>
@@ -2885,7 +2920,7 @@ export function TradeCenter(props: {
             onCounter={startCounter}
             reloadToken={inboxReloadToken}
             onChanged={bumpInboxReload}
-            importedHistory={props.completedHistory}
+            importedHistory={completedHistory.list}
           />
         ) : null}
       </div>
