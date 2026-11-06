@@ -65,3 +65,7 @@
 .af-archive th{overflow-wrap:normal;word-break:normal}
 /* The closed "Timing and source details" label sat at the top of its 44px row; centre it, keep the marker. */
 .af-archive-tech>summary{min-height:0;padding:11px 0;line-height:22px}
+/* Columns with no data for the draft are dropped, so the table is only as wide as what it shows:
+   five columns no longer scroll sideways at the width nine did (112px a column, 1008px for nine). */
+.af-archive table{min-width:calc(var(--af-cols,9) * 112px)}
+.af-archive-cols-note{margin:.5rem 0 0;color:var(--text2);font-size:12px}

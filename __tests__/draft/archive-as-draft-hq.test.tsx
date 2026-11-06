@@ -117,6 +117,32 @@ describe('the archive as Draft HQ', () => {
     expect(document.querySelector('.af-archive-table')?.textContent).toContain('GuapCiege')
   })
 
+  const picksTable = () => screen.getByRole('region', { name: 'Archived picks' })
+  const heads = () => [...picksTable().querySelectorAll('th')].map(th => th.textContent)
+  const cellsPerRow = () => [...picksTable().querySelectorAll('tbody tr')].map(tr => tr.querySelectorAll('td').length)
+
+  it('drops every column the draft has no data for, and says so', () => {
+    // Live /core 2026-11-06: an imported Sleeper draft read "—" in four columns on all 168 rows.
+    const d = detail()
+    d.picks.forEach((p, i) => Object.assign(p, { slot: i + 1, actorName: 'Manager ' + i, source: 'sleeper' }))
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(heads()).toEqual(['Pick', 'Player', 'Receiving team', 'Original slot', 'Selected by'])
+    expect(cellsPerRow()).toEqual([5, 5])
+    expect((picksTable().querySelector('table') as HTMLElement).style.getPropertyValue('--af-cols')).toBe('5')
+    expect(document.querySelector('.af-archive-cols-note')?.textContent).toContain('Timing and source details')
+    expect(picksTable().textContent).not.toContain('— / sleeper')
+  })
+
+  it('keeps a column when any one pick has a value, so a filter never makes it flicker', () => {
+    const d = detail()
+    Object.assign(d.picks[1], { slot: 2, originalRosterId: 'r1', originalTeamName: 'Club 1', actorName: 'M', selectedAt: '2026-08-30T01:01:00.000Z', elapsedMs: 30_000, activeMs: 25_000, allowanceSeconds: 90, amount: 12, adp: 1.5, adpDifference: 0.5 })
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(heads()).toHaveLength(9)
+    expect(cellsPerRow()).toEqual([9, 9])
+    expect(heads()).toContain('Original slot / owner')
+    expect(document.querySelector('.af-archive-cols-note')).toBeNull()
+  })
+
   it('reads Spanish', () => {
     h.language = 'es'
     render(<DraftArchive {...props} detail={detail()} asDraftHq />)
