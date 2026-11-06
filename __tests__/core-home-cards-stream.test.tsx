@@ -305,6 +305,8 @@ describe('/core home cards stream independently', () => {
     const { cards } = await homeCards()
     expect([...cards.keys()]).toEqual([
       'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
+      // The folded trade evaluator (2026-11-06), after the bands.
+      'trade-evaluator',
       'chimmy', 'career', 'rivals', 'following', 'leagues', 'coverage',
     ])
   })
@@ -341,6 +343,8 @@ describe('/core home cards stream independently', () => {
       'carryover',
       'user-os',
       'schedule',
+      // The folded trade evaluator (2026-11-06): one closed row after the bands, before the dashboard.
+      'trade-evaluator',
       'routine',
       'matchups',
       'chimmy',

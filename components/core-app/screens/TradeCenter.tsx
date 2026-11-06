@@ -387,6 +387,59 @@ function sportFromMeta(meta: string | null | undefined): string | null {
   return ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(first) ? first : null
 }
 
+/**
+ * The league trade evaluator on its own: a league picker, then that league's builder with Team A as
+ * you and Team B a manager dropdown — or, for an offer from somewhere AllFantasy cannot see, the
+ * no-league analyzer. The Trades hub renders it in its evaluator section; Home renders it inside a
+ * folded card (HomeTradeEvaluatorCard). One component, so the two cannot drift apart.
+ */
+export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?: string | null }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  /*
+   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
+   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
+   * from somewhere AllFantasy cannot see.
+   */
+  const OUTSIDE = 'outside'
+  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
+  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
+  return (
+    <>
+      <label className="af-tc-hub-league-select">
+        <span>{copy('League')}</span>
+        <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
+          {props.leagues.map((league) => (
+            <option key={league.id} value={league.id}>
+              {league.name}{league.meta ? ` · ${league.meta}` : ''}
+            </option>
+          ))}
+          <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
+        </select>
+      </label>
+      {evalLeague ? (
+        <>
+          <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
+          {/*
+            The league's own Trade Center builder, keyed by league so switching leagues starts a
+            clean deal instead of carrying one team's players into another league.
+          */}
+          <TradeCenter
+            key={evalLeague.id}
+            embedded
+            viewerId={props.viewerId}
+            league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
+            platform={evalLeague.platform}
+            sport={sportFromMeta(evalLeague.meta)}
+          />
+        </>
+      ) : (
+        <GenericTradeAnalyzer viewerId={props.viewerId} />
+      )}
+    </>
+  )
+}
+
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
@@ -396,14 +449,6 @@ function AllLeaguesTradeHub(props: {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const [query, setQuery] = useState('')
-  /*
-   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
-   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
-   * from somewhere AllFantasy cannot see.
-   */
-  const OUTSIDE = 'outside'
-  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
-  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
@@ -428,36 +473,7 @@ function AllLeaguesTradeHub(props: {
             <h2>{copy('Build a trade in one of your leagues')}</h2>
           </div>
         </div>
-        <label className="af-tc-hub-league-select">
-          <span>{copy('League')}</span>
-          <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
-            {props.leagues.map((league) => (
-              <option key={league.id} value={league.id}>
-                {league.name}{league.meta ? ` · ${league.meta}` : ''}
-              </option>
-            ))}
-            <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
-          </select>
-        </label>
-        {evalLeague ? (
-          <>
-            <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
-            {/*
-              The league's own Trade Center builder, keyed by league so switching leagues starts a
-              clean deal instead of carrying one team's players into another league.
-            */}
-            <TradeCenter
-              key={evalLeague.id}
-              embedded
-              viewerId={props.viewerId}
-              league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
-              platform={evalLeague.platform}
-              sport={sportFromMeta(evalLeague.meta)}
-            />
-          </>
-        ) : (
-          <GenericTradeAnalyzer viewerId={props.viewerId} />
-        )}
+        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} />
       </section>
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
