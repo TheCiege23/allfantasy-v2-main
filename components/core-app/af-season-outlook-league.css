@@ -619,3 +619,164 @@
     font-size: 26px;
   }
 }
+
+/* ── Odds history (components/core-app/outlook/OddsHistoryChart.tsx) ─────────
+   Your playoff % (--chart-1) and title % (--chart-2) by week, one 0–100% axis.
+   Same chrome as the Plans token-spend chart: mono uppercase title, recessive
+   grid, 2px lines, text in text tokens, the colour only on the marks. */
+
+.af-core .af-sol .af-olk-hist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-card, 16px);
+  background: var(--surface);
+  color: var(--text);
+}
+.af-core .af-sol .af-olk-hist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+}
+.af-core .af-sol .af-olk-hist-title {
+  margin: 0;
+  color: var(--muted);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.af-core .af-sol .af-olk-hist-legend {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.af-core .af-sol .af-olk-hist-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-core .af-sol .af-olk-hist-plot {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--af-radius-inner, 12px);
+  outline-offset: 2px;
+}
+.af-core .af-sol .af-olk-hist-plot:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.af-core .af-sol .af-olk-hist-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.af-core .af-sol .af-olk-hist-tick {
+  fill: var(--muted);
+  font: 500 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-core .af-sol .af-olk-hist-end {
+  fill: var(--text2);
+  font: 600 12px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-core .af-sol .af-olk-hist-end-v {
+  fill: var(--text);
+  font-weight: 800;
+}
+.af-core .af-sol .af-olk-hist-tip {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.55);
+  color: var(--text2);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.af-core .af-sol .af-olk-hist-tip[data-align='start'] {
+  transform: translateX(-12px);
+}
+.af-core .af-sol .af-olk-hist-tip[data-align='end'] {
+  transform: translateX(calc(-100% + 12px));
+}
+.af-core .af-sol .af-olk-hist-tip-w {
+  color: var(--muted);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-core .af-sol .af-olk-hist-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-core .af-sol .af-olk-hist-tip-row i {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+.af-core .af-sol .af-olk-hist-tip-row b {
+  color: var(--text);
+  font: 800 13px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-core .af-sol .af-olk-hist-note {
+  margin: 0;
+  color: var(--text2);
+  font-size: 12px;
+}
+.af-core .af-sol .af-olk-hist-data summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-core .af-sol .af-olk-hist-data table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+}
+.af-core .af-sol .af-olk-hist-data th,
+.af-core .af-sol .af-olk-hist-data td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.af-core .af-sol .af-olk-hist-data thead th {
+  color: var(--muted);
+  font-weight: 700;
+}
+.af-core .af-sol .af-olk-hist-data td {
+  text-align: right;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-core .af-sol .af-olk-hist-data thead th:not(:first-child) {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .af-core .af-sol .af-olk-hist {
+    padding: 14px 12px;
+  }
+}

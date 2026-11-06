@@ -229,6 +229,28 @@ describe('SeasonOutlookLeague', () => {
     expect(document.body.textContent).toContain('We cannot tell which team is yours')
     expect(document.querySelector('.af-olk-hero')).toBeNull()
   })
+
+  it('draws the odds-history chart under the forecast when two or more weeks are stored', () => {
+    const history = [
+      { week: 3, playoffPct: 41, titlePct: 6 },
+      { week: 4, playoffPct: 55, titlePct: 9 },
+      { week: 5, playoffPct: 63.4, titlePct: 14.2 },
+    ]
+    render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" history={history} />)
+    const chart = document.querySelector('.af-olk-hero [data-testid="outlook-odds-history"]')!
+    expect(chart).toBeTruthy()
+    expect(chart.textContent).toContain('How your odds moved')
+    expect(chart.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
+  it('draws no chart and no empty box without history, or with a single week', () => {
+    const { unmount } = render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" />)
+    expect(document.querySelector('[data-testid="outlook-odds-history"]')).toBeNull()
+    expect(document.querySelector('.af-olk-hist')).toBeNull()
+    unmount()
+    render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" history={[{ week: 5, playoffPct: 63, titlePct: 14 }]} />)
+    expect(document.querySelector('.af-olk-hist')).toBeNull()
+  })
 })
 
 describe('SeasonOutlook (cross-league)', () => {

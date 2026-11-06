@@ -204,6 +204,7 @@ import { WeekHistoryNotice } from '@/components/core-app/WeekHistoryNotice'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { readOddsHistory } from '@/lib/core-app/seasonOutlookOddsHistory'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
@@ -3696,6 +3697,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .catch(() => null)
       : null
 
+  /*
+   * Your playoff and title odds by week this season, for the same one league (`league_odds_snapshots`).
+   * Null when the table is missing, the read fails or fewer than two weeks are on file — the screen then
+   * draws no chart at all. Display only; a failed read costs the chart and nothing else.
+   */
+  const outlookHistoryLeague =
+    activeKey === 'season-outlook' && selectedLeagueId
+      ? outlook?.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null
+      : null
+  const outlookHistoryInput = outlookHistoryLeague ? outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null : null
+  const outlookHistory =
+    outlookHistoryLeague?.you && outlookHistoryInput
+      ? await readOddsHistory(outlookHistoryInput, outlookHistoryLeague.season, outlookHistoryLeague.you.rosterId).catch(() => null)
+      : null
+
   /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
   const outlookFreshness = outlookFresh
     ? {
@@ -5432,6 +5448,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               priorities={outlook.priorities}
               freshness={outlookFreshness}
               lineups={outlookLineups}
+              history={outlookHistory}
             />
           ) : (
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />

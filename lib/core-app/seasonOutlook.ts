@@ -36,6 +36,7 @@ import {
   writeLeagueSims,
   type LeagueSimResult,
 } from './seasonOutlookSims'
+import { snapshotFromRun, writeOddsSnapshot } from './seasonOutlookOddsHistory'
 import {
   BRANCH_ITERATIONS,
   buildFocusInsights,
@@ -859,6 +860,19 @@ export async function getSeasonOutlook(
     toWrite.push([p.pid, result])
   }
   if (toWrite.length > 0) await writeLeagueSims(toWrite, now)
+  /*
+   * Odds history, opportunistically: each run computed here is also this week's row in
+   * `league_odds_snapshots`. Not awaited — the render never waits on it — and `writeOddsSnapshot`
+   * never throws (a missing table is a no-op). The scheduled pre-compute is the writer that keeps the
+   * table current; this only saves a cron fire's wait for a league someone just opened.
+   */
+  if (toWrite.length > 0) {
+    const byPid = new Map(prepared.map((p) => [p.pid, p]))
+    for (const [pid, result] of toWrite) {
+      const p = byPid.get(pid)
+      if (p) void writeOddsSnapshot(snapshotFromRun(p, result)).catch(() => undefined)
+    }
+  }
 
   const out: OutlookLeague[] = []
   for (const p of prepared) {
