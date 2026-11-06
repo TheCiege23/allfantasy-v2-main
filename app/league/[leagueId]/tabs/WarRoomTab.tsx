@@ -265,7 +265,9 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
               <p className={`rdt-eyebrow ${identity ? 'rdt-eyebrow-accent' : ''}`}>
                 {identity
                   ? `Redraft war room · ${identity.sportLabel}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
-                  : 'War room'}
+                  : isDynasty
+                    ? `Dynasty war room · ${sportU}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
+                    : 'War room'}
               </p>
               <h1 className="text-lg font-bold tracking-tight rdt-text md:text-xl">AF Legacy</h1>
               <p className="text-[12px] rdt-faint">
@@ -287,6 +289,10 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         </Link>
       </header>
 
+      {/* Dynasty leagues get the dynasty-horizon War Room (value/age/direction) FIRST: the plan upsell used to sit above
+          it, so on a phone the panel about this league began a screen and a half down. */}
+      {isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
+
       {isZombieLeague && <ZombieWarRoomShortcuts leagueId={league.id} />}
 
       <div className="rdt-bridge">
@@ -295,9 +301,6 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
 
       {/* Redraft leagues get a data-grounded War Room scoped to THIS league. */}
       {isRedraftLeague ? <RedraftWarRoomPanel leagueId={league.id} /> : null}
-
-      {/* Dynasty leagues get the dynasty-horizon War Room (value/age/direction). */}
-      {isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
 
       {/* Keeper leagues get the keeper War Room (value surplus / keep-cut / draft plan). */}
       {isKeeperLeague ? <KeeperWarRoomPanel leagueId={league.id} /> : null}
