@@ -2023,6 +2023,8 @@ model LeagueTrade {
 
   @@unique([historyId, transactionId])
   @@index([historyId])
+  // The Trades screen joins LeagueTrade to warehouse facts by `transactionId IN (...)` (lib/core-app/trades.ts).
+  @@index([transactionId])
   @@index([analyzed])
   @@index([season])
   @@index([platform])
@@ -14433,6 +14435,8 @@ model TransactionFact {
   createdAt     DateTime @default(now())
 
   @@index([leagueId, createdAt])
+  // The Trades screen's history read: `leagueId` + `type` filter, newest season/week first (lib/core-app/trades.ts).
+  @@index([leagueId, type, season, weekOrPeriod])
   @@index([playerId, sport])
   @@index([type])
   @@map("dw_transaction_facts")
