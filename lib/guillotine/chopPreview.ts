@@ -34,6 +34,8 @@ export type ChopPreviewTeam = {
 
 export type ChopPreviewInput = {
   week: number
+  /** The chop engine's tiebreak seed (`leagueId:season`), so a seeded tie previews as it will chop. */
+  tiebreakSeed?: string
   /** 'live': games still to play this week, so the order can change. 'final': waiting on the correction window. */
   weekState: 'live' | 'final'
   eliminationStartWeek: number
@@ -135,6 +137,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     teamsPerChop: chopCount,
     weekOrPeriod: input.week,
     draftSlotByRoster: input.draftSlotByRoster,
+    tiebreakSeed: input.tiebreakSeed,
   })
   const chopped = new Set(choppedRosterIds)
   const immune = new Set(immunity.protectedIds)
