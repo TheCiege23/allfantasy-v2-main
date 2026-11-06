@@ -94,7 +94,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Classic: manual lineup saves refused | P | Refused only for Guilly+BB (`lineupService.ts:177`). Classic saves "succeed" and change nothing except IR/taxi exclusion. |
 | Guilly: survivors keep FAAB/waivers | W | Nothing disables them. This branch explicitly exempts Guilly from the new gate. |
 | FAAB ordering, $0 bids, minimum bid, roster space, blind bids | W | `process-engine.ts:398-431,686-707`. Members see only their own claims. |
-| Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Still open: an instant free-agent add racing a run can put one player on two rosters; the add path takes no lock. |
+| Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Instant free-agent adds now take the same lock around their check-then-write (`leagueWaiverLock.ts`). |
 | No retroactive points for acquisitions | **Fixed (best ball)** | See P0-3. The standard weekly (non-daily) lineup path still reads the current roster; its starters are locked per game, so the exposure there is smaller. |
 | Ownership history | W | `addedAt`/`droppedAt` are now read by best ball scoring. A trade moves the row and keeps `addedAt`, so trades are not split by week; best ball refuses trades. |
 
@@ -106,10 +106,10 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Final-only before a chop | W | All games final + 12h grace + coverage floor + correction window (`weekFinalizer.ts:439-449`; `nativeGuillotineWeek.ts:155-166`). |
 | Missing stats | P | Above 80% coverage, the missing players are sealed at 0 (`weekFinalizer.ts:60-69,618-639`). |
 | Post-chop stat corrections | M | `statCorrectionHandler.ts:13-35` is a stub. |
-| Ties | P | Configurable order. The final fallback is `Math.random` or DB order, which is not reproducible (`GuillotineTiebreakResolver.ts:38,73-79`). |
+| Ties | **Fixed** | Configurable order. The `random` step and the every-step-spent fallback now use a seeded order (`leagueId:season`, period, roster), so a retry, the preview and an audit agree (`GuillotineTiebreakResolver.seededOrder`). |
 | Double chops, Final N | W | `chopSchedule.ts`, `endgameRules.ts`. A Final N is not validated against the season length. |
 | Idempotency and recovery | W | Two locks, a unique index on (season, period, roster), the audit row, and `resumeAuditedRosterRelease` every tick. |
-| Calendar = teams − 1 | **B** | Not validated. 27 teams are allowed against 18 NFL weeks, and the season just ends ranked by points. |
+| Calendar = teams − 1 | **Fixed** | `lib/guillotine/calendarFit.ts`: creation plans opening double-chop weeks when one a week cannot finish (refuses only if four a week cannot); the rules and chop-schedule editors refuse a calendar that cannot reach a champion. |
 | Release into the fair process | P | Blind-FAAB hold works. The chop writes no drop transaction, so the after-drop waiver hold may not apply in instant-FA leagues (code-read). |
 | Eliminated team: no transactions | **Fixed** | Previously only claims were blocked. Add/drop and trades through the roster gate are now refused. |
 | Eliminated team: keeps view access; commissioner powers separate | W | Membership kept; `commissioner/permissions.ts` is independent of elimination. |
@@ -123,7 +123,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Feature | Status | Evidence |
 |---|---|---|
 | Best Ball tab shows the scoring lineup | **Fixed** | Hosted leagues now read the matchup snapshot's started lineup and `league_player_weekly_scores` (`lib/bestball/nativeBestBallTabLoad.ts`). Imported leagues keep the legacy tables. |
-| Provisional label and "why he counted" | **Fixed (tab)** | Each card is Final or Provisional, shows unfilled slots and players still awaiting stats, and gives each bench player a one-sentence reason (`benchReason`). My Team still says "Your **provider** selects…" (`MyTeam.tsx:1944-1946`). |
+| Provisional label and "why he counted" | **Fixed (tab)** | Each card is Final or Provisional, shows unfilled slots and players still awaiting stats, and gives each bench player a one-sentence reason (`benchReason`). My Team now says AllFantasy picks the lineup in hosted leagues. |
 | No "set your lineup" nags for Classic | P | Chimmy lineup and slate-lock alerts skip best ball. The commissioner reminder recipe (off by default) and the AI commissioner alert do not. |
 | Weekly recap / power rankings | **B** | Scheduled as GET; the routes export POST only, so they 405 every week (`app/api/redraft/ai/weekly-recap/route.ts:8`). |
 | Discovery | P | Public leagues are listed. No Guilly category. |
@@ -131,7 +131,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Revoked invite link | B | A disabled link still works unless visibility is `invite_only` (`InviteValidationResolver.ts:212`). |
 | Joins closed after the draft | **M** | Closed for Survivor only (`join/route.ts:307-314`). |
 | Android → app/Play; iPhone/desktop → web | P | Android relies on App Links (`assetlinks.json`). There is no Play prompt for league invites. Destination is kept through sign-in via `callbackUrl`. |
-| Renewal | P | Duplicate guard, claim/trade cancel and new draft work. Guilly chops reset. **A tournament renewal keeps a completed `bbContestId`, so the new season auto-completes on its first tick** (code-read). |
+| Renewal | P | Duplicate guard, claim/trade cancel and new draft work. Guilly chops reset. **Fixed:** a renewed tournament league no longer ends its new season at once; a stale completed contest is rolled to a fresh one, and a superseded season is left alone (`nativeTournament.ts`). |
 | Chimmy reads real state | P | Sport, scoring and structure come from the league. Lineup slots come from sport defaults, and score history from `weeklyScore`. |
 | Chimmy cannot write official state | W | `AIActionWriteScope.ts:5`; no score/chop/pick/FAAB writers found. |
 | Hidden data | W | `get_waiver_status` returns only the asker's own bids. |
@@ -171,9 +171,9 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
    - Still open: instant free-agent adds take no lock.
 9. **Autopick could draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches *(fixed in branch)*. The orphan branch's wiring is covered by the shared guard's unit tests only, not by an end-to-end test.
 10. **NBA/NHL/MLB draft rounds below roster capacity** (code-read: 13/17/24 rounds against 18/21/26 seats).
-11. **The Guilly calendar is not validated** against teams − 1 or Final N length.
+11. **The Guilly calendar was not validated** against teams − 1 or Final N length *(fixed in branch)*.
 12. **Missing stats seal as zero** up to the 80% coverage floor, and post-seal corrections are never applied (Guilly: `statCorrectionHandler.ts` stub).
-13. **Tournament renewal auto-completes the new season** (code-read).
+13. **Tournament renewal auto-completed the new season** *(fixed in branch)*. A second path to the same result was also found: last season, still in score-sync's batch, re-finalized the renewed league every tick.
 14. **Weekly recap and power rankings crons 405 every week.**
 15. **Private-league joins skip commissioner approval**; joins stay open after the draft; revoked links still work for private leagues.
 16. **Commissioner Best Ball edits have no lock or audit**, and playoff/season-length edits are not applied.
@@ -183,7 +183,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 
 18. NBA/NHL/MLB labelled "daily" but computed weekly; `bbScoringPeriod` is unread.
 19. "No playoffs" still writes 6 playoff teams; season-total leagues still crown a bracket winner when `playoffTeams > 0`.
-20. Non-reproducible final Guilly tiebreak (`Math.random`/DB order).
+20. Non-reproducible final Guilly tiebreak *(fixed in branch: seeded order)*.
 21. `GuillySetup` refuses best ball and double chops for stale reasons.
 22. My Team says "provider" for AF-hosted leagues; the War Room uses sport-default slots.
 23. Best ball draft-rec AI is a stub.
@@ -290,6 +290,11 @@ delegate):
 | `__tests__/waiver-wire/waiver-run-serialization.test.ts` (new) | 7 tests. Controls: shared roster state off fails 1; run lock off fails 2; compare-and-set off fails 1. The mock writes unconditionally when no snapshot is sent, so the CAS test can fail. |
 | `lib/bestball/nativeBestBallTab.ts` (new), `nativeBestBallTabLoad.ts` (new), `app/api/leagues/[leagueId]/bestball/handler.ts`, `app/league/[leagueId]/tabs/BestBallTab.tsx` | The Best Ball tab reads native scoring, with labels and reasons. |
 | `__tests__/bestball/native-best-ball-tab.test.tsx` (new) | 12 tests: reasons, cards, loader, the API route and a render. Controls: tab reverted fails 1; late-stats branch off fails 1; handler reverted fails 1. |
+| `lib/waiver-wire/leagueWaiverLock.ts` (new), `free-agent-service.ts` | Instant free-agent adds take the league waiver lock. Test: `instant-add-waiver-lock` (3; lock off fails 2). |
+| `lib/guillotine/GuillotineTiebreakResolver.ts`, `chopPreview*.ts`, `GuillotineEliminationEngine.ts` | Seeded last-resort tiebreak. Test: `tiebreak-deterministic` (6; resolver reverted fails 4). |
+| `lib/guillotine/calendarFit.ts` (new), creation, `guillotineRulesSave.ts`, `guillotineAdvancedSettings.ts` | Calendar must reach a champion. Tests: `calendar-fit` (7) and a refusal in `guillotine-rules` (check off fails 1). |
+| `lib/bestball/nativeTournament.ts` | Tournament renewal rollover and superseded guard. Test: `native-tournament-renewal` (4; fix off fails 3). |
+| `components/core-app/screens/MyTeam.tsx`, `coreUiCopy.ts` | Hosted Best Ball banner names AllFantasy. Test in `my-team-screen` (reverted fails 1). |
 
 **The 19 tests cover:**
 

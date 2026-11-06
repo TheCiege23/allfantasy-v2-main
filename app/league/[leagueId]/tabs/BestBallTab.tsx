@@ -171,7 +171,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                       {lineup.status ? (
                         <span
                           data-testid="bestball-lineup-status"
-                          className={`rounded-full px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide ${
+                          className={`rounded-full px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide ${
                             lineup.status === 'final' ? 'bg-emerald-400/15 text-[#a7f3d0]' : 'bg-amber-400/15 text-[#fde68a]'
                           }`}
                         >
@@ -191,12 +191,12 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     Waiting on stats for {lineup.awaitingStats} player{lineup.awaitingStats === 1 ? '' : 's'}; this total can still change.
                   </p>
                 ) : null}
-                <div className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-white/35">Counted</div>
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35">Counted</div>
                 <div className="mt-1.5 space-y-1.5">
                   {lineup.starters.map((starter) => (
                     <div key={`${starter.slot}-${starter.playerId}`} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="w-12 shrink-0 rounded bg-[#ff3d81]/15 px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#ffb8d1]">
+                        <span className="w-12 shrink-0 rounded bg-[#ff3d81]/15 px-1.5 py-0.5 text-center text-[11px] font-semibold text-[#ffb8d1]">
                           {starter.slot ?? starter.position}
                         </span>
                         <div className="min-w-0">
@@ -213,7 +213,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                   {(lineup.unfilledSlots ?? []).map((slot, i) => (
                     <div key={`unfilled-${slot}-${i}`} className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-rose-300/25 px-3 py-2 text-xs text-rose-200/80">
                       <span>
-                        <span className="mr-2 inline-block w-12 rounded bg-rose-400/10 px-1.5 py-0.5 text-center text-[10px] font-semibold">{slot}</span>
+                        <span className="mr-2 inline-block w-12 rounded bg-rose-400/10 px-1.5 py-0.5 text-center text-[11px] font-semibold">{slot}</span>
                         No eligible player on the roster
                       </span>
                       <span className="font-semibold">0.00</span>
@@ -222,7 +222,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                 </div>
                 {lineup.bench.length > 0 ? (
                   <details className="group mt-3">
-                    <summary className="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-wide text-white/35 hover:text-white/60">
+                    <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-wide text-white/35 hover:text-white/60">
                       Didn&apos;t count ({lineup.bench.length}) <span className="normal-case tracking-normal text-white/30 group-open:hidden">· show why</span>
                     </summary>
                     <div className="mt-1.5 space-y-1.5">
@@ -303,7 +303,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                   <div key={`${lineup.rosterId}-${row.week}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
                     <span className="text-white/60">
                       Week {row.week}
-                      {row.status === 'provisional' ? <span className="ml-2 text-[10px] font-semibold uppercase text-[#fde68a]/80">Provisional</span> : null}
+                      {row.status === 'provisional' ? <span className="ml-2 text-[11px] font-semibold uppercase text-[#fde68a]/80">Provisional</span> : null}
                     </span>
                     <span className="font-semibold text-[#ffd7e5]">{row.totalPoints.toFixed(2)}</span>
                   </div>
