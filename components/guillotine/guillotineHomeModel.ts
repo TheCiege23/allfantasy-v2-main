@@ -107,6 +107,31 @@ export function tiebreakLabels(order: readonly string[] | null | undefined): str
   return (order ?? []).map((s) => TIEBREAK_LABEL[s] ?? s.replace(/_/g, ' '))
 }
 
+/**
+ * The Rules & Settings card, in words. It used to print the stored config verbatim ("Elimination end 11",
+ * `season_points → previous_period`, "— pts"); the tiebreak order uses tiebreakLabels so it reads exactly as the
+ * hub's "Ties are broken by" card on the same page.
+ */
+export function guillotineRuleRows(config: {
+  eliminationStartWeek: number
+  eliminationEndWeek: number | null
+  teamsPerChop: number
+  tiebreakerOrder?: readonly string[] | null
+  dangerMarginPoints: number | null
+}): { label: string; value: string | string[] }[] {
+  const ties = tiebreakLabels(config.tiebreakerOrder)
+  return [
+    { label: 'First chop', value: `Week ${config.eliminationStartWeek}` },
+    { label: 'Last chop', value: config.eliminationEndWeek != null ? `Week ${config.eliminationEndWeek}` : 'No last week set' },
+    { label: 'Chopped each week', value: `${config.teamsPerChop} ${config.teamsPerChop === 1 ? 'team' : 'teams'}` },
+    {
+      label: 'Danger tier',
+      value: config.dangerMarginPoints != null ? `Within ${config.dangerMarginPoints} points of the cut` : 'Not set',
+    },
+    { label: 'Ties are broken by', value: ties.length > 0 ? ties : 'Not set' },
+  ]
+}
+
 /** Tier → the spec's words. Colour is never the only signal; this text always renders. */
 export function tierLabel(tier: ChopLineRow['tier']): string {
   return tier === 'chop_zone' ? 'Chop zone' : tier === 'danger' ? 'Danger' : 'Safe'
