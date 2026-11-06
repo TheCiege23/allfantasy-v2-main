@@ -109,7 +109,8 @@ export default async function PricingPage(
       readWeeklyTokenSpend(userId),
     ]);
     if (isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)) {
-      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null };
+      // The spend chart reads the viewer's own ledger, which an admin account has like anyone else.
+      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null, weeklySpend };
     } else if (access) {
       const planIds = access.hasSubscription ? access.subscription.plans : [];
       account = {

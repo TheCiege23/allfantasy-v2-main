@@ -32,6 +32,11 @@ import {
 } from '@/lib/projections/futureWeekProjections'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 import {
+  normalizeIdentitySport,
+  resolveFantraxIdentities,
+  type RosterPlayerIdentity,
+} from '@/lib/player-identity/resolveRosterPlayerIdentities'
+import {
   buildDynastyRosterMarkers,
   isCollegeProspect,
   isDevyFormatLeague,
@@ -1663,6 +1668,48 @@ export type PlayerCardRequest = {
  * failure into an unavailable reason, so one cold table cannot blank the card —
  * the modal has to render something the moment it opens.
  */
+/** How the card's first `SportsPlayer` read is keyed. */
+export type PlayerCardAnchorLookup =
+  | { sleeperId: string }
+  | { externalId: string; source?: string }
+
+/**
+ * 🛑 A FANTRAX ROSTER ID IS NOT A SLEEPER ID (2026-11-06). My team in a Fantrax league sends the
+ * roster's own id (`04yla`) in the `sleeperId` slot, because that is the only id the row holds. No
+ * `SportsPlayer` row carries it, so every card in the league answered 404 and opened as "This
+ * player's card could not be loaded" — measured on a Fantrax NHL league, five of five players.
+ *
+ * The bridge already exists: `PlayerIdentityMap.fantraxId`, written weekly and read by the roster
+ * list for names and headshots (`resolveFantraxIdentities`). The card takes the same crosswalk to
+ * the id the linked row speaks — Sleeper for NFL, Rolling Insights for the pro sports, CFBD for
+ * college — and reads `SportsPlayer` by THAT. An id the registry cannot link stays a miss: it is
+ * never retried as a Sleeper id, where a short Fantrax-shaped string could name a stranger.
+ *
+ * Only a league the viewer belongs to is consulted (the route passes `leagueId` after its
+ * membership check), and only a Fantrax league is translated; every other caller reads exactly as
+ * before.
+ */
+export async function anchorLookupFor(
+  req: Pick<PlayerCardRequest, 'sport' | 'externalId' | 'sleeperId' | 'leagueId'>,
+): Promise<PlayerCardAnchorLookup | null> {
+  if (req.externalId) return { externalId: req.externalId }
+  const id = String(req.sleeperId ?? '').trim()
+  if (!id) return null
+  if (!req.leagueId) return { sleeperId: id }
+  const league = await prisma.league
+    .findUnique({ where: { id: req.leagueId }, select: { platform: true, sport: true } })
+    .catch(() => null)
+  if (String(league?.platform ?? '').trim().toLowerCase() !== 'fantrax') return { sleeperId: id }
+  const identities = await resolveFantraxIdentities(normalizeIdentitySport(league?.sport ?? req.sport), [id]).catch(
+    () => new Map<string, RosterPlayerIdentity>(),
+  )
+  const identity = identities.get(id)
+  if (identity?.sleeperId) return { sleeperId: identity.sleeperId }
+  if (identity?.rollingInsightsId) return { source: 'rolling_insights', externalId: identity.rollingInsightsId }
+  if (identity?.cfbdId) return { source: 'cfbd', externalId: identity.cfbdId }
+  return null
+}
+
 export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardData | null> {
   const sport = req.sport.trim()
   if (!sport) return null
@@ -1685,13 +1732,15 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     yearsExp: true,
     college: true,
   } as const
+  const lookup = await anchorLookupFor(req)
+  if (!lookup) return null
   const anchor = await prisma.sportsPlayer
     .findFirst({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
-        ...(req.externalId
-          ? { externalId: req.externalId }
-          : { sleeperId: { equals: req.sleeperId!, mode: 'insensitive' } }),
+        ...('sleeperId' in lookup
+          ? { sleeperId: { equals: lookup.sleeperId, mode: 'insensitive' } }
+          : { externalId: lookup.externalId, ...(lookup.source ? { source: lookup.source } : {}) }),
       },
       orderBy: [{ fetchedAt: 'desc' }],
       select,
@@ -1721,7 +1770,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     anchor,
     ...siblings.filter((s) => !(s.source === anchor.source && s.externalId === anchor.externalId)),
   ])
-  const player = !picked || (req.externalId && picked.ignored.includes(anchor)) ? anchor : picked.row
+  const player = !picked || ('externalId' in lookup && picked.ignored.includes(anchor)) ? anchor : picked.row
 
   const identity: PlayerCardIdentity = {
     externalId: player.externalId,

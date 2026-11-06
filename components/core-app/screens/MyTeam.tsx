@@ -37,6 +37,7 @@ import {
   projectionSourceKind,
   type ProjectionSourceKind,
 } from '@/lib/core-app/projectionSourceLabel'
+import { summarizeLineupChanges } from '@/lib/core-app/lineupChangeSummary'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
@@ -1246,22 +1247,42 @@ function LineupOptimizerCard({ result, platform, fixHref }: { result: LineupOpti
         <>
           <p className="af-mt-opt-totals af-num">{m.optimizerTotals(pts(result.currentTotal), pts(result.bestTotal))}</p>
           {result.verdict === 'close' ? <p className="af-mt-opt-close">{m.optimizerClose}</p> : null}
-          <ul className="af-mt-opt-list">
-            {result.changes.map((c) => (
-              <li key={c.slotIndex} data-testid="mt-optimizer-change">
-                <span className="af-mt-opt-slot af-num">{c.slotLabel}</span>
-                <span className="af-mt-opt-out">
-                  {c.outName ?? m.optimizerEmptySeat}
-                  {c.outProjected != null ? <span className="af-num"> {pts(c.outProjected)}</span> : null}
-                </span>
-                <span className="af-mt-opt-arrow" aria-hidden>→</span>
-                <span className="af-mt-opt-in">
-                  <strong>{c.inName}</strong>
-                  <span className="af-num"> {pts(c.inProjected)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          {(() => {
+            /* Seat-by-seat changes regrouped into what you do: who starts, who sits, who only
+               switches seats (lineupChangeSummary.ts). */
+            const { starts, benches, moves } = summarizeLineupChanges(result.changes)
+            return (
+              <>
+                <ul className="af-mt-opt-list">
+                  {starts.map((s) => (
+                    <li key={`in-${s.name}`} data-kind="start" data-testid="mt-optimizer-change">
+                      <span className="af-mt-opt-tag">{m.optimizerStart}</span>
+                      <span className="af-mt-opt-in">
+                        <strong>{s.name}</strong>
+                        <span className="af-num"> {pts(s.projected)}</span>
+                      </span>
+                      <span className="af-mt-opt-slot af-num">{s.emptySeat ? m.optimizerEmptySeatAt(s.slotLabel) : s.slotLabel}</span>
+                    </li>
+                  ))}
+                  {benches.map((b) => (
+                    <li key={`out-${b.name}`} data-kind="bench" data-testid="mt-optimizer-change">
+                      <span className="af-mt-opt-tag">{m.optimizerBench}</span>
+                      <span className="af-mt-opt-out">
+                        {b.name}
+                        {b.projected != null ? <span className="af-num"> {pts(b.projected)}</span> : null}
+                      </span>
+                      <span aria-hidden />
+                    </li>
+                  ))}
+                </ul>
+                {moves.length > 0 ? (
+                  <p className="af-mt-opt-moves">
+                    {m.optimizerMoves(moves.map((mv) => m.optimizerMove(mv.name, mv.fromSlot, mv.toSlot)).join(', '))}
+                  </p>
+                ) : null}
+              </>
+            )
+          })()}
           {fixHref ? (
             <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
               {m.fixInPlatform(platform)}
