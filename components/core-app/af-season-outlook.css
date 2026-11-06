@@ -4,25 +4,7 @@
 
 .af-so-head { margin-bottom: 20px; }
 
-.af-so-eyebrow {
-  margin: 0 0 6px;
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-.af-so-title { margin: 0; font-size: 26px; letter-spacing: -0.035em; }
-
-.af-so-sub {
-  margin: 8px 0 0;
-  max-width: 66ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 
 /* ── Summary tiles ────────────────────────────────────────────────── */
 
@@ -383,7 +365,6 @@
 .af-so-withheld b { color: var(--text2); }
 
 @media (max-width: 640px) {
-  .af-so-title { font-size: 21px; }
   .af-so-tiles { grid-template-columns: 1fr 1fr; }
 }
 

@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import '@/components/core-app/af-core.css'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-player-finder.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import '@/components/core-app/af-player-finder-redesign.css'
@@ -706,7 +707,7 @@ export function PlayerFinder({
         specifies.
       */}
       <aside className="af-pf-rail" aria-label={t.railLabel}>
-        <h1 className="af-display af-pf-h1">{t.h1}</h1>
+        <PageHeader className="af-pf-head" titleClassName="af-pf-title" title={t.h1} />
         {/*
           The search box: a GET form as before, with suggestions as you type
           layered on top (2026-09-05). See PlayerSearchBox for the rate-limit

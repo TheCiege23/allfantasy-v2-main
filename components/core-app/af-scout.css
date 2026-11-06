@@ -57,18 +57,7 @@
   border-color: var(--accent);
 }
 
-.af-core .af-sc-title {
-  font-size: 22px;
-  margin: 0 0 6px;
-}
-
-.af-core .af-sc-blurb {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-  max-width: 62ch;
-}
+/* Eyebrow, title and blurb: the shared PageHeader (primitives/af-primitives.css); the head is still a card. */
 
 /* ── This week's opponent ────────────────────────────────────────────── */
 
@@ -463,10 +452,6 @@
 @media (max-width: 560px) {
   .af-core .af-sc-list {
     grid-template-columns: 1fr;
-  }
-
-  .af-core .af-sc-title {
-    font-size: 18px;
   }
 
   /* The switch drops under the title rather than squeezing it. */

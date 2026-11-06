@@ -25,6 +25,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { outlookText, seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 import { seasonOutlookLeagueMessages } from '@/lib/core-app/messages/seasonOutlookLeague'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-season-outlook-league.css'
 import '@/components/core-app/af-outlook.css'
 import '@/components/core-app/af-core-redraft-standings.css'
@@ -422,18 +423,21 @@ function Header({
 }) {
   const m = useMessages(seasonOutlookLeagueMessages)
   return (
-    <header className="af-sol-head">
-      <p className="af-label af-sol-eyebrow">{league.leagueName}</p>
-      <div className="af-olk-titlerow">
-        <h1 className="af-display af-sol-title">{m.seasonOutlookTitle}</h1>
-        {freshness ? (
+    <PageHeader
+      className="af-sol-head"
+      eyebrowClassName="af-sol-eyebrow"
+      titleRowClassName="af-olk-titlerow"
+      titleClassName="af-sol-title"
+      subClassName="af-sol-sub"
+      eyebrow={league.leagueName}
+      title={m.seasonOutlookTitle}
+      titleAside={
+        freshness ? (
           <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
-        ) : null}
-      </div>
-      <p className="af-sol-sub">
-        {m.seasonOutlookSub}
-      </p>
-    </header>
+        ) : null
+      }
+      sub={m.seasonOutlookSub}
+    />
   )
 }
 

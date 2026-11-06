@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import { rankingsHeroMessages } from '@/lib/core-app/messages/rankingsHero'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import {
@@ -47,18 +48,26 @@ export function RankingsHero({
     [m.earnTitle, RANK_XP_PER_CHAMPIONSHIP],
   ]
   return (
-    <header className="af-rk-hero" data-testid="rk-hero">
+    // A section, not a header: the page header is the PageHeader inside it (a header may not nest a header).
+    <section className="af-rk-hero" data-testid="rk-hero">
       <div className="af-rk-hero-main">
-        <p className="af-rk-hero-eyebrow">{m.eyebrow}</p>
-        <div className="af-rk-hero-titlerow">
-          <h1 className="af-rk-title">Rankings</h1>
-          <div className="af-rk-headact">{actions}</div>
-        </div>
-        <p className="af-rk-hero-intro">
-          {m.intro1}
-          <strong>{m.why}</strong>
-          {m.intro2}
-        </p>
+        <PageHeader
+          className="af-rk-hero-head"
+          eyebrowClassName="af-rk-hero-eyebrow"
+          titleRowClassName="af-rk-hero-titlerow"
+          titleClassName="af-rk-title"
+          subClassName="af-rk-hero-intro"
+          eyebrow={m.eyebrow}
+          title="Rankings"
+          titleAside={<div className="af-rk-headact">{actions}</div>}
+          sub={
+            <>
+              {m.intro1}
+              <strong>{m.why}</strong>
+              {m.intro2}
+            </>
+          }
+        />
         {community || you ? (
           <ul className="af-rk-pills" aria-label={m.summaryAria} data-testid="rk-pills">
             {community ? (
@@ -109,7 +118,7 @@ export function RankingsHero({
           <p className="af-rk-levelcard-note">{m.levelNote}</p>
         </section>
       ) : null}
-    </header>
+    </section>
   )
 }
 

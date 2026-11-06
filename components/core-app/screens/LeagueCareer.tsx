@@ -13,6 +13,7 @@ import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
 import { leagueCareerChimmyPrompts, leagueWeeklyCareerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-league-career.css'
 import '@/components/core-app/af-career-live.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -41,10 +42,7 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
   if (!data.available) {
     return (
       <div className="af-lc">
-        <header className="af-lc-head">
-          <p className="af-label af-lc-eyebrow">{data.leagueName}</p>
-          <h1 className="af-display af-lc-title">Your career here</h1>
-        </header>
+        <PageHeader className="af-lc-head" eyebrowClassName="af-lc-eyebrow" titleClassName="af-lc-title" eyebrow={data.leagueName} title="Your career here" />
         <div className="af-lc-blocked">
           <span className="af-lc-blocked-mark af-num" aria-hidden>
             —
@@ -72,14 +70,20 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
 
   return (
     <div className="af-lc">
-      <header className="af-lc-head">
-        <p className="af-label af-lc-eyebrow">{league.name}</p>
-        <h1 className="af-display af-lc-title">Your career here</h1>
-        <p className="af-lc-sub">
-          Every season you have played in this league, since {firstSeason}.{' '}
-          <Link href={allLeaguesHref}>Across every league →</Link>
-        </p>
-      </header>
+      <PageHeader
+        className="af-lc-head"
+        eyebrowClassName="af-lc-eyebrow"
+        titleClassName="af-lc-title"
+        subClassName="af-lc-sub"
+        eyebrow={league.name}
+        title="Your career here"
+        sub={
+          <>
+            Every season you have played in this league, since {firstSeason}.{' '}
+            <Link href={allLeaguesHref}>Across every league →</Link>
+          </>
+        }
+      />
 
       {/* ── Identity banner ─────────────────────────────────────────── */}
       <div className="af-lc-banner">
@@ -258,15 +262,21 @@ function WeeklyLeagueCareer({
 
   return (
     <div className="af-lc">
-      <header className="af-lc-head">
-        <p className="af-label af-lc-eyebrow">{league.name}</p>
-        <h1 className="af-display af-lc-title">Your career here</h1>
-        <p className="af-lc-sub">
-          {elimination ? 'A Guilly league' : 'A league scored against the whole field'}, so every week is your
-          score against everyone still playing — since {firstSeason}.{' '}
-          <Link href={allLeaguesHref}>Across every league →</Link>
-        </p>
-      </header>
+      <PageHeader
+        className="af-lc-head"
+        eyebrowClassName="af-lc-eyebrow"
+        titleClassName="af-lc-title"
+        subClassName="af-lc-sub"
+        eyebrow={league.name}
+        title="Your career here"
+        sub={
+          <>
+            {elimination ? 'A Guilly league' : 'A league scored against the whole field'}, so every week is your
+            score against everyone still playing — since {firstSeason}.{' '}
+            <Link href={allLeaguesHref}>Across every league →</Link>
+          </>
+        }
+      />
 
       <div className="af-lc-banner">
         <div className="af-lc-stat">

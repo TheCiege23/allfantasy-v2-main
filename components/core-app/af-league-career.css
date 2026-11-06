@@ -43,17 +43,7 @@
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
-.af-lc-title {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: -0.035em;
-}
-.af-lc-sub {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 .af-lc-sub a,
 .af-lc-blocked-alt a {
   color: var(--accent);
@@ -386,9 +376,6 @@
 }
 
 @media (max-width: 560px) {
-  .af-lc-title {
-    font-size: 23px;
-  }
   .af-lc-banner {
     padding: 16px;
   }
