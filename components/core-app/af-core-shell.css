@@ -3821,7 +3821,15 @@ html[data-mode='light'] .af-core {
 /* Mobile-first polish: quiet chrome, clear league cards, touch-sized navigation. */
 .af-core.af-shell { background-image: none; }
 .af-core .af-main { min-width: 0; }
-.af-core .af-content { padding: 22px clamp(14px, 2.4vw, 32px) 32px; }
+/*
+ * The bottom term in both shorthands below is the chat bubble's clearance, not a spacing choice:
+ * the bubble's own bottom offset (`--af-fab-bottom`, which already includes the phone tab bar and
+ * home indicator), plus its 56px height, plus 16px. A flat 32px (desktop) and 92px (phone) here
+ * silently overrode the clearance documented on `.af-content` above, so the last card on every
+ * screen ended under the bubble with nothing left to scroll — measured on redraft Waivers and My
+ * team at 390px and 1440px.
+ */
+.af-core .af-content { padding: 22px clamp(14px, 2.4vw, 32px) calc(var(--af-fab-bottom, 18px) + 56px + 16px); }
 .af-core .af-topbar { gap: 12px; padding-block: 10px; background: var(--bg); }
 .af-core .af-topbar-right { gap: 10px; }
 .af-core .af-data-menu { position: relative; flex: none; font-size: 13px; }
@@ -3851,7 +3859,7 @@ html[data-mode='light'] .af-core {
 }
 @media (max-width: 720px) {
   .af-core.af-shell { width: 100%; max-width: 100%; overflow-x: clip; }
-  .af-core .af-content { padding: 14px 12px calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .af-core .af-content { padding: 14px 12px calc(var(--af-fab-bottom, 18px) + 56px + 16px); }
   .af-core .af-topbar { padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; gap: 6px 10px; }
   .af-core .af-topbar .af-topbar-right { overflow: visible; flex: 0 0 auto; margin-left: auto; }
   .af-core .af-topbar .af-plan, .af-core .af-topbar .af-week, .af-core .af-admin-shortcut { display: none; }

@@ -11,7 +11,9 @@ export const waiversMessages = defineMessages({
     budgetRank: (rank: number, rosters: number) => `${rank} of ${rosters} by budget left`,
     ofRosters: (rosters: number) => `of ${rosters} rosters`,
     rosterLoad: (starters: number, bench: number, reserve: number) =>
-      `${starters} starting · ${bench} bench${reserve > 0 ? ` · ${reserve} IR/taxi` : ''}`,
+      // A no-break space inside each part, so a narrow tile wraps between parts ("· 1 IR/taxi")
+      // instead of leaving a bare "1" at the end of a line.
+      `${starters}\u00a0starting · ${bench}\u00a0bench${reserve > 0 ? ` · ${reserve}\u00a0IR/taxi` : ''}`,
     claimOn: (platform: string) => `Claim on ${platform}`,
     claimsMadeOn: (platform: string) => `Claims are made on ${platform}. AllFantasy only reads your league.`,
     observedRuns: (runs: number) => `seen over this league's last ${runs} runs`,
@@ -24,7 +26,7 @@ export const waiversMessages = defineMessages({
     budgetRank: (rank, rosters) => `${rank} de ${rosters} por presupuesto restante`,
     ofRosters: (rosters) => `de ${rosters} equipos`,
     rosterLoad: (starters, bench, reserve) =>
-      `${starters} titulares · ${bench} suplentes${reserve > 0 ? ` · ${reserve} IR/taxi` : ''}`,
+      `${starters}\u00a0titulares · ${bench}\u00a0suplentes${reserve > 0 ? ` · ${reserve}\u00a0IR/taxi` : ''}`,
     claimOn: (platform) => `Reclamar en ${platform}`,
     claimsMadeOn: (platform) => `Los reclamos se hacen en ${platform}. AllFantasy solo lee tu liga.`,
     observedRuns: (runs) => `según las últimas ${runs} ejecuciones de esta liga`,
