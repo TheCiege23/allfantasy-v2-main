@@ -705,6 +705,8 @@
 }
 .af-core .af-sol .af-olk-hist-svg {
   display: block;
+  width: 100%;
+  height: auto;
   overflow: visible;
 }
 .af-core .af-sol .af-olk-hist-tick {

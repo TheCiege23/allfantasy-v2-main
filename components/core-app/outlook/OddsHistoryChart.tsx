@@ -97,7 +97,7 @@ export function OddsHistoryChart({ points }: { points: OddsHistoryPoint[] | null
   /* Thin the x labels on a narrow chart, always keeping the first and last week. */
   const room = Math.max(1, Math.floor((x1 - x0) / 34))
   const stride = Math.max(1, Math.ceil(data.length / room))
-  const showX = (i: number) => i === 0 || i === data.length - 1 || (i % stride === 0 && data.length - 1 - i >= stride / 2)
+  const showX = (i: number) => i === 0 || i === data.length - 1 || (i % stride === 0 && data.length - 1 - i >= stride)
 
   const nearest = (px: number) => {
     let best = 0
@@ -106,7 +106,8 @@ export function OddsHistoryChart({ points }: { points: OddsHistoryPoint[] | null
   }
   const onMove = (e: PointerEvent<SVGRectElement>) => {
     const box = (e.currentTarget.ownerSVGElement ?? e.currentTarget).getBoundingClientRect()
-    setActive(nearest(e.clientX - box.left))
+    // Pointer pixels into viewBox units — equal once measured, but not before.
+    setActive(nearest(box.width > 0 ? ((e.clientX - box.left) * width) / box.width : e.clientX - box.left))
   }
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const lastIndex = data.length - 1
@@ -153,7 +154,9 @@ export function OddsHistoryChart({ points }: { points: OddsHistoryPoint[] | null
         onFocus={() => setActive((a) => a ?? data.length - 1)}
         onBlur={() => setActive(null)}
       >
-        <svg width={width} height={HEIGHT} aria-hidden focusable="false" className="af-olk-hist-svg">
+        {/* viewBox + 100% width: before the first measure (and on the server) it scales to fit rather than
+            overflowing a phone; once measured the viewBox IS the pixel width, so type renders at its size. */}
+        <svg viewBox={`0 0 ${width} ${HEIGHT}`} width="100%" aria-hidden focusable="false" className="af-olk-hist-svg">
           {TICKS.map((t) => (
             <g key={t}>
               <line x1={x0} x2={x1} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--line2)' : 'var(--line)'} strokeWidth={1} />
