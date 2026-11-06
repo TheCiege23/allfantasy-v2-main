@@ -39,10 +39,7 @@ jobs:
   landing-performance-budget-strict:
     name: Landing Perf Budget (strict)
     if: github.event_name != 'pull_request'
-    # Pinned, not ubuntu-latest: on 2026-11-06 ubuntu-latest moved to 26.04 and Playwright 1.59.1
-    # refuses it ("Playwright does not support chromium on ubuntu26.04-x64"), failing the browser
-    # install before any test ran. Move back once Playwright supports the new image.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
       postgres:

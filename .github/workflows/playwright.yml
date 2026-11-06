@@ -113,9 +113,7 @@ jobs:
     # Core e2e exceeded GitHub's 6h single-job cap; shard into 3 parallel jobs (each << 6h).
     # Bracket key matches matrix include (required for this workflow file).
     timeout-minutes: ${{ matrix['job-timeout'] }}
-    # Pinned: ubuntu-latest moved to 26.04 (Nov 2026) and this Playwright cannot install Chromium
-    # there ("Playwright does not support chromium on ubuntu26.04-x64"). Unpin when Playwright is upgraded.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -454,9 +452,7 @@ jobs:
   draft-room-regression:
     name: Draft Room Regression
     timeout-minutes: 35
-    # Pinned: ubuntu-latest moved to 26.04 (Nov 2026) and this Playwright cannot install Chromium
-    # there ("Playwright does not support chromium on ubuntu26.04-x64"). Unpin when Playwright is upgraded.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
