@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
+import { loadNativeBestBallTab } from '@/lib/bestball/nativeBestBallTabLoad'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ export async function GET(
       settings: true,
       bbMatchupFormat: true,
       bbScoringPeriod: true,
+      platform: true,
       rosters: {
         select: {
           id: true,
@@ -69,6 +71,32 @@ export async function GET(
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
   })
   const profile = getBestBallSportProfile(league.sport)
+
+  // A league AllFantasy scores itself is read from what native scoring writes; the legacy tables below
+  // stay for the leagues that have no native season.
+  const native = await loadNativeBestBallTab({
+    leagueId,
+    platform: league.platform,
+    sport: String(league.sport),
+    settings: league.settings,
+    requestedWeek: Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10),
+    rankBy: bestBallSettings.matchupFormat === 'cumulative' ? 'points' : 'record',
+  })
+  if (native) {
+    return NextResponse.json({
+      league: {
+        id: league.id,
+        name: league.name,
+        sport: league.sport,
+        season: native.season,
+        summary: buildBestBallSettingsSummary(bestBallSettings),
+        settings: bestBallSettings,
+        profile,
+      },
+      source: 'native',
+      ...native.body,
+    })
+  }
 
   const playedWeeks = await prisma.teamWeekResult.findMany({
     where: { leagueId, season: league.season },
