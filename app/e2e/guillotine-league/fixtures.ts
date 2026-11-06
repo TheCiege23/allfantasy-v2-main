@@ -5,6 +5,9 @@
  * answered in the browser so no request reaches a database. Labelled fixture data, not real teams.
  */
 import { buildSurvivalHistory } from '@/lib/guillotine/survivalHistory'
+import { evaluateUserSurvivalRisk } from '@/lib/guillotine-war-room/guillotineSurvivalRiskEngine'
+import { buildWeeklyPlan } from '@/lib/guillotine-war-room/guillotineWeeklyPlanEngine'
+import type { GuillotinePlayerFact, GuillotineWarRoomContext } from '@/lib/guillotine-war-room/types'
 
 export const GUILLOTINE_HARNESS_TABS = ['guillotine', 'war_room'] as const
 export type GuillotineHarnessTab = (typeof GUILLOTINE_HARNESS_TABS)[number]
@@ -126,6 +129,71 @@ export function guillotineSummary(mood: GuillotineHarnessMood) {
   }
 }
 
+/** The viewer's roster for the War Room: starters, a bench, one questionable starter. Labelled fixture players. */
+const MY_PLAYERS: [string, string, string, boolean, string | null, number, number][] = [
+  // name, position, team, starter, injury, week projection, season average
+  ['Cole Ridley', 'QB', 'BUF', true, null, 21.4, 22.8],
+  ['Marcus Hale', 'RB', 'ATL', true, 'Questionable', 13.2, 15.1],
+  ['Dante Wilks', 'RB', 'MIA', true, null, 11.8, 10.9],
+  ['Jaylen Price', 'WR', 'CIN', true, null, 15.6, 16.2],
+  ['Trey Bowman', 'WR', 'DET', true, null, 12.1, 11.4],
+  ['Nate Ortega', 'TE', 'KC', true, null, 9.8, 10.3],
+  ['Ray Castillo', 'WR', 'SF', true, null, 10.4, 9.7],
+  ['Eli Brandt', 'K', 'BAL', true, null, 8.1, 8.6],
+  ['Steel Curtain DEF', 'DEF', 'PIT', true, null, 7.4, 7.9],
+  ['Omar Banks', 'RB', 'NYG', false, null, 7.9, 6.8],
+  ['Luke Fenn', 'WR', 'LV', false, null, 8.6, 7.2],
+  ['Grant Moyer', 'QB', 'TEN', false, null, 14.1, 13.0],
+]
+
+/** GET /api/leagues/[id]/guillotine-war-room: the summary's chop line, run through the real War Room engines. */
+export function guillotineWarRoomState(mood: GuillotineHarnessMood) {
+  const s = guillotineSummary(mood)
+  const tierOf = Object.fromEntries(s.dangerTiers.map((t) => [t.rosterId, t]))
+  const players: GuillotinePlayerFact[] = MY_PLAYERS.map(([playerName, position, team, starter, injury, proj, avg], i) => ({
+    playerId: `p-${i}`, playerName, position, team, slotType: starter ? position : 'BN', isStarterSlot: starter,
+    injuryStatus: injury, adp: 20 + i * 9, weekProjection: proj, seasonAvgActual: avg, hasNoValueSignal: false,
+  }))
+  const now = new Date().toISOString()
+  const context: GuillotineWarRoomContext = {
+    leagueId: GUILLOTINE_LEAGUE_ID, leagueType: 'guillotine', sport: 'NFL', season: 2026, currentWeek: GUILLOTINE_WEEK,
+    scoring: { sport: 'NFL', scoringPreset: 'half_ppr' },
+    roster: { totalStarterSlots: 9, benchSlots: 6, requiredByPosition: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } },
+    guillotine: { eliminationStartWeek: 1, eliminationEndWeek: 11, teamsPerChop: 1, dangerMarginPoints: 12, tiebreaker: 'season_points', rosterReleaseTiming: 'next_waiver_run', tradesEnabled: true },
+    userRosterId: s.myRosterId,
+    isCommissioner: true,
+    standings: ids.map((id) => {
+      const t = tierOf[id]
+      const row = s.survivalStandings.find((r) => r.rosterId === id)
+      return {
+        rosterId: id, ownerName: NAMES[id]!, teamName: NAMES[id]!, isUserTeam: id === s.myRosterId,
+        eliminated: CHOPPED[id] != null, choppedInPeriod: CHOPPED[id] ?? null, rank: row?.rank ?? null,
+        seasonPointsCumul: Math.round(scoreRows.filter((r) => r.rosterId === id).reduce((a, r) => a + r.points, 0) * 10) / 10,
+        periodPoints: s.home.scores[id] ?? null,
+        tier: (t?.tier ?? 'unknown') as GuillotineWarRoomContext['standings'][number]['tier'],
+        pointsFromChopZone: t?.pointsFromChopZone ?? null,
+      }
+    }),
+    activeTeamCount: 9,
+    eliminatedTeamCount: 3,
+    teams: ids.map((id) => ({
+      rosterId: id, ownerId: `u-${id}`, ownerName: NAMES[id]!, teamName: NAMES[id]!, isUserTeam: id === s.myRosterId,
+      eliminated: CHOPPED[id] != null, faabRemaining: id === s.myRosterId ? 64 : 40, players: id === s.myRosterId ? players : [],
+    })),
+    droppedPlayers: s.home.lastChop.releases.map((r) => ({
+      playerId: r.playerId, playerName: r.playerName, position: r.position, team: r.team, fromEliminatedRosterId: 'r10', availableAt: r.availableAt, adp: 60,
+    })),
+    availability: { config: 'available', rosters: 'available', periodScores: 'available', eliminationLine: 'available', rosterStates: 'available', playerValues: 'available', projections: 'available', injuries: 'available', news: 'missing', faab: 'available', droppedPlayerPool: 'available' },
+    freshness: { generatedAt: now, scoresAsOf: now, injuriesAsOf: now },
+    missingDataFlags: [],
+    featureAvailability: { survivalRisk: true, rosterRisk: true, lineupSafety: true, waivers: true, faabPlan: true, droppedPlayers: true, tradeAnalyze: true, weeklyPlan: true },
+  }
+  const survival = evaluateUserSurvivalRisk(context)
+  const mine = context.userRosterId
+  const weeklyPlan = mine && CHOPPED[mine] == null ? buildWeeklyPlan(context, mine) : null
+  return { context, survival, weeklyPlan }
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -145,6 +213,7 @@ export function installGuillotineHarnessFetch(mood: GuillotineHarnessMood) {
       if (url.searchParams.get('view') === 'preview') return json({ error: 'Not part of this harness.' }, 409)
       return json(guillotineSummary(mood))
     }
+    if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine-war-room` && method === 'GET') return json(guillotineWarRoomState(mood))
     if (p === '/api/subscription/entitlements') return json({ hasAccess: true, entitlement: { plans: ['pro'], status: 'active' } })
     if (p === '/api/guest-mode/status') return json({ isGuest: false })
     // Writes and AI calls are not part of a visual harness: answer "unavailable" rather than reach a route.
