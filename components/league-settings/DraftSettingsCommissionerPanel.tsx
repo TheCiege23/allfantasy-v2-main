@@ -859,7 +859,15 @@ function DateField({ label, value, onChange, disabled, language, t }: {
   const [text, setText] = useState(() => formatTypedDate(value, language))
   const [invalid, setInvalid] = useState(false)
   // A calendar pick or a load replaces whatever was typed.
-  useEffect(() => { setText(formatTypedDate(value, language)); setInvalid(false) }, [value, language])
+  // ⚠ Synced DURING RENDER, and only on a real change — not in a useEffect. A passive effect also
+  // fires once on mount, on a later tick, so anything typed before that tick was wiped (CI saw
+  // "02/30/2027" erased and its error never shown, 6 red runs on main in a week).
+  const [synced, setSynced] = useState({ value, language })
+  if (synced.value !== value || synced.language !== language) {
+    setSynced({ value, language })
+    setText(formatTypedDate(value, language))
+    setInvalid(false)
+  }
   const placeholder = t(dateOrder(language) === 'dmy' ? 'lsEd.dr.v2.dateFormatDmy' : 'lsEd.dr.v2.dateFormatMdy')
   const long = useMemo(() => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)

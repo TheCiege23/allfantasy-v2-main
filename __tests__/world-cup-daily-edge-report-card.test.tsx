@@ -439,6 +439,12 @@ describe("F — token confirmation flow (409)", () => {
       fireEvent.click(screen.getByTestId("edge-report-unlock-btn"))
     })
 
+    // ⚠ WAIT FOR THE 409 TO BE HANDLED before counting. paidToolFetch hashes the request before it
+    // calls fetch, which settles on a later tick than act() flushes — so on a slow runner the POST
+    // had not been sent yet here, this assertion saw 1 call, and the stray POST then ran inside G1,
+    // swallowing G1's queued coaching response. F2 and G1 failed together on main 4 times.
+    await waitFor(() => expect(confirmTokenSpendMock).toHaveBeenCalledTimes(1))
+
     // No retry POST
     expect(fetchMock).toHaveBeenCalledTimes(2)  // GET + first POST only
     expect(screen.queryByTestId("edge-report-coaching-block")).toBeNull()
