@@ -658,6 +658,14 @@ function futureCell(
   return { projection: line.projectedPoints, projectionKind: 'future', futureStatus: 'published', projectionAsOf: line.asOf }
 }
 
+/** Weekly-fixture sports: the only ones a week strip and a bye mean anything in. */
+export function isWeeklyScheduleSport(sport: string | null | undefined): boolean {
+  const s = String(sport ?? 'NFL').trim().toUpperCase()
+  return s === 'NFL' || s === 'NCAAF'
+}
+
+export const NON_WEEKLY_SCHEDULE = "Weekly schedules and byes are football's. This card does not list his games yet."
+
 export async function loadSchedule(
   team: string | null,
   season: number,
@@ -674,6 +682,17 @@ export async function loadSchedule(
   afProjection: number | null = null,
   sport: string = 'NFL',
 ): Promise<{ schedule: SectionState<PlayerCardSchedule>; byeWeek: number | null }> {
+  /*
+   * 🛑 A BYE IS A FOOTBALL FACT (2026-11-06). This strip reads fixtures by WEEK and calls a club absent
+   * from a full week's slate a bye. NBA, NHL and MLB clubs play several games a week and have no byes,
+   * and the card's caller passed no sport at all — so a hockey player was looked up among NFL clubs,
+   * found in none, and the card said "Bye in week 9 — check it against your own before you trade for
+   * him" for every week on a live Fantrax NHL league. Only the weekly sports get the strip; the rest
+   * say so rather than invent a schedule.
+   */
+  if (!isWeeklyScheduleSport(sport)) {
+    return { schedule: unavailable(NON_WEEKLY_SCHEDULE), byeWeek: null }
+  }
   const collegeIndex = sport === 'NCAAF' ? await loadCollegeTeamIndex().catch(() => null) : null
   const club = sport === 'NCAAF'
     ? (team && collegeIndex ? resolveFantraxCollegeTeam(team, collegeIndex)?.school ?? null : null)
@@ -1381,6 +1400,31 @@ function slotOf(pd: Record<string, unknown>, id: string): string | null {
   return null
 }
 
+/**
+ * `slotOf` for a foreign roster, whose entries may be bare ids or objects carrying the platform id
+ * (`{ id }`, `{ fantraxId }`, `{ playerId }`). Matches only the exact id it is given.
+ */
+export function slotOfRosterId(pd: Record<string, unknown>, id: string): string | null {
+  const ids = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v
+          .map((x) => {
+            if (x == null) return ''
+            if (typeof x === 'object') {
+              const o = x as Record<string, unknown>
+              return String(o.fantraxId ?? o.id ?? o.playerId ?? '')
+            }
+            return String(x)
+          })
+          .filter(Boolean)
+      : []
+  if (ids(pd.starters).includes(id)) return 'STARTER'
+  if (ids(pd.reserve).includes(id) || ids(pd.ir).includes(id)) return 'IR SLOT'
+  if (ids(pd.taxi).includes(id)) return 'TAXI'
+  if (ids(pd.players).includes(id) || ids(pd.bench).includes(id)) return 'BENCH'
+  return null
+}
+
 export { SLOT_KEYS }
 
 /** One player's trade-block row in one Sleeper league — the table's own unique key. */
@@ -1409,7 +1453,9 @@ async function loadLeague(
   userId: string | null,
   book: ValueBook,
   club: string | null,
-  season: number
+  season: number,
+  /** The id the card was opened with, in this league's own id space (a Fantrax `04yla`). */
+  rosterPlayerId: string | null = null,
 ): Promise<PlayerCardLeague | null> {
   const league = await prisma.league
     .findUnique({
@@ -1444,7 +1490,27 @@ async function loadLeague(
   /* A foreign league's rosters were stripped above, so "not found" there is "not read". */
   let slot = isForeignIdSpace(league.platform, league.sport) ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
-  if (sleeperId) {
+  /*
+   * ⚠ A FOREIGN LEAGUE IS READ IN ITS OWN ID SPACE (2026-11-06). The stripped rosters above can never
+   * hold his Sleeper id, so every Fantrax card said UNREADABLE. `rosterPlayerId` is set only when the
+   * card translated the league's OWN id for him (anchorLookupFor's Fantrax path), so matching it
+   * against the same league's raw rosters compares one namespace with itself — none of the collision
+   * the strip exists to stop. Any other caller passes null and reads exactly as before.
+   */
+  if (rosterPlayerId && isForeignIdSpace(league.platform, league.sport)) {
+    const raw = await prisma.roster
+      .findMany({ where: { leagueId }, select: { id: true, playerData: true, platformUserId: true } })
+      .catch(() => [])
+    for (const r of raw) {
+      const found = slotOfRosterId((r.playerData ?? {}) as Record<string, unknown>, rosterPlayerId)
+      if (found) {
+        slot = found
+        holder = r as (typeof rosters)[number]
+        break
+      }
+    }
+  }
+  if (sleeperId && holder == null) {
     for (const r of rosters) {
       const found = slotOf((r.playerData ?? {}) as Record<string, unknown>, sleeperId)
       if (found) {
@@ -1670,8 +1736,8 @@ export type PlayerCardRequest = {
  */
 /** How the card's first `SportsPlayer` read is keyed. */
 export type PlayerCardAnchorLookup =
-  | { sleeperId: string }
-  | { externalId: string; source?: string }
+  | { sleeperId: string; rosterId?: string }
+  | { externalId: string; source?: string; rosterId?: string }
 
 /**
  * 🛑 A FANTRAX ROSTER ID IS NOT A SLEEPER ID (2026-11-06). My team in a Fantrax league sends the
@@ -1704,9 +1770,10 @@ export async function anchorLookupFor(
     () => new Map<string, RosterPlayerIdentity>(),
   )
   const identity = identities.get(id)
-  if (identity?.sleeperId) return { sleeperId: identity.sleeperId }
-  if (identity?.rollingInsightsId) return { source: 'rolling_insights', externalId: identity.rollingInsightsId }
-  if (identity?.cfbdId) return { source: 'cfbd', externalId: identity.cfbdId }
+  // `rosterId`: the id this Fantrax league's rosters hold for him — set ONLY on this translated path.
+  if (identity?.sleeperId) return { sleeperId: identity.sleeperId, rosterId: id }
+  if (identity?.rollingInsightsId) return { source: 'rolling_insights', externalId: identity.rollingInsightsId, rosterId: id }
+  if (identity?.cfbdId) return { source: 'cfbd', externalId: identity.cfbdId, rosterId: id }
   return null
 }
 
@@ -1839,7 +1906,11 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           req.userId ?? null,
           book,
           player.team,
-          projWeek ? Number(projWeek.season) : new Date().getFullYear()
+          projWeek ? Number(projWeek.season) : new Date().getFullYear(),
+          /* The roster's own id for him — only when it arrived through the Fantrax crosswalk. A
+             Fleaflicker card is opened with a real Sleeper id, and matching THAT against raw foreign
+             rosters is the collision player-card-league-foreign-ids pins. */
+          lookup.rosterId ?? null,
         ).catch(() => null)
       : Promise.resolve(null),
     /*
@@ -1914,7 +1985,9 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     projected,
     SCHEDULE_WEEKS,
     futureForCard,
-    afProjected
+    afProjected,
+    // Without it every player was looked up among NFL clubs (see isWeeklyScheduleSport).
+    String(player.sport ?? 'NFL').trim().toUpperCase(),
   )
 
   const comps =
