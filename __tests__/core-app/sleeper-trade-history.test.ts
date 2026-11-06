@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({ grades: vi.fn(), feed: vi.fn(), expectation: v
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ getTradeGrades: mocks.grades }))
 vi.mock('@/lib/trade-intel/sleeperTradeSync', () => ({ currentTradeIds: mocks.feed }))
 vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: mocks.archive }))
-vi.mock('@/lib/trade-intel/tradeExpectationLoader', () => ({ loadTradeExpectation: mocks.expectation }))
+vi.mock('@/lib/trade-intel/tradeExpectationLoader', () => ({ loadTradeExpectation: mocks.expectation, tradeExpectationShared: () => ({ memo: new Map() }) }))
+// The graded-history cache always misses here, so every test below grades; it has its own suite.
+vi.mock('@/lib/core-app/tradeHistoryGradeCache', () => ({ readTradeHistoryGrades: async () => null, writeTradeHistoryGrades: async () => undefined }))
 vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade: mocks.oneGrade }))
 import { getReconciledTradeGrades, getSleeperTradeHistory, toTradeRecord } from '@/lib/core-app/sleeperTradeHistory'
 
@@ -91,7 +93,8 @@ describe('Sleeper trades shown in the app', () => {
   it('grades each trade on the viewer’s own copy of the league', async () => {
     mocks.grades.mockResolvedValue(payload([trade()]))
     await getSleeperTradeHistory('league', 'owner-1', { afLeagueId: 'row-mine' })
-    expect(mocks.expectation).toHaveBeenCalledWith('league', expect.objectContaining({ id: 'league:tx' }), { afLeagueId: 'row-mine' })
+    // `shared`: the league-scoped reads memoised across the whole history (`tradeExpectationShared`).
+    expect(mocks.expectation).toHaveBeenCalledWith('league', expect.objectContaining({ id: 'league:tx' }), expect.objectContaining({ afLeagueId: 'row-mine', shared: expect.any(Object) }))
   })
   /*
    * 🛑 THE ONE GRADE NEVER REACHED THIS HISTORY (2026-09-27), so every archived trade on the Trade
