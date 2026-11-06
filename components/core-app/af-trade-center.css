@@ -41,20 +41,9 @@ html[data-mode='light'] .af-core .af-tc {
 
 /* ── Header ──────────────────────────────────────────────────────────── */
 
-.af-tc-head h1 {
-  margin: 4px 0 6px;
-  font-size: 34px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-.af-tc-lede {
-  margin: 0;
-  max-width: 62ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and lede: the shared PageHeader (primitives/af-primitives.css). The head stays a
+   column; the hand-off link under the lede carries its own top padding. */
+.af-tc-head { flex-direction: column; gap: 0; }
 
 /* ── League context bar ──────────────────────────────────────────────── */
 
@@ -529,7 +518,6 @@ html[data-mode='light'] .af-core .af-tc {
 }
 
 @media (max-width: 720px) {
-  .af-tc-head h1 { font-size: 26px; }
   .af-tc-builder,
   .af-tc-notes { grid-template-columns: 1fr; }
 }

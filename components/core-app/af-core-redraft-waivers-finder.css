@@ -33,9 +33,9 @@
 .af-core.af-shell[data-format=redraft] :is(.af-dh-section-head,.af-pf-section-head) > h2.af-label{display:inline-flex;align-items:center;gap:8px;color:var(--text2)}
 .af-core.af-shell[data-format=redraft] :is(.af-dh-section-head,.af-pf-section-head) > h2.af-label::before{content:'';flex:0 0 auto;width:14px;height:3px;border-radius:2px;background:var(--rd-accent)}
 
-/* Screen titles: the heavy upright display, underlined by the sport bar. */
-.af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1){letter-spacing:-0.025em}
-.af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1)::after{content:'';display:block;width:34px;height:4px;margin-top:8px;border-radius:2px;background:var(--rd-accent)}
+/* Screen titles (the shared PageHeader's, sized by --af-title-size): underlined by the sport bar. */
+.af-core.af-shell[data-format=redraft] :is(.af-wv-head .af-wv-title,.af-pf-head .af-pf-title){letter-spacing:-0.025em}
+.af-core.af-shell[data-format=redraft] :is(.af-wv-head .af-wv-title,.af-pf-head .af-pf-title)::after{content:'';display:block;width:34px;height:4px;margin-top:8px;border-radius:2px;background:var(--rd-accent)}
 
 /* ── Waivers · the claim window as the hero ───────────────────────────────────────────────────────── */
 
@@ -112,5 +112,5 @@
 @media (max-width:720px){
   /* Phone: the hero line steps down a size; the title bar sits closer. */
   .af-core.af-shell[data-format=redraft] .af-wv-next{font-size:14px;padding:10px 14px}
-  .af-core.af-shell[data-format=redraft] :is(.af-wv > h1.af-display,.af-pf-rail > h1.af-pf-h1)::after{margin-top:6px}
+  .af-core.af-shell[data-format=redraft] :is(.af-wv-head .af-wv-title,.af-pf-head .af-pf-title)::after{margin-top:6px}
 }

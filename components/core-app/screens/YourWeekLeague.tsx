@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { LeagueWeekBoard, LeagueSideline } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-week-league.css'
 /* After af-week-league.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
@@ -146,39 +147,48 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
 
   return (
     <div className="af-wl">
-      <header className="af-wl-head">
-        <p className="af-label af-wl-eyebrow">
-          {board.leagueName} · {board.season} · {msg.period} {board.week}
-        </p>
-        <div className="af-wl-title-row">
-          <h1 className="af-display af-wl-title">{copy('Your week')}</h1>
+      <PageHeader
+        className="af-wl-head"
+        eyebrowClassName="af-wl-eyebrow"
+        titleRowClassName="af-wl-title-row"
+        titleClassName="af-wl-title"
+        actionsClassName="af-wl-headactions"
+        eyebrow={
+          <>
+            {board.leagueName} · {board.season} · {msg.period} {board.week}
+          </>
+        }
+        title={copy('Your week')}
+        titleAside={
           <Link href={allWeeksHref} className="af-wl-allweeks">
             {copy('Every league at once')} →
           </Link>
-        </div>
-        {/*
-          The season-race line: the week, your record, your place by record. Each piece only when it is
-          real — no record before a scored game, no place unless every team in the week has a record.
-        */}
-        {yourRecord || raceRank ? (
-          <p className="af-wl-race" data-testid="week-season-race" aria-label={copy('Season race')}>
-            <span className="af-wl-race-chip af-num" data-kind="week">
-              {msg.period} {board.week}
-            </span>
-            {yourRecord ? (
-              <span className="af-wl-race-chip af-num" data-kind="record">
-                <span className="af-wl-race-k">{copy('Record')}</span> {yourRecord}
+        }
+        actions={
+          /*
+            The season-race line: the week, your record, your place by record. Each piece only when it is
+            real — no record before a scored game, no place unless every team in the week has a record.
+          */
+          yourRecord || raceRank ? (
+            <p className="af-wl-race" data-testid="week-season-race" aria-label={copy('Season race')}>
+              <span className="af-wl-race-chip af-num" data-kind="week">
+                {msg.period} {board.week}
               </span>
-            ) : null}
-            {raceRank ? (
-              <span className="af-wl-race-chip af-num" data-kind="rank">
-                {seasonRaceOrdinal(raceRank)} {copy('of')} {raceRank.of}{' '}
-                <span className="af-wl-race-k">{copy('by record')}</span>
-              </span>
-            ) : null}
-          </p>
-        ) : null}
-      </header>
+              {yourRecord ? (
+                <span className="af-wl-race-chip af-num" data-kind="record">
+                  <span className="af-wl-race-k">{copy('Record')}</span> {yourRecord}
+                </span>
+              ) : null}
+              {raceRank ? (
+                <span className="af-wl-race-chip af-num" data-kind="rank">
+                  {seasonRaceOrdinal(raceRank)} {copy('of')} {raceRank.of}{' '}
+                  <span className="af-wl-race-k">{copy('by record')}</span>
+                </span>
+              ) : null}
+            </p>
+          ) : null
+        }
+      />
 
       {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
       {board.extraMatchup ? (

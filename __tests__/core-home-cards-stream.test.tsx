@@ -205,7 +205,7 @@ vi.mock('@/lib/analytics/recordDashboardActivation', () => ({ recordDashboardAct
 // The league home — its loader failing is case 6.
 vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: vi.fn(async () => g.leagueHome.data) }))
 // A non-home screen for the badges case.
-vi.mock('@/lib/core-app/trades', () => ({ getTradesData: vi.fn(async () => null) }))
+vi.mock('@/lib/core-app/trades', () => ({ getTradesData: vi.fn(async () => null), startTradesRead: vi.fn(async () => null) }))
 vi.mock('@/lib/core-app/crossLeagueValueActions', () => ({ getCrossLeagueValueActions: vi.fn(async () => []) }))
 
 type AnyElement = ReactElement<Record<string, unknown>>

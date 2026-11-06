@@ -53,7 +53,7 @@ import {
 } from '@/lib/league-import/importCoverageSummary'
 import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
-  Matchup, Trades, Waivers, DraftHq, DraftBoard,
+  Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
   GamePlan, WarRoomWeek, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
@@ -124,7 +124,8 @@ import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { MatchupPickerBlurb, MatchupPickerNotice } from '@/components/core-app/MatchupPickerCopy'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
-import { getTradesData } from '@/lib/core-app/trades'
+import { startTradesRead } from '@/lib/core-app/trades'
+import { TradesHistorySlot, completedHistoryOf } from '@/components/core-app/screens/TradesHistorySection'
 import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
 import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
@@ -204,6 +205,7 @@ import { WeekHistoryNotice } from '@/components/core-app/WeekHistoryNotice'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { readOddsHistory } from '@/lib/core-app/seasonOutlookOddsHistory'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
@@ -2118,11 +2120,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * they are used: they need neither the paywall nor each other, and starting them late put the
    * paywall and the value actions in front of the trades read on the screen's load time. Awaited
    * where they always were; the failure flag is still set before anything reads it.
+   *
+   * ⚠ ONLY THE SHELL IS AWAITED (2026-11-06). `startTradesRead` resolves once the header's reads are
+   * in and hands back the rest — grades, the 19–30s cold Sleeper history, offers, ideas — as a
+   * promise that streams into the history slot (TradesHistorySection). A failure HERE is still the
+   * whole-screen ScreenLoadError; a failure in the streamed part is that card in the slot alone.
    */
   let tradesLoadFailed = false
   const tradesRead =
     activeKey === 'trades' && selectedLeagueId
-      ? getTradesData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+      ? startTradesRead(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/trades] read failed', e)
           tradesLoadFailed = true
           return null
@@ -3007,7 +3014,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : null
 
   /* Same split as my-team above: a failed read must not read as "no league". Both reads started near the top. */
-  const trades = await tradesRead
+  const tradesStart = await tradesRead
+  /* The header's fields — every value the Trade Center's head and summary strip read. */
+  const trades = tradesStart?.shell ?? null
   const tradeValueActions = await tradeValueActionsRead
 
   /*
@@ -3694,6 +3703,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .league()
           .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
           .catch(() => null)
+      : null
+
+  /*
+   * Your playoff and title odds by week this season, for the same one league (`league_odds_snapshots`).
+   * Null when the table is missing, the read fails or fewer than two weeks are on file — the screen then
+   * draws no chart at all. Display only; a failed read costs the chart and nothing else.
+   */
+  const outlookHistoryLeague =
+    activeKey === 'season-outlook' && selectedLeagueId
+      ? outlook?.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null
+      : null
+  const outlookHistoryInput = outlookHistoryLeague ? outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null : null
+  const outlookHistory =
+    outlookHistoryLeague?.you && outlookHistoryInput
+      ? await readOddsHistory(outlookHistoryInput, outlookHistoryLeague.season, outlookHistoryLeague.you.rosterId).catch(() => null)
       : null
 
   /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
@@ -4858,8 +4882,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={tradeStripLeagues}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
-              history={<Trades data={trades} hidePending />}
-              completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
+              /*
+                The slow half streams in here (TradesHistorySection): same `<Trades data hidePending />`
+                once the read lands, a shaped placeholder until then, and its own "did not load" card if
+                it fails. `completedHistory` is the same Sleeper list, delivered when it arrives.
+              */
+              history={
+                tradesStart ? (
+                  <TradesHistorySlot
+                    data={tradesStart.data}
+                    screen={navLabel('trades')}
+                    retryHref={retryHref}
+                    language={language}
+                  />
+                ) : null
+              }
+              completedHistory={tradesStart ? completedHistoryOf(tradesStart.data) : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
               startWithOfferEntry={sp.enter === 'offer' && trades.league.platform === 'sleeper'}
             />
@@ -5432,6 +5470,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               priorities={outlook.priorities}
               freshness={outlookFreshness}
               lineups={outlookLineups}
+              history={outlookHistory}
             />
           ) : (
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />

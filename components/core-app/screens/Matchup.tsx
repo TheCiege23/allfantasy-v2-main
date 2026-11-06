@@ -1,5 +1,6 @@
 'use client'
 
+import { EmptyState } from '@/components/core-app/primitives/EmptyState'
 import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
@@ -1111,21 +1112,20 @@ export function Matchup({ data }: MatchupProps) {
           ("no matchup resolved, so…") down an otherwise empty page. One titled card says it once,
           and says when the matchup will appear.
         */
-        <div className="af-empty-card" data-testid="matchup-empty">
-          <span className="af-empty-card-mark" aria-hidden>
-            vs
-          </span>
-          <div className="af-empty-card-text">
-            <p className="af-empty-card-title">{m.noMatchupTitle}</p>
-            {/* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */}
-            <p className="af-empty-card-hint">{m.noMatchupHint}</p>
-            <p className="af-empty-card-links">
-              <Link href={`/core/my-team?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
-                {copy('Check your lineup')} →
-              </Link>
-            </p>
-          </div>
-        </div>
+        /* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */
+        <EmptyState
+          testId="matchup-empty"
+          mark="vs"
+          title={m.noMatchupTitle}
+          hint={m.noMatchupHint}
+          links={[
+            {
+              href: `/core/my-team?league=${encodeURIComponent(data.league.id)}`,
+              label: `${copy('Check your lineup')} →`,
+              prefetch: false,
+            },
+          ]}
+        />
       ) : data.league.elimination ? (
         /*
           🛑 NO VERSUS FOR AN ELIMINATION LEAGUE. The lowest score each week goes home, so the

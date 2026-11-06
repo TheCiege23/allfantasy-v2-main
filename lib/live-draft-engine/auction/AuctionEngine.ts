@@ -30,6 +30,7 @@ import { processWinningContractBid } from '@/lib/salary-cap/ContractBidService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
 import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
+import { recordAuctionBid } from '@/lib/live-draft-engine/auction/auctionBidLog'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -254,6 +255,11 @@ async function _nominatePlayerCore(
     }
   }
 
+  // A season auto-nomination opens at the minimum bid on the nominator's behalf: the ladder's first rung.
+  if (openingBid > 0 && newState.currentNomination) {
+    await recordAuctionBid({ draftSessionId: session.id, leagueId, player: newState.currentNomination, rosterId: nominatorRosterId, amount: openingBid })
+  }
+
   return { success: true }
 }
 
@@ -355,6 +361,10 @@ async function _placeBidCore(
       throw error
     }
   }
+
+  // Only now is the bid accepted and saved. The history row is best-effort (never throws, never
+  // blocks): with the auction_bids table absent the bid still succeeds and the room shows no ladder.
+  await recordAuctionBid({ draftSessionId: session.id, leagueId, player: state.currentNomination, rosterId, amount })
 
   return { success: true }
 }
