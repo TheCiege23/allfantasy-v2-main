@@ -1724,7 +1724,18 @@ async function loadLeague(
   } else {
     // No projection is passed: nothing is published beyond the current week, and
     // the playoff window is always later than that.
-    const { schedule } = await loadSchedule(club, season, startWeek, null, null, PLAYOFF_WEEKS)
+    // The league's sport: without it a hockey league's playoff weeks were read from NFL clubs (all byes).
+    const { schedule } = await loadSchedule(
+      club,
+      season,
+      startWeek,
+      null,
+      null,
+      PLAYOFF_WEEKS,
+      null,
+      null,
+      String(league.sport ?? 'NFL').trim().toUpperCase(),
+    )
     playoffSchedule = schedule.available
       ? { available: true, data: { weeks: schedule.data.weeks, startWeek } }
       : schedule

@@ -156,6 +156,22 @@ describe('the card a Fantrax hockey player opens to (live, 2026-11-06)', () => {
     expect(card?.league?.slot).toBe('STARTER')
   })
 
+  it('the league playoff strip uses the league sport too: no NFL byes for a hockey league', async () => {
+    overrides.league = {
+      findUnique: async () => ({ id: 'L1', name: 'Top Shelf', platform: 'fantrax', sport: 'NHL', settings: { playoff_week_start: 21 }, leagueType: 'redraft' }),
+    }
+    identities([{ fantraxId: '04yla', rollingInsightsId: '1114' }])
+    // A full NFL-looking slate without his club: before the fix every playoff week read BYE.
+    overrides.sportsGame = {
+      findMany: async () =>
+        Array.from({ length: 14 }, (_, i) => ({ homeTeam: `H${i}`, awayTeam: `A${i}`, startTime: new Date(), seasonType: 'regular', venue: null, week: 21 })),
+    }
+    const card = await getPlayerCard({ sport: 'NHL', sleeperId: '04yla', leagueId: 'L1' })
+    const playoff = card?.league?.playoffSchedule
+    expect(playoff?.available).toBe(false)
+    expect(playoff && !playoff.available ? playoff.reason : null).toBe(NON_WEEKLY_SCHEDULE)
+  })
+
   it('weekly sports keep the strip; daily ones do not', () => {
     expect(['NFL', 'ncaaf', null].map(isWeeklyScheduleSport)).toEqual([true, true, true])
     expect(['NBA', 'NHL', 'MLB'].map(isWeeklyScheduleSport)).toEqual([false, false, false])
