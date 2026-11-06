@@ -4,6 +4,8 @@ import { useMessages } from '@/components/i18n/useMessages';
 import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens';
 import type { DraftReference } from '@/lib/draft-archive/referenceModel';
 import { useState } from 'react';
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient';
+import { readableWhen } from './DraftResultsRefresh';
 import '@/components/core-app/af-draft-analysis.css';
 function ReferenceRows({ r }: { r: DraftReference }) {
   const [query,setQuery] = useState(''), [page,setPage] = useState(0);
@@ -14,13 +16,13 @@ function ReferenceRows({ r }: { r: DraftReference }) {
     <nav aria-label={m.referencesReferencePages}><button disabled={page===0} onClick={()=>setPage(p=>p-1)}>{m.referencesPrevious}</button><span>{entries.length} {m.referencesPlayers} · {page+1}</span><button disabled={(page+1)*20>=entries.length} onClick={()=>setPage(p=>p+1)}>{m.referencesNext}</button></nav></>;
 }
 export function DraftReferences({ references, error }: { references?: DraftReference[]; error?: boolean }) {
-  const m = useMessages(draftScreensMessages);
+  const m = useMessages(draftScreensMessages), language = useOptionalLanguage().language;
   if (!references?.length && !error) return null;
   return <section className="af-draft-reference" aria-label={m.referencesMarketReferences}>
-    <h3>{m.referencesMarketReferences} <InfoTip label={m.referencesAboutMarketReferences} title={m.referencesReferenceCoverage}><p>{m.referencesHelp}</p></InfoTip></h3>
+    <h3>{m.referencesMarketReferences} <InfoTip label={m.referencesAboutMarketReferences} title={m.referencesReferenceCoverage}><span className="af-info-para">{m.referencesHelp}</span></InfoTip></h3>
     {error && <p role="status">{m.referencesLoadError}</p>}
-    {references?.map(r => <details key={r.kind + r.format}><summary>{r.kind === 'adp' ? 'ADP' : r.kind === 'auction_price' ? m.referencesObservedAuctionPrices : m.referencesMarketValueRanking} · {r.format} · {r.entries.length} {m.referencesCoveredPlayers}</summary>
-      <p>{r.attributionUrl ? <a href={r.attributionUrl} target="_blank" rel="noopener noreferrer">{r.provider}</a> : r.provider} · {m.referencesEffective}: {r.effectiveAt} · {m.referencesRetrieved}: {r.observedAt}</p>
+    {references?.map(r => <details key={r.kind + r.format}><summary>{r.kind === 'adp' ? 'ADP' : r.kind === 'auction_price' ? m.referencesObservedAuctionPrices : m.referencesMarketValueRanking} · {m.referencesFormat(r.format)} · {r.entries.length} {m.referencesCoveredPlayers}</summary>
+      <p>{r.attributionUrl ? <a href={r.attributionUrl} target="_blank" rel="noopener noreferrer">{r.provider}</a> : r.provider} · {m.referencesEffective}: {readableWhen(r.effectiveAt, language)} · {m.referencesRetrieved}: {readableWhen(r.observedAt, language)}</p>
       <p>{m.referencesFormatNote}</p>
       <ReferenceRows key={r.effectiveAt + r.observedAt} r={r}/>
       {r.displayScope && <p>{r.displayScope === 'preparation_top100' ? m.referencesPreparationSubset : m.referencesDraftScope}</p>}
