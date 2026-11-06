@@ -204,6 +204,8 @@ export async function getLeagueScoreboard(args: {
     (r) => r.league?.sport,
   )
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
+  /* The league's sport, so a Sleeper NBA board is never priced from NFL rows of the same id (projectionSportScope). */
+  const leagueSport = rosters.find((r) => r.league?.sport)?.league?.sport ?? null
 
   /**
    * Find a team's roster across the three id spellings it can be stored under.
@@ -255,11 +257,11 @@ export async function getLeagueScoreboard(args: {
         // Defenders are priced under this league's own rules here too, so a board that
         // includes IDP lineups is measured the same way for every team on it.
         scoringSettings: args.scoringSettings,
-      }).catch(() => new Map())
+      }, leagueSport).catch(() => new Map())
     : new Map()
   /* AllFantasy's own engine for the same starters and week — the second total on every row. */
   const afEngine = everyStarter.length
-    ? await lookupAfEngineProjections(everyStarter, args.projectionWeek).catch(
+    ? await lookupAfEngineProjections(everyStarter, args.projectionWeek, leagueSport).catch(
         (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
       )
     : new Map()
