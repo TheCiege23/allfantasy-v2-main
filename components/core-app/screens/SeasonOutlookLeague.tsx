@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { OutlookLeague, SwingMatchup } from '@/lib/core-app/seasonOutlook'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import type { OddsHistoryPoint } from '@/lib/core-app/seasonOutlookOddsHistory'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
 import { describeTeamOutlook, pct, rangeLabel, signedPts, band } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
@@ -19,6 +20,7 @@ import {
   StatusPill,
 } from '@/components/core-app/outlook/OutlookParts'
 import { OutlookScenarioPanel } from '@/components/core-app/outlook/OutlookScenarioPanel'
+import { OddsHistoryChart } from '@/components/core-app/outlook/OddsHistoryChart'
 import { FirstPickExplainerBlock } from '@/components/scenario-explainer/WhatDoINeed'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -78,6 +80,11 @@ export type SeasonOutlookLeagueProps = {
    * without AF and nothing here feeds them. Null draws no section.
    */
   lineups?: StandingsLineups | null
+  /**
+   * Your playoff and title odds by week this season (`league_odds_snapshots`). Null — or fewer than two
+   * weeks — draws no chart and no box.
+   */
+  history?: OddsHistoryPoint[] | null
 }
 
 const TABS = [
@@ -100,7 +107,7 @@ function readTab(): TabKey | null {
   return TABS.some((t) => t.key === v) ? (v as TabKey) : null
 }
 
-export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null, lineups = null }: SeasonOutlookLeagueProps) {
+export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null, lineups = null, history = null }: SeasonOutlookLeagueProps) {
   const { say } = useOutlookLanguage()
   const m = useMessages(seasonOutlookLeagueMessages)
   const you = league.you
@@ -229,6 +236,8 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
         </div>
 
         <p className="af-olk-decides">{say(league.whatDecidesIt)}</p>
+
+        {history && history.length >= 2 ? <OddsHistoryChart points={history} /> : null}
 
         <div className="af-olk-hero-grid">
           <div className="af-olk-next">
