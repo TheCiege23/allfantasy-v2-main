@@ -10,7 +10,7 @@ export const waiversMessages = defineMessages({
     yourTime: ' your time',
     budgetRank: (rank: number, rosters: number) => `${rank} of ${rosters} by budget left`,
     ofRosters: (rosters: number) => `of ${rosters} rosters`,
-    claimsPending: (count: number) => (count === 1 ? 'waits for the next run' : 'wait for the next run'),
+    claimsPending: (count: number): string => (count === 1 ? 'waits for the next run' : 'wait for the next run'),
     rosterLoad: (starters: number, bench: number, reserve: number) =>
       // A no-break space inside each part, so a narrow tile wraps between parts ("· 1 IR/taxi")
       // instead of leaving a bare "1" at the end of a line.
