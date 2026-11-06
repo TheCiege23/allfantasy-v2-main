@@ -224,10 +224,18 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+/* Wraps to a second line instead of cutting on the first: at ~800px the third card read
+   "KingGinger…". A single-word handle breaks inside the word; only a name longer than two
+   lines still ends in an ellipsis. The record keeps its own flex:none column beside it. */
 .af-crr-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
   color: var(--text);
   font-size: 14px;
   font-weight: 700;
