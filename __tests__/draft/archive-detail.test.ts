@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn(), executions: vi.fn(), raw: vi.fn(), teams: vi.fn(), any: vi.fn(async () => []), one: vi.fn(async () => null) }))
+const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn(), executions: vi.fn(), raw: vi.fn(), teams: vi.fn(), any: vi.fn(async () => []), one: vi.fn(async () => null), results: vi.fn() }))
+vi.mock('@/lib/draft-archive/importedResults', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/draft-archive/importedResults')>(), readImportedResults: db.results }))
 vi.mock('@/server/services/permissionService', () => ({ canViewLeague: db.gate, isElevatedCommissioner: db.commissioner }))
 vi.mock('@/lib/core-app/draftHq', () => ({ resolvePlayerNames: vi.fn(async () => new Map()) }))
 vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: db.catalog }))
@@ -81,6 +82,16 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(db.teams).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'l', platformUserId: { not: null } } }))
     expect(result?.picks[0]).toMatchObject({ actor: '100561289762', actorName: 'GuapCiege', teamName: 'Maye Day', originalTeamName: 'Recorded Sleeper name' })
     expect(result?.picks[1]).toMatchObject({ actorName: null, teamName: null })
+  })
+  it('names the teams in stored results the same way, keeping a placeholder only where nobody is known', async () => {
+    // Live /core 2026-11-06: Results to date listed "Team 8", "Team 5"… because ingestion stores 'Team ' + rosterId.
+    db.catalog.mockResolvedValue({ choices: [{ key: 'imported:139', source: 'imported', sourceId: '139', format: 'snake', sport: 'NFL', season: 2026 }] })
+    db.raw.mockResolvedValue([{ draftId: 'f1', pickNumber: 1, round: 1, playerId: '4034', metadata: { provider: 'sleeper', selectionRosterId: '8', playerSnapshot: { name: 'Bijan Robinson', position: 'RB' }, archiveDraft: { observedSeasonRosters: [{ roster_id: 8, owner_id: 'u8' }, { roster_id: 3, owner_id: 'u3' }] } } }])
+    db.teams.mockResolvedValue([{ platformUserId: 'u8', ownerName: 'GuapCiege', teamName: 'Maye Day' }, { platformUserId: 'u3', ownerName: 'Three', teamName: 'Never used' }])
+    const team = (rosterId: string, name: string) => ({ rosterId, name, rank: 1, points: 1, starterPoints: 1, starts: 1, weeks: [1], coveredPicks: 1 })
+    db.results.mockResolvedValue({ observedAt: '2026-11-01T00:00:00.000Z', report: { state: 'ready', provisional: true, coverage: 'c', teams: [team('8', 'Team 8'), team('5', 'Team 5'), team('3', 'Recorded name')] } })
+    const result = await draftArchiveDetail('l', 'viewer', 'imported:139')
+    expect(result?.resultsReport?.teams.map(t => t.name)).toEqual(['Maye Day', 'Team 5', 'Recorded name'])
   })
   it('uses recorded team and actor names without loading current roster identities', async () => {
     const startedAt = new Date('2026-09-01T00:00:00Z')

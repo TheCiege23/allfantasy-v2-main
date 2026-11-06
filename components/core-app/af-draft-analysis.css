@@ -31,3 +31,19 @@
 
 .af-draft-phase4 .af-college-values table{min-width:900px}
 .af-draft-phase4 .af-college-values th{white-space:nowrap;overflow-wrap:normal}
+
+/* Draft analysis: title first, one note, each part its own block with a status chip (2026-11-06). */
+.af-draft-analysis .af-analysis-head{display:flex;align-items:center;gap:.5rem;margin:0 0 .75rem}
+.af-draft-analysis .af-analysis-head h3{margin:0;font-size:1.05rem;line-height:1.3}
+.af-draft-analysis .af-analysis-note{margin:0 0 1rem;padding:.6rem .75rem;border-left:3px solid var(--warn);border-radius:6px;background:var(--warn-soft);color:var(--text2);font-size:13px;line-height:1.45}
+.af-draft-analysis .af-analysis-part{padding:.9rem 0 0;margin-top:.9rem;border-top:1px solid var(--line)}
+.af-draft-analysis .af-analysis-note+.af-analysis-part,.af-draft-analysis .af-analysis-head+.af-analysis-part{margin-top:0;border-top:0;padding-top:0}
+.af-draft-analysis .af-analysis-part-head{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin:0 0 .35rem}
+.af-draft-analysis .af-analysis-part-head h4{margin:0;font-size:.95rem;line-height:1.3}
+.af-draft-analysis .af-analysis-state{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;line-height:18px;white-space:nowrap;border:1px solid var(--line);color:var(--text2)}
+.af-draft-analysis .af-analysis-state[data-tone=ok]{color:var(--good);background:var(--good-soft);border-color:transparent}
+.af-draft-analysis .af-analysis-state[data-tone=warn]{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+.af-draft-analysis .af-analysis-reason{margin:0 0 .75rem;max-width:68ch;color:var(--text2);font-size:13px;line-height:1.5}
+.af-draft-analysis .af-analysis-rank{font-weight:700;font-variant-numeric:tabular-nums}
+.af-draft-analysis td{font-variant-numeric:tabular-nums}
+.af-draft-analysis details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
