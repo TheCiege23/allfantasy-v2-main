@@ -9,6 +9,9 @@ import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
+import { auctionBidLadderMessages } from '@/lib/core-app/messages/auctionBidLadder'
+import { auctionBidPlayerKey, ladderFor } from '@/lib/draft-room/auctionBidLadder'
+import { AuctionBidLadder, useAuctionBidHistory } from './AuctionBidLadder'
 
 export type AuctionSpotlightPanelProps = {
   auction: AuctionSessionSnapshot
@@ -30,6 +33,11 @@ export type AuctionSpotlightPanelProps = {
   picks?: DraftPickSnapshot[] | null
   /** The league's minimum bid; the server reserves this much per open spot. */
   minimumBid?: number
+  /**
+   * The league whose bid history to show. Without it no history is read and no ladder is drawn
+   * (the history route is per league).
+   */
+  leagueId?: string | null
 }
 
 export type AuctionTeamLine = {
@@ -115,8 +123,10 @@ export function AuctionSpotlightPanel({
   rosterSize = null,
   picks = null,
   minimumBid = 1,
+  leagueId = null,
 }: AuctionSpotlightPanelProps) {
   const m = useMessages(draftRoomRedesignMessages)
+  const lm = useMessages(auctionBidLadderMessages)
   const state: AuctionState = auction.auctionState
   const [bidAmount, setBidAmount] = useState(() => String(state.minNextBid ?? 1))
   const nomination = state.currentNomination
@@ -156,6 +166,14 @@ export function AuctionSpotlightPanel({
   useEffect(() => {
     setBidAmount(String(minNextBid))
   }, [minNextBid])
+
+  // Refetch the history whenever the auction moves: a new bid, a new player on the block, a sale.
+  const blockKey = nomination ? auctionBidPlayerKey(nomination) : ''
+  const bidHistory = useAuctionBidHistory(
+    leagueId,
+    `${blockKey}|${state.currentBid}|${state.currentBidderRosterId ?? ''}|${picks?.length ?? 0}`,
+  )
+  const blockLadder = useMemo(() => (blockKey ? ladderFor(bidHistory, blockKey).slice(0, 8) : []), [bidHistory, blockKey])
 
   const withinMax = (amount: number) => myMax == null || amount <= myMax
   const placeBid = (amount: number) => {
@@ -325,6 +343,8 @@ export function AuctionSpotlightPanel({
               {m.minNextBid(minNextBid)}
               {canBid && myMax != null && mine?.spots != null && mine.spots > 0 ? ` · ${m.maxBidNote(myMax, mine.spots, minimumBid)}` : ''}
             </p>
+
+            <AuctionBidLadder bids={blockLadder} playerName={nomination.playerName} nameOf={nameOf} testId="auction-block-ladder" />
           </>
         ) : (
           <div>
@@ -350,21 +370,34 @@ export function AuctionSpotlightPanel({
             <div className="af-dr-card-head">
               <h3 className="af-dr-card-title">{m.recentlyWon}</h3>
             </div>
-            {recentWins.map((pick) => (
-              <div key={pick.id} className="af-dr-row">
-                <span style={{ minWidth: 0 }}>
-                  <span className="af-dr-row-name" style={{ display: 'block' }}>
-                    {pick.playerName}
-                  </span>
-                  <span className="af-dr-row-sub">
-                    {[pick.position, pick.team, pick.displayName ?? nameOf(pick.rosterId)].filter(Boolean).join(' · ')}
-                  </span>
-                </span>
-                <span className="af-dr-num" style={{ fontWeight: 800, color: 'var(--text)' }}>
-                  ${pick.amount}
-                </span>
-              </div>
-            ))}
+            {recentWins.map((pick) => {
+              const ladder = ladderFor(bidHistory, auctionBidPlayerKey(pick))
+              return (
+                <div key={pick.id} className="af-dr-won">
+                  <div className="af-dr-row">
+                    <span style={{ minWidth: 0 }}>
+                      <span className="af-dr-row-name" style={{ display: 'block' }}>
+                        {pick.playerName}
+                      </span>
+                      <span className="af-dr-row-sub">
+                        {[pick.position, pick.team, pick.displayName ?? nameOf(pick.rosterId)].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <span className="af-dr-num" style={{ fontWeight: 800, color: 'var(--text)' }}>
+                      ${pick.amount}
+                    </span>
+                  </div>
+                  {ladder.length > 0 ? (
+                    <details className="af-dr-ladder-fold" data-testid="auction-won-ladder">
+                      <summary className="af-dr-ladder-summary">
+                        {lm.title} · {lm.show(ladder.length)}
+                      </summary>
+                      <AuctionBidLadder bids={ladder} playerName={pick.playerName} nameOf={nameOf} testId="auction-won-ladder-list" />
+                    </details>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
         ) : null}
 
