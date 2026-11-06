@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -410,11 +411,13 @@ function AllLeaguesTradeHub(props: {
 
   return (
     <div className="af-tc af-tc--hub">
-      <header className="af-tc-head af-tc-hub-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade command center')}</h1>
-        <p className="af-tc-lede">{copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}</p>
-      </header>
+      <PageHeader
+        className="af-tc-head af-tc-hub-head"
+        subClassName="af-tc-lede"
+        eyebrow={<>{copy("Core · ")}{copy('Trades')}</>}
+        title={copy('Trade command center')}
+        sub={copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}
+      />
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
 
@@ -1631,35 +1634,37 @@ export function TradeCenter(props: {
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       {props.embedded ? null : (
-      <header className="af-tc-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade Center')}</h1>
-        <p className="af-tc-lede">
-          {copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
-        </p>
-        {/*
-          🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
-          AllFantasy is read-only on every connected platform — Sleeper's API has
-          no write endpoint at all — so a deal built here does not exist until it
-          is re-entered on the source platform. My Team and Matchup have carried a
-          `sourceLink` for that reason since they shipped; the trade builder, the
-          one screen whose entire output is an action the user must take
-          somewhere else, did not. The flow dead-ended on a verdict.
+      <PageHeader
+        className="af-tc-head"
+        subClassName="af-tc-lede"
+        eyebrow={<>{copy("Core · ")}{copy('Trades')}</>}
+        title={copy('Trade Center')}
+        sub={copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
+        actions={
+          /*
+            🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
+            AllFantasy is read-only on every connected platform — Sleeper's API has
+            no write endpoint at all — so a deal built here does not exist until it
+            is re-entered on the source platform. My Team and Matchup have carried a
+            `sourceLink` for that reason since they shipped; the trade builder, the
+            one screen whose entire output is an action the user must take
+            somewhere else, did not. The flow dead-ended on a verdict.
 
-          `screen: 'trade'` lands on the platform's own trade page (Sleeper
-          /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
-          home, and renders nothing at all for a native league or an unresolved
-          host — never a guessed href.
-        */}
-        {props.sourceLink ? (
-          <div className="af-tc-handoff">
-            <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
-            <span className="af-tc-handoff-note">
-              {copy('AllFantasy never sends a trade for you — build it here, then send it there.')}
-            </span>
-          </div>
-        ) : null}
-      </header>
+            `screen: 'trade'` lands on the platform's own trade page (Sleeper
+            /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
+            home, and renders nothing at all for a native league or an unresolved
+            host — never a guessed href.
+          */
+          props.sourceLink ? (
+            <div className="af-tc-handoff">
+              <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
+              <span className="af-tc-handoff-note">
+                {copy('AllFantasy never sends a trade for you — build it here, then send it there.')}
+              </span>
+            </div>
+          ) : null
+        }
+      />
       )}
 
       {props.league && !props.embedded ? (

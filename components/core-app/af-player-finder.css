@@ -594,6 +594,7 @@
   overflow-y: auto;
 }
 
+/* The public /players index's h1 (app/players/page.tsx). The /core rail's title is the shared PageHeader. */
 .af-core .af-pf-h1 {
   margin: 0;
   font-size: 26px;
@@ -867,9 +868,7 @@
     padding: 16px;
   }
 
-  .af-core .af-pf-h1 {
-    font-size: 22px;
-  }
+  /* The rail title is the shared PageHeader's (--af-title-size); `.af-pf-h1` is the public index's. */
 
   .af-core .af-pf-main {
     padding: 16px;
@@ -1521,9 +1520,6 @@
     padding: 14px 16px 10px;
     border-bottom: 0;
     background: transparent;
-  }
-  .af-core .af-pf-h1 {
-    font-size: 28px;
   }
   .af-core .af-pf-search {
     height: 48px;
@@ -4600,7 +4596,7 @@
   .af-core.af-pf--home .af-pf-rail > * {
     margin: 0 16px 14px;
   }
-  .af-core.af-pf--home .af-pf-h1 {
+  .af-core.af-pf--home .af-pf-head {
     margin-top: 16px;
   }
   .af-core.af-pf--home .af-pf-main {

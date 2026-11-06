@@ -11,6 +11,7 @@ import {
   eliminationStatusOf,
   type EliminationZones,
 } from '@/components/core-app/standings/StandingsBoardView'
+import { EmptyState, PageHeader } from '@/components/core-app/primitives'
 import '@/components/core-app/af-standings.css'
 import '@/components/core-app/af-empty-state.css'
 // The redraft overrides load last, after every stylesheet of this screen's own.
@@ -422,26 +423,26 @@ export function Standings({
   if (!data.available) {
     return (
       <div className="af-st">
-        <header className="af-st-head">
-          <p className="af-label af-st-eyebrow">{data.leagueName}</p>
-          <h1 className="af-display af-st-title">{copy('Standings')}</h1>
-          {chip}
-        </header>
+        <PageHeader
+          className="af-st-head"
+          eyebrowClassName="af-st-eyebrow"
+          titleClassName="af-st-title"
+          eyebrow={data.leagueName}
+          title={copy('Standings')}
+          actions={chip}
+        />
         {/*
           A titled "nothing yet" card. The loader's reason is already a full explanation, but on its
           own — lowercase, beside a dash — it read as a fault. When the board is only waiting for a
           scored week, say that it will fill in, and when.
         */}
-        <div className="af-empty-card af-st-blocked" data-testid="standings-empty">
-          <span className="af-empty-card-mark" aria-hidden>
-            —
-          </span>
-          <div className="af-empty-card-text">
-            <p className="af-empty-card-title">{m.emptyTitle}</p>
-            <p className="af-empty-card-body af-st-blocked-body">{copy(data.reason)}</p>
-            {standingsWaitForScores(data.reason) ? <p className="af-empty-card-hint">{m.emptyHintScores}</p> : null}
-          </div>
-        </div>
+        <EmptyState
+          testId="standings-empty"
+          mark="—"
+          title={m.emptyTitle}
+          body={copy(data.reason)}
+          hint={standingsWaitForScores(data.reason) ? m.emptyHintScores : null}
+        />
         {/* An offseason dynasty league is exactly when its history matters most. */}
         {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
         {/* The live board cannot be drawn, but the imported seasons still can. */}
@@ -457,26 +458,33 @@ export function Standings({
 
   return (
     <div className="af-st">
-      <header className="af-st-head">
-        <p className="af-label af-st-eyebrow">{league.name}</p>
-        <h1 className="af-display af-st-title">{copy('Standings')}</h1>
-        <p className="af-st-sub">
-          {m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek })}
-        </p>
-        {chip}
-        <div className="af-st-share">
-          {/*
-            The IMAGE is shared, never the URL: the card route is auth-gated to league members, so a link
-            would open nothing for anyone else.
-          */}
-          <ShareMomentButton
-            url={`/api/share/rivalry-card?kind=standings&leagueId=${encodeURIComponent(league.id)}`}
-            filename={`standings-${season}-week-${board.throughWeek}.png`}
-            title={`${league.name} standings`}
-            label={copy('Share standings')}
-          />
-        </div>
-      </header>
+      <PageHeader
+        className="af-st-head"
+        eyebrowClassName="af-st-eyebrow"
+        titleClassName="af-st-title"
+        subClassName="af-st-sub"
+        actionsClassName="af-st-headactions"
+        eyebrow={league.name}
+        title={copy('Standings')}
+        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek })}
+        actions={
+          <>
+            {chip}
+            <div className="af-st-share">
+              {/*
+                The IMAGE is shared, never the URL: the card route is auth-gated to league members, so a link
+                would open nothing for anyone else.
+              */}
+              <ShareMomentButton
+                url={`/api/share/rivalry-card?kind=standings&leagueId=${encodeURIComponent(league.id)}`}
+                filename={`standings-${season}-week-${board.throughWeek}.png`}
+                title={`${league.name} standings`}
+                label={copy('Share standings')}
+              />
+            </div>
+          </>
+        }
+      />
 
       {me ? (
         <div className="af-st-tiles">

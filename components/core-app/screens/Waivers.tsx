@@ -6,6 +6,7 @@ import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
 import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
 import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-waivers.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
@@ -166,7 +167,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       width — a container query — because the core shell's rail takes a slice of the viewport.
     */
     <div className="af-wv" data-details-scope>
-      <h1 className="af-display">{copy('Waivers')}</h1>
+      <PageHeader className="af-wv-head" titleClassName="af-wv-title" title={copy('Waivers')} />
       {/*
         The deadline first, when there is a real one: a manager opening this tab is usually checking
         it. Only leagues whose schedule we actually imported — a Sleeper league's is not on file and

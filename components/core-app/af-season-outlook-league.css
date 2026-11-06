@@ -27,18 +27,7 @@
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
-.af-sol-title {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: -0.035em;
-}
-.af-sol-sub {
-  margin: 0;
-  max-width: 66ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 
 /* ── Tiles ───────────────────────────────────────────────────────────── */
 
@@ -341,9 +330,6 @@
 }
 
 @media (max-width: 560px) {
-  .af-sol-title {
-    font-size: 23px;
-  }
   .af-sol-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -483,17 +469,6 @@
   gap: 6px;
   padding-bottom: 18px;
 }
-.af-core .af-sol-eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-.af-core .af-sol-title {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
 
 /* The forecast card. */
 .af-core .af-sol .af-olk-hero {
@@ -622,9 +597,6 @@
 }
 
 @media (max-width: 640px) {
-  .af-core .af-sol-title {
-    font-size: 26px;
-  }
   .af-core .af-sol .af-olk-hero,
   .af-core .af-sol .af-olk-panel {
     padding: 16px;

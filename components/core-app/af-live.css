@@ -24,17 +24,7 @@
   gap: 7px;
   max-width: 64ch;
 }
-.af-live-title {
-  font-size: 30px;
-  letter-spacing: -0.035em;
-  margin: 0;
-}
-.af-live-lede {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and lede: the shared PageHeader (primitives/af-primitives.css). */
 
 /* ── Control bar ─────────────────────────────────────────────────────── */
 
@@ -866,9 +856,6 @@
 }
 
 @media (max-width: 620px) {
-  .af-live-title {
-    font-size: 24px;
-  }
   .af-live-bar-top {
     padding: 12px 14px;
   }
@@ -2883,7 +2870,7 @@
 .af-live-league-contribution dt { font-size:12px; color:var(--muted); }
 .af-live-league-contribution dd { margin:4px 0 0; font-size:19px; font-variant-numeric:tabular-nums; }
 @media(max-width:720px) {
- .af-live-lede,.af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
+ .af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
  .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
  .af-live-scope-btn,.af-live-search { min-height:48px; }
  .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
@@ -3155,7 +3142,6 @@
 /* Scoreboard: scores first, team identity second, details below. */
 .af-core .af-live { gap: 16px; }
 .af-core .af-live-head { gap: 5px; max-width: 76ch; }
-.af-core .af-live-title { font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; }
 .af-core .af-live-eyebrow { display: none; }
 .af-core .af-live-bar { border-radius: 16px; background: var(--surface); }
 .af-core .af-live-bar-name { display: none; }
@@ -3175,7 +3161,6 @@
   .af-core .af-live-team-name { white-space: normal; font-size: 13px; line-height: 1.3; }
   .af-core .af-live-search { flex: 1 1 100%; order: 2; }
   .af-core .af-live-search input { font-size: 16px; min-width: 0; }
-  .af-core .af-live-lede { font-size: 13px; line-height: 1.5; }
   .af-core .af-live-sports { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 }
 

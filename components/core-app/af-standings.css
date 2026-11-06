@@ -22,57 +22,16 @@
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
-.af-st-title {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: -0.035em;
-}
-.af-st-sub {
-  margin: 0;
-  max-width: 68ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-/*
- * The freshness chip. `align-self: flex-start` because .af-st-head is a flex COLUMN — without it
- * the chip stretches the full header width and reads as a banner rather than a label.
- */
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). The freshness chip and
+   the share button sit in its actions row, under the sub. */
 .af-st-head .af-fresh {
   align-self: flex-start;
   margin-top: 2px;
 }
 
 /* ── Refusal state ───────────────────────────────────────────────────── */
-
-/*
- * Deliberately not styled as an error. Nothing has gone wrong when a league has
- * not played yet — red would say something broke, and the sentence inside says
- * the opposite.
- */
-.af-st-blocked {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 28px 24px;
-  border-radius: 15px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.af-st-blocked-mark {
-  font-size: 26px;
-  font-weight: 900;
-  line-height: 1;
-  color: var(--faint);
-}
-.af-st-blocked-body {
-  margin: 0;
-  max-width: 64ch;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--muted);
-}
+/* The shared EmptyState card (primitives/af-primitives.css): deliberately not styled as an error.
+   Nothing has gone wrong when a league has not played yet. */
 
 .af-st-noteam {
   padding: 13px 15px;
@@ -407,9 +366,6 @@
 }
 
 @media (max-width: 560px) {
-  .af-st-title {
-    font-size: 23px;
-  }
   .af-st-tiles {
     gap: 10px;
   }
@@ -418,11 +374,6 @@
   }
   .af-st-tile-v {
     font-size: 23px;
-  }
-  .af-st-blocked {
-    flex-direction: column;
-    gap: 8px;
-    padding: 22px 18px;
   }
   .af-st-proj-v > .af-num:first-child {
     font-size: 25px;

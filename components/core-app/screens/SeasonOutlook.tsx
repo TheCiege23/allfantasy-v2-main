@@ -9,6 +9,7 @@ import { band, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -73,20 +74,27 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
 
   return (
     <div className="af-so af-olk">
-      <header className="af-so-head">
-        <p className="af-so-eyebrow af-label">{copy('Across every league you play')}</p>
-        <div className="af-olk-titlerow">
-          <h1 className="af-display af-so-title">{copy('Season Outlook')}</h1>
-          {/* Beside the title, not in it: the tiles below have no heading of their own to carry it. */}
-          {hasLeagues ? <TopicTip topic="outlookTiles" /> : null}
-          {freshness ? (
-            <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
-          ) : null}
-        </div>
-        <p className="af-so-sub">
-          {copy("Playoff, bye and championship odds, simulated per league against that league's own rules. Open a league for its what-ifs, moves and roster risk.")}
-        </p>
-      </header>
+      <PageHeader
+        className="af-so-head"
+        eyebrowClassName="af-so-eyebrow"
+        titleRowClassName="af-olk-titlerow"
+        titleClassName="af-so-title"
+        subClassName="af-so-sub"
+        eyebrow={copy('Across every league you play')}
+        title={copy('Season Outlook')}
+        titleAside={
+          hasLeagues || freshness ? (
+            <>
+              {/* Beside the title, not in it: the tiles below have no heading of their own to carry it. */}
+              {hasLeagues ? <TopicTip topic="outlookTiles" /> : null}
+              {freshness ? (
+                <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
+              ) : null}
+            </>
+          ) : null
+        }
+        sub={copy("Playoff, bye and championship odds, simulated per league against that league's own rules. Open a league for its what-ifs, moves and roster risk.")}
+      />
 
       {hasLeagues ? (
         <>

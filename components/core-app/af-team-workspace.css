@@ -1,6 +1,6 @@
 .af-tw { display:grid; gap:16px; min-width:0; margin-block:20px; }
-.af-tw h1,.af-tw h2,.af-tw h3 { margin:0 0 8px; line-height:1.25; color:var(--text); }
-.af-tw h1 { font-size:clamp(24px,3vw,34px); }
+/* The page h1 is the shared PageHeader's (primitives/af-primitives.css, --af-title-size). */
+.af-tw h2,.af-tw h3 { margin:0 0 8px; line-height:1.25; color:var(--text); }
 .af-tw h2 { font-size:22px; }
 .af-tw h3 { font-size:17px; }
 .af-tw p { margin:6px 0; line-height:1.5; }

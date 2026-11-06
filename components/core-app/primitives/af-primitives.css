@@ -35,6 +35,9 @@
   font: 800 var(--af-title-size, 30px)/1.1 'Archivo', system-ui, sans-serif;
   letter-spacing: -0.02em;
 }
+/* `titleAside`: a chip, tip or link on the title's line, beside the heading rather than inside it. */
+.af-core .af-pg-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.af-core .af-pg-titlerow > * { margin: 0; }
 .af-core .af-pg-sub { max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
 .af-core .af-pg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 

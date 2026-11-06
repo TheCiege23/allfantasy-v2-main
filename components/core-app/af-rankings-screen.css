@@ -29,12 +29,7 @@
   min-height: 60px;
   padding: 0 2px;
 }
-.af-rk-title {
-  font: 900 22px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif;
-  letter-spacing: -0.03em;
-  margin: 0;
-  color: var(--text);
-}
+/* Page titles (the hero, Compare, How ranking works) are the shared PageHeader's (primitives/af-primitives.css). */
 .af-rk-sub {
   font-size: 12.5px;
   color: var(--muted);
@@ -624,7 +619,6 @@
   /* The VS column becomes a divider row rather than disappearing — the
      head-to-head record lives in it and is not repeated anywhere else. */
   .af-rk-vsmid { flex-direction: row; padding: 4px 0; }
-  .af-rk-title { font-size: 19px; }
   .af-rk-table td.n { width: auto; }
 }
 
@@ -1372,16 +1366,9 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 16px 24px;
 }
 .af-rk-hero-main { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.af-rk-hero-eyebrow {
-  margin: 0;
-  color: var(--faint);
-  font: 600 11px/1.3 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
+/* The hero's eyebrow, title and intro are the shared PageHeader; the head stacks so the title row spans the column. */
+.af-rk-hero-head { flex-direction: column; }
 .af-rk-hero-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.af-rk-hero .af-rk-title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
-.af-rk-hero-intro { margin: 0; max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
 .af-rk-hero-intro strong { color: var(--text); }
 .af-rk-pills { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .af-rk-pills li {
@@ -1549,7 +1536,6 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 }
 
 @media (max-width: 720px) {
-  .af-rk-hero .af-rk-title { font-size: 26px; }
   .af-rk-levelcard { max-width: none; }
   .af-rk-av { display: none; }
   .af-rk-namecell { display: inline; }

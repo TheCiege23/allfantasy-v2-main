@@ -33,24 +33,13 @@
   border-bottom: 1px solid var(--line);
 }
 
-.af-wl-eyebrow {
-  color: var(--faint);
-  letter-spacing: 0.14em;
-}
-
+/* Eyebrow and title: the shared PageHeader (primitives/af-primitives.css); the link sits on the title row. */
 .af-wl-title-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-}
-
-.af-wl-title {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.03em;
-  color: var(--text);
 }
 
 .af-core .af-wl-allweeks {
