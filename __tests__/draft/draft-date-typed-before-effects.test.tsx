@@ -12,13 +12,35 @@
  * time. Against the old effect this fails 5 of 5; the during-render sync passes.
  */
 import React from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
-vi.hoisted(() => {
+/*
+ * 🛑 THE DELAYED setImmediate MUST NOT OUTLIVE THIS FILE. A callback still waiting out its 30ms when
+ * the file ends runs React's scheduler after jsdom is torn down, and throws `window is not defined`
+ * as an unhandled error. The tests had all passed, but the vitest ratchet fails a file that leaks one,
+ * and `Unit tests (1/4)` went red on main's own head 2 runs in 6 for exactly that. Every pending
+ * callback is tracked, cancelled once the file is done, and the real setImmediate put back.
+ */
+const delayedImmediate = vi.hoisted(() => {
   const realSetTimeout = globalThis.setTimeout
-  ;(globalThis as any).setImmediate = (fn: (...a: unknown[]) => void, ...args: unknown[]) =>
-    realSetTimeout(() => fn(...args), 30)
+  const realSetImmediate = (globalThis as any).setImmediate
+  const pending = new Set<ReturnType<typeof setTimeout>>()
+  ;(globalThis as any).setImmediate = (fn: (...a: unknown[]) => void, ...args: unknown[]) => {
+    const handle = realSetTimeout(() => {
+      pending.delete(handle)
+      fn(...args)
+    }, 30)
+    pending.add(handle)
+    return handle
+  }
+  return { pending, realSetImmediate }
+})
+
+afterAll(() => {
+  for (const handle of delayedImmediate.pending) clearTimeout(handle)
+  delayedImmediate.pending.clear()
+  ;(globalThis as any).setImmediate = delayedImmediate.realSetImmediate
 })
 
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
