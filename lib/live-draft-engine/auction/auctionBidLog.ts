@@ -5,7 +5,7 @@ import { auctionBidPlayerKey, type AuctionBidRow } from '@/lib/draft-room/auctio
 /**
  * Auction bid history — the one place that writes or reads `auction_bids` (model `AuctionBid`).
  *
- * 🛑 THE CODE SHIPS AHEAD OF ITS MIGRATION. `prisma/migrations-pending/20261106120000_auction_bid_history`
+ * 🛑 THE CODE SHIPS AHEAD OF ITS MIGRATION. `prisma/migrations-pending/20261106130000_auction_bid_history`
  * creates the table and applying it is the owner's call. Until then every write and read here hits
  * P2021 (table missing). So:
  *   - a write NEVER throws and is never on the bid's critical path: the engine has already accepted
