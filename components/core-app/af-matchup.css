@@ -45,9 +45,10 @@
 }
 
 .af-mu-league-name {
-  /* An h1 now — see the note in Matchup.tsx. The margin has to go explicitly:
-     the banner is a flex row and a default 0.67em block margin would push the
-     crest and the week chip out of line with it. */
+  /* A label in the banner, not the page title: the title is the shared PageHeader's "Matchup"
+     (primitives/af-primitives.css, --af-title-size) since 2026-11, so nothing here sizes a heading.
+     The margin goes explicitly: the banner is a flex row and a paragraph's default block margin
+     would push the crest and the week chip out of line with it. */
   margin: 0;
   font-size: 13px;
   font-weight: 800;
@@ -1254,7 +1255,7 @@
   /*
    * The league is already named, with its crest, in the league card directly above this screen —
    * on a phone it was printed four times before the score. Hidden from sight, NOT from the
-   * accessibility tree: it is still the page's h1.
+   * accessibility tree, so the banner still says whose matchup it is to a screen reader.
    */
   .af-mu-week > .af-mu-league-crest {
     display: none;

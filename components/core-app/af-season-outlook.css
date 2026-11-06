@@ -6,44 +6,9 @@
 
 /* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 
-/* ── Summary tiles ────────────────────────────────────────────────── */
+/* ── Summary tiles: the shared StatStrip (primitives/af-primitives.css), value first ── */
 
-.af-so-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.af-so-tile {
-  padding: 14px 15px;
-  border: 1px solid var(--line);
-  border-top: 2px solid var(--line2);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.af-so-tile[data-tone='good'] { border-top-color: var(--good); }
-.af-so-tile[data-tone='warn'] { border-top-color: var(--warn); }
-.af-so-tile[data-tone='accent'] { border-top-color: var(--accent); }
-
-.af-so-tile-v {
-  display: block;
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1;
-  color: var(--text);
-}
-
-.af-so-tile-l {
-  display: block;
-  margin-top: 6px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--faint);
-}
+.af-so-tiles { margin-bottom: 12px; }
 
 .af-so-basis {
   margin: 0 0 22px;
@@ -364,9 +329,6 @@
 
 .af-so-withheld b { color: var(--text2); }
 
-@media (max-width: 640px) {
-  .af-so-tiles { grid-template-columns: 1fr 1fr; }
-}
 
 /* See the note in af-week.css: a league NAME gets a colour dot, never the
    filled `.af-platform` badge background. Repeated here because Season Outlook

@@ -7,6 +7,7 @@ import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
 import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip, type StatItem } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-waivers.css'
 import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
@@ -64,64 +65,65 @@ export function faabTrack(remaining: number | null | undefined, budget: number |
   return remaining / budget
 }
 
-function Tile({
+type TileOut = { value: string; of?: string; sub?: string; track?: number | null }
+
+/**
+ * One header tile, as a StatStrip item (components/core-app/primitives). The tile keeps its
+ * `af-wv-tile` class and `data-tile` hook for the redraft stylesheet (af-core-redraft-waivers-finder.css)
+ * and the tests; layout and type are the shared strip's.
+ */
+function tileItem({
   label,
   state,
   render,
   sub,
   help,
   tile,
+  copy,
 }: {
   label: string
   state: SectionState<unknown>
-  /** `track`, 0–1: a share of a known total, drawn as a bar only in the redraft identity (see below). */
-  render?: (d: never) => { value: string; of?: string; sub?: string; track?: number | null }
+  /** `track`, 0–1: a share of a known total, drawn as a bar (see below). */
+  render?: (d: never) => TileOut
   sub?: string
   /** A "?" beside the label (lib/core-app/helpTopics.ts). */
   help?: HelpTopicId
   /** Which tile this is, for the redraft stylesheet (af-core-redraft-waivers-finder.css). */
-  tile?: string
-}) {
-  const { language } = useOptionalLanguage()
-  const copy = (english: string) => coreUiCopy(english, language)
+  tile: string
+  copy: (english: string) => string
+}): StatItem {
+  const labelNode = (
+    <>
+      {copy(label)}
+      {help ? <> <TopicTip topic={help} /></> : null}
+    </>
+  )
+  const base = { key: tile, className: 'af-wv-tile', data: { tile }, label: labelNode }
   if (!state.available) {
-    return (
-      <div className="af-wv-tile" data-missing="true" data-tile={tile}>
-        <div className="af-wv-tile-value af-num">—</div>
-        <div className="af-label">
-          {copy(label)}
-          {help ? <> <TopicTip topic={help} /></> : null}
-        </div>
-        <div className="af-wv-tile-why">{copy(state.reason)}</div>
-      </div>
-    )
+    return { ...base, value: null, missing: true, reason: copy(state.reason) }
   }
-  const out: { value: string; of?: string; sub?: string; track?: number | null } = render ? render(state.data as never) : { value: String(state.data), sub }
-  return (
-    <div className="af-wv-tile" data-tile={tile}>
-      <div className="af-wv-tile-value af-num">
+  const out: TileOut = render ? render(state.data as never) : { value: String(state.data), sub }
+  return {
+    ...base,
+    value: (
+      <>
         {out.value}
         {/* "/ $100" — the denominator, only when it is a real figure (the FAAB tile's league budget). */}
         {out.of ? <span className="af-wv-tile-of"> {out.of}</span> : null}
-      </div>
-      <div className="af-label">
-        {copy(label)}
-        {help ? <> <TopicTip topic={help} /></> : null}
-      </div>
-      {out.sub ? <div className="af-wv-tile-sub">{copy(out.sub)}</div> : null}
-      {/*
-        A decorative bar for a share the screen already states in text (the tile's "$63", the rules'
-        "$100 budget"). Empty inline spans: with no stylesheet rule they take no space and draw nothing,
-        so every league outside the redraft identity renders exactly as before (the capture script's
-        dynasty control proves it pixel for pixel). aria-hidden: the figure is already read out above.
-      */}
-      {out.track != null ? (
+      </>
+    ),
+    sub: out.sub ? copy(out.sub) : undefined,
+    /*
+      A decorative bar for a share the screen already states in text (the tile's "$63", the rules'
+      "$100 budget"). aria-hidden: the figure is already read out above.
+    */
+    extra:
+      out.track != null ? (
         <span className="af-wv-track" aria-hidden="true" data-testid="waiver-faab-track">
           <span className="af-wv-track-fill" style={{ width: `${Math.round(out.track * 100)}%` }} />
         </span>
-      ) : null}
-    </div>
-  )
+      ) : null,
+  }
 }
 
 export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
@@ -149,8 +151,6 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
    * the loader's own sentence about why no day is shown.
    */
   const showNextRunTile = !schedule
-  /* How many tiles the strip holds, so it can lay out as one full row instead of 3 + an orphan 2. */
-  const tileCount = 3 + (showFaabTile ? 1 : 0) + (showNextRunTile ? 1 : 0)
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
     data.waiverType.available ? copy(data.waiverType.data.label) : null,
@@ -184,73 +184,80 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       <div className="af-wv-layout">
         <div className="af-wv-area-tiles">
           {/* ── Tiles ───────────────────────────────────────────────────── */}
-          <div className="af-wv-tiles" data-count={tileCount}>
-            {showFaabTile ? (
-            <Tile
-              label="Your FAAB"
-              help="faab"
-              tile="faab"
-              state={data.budget}
-              render={(d: never) => {
-                const b = d as unknown as {
-                  faabRemaining: number
-                  rankByBudget: number | null
-                  rostersWithBudget: number
-                }
-                return {
-                  value: `$${b.faabRemaining}`,
-                  of: faabTrack(b.faabRemaining, faabBudget) != null ? `/ $${faabBudget}` : undefined,
-                  sub:
-                    b.rankByBudget != null
-                      ? m.budgetRank(b.rankByBudget, b.rostersWithBudget)
-                      : undefined,
-                  track: faabTrack(b.faabRemaining, faabBudget),
-                }
-              }}
-            />
-            ) : null}
-
-            <Tile
-              label="Waiver priority"
-              help="waiverPriority"
-              tile="priority"
-              state={data.waiverPriority}
-              render={(d: never) => {
-                const w = d as unknown as { priority: number; leagueRosters: number }
-                return { value: `#${w.priority}`, sub: m.ofRosters(w.leagueRosters) }
-              }}
-            />
-
-            {/*
-              With a schedule the next run is the sticky line above, so it is not said again here. With
-              none, this tile is the only place it appears: the loader's own sentence, never a guessed day.
-            */}
-            {showNextRunTile ? <Tile label="Next waiver run" tile="next-run" state={data.processTime} /> : null}
-
-            <Tile
-              label="Claims queued"
-              help="claimsQueued"
-              tile="claims"
-              state={data.claimsQueued}
-              render={(d: never) => {
-                const c = d as unknown as { count: number }
-                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
-              }}
-            />
-
-            <Tile
-              label="Players held"
-              tile="held"
-              state={data.rosterLoad}
-              render={(d: never) => {
-                const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
-                return {
-                  value: String(r.playersHeld),
-                  sub: m.rosterLoad(r.starters, r.bench, r.reserve),
-                }
-              }}
-            />
-          </div>
+          {/*
+            The strip holds 3–5 tiles (FAAB only where the league bids, the next run only where there is
+            no sticky line) and lays out by that count, so it always fills its row (af-primitives.css).
+          */}
+          <StatStrip
+            className="af-wv-tiles"
+            order="value-first"
+            items={[
+              ...(showFaabTile
+                ? [
+                    tileItem({
+                      label: 'Your FAAB',
+                      help: 'faab',
+                      tile: 'faab',
+                      state: data.budget,
+                      copy,
+                      render: (d: never) => {
+                        const b = d as unknown as {
+                          faabRemaining: number
+                          rankByBudget: number | null
+                          rostersWithBudget: number
+                        }
+                        return {
+                          value: `$${b.faabRemaining}`,
+                          of: faabTrack(b.faabRemaining, faabBudget) != null ? `/ $${faabBudget}` : undefined,
+                          sub: b.rankByBudget != null ? m.budgetRank(b.rankByBudget, b.rostersWithBudget) : undefined,
+                          track: faabTrack(b.faabRemaining, faabBudget),
+                        }
+                      },
+                    }),
+                  ]
+                : []),
+              tileItem({
+                label: 'Waiver priority',
+                help: 'waiverPriority',
+                tile: 'priority',
+                state: data.waiverPriority,
+                copy,
+                render: (d: never) => {
+                  const w = d as unknown as { priority: number; leagueRosters: number }
+                  return { value: `#${w.priority}`, sub: m.ofRosters(w.leagueRosters) }
+                },
+              }),
+              /*
+                With a schedule the next run is the sticky line above, so it is not said again here. With
+                none, this tile is the only place it appears: the loader's own sentence, never a guessed day.
+              */
+              ...(showNextRunTile ? [tileItem({ label: 'Next waiver run', tile: 'next-run', state: data.processTime, copy })] : []),
+              tileItem({
+                label: 'Claims queued',
+                help: 'claimsQueued',
+                tile: 'claims',
+                state: data.claimsQueued,
+                copy,
+                render: (d: never) => {
+                  const c = d as unknown as { count: number }
+                  return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
+                },
+              }),
+              tileItem({
+                label: 'Players held',
+                tile: 'held',
+                state: data.rosterLoad,
+                copy,
+                render: (d: never) => {
+                  const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
+                  return {
+                    value: String(r.playersHeld),
+                    sub: m.rosterLoad(r.starters, r.bench, r.reserve),
+                  }
+                },
+              }),
+            ]}
+          />
 
         </div>
 

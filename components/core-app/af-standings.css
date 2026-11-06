@@ -43,36 +43,7 @@
   color: var(--muted);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────── */
-
-.af-st-tiles {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-.af-st-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 17px 18px;
-  border-radius: 13px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.af-st-tile-v {
-  font-size: 28px;
-  font-weight: 900;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.af-st-tile .af-label {
-  color: var(--faint);
-}
-.af-st-tile-s {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
-}
+/* ── Tiles: the shared StatStrip (primitives/af-primitives.css); the move marker below is the board's ── */
 
 .af-st-move {
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -357,24 +328,12 @@
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
 @media (max-width: 1000px) {
-  .af-st-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .af-st-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 560px) {
-  .af-st-tiles {
-    gap: 10px;
-  }
-  .af-st-tile {
-    padding: 14px;
-  }
-  .af-st-tile-v {
-    font-size: 23px;
-  }
   .af-st-proj-v > .af-num:first-child {
     font-size: 25px;
   }
@@ -502,31 +461,6 @@
  * stays the cross-app XP ladder. Appended as one block so the handoff reads as a
  * layer over 38a·7.
  */
-
-.af-st-tile {
-  gap: 7px;
-  padding: 16px;
-}
-.af-st-tile .af-label {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-}
-.af-st-tile-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.af-st-tile-v {
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 28px;
-  font-weight: 900;
-}
-.af-st-tile-v[data-tone='good'] { color: var(--good); }
-.af-st-tile-v[data-tone='bad'] { color: var(--bad); }
-.af-st-tile-v[data-tone='accent'] { color: var(--accent); }
-.af-st-tile-row .af-st-move,
-.af-st-tile-row .af-stb-move { font-size: 12px; }
-.af-st-tile-s { font-size: 11px; }
 
 .af-st-section {
   display: flex;
@@ -1441,12 +1375,10 @@
 }
 
 @container af-st (max-width: 760px) {
-  .af-st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-st-split { grid-template-columns: minmax(0, 1fr); }
 }
 
 @container af-st (max-width: 420px) {
-  .af-st-tile-v { font-size: 22px; }
   .af-st-recent li { grid-template-columns: 40px minmax(0, 1fr) auto; }
   .af-st-recent-r {
     grid-column: 2 / -1;

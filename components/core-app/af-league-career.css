@@ -78,37 +78,10 @@
   font-size: 12.5px;
 }
 
-/* ── Identity banner ─────────────────────────────────────────────────── */
+/* ── Identity banner: the shared StatStrip (primitives/af-primitives.css), value first ──
+   It keeps the career tint it had as one card, now on each tile. */
 
-.af-lc-banner {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 20px;
-  border-radius: 16px;
-  background: var(--chimmy);
-  border: 1px solid var(--accent-line);
-}
-.af-lc-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-.af-lc-stat-v {
-  font-size: 27px;
-  font-weight: 900;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.af-lc-stat .af-label {
-  color: var(--faint);
-}
-.af-lc-stat-s {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
-}
+.af-core .af-lc-banner .af-pg-stat { background: var(--chimmy); border-color: var(--accent-line); }
 
 .af-lc-note {
   margin: 0;
@@ -365,10 +338,6 @@
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  .af-lc-banner {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
   .af-lc-grades {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -376,12 +345,6 @@
 }
 
 @media (max-width: 560px) {
-  .af-lc-banner {
-    padding: 16px;
-  }
-  .af-lc-stat-v {
-    font-size: 22px;
-  }
   .af-lc-grade-letter {
     font-size: 32px;
   }

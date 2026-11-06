@@ -46,11 +46,10 @@
 .af-core.af-shell[data-format=redraft] .af-wv-next .af-wv-clock-in{color:var(--rd-accent-text);font-weight:850}
 .af-core.af-shell[data-format=redraft] .af-wv-next [data-soon='true'] .af-wv-clock-in{color:var(--warn)}
 
-/* Tiles: one card language with the rest of the redraft screens. */
-.af-core.af-shell[data-format=redraft] .af-wv-tile{border-radius:14px}
+/* Tiles: the shared StatStrip, whose card radius is the one token (--af-radius-card). */
 /* The FAAB tile is the lead number: it is what a claim spends. */
 .af-core.af-shell[data-format=redraft] .af-wv-tile[data-tile='faab']:not([data-missing='true']){border-color:var(--rd-accent-line);border-top:3px solid var(--rd-accent);background:var(--rd-surface-elev)}
-.af-core.af-shell[data-format=redraft] .af-wv-tile[data-tile='faab']:not([data-missing='true']) .af-wv-tile-value{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-wv-tile[data-tile='faab']:not([data-missing='true']) .af-pg-stat-value{color:var(--rd-accent-text)}
 /* FAAB left as a share of the league's budget (Waivers.tsx `faabTrack`): drawn only when both are real. */
 .af-core.af-shell[data-format=redraft] .af-wv-track{display:block;height:6px;margin-top:9px;border-radius:999px;background:var(--rd-track);overflow:hidden}
 .af-core.af-shell[data-format=redraft] .af-wv-track-fill{display:block;height:100%;border-radius:inherit;background:var(--rd-accent)}
@@ -79,7 +78,6 @@
 .af-core.af-shell[data-format=redraft] .af-pf-detail{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
 .af-core.af-shell[data-format=redraft] .af-pf-name{font-weight:900;letter-spacing:-0.03em}
 .af-core.af-shell[data-format=redraft] .af-pf-headshot{border-color:var(--rd-accent-line)}
-.af-core.af-shell[data-format=redraft] .af-pf-tile{border-radius:14px}
 
 /* ── Draft HQ ─────────────────────────────────────────────────────────────────────────────────────── */
 

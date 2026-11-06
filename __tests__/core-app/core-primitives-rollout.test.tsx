@@ -7,8 +7,8 @@
  *      at 760px and below) in af-primitives.css; a screen rule naming its title class would put back
  *      the drift (18px to 34px across screens) this rollout removed.
  *
- * Matchup is the deliberate exception for the title: its h1 is the league name, kept small by a
- * documented decision that needs an owner design call. Its empty card is on EmptyState.
+ * Matchup joined in 2026-11 (core-primitives-part2): its title is PageHeader's "Matchup" with the
+ * week as the eyebrow; the league name stays in the banner as text. Its empty card is on EmptyState.
  */
 import React from 'react'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
@@ -61,6 +61,7 @@ const MIGRATED: Array<{ screen: string; file: string; title: string | null }> = 
   { screen: 'Player Finder', file: 'components/core-app/screens/PlayerFinder.tsx', title: 'af-pf-title' },
   { screen: 'League career', file: 'components/core-app/screens/LeagueCareer.tsx', title: 'af-lc-title' },
   { screen: 'Your week (league)', file: 'components/core-app/screens/YourWeekLeague.tsx', title: 'af-wl-title' },
+  { screen: 'Matchup', file: 'components/core-app/screens/Matchup.tsx', title: null },
 ]
 
 /**
@@ -77,10 +78,10 @@ describe('migrated screens draw their title through PageHeader', () => {
     expect(src).not.toMatch(/<h1\b/)
   })
 
-  it('leaves Matchup’s league-name h1 alone (owner design call), and nothing else of its header moved', () => {
+  it('Matchup’s league name is banner text now, not a second heading', () => {
     const src = read('components/core-app/screens/Matchup.tsx')
-    expect(src).toMatch(/<h1 className="af-mu-league-name">/)
-    expect(src).not.toMatch(/<PageHeader\b/)
+    expect(src).toMatch(/<p className="af-mu-league-name">/)
+    expect(src).not.toMatch(/<h1 className="af-mu-league-name">/)
   })
 })
 
@@ -152,7 +153,7 @@ describe('rendered: the page header is the shared one', () => {
     expect(container.querySelector('.af-pg-eyebrow.af-lc-eyebrow')?.textContent).toBe('Kings of Buffalo')
   })
 
-  it('Matchup (no matchup resolved): the shared EmptyState card, its lineup link still not prefetched', () => {
+  it('Matchup (no matchup resolved): PageHeader titled Matchup over the shared EmptyState card, its lineup link still not prefetched', () => {
     const data = {
       league: { id: 'l1', name: 'L', platform: 'native', logoUrl: null, sourceLink: null, lineupLink: null },
       week: { available: false, reason: 'no weekly results stored for this league' },
@@ -174,8 +175,10 @@ describe('rendered: the page header is the shared one', () => {
     const link = card.querySelector('.af-empty-card-links a')
     expect(link?.getAttribute('href')).toBe('/core/my-team?league=l1')
     expect(link?.getAttribute('data-prefetch')).toBe('false')
-    // Its h1 is untouched: the league name, not a PageHeader title.
-    expect(container.querySelector('h1')?.className).toBe('af-mu-league-name')
+    // The page title is the shared header's; with no week on file there is no eyebrow.
+    expect(pageTitle(container).textContent).toBe('Matchup')
+    expect(container.querySelector('.af-pg-eyebrow')).toBeNull()
+    expect(container.querySelector('p.af-mu-league-name')?.textContent).toBe('L')
   })
 })
 

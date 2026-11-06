@@ -36,50 +36,7 @@
   color: var(--text);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────── */
-
-.af-wv-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px;
-}
-
-.af-wv-tile {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.af-wv-tile-value {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-/*
- * A missing value is smaller and --faint. A large grey "$0" would read as a
- * budget of zero; this has to read as "no figure".
- */
-.af-wv-tile[data-missing='true'] .af-wv-tile-value {
-  font-size: 18px;
-  color: var(--faint);
-}
-
-.af-wv-tile-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.af-wv-tile-why {
-  margin-top: 5px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--faint);
-}
+/* ── Tiles: the shared StatStrip (primitives/af-primitives.css), laid out by count, value first. ── */
 
 /* ── Sections ────────────────────────────────────────────────────────── */
 
@@ -386,21 +343,6 @@
   color: var(--text2);
 }
 
-/*
- * The four header tiles, two by two on a phone (2026-10-01 audit). `minmax(190px, 1fr)` fits
- * one column in a 343px row, so four small figures took four full-width rows (~380px).
- * Its own top-level block at end of file — nothing here can be carried into another band.
- */
-@media (max-width: 560px) {
-  .af-wv-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  /* An odd count leaves one tile alone on the last row; it takes the full width instead. */
-  .af-wv-tiles > .af-wv-tile:last-child:nth-child(odd) {
-    grid-column: span 2;
-  }
-}
-
 /* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
    Own top-level blocks at end of file, so nothing can be carried into another band. */
 .af-core .af-wv-next {
@@ -496,27 +438,6 @@
     grid-template-areas: 'tiles tiles' 'main side';
     column-gap: 16px;
   }
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 24px; }
-}
-/*
- * The strip holds 3–5 tiles (FAAB only where the league bids, the next run only where there is no
- * sticky line), so it is laid out BY COUNT — `data-count` on .af-wv-tiles — and always fills its row.
- * It used to be five columns from 900px and three-over-two below, so a ~1000px content column (1440
- * with the rail open) could land in the 3 + 2 band and leave a ragged second row.
- *
- * From 760px of container width every tile shares one row, whatever the count.
- */
-@container af-wv (min-width: 760px) {
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-}
-/* Narrower than that, but not a phone: full rows only — three over two, two by two, or three across. */
-@container af-wv (min-width: 600px) and (max-width: 759px) {
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile { grid-column: span 2; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='5'] > .af-wv-tile:nth-child(n + 4) { grid-column: span 3; }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='4'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tiles[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container af-wv (min-width: 1180px) {
   .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -568,8 +489,6 @@
 }
 
 /* ── Readability: the 11px grey reasons are the first thing a phone shrinks to unreadable ── */
-.af-core .af-wv-tile-sub,
-.af-core .af-wv-tile-why,
 .af-core .af-wv-section-note,
 .af-core .af-wlb-meta,
 .af-core .af-wlb-note,
@@ -578,7 +497,6 @@
 .af-core .af-wlb-why,
 .af-core .af-wv-edge-note,
 .af-core .af-wv-footnote { font-size: 12.5px; }
-.af-core .af-wv-tile-why,
 .af-core .af-wv-rule-why,
 .af-core .af-wlb-note,
 .af-core .af-wv-footnote { color: var(--muted); }
@@ -661,7 +579,7 @@
 
 /* "$64 / $100": the league budget beside what is left, quieter than the figure itself. */
 .af-core .af-wv-tile-of { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
-.af-core .af-wv-tile[data-tile='next-run'] .af-wv-tile-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
+.af-core .af-wv-tile[data-tile='next-run'] .af-pg-stat-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
 /* The budget bar for every league now, not only the redraft stamp: a share of two real figures. */
 .af-core .af-wv-track { display: block; height: 6px; margin-top: 9px; border-radius: 999px; background: var(--chip); overflow: hidden; }
 .af-core .af-wv-track-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }

@@ -166,39 +166,7 @@
   font-weight: 700;
 }
 
-/* ── Stat tiles ──────────────────────────────────────────────────────── */
-
-.af-pf-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-
-.af-pf-tile {
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface2);
-}
-
-.af-pf-tile-value {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
-  line-height: 1.1;
-}
-/* A missing figure must not read as a measured zero. */
-.af-pf-tile[data-missing='true'] .af-pf-tile-value {
-  color: var(--faint);
-  font-size: 18px;
-}
-
-.af-pf-tile-why {
-  margin-top: 5px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--faint);
-}
+/* ── Stat tiles: the shared StatStrip (primitives/af-primitives.css), value first ── */
 
 /* ── Blocks ──────────────────────────────────────────────────────────── */
 
@@ -1119,19 +1087,6 @@
   color: var(--bad);
 }
 
-/* ── Tiles: coloured value + the `?` beside the label ────────────────── */
-.af-core .af-pf-tile-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.af-core .af-pf-tile[data-tone='good'] .af-pf-tile-value {
-  color: var(--good);
-}
-.af-core .af-pf-tile[data-tone='warn'] .af-pf-tile-value {
-  color: var(--warn);
-}
 
 /* ── Help dot — own prefix because /players/{slug} never loads the shell ── */
 .af-pf-help {

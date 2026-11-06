@@ -10,6 +10,7 @@ import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -40,15 +41,6 @@ import { seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 export type SeasonOutlookProps = {
   data: SeasonOutlookData
   freshness?: { meta: FreshnessMeta; initialLabel: string; initialWarn: boolean } | null
-}
-
-function Tile({ value, label, tone }: { value: string; label: string; tone?: 'good' | 'warn' | 'accent' }) {
-  return (
-    <div className="af-so-tile" data-tone={tone ?? 'neutral'}>
-      <span className="af-so-tile-v af-num">{value}</span>
-      <span className="af-so-tile-l">{label}</span>
-    </div>
-  )
 }
 
 /** Moved to `lib/core-app/outlookSpanish.ts` so the league screen can share it without importing this one. */
@@ -98,24 +90,23 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
 
       {hasLeagues ? (
         <>
-          <section className="af-so-tiles" aria-label={copy('Your odds across leagues')}>
-            <Tile
-              value={String(data.summary.makingPlayoffs)}
-              label={m.onTrack(data.leagues.length)}
-              tone="accent"
-            />
-            <Tile value={String(data.summary.clinched)} label={copy('already clinched')} tone="good" />
-            <Tile value={String(data.summary.onTheBubble)} label={copy('on the bubble')} tone="warn" />
-            {anyByes ? <Tile value={String(data.summary.onByePace)} label={copy('on pace for a bye')} /> : null}
-            <Tile
-              value={data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—'}
-              label={
-                data.summary.bestTitle
-                  ? m.bestTitleOdds(data.summary.bestTitle.leagueName)
-                  : copy('no title odds yet')
-              }
-            />
-          </section>
+          {/* Value first: each label finishes its figure's sentence ("3 · already clinched"). */}
+          <StatStrip
+            className="af-so-tiles"
+            ariaLabel={copy('Your odds across leagues')}
+            order="value-first"
+            items={[
+              { key: 'playoffs', value: String(data.summary.makingPlayoffs), label: m.onTrack(data.leagues.length), tone: 'accent' },
+              { key: 'clinched', value: String(data.summary.clinched), label: copy('already clinched'), tone: 'good' },
+              { key: 'bubble', value: String(data.summary.onTheBubble), label: copy('on the bubble'), tone: 'warn' },
+              ...(anyByes ? [{ key: 'bye', value: String(data.summary.onByePace), label: copy('on pace for a bye') }] : []),
+              {
+                key: 'title',
+                value: data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—',
+                label: data.summary.bestTitle ? m.bestTitleOdds(data.summary.bestTitle.leagueName) : copy('no title odds yet'),
+              },
+            ]}
+          />
 
           <section className="af-olk-hero-grid af-so-lead" aria-label={copy('What to do next')}>
             <div className="af-olk-next">
