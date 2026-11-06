@@ -2076,8 +2076,9 @@ export function TradeCenter(props: {
               return (
                 <details className="af-tc-roster" open={rostersOpenAtStart}>
                   <summary className="af-tc-roster-head">
-                    <span className="af-label">
-                      {copy(r.ownerName ? `${r.ownerName}'s roster` : 'On this roster')}{copy(" · ")}{players.length}
+                    <span className="af-label af-tc-roster-label">
+                      {/* "Gridiron Ghosts' roster", not "Gridiron Ghosts's roster". */}
+                      {copy(r.ownerName ? `${r.ownerName}${/s$/i.test(r.ownerName) ? "'" : "'s"} roster` : 'On this roster')}{copy(" · ")}{players.length}
                     </span>
                     <span className="af-tc-row-sub af-tc-roster-hint">{copy("Tap a player to add them")}</span>
                     <span className="af-tc-row-sub af-tc-roster-browse">{copy('Browse roster')}</span>
