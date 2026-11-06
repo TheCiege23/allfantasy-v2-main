@@ -60,3 +60,8 @@
 .af-archive-tech{margin:.75rem 0;border:1px solid var(--line);border-radius:12px;padding:0 .75rem;background:var(--surface2)}
 .af-archive-tech>summary{color:var(--text2);font-weight:700}
 .af-archive-tech[open]{padding-bottom:.75rem}
+/* "Selected at" broke as "Selecte / d at": the archive's overflow-wrap:anywhere reached the column heads.
+   A head wraps between words, never inside one; the table already scrolls sideways. */
+.af-archive th{overflow-wrap:normal;word-break:normal}
+/* The closed "Timing and source details" label sat at the top of its 44px row; centre it, keep the marker. */
+.af-archive-tech>summary{min-height:0;padding:11px 0;line-height:22px}

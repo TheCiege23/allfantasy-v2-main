@@ -84,6 +84,39 @@ describe('the archive as Draft HQ', () => {
     expect(document.querySelector('details.af-archive-tech')).not.toBeNull()
   })
 
+  it('says each thing once: no repeated draft heading, no lone "Page 1", a singular record count', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+    expect(document.querySelectorAll('h3')).toHaveLength(2) // Selections and ownership, Draft analysis — not the draft line again
+    expect([...document.querySelectorAll('h3')].some(h => h.textContent?.startsWith('2026 · NFL'))).toBe(false)
+    expect(screen.queryByRole('navigation', { name: 'Archive pages' })).toBeNull()
+    expect(screen.getByText('1 draft record')).toBeTruthy()
+  })
+
+  it('keeps the page nav when there is somewhere to go', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq more total={30} />)
+    expect(screen.getByRole('navigation', { name: 'Archive pages' }).textContent).toContain('Page 1')
+    expect(screen.getByText('30 draft records')).toBeTruthy()
+  })
+
+  it('names drafts in the picker without the provider id, unless two would read the same', () => {
+    const c = (key: string, sourceId: string, season = 2026) => ({ key, leagueId: 'L1', leagueName: 'L', source: 'imported', sourceId, season, sport: 'NFL', format: 'snake', status: 'complete' })
+    render(<DraftArchive {...props} detail={detail()} choices={[c('imported:139', '1391441779609317376'), c('imported:2025', '1180000000000004242', 2025)] as never} asDraftHq />)
+    expect([...screen.getByRole('combobox', { name: 'Select draft' }).querySelectorAll('option')].map(o => o.textContent)).toEqual(['Choose a draft', '2026 · snake · complete', '2025 · snake · complete'])
+    cleanup()
+    render(<DraftArchive {...props} detail={detail()} choices={[c('imported:139', '1391441779609317376'), c('imported:140', '1400000000000009999')] as never} asDraftHq />)
+    expect([...screen.getByRole('combobox', { name: 'Select draft' }).querySelectorAll('option')].map(o => o.textContent)).toEqual(['Choose a draft', '2026 · snake · complete · …7376', '2026 · snake · complete · …9999'])
+  })
+
+  it('never prints a raw provider user id under Selected by', () => {
+    const d = detail()
+    ;(d.picks[0] as { actor: string | null }).actor = '100561289762'
+    ;(d.picks[1] as { actor: string | null; actorName?: string | null }).actor = 'u2'
+    ;(d.picks[1] as { actorName?: string | null }).actorName = 'GuapCiege'
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(document.querySelector('.af-archive-table')?.textContent).not.toContain('100561289762')
+    expect(document.querySelector('.af-archive-table')?.textContent).toContain('GuapCiege')
+  })
+
   it('reads Spanish', () => {
     h.language = 'es'
     render(<DraftArchive {...props} detail={detail()} asDraftHq />)

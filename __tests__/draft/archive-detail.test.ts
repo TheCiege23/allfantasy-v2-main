@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn(), executions: vi.fn() }))
+const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn(), executions: vi.fn(), raw: vi.fn(), teams: vi.fn(), any: vi.fn(async () => []), one: vi.fn(async () => null) }))
 vi.mock('@/server/services/permissionService', () => ({ canViewLeague: db.gate, isElevatedCommissioner: db.commissioner }))
 vi.mock('@/lib/core-app/draftHq', () => ({ resolvePlayerNames: vi.fn(async () => new Map()) }))
 vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: db.catalog }))
@@ -15,6 +15,8 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   draftSession: { findFirst: db.session }, leagueAuditLog: { findFirst: db.audit, findMany: db.events },
   draftPickAuditLog: { findMany: db.corrections }, draftPick: { findMany: db.picks }, draftPickTradeProposal: { findMany: db.trades },
   tradeExecutionSnapshot: { findMany: db.executions },
+  $queryRaw: db.raw, leagueTeam: { findMany: db.teams }, transactionFact: { findMany: db.any }, league: { findUnique: db.one },
+  leagueDynastySeason: { findFirst: db.one }, playerIdentityMap: { findMany: db.any }, weeklyScore: { findMany: db.any }, teamWeekResult: { findMany: db.any }, sportsGame: { findMany: db.any, findFirst: db.one },
 } }))
 import { draftArchiveDetail } from '@/lib/draft-archive/detail'
 beforeEach(() => {
@@ -67,6 +69,19 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(JSON.stringify(result)).not.toContain('private-note')
     expect(db.corrections).not.toHaveBeenCalled()
   })
+  it('names the managers of an imported draft from the league, never by raw provider id', async () => {
+    // Live /core 2026-11-06: Selected by read "100561289762" and the receiving team a bare roster number.
+    db.catalog.mockResolvedValue({ choices: [{ key: 'imported:139', source: 'imported', sourceId: '139', format: 'snake', sport: 'NFL', season: 2026 }] })
+    db.raw.mockResolvedValue([
+      { draftId: 'f1', pickNumber: 1, round: 1, playerId: '4034', metadata: { provider: 'sleeper', selectionRosterId: '8', providerPickedBy: '100561289762', originalDraftSlot: 1, playerSnapshot: { name: 'Bijan Robinson', position: 'RB' }, archiveDraft: { slotToRosterId: { 1: 1 }, observedSeasonRosters: [{ roster_id: 8, owner_id: '100561289762' }, { roster_id: 1, owner_id: 'u1', metadata: { team_name: 'Recorded Sleeper name' } }] } } },
+      { draftId: 'f2', pickNumber: 2, round: 1, playerId: '9', metadata: { provider: 'sleeper', selectionRosterId: '5', providerPickedBy: 'stranger', originalDraftSlot: 2, playerSnapshot: { name: 'Other', position: 'WR' } } },
+    ])
+    db.teams.mockResolvedValue([{ platformUserId: '100561289762', ownerName: 'GuapCiege', teamName: 'Maye Day' }, { platformUserId: 'u1', ownerName: 'One', teamName: 'Current name' }])
+    const result = await draftArchiveDetail('l', 'viewer', 'imported:139')
+    expect(db.teams).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'l', platformUserId: { not: null } } }))
+    expect(result?.picks[0]).toMatchObject({ actor: '100561289762', actorName: 'GuapCiege', teamName: 'Maye Day', originalTeamName: 'Recorded Sleeper name' })
+    expect(result?.picks[1]).toMatchObject({ actorName: null, teamName: null })
+  })
   it('uses recorded team and actor names without loading current roster identities', async () => {
     const startedAt = new Date('2026-09-01T00:00:00Z')
     db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'completed', startedAt })
@@ -74,6 +89,7 @@ describe('draft archive authorization and attempt boundaries', () => {
     db.picks.mockResolvedValue([{ id: 'p', overall: 1, round: 1, slot: 1, originalRosterId: 'original', rosterId: 'receiver', displayName: 'Receiving recorded team', ownerUserId: 'actor', playerName: 'Player', position: 'QB' }])
     const result = await draftArchiveDetail('l', 'viewer', 'native:d')
     expect(result?.picks[0]).toMatchObject({ originalTeamName: 'Original recorded team', actorName: 'Recorded manager', teamName: 'Receiving recorded team' })
+    expect(db.teams).not.toHaveBeenCalled()
   })
   it('bounds a reset attempt by mutation sequence when its observed timestamp moved backward', async () => {
     const startedAt = new Date('2026-09-01T00:00:10Z');
