@@ -99,6 +99,10 @@ export type PlayerCardCopy = {
   noMarketPrice: string
   // schedule
   weekRow: (week: number, bye: boolean, home: boolean, opponent: string | null) => string
+  /** A daily-sport game: "Thu 11/12 · vs BOS" — `day` arrives already in the reader's language. */
+  gameRow: (day: string, home: boolean, opponent: string) => string
+  /** His club's games in the current fantasy week (NBA / NHL). */
+  gamesThisWeek: (n: number) => string
   projTitle: (provider: string) => string
   projNote: (provider: string) => string
   schedule: string
