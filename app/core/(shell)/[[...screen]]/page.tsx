@@ -5663,6 +5663,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         homeLoads ? (
           <CoreHomeCards
             loads={homeLoads}
+            tradeLeagues={tradeStripLeagues.filter((l) => homePlayed.some((p) => p.id === l.id))}
+            viewerId={userId}
             now={now}
             resetKey={errorResetKey}
             planName={plan?.name ?? null}

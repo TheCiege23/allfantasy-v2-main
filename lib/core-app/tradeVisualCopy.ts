@@ -4,6 +4,8 @@ import { coreUiCopy } from './coreUiCopy'
 export const tradeVisualSpanish: Record<string,string> = {
   // The league trade evaluator on the all-leagues hub (2026-11-05).
   "Trade evaluator":"Evaluador de intercambios",
+  "Evaluate a trade":"Evaluar un intercambio",
+  "Build a deal in any of your leagues":"Arma un intercambio en cualquiera de tus ligas",
   "Build a trade in one of your leagues":"Arma un intercambio en una de tus ligas",
   "League":"Liga",
   "Outside offer — no league":"Oferta externa — sin liga",
