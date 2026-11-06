@@ -17,6 +17,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
 import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -379,6 +380,8 @@ export function WaiverFilteredList({
     (c) => (pos == null || c.position === pos) && (q === '' || c.name.toLowerCase().includes(q)),
   )
   const showBar = candidates.length >= 3
+  /* The "All" chip's id: no position is spelled like this. */
+  const ALL_POSITIONS = '__all__'
   return (
     <>
       {showBar ? (
@@ -392,23 +395,20 @@ export function WaiverFilteredList({
             aria-label={m.searchLabel}
           />
           {positions.length > 1 ? (
-            <div className="af-wlb-chips">
-              <button type="button" className="af-wlb-chip-btn" aria-pressed={pos == null} onClick={() => onPos(null)}>
-                {m.allPositions}
-              </button>
-              {positions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="af-wlb-chip-btn"
-                  data-pos={posKey(p)}
-                  aria-pressed={pos === p}
-                  onClick={() => onPos(pos === p ? null : p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            /*
+              The shared FilterChips (components/core-app/primitives): one pressed pill is the position.
+              Tapping the pressed one again clears it, as before. `data-pos` keeps the position colour.
+            */
+            <FilterChips
+              className="af-wlb-chips"
+              ariaLabel={m.positionFilterLabel}
+              value={pos ?? ALL_POSITIONS}
+              onChange={(next) => onPos(next === ALL_POSITIONS || next === pos ? null : next)}
+              options={[
+                { id: ALL_POSITIONS, label: m.allPositions },
+                ...positions.map((p) => ({ id: p, label: p, data: { pos: posKey(p) } })),
+              ]}
+            />
           ) : null}
           {shown.length !== candidates.length ? (
             <span className="af-wlb-count af-num" aria-live="polite">

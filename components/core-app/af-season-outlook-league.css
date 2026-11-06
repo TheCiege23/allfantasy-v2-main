@@ -41,7 +41,7 @@
   flex-direction: column;
   gap: 5px;
   padding: 17px 18px;
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -85,7 +85,7 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--chimmy);
   border: 1px solid var(--accent-line);
 }
@@ -125,7 +125,7 @@
   flex-direction: column;
   gap: 7px;
   padding: 15px 16px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -175,7 +175,7 @@
 /* ── Standings ───────────────────────────────────────────────────────── */
 
 .af-sol-tablewrap {
-  border-radius: 15px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
   /* The table has six columns and does not compress below ~720px. It scrolls
@@ -295,7 +295,7 @@
 
 .af-sol-empty {
   padding: 26px 20px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -371,7 +371,7 @@
   padding: 16px 18px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 .af-sol-attention-head {
@@ -406,7 +406,7 @@
   min-height: 44px;
   padding: 9px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--bg);
   text-decoration: none;
   transition: border-color 120ms ease, background 120ms ease;
@@ -474,7 +474,7 @@
 .af-core .af-sol .af-olk-hero {
   gap: 16px;
   padding: 22px;
-  border-radius: 18px;
+  border-radius: var(--af-radius-card, 16px);
 }
 .af-core .af-sol .af-olk-odds-row {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -483,7 +483,7 @@
 .af-core .af-sol .af-olk-odds {
   gap: 10px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
 }
 .af-core .af-sol .af-olk-odds-head {
@@ -499,7 +499,7 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -529,7 +529,7 @@
 .af-core .af-sol .af-olk-drivebox {
   gap: 10px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 /* The working: a pill row in place of the underlined tab strip. */
@@ -537,14 +537,14 @@
   gap: 8px;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
 }
 .af-core .af-sol .af-olk-tab {
   min-height: 40px;
   padding: 0 14px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 13px;
   color: var(--muted);
 }
@@ -574,7 +574,7 @@
 .af-core .af-sol .af-olk-panel {
   gap: 18px;
   padding: 22px;
-  border-radius: 18px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -584,11 +584,11 @@
   color: var(--text);
 }
 .af-core .af-sol .af-sol-clinch {
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   padding: 20px;
 }
 .af-core .af-sol .af-sol-branch {
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
 }
 .af-core .af-sol .af-sol-branch-v {
   font-size: 28px;
@@ -600,7 +600,7 @@
   .af-core .af-sol .af-olk-hero,
   .af-core .af-sol .af-olk-panel {
     padding: 16px;
-    border-radius: 16px;
+    border-radius: var(--af-radius-card, 16px);
   }
   .af-core .af-sol .af-olk-odds-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -702,7 +702,7 @@
   gap: 3px;
   padding: 7px 9px;
   border: 1px solid var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.55);
   color: var(--text2);

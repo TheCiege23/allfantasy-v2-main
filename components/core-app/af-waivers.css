@@ -22,7 +22,7 @@
 
 .af-wv-context {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line);
   background: var(--accent-soft);
 }
@@ -119,7 +119,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px dashed var(--line2);
   background: var(--surface2);
 }
@@ -322,7 +322,7 @@
 }
 .af-wv-edge-rival {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -352,7 +352,7 @@
   align-items: baseline;
   gap: 4px 10px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
   font-size: 14px;
@@ -399,7 +399,7 @@
 .af-core .af-wlb-priority {
   margin: 10px 0 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text2);
@@ -516,7 +516,7 @@
 .af-core .af-wvai-box {
   margin-top: 10px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
   background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
 }
@@ -534,7 +534,7 @@
 .af-core .af-wvai-results { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .af-core .af-wvai-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
 .af-core .af-wvai-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.af-core .af-wvai-rec { padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
+.af-core .af-wvai-rec { padding: 12px; border-radius: var(--af-radius-inner, 12px); border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
 .af-core .af-wvai-rec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .af-core .af-wvai-rec-title { margin: 0; font-size: 14px; color: var(--text); }
 .af-core .af-wvai-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -593,7 +593,7 @@
   gap: 8px 10px;
   margin-top: 4px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2, var(--surface));
 }
@@ -602,7 +602,7 @@
   min-width: 0;
   min-height: 40px;
   padding: 0 12px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2, var(--line));
   background: var(--bg);
   color: var(--text);
@@ -611,22 +611,7 @@
 }
 .af-core .af-wlb-search::placeholder { color: var(--faint); }
 .af-core .af-wlb-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.af-core .af-wlb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.af-core .af-wlb-chip-btn {
-  min-height: 40px;
-  min-width: 44px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text2);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 800;
-  cursor: pointer;
-}
-.af-core .af-wlb-chip-btn[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent-line, var(--accent)); color: var(--text); }
-.af-core .af-wlb-chip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The position chips are the shared FilterChips (primitives/af-primitives.css); the pressed one takes its position colour below. */
 .af-core .af-wlb-count { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
 .af-core .af-wlb-clear {
   min-height: 44px;
@@ -670,11 +655,11 @@
   background: var(--mu-pos-flex-bg);
   color: var(--mu-pos-flex-fg);
 }
-.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chip-btn[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
-.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chip-btn[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
-.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chip-btn[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
-.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chip-btn[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
-.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chip-btn[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
+.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
+.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
+.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chips .af-pg-chip[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
+.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chips .af-pg-chip[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
+.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chips .af-pg-chip[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
 /* The badge says the position; the meta line keeps it in text for a screen reader, not on screen. */
 .af-core .af-wlb-meta-pos {
   position: absolute;
@@ -691,13 +676,11 @@
   .af-core .af-wlb-head { display: none; }
   .af-core .af-wlb-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
   .af-core .af-wlb-over { grid-column: 2 / -1; text-align: left; }
-  .af-core .af-wlb-chip-btn,
   .af-core .af-wlb-search { min-height: 44px; }
   .af-core .af-wlb-count { margin-left: 0; }
 }
 
 @media (pointer: coarse) {
-  .af-core .af-wlb-chip-btn,
   .af-core .af-wlb-search { min-height: 44px; }
 }
 

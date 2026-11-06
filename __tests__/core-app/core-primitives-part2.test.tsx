@@ -9,12 +9,17 @@
  *   3. No migrated stylesheet still boxes a tile itself — no card radius, padding or border of its own — so
  *      every tile takes `--af-radius-card` (16px) from the one primitive rule.
  *   4. Matchup's page title is PageHeader's: "Matchup", the week as its eyebrow, the banner directly under it.
+ *   5. The controls that genuinely narrow a list are the shared FilterChips (Waivers' free-agent positions,
+ *      Player Finder's match positions, the Trades timeline). Tabs, segmented toggles and links stay as they are.
+ *   6. The swept redraft stylesheets hold no hard-coded card or inner-panel radius: those are
+ *      `--af-radius-card` (16px) and `--af-radius-inner` (12px). Pills (999px, 50%) and tiny marks (8px and
+ *      under) stay.
  */
 import React from 'react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: 'en' }) }))
 vi.mock('next/link', () => ({
@@ -31,7 +36,8 @@ vi.mock('next/navigation', async (orig) => ({
   useSearchParams: () => new URLSearchParams('league=l1'),
 }))
 
-import { StatStrip, type StatItem } from '@/components/core-app/primitives'
+import { FilterChips, StatStrip, type StatItem } from '@/components/core-app/primitives'
+import { MatchPositionFilter } from '@/components/core-app/player-finder/MatchPositionFilter'
 import Matchup from '@/components/core-app/screens/Matchup'
 import type { MatchupData } from '@/lib/core-app/matchup'
 
@@ -296,5 +302,142 @@ describe('Matchup: the shared page header, the week as its eyebrow', () => {
       const sizers = rules(read(f)).filter(({ selector, body }) => /(^|[\s>,])h1\b|af-mu-head\b/.test(selector) && /font(-size)?\s*:/.test(body))
       expect(sizers.map((r) => `${f}: ${r.selector}`)).toEqual([])
     }
+  })
+})
+
+/* ── 5. Filter chips ──────────────────────────────────────────────────────────────────────── */
+
+describe('controls that narrow a list are the shared FilterChips', () => {
+  it('FilterChips carries a per-chip data hook (the position colour), skipping an undefined one', () => {
+    render(
+      <FilterChips
+        ariaLabel="Filter by position"
+        value="QB"
+        onChange={() => {}}
+        options={[
+          { id: 'all', label: 'All', data: { pos: undefined } },
+          { id: 'QB', label: 'QB', data: { pos: 'QB' } },
+        ]}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'QB' }).getAttribute('data-pos')).toBe('QB')
+    expect(screen.getByRole('button', { name: 'All' }).hasAttribute('data-pos')).toBe(false)
+  })
+
+  it('Player Finder: the match position filter is FilterChips, with "All" standing for no filter', () => {
+    const seen: Array<string | null> = []
+    const { container, rerender } = render(<MatchPositionFilter options={['QB', 'WR']} value={null} onChange={(v) => seen.push(v)} total={7} />)
+    const group = container.querySelector('.af-pg-chips.af-pf-posfilter')!
+    expect(group.getAttribute('role')).toBe('group')
+    expect([...group.querySelectorAll('.af-pg-chip')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
+      ['All', 'true'],
+      ['QB', 'false'],
+      ['WR', 'false'],
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'WR' }))
+    rerender(<MatchPositionFilter options={['QB', 'WR']} value="WR" onChange={(v) => seen.push(v)} total={7} />)
+    expect(screen.getByRole('button', { name: 'WR' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    expect(seen).toEqual(['WR', null])
+  })
+
+  const CHIP_SOURCES: Array<{ name: string; file: string; gone: RegExp[]; count: number }> = [
+    { name: 'Waivers free-agent positions', file: 'components/core-app/WaiverLineupBoard.tsx', gone: [/af-wlb-chip-btn/], count: 1 },
+    { name: 'Player Finder match positions', file: 'components/core-app/player-finder/MatchPositionFilter.tsx', gone: [/af-pf-posfilter-chip/, /<button\b/], count: 1 },
+    { name: 'Trades timeline (both variants)', file: 'components/core-app/screens/TradeInbox.tsx', gone: [/data-on=\{timelineFilter/], count: 2 },
+  ]
+  it.each(CHIP_SOURCES)('$name renders FilterChips and no hand-built chip buttons', ({ file, gone, count }) => {
+    const src = noComments(read(file))
+    expect(src).toMatch(/from '@\/components\/core-app\/primitives(\/FilterChips)?'/)
+    expect(src.match(/<FilterChips\b/g) ?? []).toHaveLength(count)
+    for (const re of gone) expect(src).not.toMatch(re)
+  })
+
+  it('no stylesheet still draws the old chip buttons', () => {
+    const css = ['af-waivers.css', 'af-player-finder-redesign.css', 'af-trade-center.css'].map((f) => read(`components/core-app/${f}`)).join('\n')
+    expect(css).not.toMatch(/\.af-wlb-chip-btn|\.af-pf-posfilter-chip|\.af-tc-timeline-filters button/)
+    // The pressed position chip keeps its position colour, now keyed on the primitive chip.
+    expect(css).toContain(".af-core .af-wlb-chips .af-pg-chip[data-pos='QB'][aria-pressed='true']")
+  })
+
+  it('leaves the tabs, toggles and links alone (they are not filters)', () => {
+    const live = noComments(read('components/core-app/screens/LiveScores.tsx'))
+    expect(live).toMatch(/className="af-live-sports" role="tablist"/)
+    expect(live).toMatch(/className="af-live-scope" role="group"/)
+    expect(noComments(read('components/core-app/screens/SeasonOutlookLeague.tsx'))).toMatch(/role="tablist"/)
+    expect(noComments(read('components/core-app/standings/StandingsBoardView.tsx'))).toMatch(/role="radio"/)
+  })
+})
+
+/* ── 6. Radius sweep ──────────────────────────────────────────────────────────────────────── */
+
+const SWEPT = [
+  'af-core-redraft-live.css',
+  'af-core-redraft-matchup.css',
+  'af-core-redraft-myteam.css',
+  'af-core-redraft-standings.css',
+  'af-core-redraft-trades.css',
+  'af-core-redraft-waivers-finder.css',
+  'af-standings.css',
+  'af-waivers.css',
+  'af-live.css',
+  'af-trade-center.css',
+  'af-season-outlook.css',
+  'af-season-outlook-league.css',
+  'af-scout.css',
+  'af-scout-room.css',
+  'af-player-finder.css',
+  'af-player-finder-redesign.css',
+  'af-matchup.css',
+  'af-league-career.css',
+  'af-week-league.css',
+  'af-rankings-screen.css',
+  'af-team-workspace.css',
+  'af-outlook.css',
+].map((f) => `components/core-app/${f}`)
+
+/**
+ * Every radius declaration (shorthand or a corner longhand) with a hard-coded length in the card/panel
+ * band, 9–24px — on any corner. A token's fallback inside var() is not hard-coded. Comments are prose, not rules. 999px and 50% are pills and circles; 8px
+ * and under are tiny marks.
+ */
+function hardCodedPanelRadii(css: string): string[] {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const out: string[] = []
+  for (const m of clean.matchAll(/border(?:-(?:top|bottom)-(?:left|right))?-radius\s*:\s*([^;}]+)/g)) {
+    const lengths = [...m[1].replace(/var\([^)]*\)/g, '').matchAll(/(\d+(?:\.\d+)?)px/g)].map((x) => Number(x[1]))
+    if (lengths.some((n) => n >= 9 && n <= 24)) out.push(m[0].replace(/\s+/g, ' ').trim())
+  }
+  return out
+}
+
+describe('the swept redraft stylesheets hold no hard-coded card or panel radius', () => {
+  it('reads every swept stylesheet, and they do use the tokens', () => {
+    const all = SWEPT.map(read).join('\n')
+    expect(all.length).toBeGreaterThan(10000)
+    expect(all).toContain('var(--af-radius-card, 16px)')
+    expect(all).toContain('var(--af-radius-inner, 12px)')
+  })
+
+  it.each(SWEPT)('%s: card radii are --af-radius-card, panel radii --af-radius-inner', (file) => {
+    expect(hardCodedPanelRadii(read(file))).toEqual([])
+  })
+
+  it('positive control: hard-coded card and panel radii are reported, pills, marks and tokens are not', () => {
+    const css = [
+      '.a { border-radius: 14px; }',
+      '.b{border-radius:10px}',
+      '.c { border-radius: 18px 18px 0 0; }',
+      '.d { border-top-left-radius: 12px; }',
+      '.e { border-radius: 999px; } .f { border-radius: 50%; } .g { border-radius: 8px; } .h { border-radius: 0 4px 4px 0; }',
+      '.i { border-radius: var(--af-radius-card, 16px); } .j { border-radius: var(--af-radius-inner, 12px) var(--af-radius-inner, 12px) 0 0; }',
+      '/* .k { border-radius: 20px; } */',
+    ].join('\n')
+    expect(hardCodedPanelRadii(css)).toEqual([
+      'border-radius: 14px',
+      'border-radius:10px',
+      'border-radius: 18px 18px 0 0',
+      'border-top-left-radius: 12px',
+    ])
   })
 })

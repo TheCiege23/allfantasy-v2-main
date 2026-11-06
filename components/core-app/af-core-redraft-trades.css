@@ -20,7 +20,7 @@
 /* ── Trade deadline bar (RedraftTradeDeadlineBar) ──────────────────────────────────────────────── */
 .af-core.af-shell[data-format=redraft] .af-rd-deadline {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
-  padding: 14px 18px; border: 1px solid var(--rd-accent-line); border-radius: 14px;
+  padding: 14px 18px; border: 1px solid var(--rd-accent-line); border-radius: var(--af-radius-card, 16px);
   background: var(--rd-surface-elev); color: var(--text2); font-size: 14px;
 }
 .af-core.af-shell[data-format=redraft] .af-rd-deadline-k {
@@ -92,7 +92,7 @@
 
 /* ── Letter-grade blocks: offer cards (TradeInbox), the builder's verdict, completed trades ──────── */
 .af-core.af-shell[data-format=redraft] .af-tc-offer {
-  border-color: var(--rd-accent-line); background: var(--rd-surface-elev); border-radius: 14px;
+  border-color: var(--rd-accent-line); background: var(--rd-surface-elev); border-radius: var(--af-radius-card, 16px);
 }
 .af-core.af-shell[data-format=redraft] .af-tc-offer-partner { font-weight: 800; color: var(--text); }
 .af-core.af-shell[data-format=redraft] .af-tc-offer-grade { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
@@ -102,7 +102,7 @@
 .af-core.af-shell[data-format=redraft] .af-tr-graderow-letter,
 .af-core.af-shell[data-format=redraft] .af-tr-offer-grade {
   display: inline-grid; place-items: center; min-width: 48px; height: 44px; padding: 0 10px;
-  border: 1px solid var(--line2); border-radius: 10px; background: var(--surface2); color: var(--text);
+  border: 1px solid var(--line2); border-radius: var(--af-radius-inner, 12px); background: var(--surface2); color: var(--text);
   font: 800 22px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
 }
 .af-core.af-shell[data-format=redraft] :is(.af-tc-offer-grade[data-letter=A], .af-tc-offer-grade[data-letter=B]) strong,
@@ -122,7 +122,7 @@
 }
 /* A withheld grade is a sentence on a neutral card — never a dimmed letter. */
 .af-core.af-shell[data-format=redraft] .af-tc-offer-grade[data-letter=none] {
-  display: block; padding: 10px 12px; border: 1px dashed var(--line2); border-radius: 10px; background: var(--surface); color: var(--text2);
+  display: block; padding: 10px 12px; border: 1px dashed var(--line2); border-radius: var(--af-radius-inner, 12px); background: var(--surface); color: var(--text2);
 }
 /* The builder's per-team verdict letters (af-trade-center.css hardcodes their fills in rgba). */
 .af-core.af-shell[data-format=redraft] .af-tc-grade:is([data-letter=A],[data-letter=B]) .af-tc-grade-letter { background: var(--good-soft); border-color: var(--good); }
@@ -169,7 +169,7 @@
 .af-core.af-shell[data-format=redraft] .af-sc-card[data-you] { border: 1px solid var(--rd-accent-line); background: var(--rd-surface-elev); }
 .af-core.af-shell[data-format=redraft] .af-sc-face { background: var(--rd-accent-soft); color: var(--rd-accent-text); border-color: var(--rd-accent-line); }
 .af-core.af-shell[data-format=redraft] .af-sc-tag:not([data-sev=out]) { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
-.af-core.af-shell[data-format=redraft] .af-sc-facts > div { padding: 8px 10px; border-radius: 10px; background: var(--surface2); }
+.af-core.af-shell[data-format=redraft] .af-sc-facts > div { padding: 8px 10px; border-radius: var(--af-radius-inner, 12px); background: var(--surface2); }
 .af-core.af-shell[data-format=redraft] .af-sc-facts dd { color: var(--text); }
 .af-core.af-shell[data-format=redraft] .af-sc-basis[data-available] { border-color: var(--rd-accent-line); background: var(--surface); }
 

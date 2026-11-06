@@ -10,6 +10,14 @@ export type FilterChipOption<T extends string> = {
   /** An optional count beside the label; 0 is shown, absent is not. */
   count?: number
   testId?: string
+  /** `data-*` hooks a screen's stylesheet keys on (`{ pos: 'QB' }` → `data-pos="QB"`, the position colour). */
+  data?: Record<string, string | undefined>
+}
+
+function dataAttrs(data: FilterChipOption<string>['data']): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(data ?? {})) if (v != null) out[`data-${k}`] = v
+  return out
 }
 
 /**
@@ -47,6 +55,7 @@ export function FilterChips<T extends string>({
           aria-pressed={value === option.id}
           onClick={() => onChange(option.id)}
           data-testid={option.testId}
+          {...dataAttrs(option.data)}
         >
           {option.label}
           {typeof option.count === 'number' ? <span className="af-pg-chip-n af-num">{option.count}</span> : null}
