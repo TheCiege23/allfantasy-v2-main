@@ -10,6 +10,7 @@ export const waiversMessages = defineMessages({
     yourTime: ' your time',
     budgetRank: (rank: number, rosters: number) => `${rank} of ${rosters} by budget left`,
     ofRosters: (rosters: number) => `of ${rosters} rosters`,
+    claimsPending: (count: number) => (count === 1 ? 'waits for the next run' : 'wait for the next run'),
     rosterLoad: (starters: number, bench: number, reserve: number) =>
       // A no-break space inside each part, so a narrow tile wraps between parts ("· 1 IR/taxi")
       // instead of leaving a bare "1" at the end of a line.
@@ -25,6 +26,7 @@ export const waiversMessages = defineMessages({
     yourTime: ' (tu hora)',
     budgetRank: (rank, rosters) => `${rank} de ${rosters} por presupuesto restante`,
     ofRosters: (rosters) => `de ${rosters} equipos`,
+    claimsPending: (count) => (count === 1 ? 'espera la próxima ejecución' : 'esperan la próxima ejecución'),
     rosterLoad: (starters, bench, reserve) =>
       `${starters}\u00a0titulares · ${bench}\u00a0suplentes${reserve > 0 ? ` · ${reserve}\u00a0IR/taxi` : ''}`,
     claimOn: (platform) => `Reclamar en ${platform}`,

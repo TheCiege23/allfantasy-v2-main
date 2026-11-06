@@ -234,7 +234,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               state={data.claimsQueued}
               render={(d: never) => {
                 const c = d as unknown as { count: number }
-                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
+                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : m.claimsPending(c.count) }
               }}
             />
 
