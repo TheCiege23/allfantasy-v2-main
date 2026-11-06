@@ -1857,7 +1857,7 @@ model MatchupOddsSnapshot {
 ///
 /// Retention: the writer keeps the current and previous season per league and deletes older ones.
 /// ⚠ Code is raw SQL and treats a missing table as "no history", so it is safe before the migration
-/// (`prisma/migrations/20261106120000_league_odds_snapshots`) is applied.
+/// (`prisma/migrations-pending/20261106120000_league_odds_snapshots`, moved to `prisma/migrations/` only when the owner authorises applying it) is applied.
 model LeagueOddsSnapshot {
   id             String   @id
   leagueId       String   @map("league_id") @db.VarChar(128)
