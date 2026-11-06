@@ -38,8 +38,16 @@
   border-color: var(--bad);
   background: var(--bad-soft);
 }
-.af-mt-lock[data-locked='true'] {
-  opacity: 0.7;
+/*
+ * Games have started: quieter than a countdown, but still readable. This used to be `opacity: 0.7`
+ * on the whole strip, which faded the already-faint label with it — 2.4:1 contrast in light mode.
+ * The time steps down to the muted ink instead, and every line keeps its own contrast.
+ */
+.af-mt-lock[data-locked='true'] .af-mt-lock-time {
+  color: var(--muted);
+}
+.af-mt-lock[data-locked='true'] .af-mt-lock-label {
+  color: var(--muted);
 }
 
 .af-mt-lock-label {
