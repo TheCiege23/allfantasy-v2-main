@@ -66,6 +66,8 @@ export type TankingEvidenceLike = {
   pointsLeftOnBench?: number
   eliminatedFromPlayoffs?: boolean
   redFlags?: string[]
+  /** `rules`: raised by the lineup rules (lib/integrity/tankingRules.ts) — no model confidence to show. */
+  detector?: string
 }
 
 export type IntegrityFlagRow = {
@@ -303,10 +305,20 @@ export function IntegrityFlagCard({
          * K. Walker (OUT) · at 0.0 projected over…", which reads as two facts
          * rather than one sentence. Caught by the test below this file's fixture.
          */
+        /*
+         * The bench player who could have taken the slot, by name (2026-11-06 on). Older flags stored
+         * the placeholders "bench" / "higher projection on bench" here instead of a player, and those
+         * are not names.
+         */
+        const benchName = first.benchedBetterOption?.trim()
+        const namedBench =
+          benchName && benchName !== 'bench' && benchName !== 'higher projection on bench' ? benchName : null
         const projection =
           typeof startProj === 'number' && typeof benchProj === 'number'
-            ? ` at ${startProj.toFixed(1)} projected over a bench option at ${benchProj.toFixed(1)}`
-            : ''
+            ? ` at ${startProj.toFixed(1)} projected over ${namedBench ?? 'a bench option'} at ${benchProj.toFixed(1)}`
+            : namedBench
+              ? ` with ${namedBench} available on the bench`
+              : ''
         parts.push(`started ${who}${status ? ` (${status})` : ''}${projection}`)
       }
       if (parts.length > 0) bullets.push(`${parts.join(' · ')}.`)
@@ -320,7 +332,9 @@ export function IntegrityFlagCard({
 
   const age = ageLabel(flag.createdAt)
   const fromReview = isCollusion && typeof (ev as CollusionEvidenceLike).reviewModel === 'string'
-  const confidencePct = !fromReview && Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
+  // A rules-raised tanking flag has no confidence; showing its stored 0 (or an imported flag's 1) would read as a score.
+  const fromLineupRules = !isCollusion && (ev as TankingEvidenceLike).detector === 'rules'
+  const confidencePct = !fromReview && !fromLineupRules && Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
 
   /*
    * ⚠ BUILD RULE 3, ENFORCED HERE RATHER THAN BY THE CALLER. A flag whose
@@ -386,7 +400,16 @@ export function IntegrityFlagCard({
           {gapLabel ? <span className="af-cm-state af-num af-cm-gap">{gapLabel}</span> : null}
         </div>
         <div className="af-cm-flagcard-meta af-num">
-          {[fromReview ? 'Found by the trade review' : confidencePct != null ? `Confidence ${confidencePct}%` : null, age]
+          {[
+            fromReview
+              ? 'Found by the trade review'
+              : fromLineupRules
+                ? 'Found by the lineup check'
+                : confidencePct != null
+                  ? `Confidence ${confidencePct}%`
+                  : null,
+            age,
+          ]
             .filter(Boolean)
             .join(' · ')}
         </div>

@@ -141,11 +141,12 @@ export async function scanImportedLeagueForTanking(
           ...Array.from({ length: f.emptySlots }, () => ({ slotPosition: 'STARTER', startedPlayerId: '', startedPlayerName: 'Empty slot', startedPlayerStatus: 'EMPTY' })),
         ],
         consecutiveWeeksWithSuspiciousLineup: 1,
-        winsBelowExpected: 0,
+        weeksFlagged: [week],
         pointsLeftOnBench: 0,
         eliminatedFromPlayoffs: false,
         weeksUntilPlayoffs: null,
         redFlags: [],
+        detector: 'rules',
       }
       const row = await d.createFlag({
         leagueId,
