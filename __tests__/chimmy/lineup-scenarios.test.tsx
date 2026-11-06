@@ -270,7 +270,7 @@ describe('waiver add/drop', () => {
     expect(call.playerIds).toContain('sl-bateman')
     expect(call.positions.get('sl-bateman')).toBe('WR')
     expect(call.rules).toEqual(FULL_PPR)
-    expect(findWeekPlayersByName).toHaveBeenCalledWith({ week: WEEK, name: 'Rashod Bateman' })
+    expect(findWeekPlayersByName).toHaveBeenCalledWith({ week: WEEK, name: 'Rashod Bateman', sport: 'NFL' })
   })
 
   it('reads "drop Y for X" as dropping Y', async () => {

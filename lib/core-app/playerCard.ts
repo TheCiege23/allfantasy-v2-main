@@ -2020,7 +2020,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     /* AllFantasy's own engine, same week as the provider row above. College is left out: its
        `projections` entry already IS the AF engine's season figure (ncaafProjections.ts). */
     player.sleeperId && projWeek && String(player.sport ?? '').toUpperCase() !== 'NCAAF'
-      ? lookupAfEngineProjections([player.sleeperId], projWeek).catch(() => new Map())
+      ? lookupAfEngineProjections([player.sleeperId], projWeek, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
   ])
 

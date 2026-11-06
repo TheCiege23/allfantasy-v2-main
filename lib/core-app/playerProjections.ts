@@ -6,6 +6,7 @@ import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
+import { isKnownNonNflSport } from './rosterIdSpace'
 import { isIdpEligiblePosition } from '@/lib/af-projections/idpScoring'
 import type { StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
 
@@ -147,6 +148,25 @@ export interface IdpEnrichment {
   injuryBySleeperId?: ReadonlyMap<string, string | null>
 }
 
+/**
+ * The `fantasy_projections.sport` filter a lookup for `sport` must carry.
+ *
+ * 🛑 A NON-NFL LEAGUE IS NEVER PRICED FROM NFL ROWS (2026-11-06). Both lookups below match on
+ * `playerId` alone, and a Sleeper league of another sport hands them Sleeper ids from THAT sport's
+ * namespace — "Sleeper's NBA ids are independent of its NFL ids" (migration
+ * 20261103050000_nba_sleeper_identity_bridge; `PlayerIdentityMap.sleeperNbaId`). Both are short
+ * numeric strings, so an NBA id equal to an NFL id matched the NFL row and summed an NFL stranger
+ * into an NBA lineup — a hit, which no downstream guard examines. The rows carry `sport` (every writer
+ * sets it: the importer as 'NFL', the AF mirror as the run's sport), so a known non-NFL sport reads
+ * only its own rows — today none, which renders "no projection", the true statement.
+ *
+ * ⚠ NFL AND AN UNKNOWN SPORT ADD NO FILTER, so every NFL caller's query is byte-identical to before.
+ * Same rule as `isKnownNonNflSport` in rosterIdSpace.ts: an unthreaded caller keeps its old answer.
+ */
+export function projectionSportScope(sport: string | null | undefined): { sport?: string } {
+  return isKnownNonNflSport(sport) ? { sport: String(sport).trim().toUpperCase() } : {}
+}
+
 /** Projections for a set of players, keyed by player id. */
 export async function lookupProjections(
   playerIds: readonly string[],
@@ -174,12 +194,14 @@ export async function lookupProjections(
   if (!when) return new Map()
 
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' } },
+    where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
     select: { playerId: true, projectedPoints: true, stats: true, source: true },
   })
   const out = new Map(rows.map((r) => [r.playerId, toProjection(r)]))
 
-  if (idp && hasIdpScoring(idp.scoringSettings)) {
+  // IDP enrichment loads NFL defensive lines keyed on NFL Sleeper ids — the same collision, so a
+  // known non-NFL sport never reaches it.
+  if (idp && hasIdpScoring(idp.scoringSettings) && !isKnownNonNflSport(sport)) {
     await enrichWithIdpProjections(out, ids, when, idp)
   }
   return out
@@ -305,6 +327,8 @@ export type AfEngineProjection = {
 export async function lookupAfEngineProjections(
   playerIds: readonly string[],
   at?: { season: string; week: number } | null,
+  /** The league's sport. A known non-NFL sport reads only its own rows — see `projectionSportScope`. */
+  sport?: string | null,
 ): Promise<Map<string, AfEngineProjection>> {
   const ids = [...new Set(playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:')))]
   if (ids.length === 0) return new Map()
@@ -312,7 +336,7 @@ export async function lookupAfEngineProjections(
   if (!when) return new Map()
 
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy' },
+    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy', ...projectionSportScope(sport) },
     select: { playerId: true, projectedPoints: true, stats: true },
   })
   const out = new Map<string, AfEngineProjection>()
