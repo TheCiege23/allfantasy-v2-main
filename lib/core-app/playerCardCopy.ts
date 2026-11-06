@@ -204,6 +204,8 @@ const REASON_ES: Record<string, string> = {
   'No club on file for this player, so his fixtures cannot be looked up.':
     'No tenemos el equipo de este jugador, así que no se pueden buscar sus partidos.',
   'No fixtures on file for these weeks.': 'No hay partidos registrados para estas semanas.',
+  "Weekly schedules and byes are football's. This card does not list his games yet.":
+    'El calendario semanal y las semanas libres son del fútbol americano. Esta ficha todavía no muestra sus partidos.',
   // loadTrades
   'No Sleeper id on file, so trades cannot be matched to this player.':
     'No tenemos el id de Sleeper, así que no se pueden emparejar intercambios con este jugador.',
