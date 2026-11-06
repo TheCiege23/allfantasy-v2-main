@@ -94,7 +94,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Classic: manual lineup saves refused | P | Refused only for Guilly+BB (`lineupService.ts:177`). Classic saves "succeed" and change nothing except IR/taxi exclusion. |
 | Guilly: survivors keep FAAB/waivers | W | Nothing disables them. This branch explicitly exempts Guilly from the new gate. |
 | FAAB ordering, $0 bids, minimum bid, roster space, blind bids | W | `process-engine.ts:398-431,686-707`. Members see only their own claims. |
-| Concurrent waiver runs | **B** | Only the cron path takes the `waiver:league:{id}` mutex. Commissioner "process", the manual process route and FCFS-immediate run without it, and the processor writes an absolute `faabRemaining` (`process-engine.ts:180,500`). |
+| Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Still open: an instant free-agent add racing a run can put one player on two rosters; the add path takes no lock. |
 | No retroactive points for acquisitions | **Fixed (best ball)** | See P0-3. The standard weekly (non-daily) lineup path still reads the current roster; its starters are locked per game, so the exposure there is smaller. |
 | Ownership history | W | `addedAt`/`droppedAt` are now read by best ball scoring. A trade moves the row and keeps `addedAt`, so trades are not split by week; best ball refuses trades. |
 
@@ -166,7 +166,9 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 
 ### P1 — integrity, automation and correctness gaps
 
-8. **Overlapping waiver runs** can award the same player twice or lose FAAB (`process-engine.ts:180,500`; only the cron takes the mutex).
+8. **Overlapping waiver runs** could award the same player twice or lose FAAB *(fixed in branch)*.
+   - Found while fixing: a team winning two claims in ONE run lost its first award and was charged from the stale balance. Also fixed.
+   - Still open: instant free-agent adds take no lock.
 9. **Autopick could draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches *(fixed in branch)*. The orphan branch's wiring is covered by the shared guard's unit tests only, not by an end-to-end test.
 10. **NBA/NHL/MLB draft rounds below roster capacity** (code-read: 13/17/24 rounds against 18/21/26 seats).
 11. **The Guilly calendar is not validated** against teams − 1 or Final N length.
@@ -237,7 +239,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 | Renewal | Commissioner POST | Duplicate guard | Selecting returning managers (intended) |
 
 **Manager strategy decisions** (intended to stay human): the draft, queue and rankings; FAAB bids in Guilly.
-**Commissioner administration that should not be needed but is today:** pressing "process" on waivers, applying stat corrections, and noticing a stalled tournament.
+**Commissioner administration that should not be needed but is today:** applying stat corrections, and noticing a stalled tournament.
 
 ---
 
@@ -256,8 +258,8 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
    and show why each player counted.
 6. **Guilly calendar validation** at creation and on save (teams − 1 ≤ elimination periods; Final N fits).
    Add MLB two-week periods.
-7. **Waiver-run mutex on every processing entry point.** Make the FAAB write relative or compare-and-set.
-8. **Store `algorithm`, slot config and a scoring-rules hash** with each sealed week. Score corrections
+7. **Waiver-run mutex on every processing entry point** — **done in this branch**, plus the same-run
+   double-award and a roster compare-and-set. Still open: make instant free-agent adds take the same lock.
    against the sealed version.
 9. **Retire or repoint the greedy and DFS optimizers** to `computeOptimalLineup`.
 10. Close joins after the draft; private join → approval; honour revoked links; reset `bbContestId` on
@@ -285,6 +287,8 @@ delegate):
 | `lib/draft/redraftScheduledStart.ts`, `lib/draft/startScheduledRedraftDrafts.ts` | Classic Best Ball drafts start at their scheduled time. |
 | `lib/live-draft-engine/autopickStarterGuard.ts` (new), `autopickBestAvailableSubmit.ts`, `slow-draft/SlowDraftRuntimeService.ts`, `lib/orphan-ai-manager/OrphanAIManagerService.ts` | One starter guard for every autopick branch. |
 | `__tests__/live-draft-engine/autopick-starter-guard-all-branches.test.ts` (new), plus cases added to `autopick-fills-starters`, `scheduled-redraft-draft-start` and `redraft-scheduled-start-predicate` | Controls: reverting scheduled start fails 9+; removing the queue guard fails 2; reverting the resolver fails 1. The scan test was updated because it pinned `leagueType: 'redraft'`. |
+| `lib/waiver-wire/process-engine.ts`, `claim-snapshot.ts`, `lib/automation/jobs/waivers/processLeagueWaiversJob.ts` | One run per league at a time; shared roster state within a run; compare-and-set roster write. |
+| `__tests__/waiver-wire/waiver-run-serialization.test.ts` (new) | 7 tests. Controls: shared roster state off fails 1; run lock off fails 2; compare-and-set off fails 1. The mock writes unconditionally when no snapshot is sent, so the CAS test can fail. |
 
 **The 19 tests cover:**
 
