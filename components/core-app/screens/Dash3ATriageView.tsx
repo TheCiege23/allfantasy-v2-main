@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { TopicTip } from '@/components/core-app/TopicTip'
@@ -229,6 +229,15 @@ function DepthChecks({ alerts, language }: { alerts: TriageViewDepthAlert[]; lan
   )
 }
 
+/**
+ * ⚠ HOW MANY LEAGUE ROWS A PLAYER SHOWS BEFORE "SHOW N MORE" (2026-11-06, phone pass). One fix row per
+ * league is right for two leagues and wrong for ten: on an 81-league account one injured receiver took
+ * 1,700px of the home, nine near-identical rows of a league name and two buttons. The header line already
+ * says "In 10 of 81 leagues: starting in 9", so the first rows show the shape and the rest wait one tap
+ * away. The "also in" chips go behind the same tap; with no fix rows they ARE the message, so they stay.
+ */
+export const VISIBLE_FIX_ROWS = 2
+
 export function Dash3ATriageView({
   rows,
   overflow,
@@ -279,6 +288,14 @@ export function Dash3ATriageView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const title = hasStarters ? m.startersInDoubt : m.rosterCheck
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   return (
     <section id="af-home-triage" className="af-core af-triage" aria-label={title}>
@@ -324,6 +341,95 @@ export function Dash3ATriageView({
           const extraFreeAgents = p.tone === 'warn' ? [] : p.freeAgentLinks.filter((l) => !starterIds.has(l.id))
           const fixIds = new Set(starterLeagues.filter((l) => l.fixHref).slice(0, 3).map((l) => l.id))
           const injuredId = String(p.sport ?? '').toUpperCase() === 'NFL' ? p.sleeperId ?? null : null
+          const fixItems = [
+            ...(starterLeagues.map((l) => {
+                /*
+                  Cover you already own, in this league. Free agents need that league's whole
+                  player pool and a rostered-elsewhere exclusion — a per-league scan that must not
+                  run for 61 leagues on a render — so they live behind the button in this row. An
+                  empty bench here is not a gap in the data; it is the reason to go look.
+                */
+                const cover = coverText(l, es, p.tone === 'warn')
+                const freeAgent = freeAgentFor.get(l.id)
+                return (
+                  <li key={l.id} className="af-triage-fix">
+                    <Link href={l.href} className="af-triage-fix-league">
+                      <span className="af-triage-league-platform" data-platform={l.platform.toLowerCase()}>
+                        {l.platform.toUpperCase()}
+                      </span>
+                      <span className="af-triage-fix-name">{l.name}</span>
+                      <span className="af-triage-slot" data-slot="starter">
+                        {slotLabel('starter', es)}
+                      </span>
+                    </Link>
+                    <span className="af-triage-fix-advice">
+                      {cover ? <span className="af-triage-bench">{cover}</span> : null}
+                    </span>
+                    <span className="af-triage-fix-actions">
+                      {/*
+                        Where the move is made. Sleeper, ESPN and Yahoo accept no lineup write from
+                        us, so this is a precise hand-off to their own lineup screen, never a
+                        pretend "apply". The row names the league, so the button shows the verb
+                        and keeps the rest for a screen reader — the accessible name is unchanged.
+                      */}
+                      {fixIds.has(l.id) && l.fixHref ? (
+                        <a
+                          className="af-triage-cta af-triage-cta--fix"
+                          href={l.fixHref}
+                          target={/^https?:/.test(l.fixHref) ? '_blank' : undefined}
+                          rel={/^https?:/.test(l.fixHref) ? 'noopener noreferrer' : undefined}
+                          onClick={() => sendProductAnalyticsBeacon('product.triage.fix_clicked', { platform: l.platform, questionable: p.tone === 'warn' })}
+                        >
+                          {m.setLineupLead}
+                          <span className="af-sr-only">{m.setLineupWhere(platformLabel(l.platform), l.name)}</span>
+                        </a>
+                      ) : null}
+                      {freeAgent ? (
+                        <TriageFreeAgentCta
+                          leagueId={freeAgent.id}
+                          leagueName={freeAgent.name}
+                          baseHref={freeAgent.href}
+                          injuredId={injuredId}
+                          auto={bestAddKeys.has(`${p.key}|${freeAgent.id}`)}
+                          es={es}
+                          compact
+                        />
+                      ) : null}
+                    </span>
+                  </li>
+                )
+              })),
+            ...(extraFreeAgents.map((l) => (
+                <li key={`fa-${l.id}`} className="af-triage-fix">
+                  <span className="af-triage-fix-league">
+                    <span className="af-triage-fix-name">{l.name}</span>
+                    <span className="af-triage-slot" data-slot="starter">
+                      {slotLabel('starter', es)}
+                    </span>
+                  </span>
+                  <span className="af-triage-fix-advice" />
+                  <span className="af-triage-fix-actions">
+                    <TriageFreeAgentCta
+                      leagueId={l.id}
+                      leagueName={l.name}
+                      baseHref={l.href}
+                      injuredId={injuredId}
+                      auto={bestAddKeys.has(`${p.key}|${l.id}`)}
+                      es={es}
+                      compact
+                    />
+                  </span>
+                </li>
+              ))),
+          ]
+          const hasChips = otherLeagues.length > 0 || p.leagueCount > p.leagues.length
+          // Everything past the first rows waits behind the button: later fix rows, and the chips when fix
+          // rows lead. Its count is every league he is in minus the rows already showing — leagues past the
+          // first six arrive both as extra fix rows and in leagueCount, so adding the parts double-counts.
+          const hasHidden = fixItems.length > VISIBLE_FIX_ROWS || (fixItems.length > 0 && hasChips)
+          const hiddenCount = hasHidden ? Math.max(1, p.leagueCount - Math.min(fixItems.length, VISIBLE_FIX_ROWS)) : 0
+          const open = expanded.has(p.key)
+          const showChips = hasChips && (open || fixItems.length === 0)
           return (
             <li key={p.key} className="af-triage-row" data-tone={p.tone}>
               {p.imageUrl ? (
@@ -405,90 +511,23 @@ export function Dash3ATriageView({
                      no injury table here holds an expected return. */
                   <p className="af-triage-note">{p.description}</p>
                 ) : null}
-                {starterLeagues.length + extraFreeAgents.length > 0 ? (
-                  <ul className="af-triage-fixes">
-                    {starterLeagues.map((l) => {
-                      /*
-                        Cover you already own, in this league. Free agents need that league's whole
-                        player pool and a rostered-elsewhere exclusion — a per-league scan that must not
-                        run for 61 leagues on a render — so they live behind the button in this row. An
-                        empty bench here is not a gap in the data; it is the reason to go look.
-                      */
-                      const cover = coverText(l, es, p.tone === 'warn')
-                      const freeAgent = freeAgentFor.get(l.id)
-                      return (
-                        <li key={l.id} className="af-triage-fix">
-                          <Link href={l.href} className="af-triage-fix-league">
-                            <span className="af-triage-league-platform" data-platform={l.platform.toLowerCase()}>
-                              {l.platform.toUpperCase()}
-                            </span>
-                            <span className="af-triage-fix-name">{l.name}</span>
-                            <span className="af-triage-slot" data-slot="starter">
-                              {slotLabel('starter', es)}
-                            </span>
-                          </Link>
-                          <span className="af-triage-fix-advice">
-                            {cover ? <span className="af-triage-bench">{cover}</span> : null}
-                          </span>
-                          <span className="af-triage-fix-actions">
-                            {/*
-                              Where the move is made. Sleeper, ESPN and Yahoo accept no lineup write from
-                              us, so this is a precise hand-off to their own lineup screen, never a
-                              pretend "apply". The row names the league, so the button shows the verb
-                              and keeps the rest for a screen reader — the accessible name is unchanged.
-                            */}
-                            {fixIds.has(l.id) && l.fixHref ? (
-                              <a
-                                className="af-triage-cta af-triage-cta--fix"
-                                href={l.fixHref}
-                                target={/^https?:/.test(l.fixHref) ? '_blank' : undefined}
-                                rel={/^https?:/.test(l.fixHref) ? 'noopener noreferrer' : undefined}
-                                onClick={() => sendProductAnalyticsBeacon('product.triage.fix_clicked', { platform: l.platform, questionable: p.tone === 'warn' })}
-                              >
-                                {m.setLineupLead}
-                                <span className="af-sr-only">{m.setLineupWhere(platformLabel(l.platform), l.name)}</span>
-                              </a>
-                            ) : null}
-                            {freeAgent ? (
-                              <TriageFreeAgentCta
-                                leagueId={freeAgent.id}
-                                leagueName={freeAgent.name}
-                                baseHref={freeAgent.href}
-                                injuredId={injuredId}
-                                auto={bestAddKeys.has(`${p.key}|${freeAgent.id}`)}
-                                es={es}
-                                compact
-                              />
-                            ) : null}
-                          </span>
-                        </li>
-                      )
-                    })}
-                    {extraFreeAgents.map((l) => (
-                      <li key={`fa-${l.id}`} className="af-triage-fix">
-                        <span className="af-triage-fix-league">
-                          <span className="af-triage-fix-name">{l.name}</span>
-                          <span className="af-triage-slot" data-slot="starter">
-                            {slotLabel('starter', es)}
-                          </span>
-                        </span>
-                        <span className="af-triage-fix-advice" />
-                        <span className="af-triage-fix-actions">
-                          <TriageFreeAgentCta
-                            leagueId={l.id}
-                            leagueName={l.name}
-                            baseHref={l.href}
-                            injuredId={injuredId}
-                            auto={bestAddKeys.has(`${p.key}|${l.id}`)}
-                            es={es}
-                            compact
-                          />
-                        </span>
-                      </li>
-                    ))}
+                {fixItems.length > 0 ? (
+                  <ul className="af-triage-fixes" id={`af-triage-fixes-${p.key}`}>
+                    {open ? fixItems : fixItems.slice(0, VISIBLE_FIX_ROWS)}
                   </ul>
                 ) : null}
-                {otherLeagues.length > 0 || p.leagueCount > p.leagues.length ? (
+                {hiddenCount > 0 ? (
+                  <button
+                    type="button"
+                    className="af-triage-more"
+                    aria-expanded={open}
+                    aria-controls={`af-triage-fixes-${p.key}`}
+                    onClick={() => toggle(p.key)}
+                  >
+                    {open ? m.showFewerLeagues : m.showMoreLeagues(hiddenCount)}
+                  </button>
+                ) : null}
+                {showChips ? (
                   <div className="af-triage-leagues">
                     {starterLeagues.length > 0 ? <span className="af-triage-also">{m.alsoIn}</span> : null}
                     {otherLeagues.map((l) => (
