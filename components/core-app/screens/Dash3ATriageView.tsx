@@ -287,7 +287,13 @@ export function Dash3ATriageView({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const title = hasStarters ? m.startersInDoubt : m.rosterCheck
+  /*
+   * ⚠ "STARTERS" ONLY WHEN ONE OF THEM STARTS. The book lists every injured player you hold — bench, IR,
+   * taxi and best ball included — so a card of benched or best-ball-only players was titled "Starters in
+   * doubt" over a list with no starter in it.
+   */
+  const anyStarting = rows.some((r) => r.startingIn > 0)
+  const title = hasStarters ? (anyStarting ? m.startersInDoubt : m.injuredHeld) : m.rosterCheck
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const toggle = (key: string) =>
     setExpanded((prev) => {

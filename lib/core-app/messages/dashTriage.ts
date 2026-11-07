@@ -34,6 +34,8 @@ export const dashTriageMessages = defineMessages({
     depthSub: 'Best ball sets your lineup for you — these are the spots running out of healthy bodies.',
     findPosition: (position: string) => `Find a ${position}`,
     startersInDoubt: 'Starters in doubt',
+    /** The same card when nobody listed starts anywhere — every one is benched, on IR or in best ball. */
+    injuredHeld: 'Injured players you hold',
     rosterCheck: 'Roster check',
     mayNotPlay: 'may not play this week · most valuable first',
     proUpsell: 'AF Pro: the best free agent for every hole, plus Questionable game-time calls',
@@ -84,6 +86,7 @@ export const dashTriageMessages = defineMessages({
     depthSub: 'Best ball arma tu alineación solo; esto marca posiciones donde casi no quedan sanos.',
     findPosition: (position) => `Buscar ${position}`,
     startersInDoubt: 'Titulares en duda',
+    injuredHeld: 'Jugadores lesionados en tu plantilla',
     rosterCheck: 'Revisa tu plantilla',
     mayNotPlay: 'puede que no jueguen esta semana · los más valiosos primero',
     proUpsell: 'AF Pro: el mejor agente libre para cada hueco y alertas de jugadores en duda',
