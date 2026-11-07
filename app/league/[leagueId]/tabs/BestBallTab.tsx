@@ -21,6 +21,8 @@ type BestBallApiResponse = {
       tradesEnabled: boolean
       substitutionsEnabled: boolean
       playoffTeams: number
+      /** The period the league is actually scored with (lib/bestball/scoringPeriod.ts). */
+      scoringPeriod?: string
     }
     profile: {
       label: string
@@ -38,6 +40,8 @@ type BestBallApiResponse = {
     rosterId: string
     teamName: string
     totalPoints: number
+    /** `daily`: each day's best lineup was summed, and `slot` says how many days a player counted. */
+    scoringPeriod?: 'daily'
     winLoss: string | null
     /** Native leagues: `provisional` until every game and stat for the week is final. */
     status?: 'final' | 'provisional'
@@ -108,6 +112,8 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
     return map
   }, [data])
 
+  const daily = data?.league.settings.scoringPeriod === 'daily'
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 text-[#e6edf3]">
       <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
@@ -152,7 +158,14 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
       {!loading && !error && data && sub === 'lineup' ? (
         <div className="flex flex-col gap-4">
           <p data-testid="bestball-lineup-explainer" className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/60">
-            Nobody sets a lineup in Best Ball. Each week the highest-scoring legal lineup from your whole roster counts automatically.
+            {daily ? (
+              <>
+                Nobody sets a lineup in Best Ball. This league uses <span className="font-semibold text-[#ffd7e5]">daily best ball</span>: each day the
+                highest-scoring legal lineup from the players on your roster that day counts automatically, and the week score is the sum of the days.
+              </>
+            ) : (
+              <>Nobody sets a lineup in Best Ball. Each week the highest-scoring legal lineup from your whole roster counts automatically.</>
+            )}{' '}
             Scores stay <span className="font-semibold text-[#fde68a]">provisional</span> until every game and stat for the week is final.
           </p>
           {data.lineups.length === 0 ? (
@@ -168,6 +181,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     <h2 className="truncate text-sm font-semibold text-white">{lineup.teamName}</h2>
                     <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-white/45">
                       <span>Week {data.selectedWeek}</span>
+                      {lineup.scoringPeriod === 'daily' ? (
+                        <span data-testid="bestball-lineup-daily" className="rounded-full bg-[#38bdf8]/15 px-1.5 py-px text-[11px] font-semibold text-[#bae6fd]">
+                          Daily best ball
+                        </span>
+                      ) : null}
                       {lineup.status ? (
                         <span
                           data-testid="bestball-lineup-status"
@@ -191,7 +209,12 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     Waiting on stats for {lineup.awaitingStats} player{lineup.awaitingStats === 1 ? '' : 's'}; this total can still change.
                   </p>
                 ) : null}
-                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35">Counted</div>
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35">
+                  Counted
+                  {lineup.scoringPeriod === 'daily' ? (
+                    <span className="normal-case tracking-normal text-white/35"> · points summed over the days each player made that day&apos;s best lineup</span>
+                  ) : null}
+                </div>
                 <div className="mt-1.5 space-y-1.5">
                   {lineup.starters.map((starter) => (
                     <div key={`${starter.slot}-${starter.playerId}`} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
@@ -254,8 +277,10 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
               <p className="mt-1 text-xs text-white/45">{roster.playerCount} players on the roster{data.source === 'native' ? ` in week ${data.selectedWeek}` : ''}</p>
               <p className="mt-3 text-xs text-white/60">
                 {data.source === 'native'
-                  ? 'Each week the highest-scoring legal lineup from these players counts automatically.'
-                  : `Recommended roster size: ${data.league.profile.recommendedRosterSize}. Best Ball automatically optimizes legal starters every ${data.league.profile.scoringPeriod} scoring period.`}
+                  ? daily
+                    ? 'Each day the highest-scoring legal lineup from the players on the roster that day counts automatically; the week is the sum of the days.'
+                    : 'Each week the highest-scoring legal lineup from these players counts automatically.'
+                  : `Recommended roster size: ${data.league.profile.recommendedRosterSize}. Best Ball automatically optimizes legal starters ${daily ? 'every day, and sums the days into the week' : 'every week'}.`}
               </p>
             </article>
           ))}
@@ -271,6 +296,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
               <p>Draft mode: <span className="text-white">{data.league.settings.draftMode}</span></p>
               <p>Contest structure: <span className="text-white">{data.league.settings.contestStructure}</span></p>
               <p>Scoring: <span className="text-white">{data.league.settings.matchupFormat}</span></p>
+              <p>Lineups: <span className="text-white">{daily ? 'Daily best ball (each day summed)' : 'Weekly best ball'}</span></p>
               <p>Waivers: <span className="text-white">{data.league.settings.waiversEnabled ? 'On' : 'Off'}</span></p>
               <p>Trades: <span className="text-white">{data.league.settings.tradesEnabled ? 'On' : 'Off'}</span></p>
               <p>Manual substitutions: <span className="text-white">{data.league.settings.substitutionsEnabled ? 'On' : 'Off'}</span></p>

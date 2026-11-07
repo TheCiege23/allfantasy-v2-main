@@ -14,11 +14,20 @@
 
 export type SnapshotAssignment = { slot: string; seat?: number; playerId: string; playerName?: string | null; points: number }
 
+/** Daily best ball: one player's points summed across the days he was in the counted lineup. */
+export type SnapshotDailyCounted = { playerId: string; playerName?: string | null; points: number; days: number }
+
 export type SnapshotSide = {
   points?: number
   allFinal?: boolean
   missingPlayerIds?: string[]
-  bestBall?: { assignments?: SnapshotAssignment[]; unfilledSlots?: Array<{ slot: string; seat?: number }> }
+  bestBall?: {
+    assignments?: SnapshotAssignment[]
+    unfilledSlots?: Array<{ slot: string; seat?: number }>
+    /** `daily` for a daily best ball league (lib/bestball/dailyBestBall.ts); absent for weekly. */
+    period?: 'daily'
+    counted?: SnapshotDailyCounted[]
+  }
 }
 
 export type WeekRosterPlayer = {
@@ -38,10 +47,13 @@ export type NativeLineupCard = {
   rosterId: string
   teamName: string
   totalPoints: number
+  /** `daily` when each day's best lineup was summed; absent for weekly best ball (one weekly lineup). */
+  scoringPeriod?: 'daily'
   status: LineupStatus
   /** Head-to-head result once the week is final; null while provisional or with no opponent. */
   winLoss: string | null
-  starters: Array<{ playerId: string; name: string; position: string; team: string | null; points: number; slot: string }>
+  /** Daily: `slot` is how many days he counted ("3 days"), `points` his counted points summed over them. */
+  starters: Array<{ playerId: string; name: string; position: string; team: string | null; points: number; slot: string; days?: number }>
   bench: Array<{ playerId: string; name: string; position: string; team: string | null; points: number | null; reason: string }>
   unfilledSlots: string[]
   /** Players whose stats have not arrived yet; the total can still move. */
@@ -114,6 +126,7 @@ export function buildNativeLineupCard(args: {
   pointsByPlayer: ReadonlyMap<string, number>
   slots: readonly SlotEligibility[]
 }): NativeLineupCard {
+  if (args.side?.bestBall?.period === 'daily') return buildDailyLineupCard(args)
   const assignments = args.side?.bestBall?.assignments ?? []
   const missing = new Set(args.side?.missingPlayerIds ?? [])
   const byId = new Map(args.weekRoster.map((p) => [p.playerId, p]))
@@ -163,6 +176,65 @@ export function buildNativeLineupCard(args: {
     starters,
     bench,
     unfilledSlots: (args.side?.bestBall?.unfilledSlots ?? []).map((u) => u.slot),
+    awaitingStats: missing.size,
+  }
+}
+
+/**
+ * DAILY BEST BALL'S CARD. There is no one weekly lineup: each day's best lineup counted on its own, so a
+ * player is "counted" with his points summed across the days he was in it, and a player who never made a
+ * day's lineup "didn't count". Nobody is compared against a single starter, because the comparison that
+ * decided each day was against THAT day's lineup.
+ */
+function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0]): NativeLineupCard {
+  const counted = args.side?.bestBall?.counted ?? []
+  const missing = new Set(args.side?.missingPlayerIds ?? [])
+  const byId = new Map(args.weekRoster.map((p) => [p.playerId, p]))
+  const countedIds = new Set(counted.map((c) => c.playerId))
+  const status: LineupStatus = args.matchupFinal && args.side?.allFinal !== false ? 'final' : 'provisional'
+  const total = typeof args.side?.points === 'number' ? args.side.points : counted.reduce((s, c) => s + c.points, 0)
+
+  const starters = counted.map((c) => {
+    const p = byId.get(c.playerId)
+    return {
+      playerId: c.playerId,
+      name: c.playerName || p?.playerName || c.playerId,
+      position: p?.position ?? '',
+      team: p?.team ?? null,
+      points: c.points,
+      slot: `${c.days} day${c.days === 1 ? '' : 's'}`,
+      days: c.days,
+    }
+  })
+
+  const bench = args.weekRoster
+    .filter((p) => !countedIds.has(p.playerId))
+    .map((p) => {
+      const points = args.pointsByPlayer.has(p.playerId) ? args.pointsByPlayer.get(p.playerId)! : null
+      let reason: string
+      if (RESERVE.has(String(p.slotType ?? '').toLowerCase())) reason = 'On IR / reserve this week, so he cannot count.'
+      else if (points == null || missing.has(p.playerId)) reason = 'No stats yet for this week.'
+      else if (points === 0) reason = 'No points on any day he was on the roster this week.'
+      else reason = `Scored ${fmt(points)} this week, but on every day he played a higher scorer filled each slot he fits.`
+      return { playerId: p.playerId, name: p.playerName, position: p.position, team: p.team, points, reason }
+    })
+    .sort((a, b) => (b.points ?? -Infinity) - (a.points ?? -Infinity) || a.name.localeCompare(b.name))
+
+  let winLoss: string | null = null
+  if (status === 'final' && args.opponentPoints != null) {
+    winLoss = total > args.opponentPoints ? 'W' : total < args.opponentPoints ? 'L' : 'T'
+  }
+
+  return {
+    rosterId: args.rosterId,
+    teamName: args.teamName,
+    totalPoints: Math.round(total * 100) / 100,
+    scoringPeriod: 'daily',
+    status,
+    winLoss,
+    starters,
+    bench,
+    unfilledSlots: [],
     awaitingStats: missing.size,
   }
 }
