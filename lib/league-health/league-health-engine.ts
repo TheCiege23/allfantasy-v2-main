@@ -220,9 +220,11 @@ export function monitorLeagueHealth(input: LeagueHealthInput): LeagueHealthResul
   if (input.inactiveManagers >= 2) problems.push(`${input.inactiveManagers} inactive managers — engagement at risk`)
   if (input.abandonedTeams > 0) problems.push(`${input.abandonedTeams} abandoned teams — immediate action needed`)
   if (input.unresolvedDisputes > 0) problems.push(`${input.unresolvedDisputes} unresolved disputes eroding trust`)
+  // Plain templates on purpose: the Spanish tables (commissionerOsText, commissionerHubCopy) match them whole.
   const departures = input.departureSignals ?? 0
-  if (departures > 0) problems.push(`${departures} ${departures === 1 ? 'manager has' : 'managers have'} said they might leave the league`)
-  if ((input.collusionComplaints ?? 0) >= 2) problems.push(`${input.collusionComplaints} collusion complaints — managers are losing trust in trades`)
+  const complaints = input.collusionComplaints ?? 0
+  if (departures > 0) problems.push(`${departures} managers said they might leave the league`)
+  if (complaints >= 2) problems.push(`${complaints} collusion complaints — managers are losing trust in trades`)
   if (engagement < 40) problems.push('Low engagement — league activity is below healthy levels')
   if (input.lineupSubmissionRate < 0.7) problems.push('Poor lineup submission rate — managers are checked out')
 

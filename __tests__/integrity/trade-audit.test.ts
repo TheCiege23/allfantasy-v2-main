@@ -162,7 +162,7 @@ describe('League Health reads the dispute desk', () => {
     expect(monitorLeagueHealth({ ...base, departureSignals: 0, collusionComplaints: 0 })).toMatchObject({ churnRiskScore: before.churnRiskScore, sustainabilityScore: before.sustainabilityScore })
     const leaving = monitorLeagueHealth({ ...base, departureSignals: 2, collusionComplaints: 2 })
     expect(leaving.churnRiskScore).toBeGreaterThan(before.churnRiskScore)
-    expect(leaving.biggestProblems.join(' ')).toMatch(/2 managers have said they might leave/)
+    expect(leaving.biggestProblems.join(' ')).toMatch(/2 managers said they might leave the league/)
     expect(leaving.urgentAlerts.join(' ')).toMatch(/might leave/)
     expect(leaving.interventionRecommendations.join(' ')).toMatch(/trade history review/)
   })
