@@ -44,6 +44,16 @@ describe("NBA Cup remaining-game board", () => {
       container.remove()
     }
   })
+  it("shows whether the owner's NBA Cup entry is saved as a draft or finalized", () => {
+    const v = view()
+    const { rerender } = render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
+    expect(screen.getByTestId("cup-entry-draft-status")).toHaveTextContent("Picks saved — bracket not finalized")
+    expect(screen.getByTestId("cup-entry-draft-status")).toHaveTextContent("Finalize picks to join the standings")
+    const finalized = { ...v, activeEntry: { ...v.activeEntry!, finalizedAt: "2026-10-30T00:00:00Z" } }
+    rerender(<MlbBracketBoard view={finalized} onViewChange={() => {}} />)
+    expect(screen.queryByTestId("cup-entry-draft-status")).not.toBeInTheDocument()
+    expect(screen.getByText(/Picks finalized/)).toBeInTheDocument()
+  })
   it("filters group games by date and restores all dates", () => {
     const v = view()
     const first = v.series.find((game) => game.id === "group")!
