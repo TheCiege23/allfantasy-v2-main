@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 const m = vi.hoisted(() => ({ findMany: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { leagueIntegritySettings: { findMany: m.findMany } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { leagueIntegritySettings: { findMany: m.findMany }, leagueTeam: { findFirst: vi.fn(async () => ({ teamName: 'Sleeper Seven', ownerName: null })) } } }))
 vi.mock('@/lib/integrity/leagueEntitlement', () => ({ checkLeagueCommissionerEntitlement: vi.fn() }))
 vi.mock('@/lib/integrity/integrityNotifier', () => ({ notifyCommissionerOfFlag: vi.fn() }))
 vi.mock('@/lib/lineup-integrity/lineupIntegrityService', () => ({ readLineupIntegrity: vi.fn() }))
@@ -43,7 +43,7 @@ const report = (findings = [finding()], latestWeek: number | null = 6): LineupIn
   basis: '',
 })
 
-let deps: { [K in keyof ImportedTankingScanDeps]: ReturnType<typeof vi.fn> }
+let deps: { [K in keyof ImportedTankingScanDeps]-?: ReturnType<typeof vi.fn> }
 const run = () => scanImportedLeagueForTanking('L', deps as unknown as ImportedTankingScanDeps)
 
 beforeEach(() => {
@@ -59,6 +59,7 @@ beforeEach(() => {
     createFlag: vi.fn(async () => ({ id: 'flag-1' })),
     notify: vi.fn(async () => undefined),
     stampScan: vi.fn(async () => undefined),
+    lineupScores: vi.fn(async () => new Map()),
   }
 })
 
@@ -99,7 +100,9 @@ describe('scanImportedLeagueForTanking', () => {
   it('respects the switches: monitor off, illegal-lineup check off, no plan, before the start week', async () => {
     deps.settings.mockResolvedValue({ tankingMonitorEnabled: false, tankingStartWeek: null, tankingIllegalLineupCheck: true })
     expect((await run()).outcome).toBe('not_monitored')
-    deps.settings.mockResolvedValue({ tankingMonitorEnabled: true, tankingStartWeek: null, tankingIllegalLineupCheck: false })
+    // Both checks off: nothing to run. (With only the illegal-lineup check off, the Lineup Integrity
+    // pattern still runs — see the block below.)
+    deps.settings.mockResolvedValue({ tankingMonitorEnabled: true, tankingStartWeek: null, tankingIllegalLineupCheck: false, tankingBenchPatternCheck: false })
     expect((await run()).outcome).toBe('not_monitored')
     deps.settings.mockResolvedValue({ tankingMonitorEnabled: true, tankingStartWeek: 8, tankingIllegalLineupCheck: true })
     expect((await run()).outcome).toBe('before_start_week')
@@ -143,5 +146,61 @@ describe('scanImportedLeaguesForTanking', () => {
       tankingMonitorEnabled: true,
       league: { platform: { equals: 'sleeper', mode: 'insensitive' }, platformLeagueId: { not: '' } },
     })
+  })
+})
+
+describe('the Lineup Integrity pattern for an imported Sleeper league', () => {
+  const weeks = (...ratios: Array<number | null>) => ratios.map((ratio, i) => ({ week: i + 4, ratio, startedTopCount: 7, starterCount: 9, skipReason: ratio == null ? 'thin_projections' : null }))
+  const scores = (rosterId: string, w: ReturnType<typeof weeks>) =>
+    new Map([[rosterId, { thisWeek: { scored: true, ratio: w.at(-1)!.ratio, startedProj: 0, optimalProj: 0, startedTopCount: 7, starterCount: 9, excludedIds: [] }, weeks: w, snapshot: null }]])
+
+  it('opens a case on a run of low weeks, says how it was scored, and names no single start', async () => {
+    deps.report.mockResolvedValue(report([]))
+    deps.lineupScores.mockResolvedValue(scores('7', weeks(0.95, 0.8, 0.82)))
+    expect(await run()).toMatchObject({ outcome: 'scanned', flagged: 1 })
+    const data = deps.createFlag.mock.calls[0][0]
+    expect(data).toMatchObject({ flagType: 'tanking', affectedRosterIds: ['7'], severity: 'medium' })
+    expect(data.summary).toBe('Started lineups well below the best available. Lineup Integrity under 85% of the best possible projection 2 weeks in a row.')
+    expect(data.evidenceJson.lineupIntegrity).toMatchObject({ pattern: true, run: [5, 6], below: 0.85 })
+    expect(data.evidenceJson.illegalOrSuspiciousStarters).toEqual([])
+    expect(data.evidenceJson.redFlags.join(' ')).toMatch(/Sleeper’s own projections are not stored/)
+    expect(deps.lineupScores).toHaveBeenCalledWith({ leagueId: 'L', season: 2026, week: 6 })
+  })
+
+  it('one low week is never a case', async () => {
+    deps.report.mockResolvedValue(report([]))
+    deps.lineupScores.mockResolvedValue(scores('7', weeks(0.95, 0.96, 0.6)))
+    expect(await run()).toMatchObject({ flagged: 0 })
+    expect(deps.createFlag).not.toHaveBeenCalled()
+  })
+
+  it('the pattern runs with the illegal-lineup check off, and not with the bench-pattern check off', async () => {
+    deps.report.mockResolvedValue(report())
+    deps.lineupScores.mockResolvedValue(scores('7', weeks(0.8, 0.8)))
+    deps.settings.mockResolvedValue({ tankingMonitorEnabled: true, tankingStartWeek: null, tankingIllegalLineupCheck: false })
+    expect(await run()).toMatchObject({ outcome: 'scanned', flagged: 1 })
+    // Only the pattern case — the hard finding for team 3 obeys the illegal-lineup switch.
+    expect(deps.createFlag.mock.calls.map((c) => c[0].affectedRosterIds[0])).toEqual(['7'])
+
+    vi.clearAllMocks()
+    deps.claim.mockResolvedValue(true)
+    deps.entitled.mockResolvedValue(true)
+    deps.report.mockResolvedValue(report([]))
+    deps.lineupScores.mockResolvedValue(scores('7', weeks(0.8, 0.8)))
+    deps.settings.mockResolvedValue({ tankingMonitorEnabled: true, tankingStartWeek: null, tankingIllegalLineupCheck: true, tankingBenchPatternCheck: false })
+    expect(await run()).toMatchObject({ flagged: 0 })
+    expect(deps.lineupScores).not.toHaveBeenCalled()
+  })
+
+  it('one open case per manager: a team flagged for hard evidence this week is not flagged twice', async () => {
+    deps.report.mockResolvedValue(report())
+    deps.lineupScores.mockResolvedValue(scores('3', weeks(0.8, 0.8)))
+    let opened = false
+    deps.hasOpenCase.mockImplementation(async () => opened)
+    deps.createFlag.mockImplementation(async () => {
+      opened = true
+      return { id: 'flag-1' }
+    })
+    expect(await run()).toMatchObject({ flagged: 1 })
   })
 })

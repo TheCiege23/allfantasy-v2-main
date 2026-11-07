@@ -374,6 +374,24 @@ export async function GET(request: Request) {
   }
 
   /*
+   * The same snapshot for IMPORTED SLEEPER leagues (lib/integrity/sleeperLineupSnapshots.ts), keyed by
+   * Sleeper roster_id and scored on AllFantasy projections under the league's own scoring. DB-first: it
+   * reads synced rosters and stored projections and never calls Sleeper. Guarded and on its own job identity.
+   */
+  let sleeperLineupSnapshots: unknown = null
+  try {
+    const { runSleeperLineupSnapshots } = await import('@/lib/integrity/sleeperLineupSnapshots')
+    sleeperLineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-sleeper-lineup-snapshots', trigger: 'cron' },
+      () => runSleeperLineupSnapshots(),
+      (r) => ({ rowsRead: r.teams, rowsWritten: r.written, errors: r.failures, metadata: { leagues: r.leagues, skipped: r.skipped } }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] sleeper lineup snapshots failed', e)
+    sleeperLineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Taxi deadline notices (lib/taxi/taxiDeadlineNoticeService): in the week a taxi promotion deadline
    * or lock week closes, every owner is told before it does and the commissioner gets a summary. Leagues
    * with taxi enforcement on (AF Commissioner). Guarded and on its own job identity, like the sweeps around it.
@@ -583,5 +601,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }
