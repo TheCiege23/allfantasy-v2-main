@@ -51,6 +51,8 @@ type BestBallApiResponse = {
     bench: Array<{ playerId: string; name: string; position: string; team: string | null; points: number | null; reason?: string }>
     unfilledSlots?: string[]
     awaitingStats?: number
+    /** Native: the week was sealed on seats that differ from the league's current ones — which ones. */
+    sealedSeatsNote?: string
   }>
   rosterComposition: Array<{ rosterId: string; teamName: string; playerCount: number }>
   standings: Array<{ rosterId: string; rank: number | null; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }>
@@ -212,6 +214,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     <div className="text-[11px] text-white/40">{lineup.starters.length} counted</div>
                   </div>
                 </div>
+                {lineup.sealedSeatsNote ? (
+                  <p data-testid="bestball-lineup-sealed-seats" className="mt-2 text-[11px] text-white/55">
+                    {lineup.sealedSeatsNote}
+                  </p>
+                ) : null}
                 {lineup.awaitingStats ? (
                   <p className="mt-2 text-[11px] text-[#fde68a]/80">
                     Waiting on stats for {lineup.awaitingStats} player{lineup.awaitingStats === 1 ? '' : 's'}; this total can still change.

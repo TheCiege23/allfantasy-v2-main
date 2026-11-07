@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { buildBestBallSlots } from '@/lib/redraft/scoringEngine'
 import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
-import { buildNativeLineupCard, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
+import { buildNativeLineupCard, lineupSlotsForWeek, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
 
 /** Matchup rows that have been scored at least once. */
 const SCORED = ['active', 'final']
@@ -82,34 +82,36 @@ export async function loadNativeBestBallTab(args: {
       })
     : []
   const pointsByPlayer = new Map(pointRows.map((r) => [r.playerId, r.points]))
-  const slots = buildBestBallSlots(args.sport, args.settings).map((s) => ({ slot: s.slot, eligible: s.eligible }))
+  // The league's CURRENT seats. A sealed week is read against the seats it was scored on instead
+  // (lineupSlotsForWeek, per matchup); a legacy or unstamped week keeps these.
+  const currentSlots = buildBestBallSlots(args.sport, args.settings).map((s) => ({ slot: s.slot, eligible: s.eligible, count: s.count }))
 
   const lineups: NativeLineupCard[] = []
   for (const m of weekMatchups) {
+    const { slots, sealedSeatsNote } = lineupSlotsForWeek(m.lineupSnapshots, currentSlots)
     const sides: Array<{ rosterId: string | null; side: 'home' | 'away'; opp: number | null }> = [
       { rosterId: m.homeRosterId, side: 'home', opp: m.awayRosterId ? m.awayScore : null },
       { rosterId: m.awayRosterId, side: 'away', opp: m.homeScore },
     ]
     for (const s of sides) {
       if (!s.rosterId) continue
-      lineups.push(
-        buildNativeLineupCard({
-          rosterId: s.rosterId,
-          teamName: nameOf.get(s.rosterId) ?? 'Team',
-          side: snapshotSide(m.lineupSnapshots, s.side),
-          matchupFinal: m.status === 'final',
-          opponentPoints: s.opp,
-          weekRoster: (rowsByRoster.get(s.rosterId) ?? []).map((r) => ({
-            playerId: r.playerId,
-            playerName: r.playerName,
-            position: r.position,
-            team: r.team ?? null,
-            slotType: r.slotType ?? null,
-          })),
-          pointsByPlayer,
-          slots,
-        }),
-      )
+      const card = buildNativeLineupCard({
+        rosterId: s.rosterId,
+        teamName: nameOf.get(s.rosterId) ?? 'Team',
+        side: snapshotSide(m.lineupSnapshots, s.side),
+        matchupFinal: m.status === 'final',
+        opponentPoints: s.opp,
+        weekRoster: (rowsByRoster.get(s.rosterId) ?? []).map((r) => ({
+          playerId: r.playerId,
+          playerName: r.playerName,
+          position: r.position,
+          team: r.team ?? null,
+          slotType: r.slotType ?? null,
+        })),
+        pointsByPlayer,
+        slots,
+      })
+      lineups.push(sealedSeatsNote ? { ...card, sealedSeatsNote } : card)
     }
   }
   lineups.sort((a, b) => b.totalPoints - a.totalPoints)

@@ -11,6 +11,7 @@
  * Pure: the handler loads rows, this shapes them. Every sentence a member reads about why a player did or
  * did not count is decided here, so it is testable without a database.
  */
+import { frozenBestBallSlots, readBestBallRuleStamp } from '@/lib/bestball/resultRuleStamp'
 
 export type SnapshotAssignment = { slot: string; seat?: number; playerId: string; playerName?: string | null; points: number }
 
@@ -39,7 +40,8 @@ export type WeekRosterPlayer = {
   slotType: string | null
 }
 
-export type SlotEligibility = { slot: string; eligible: readonly string[] }
+/** `count`: how many seats of this slot; present when known (the stored stamp, `buildBestBallSlots`). */
+export type SlotEligibility = { slot: string; eligible: readonly string[]; count?: number }
 
 export type LineupStatus = 'final' | 'provisional'
 
@@ -58,6 +60,51 @@ export type NativeLineupCard = {
   unfilledSlots: string[]
   /** Players whose stats have not arrived yet; the total can still move. */
   awaitingStats: number
+  /**
+   * Set when this week was SEALED on seats that differ from the league's current ones (a commissioner
+   * changed the roster seats after it was scored): which seats it was scored on. Absent otherwise.
+   */
+  sealedSeatsNote?: string
+}
+
+/** "QB, 2 WR, FLEX" — the seats a lineup is scored on, in their stored order. */
+function describeSeats(slots: readonly SlotEligibility[]): string {
+  return slots
+    .filter((s) => (s.count ?? 1) > 0)
+    .map((s) => ((s.count ?? 1) > 1 ? `${s.count} ${s.slot}` : s.slot))
+    .join(', ')
+}
+
+const seatKey = (slots: readonly SlotEligibility[]) =>
+  slots
+    .filter((s) => (s.count ?? 1) > 0)
+    .map((s) => `${s.slot}:${s.count ?? 1}:${[...s.eligible].map((e) => e.toUpperCase()).sort().join('/')}`)
+    .sort()
+    .join('|')
+
+/**
+ * The seats a week's lineup card is read against.
+ *
+ * 🛑 A SEALED WEEK IS SCORED ON ITS STORED SEATS, SO ITS CARD MUST BE READ ON THEM TOO. Scoring freezes a
+ * final week's slots in `lineupSnapshots.redraftScoring.bestBallRules` (lib/bestball/resultRuleStamp.ts),
+ * but the tab read every week against the league's CURRENT seats. After a commissioner dropped a FLEX
+ * seat, a sealed week's FLEX starter matched no current slot, and a benched RB was told "No lineup slot
+ * takes a RB" — false for the week he was benched in. A week sealed under a stamp now uses the stamp's
+ * slots; a legacy-stamped or unstamped week keeps the current seats, exactly as before (its original
+ * seats are unknown, which is also why scoring does not freeze it).
+ */
+export function lineupSlotsForWeek(
+  lineupSnapshots: unknown,
+  currentSlots: readonly SlotEligibility[],
+): { slots: SlotEligibility[]; sealedSeatsNote?: string } {
+  const frozen = frozenBestBallSlots(readBestBallRuleStamp(lineupSnapshots))
+  if (!frozen) return { slots: [...currentSlots] }
+  const slots: SlotEligibility[] = frozen.map((s) => ({ slot: s.slot, eligible: [...s.eligible], count: s.count }))
+  if (seatKey(slots) === seatKey(currentSlots)) return { slots }
+  return {
+    slots,
+    sealedSeatsNote: `Scored on the seats this week was sealed with (${describeSeats(slots)}); the league's seats have changed since.`,
+  }
 }
 
 const RESERVE = new Set(['ir', 'injured_reserve', 'taxi', 'devy', 'reserve'])
