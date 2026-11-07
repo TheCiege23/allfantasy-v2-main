@@ -35,9 +35,21 @@ export interface BigBrotherHomeProps {
   isCommissioner?: boolean
   /** When set from league shell tabs, opens this lens directly. */
   initialView?: BigBrotherView
+  /**
+   * Rendered inside the league workspace, whose sidebar (desktop) and Section picker (phone) already list House, HOH,
+   * Veto, Voting, Jury, Twists, History and Command, and link League chat, Settings and Chimmy. In that case the
+   * "Big Brother" header card, the four-button row and the in-page tab row / View menu are a third and fourth way to
+   * navigate — about 250px on a phone before any content (2026-11-07, Big Brother audit item 3). They are replaced by
+   * one slim bar: the view's name, your status, and links to the two views the sidebar does not list (Ceremony, and
+   * Admin tools for the commissioner). Without it (the Overview embed) the full chrome stays: it is the only nav there.
+   */
+  shellNav?: boolean
 }
 
-export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house' }: BigBrotherHomeProps) {
+/** Views the league sidebar does not list, so `shellNav` must still offer them. */
+const OFF_SIDEBAR_VIEWS: readonly BigBrotherView[] = ['ceremony', 'commissioner']
+
+export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house', shellNav = false }: BigBrotherHomeProps) {
   const { formatInTimezone } = useUserTimezone()
   const [summary, setSummary] = useState<BigBrotherSpecialtySummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -108,7 +120,35 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
       {view === 'house' && summary ? (
         <BigBrotherSpecialtyHome leagueId={leagueId} summary={summary} onChanged={load} />
       ) : null}
-      {view !== 'house' ? (
+      {shellNav ? (
+        <div
+          className={`relative flex flex-wrap items-center justify-between gap-2 ${view !== 'house' ? '!mt-0' : ''}`}
+          data-testid="bb-view-bar"
+        >
+          {view !== 'house' ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h2 className="text-lg font-semibold text-white">{VIEW_LABELS[view]}</h2>
+              {summary?.myStatus ? <BigBrotherStatusBadge status={summary.myStatus} /> : null}
+            </div>
+          ) : (
+            <span />
+          )}
+          <nav aria-label="More Big Brother views" className="flex flex-wrap gap-1">
+            {OFF_SIDEBAR_VIEWS.filter((v) => viewOptions.includes(v)).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(view === v ? initialView : v)}
+                aria-pressed={view === v}
+                className={`min-h-[36px] rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-amber-500/20 text-amber-200' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+              >
+                {v === 'commissioner' ? 'Admin tools' : 'Ceremony'}
+              </button>
+            ))}
+          </nav>
+        </div>
+      ) : null}
+      {view !== 'house' && !shellNav ? (
       <header className="relative flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4 backdrop-blur-sm sm:p-6">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-950/50 to-[#0a1228] shadow-[0_0_24px_rgba(245,158,11,0.12)] sm:h-16 sm:w-16">
@@ -134,58 +174,62 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/league/${leagueId}?tab=Chat`}
-          className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2 text-sm text-amber-200 hover:bg-amber-950/50"
-        >
-          <MessageSquare className="h-4 w-4" /> League Chat
-        </Link>
-        <Link href={`/league/${leagueId}?tab=Settings`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
-          <Settings className="h-4 w-4" /> Settings
-        </Link>
-        <Link href={`/league/${leagueId}?tab=Intelligence`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
-          <Sparkles className="h-4 w-4" /> Chimmy Host
-        </Link>
-        {isCommissioner ? (
+      {!shellNav ? (
+        <>
+        <div className="flex flex-wrap gap-2">
           <Link
-            href={`/big-brother/${leagueId}/command`}
-            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-2 text-sm text-amber-100 hover:bg-amber-950/40"
-            data-testid="bb-open-command"
+            href={`/league/${leagueId}?tab=Chat`}
+            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2 text-sm text-amber-200 hover:bg-amber-950/50"
           >
-            <Sparkles className="h-4 w-4" /> Command
+            <MessageSquare className="h-4 w-4" /> League Chat
           </Link>
-        ) : null}
-      </div>
-
-      {/* View switcher */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-white/50 sm:hidden">View:</span>
-        <div className="relative sm:hidden">
-          <select
-            value={view}
-            onChange={(e) => setView(e.target.value as BigBrotherView)}
-            className="rounded-xl border border-white/20 bg-white/5 py-2 pl-3 pr-8 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-          >
-            {viewOptions.map((v) => (
-              <option key={v} value={v}>{VIEW_LABELS[v]}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-        </div>
-        <div className="hidden flex-wrap gap-1 sm:flex">
-          {viewOptions.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-amber-500/20 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+          <Link href={`/league/${leagueId}?tab=Settings`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
+            <Settings className="h-4 w-4" /> Settings
+          </Link>
+          <Link href={`/league/${leagueId}?tab=Intelligence`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
+            <Sparkles className="h-4 w-4" /> Chimmy Host
+          </Link>
+          {isCommissioner ? (
+            <Link
+              href={`/big-brother/${leagueId}/command`}
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-2 text-sm text-amber-100 hover:bg-amber-950/40"
+              data-testid="bb-open-command"
             >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
+              <Sparkles className="h-4 w-4" /> Command
+            </Link>
+          ) : null}
         </div>
-      </div>
+
+        {/* View switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-white/50 sm:hidden">View:</span>
+          <div className="relative sm:hidden">
+            <select
+              value={view}
+              onChange={(e) => setView(e.target.value as BigBrotherView)}
+              className="rounded-xl border border-white/20 bg-white/5 py-2 pl-3 pr-8 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            >
+              {viewOptions.map((v) => (
+                <option key={v} value={v}>{VIEW_LABELS[v]}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+          </div>
+          <div className="hidden flex-wrap gap-1 sm:flex">
+            {viewOptions.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-amber-500/20 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+              >
+                {VIEW_LABELS[v]}
+              </button>
+            ))}
+          </div>
+        </div>
+        </>
+      ) : null}
 
       {view === 'house' && summary && (
         <div className="space-y-4">
