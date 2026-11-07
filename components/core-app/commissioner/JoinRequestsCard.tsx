@@ -109,7 +109,7 @@ export function JoinRequestsCard({ leagueId }: { leagueId: string }) {
       {pending.length > 0 ? (
         <div className="space-y-3" data-testid="join-requests-list">
           {pending.map((r) => (
-            <div key={r.id} className="space-y-2 rounded-lg border p-3" data-testid={`join-request-${r.id}`}>
+            <div key={r.id} className="space-y-2 rounded-lg border border-[var(--line)] p-3" data-testid={`join-request-${r.id}`}>
               <p>
                 <strong>{r.name}</strong>
                 {r.username ? ` @${r.username}` : null}
