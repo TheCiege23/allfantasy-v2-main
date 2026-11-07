@@ -1,5 +1,6 @@
 'use client'
 
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { isPollClosed, pollShare, type ViewerPoll } from '@/lib/chat-core/messagePolls'
 import { formatChatMessageTimestamp } from '@/lib/chat-core/chat-timestamps'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -116,9 +117,9 @@ export function MessagePoll({
 
 export default MessagePoll
 
-/** "Sat, Aug 29, 5:00 PM PDT" in the browser's own zone; null when the time cannot be read. */
+/** "Sat, Aug 29, 5:00 PM PDT" in the browser's own zone and the app's language; null when unreadable. */
 function localTimeLabel(iso: string): string | null {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  return d.toLocaleString(getAppIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 import { MAX_SLOTS, MIN_SLOTS } from '@/lib/draft-schedule/draftSchedule'
 import type { DraftScheduleView } from '@/lib/draft-schedule/draftScheduleService'
@@ -14,7 +15,7 @@ import type { DraftScheduleView } from '@/lib/draft-schedule/draftScheduleServic
 type View = DraftScheduleView & { isCommissioner: boolean }
 
 const localLabel = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  new Date(iso).toLocaleString(getAppIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 
 export function DraftSchedulePoll({ leagueId, disabled = false }: { leagueId: string; disabled?: boolean }) {
   const endpoint = `/api/leagues/${encodeURIComponent(leagueId)}/draft/schedule`

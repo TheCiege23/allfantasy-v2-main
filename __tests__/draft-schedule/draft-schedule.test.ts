@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { bestSlot, draftReminderDue, formatSlot, groupByTimeZone, parseSlots, safeTimeZone } from '@/lib/draft-schedule/draftSchedule'
 import { readViewerPoll } from '@/lib/chat-core/messagePolls'
 
+// Mocks for the draft-time notification test at the bottom; the pure tests above never touch them.
+const h = vi.hoisted(() => ({ dispatched: [] as Array<{ userIds: string[]; body?: string }> }))
+vi.mock('server-only', () => ({}))
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: vi.fn(async (p: { userIds: string[]; body?: string }) => { h.dispatched.push(p) }) }))
+vi.mock('@/lib/notifications/resolveAppUserIds', () => ({ resolveAppUserIds: async (ids: string[]) => ids }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    roster: { findMany: async () => [{ platformUserId: 'east' }, { platformUserId: 'west' }, { platformUserId: 'nozone' }] },
+    league: { findUnique: async () => ({ userId: 'east', name: 'Dynasty Bros' }) },
+    userProfile: { findMany: async () => [{ userId: 'east', timezone: 'America/New_York' }, { userId: 'west', timezone: 'America/Los_Angeles' }, { userId: 'nozone', timezone: null }] },
+    leagueSettings: { findUnique: async () => ({ timezone: 'America/Chicago' }) },
+  },
+}))
+
+
 const NOW = new Date('2026-08-01T12:00:00Z')
 const H = 60 * 60 * 1000
 const at = (ms: number) => new Date(NOW.getTime() + ms).toISOString()
@@ -73,19 +88,6 @@ describe('a time option in a chat poll', () => {
 })
 
 describe('🛑 the draft-time notice is in each member’s own zone, not "ET" for everyone', () => {
-  const h = vi.hoisted(() => ({ dispatched: [] as Array<{ userIds: string[]; body?: string }> }))
-  vi.mock('server-only', () => ({}))
-  vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: vi.fn(async (p: { userIds: string[]; body?: string }) => { h.dispatched.push(p) }) }))
-  vi.mock('@/lib/notifications/resolveAppUserIds', () => ({ resolveAppUserIds: async (ids: string[]) => ids }))
-  vi.mock('@/lib/prisma', () => ({
-    prisma: {
-      roster: { findMany: async () => [{ platformUserId: 'east' }, { platformUserId: 'west' }, { platformUserId: 'nozone' }] },
-      league: { findUnique: async () => ({ userId: 'east', name: 'Dynasty Bros' }) },
-      userProfile: { findMany: async () => [{ userId: 'east', timezone: 'America/New_York' }, { userId: 'west', timezone: 'America/Los_Angeles' }, { userId: 'nozone', timezone: null }] },
-      leagueSettings: { findUnique: async () => ({ timezone: 'America/Chicago' }) },
-    },
-  }))
-
   it('sends one message per zone, each with the time in that zone', async () => {
     const { notifyDraftTimeSet } = await import('@/lib/draft-notifications/DraftNotificationService')
     await notifyDraftTimeSet('L1', new Date('2026-08-30T00:00:00.000Z'))
