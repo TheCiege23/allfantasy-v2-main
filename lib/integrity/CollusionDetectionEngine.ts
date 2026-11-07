@@ -13,6 +13,8 @@ import { ELIMINATED_PLAYOFF_PCT } from "@/lib/decision-os/trade/tradeReview"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity"
+import { auditRowFromReview, recordTradeValueAudit } from "./tradeValueAudit"
+import { checkRepeatTradingPairs } from "./pairFrequencyCheck"
 
 /**
  * The post-trade collusion scan — commissioner review mode, run by the integrity worker once a trade
@@ -80,6 +82,10 @@ export type CollusionScanDeps = {
   review: typeof reviewStoredTrade
   explain: typeof explainTrade
   notify: typeof notifyCommissionerOfFlag
+  /** Records the trade's values as priced now — at completion, for a trade the scan reaches as it settles. */
+  audit: typeof recordTradeValueAudit
+  /** League-wide: pairs trading far more often than the league's volume predicts (./pairFrequencyCheck.ts). */
+  pairCheck: (leagueId: string) => Promise<unknown>
   now: () => Date
 }
 
@@ -87,6 +93,8 @@ const defaultDeps: CollusionScanDeps = {
   review: reviewStoredTrade,
   explain: explainTrade,
   notify: notifyCommissionerOfFlag,
+  audit: recordTradeValueAudit,
+  pairCheck: (leagueId) => checkRepeatTradingPairs(leagueId),
   now: () => new Date(),
 }
 
@@ -126,7 +134,8 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
     team1TotalValue: give,
     team2TotalValue: get,
     valueDifferential: Math.abs(give - get),
-    valueDifferentialPct: g.graded ? Math.abs(g.percentDiff) : 0,
+    // The review's gap: priced when the trade happened where that is on record (lib/integrity/tradeValueAudit.ts).
+    valueDifferentialPct: facts.gapPct?.ok ? Math.abs(facts.gapPct.value) : g.graded ? Math.abs(g.percentDiff) : 0,
     ...(facts.history.ok ? { priorTradesBetweenPair: Math.max(0, facts.history.value.length - 1) } : {}),
     ...(facts.playoffPct.ok
       ? { isPlayoffContender: { team1: !eliminated(facts.playoffPct.value[0]), team2: !eliminated(facts.playoffPct.value[1]) } }
@@ -163,6 +172,16 @@ export async function scanTradeForCollusion(
   // Reviewed as the league's commissioner — the one viewer every trade in the league is visible to.
   const r = await d.review({ leagueId, ref, userId: league.userId, surface: "integrity-scan" })
   const flags: CollusionScanResult["flags"] = []
+
+  /*
+   * Record what the trade is worth NOW, once. A trade reaches this scan as it settles, so for almost
+   * every trade "now" is the trade date; one reached later says so (`basis: first_audited`). Write-once,
+   * so a re-scan weeks later never re-prices it. Failure-contained: the scan does not depend on it.
+   */
+  const auditRow = auditRowFromReview(r, ref, d.now())
+  if (auditRow) {
+    await d.audit(leagueId, auditRow).catch((e) => console.warn("[integrity] trade value audit write failed", { leagueId, error: String(e) }))
+  }
 
   if (r.ok) {
     const raised = collusionFlagsAtSensitivity(r.review.flags, normalizeSensitivity(settings?.collusionSensitivity))
@@ -201,6 +220,8 @@ export async function scanTradeForCollusion(
   } else {
     console.warn(`[integrity] collusion scan could not review ${tradeTransactionId}: ${r.refusal.reason}`)
   }
+
+  await d.pairCheck(leagueId).catch((e) => console.warn("[integrity] repeat-pair check failed", { leagueId, error: String(e) }))
 
   const at = d.now()
   await prisma.leagueIntegritySettings.upsert({
