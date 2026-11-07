@@ -1,8 +1,14 @@
 /**
  * ONE LOCK FOR EVERYTHING THAT DECIDES WHO OWNS A FREE AGENT IN A LEAGUE.
  *
- * A waiver run (`processWaiverClaimsForLeague`) and an instant free-agent add (`executeImmediateAddDrop`)
- * both read "who is rostered" and then write a roster. Run concurrently they can put one player on two
+ * Holders — every path that reads "who is rostered" and then writes a roster from that read:
+ *   - waiver runs: `processWaiverClaimsForLeague` (native WaiverClaim), `processWaiverWindow`
+ *     (RedraftWaiverClaim, hourly), `processNflRedraftWaiverWindow` (commissioner, waiver runtime);
+ *   - instant free-agent adds: `executeImmediateAddDrop` (the add/drop route every waiver screen uses)
+ *     and `addNflRedraftFreeAgent` (`/api/redraft/waiver-runtime` action `add_free_agent`).
+ * A new path that awards or adds a free agent must take it too.
+ *
+ * A waiver run and an instant free-agent add both read "who is rostered" and then write a roster. Run concurrently they can put one player on two
  * rosters: the run awards him from its read while an add takes him from its own. Both now hold
  * `waiver:process:{leagueId}` for the whole read-decide-write, so they take turns.
  *
@@ -20,6 +26,9 @@ const WAIT_ATTEMPTS = 8
 const WAIT_MS = 750
 
 export const leagueWaiverLockKey = (leagueId: string) => `waiver:process:${leagueId}`
+
+/** Refusal for an instant add while a waiver run (or another add) holds the league's lock past the short wait. */
+export const WAIVER_RUN_IN_PROGRESS_MESSAGE = 'Waivers are processing for this league right now. Try the add again in a moment.'
 
 export async function withLeagueWaiverLock<T>(
   leagueId: string,

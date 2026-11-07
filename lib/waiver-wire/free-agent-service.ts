@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
 import { addPlayerToRosterData, removePlayerFromRosterData, getRosterPlayerIds } from './roster-utils'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
-import { withLeagueWaiverLock } from './leagueWaiverLock'
+import { WAIVER_RUN_IN_PROGRESS_MESSAGE, withLeagueWaiverLock } from './leagueWaiverLock'
+import { redraftHolderOtherThan } from './redraftRosterHolder'
 
 /**
  * Immediate free-agent add/drop (Step 3B).
@@ -33,7 +34,7 @@ export interface ImmediateAddDropResult {
 }
 
 /** Refusal while a waiver run (or another instant add) holds the league's lock past the short wait. */
-export const WAIVER_RUN_IN_PROGRESS_MESSAGE = 'Waivers are processing for this league right now. Try the add again in a moment.'
+export { WAIVER_RUN_IN_PROGRESS_MESSAGE }
 
 /**
  * 🛑 AN INSTANT ADD AND A WAIVER RUN COULD BOTH TAKE ONE PLAYER. The availability check runs in
@@ -77,6 +78,12 @@ async function executeImmediateAddDropLocked(
   })
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+
+  // The redraft engine awards into `RedraftRosterPlayer` only, which the check above never reads
+  // (redraftRosterHolder.ts). Read outside the transaction, still inside the league lock.
+  if (await redraftHolderOtherThan(prisma, { leagueId, genericRosterId: rosterId, playerId: addPlayerId })) {
+    throw new Error('This player is already on another roster in this league.')
+  }
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const roster = await tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, playerData: true } })

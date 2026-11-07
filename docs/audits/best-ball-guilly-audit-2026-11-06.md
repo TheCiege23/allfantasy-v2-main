@@ -94,7 +94,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Classic: manual lineup saves refused | **Fixed** | Saves are refused wherever scoring ignores slots (Classic and Guilly+BB) in both the lineup engine and the redraft roster PATCH; IR/taxi, commissioner and import saves still pass. The Team tab shows no lineup editor and says the lineup sets itself. |
 | Guilly: survivors keep FAAB/waivers | W | Nothing disables them. This branch explicitly exempts Guilly from the new gate. |
 | FAAB ordering, $0 bids, minimum bid, roster space, blind bids | W | `process-engine.ts:398-431,686-707`. Members see only their own claims. |
-| Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Instant free-agent adds now take the same lock around their check-then-write (`leagueWaiverLock.ts`). |
+| Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Instant free-agent adds now take the same lock around their check-then-write (`leagueWaiverLock.ts`). The redraft engine's hourly run (`processWaiverWindow`) and the waiver runtime's add and commissioner run (`/api/redraft/waiver-runtime`) took no lock; they do now. The native add also refuses a player the redraft engine holds only in `RedraftRosterPlayer` (`redraftRosterHolder.ts`). |
 | No retroactive points for acquisitions | **Fixed (best ball)** | See P0-3. The standard weekly (non-daily) lineup path still reads the current roster; its starters are locked per game, so the exposure there is smaller. |
 | Ownership history | W | `addedAt`/`droppedAt` are now read by best ball scoring. A trade moves the row and keeps `addedAt`, so trades are not split by week; best ball refuses trades. |
 
@@ -114,7 +114,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Eliminated team: no transactions | **Fixed** | Previously only claims were blocked. Add/drop and trades through the roster gate are now refused. |
 | Eliminated team: keeps view access; commissioner powers separate | W | Membership kept; `commissioner/permissions.ts` is independent of elimination. |
 | Pending trades cancelled at chop | M | Moot while Guilly trades are off (now enforced on both paths). |
-| Chop → waivers ordering | P | Two independent crons. Ordering relies on the blind window, not on sequencing. |
+| Chop → waivers ordering | **Fixed** | Two independent crons; a held week (missing box scores, the correction window) could push the chop past the run. Then the doomed team won its claims and bids on its players failed for good. A native Guilly league's waiver run (both engines) now defers the league while a finished week's chop is due and not applied (`lib/guillotine/chopBeforeWaivers.ts`); claims stay pending. Bounded: a chop more than a week overdue no longer holds waivers. A commissioner's manual run is exempt. |
 | Champion and season end | W | `finishGuillotineSeason.ts`. No champion notification. |
 | Specialty-automation handler | B (dead) | Never passes `periodEndedAt`, so it can never chop (`guillotineHandler.ts:30`). |
 
@@ -168,7 +168,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 
 8. **Overlapping waiver runs** could award the same player twice or lose FAAB *(fixed in branch)*.
    - Found while fixing: a team winning two claims in ONE run lost its first award and was charged from the stale balance. Also fixed.
-   - Still open: instant free-agent adds take no lock.
+   - Instant free-agent adds now take the same lock, on both engines' add paths *(fixed in branch)*. The earlier "still open" line was stale: the native add/drop had been locked in `9fefabf8e2`; the redraft engine's run and the waiver runtime's add were the paths still unlocked.
 9. **Autopick could draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches *(fixed in branch)*. The orphan branch's wiring is covered by the shared guard's unit tests only, not by an end-to-end test.
 10. **NBA/NHL/MLB draft rounds below roster capacity** *(fixed in branch)*. Measured against the `best_ball` roster templates the seats are 17/22/33 (not 18/21/26 as first read); rounds now equal them.
 11. **The Guilly calendar was not validated** against teams − 1 or Final N length *(fixed in branch)*.
@@ -258,7 +258,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 6. **Guilly calendar validation** at creation and on save (teams − 1 ≤ elimination periods; Final N fits).
    Add MLB two-week periods.
 7. **Waiver-run mutex on every processing entry point** — **done in this branch**, plus the same-run
-   double-award and a roster compare-and-set. Still open: make instant free-agent adds take the same lock.
+   double-award and a roster compare-and-set. Instant free-agent adds on both engines take the same lock — **done in this branch**.
    against the sealed version.
 9. **Retire or repoint the greedy and DFS optimizers** to `computeOptimalLineup` — **done in this branch**.
 10. Close joins after the draft; private join → approval; honour revoked links; reset `bbContestId` on
@@ -291,6 +291,8 @@ delegate):
 | `lib/bestball/nativeBestBallTab.ts` (new), `nativeBestBallTabLoad.ts` (new), `app/api/leagues/[leagueId]/bestball/handler.ts`, `app/league/[leagueId]/tabs/BestBallTab.tsx` | The Best Ball tab reads native scoring, with labels and reasons. |
 | `__tests__/bestball/native-best-ball-tab.test.tsx` (new) | 12 tests: reasons, cards, loader, the API route and a render. Controls: tab reverted fails 1; late-stats branch off fails 1; handler reverted fails 1. |
 | `lib/waiver-wire/leagueWaiverLock.ts` (new), `free-agent-service.ts` | Instant free-agent adds take the league waiver lock. Test: `instant-add-waiver-lock` (3; lock off fails 2). |
+| `lib/redraft/waiverEngine.ts`, `lib/waiver-runtime/resolveNflRedraftWaiverRuntime.ts`, `lib/waiver-wire/redraftRosterHolder.ts` (new), `addDropErrors.ts` | The redraft run, the runtime add and the runtime commissioner run take the league waiver lock; the native add sees the redraft engine's rows; a lost race returns `WAIVERS_PROCESSING` (409). Test: `fa-add-paths-waiver-lock` (7). Controls: run lock off fails 2 (one player on two rosters); holder check off fails 2; runtime locks off fail 2. |
+| `lib/guillotine/chopBeforeWaivers.ts` (new), `process-engine.ts`, `waiverEngine.ts`, `discoverDueWaiverLeagues.ts`, `processLeagueWaiversJob.ts` | A Guilly waiver run waits for a due chop. Test: `chop-before-waivers` (12). Controls: engine gate off fails 1; redraft gate off fails 1; week-finished check off fails 3; overdue bound off fails 1; FCFS discovery off fails 1. |
 | `lib/guillotine/GuillotineTiebreakResolver.ts`, `chopPreview*.ts`, `GuillotineEliminationEngine.ts` | Seeded last-resort tiebreak. Test: `tiebreak-deterministic` (6; resolver reverted fails 4). |
 | `lib/guillotine/calendarFit.ts` (new), creation, `guillotineRulesSave.ts`, `guillotineAdvancedSettings.ts` | Calendar must reach a champion. Tests: `calendar-fit` (7) and a refusal in `guillotine-rules` (check off fails 1). |
 | `lib/bestball/nativeTournament.ts` | Tournament renewal rollover and superseded guard. Test: `native-tournament-renewal` (4; fix off fails 3). |

@@ -26,6 +26,7 @@ import { claimSnapshotWhere, isClaimSnapshotConflict, isRosterSnapshotConflict, 
 import { withLeagueWaiverLock } from './leagueWaiverLock'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
+import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
@@ -37,7 +38,7 @@ import {
 } from './nhlProspectFreeAgency'
 
 /** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
-export type WaiverRunSkipReason = 'league_moves_locked' | 'run_in_progress'
+export type WaiverRunSkipReason = 'league_moves_locked' | 'run_in_progress' | 'guillotine_chop_pending'
 
 type ClaimRow = {
   id: string
@@ -149,7 +150,7 @@ async function processWaiverClaimsForLeagueLocked(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
+      select: { id: true, rosterSize: true, leagueType: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -178,6 +179,18 @@ async function processWaiverClaimsForLeagueLocked(
   ])
 
   if (!league) return []
+  // 🛑 A Guilly week's chop lands BEFORE the run that follows it (lib/guillotine/chopBeforeWaivers.ts):
+  // run first and the doomed team wins claims while bids on its players fail. Nothing is touched — every
+  // claim stays pending for the first run after the chop. A commissioner's manual run is exempt, as from
+  // every other hold here.
+  if (opts?.runType !== 'manual') {
+    const chop = await guillotineChopPendingForWaivers(leagueId, league)
+    if (chop.hold) {
+      console.info(`[waiver-process] league ${leagueId} skipped: week ${chop.week}'s Guilly chop has not landed; pending claims stay pending`)
+      opts?.onSkip?.('guillotine_chop_pending')
+      return []
+    }
+  }
   /*
    * 🛑 ONE ROSTER OBJECT PER TEAM FOR THE WHOLE RUN. Each claim row arrives with its OWN copy of its
    * roster, and only the awarded claim's copy was refreshed after an award. A team winning two claims
