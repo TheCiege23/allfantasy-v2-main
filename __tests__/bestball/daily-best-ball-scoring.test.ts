@@ -42,7 +42,7 @@ vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: vi.fn(async () 
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: {} }))
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
-import { calculateScoreFromSportConfig, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { buildBestBallSlots, calculateScoreFromSportConfig, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { computeDailyBestBall } from '@/lib/bestball/dailyBestBall'
 import { computeOptimalLineup } from '@/lib/lineup-optimizer/optimalLineup'
 import { isDailyBestBallLeague, resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
@@ -219,6 +219,34 @@ describe('scoring a best ball week', () => {
     const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026 })
     expect(r.points).toBe(Math.round((await f(30)) * 100) / 100)
     expect(db.playerDailyScore.findMany).not.toHaveBeenCalled()
+  })
+
+  it("hands back the daily optimizer's inputs when asked (the Guilly stat-correction baseline), only for a daily week", async () => {
+    arrange(DAILY_BB)
+    const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026, collectDailyBestBallDetail: true })
+    expect(r.dailyBestBall?.days).toEqual(expect.arrayContaining(['2026-10-20', '2026-10-21']))
+    const byId = new Map(r.dailyBestBall!.players.map((p) => [p.playerId, p]))
+    expect(byId.get('X')).toMatchObject({ sport: 'NBA', position: 'PG', pointsByDay: { '2026-10-20': await f(30) } })
+    expect(byId.get('Y')).toMatchObject({ sport: 'NBA', position: 'PG', pointsByDay: { '2026-10-21': await f(25) } })
+    expect(byId.get('X')!.onRosterDays).toEqual(expect.arrayContaining(['2026-10-20', '2026-10-21']))
+    // The same optimizer over the recorded inputs lands the chop's own total.
+    const again = computeDailyBestBall({
+      candidates: r.dailyBestBall!.players.map((p) => ({
+        playerId: p.playerId,
+        positions: [p.position!],
+        playerName: null,
+        onRosterDays: new Set(p.onRosterDays),
+        pointsByDay: new Map(Object.entries(p.pointsByDay)),
+      })),
+      slots: buildBestBallSlots('NBA', DAILY_BB),
+      days: r.dailyBestBall!.days,
+    })
+    expect(again.total).toBe(r.points)
+
+    // Not asked: absent, so `updateMatchupScores` never carries it. A weekly week: absent even when asked.
+    expect((await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026 })).dailyBestBall).toBeUndefined()
+    arrange(WEEKLY_BB)
+    expect((await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026, collectDailyBestBallDetail: true })).dailyBestBall).toBeUndefined()
   })
 
   it('a player with weekly stats but no per-day rows yet is missing, never scored 0', async () => {

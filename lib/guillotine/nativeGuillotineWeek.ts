@@ -29,7 +29,7 @@ import { isPastCorrectionCutoff, savePeriodScores } from '@/lib/guillotine/Guill
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
 import { ensureGuillotineSeason } from '@/lib/guillotine/ensureGuillotineSeason'
 import { finalizeRedraftWeek, readWeekSlate, WEEK_KEYED_SPORTS } from '@/lib/redraft/weekFinalizer'
-import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { scoreRosterForWeek, type DailyBestBallDetail } from '@/lib/redraft/scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finishGuillotineSeason'
@@ -235,19 +235,31 @@ export async function runNativeGuillotineWeek(
     const playerPoints = new Map<string, Array<{ playerId: string; points: number; isStarter: boolean }>>()
     // A two-week period's baseline is kept per week: each week is re-scored and re-seated on its own.
     const weekPlayerPoints = new Map<string, Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }>>()
+    /*
+     * A DAILY best ball league (lib/bestball/scoringPeriod.ts) is scored as the sum of each day's optimal
+     * lineup, so per-player weekly sums cannot be re-seated: the baseline keeps each day's inputs too, and
+     * a correction re-runs the same daily optimizer over them. Absent for every weekly league.
+     */
+    const dailyWeeks = new Map<string, Array<{ week: number } & DailyBestBallDetail>>()
+    const keepDaily = (rosterId: string, w: number, detail: DailyBestBallDetail | undefined) => {
+      if (!detail) return
+      dailyWeeks.set(rosterId, [...(dailyWeeks.get(rosterId) ?? []), { week: w, ...detail }])
+    }
     for (const r of active) {
       if (periodWeeks === 1) {
-        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
+        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true, collectDailyBestBallDetail: true })
         points.set(r.id, s.points)
         if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
         playerPoints.set(r.id, s.playerPoints ?? [])
+        keepDaily(r.id, week, s.dailyBestBall)
         continue
       }
       let total = 0
       let bench: number | null = null
       const perWeek: Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }> = []
       for (const w of periodWeekList) {
-        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week: w, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
+        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week: w, seasonYear: season.season, includeBench: true, collectPlayerPoints: true, collectDailyBestBallDetail: true })
+        keepDaily(r.id, w, s.dailyBestBall)
         total += s.points
         if (typeof s.benchPoints === 'number') bench = (bench ?? 0) + s.benchPoints
         perWeek.push({ week: w, playerPoints: s.playerPoints ?? [] })
@@ -334,6 +346,7 @@ export async function runNativeGuillotineWeek(
           recordedPoints: points.get(r.id) ?? 0,
           playerPoints: playerPoints.get(r.id) ?? [],
           ...(periodWeeks > 1 ? { weekPlayerPoints: weekPlayerPoints.get(r.id) ?? [] } : {}),
+          ...(dailyWeeks.has(r.id) ? { dailyWeeks: dailyWeeks.get(r.id) } : {}),
         })),
       })
     } catch (error) {

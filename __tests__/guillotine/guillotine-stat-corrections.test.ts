@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   events: [] as Row[],
   audit: [] as Row[],
   rosterPlayers: [] as Row[],
+  /** `player_daily_scores` rows (daily best ball). */
+  daily: [] as Row[],
   guillotineSeasons: [] as Row[],
   forbidden: [] as string[],
   /** The league's CURRENT best ball seats; null = the one-QB default below. */
@@ -48,6 +50,18 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
     league: { findUnique: vi.fn(async () => state.league) },
+    playerDailyScore: {
+      findMany: vi.fn(async ({ where }: Row) =>
+        state.daily.filter(
+          (r) =>
+            where.playerId.in.includes(r.playerId) &&
+            r.sport === where.sport &&
+            r.season === where.season &&
+            r.scoringDay >= where.scoringDay.gte &&
+            r.scoringDay < where.scoringDay.lt,
+        ),
+      ),
+    },
     playerWeeklyScore: {
       findMany: vi.fn(async ({ where }: Row) =>
         state.weekly.filter((r) => r.week === where.week && r.season === where.season && where.sport.in.includes(r.sport) && where.playerId.in.includes(r.playerId)),
@@ -118,6 +132,12 @@ vi.mock('@/lib/redraft/scoringEngine', async (orig) => ({
   buildBestBallSlots: () => state.slots ?? [{ slot: 'QB', eligible: ['QB'], count: 1, slotOrder: 0 }],
 }))
 
+// A fixed two-day week, so the daily tests do not depend on a real season calendar.
+vi.mock('@/lib/season-week/dailySportSeasonStarts', async (orig) => ({
+  ...(await orig<typeof import('@/lib/season-week/dailySportSeasonStarts')>()),
+  resolveDailySportWeekWindow: () => ({ start: new Date('2026-09-21T00:00:00.000Z'), end: new Date('2026-09-23T00:00:00.000Z') }),
+}))
+
 import {
   applyGuillotineStatCorrectionsForWeek,
   checkGuillotineStatCorrectionsForSeason,
@@ -131,22 +151,23 @@ const CHOPPED_AT = new Date('2026-10-01T12:00:00.000Z')
 const NOW = new Date('2026-10-02T12:00:00.000Z')
 
 /** Week 3: A 110, B 72.5 (chopped), C 95. B's bench QB scored 10. */
-async function arrange(opts: { bestBall?: boolean } = {}) {
+async function arrange(opts: { bestBall?: boolean; sport?: string; settings?: Row } = {}) {
+  const sport = opts.sport ?? 'NFL'
   state.cache.clear()
   state.forbidden.length = 0
   state.slots = null
-  state.league = { sport: 'NFL', settings: {}, bestBallMode: opts.bestBall === true, leagueVariant: 'guillotine', leagueType: 'redraft', guillotineMode: true, userId: 'owner-1' }
+  state.league = { sport, settings: opts.settings ?? {}, bestBallMode: opts.bestBall === true, leagueVariant: 'guillotine', leagueType: 'redraft', guillotineMode: true, userId: 'owner-1' }
   state.rosterPlayers = [
-    { rosterId: 'rr-a', playerId: 'a1', sport: 'NFL', position: 'QB' },
-    { rosterId: 'rr-b', playerId: 'b1', sport: 'NFL', position: 'QB' },
-    { rosterId: 'rr-b', playerId: 'b2', sport: 'NFL', position: 'QB' },
-    { rosterId: 'rr-c', playerId: 'c1', sport: 'NFL', position: 'QB' },
+    { rosterId: 'rr-a', playerId: 'a1', sport, position: 'QB' },
+    { rosterId: 'rr-b', playerId: 'b1', sport, position: 'QB' },
+    { rosterId: 'rr-b', playerId: 'b2', sport, position: 'QB' },
+    { rosterId: 'rr-c', playerId: 'c1', sport, position: 'QB' },
   ]
   state.weekly = [
-    { playerId: 'a1', sport: 'NFL', week: 3, season: 2026, stats: { pts: 110 } },
-    { playerId: 'b1', sport: 'NFL', week: 3, season: 2026, stats: { pts: 72.5 } },
-    { playerId: 'b2', sport: 'NFL', week: 3, season: 2026, stats: { pts: 10 } },
-    { playerId: 'c1', sport: 'NFL', week: 3, season: 2026, stats: { pts: 95 } },
+    { playerId: 'a1', sport, week: 3, season: 2026, stats: { pts: 110 } },
+    { playerId: 'b1', sport, week: 3, season: 2026, stats: { pts: 72.5 } },
+    { playerId: 'b2', sport, week: 3, season: 2026, stats: { pts: 10 } },
+    { playerId: 'c1', sport, week: 3, season: 2026, stats: { pts: 95 } },
   ]
   state.periods = [
     { leagueId: 'L1', rosterId: 'R-a', weekOrPeriod: 2, season: 2026, periodPoints: 100, seasonPointsCumul: 100 },
@@ -518,6 +539,169 @@ describe('a stat correction after a two-week period is chopped', () => {
     const b = state.cache.get(guillotineCorrectionKey('s1', 3))
     expect(Object.keys(b)).toEqual(['v', 'seasonId', 'leagueId', 'season', 'week', 'capturedAt', 'teams'])
     expect(Object.keys(b.teams[0])).toEqual(['redraftRosterId', 'engineRosterId', 'recordedPoints', 'players'])
+  })
+})
+
+/**
+ * Date-windowed sports (NBA / NHL / MLB / NCAAB / SOCCER). A WEEKLY best ball league there is scored by
+ * the same weekly path as NFL, so it is corrected by the same arithmetic — it used to read `not_supported`
+ * for every one of them. DAILY best ball sums each day's optimal lineup; its correction re-runs that daily
+ * optimizer over the chop's per-day inputs.
+ */
+const DAILY_BB = { best_ball_settings: { scoringPeriod: 'daily', dailyBestBall: true, contestStructure: 'season_long' } }
+const D1 = '2026-09-21'
+const D2 = '2026-09-22'
+
+/**
+ * Daily best ball, one QB seat, NBA. A: a1 30 on D1 + a2 25 on D2 = 55. B: b1 20 + b2 20 = 40 (chopped).
+ * C: c1 50 on D1 = 50. Weekly best ball would count A as 30 (one seat on weekly totals) — the daily sum is
+ * what the chop used, and what a correction must re-seat.
+ */
+async function arrangeDaily() {
+  state.cache.clear()
+  state.forbidden.length = 0
+  state.slots = null
+  state.league = { sport: 'NBA', settings: DAILY_BB, bestBallMode: true, leagueVariant: 'guillotine', leagueType: 'redraft', guillotineMode: true, userId: 'owner-1' }
+  const lines: Array<[string, string, string, number]> = [
+    ['rr-a', 'a1', D1, 30],
+    ['rr-a', 'a2', D2, 25],
+    ['rr-b', 'b1', D1, 20],
+    ['rr-b', 'b2', D2, 20],
+    ['rr-c', 'c1', D1, 50],
+  ]
+  state.rosterPlayers = lines.map(([rosterId, playerId]) => ({ rosterId, playerId, sport: 'NBA', position: 'QB' }))
+  state.daily = lines.map(([, playerId, d, pts]) => ({ playerId, sport: 'NBA', season: 2026, scoringDay: new Date(`${d}T00:00:00.000Z`), stats: { pts }, isFinalized: true }))
+  state.weekly = lines.map(([, playerId, , pts]) => ({ playerId, sport: 'NBA', week: 3, season: 2026, stats: { pts } }))
+  state.periods = [
+    { leagueId: 'L1', rosterId: 'R-a', weekOrPeriod: 3, season: 2026, periodPoints: 55, seasonPointsCumul: 55 },
+    { leagueId: 'L1', rosterId: 'R-b', weekOrPeriod: 3, season: 2026, periodPoints: 40, seasonPointsCumul: 40 },
+    { leagueId: 'L1', rosterId: 'R-c', weekOrPeriod: 3, season: 2026, periodPoints: 50, seasonPointsCumul: 50 },
+  ]
+  state.survival = ['rr-a', 'rr-b', 'rr-c'].map((rosterId, i) => ({ leagueId: 'L1', rosterId, scoringPeriod: 3, totalScore: [55, 40, 50][i] }))
+  state.rosterStates = [{ leagueId: 'L1', rosterId: 'R-b', choppedInPeriod: 3 }]
+  state.events = []
+  state.audit = []
+  state.guillotineSeasons = [{ id: 'g1', redraftSeasonId: 's1' }]
+  const team = (k: 'a' | 'b' | 'c', recordedPoints: number) => {
+    const mine = lines.filter(([r]) => r === `rr-${k}`)
+    return {
+      redraftRosterId: `rr-${k}`,
+      engineRosterId: `R-${k}`,
+      recordedPoints,
+      playerPoints: mine.map(([, playerId, , pts]) => ({ playerId, points: pts, isStarter: true })),
+      // What `scoreRosterForWeek({ collectDailyBestBallDetail: true })` hands the chop.
+      dailyWeeks: [
+        {
+          week: 3,
+          days: [D1, D2],
+          players: mine.map(([, playerId, d, pts]) => ({ playerId, sport: 'NBA', position: 'QB', onRosterDays: [D1, D2], pointsByDay: { [d]: pts } })),
+        },
+      ],
+    }
+  }
+  await recordGuillotineCorrectionBaseline({ seasonId: 's1', leagueId: 'L1', season: 2026, week: 3, capturedAt: CHOPPED_AT, teams: [team('a', 55), team('b', 40), team('c', 50)] })
+}
+const correctDay = (playerId: string, pts: number) => {
+  state.daily.find((r) => r.playerId === playerId)!.stats = { pts }
+}
+
+describe('a stat correction in a date-windowed sport', () => {
+  it.each(['MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'])(
+    'weekly best ball in %s is corrected by the weekly arithmetic the chop used (was not_supported)',
+    async (sport) => {
+      await arrange({ bestBall: true, sport })
+      correct('b2', 80) // the bench player now outscores the starter: the lineup re-seats
+      const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+      expect(r.outcome).toBe('applied')
+      expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 72.5, after: 80 }])
+      expect(state.cache.get(guillotineCorrectionKey('s1', 3)).bestBallRules.period).toBe('weekly')
+      expect(state.forbidden).toEqual([])
+    },
+  )
+
+  it('a lineup league with daily lineups is still reported, never re-scored on the wrong unit', async () => {
+    await arrange({ sport: 'NBA', settings: { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } } })
+    correct('b1', 100)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r.outcome).toBe('not_supported')
+    expect(period('R-b', 3)?.periodPoints).toBe(72.5)
+  })
+
+  it('best ball never reads the lineup-league rules, so they do not gate its correction', async () => {
+    await arrange({ bestBall: true, sport: 'NBA', settings: { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } } })
+    correct('b2', 80)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r.outcome).toBe('applied')
+  })
+
+  it("records a daily chop's per-day inputs, marked daily", async () => {
+    await arrangeDaily()
+    const b = state.cache.get(guillotineCorrectionKey('s1', 3))
+    expect(b.dailyBestBall).toBe(true)
+    expect(b.bestBallRules.period).toBe('daily')
+    expect(b.teams[0].dailyWeeks).toEqual([
+      {
+        week: 3,
+        days: [D1, D2],
+        players: [
+          { playerId: 'a1', sport: 'NBA', position: 'QB', onRosterDays: [D1, D2], pointsByDay: { [D1]: 30 } },
+          { playerId: 'a2', sport: 'NBA', position: 'QB', onRosterDays: [D1, D2], pointsByDay: { [D2]: 25 } },
+        ],
+      },
+    ])
+  })
+
+  it("daily best ball re-runs the DAILY optimizer: a correction to one day's line moves the week sum, and the chop stands", async () => {
+    await arrangeDaily()
+    correctDay('a2', 5) // A: 30 + 5 = 35, now below C's 50 — and B's 40. Weekly totals would read A as 30 either way.
+
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+
+    expect(r.outcome).toBe('applied')
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-a', engineRosterId: 'R-a', before: 55, after: 35 }])
+    expect(period('R-a', 3)).toMatchObject({ periodPoints: 35, seasonPointsCumul: 35 })
+    expect(state.survival.find((s) => s.rosterId === 'rr-a')?.totalScore).toBe(35)
+    // Never reversed; the commissioner is told A would have gone instead of B.
+    expect(state.forbidden).toEqual([])
+    expect(r).toMatchObject({ choppedRosterIds: ['R-b'], wouldHaveChoppedRosterIds: ['R-a'], chopDisputed: true })
+    expect(state.events).toHaveLength(1)
+    expect(state.audit).toHaveLength(1)
+    expect(state.audit[0]).toMatchObject({ afterState: { choppedRedraftRosterIds: ['rr-b'], wouldHaveChoppedRedraftRosterIds: ['rr-a'], chopStands: true } })
+
+    // Idempotent: checked again, the same numbers and no second log.
+    const again = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3, force: true }, deps())
+    expect(again.outcome).toBe('no_change')
+    expect(period('R-a', 3)?.periodPoints).toBe(35)
+    expect(state.audit).toHaveLength(1)
+  })
+
+  it('daily best ball: a corrected line seats a different player that day', async () => {
+    await arrangeDaily()
+    // B's D1 starter is b1 (20). Give b2 a D1 line too, as a correction would: D1 now seats b2's 45.
+    state.daily.push({ playerId: 'b2', sport: 'NBA', season: 2026, scoringDay: new Date(`${D1}T00:00:00.000Z`), stats: { pts: 45 }, isFinalized: true })
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 40, after: 65 }])
+    expect(r.chopDisputed).toBe(true)
+  })
+
+  it('daily best ball never treats a vanished day line as zero: it keeps its chop-time points', async () => {
+    await arrangeDaily()
+    state.daily = state.daily.filter((r) => r.playerId !== 'b2')
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r.outcome).toBe('no_change')
+    expect(period('R-b', 3)?.periodPoints).toBe(40)
+  })
+
+  it('a daily chop whose baseline predates per-day inputs says so, and changes nothing', async () => {
+    await arrangeDaily()
+    const key = guillotineCorrectionKey('s1', 3)
+    const { dailyBestBall: _d, ...legacy } = state.cache.get(key)
+    const { period: _p, ...rules } = legacy.bestBallRules
+    state.cache.set(key, { ...legacy, bestBallRules: rules, teams: legacy.teams.map(({ dailyWeeks: _w, ...t }: Row) => t) })
+    correctDay('a2', 5)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r).toMatchObject({ outcome: 'not_supported', reason: 'daily_best_ball_baseline_without_days' })
+    expect(period('R-a', 3)?.periodPoints).toBe(55)
   })
 })
 

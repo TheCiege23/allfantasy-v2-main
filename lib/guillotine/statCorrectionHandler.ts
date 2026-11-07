@@ -38,6 +38,14 @@
  * re-scored and re-seated on its own, and the corrected period score is the recorded period score plus
  * BOTH weeks' deltas. A one-week baseline carries neither field and is read exactly as before.
  *
+ * ── DATE-WINDOWED SPORTS (NBA / NHL / MLB / NCAAB / SOCCER) ───────────────────────────────────
+ * A week there is a date range, but WEEKLY best ball and weekly-lineup leagues are still scored from each
+ * player's weekly row exactly as NFL is — so they are corrected by the same arithmetic. DAILY best ball
+ * (lib/bestball/scoringPeriod.ts) sums each day's optimal lineup, and a weekly sum per player cannot be
+ * re-seated; its baseline keeps each day's inputs (`teams[].dailyWeeks`, from the chop's own scorer) and
+ * the correction re-runs `computeDailyBestBall` over them with the days' current `player_daily_scores`
+ * lines. A daily chop recorded before that baseline existed cannot be corrected and says so.
+ *
  * ⚠ NEVER TREATS UNAVAILABLE DATA AS ZERO. A player whose row is gone keeps his baseline points; a
  * refresh that throws, or a re-seal the finalizer refuses (a missing box score, coverage below the
  * floor), applies nothing and waits for the next hourly check.
@@ -48,11 +56,13 @@ import { prisma } from '@/lib/prisma'
 import { appendEvent } from './GuillotineEventLog'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { finalizeRedraftWeek } from '@/lib/redraft/weekFinalizer'
-import { DATE_WINDOWED_SPORTS } from '@/lib/redraft/weekGames'
 import { buildBestBallSlots, calculateScoreFromSportConfig, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
 import { computeOptimalLineup } from '@/lib/lineup-optimizer/optimalLineup'
 import { playerPositions } from '@/lib/rookie-order/nativeMaxPf'
-import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { isDailyLineupScoringEnabled, loadPlayerDailyStats } from '@/lib/redraft/dailyLineups'
+import { computeDailyBestBall, type DailyBestBallCandidate } from '@/lib/bestball/dailyBestBall'
+import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
 import { readGamesLimits } from '@/lib/redraft/gamesLimits'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
@@ -92,7 +102,21 @@ export type BaselineTeam = {
    * oldest first. Each week is re-scored and re-seated on its own, exactly as the chop scored it.
    */
   weeks?: Array<{ week: number; players: BaselinePlayer[] }>
+  /**
+   * DAILY best ball only: each week's daily-optimizer inputs as the chop's scorer built them
+   * (`RosterScoreSummary.dailyBestBall`) — per scored player, his roster days and his points on each day
+   * he played. The weekly `players` / `weeks` above are still kept, but a daily correction never reads them.
+   */
+  dailyWeeks?: DailyBaselineWeek[]
 }
+export type DailyBaselinePlayer = {
+  playerId: string
+  sport: string
+  position: string | null
+  onRosterDays: string[]
+  pointsByDay: Record<string, number>
+}
+export type DailyBaselineWeek = { week: number; days: string[]; players: DailyBaselinePlayer[] }
 export type CorrectionBaseline = {
   v: 1
   seasonId: string
@@ -115,7 +139,9 @@ export type CorrectionBaseline = {
    * after the chop cannot move a closed week's scores. Absent on a baseline recorded before this existed
    * (or for a lineup league): the correction then reads the league's current slots, as before.
    */
-  bestBallRules?: { algorithm: string; slots: StoredSlot[]; scoringFingerprint: string | null }
+  bestBallRules?: { algorithm: string; slots: StoredSlot[]; scoringFingerprint: string | null; period?: 'weekly' | 'daily' }
+  /** True when the chop scored the period as DAILY best ball and kept each team's `dailyWeeks`. */
+  dailyBestBall?: true
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -155,6 +181,8 @@ export async function recordGuillotineCorrectionBaseline(args: {
      * week being `week`. When given, `playerPoints` is ignored and the period is corrected week by week.
      */
     weekPlayerPoints?: Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }>
+    /** Daily best ball only: each week's daily-optimizer inputs, from the chop's `scoreRosterForWeek`. */
+    dailyWeeks?: DailyBaselineWeek[]
   }>
 }): Promise<void> {
   const multiWeek = args.teams.some((t) => (t.weekPlayerPoints?.length ?? 0) > 1)
@@ -173,7 +201,13 @@ export async function recordGuillotineCorrectionBaseline(args: {
       // A player whose sport cannot be read cannot be re-read later; he keeps his points (delta 0).
       return m ? [{ playerId: p.playerId, sport: m.sport, position: m.position ?? null, points: p.points, isStarter: p.isStarter }] : []
     })
-  const bestBallRules = await chopBestBallRules(args.leagueId)
+  /*
+   * Daily when the chop's scorer handed back daily inputs (it does exactly when it scored the week daily).
+   * Any team with them marks the period daily; a team without them then simply has no counted players.
+   */
+  const daily = args.teams.some((t) => (t.dailyWeeks?.length ?? 0) > 0)
+  const rules = await chopBestBallRules(args.leagueId)
+  const bestBallRules = rules ? { ...rules, period: daily ? ('daily' as const) : ('weekly' as const) } : null
   // Every week the period scored, from any team that reports them (all teams score the same weeks).
   const periodWeeks = multiWeek
     ? [...new Set(args.teams.flatMap((t) => (t.weekPlayerPoints ?? []).map((w) => w.week)))].sort((a, b) => a - b)
@@ -199,8 +233,12 @@ export async function recordGuillotineCorrectionBaseline(args: {
             })),
           }
         : {}),
+      ...(daily
+        ? { dailyWeeks: (t.dailyWeeks ?? []).map((w) => ({ week: w.week, days: [...w.days], players: w.players.map((p) => ({ ...p })) })) }
+        : {}),
     })),
     ...(bestBallRules ? { bestBallRules } : {}),
+    ...(daily ? { dailyBestBall: true as const } : {}),
   })
 }
 
@@ -314,17 +352,22 @@ export async function applyGuillotineStatCorrectionsForWeek(
   const sport = seasonSportToLeagueSport(String(league.sport ?? 'NFL')) || 'NFL'
   const bestBall = leagueIsBestBall(league)
   /*
-   * Supported where a player's WEEKLY row decides his points: daily lineups, games-count and
-   * games-limits score per day or per game, and best ball in a daily sport is moving to per-day
-   * scoring. Those are reported, never re-scored on the wrong unit.
+   * Corrected on the unit the chop scored on. A LINEUP league is supported where a player's weekly row
+   * decides his points: daily lineups, games-count and games-limits score per day or per game, and are
+   * reported, never re-scored on the wrong unit. Best ball never reads those three (`scoreRosterStarters`
+   * hands best ball to `scoreRosterBestBall` before any of them), so they do not gate it. Best ball is
+   * weekly — the weekly arithmetic below, in every sport — or DAILY, corrected from its per-day baseline.
    */
   if (
-    isDailyLineupScoringEnabled(league.settings, sport) ||
-    gamesCountActive(league.settings, sport) ||
-    readGamesLimits(league.settings, sport) ||
-    (bestBall && DATE_WINDOWED_SPORTS.includes(sport))
+    !bestBall &&
+    (isDailyLineupScoringEnabled(league.settings, sport) || gamesCountActive(league.settings, sport) || readGamesLimits(league.settings, sport))
   ) {
     return { outcome: 'not_supported', week }
+  }
+  const dailyBestBall = bestBall && baseline.dailyBestBall === true
+  // A daily chop whose baseline predates per-day inputs (no `period` stamp) holds only weekly sums.
+  if (bestBall && !dailyBestBall && baseline.bestBallRules?.period !== 'weekly' && isDailyBestBallLeague({ ...league, sport })) {
+    return { outcome: 'not_supported', week, reason: 'daily_best_ball_baseline_without_days' }
   }
 
   const stamp = (fingerprint?: string) =>
@@ -365,6 +408,15 @@ export async function applyGuillotineStatCorrectionsForWeek(
     // The chop's own slots when the baseline kept them; a baseline from before that reads today's.
     const slots = bestBall ? readStoredSlots(baseline.bestBallRules?.slots) ?? buildBestBallSlots(sport, league.settings) : null
 
+    if (dailyBestBall) {
+      const daily = await correctedDailyBestBall({ baseline, weeks, sport: String(league.sport ?? sport).toUpperCase(), slots: slots!, score })
+      if (!daily) {
+        await stamp()
+        return { outcome: 'not_supported', week, reason: 'daily_window_unknown' }
+      }
+      return await applyCorrected({ baseline, week, corrected: daily, stamp })
+    }
+
     // Each week's stat lines, read once for every team.
     const statsByWeek = new Map<number, Map<string, Record<string, number>>>()
     for (const w of weeks) {
@@ -400,66 +452,130 @@ export async function applyGuillotineStatCorrectionsForWeek(
       }
       corrected.push({ team, points: round2(team.recordedPoints + delta) })
     }
-
-    const stored = await prisma.guillotinePeriodScore.findMany({
-      where: { leagueId: baseline.leagueId, weekOrPeriod: week, rosterId: { in: baseline.teams.map((t) => t.engineRosterId) } },
-      select: { rosterId: true, periodPoints: true },
-    })
-    const storedBy = new Map(stored.map((s) => [s.rosterId, s.periodPoints]))
-    const changes = corrected
-      .filter((c) => storedBy.has(c.team.engineRosterId) && Math.abs((storedBy.get(c.team.engineRosterId) ?? 0) - c.points) >= 0.005)
-      .map((c) => ({
-        redraftRosterId: c.team.redraftRosterId,
-        engineRosterId: c.team.engineRosterId,
-        before: round2(storedBy.get(c.team.engineRosterId) ?? 0),
-        after: c.points,
-      }))
-
-    // Scores first, every write absolute: a crash here is repaired by the next check, not doubled.
-    for (const c of changes) {
-      await prisma.guillotinePeriodScore.updateMany({
-        where: { leagueId: baseline.leagueId, rosterId: c.engineRosterId, weekOrPeriod: week },
-        data: { periodPoints: c.after },
-      })
-      await prisma.guillotineSurvivalLog.updateMany({
-        where: { leagueId: baseline.leagueId, rosterId: c.redraftRosterId, scoringPeriod: week },
-        data: { totalScore: c.after },
-      })
-    }
-    if (changes.length > 0) await rebuildRunningTotals(baseline.leagueId, baseline.season, changes.map((c) => c.engineRosterId))
-
-    // The week's chop, as it happened. Read, never written.
-    const chopped = (
-      await prisma.guillotineRosterState.findMany({ where: { leagueId: baseline.leagueId, choppedInPeriod: week }, select: { rosterId: true } })
-    ).map((r) => r.rosterId)
-    const finalScores = corrected.map((c) => ({ id: c.team.engineRosterId, points: c.points }))
-    const line = chopped.length > 0 ? lowest(finalScores, chopped.length) : null
-    const wouldHave = line?.ids ?? []
-    const chopDisputed = !!line && (line.tieAtLine || wouldHave.some((id) => !chopped.includes(id)))
-
-    const fingerprint = fingerprintOf(week, finalScores.map((s) => [s.id, s.points]))
-    const result: GuillotineCorrectionResult = {
-      outcome: changes.length > 0 ? 'applied' : 'no_change',
-      week,
-      changes,
-      choppedRosterIds: chopped,
-      wouldHaveChoppedRosterIds: wouldHave,
-      chopDisputed,
-    }
-    /*
-     * Logged when the corrected scores differ from the last ones logged (or, the first time, from the
-     * scores the chop used). Keyed on the scores, not on `changes`, so a run that wrote the scores and
-     * died before logging still logs on the retry, when `changes` is already empty.
-     */
-    const original = fingerprintOf(week, baseline.teams.map((t) => [t.engineRosterId, t.recordedPoints]))
-    if (fingerprint !== (baseline.lastFingerprint ?? original)) {
-      await recordCorrection({ baseline, week, fingerprint, result })
-    }
-    await stamp(fingerprint)
-    return result
+    return await applyCorrected({ baseline, week, corrected, stamp })
   } finally {
     await releaseAutomationLock(lockKey, owner).catch(() => undefined)
   }
+}
+
+type ScorePlayer = NonNullable<GuillotineCorrectionDeps['scorePlayer']>
+
+/**
+ * DAILY best ball: each team's corrected period score is the chop's score plus, per week, the daily
+ * optimizer's total over today's per-day lines minus its total over the chop's — the same
+ * `computeDailyBestBall`, slots and per-line scorer the chop used (`scoreRosterBestBallDaily`). A day a
+ * player had a line at the chop and has none now keeps his chop-time points: never a 0. Null when a
+ * week's date window cannot be resolved (its per-day rows cannot be read).
+ */
+async function correctedDailyBestBall(args: {
+  baseline: CorrectionBaseline
+  weeks: number[]
+  sport: string
+  slots: ReturnType<typeof buildBestBallSlots>
+  score: ScorePlayer
+}): Promise<Array<{ team: BaselineTeam; points: number }> | null> {
+  const { baseline, weeks, sport, slots, score } = args
+  const deltas = new Map<string, number>()
+  for (const w of weeks) {
+    const window = resolveDailySportWeekWindow(sport, baseline.season, w)
+    if (!window) return null
+    const perTeam = baseline.teams.map((t) => ({ team: t, dw: t.dailyWeeks?.find((x) => x.week === w) }))
+    const all = perTeam.flatMap((x) => x.dw?.players ?? [])
+    const ids = [...new Set(all.map((p) => p.playerId))]
+    const linesBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
+    for (const playerSport of new Set(all.map((p) => p.sport))) {
+      linesBySport.set(playerSport, await loadPlayerDailyStats(prisma, { playerIds: ids, sport: playerSport, season: baseline.season, window }))
+    }
+    for (const { team, dw } of perTeam) {
+      if (!dw || dw.players.length === 0) continue
+      const recorded: DailyBestBallCandidate[] = []
+      const current: DailyBestBallCandidate[] = []
+      for (const p of dw.players) {
+        const base = { playerId: p.playerId, positions: playerPositions(p.position), playerName: null, onRosterDays: new Set(p.onRosterDays) }
+        recorded.push({ ...base, pointsByDay: new Map(Object.entries(p.pointsByDay)) })
+        const byDay = linesBySport.get(p.sport)?.get(p.playerId)
+        const pointsByDay = new Map<string, number>()
+        for (const day of p.onRosterDays) {
+          const line = byDay?.get(day)
+          if (line) pointsByDay.set(day, await score({ leagueId: baseline.leagueId, playerId: p.playerId, week: w, stats: line.stats, position: p.position }))
+          else if (typeof p.pointsByDay[day] === 'number') pointsByDay.set(day, p.pointsByDay[day])
+        }
+        current.push({ ...base, pointsByDay })
+      }
+      const delta = computeDailyBestBall({ candidates: current, slots, days: dw.days }).total - computeDailyBestBall({ candidates: recorded, slots, days: dw.days }).total
+      deltas.set(team.engineRosterId, (deltas.get(team.engineRosterId) ?? 0) + delta)
+    }
+  }
+  return baseline.teams.map((team) => ({ team, points: round2(team.recordedPoints + (deltas.get(team.engineRosterId) ?? 0)) }))
+}
+
+/**
+ * Writes the corrected scores, rebuilds running totals, reads the chop (never writes it), logs once per
+ * distinct set of corrected scores and stamps the baseline. Shared by the weekly and the daily arithmetic.
+ */
+async function applyCorrected(args: {
+  baseline: CorrectionBaseline
+  week: number
+  corrected: Array<{ team: BaselineTeam; points: number }>
+  stamp: (fingerprint?: string) => Promise<void>
+}): Promise<GuillotineCorrectionResult> {
+  const { baseline, week, corrected, stamp } = args
+  const stored = await prisma.guillotinePeriodScore.findMany({
+    where: { leagueId: baseline.leagueId, weekOrPeriod: week, rosterId: { in: baseline.teams.map((t) => t.engineRosterId) } },
+    select: { rosterId: true, periodPoints: true },
+  })
+  const storedBy = new Map(stored.map((s) => [s.rosterId, s.periodPoints]))
+  const changes = corrected
+    .filter((c) => storedBy.has(c.team.engineRosterId) && Math.abs((storedBy.get(c.team.engineRosterId) ?? 0) - c.points) >= 0.005)
+    .map((c) => ({
+      redraftRosterId: c.team.redraftRosterId,
+      engineRosterId: c.team.engineRosterId,
+      before: round2(storedBy.get(c.team.engineRosterId) ?? 0),
+      after: c.points,
+    }))
+
+  // Scores first, every write absolute: a crash here is repaired by the next check, not doubled.
+  for (const c of changes) {
+    await prisma.guillotinePeriodScore.updateMany({
+      where: { leagueId: baseline.leagueId, rosterId: c.engineRosterId, weekOrPeriod: week },
+      data: { periodPoints: c.after },
+    })
+    await prisma.guillotineSurvivalLog.updateMany({
+      where: { leagueId: baseline.leagueId, rosterId: c.redraftRosterId, scoringPeriod: week },
+      data: { totalScore: c.after },
+    })
+  }
+  if (changes.length > 0) await rebuildRunningTotals(baseline.leagueId, baseline.season, changes.map((c) => c.engineRosterId))
+
+  // The week's chop, as it happened. Read, never written.
+  const chopped = (
+    await prisma.guillotineRosterState.findMany({ where: { leagueId: baseline.leagueId, choppedInPeriod: week }, select: { rosterId: true } })
+  ).map((r) => r.rosterId)
+  const finalScores = corrected.map((c) => ({ id: c.team.engineRosterId, points: c.points }))
+  const line = chopped.length > 0 ? lowest(finalScores, chopped.length) : null
+  const wouldHave = line?.ids ?? []
+  const chopDisputed = !!line && (line.tieAtLine || wouldHave.some((id) => !chopped.includes(id)))
+
+  const fingerprint = fingerprintOf(week, finalScores.map((s) => [s.id, s.points]))
+  const result: GuillotineCorrectionResult = {
+    outcome: changes.length > 0 ? 'applied' : 'no_change',
+    week,
+    changes,
+    choppedRosterIds: chopped,
+    wouldHaveChoppedRosterIds: wouldHave,
+    chopDisputed,
+  }
+  /*
+   * Logged when the corrected scores differ from the last ones logged (or, the first time, from the
+   * scores the chop used). Keyed on the scores, not on `changes`, so a run that wrote the scores and
+   * died before logging still logs on the retry, when `changes` is already empty.
+   */
+  const original = fingerprintOf(week, baseline.teams.map((t) => [t.engineRosterId, t.recordedPoints]))
+  if (fingerprint !== (baseline.lastFingerprint ?? original)) {
+    await recordCorrection({ baseline, week, fingerprint, result })
+  }
+  await stamp(fingerprint)
+  return result
 }
 
 /** `seasonPointsCumul` is a running total, so one corrected week moves every later week's total too. */

@@ -289,6 +289,24 @@ describe('runNativeGuillotineWeek', () => {
     expect(m.recordBaseline.mock.invocationCallOrder[0]!).toBeLessThan(m.runElimination.mock.invocationCallOrder[0]!)
   })
 
+  it("a DAILY best ball week's baseline keeps the scorer's per-day inputs; a weekly one carries none", async () => {
+    arrange()
+    const detail = (rosterId: string) => ({
+      days: ['2026-09-21', '2026-09-22'],
+      players: [{ playerId: `${rosterId}-p`, sport: 'NBA', position: 'PG', onRosterDays: ['2026-09-21', '2026-09-22'], pointsByDay: { '2026-09-21': POINTS[rosterId] } }],
+    })
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: POINTS[rosterId],
+      playerPoints: [{ playerId: `${rosterId}-p`, points: POINTS[rosterId], isStarter: true }],
+      ...(rosterId === 'rr-c' ? {} : { dailyBestBall: detail(rosterId) }),
+    }))
+    await run()
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ collectDailyBestBallDetail: true })
+    const teams = m.recordBaseline.mock.calls[0]![0].teams
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-b').dailyWeeks).toEqual([{ week: 3, ...detail('rr-b') }])
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-c')).not.toHaveProperty('dailyWeeks')
+  })
+
   it('a baseline that cannot be written never stops the chop', async () => {
     arrange()
     m.recordBaseline.mockRejectedValueOnce(new Error('cache down'))

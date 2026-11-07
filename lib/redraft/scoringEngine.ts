@@ -289,6 +289,25 @@ export type RosterScoreSummary = {
    * Absent for the devy engine, which scores a team without a per-player breakdown.
    */
   playerPoints?: NativePlayerPoints[]
+  /**
+   * Only with `collectDailyBestBallDetail`, and only when the week was scored as DAILY best ball: the
+   * day keys the week ran over and, per scored player, the days he was on the roster and his points on
+   * each day he played — exactly what `computeDailyBestBall` was given. A Guilly chop records it as the
+   * baseline a later stat correction re-runs the same daily optimizer against (statCorrectionHandler.ts).
+   */
+  dailyBestBall?: DailyBestBallDetail
+}
+
+/** A daily best ball week's inputs, per scored player (see `RosterScoreSummary.dailyBestBall`). */
+export type DailyBestBallDetail = {
+  days: string[]
+  players: Array<{
+    playerId: string
+    sport: string
+    position: string | null
+    onRosterDays: string[]
+    pointsByDay: Record<string, number>
+  }>
 }
 
 /**
@@ -335,6 +354,8 @@ async function scoreRosterStarters(args: {
   includeBench?: boolean
   /** Also return `playerPoints` (and score the bench to fill it). `updateMatchupScores` only. */
   collectPlayerPoints?: boolean
+  /** Also return `dailyBestBall` when the week scores as daily best ball (`scoreRosterForWeek`). */
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
   if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
   if (args.useDevyEngine) {
@@ -764,6 +785,7 @@ async function scoreRosterBestBall(args: {
   collectPlayerPoints?: boolean
   /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
   includeBench?: boolean
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
   if (args.bestBall.daily) {
     const daily = await scoreRosterBestBallDaily(args)
@@ -868,6 +890,7 @@ async function scoreRosterBestBallDaily(args: {
   bestBall: BestBallScoringContext
   collectPlayerPoints?: boolean
   includeBench?: boolean
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary | null> {
   const sport = String(args.bestBall.sport).toUpperCase()
   const window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
@@ -894,6 +917,7 @@ async function scoreRosterBestBallDaily(args: {
   const missingPlayerIds: string[] = []
   const inputs: DailyBestBallCandidate[] = []
   const positionsUsed: Record<string, string | null> = {}
+  const sportOf = new Map<string, string>()
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
@@ -919,9 +943,11 @@ async function scoreRosterBestBallDaily(args: {
       pointsByDay.set(key, await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, position))
     }
     inputs.push({ playerId: p.playerId, positions: playerPositions(position), playerName: p.playerName ?? null, onRosterDays, pointsByDay })
+    sportOf.set(p.playerId, p.sport)
   }
 
-  const result = computeDailyBestBall({ candidates: inputs, slots: args.bestBall.slots, days: days.map((d) => dayKey(d)) })
+  const dayKeys = days.map((d) => dayKey(d))
+  const result = computeDailyBestBall({ candidates: inputs, slots: args.bestBall.slots, days: dayKeys })
   const counted = new Set(result.counted.map((c) => c.playerId))
   return {
     rosterId: args.rosterId,
@@ -934,6 +960,20 @@ async function scoreRosterBestBallDaily(args: {
     bestBall: { assignments: [], unfilledSlots: [], period: 'daily', days: result.days, counted: result.counted, positions: positionsUsed },
     ...(args.collectPlayerPoints
       ? { playerPoints: [...result.pointsByPlayer].map(([playerId, points]) => ({ playerId, points, isStarter: counted.has(playerId) })) }
+      : {}),
+    ...(args.collectDailyBestBallDetail
+      ? {
+          dailyBestBall: {
+            days: dayKeys,
+            players: inputs.map((i) => ({
+              playerId: i.playerId,
+              sport: sportOf.get(i.playerId) ?? sport,
+              position: positionsUsed[i.playerId] ?? null,
+              onRosterDays: [...i.onRosterDays].sort(),
+              pointsByDay: Object.fromEntries(i.pointsByDay),
+            })),
+          },
+        }
       : {}),
   }
 }
@@ -988,6 +1028,8 @@ export async function scoreRosterForWeek(args: {
   includeBench?: boolean
   /** Also return `playerPoints` (scripts/backfill-native-player-weekly-scores.ts). */
   collectPlayerPoints?: boolean
+  /** Also return `dailyBestBall` for a daily best ball week (the Guilly stat-correction baseline). */
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
