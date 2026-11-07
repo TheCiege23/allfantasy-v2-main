@@ -96,6 +96,19 @@ export const WEEK_STAT_GAP_ESCALATE_MS = 24 * 60 * 60 * 1000
 /** League-log action written once per season-week when a missing box score escalates. */
 export const WEEK_STAT_GAP_ACTION = 'week_stat_gap'
 
+/**
+ * The hard cap on waiting, counted from the END of the grace period. A box score the provider never
+ * delivers must not freeze a league: the sweep only looks back {@link WEEK_FINALIZE_LOOKBACK_WEEKS}
+ * weeks, so an unsealed week past that would never close, its matchups would never go final and the
+ * season would stall. After this long the week seals, the gap players' zeros are reported in
+ * `unverifiedZeroPlayerIds`, and ONE commissioner log row ({@link WEEK_STAT_GAP_SEALED_ACTION}) says so.
+ * A late box score is still applied afterwards by the stat-correction pass on the sealed week.
+ */
+export const WEEK_STAT_GAP_SEAL_MS = 72 * 60 * 60 * 1000
+
+/** League-log action written once per season-week when a week is sealed despite a missing box score. */
+export const WEEK_STAT_GAP_SEALED_ACTION = 'week_stat_gap_sealed'
+
 /** How many completed weeks behind the current one a sweep will try to close. */
 export const WEEK_FINALIZE_LOOKBACK_WEEKS = 3
 
@@ -229,6 +242,8 @@ export type FinalizeRedraftWeekParams = {
   coverageFloor?: number
   /** Override of {@link WEEK_STAT_GAP_ESCALATE_MS}. */
   statGapEscalateMs?: number
+  /** Override of {@link WEEK_STAT_GAP_SEAL_MS}. */
+  statGapSealMs?: number
   /** Measure and report without writing. */
   dryRun?: boolean
   /**
@@ -672,11 +687,28 @@ export async function finalizeRedraftWeek(
     const v = verdictOf(m)
     return v != null && MISSING_STAT_BLOCKING_VERDICTS.has(v)
   })
-  if (gapPlayers.length > 0) {
-    // Measured from the end of the grace period: before it, waiting is the ordinary state.
-    const anchor = lastStart ? lastStart.getTime() + graceMs : dateWindow ? dateWindow.end.getTime() : null
+  // Measured from the end of the grace period: before it, waiting is the ordinary state.
+  const gapAnchor = lastStart ? lastStart.getTime() + graceMs : dateWindow ? dateWindow.end.getTime() : null
+  const gapCapReached =
+    gapPlayers.length > 0 && gapAnchor != null && now.getTime() >= gapAnchor + (params.statGapSealMs ?? WEEK_STAT_GAP_SEAL_MS)
+  if (gapCapReached && !params.dryRun) {
+    await recordStatGapEscalation(
+      prisma,
+      {
+        leagueId: season.leagueId,
+        seasonId: season.id,
+        season: season.season,
+        week: params.week,
+        sport,
+        teams: [...gapTeams].sort(),
+        playerIds: gapPlayers.map((m) => m.playerId),
+      },
+      WEEK_STAT_GAP_SEALED_ACTION,
+    )
+  }
+  if (gapPlayers.length > 0 && !gapCapReached) {
     const escalateMs = params.statGapEscalateMs ?? WEEK_STAT_GAP_ESCALATE_MS
-    const escalated = anchor != null && now.getTime() >= anchor + escalateMs
+    const escalated = gapAnchor != null && now.getTime() >= gapAnchor + escalateMs
     const statGapTeams = [...gapTeams].sort()
     const statGapPlayerIds = gapPlayers.map((m) => m.playerId)
     if (escalated && !params.dryRun) {
@@ -700,7 +732,13 @@ export async function finalizeRedraftWeek(
       statGapTeams,
     })
   }
-  const unverifiedZeroPlayerIds = missing.filter((m) => verdictOf(m) === 'unplaced').map((m) => m.playerId)
+  // Past the cap the gap players seal at 0 too — reported here, never folded silently into the zeros.
+  const unverifiedZeroPlayerIds = missing
+    .filter((m) => {
+      const v = verdictOf(m)
+      return v === 'unplaced' || (gapCapReached && v != null && MISSING_STAT_BLOCKING_VERDICTS.has(v))
+    })
+    .map((m) => m.playerId)
   const unverified = unverifiedZeroPlayerIds.length > 0 ? { unverifiedZeroPlayerIds } : {}
 
   if (params.dryRun) {
@@ -836,11 +874,12 @@ export async function finalizeRedraftWeek(
 async function recordStatGapEscalation(
   prisma: PrismaClient,
   args: { leagueId: string; seasonId: string; season: number; week: number; sport: string; teams: string[]; playerIds: string[] },
+  actionType: string = WEEK_STAT_GAP_ACTION,
 ): Promise<void> {
   try {
     const entityId = `${args.seasonId}:${args.week}`
     const already = await prisma.leagueAuditLog.findFirst({
-      where: { leagueId: args.leagueId, actionType: WEEK_STAT_GAP_ACTION, entityId },
+      where: { leagueId: args.leagueId, actionType, entityId },
       select: { id: true },
     })
     if (already) return
@@ -848,7 +887,7 @@ async function recordStatGapEscalation(
       data: {
         leagueId: args.leagueId,
         userId: null,
-        actionType: WEEK_STAT_GAP_ACTION,
+        actionType,
         entityType: 'redraft_week',
         entityId,
         afterState: { teams: args.teams, playerIds: args.playerIds.slice(0, 100) },

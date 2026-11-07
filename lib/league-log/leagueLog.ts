@@ -229,6 +229,27 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written by the week finalizer when a box score is STILL missing three days past the grace period. The
+  // week is sealed so the league can move on; the players named scored 0 for now, and a box score that
+  // lands later is applied by the stat-correction pass.
+  week_stat_gap_sealed: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} closed with stats still missing`,
+        es: `${wk.es} se cerró con estadísticas pendientes`,
+        detailEn: `${named ? `No box score arrived for ${named} in three days. ` : ''}The week was closed so the season can continue; those players count 0 until their stats land, and late stats are applied as a correction.`,
+        detailEs: `${named ? `No llegó la ficha de ${named} en tres días. ` : ''}La semana se cerró para que la temporada siga; esos jugadores cuentan 0 hasta que lleguen sus estadísticas, y las tardías se aplican como corrección.`,
+      }
+    },
+  },
   score_adjustment_added: {
     category: 'scoring',
     members: true,

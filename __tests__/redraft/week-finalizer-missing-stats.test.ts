@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { finalizeRedraftWeek, finalizeWeekWithRefresh, WEEK_STAT_GAP_ACTION } from '@/lib/redraft/weekFinalizer'
+import { finalizeRedraftWeek, finalizeWeekWithRefresh, WEEK_STAT_GAP_ACTION, WEEK_STAT_GAP_SEALED_ACTION } from '@/lib/redraft/weekFinalizer'
 
 type AnyArgs = Record<string, any>
 
@@ -278,6 +278,44 @@ describe('the escalation: bounded waiting, visible to the commissioner, never a 
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: SEASON.id, week: 2 })
     expect(result.refusal).toBeNull()
     expect(result.finalized).toBe(true)
+  })
+})
+
+describe('the hard cap: a box score that never arrives cannot freeze the league', () => {
+  // Grace ends 2026-09-22T08:15Z; the cap is 72h after that.
+  const PAST_CAP = new Date('2026-09-25T09:30:00.000Z')
+
+  it('three days past the grace period the week seals, reports the zeros as unverified and logs it once', async () => {
+    const { prisma, calls } = makePrisma({ ...roster('KC') })
+    const result = await finalizeRedraftWeek({ seasonId: SEASON.id, week: 2 }, { prisma, now: () => PAST_CAP, recalculateMatchups: recalc as any, ...quiet })
+    expect(result.refusal).toBeNull()
+    expect(result.finalized).toBe(true)
+    expect(result.unverifiedZeroPlayerIds).toEqual(['x'])
+    const created = calls.find((c) => c.key === 'leagueAuditLog.create')
+    expect(created?.args.data).toMatchObject({ actionType: WEEK_STAT_GAP_SEALED_ACTION, entityId: 'season-1:2', afterState: { teams: ['KC'], playerIds: ['x'] } })
+  })
+
+  it('just before the cap it still refuses', async () => {
+    const { prisma } = makePrisma({ ...roster('KC') })
+    const result = await finalizeRedraftWeek({ seasonId: SEASON.id, week: 2 }, { prisma, now: () => new Date('2026-09-25T08:00:00.000Z'), recalculateMatchups: recalc as any, ...quiet })
+    expect(result.refusal).toBe('game_stats_missing_escalated')
+  })
+
+  it('the sealed-anyway row is commissioner-only and says the week closed', async () => {
+    const { describeLogEntry } = await import('@/lib/league-log/leagueLog')
+    const row = {
+      id: 'log-2',
+      actionType: WEEK_STAT_GAP_SEALED_ACTION,
+      entityId: 'season-1:2',
+      userId: null,
+      beforeState: null,
+      afterState: { teams: ['KC'], playerIds: ['x'] },
+      metadata: { season: 2026, week: 2, sport: 'NFL' },
+      createdAt: '2026-09-25T09:30:00.000Z',
+    }
+    const names = { users: {}, teams: {} }
+    expect(describeLogEntry(row, { lang: 'en', names, forCommissioner: false })).toBeNull()
+    expect(describeLogEntry(row, { lang: 'en', names, forCommissioner: true })?.title).toBe('Week 2 closed with stats still missing')
   })
 })
 
