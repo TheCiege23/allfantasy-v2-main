@@ -212,17 +212,3 @@
     min-height: 40px;
   }
 }
-
-/*
- * Phone pass (2026-11-06): the streak is one line plus today's chips. The seven week dots took their own
- * row and repeated what the headline already says ("21-day streak", "9 days to your 30-day badge"), and
- * on a phone that row pushed Top decisions below the fold. Desktop keeps them beside the headline.
- */
-@media (max-width: 640px) {
-  .af-streak-week {
-    display: none;
-  }
-  .af-streak-glance {
-    margin-top: 8px;
-  }
-}
