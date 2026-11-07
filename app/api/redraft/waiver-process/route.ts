@@ -148,6 +148,21 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Rule-change votes (lib/constitution/constitutionService.ts): once, when a league vote has less than a
+   * day left, remind the league in chat. Guarded and on its own job identity; recorded in sync_job_runs.
+   */
+  try {
+    const { runAmendmentVoteReminders } = await import('@/lib/constitution/constitutionService')
+    await withSyncJobRun(
+      { jobName: 'cron-amendment-vote-reminders', trigger: 'cron' },
+      () => runAmendmentVoteReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] amendment vote reminders failed', e)
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
