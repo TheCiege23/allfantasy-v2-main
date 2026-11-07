@@ -2,7 +2,7 @@ import type { BestBallOptimizedLineup } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { templateSlotsToLineupSlots } from './soccerFormationOptimizer'
-import { optimizeLineupForSport } from './optimizerCore'
+import { seatContestLineup } from './optimizerCore'
 import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { resolveBestBallScoringPeriod } from './scoringPeriod'
@@ -114,7 +114,7 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
     }
     const dataQuality = buildDataQuality(rosterPlayerIds, availablePlayerIds)
 
-    const opt = optimizeLineupForSport(players, slots as LineupSlotDef[], sport)
+    const opt = seatContestLineup(players, slots as LineupSlotDef[], sport)
     const starterIds = opt.assignments.map((a) => a.player.playerId)
     const used = new Set(starterIds)
     const benchIds = players.map((p) => p.playerId).filter((id) => !used.has(id))

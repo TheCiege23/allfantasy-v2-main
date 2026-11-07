@@ -4,7 +4,7 @@
  * Production truth: `computeOptimalLineup` over `buildBestBallSlots(sport, league.settings)` — exactly what
  * `scoreRosterBestBall` (lib/redraft/scoringEngine.ts) seats. One shared fixture set runs through every
  * repointed path and each must return the SAME total and the SAME seated players:
- *   - `optimizeLineupForSport` / `runGreedyOptimizer` (lib/bestball/optimizerCore.ts — contests, survivor,
+ *   - `seatContestLineup` / `runGreedyOptimizer` (lib/bestball/optimizerCore.ts — contests, survivor,
  *     the optimize cache);
  *   - `optimizeBestBallLeagueLineup` (lib/bestball/leagueOptimizer.ts — server/services/weeklyProcessor.ts);
  *   - `selectBestBallLineupForRoster` (lib/scoring/best-ball-engine.ts — the scoring worker);
@@ -58,7 +58,7 @@ import { computeOptimalLineup, type OptimalLineupResult } from '@/lib/lineup-opt
 import { buildBestBallSlots } from '@/lib/redraft/scoringEngine'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { bestBallTemplateSettings } from '@/lib/bestball/productionLineup'
-import { optimizeLineupForSport, runGreedyOptimizer } from '@/lib/bestball/optimizerCore'
+import { seatContestLineup, runGreedyOptimizer } from '@/lib/bestball/optimizerCore'
 import { optimizeBestBallLeagueLineup } from '@/lib/bestball/leagueOptimizer'
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'
 import { runBestBallOptimizer } from '@/lib/bestball/optimizer'
@@ -204,7 +204,7 @@ describe.each(FIXTURES)('$name', (f) => {
   it('optimizerCore (contests, survivor, the optimize cache) returns the same lineup, fast', () => {
     const slots: LineupSlotDef[] = buildBestBallSlots(f.sport, f.settings).map((s) => ({ slot: s.slot, eligible: [...s.eligible], count: s.count }))
     const players = f.players.map((p) => ({ ...p, playerName: p.playerId }))
-    const { value: r, ms } = timed(() => optimizeLineupForSport(players, slots, f.sport))
+    const { value: r, ms } = timed(() => seatContestLineup(players, slots, f.sport))
     expect(r.totalPoints).toBe(expected.total)
     expect(sorted(r.assignments.map((a) => a.player.playerId))).toEqual(seatedOf(expected))
     expect(sorted(runGreedyOptimizer(players, slots, f.sport).assignments.map((a) => a.player.playerId))).toEqual(seatedOf(expected))

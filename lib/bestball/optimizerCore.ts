@@ -30,7 +30,7 @@ function toSpecs(slots: LineupSlotDef[]): LineupSlotSpec[] {
 
 /**
  * Exact best ball lineup over the given slots. SOCCER formation templates (slots with `min`/`max`) use the
- * formation optimizer instead (caller: `optimizeLineupForSport`).
+ * formation optimizer instead (caller: `seatContestLineup`).
  */
 export function runGreedyOptimizer(ranked: OptimizerPlayer[], slots: LineupSlotDef[], sport: string): OptimizerResult {
   const byId = new Map<string, OptimizerPlayer>()
@@ -64,7 +64,13 @@ function isFormationTemplate(slots: LineupSlotDef[]): boolean {
   return slots.some((s) => s.min != null || s.max != null)
 }
 
-export function optimizeLineupForSport(
+/**
+ * Seats a contest/template lineup; it does not decide one. Fixed-seat templates go straight to the
+ * canonical `computeOptimalLineup` (lib/lineup-optimizer/optimalLineup.ts); only a SOCCER formation
+ * range uses the formation pass. Formerly `optimizeLineupForSport`, renamed when it stopped being its
+ * own optimizer, so it no longer claims to be a competing lineup authority.
+ */
+export function seatContestLineup(
   players: OptimizerPlayer[],
   slots: LineupSlotDef[],
   sport: string,
