@@ -113,22 +113,22 @@ export function GuillotineAIPanel({
   if (deterministicSummaryProp == null && isGuillotineLeague === false) return null
 
   return (
-    <section className="rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-4 sm:p-6">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
-        <Sparkles className="h-5 w-5 text-cyan-400" />
+    <section className="gl gl-card-accent rounded-2xl border p-4 sm:p-6">
+      <h2 className="gl-text mb-3 flex items-center gap-2 text-lg font-semibold">
+        <Sparkles className="gl-accent-text h-5 w-5" />
         Guilly AI
       </h2>
-      <p className="mb-4 text-sm text-white/70">
+      <p className="gl-text2 mb-4 text-sm">
         Strategy and explanation only. Elimination and standings are computed by the league engine.
       </p>
 
       {/* Deterministic data first */}
       {deterministicSummary && (
-        <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">
+        <div className="gl-well mb-4 rounded-xl border p-3">
+          <p className="gl-muted mb-2 text-xs font-semibold uppercase tracking-wider">
             Deterministic data (from league engine)
           </p>
-          <ul className="space-y-1 text-sm text-white/80">
+          <ul className="gl-text space-y-1 text-sm">
             <li>Survival standings: {deterministicSummary.survivalStandings.length} teams</li>
             <li>Danger tiers: {deterministicSummary.dangerTiers?.length ?? 0} (Chop Zone / Danger / Safe)</li>
             <li>Chopped this week: {deterministicSummary.choppedThisWeek.length}</li>
@@ -144,7 +144,8 @@ export function GuillotineAIPanel({
             key={t}
             type="button"
             onClick={() => setType(t)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${type === t ? 'bg-cyan-500/80 text-white' : 'border border-white/20 bg-white/5 text-white/80 hover:bg-white/10'}`}
+            className="gl-pill rounded-lg px-3 py-1.5 text-sm"
+            aria-pressed={type === t}
           >
             {TYPE_LABELS[t]}
           </button>
@@ -156,7 +157,7 @@ export function GuillotineAIPanel({
           type="button"
           onClick={runAI}
           disabled={loading}
-          className="rounded-lg bg-cyan-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="gl-btn-primary rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
             <>
@@ -170,18 +171,18 @@ export function GuillotineAIPanel({
       </FeatureGate>
 
       {error && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 text-sm text-amber-200">
+        <div className="gl-card-warn mt-3 flex items-center gap-2 rounded-lg border p-2 text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
       {result && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
+        <div className="gl-well mt-4 rounded-xl border p-4">
+          <p className="gl-accent-text mb-2 text-xs font-semibold uppercase tracking-wider">
             AI explanation ({result.type})
           </p>
-          <p className="whitespace-pre-wrap text-sm text-white/90">{result.explanation}</p>
+          <p className="gl-text whitespace-pre-wrap text-sm">{result.explanation}</p>
         </div>
       )}
     </section>

@@ -45,6 +45,7 @@ import '@/components/core-app/af-core-shell.css'
 import './native-league.css'
 import './zombie-workspace.css'
 import './redraft-identity.css'
+import '@/components/guillotine/guillotine-identity.css'
 
 type Props = AppShellProps & {
   native: boolean
