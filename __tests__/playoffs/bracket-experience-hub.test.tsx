@@ -89,7 +89,7 @@ describe("approved bracket experience workspace", () => {
     })
     render(<BracketExperienceHub language="en" season={2026} tournaments={CUP_FIRST} />)
     expect(await screen.findByTestId("bracket-finalization-status")).toHaveTextContent("Bracket finalized")
-    expect(screen.getByTestId("bracket-finalization-status")).toHaveTextContent("Your finalization is recorded")
+    expect(screen.getByTestId("bracket-finalization-status")).toHaveTextContent("This bracket is finalized for standings")
   })
   it("exposes a retry when the API fails and never substitutes sample scores", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 503 }))
