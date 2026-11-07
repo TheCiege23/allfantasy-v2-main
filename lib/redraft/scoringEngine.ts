@@ -12,8 +12,7 @@ import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { bestBallPlayerPositions, buildBestBallSlots } from '@/lib/bestball/productionLineup'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
@@ -174,8 +173,7 @@ export function leagueIsBestBall(
     | null
     | undefined,
 ): boolean {
-  if (!league) return false
-  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
+  return lineupSetsItself(league)
 }
 
 /*

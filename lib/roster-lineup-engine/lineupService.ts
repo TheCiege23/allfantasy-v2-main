@@ -23,7 +23,7 @@ import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi/taxiRulesService'
 import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
-import { BEST_BALL_LINEUP_MESSAGE, isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 
 /**
@@ -135,20 +135,20 @@ function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['sou
 
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
   return runRosterLineupWithEngine(input, true)
 }
 
 /** Read-only rehearsal of the same validation, taxi and lock gates as a member save. */
 export async function previewRosterLineupWithEngine(
   input: Omit<PersistRosterLineupInput, 'source' | 'skipLockCheck' | 'taxiProtection' | 'transactionCheck'>,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
   return runRosterLineupWithEngine({ ...input, source: 'user_save', skipLockCheck: false, taxiProtection: undefined }, false)
 }
 
 async function runRosterLineupWithEngine(
   input: PersistRosterLineupInput, persist: boolean,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
   })
@@ -171,15 +171,16 @@ async function runRosterLineupWithEngine(
     return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
   }
 
-  // A best ball Guilly league sets its own lineup (lib/guillotine/guillotineBestBall.ts): a starter/bench
-  // shuffle would save and change nothing. IR and taxi moves (a player active on only one side) still save,
-  // as does a commissioner correcting a roster.
-  if (input.source !== 'commissioner_override' && isBestBallGuillotine(league)) {
+  // A Best Ball league, or a best ball Guilly league, sets its own lineup (lib/guillotine/guillotineBestBall.ts
+  // `lineupSetsItself`, which is scoring's own test): a starter/bench shuffle would save and change nothing.
+  // IR and taxi moves (a player active on only one side) still save, as do a commissioner correcting a roster
+  // and an import mirroring the provider's lineup.
+  if (input.source !== 'commissioner_override' && input.source !== 'import' && lineupSetsItself(league)) {
     const active = (data: unknown) => new Set([...lineupPlayerIds(data, 'starters'), ...lineupPlayerIds(data, 'bench')])
     const after = active(input.nextPlayerData)
     const stayedActive = [...active(roster.playerData)].filter((id) => after.has(id))
     if (movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, stayedActive)) {
-      return { ok: false, error: BEST_BALL_LINEUP_MESSAGE, status: 409 }
+      return { ok: false, error: BEST_BALL_LINEUP_MESSAGE, status: 409, code: BEST_BALL_LINEUP_CODE }
     }
   }
 
