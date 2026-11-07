@@ -151,6 +151,26 @@ describe('best ball lineups (lib/guillotine/guillotineBestBall.ts)', () => {
     expect(leagueUpdate).not.toHaveBeenCalled()
   })
 
+  /*
+   * Audit 2026-11-06, "League size vs pool": best ball fills every team's seats from what it drafted, so a
+   * 35-team NFL league cannot switch it on with a K seat — the NFL has 32 kickers (lib/bestball/poolCapacity.ts).
+   */
+  const NFL_GUILLY_ROSTER = { roster: { config: { sections: [{ slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 4 } }] } } }
+  it('switching it on is refused when the league is too big for the player pool, and nothing is written', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NFL', leagueSize: 35, settings: NFL_GUILLY_ROSTER }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'bestBall' })
+    if (!r.ok) expect(r.error).toContain('only about 32 K players')
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('the same switch at 32 teams goes through (tight, not impossible)', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NFL', leagueSize: 32, settings: NFL_GUILLY_ROSTER }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.best_ball).toBe(true)
+  })
+
   it('a locked league can still save its other rules, sending best ball unchanged', async () => {
     leagueFindUnique.mockResolvedValue(league({ status: 'in_season', settings: { best_ball: true } }))
     const r = await saveGuillotineRules('L1', 'u1', { bestBall: true, rosterReleaseTiming: 'immediate' })

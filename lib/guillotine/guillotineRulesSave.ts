@@ -21,6 +21,7 @@ import {
 import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
+import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -125,6 +126,18 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       error: 'The draft has started, so best ball lineups are fixed for this season.',
       field: 'bestBall',
     }
+  }
+
+  /*
+   * Switching best ball lineups ON: every team's starter seats will then be filled from what it
+   * drafted, so the league's seats must fit the sport's player pool at its size
+   * (lib/bestball/poolCapacity.ts) — a 35-team NFL league cannot fill a K seat for every team.
+   */
+  if (patch.bestBall === true && !current.rules.bestBall) {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, leagueSize: true } })
+    const teamCount = league?.leagueSize ?? (await prisma.roster.count({ where: { leagueId } })) ?? 0
+    const pool = league && teamCount > 0 ? checkLeagueBestBallPool(league, { teamCount, assumeBestBall: true }) : null
+    if (pool && pool.refusals.length > 0) return { ok: false, status: 400, error: pool.refusals[0]!.message, field: 'bestBall' }
   }
 
   // The calendar must still reach a champion with the patched end week, chops a week and endgame

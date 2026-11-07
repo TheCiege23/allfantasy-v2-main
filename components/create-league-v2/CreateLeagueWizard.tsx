@@ -5,6 +5,7 @@ import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { BestBallRulesSummary, BestBallSetupPanel } from './BestBallSetupPanel'
 import { fitBestBallToTeamCount } from '@/lib/create-league-v2/bestBallWizard'
+import { bestBallPoolCheckForWizard } from '@/lib/create-league-v2/form-completion'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
@@ -340,6 +341,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
+  best_ball_pool: 'basics',
 }
 
 export function stepForIssue(code: string): WizardStep {
@@ -1086,7 +1088,41 @@ export function LeagueBasicsStep({
         </span>
       </label>
       ) : null}
+
+      <BestBallPoolNote state={state} t={t} />
     </section>
+  )
+}
+
+/**
+ * Best ball only: whether this many teams can fill every starter seat from the sport's player pool
+ * (lib/bestball/poolCapacity.ts). A refusal also blocks Create (form-completion.ts) and is refused by
+ * the server; a warning is advice. The text is built from the numbers, so it has no translation key.
+ */
+function BestBallPoolNote({ state, t }: { state: CreateLeagueV2State; t: (key: string) => string }) {
+  const check = bestBallPoolCheckForWizard(state)
+  if (!check || (check.refusals.length === 0 && check.warnings.length === 0)) return null
+  const refused = check.refusals.length > 0
+  return (
+    <div
+      role={refused ? 'alert' : 'status'}
+      className={cx(
+        'space-y-1 rounded-xl border p-3 text-xs leading-5',
+        refused
+          ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-200'
+          : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+      )}
+      data-testid={refused ? 'g30-best-ball-pool-refused' : 'g30-best-ball-pool-warning'}
+    >
+      <p className="font-bold">
+        {refused
+          ? tx(t, 'createLeague.g30.bestBallPool.refusedTitle', 'Too many teams for this player pool')
+          : tx(t, 'createLeague.g30.bestBallPool.warningTitle', 'A tight player pool')}
+      </p>
+      {(refused ? check.refusals : check.warnings).map((issue) => (
+        <p key={`${issue.code}:${issue.slots.join('+')}`}>{issue.message}</p>
+      ))}
+    </div>
   )
 }
 

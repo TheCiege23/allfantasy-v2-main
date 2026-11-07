@@ -209,7 +209,8 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setConfig(data.config)
-      setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
+      // Best ball: a seat layout that saved but leaves the player pool tight (lib/bestball/poolCapacity.ts).
+      setWarnings([...(data.unifiedConfig?.rosterWarnings ?? []), ...(data.bestBallPoolWarnings ?? [])])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       applyPayload({ ...data, sport: rosterSport }, slotDefs)
       setSuccess(true)

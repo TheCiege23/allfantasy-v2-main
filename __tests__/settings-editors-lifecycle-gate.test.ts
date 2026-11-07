@@ -319,3 +319,55 @@ describe('details', () => {
     expect(res.status).toBe(200)
   })
 })
+
+/*
+ * Best ball: a commissioner save that leaves the league's starter seats unfillable from the sport's player
+ * pool is refused before anything is written (lib/bestball/poolCapacity.ts; audit 2026-11-06, "League
+ * size vs pool"). A lineup league is never checked.
+ */
+describe('best ball player-pool check on the commissioner saves', () => {
+  const NFL_GUILLY = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 4 }
+  function bestBallLeague(over: Record<string, unknown> = {}) {
+    setLeague('NFL', 'pre_draft')
+    h.leagueRow = {
+      ...h.leagueRow,
+      leagueType: 'guillotine',
+      guillotineMode: true,
+      settings: { best_ball: true, roster: { config: { sections: [{ slots: NFL_GUILLY }] } } },
+      ...over,
+    }
+  }
+
+  it('roster settings: a second DEF seat in a 20-team best ball league is refused, nothing written', async () => {
+    bestBallLeague({ leagueSize: 20 })
+    const res = await call(rosterPut as Handler, { slots: { ...NFL_GUILLY, DEF: 2 }, templateKey: 'custom' })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { code?: string; error?: string }
+    expect(json.code).toBe('BEST_BALL_POOL_EXHAUSTED')
+    expect(json.error).toContain('40 players in its DEF seat')
+    expect(h.updateRoster).not.toHaveBeenCalled()
+  })
+
+  it('roster settings: a tight layout saves and returns the warning for the editor', async () => {
+    bestBallLeague({ leagueSize: 28 })
+    const res = await call(rosterPut as Handler, { slots: NFL_GUILLY, templateKey: 'custom' })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { bestBallPoolWarnings?: string[] }
+    expect(json.bestBallPoolWarnings?.join(' ')).toContain('28 of the about 32 K players')
+    expect(h.updateRoster).toHaveBeenCalled()
+  })
+
+  it('roster settings: the same second DEF seat in a lineup league is not this check\'s business', async () => {
+    bestBallLeague({ leagueSize: 20, settings: { roster: { config: { sections: [{ slots: NFL_GUILLY }] } } } })
+    const res = await call(rosterPut as Handler, { slots: { ...NFL_GUILLY, DEF: 2 }, templateKey: 'custom' })
+    expect(res.status).toBe(200)
+  })
+
+  it('league settings: growing a best ball league past the pool is refused, nothing written', async () => {
+    bestBallLeague({ leagueSize: 16, settings: { best_ball: true, roster: { config: { sections: [{ slots: { ...NFL_GUILLY, DEF: 2 } }] } } } })
+    const res = await patch({ leagueId: 'L1', leagueSize: 18 })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { code?: string }).code).toBe('BEST_BALL_POOL_EXHAUSTED')
+    expect(h.leagueUpdate).not.toHaveBeenCalled()
+  })
+})
