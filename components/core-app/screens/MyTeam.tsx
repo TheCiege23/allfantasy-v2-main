@@ -1430,7 +1430,9 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
+      {/* ⚠ NOT ON AN AUTOMATIC LINEUP. Best ball scores the strongest eligible lineup by itself, so
+          "the stronger play" and "ask about this swap" advise a move nobody can make. */}
+      {slot.benchCheck && !automatic ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
