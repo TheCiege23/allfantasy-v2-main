@@ -3131,7 +3131,7 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
 }
 .af-tc-rebuild-item {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   padding: 10px 12px;
 }
