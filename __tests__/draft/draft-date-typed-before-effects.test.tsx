@@ -15,10 +15,28 @@ import React from 'react'
 import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
-vi.hoisted(() => {
+/*
+ * The delayed setImmediate, with its own bookkeeping so the file can end cleanly:
+ *   - `pending` counts callbacks still waiting, so afterAll can wait for ZERO rather than for a guessed duration
+ *   - a callback that fires after jsdom is gone is SKIPPED: it is a React flush with nothing left to render into,
+ *     and running it is exactly the CI failure — "ReferenceError: window is not defined" thrown from this wrapper
+ *     (stack: Timeout._onTimeout here → scheduler performWorkUntilDeadline → react-dom), an unhandled error that
+ *     fails the whole shard while every test passes
+ *   - the real setImmediate is put back when the file ends
+ */
+const flush = vi.hoisted(() => {
   const realSetTimeout = globalThis.setTimeout
-  ;(globalThis as any).setImmediate = (fn: (...a: unknown[]) => void, ...args: unknown[]) =>
-    realSetTimeout(() => fn(...args), 30)
+  const realSetImmediate = globalThis.setImmediate
+  const state = { pending: 0, skipped: 0, realSetImmediate }
+  ;(globalThis as any).setImmediate = (fn: (...a: unknown[]) => void, ...args: unknown[]) => {
+    state.pending++
+    return realSetTimeout(() => {
+      state.pending--
+      if (typeof window === 'undefined') { state.skipped++; return }
+      fn(...args)
+    }, 30)
+  }
+  return state
 })
 
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
@@ -40,14 +58,17 @@ const SETTINGS = {
 afterEach(() => { vi.unstubAllGlobals(); cleanup() })
 
 /*
- * ⚠ DRAIN THE DELAYED FLUSHES BEFORE THE FILE ENDS. Every setImmediate above now lands 30ms later, so the
- * unmount in the last `cleanup()` leaves React's scheduler a callback that can fire after vitest has torn
- * down jsdom: "ReferenceError: window is not defined", an unhandled error that fails the whole shard
- * while every test passes (2026-11-07: twice in a row on one PR, once in seven runs on main). Waiting out
- * a few 30ms windows here lets those callbacks run while `window` still exists.
+ * ⚠ DRAIN THE DELAYED FLUSHES BEFORE THE FILE ENDS. Every setImmediate above lands 30ms later, so the unmount in
+ * the last `cleanup()` can leave React's scheduler a callback queued after the last test. The first version of this
+ * waited a fixed ~500ms and hoped; a flush queued late on a loaded runner outlived it (a red 1/4 shard reported
+ * "window is not defined" from this file once in seven runs on main). Now: wait until nothing is pending — each
+ * flush can queue the next, so this loops — bounded so a runaway scheduler cannot hang the file, then restore the
+ * real setImmediate. Anything still in flight after that is caught by the `window` guard in the wrapper.
  */
 afterAll(async () => {
-  for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 50))
+  const deadline = Date.now() + 5000
+  while (flush.pending > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 40))
+  ;(globalThis as any).setImmediate = flush.realSetImmediate
 })
 
 it('keeps an invalid typed date, and its error, when the mount effects flush late', { repeats: 4 }, async () => {
