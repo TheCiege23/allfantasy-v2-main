@@ -13,13 +13,18 @@
  *     optimal QB <- QB_A(30), SUPER_FLEX <- RB_B(25)  = 55
  *
  * A twenty-point miss, silently, on a metric whose entire purpose is to be the number nobody can
- * manipulate. `__tests__/commissioner-os/efl/optimalLineup.test.ts` runs that exact case through
- * BOTH implementations and pins both answers, so this is a measurement rather than an assertion.
+ * manipulate. `__tests__/commissioner-os/efl/trueMaxPf.test.ts` ("the Best Ball greedy optimizer is
+ * NOT safe for Max PF") runs that exact case through BOTH implementations and pins both answers
+ * (35 and 55), so this is a measurement rather than an assertion; the rest of that file covers the
+ * primitive itself (FLEX/superflex/IDP seats, dual eligibility, ordering independence). Its Best
+ * Ball use is pinned in `__tests__/bestball/best-ball-audit-2026-11.test.ts` (re-seating, dedupe,
+ * negative points, unfillable seats, ties) and `__tests__/bestball/daily-best-ball-scoring.test.ts`
+ * (each day's lineup, summed).
  *
- * ⚠ BEST BALL IS NOT CHANGED BY THIS FILE. Its optimizer, its snapshots and its behaviour are
- * untouched; Best Ball has its own product semantics (and its own tie/alternate reporting) and
- * repointing it is a separate, user-visible decision. This module exists so that it CAN adopt the
- * primitive later without either side being rewritten.
+ * ⚠ WHICH BEST BALL USES IT. Native redraft best ball — matchups, standings and Guilly chops via
+ * `scoreRosterBestBall` (lib/redraft/scoringEngine.ts), and daily best ball (lib/bestball/dailyBestBall.ts)
+ * — seats its lineups with this primitive. The contest optimizer in `lib/bestball/optimizer.ts` still
+ * runs `optimizerCore.ts`'s greedy pass; repointing it is separate work.
  *
  * ## The algorithm, and why it is provably optimal
  *
