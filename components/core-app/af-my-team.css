@@ -1707,7 +1707,8 @@ a.af-mt-lock-fix:focus-visible {
   display: contents;
 }
 /* …except that byes and the scoring basis come AFTER the roster. They explain the week; the
-   lineup is the week. The matchup stays above the starters. */
+   lineup is the week. The matchup stays above the starters, EXCEPT on a narrow page: see "Phone:
+   the lineup right after the fix" at the end of this file (2026-11-07). */
 .af-mt-byes,
 .af-mt-basis {
   order: 1;
@@ -2832,5 +2833,34 @@ li[data-kind='questionable'] .af-mt-check-tag {
   .af-mt-check--embedded > h2.af-label,
   .af-mt-check--embedded > .af-mt-footnote {
     display: none;
+  }
+}
+
+/*
+ * ── Phone: the lineup right after the fix (2026-11-07 phone pass) ──
+ *
+ * Measured live at 375px: STARTERS began 2,231px down, on the third screen. Between the countdown and
+ * the roster sat the Sleeper check strip (158px), the lineup decision (503px), the projected matchup
+ * (291px) and "Best lineup this week" (307px), which proposes the same swap as the decision card with
+ * a second "Fix in Sleeper".
+ *
+ * On a narrow page the order becomes: header, countdown, the decision (the fix), then Starters, Bench,
+ * IR and Taxi, and only then the check strip, the matchup and Best lineup. Byes and the scoring basis
+ * keep their `order: 1` and still come last.
+ *
+ * ⚠ THIS REVERSES "the matchup stays above the starters" (the rule further up) FOR A NARROW PAGE ONLY.
+ * On a phone the matchup is a 291px card you read once; the roster is what you came to set.
+ *
+ * Visual order only, the same as the countdown rule above: the DOM (and so Tab and screen-reader order)
+ * is unchanged, and each card is self-contained. A narrow PAGE, the same container query as the
+ * countdown, so an upright iPad keeps today's order. Its own top-level block at end of file.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt .af-mt-decision,
+  .af-core .af-mt #af-mt-starters,
+  .af-core .af-mt .af-mt-bench,
+  .af-core .af-mt .af-mt-ir,
+  .af-core .af-mt .af-mt-taxi {
+    order: -1;
   }
 }
