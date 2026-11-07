@@ -54,12 +54,20 @@ export async function saveGuillotineAdvanced(
 
 /** The league's calendar with a proposed chop schedule, or null when it cannot be read (then no check). */
 async function loadCalendarForSchedule(leagueId: string, advanced: GuillotineAdvanced) {
-  const [config, league, teamCount] = await Promise.all([
-    getGuillotineConfig(leagueId),
-    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, guillotineEndgame: true } }),
-    prisma.roster.count({ where: { leagueId } }),
+  // allSettled, not all: with Promise.all one failed read rejects the batch and the OTHER failed reads
+  // become unhandled rejections, even though the caller catches. A read that fails means no check.
+  // Each read starts inside a promise, so a synchronous throw settles too instead of escaping mid-array.
+  const settle = <T,>(read: () => Promise<T>) => Promise.resolve().then(read)
+  const [configRead, leagueRead, countRead] = await Promise.allSettled([
+    settle(() => getGuillotineConfig(leagueId)),
+    settle(() => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, guillotineEndgame: true } })),
+    settle(() => prisma.roster.count({ where: { leagueId } })),
   ])
-  if (!config || !league || teamCount <= 0 || config.eliminationEndWeek == null) return null
+  if (configRead.status !== 'fulfilled' || leagueRead.status !== 'fulfilled' || countRead.status !== 'fulfilled') return null
+  const config = configRead.value
+  const league = leagueRead.value
+  const teamCount = countRead.value
+  if (!config || !league || !(teamCount > 0) || config.eliminationEndWeek == null) return null
   const endgame = resolveGuillotineEndgame(league)
   return {
     teamCount,
