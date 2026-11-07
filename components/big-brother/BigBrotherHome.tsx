@@ -282,7 +282,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
 
       {view === 'twists' && <BigBrotherTwistsPanel leagueId={leagueId} />}
 
-      {view === 'history' && <BigBrotherHistoryPanel leagueId={leagueId} />}
+      {view === 'history' && <BigBrotherHistoryPanel leagueId={leagueId} names={names} />}
 
       {view === 'ceremony' && summary && (
         <BigBrotherCeremonyCenter leagueId={leagueId} summary={summary} />
