@@ -40,7 +40,7 @@ import { ZombieSeasonOperations } from '@/components/zombie/ZombieSeasonOperatio
 
 const LEAGUE_SAFE_URL = 'https://www.leaguesafe.com'
 
-type TeamRow = {
+export type TeamRow = {
   rosterId: string
   status: string
   wins: number
@@ -55,7 +55,7 @@ type TeamRow = {
   totalWinnings?: number | null
 }
 
-type Pack = {
+export type Pack = {
   league: {
     name: string | null
     sport?: string | null
@@ -125,7 +125,7 @@ type Pack = {
   } | null
 }
 
-type FeedAnimation = {
+export type FeedAnimation = {
   id: string
   animationType: string
   week: number
@@ -372,9 +372,9 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
 
         <ZombieWinCards cards={data.winCards ?? []} />
 
-        <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
           <section className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
               <ZombieGlassPanel
                 variant="tactical"
                 title={displayName}
@@ -482,7 +482,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
               <p className="mt-4 text-sm text-white/65">{summaryLine(z, data)}</p>
             </ZombieGlassPanel>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ZombieGlassPanel title="Managers under pressure" eyebrow="Danger zone" icon={<Crosshair className="h-5 w-5 text-red-200" />} variant="danger">
                 <div className="space-y-3">
                   {(z.dangerZone?.length ? z.dangerZone : z.teams).slice(0, 4).map((team, index) => {
@@ -491,12 +491,12 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                       <div
                         key={team.rosterId}
                         className={clsx(
-                          'flex items-center justify-between gap-3 rounded-2xl border bg-white/[0.03] px-4 py-3',
+                          'flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl border bg-white/[0.03] px-4 py-3',
                           role.border,
                           role.glow,
                         )}
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1 basis-40">
                           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Hot seat {index + 1}</p>
                           <p className="truncate text-sm font-semibold text-white">{teamName(team)}</p>
                         </div>
@@ -584,7 +584,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
             </ZombieGlassPanel>
 
             <ZombieGlassPanel title="Jump to live surfaces" eyebrow="Navigation" icon={<ArrowUpRight className="h-5 w-5 text-cyan-200" />}>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <Link
                   href={`/zombie/${leagueId}/standings`}
                   className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/[0.08]"

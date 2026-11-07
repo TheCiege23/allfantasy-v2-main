@@ -11,7 +11,7 @@ import { ZombieStatusChip, zombieChipStatus } from '@/components/zombie/ZombieSt
 
 /* The Armory shows the live serum and defensive weapon commands. Bomb effects remain inactive. */
 
-type ItemRow = {
+export type ItemRow = {
   id: string
   teamStatusId: string
   usedEffect?: string | null
@@ -26,7 +26,7 @@ type ItemRow = {
   usedAtWeek?: number | null
 }
 
-type InvPayload = {
+export type InvPayload = {
   appliedItemBonus?: import('@/lib/zombie/beta2025Items').ItemBonus | null
   itemPolicy?: string
   week: number
