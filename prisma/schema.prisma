@@ -7040,6 +7040,46 @@ model IntegrityFlag {
   @@map("integrity_flags")
 }
 
+/// What each manager could see when his lineup locked: one row per team per week (2026-11-07).
+///
+/// 🛑 NOTHING ELSE STORES A PROJECTION AS IT WAS AT KICKOFF. `fantasy_projections` is upserted daily
+/// and injury status is overwritten on every sync, so a week-close judgement of "did he start his best
+/// players" read TODAY's numbers — a player hurt on Monday night looked like a bad Sunday start. The
+/// hourly writer (lib/integrity/lineupLockSnapshots.ts) refreshes every player whose game has not
+/// started and FREEZES each one at his own kickoff, so the score is computed from what the manager saw.
+///
+/// `rosterId` is the RedraftRoster id — the id the tanking flags and the week's saved lineups use.
+/// Code ships ahead of migration 20261107120000_lineup_lock_snapshots: reads return nothing and the
+/// writer skips while the table is absent, so applying it only turns the score on.
+model LineupLockSnapshot {
+  id               String    @id @default(cuid())
+  leagueId         String    @map("league_id")
+  rosterId         String    @map("roster_id")
+  season           Int
+  week             Int
+  /// `{ [playerId]: { name, position, proj, status, bye, team, frozenAt } }` — see lineupLockSnapshots.ts.
+  players          Json
+  /// The league's starting seats when captured: `[{ slot, eligible[] }]`.
+  slots            Json
+  /// Filled when the week is scored (lib/integrity/lineupIntegrityScore.ts). Null until then.
+  startedProj      Float?    @map("started_proj")
+  optimalProj      Float?    @map("optimal_proj")
+  ratio            Float?
+  startedTopCount  Int?      @map("started_top_count")
+  starterCount     Int?      @map("starter_count")
+  excludedIds      String[]  @default([]) @map("excluded_ids")
+  /// Why a week was not scored (`thin_projections`, `no_lineup`, …). A skipped week neither counts nor breaks a run.
+  skipReason       String?   @map("skip_reason")
+  scoredAt         DateTime? @map("scored_at")
+  algorithmVersion String?   @map("algorithm_version")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([leagueId, rosterId, season, week])
+  @@index([leagueId, season, week])
+  @@map("lineup_lock_snapshots")
+}
+
 model LeagueIntegritySettings {
   id                         String    @id @default(cuid())
   leagueId                   String    @unique

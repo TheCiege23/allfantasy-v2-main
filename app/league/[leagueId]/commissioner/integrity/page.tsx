@@ -364,6 +364,7 @@ export default function CommissionerIntegrityPage() {
                   <IntegrityFlagCard
                     key={f.id}
                     flag={f}
+                    leagueId={payload?.canReview !== false ? leagueId : undefined}
                     highlighted={f.id === highlightId}
                     busy={busy}
                     onEscalate={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'escalated') : undefined}

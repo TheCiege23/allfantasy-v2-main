@@ -304,6 +304,30 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Lineup lock snapshots (lib/integrity/lineupLockSnapshots.ts): in leagues with the tanking monitor
+   * on, record each player's projection, injury status and bye as the manager sees them, freezing each
+   * one at his game's kickoff. The week-close Lineup Integrity score reads these instead of today's
+   * numbers. Does nothing until its migration is applied. Guarded and on its own job identity.
+   */
+  let lineupSnapshots: unknown = null
+  try {
+    const { runLineupLockSnapshots } = await import('@/lib/integrity/lineupLockSnapshots')
+    lineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-lineup-lock-snapshots', trigger: 'cron' },
+      () => runLineupLockSnapshots(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.written,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] lineup lock snapshots failed', e)
+    lineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Taxi deadline notices (lib/taxi/taxiDeadlineNoticeService): in the week a taxi promotion deadline
    * or lock week closes, every owner is told before it does and the commissioner gets a summary. Leagues
    * with taxi enforcement on (AF Commissioner). Guarded and on its own job identity, like the sweeps around it.
@@ -513,5 +537,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }
