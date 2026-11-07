@@ -42,7 +42,7 @@ export type LeagueCareerProps = {
 export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
   if (!data.available) {
     return (
-      <div className="af-lc">
+      <div className="af-lcareer">
         <PageHeader className="af-lc-head" eyebrowClassName="af-lc-eyebrow" titleClassName="af-lc-title" eyebrow={data.leagueName} title="Your career here" />
         <div className="af-lc-blocked">
           <span className="af-lc-blocked-mark af-num" aria-hidden>
@@ -70,7 +70,7 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
   )
 
   return (
-    <div className="af-lc">
+    <div className="af-lcareer">
       <PageHeader
         className="af-lc-head"
         eyebrowClassName="af-lc-eyebrow"
@@ -270,7 +270,7 @@ function WeeklyLeagueCareer({
   const alive = elimination && current.choppedAfterWeek == null
 
   return (
-    <div className="af-lc">
+    <div className="af-lcareer">
       <PageHeader
         className="af-lc-head"
         eyebrowClassName="af-lc-eyebrow"
