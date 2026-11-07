@@ -60,7 +60,10 @@ export default async function RedraftCoreStandingsHarnessPage({
   let checklist: ReturnType<typeof harnessChecklist> | null = null
   if (screen === 'standings') {
     const data = harnessStandings()
-    body = <Standings data={data} odds={sp.odds === 'none' ? null : harnessOdds(data)} />
+    // `?elimination=1`: a guillotine week — 9 and 10 already chopped, you (4) on the bubble with 7 and 8.
+    // An elimination league has no playoff race, so it carries no odds.
+    const elimination = sp.elimination === '1' ? { eliminated: ['9', '10'], bubble: ['4', '7', '8'] } : null
+    body = <Standings data={data} odds={sp.odds === 'none' || elimination ? null : harnessOdds(data)} elimination={elimination} />
   } else if (screen === 'season-outlook') {
     const { league, swing, basis } = harnessOutlook()
     body = <SeasonOutlookLeague league={league} swing={swing} basis={basis} />
