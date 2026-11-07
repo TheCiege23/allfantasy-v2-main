@@ -36,9 +36,14 @@ export type ChopWatch = {
  * The watch for `week`, or null when the preview cannot stand in for the chop line: it is about a
  * different week, there is no chop this week, or nobody has scored yet (an all-zero board would rank
  * teams by tiebreak and call it a chop zone).
+ *
+ * In an MLB two-week league (./eliminationPeriods.ts) the preview is keyed by its period's LAST week and
+ * scores both weeks so far, so either week of that period is answered by it — and the watch carries the
+ * period's key, the week that actually chops. A week in the middle of a period never chops on its own.
  */
 export function chopWatchFromPreview(preview: ChopPreview, week: number): ChopWatch | null {
-  if (preview.week !== week || preview.outcome !== 'chop' || preview.rows.length === 0) return null
+  const firstWeek = preview.week - Math.max(1, preview.periodWeeks ?? 1) + 1
+  if (week < firstWeek || week > preview.week || preview.outcome !== 'chop' || preview.rows.length === 0) return null
   if (!preview.rows.some((row) => row.points > 0)) return null
   const line = preview.chopLine ?? Math.min(...preview.rows.map((row) => row.points))
   const dangerTiers: ChopWatchTier[] = preview.rows.map((row) => ({
@@ -50,7 +55,7 @@ export function chopWatchFromPreview(preview: ChopPreview, week: number): ChopWa
     ...(row.status === 'immune' ? { immune: true as const } : {}),
   }))
   return {
-    week,
+    week: preview.week,
     chopCount: preview.chopCount,
     chopLine: preview.chopLine,
     dangerTiers,

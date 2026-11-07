@@ -168,6 +168,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     season: input.season,
     periodScores: input.periodScores,
     periodEndedAt: input.periodEndedAt,
+    periodWeeks: readPeriodWeeks(endgameLeague?.settings),
   })
   const evalResult = evaluated && recoveryScores ? { ...evaluated, scores: recoveryScores, activeRosterIds: recoveryScores.map(row => row.rosterId) } : evaluated
   if (!evalResult) return null
@@ -558,6 +559,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
       displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
       rosterReleaseTiming: config.rosterReleaseTiming,
+      periodWeeks: readPeriodWeeks(endgameLeague?.settings),
     })
   } catch (e) {
     console.warn('[guillotine] chop alerts not sent; the chop stands', e instanceof Error ? e.message : 'unknown error')

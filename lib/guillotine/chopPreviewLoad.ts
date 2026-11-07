@@ -123,5 +123,6 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
     previousWeek: [...lastWeek].map(([rosterId, periodPoints]) => ({ rosterId, periodPoints })),
     draftSlotByRoster,
     blockers,
+    ...(periodWeeks > 1 ? { periodWeeks } : {}),
   })
 }

@@ -88,6 +88,15 @@ export const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: strin
   { value: 'random', label: 'Random' },
 ]
 
+/**
+ * A tiebreak step's label for this league. In an MLB two-week league (./eliminationPeriods.ts) the
+ * previous-period step compares the last PERIOD, so it says so; every other label is the plain one.
+ */
+export function tiebreakLabel(step: string, periodWeeks?: number): string {
+  if (step === 'previous_period' && (periodWeeks ?? 1) > 1) return 'Lower score last period is chopped'
+  return TIEBREAK_OPTIONS.find((o) => o.value === step)?.label ?? step
+}
+
 export const RELEASE_OPTIONS: ReadonlyArray<{ value: GuillotineRules['rosterReleaseTiming']; label: string; help: string }> = [
   { value: 'next_waiver_run', label: 'At the next waiver run', help: 'Everyone bids on the chopped roster at the same time.' },
   { value: 'immediate', label: 'Right after the chop', help: 'Players hit free agency as soon as the chop is final.' },

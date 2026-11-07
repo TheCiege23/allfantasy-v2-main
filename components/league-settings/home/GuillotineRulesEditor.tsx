@@ -7,7 +7,7 @@ import {
   GUILLOTINE_PAID_RULE_FIELDS,
   RELEASE_OPTIONS,
   RULE_LIMITS,
-  TIEBREAK_OPTIONS,
+  tiebreakLabel,
   type GuillotineRuleField,
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
@@ -311,7 +311,7 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
           {rules.tiebreakerOrder.map((step, i) => (
             <li key={step} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-[13px] text-white/85">
               <span className="w-5 shrink-0 text-white/40">{i + 1}.</span>
-              <span className="min-w-0 flex-1">{TIEBREAK_OPTIONS.find((o) => o.value === step)?.label ?? step}</span>
+              <span className="min-w-0 flex-1">{tiebreakLabel(step, rules.periodWeeks)}</span>
               <button
                 type="button"
                 aria-label="Move up"

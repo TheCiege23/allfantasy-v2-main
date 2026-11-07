@@ -16,7 +16,7 @@ import { applyImmunity, immuneRosterIds, scheduledChops, type GuillotineAdvanced
 import { resolveTiebreak, type DraftSlotByRoster } from './GuillotineTiebreakResolver'
 import { splitChoppedFaab, type FaabOnChop } from './faabOnChop'
 import { chopAnnouncementText } from './chopAnnouncement'
-import { RELEASE_OPTIONS, TIEBREAK_OPTIONS, type GuillotineRules } from './guillotineRules'
+import { RELEASE_OPTIONS, tiebreakLabel, type GuillotineRules } from './guillotineRules'
 import type { TiebreakStep } from './types'
 
 export type ChopPreviewTeam = {
@@ -53,6 +53,11 @@ export type ChopPreviewInput = {
   draftSlotByRoster: DraftSlotByRoster
   /** Problems the loader found that would stop the real chop (e.g. a team the engine cannot place). */
   blockers: string[]
+  /**
+   * Weeks per elimination period (./eliminationPeriods.ts). Absent = 1. In a two-week league `week` is the
+   * period's last week and every team's points are both weeks added; the copy then names the period.
+   */
+  periodWeeks?: number
 }
 
 export type ChopPreviewRow = {
@@ -86,6 +91,8 @@ export type ChopPreview = {
   announcement: string | null
   notes: string[]
   blockers: string[]
+  /** Two-week periods only: the period is `week - periodWeeks + 1` to `week`. Absent on a one-week league. */
+  periodWeeks?: number
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -104,7 +111,11 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     announcement: null,
     notes: [] as string[],
     blockers: input.blockers,
+    ...((input.periodWeeks ?? 1) > 1 ? { periodWeeks: input.periodWeeks } : {}),
   }
+  // "week 4", or "weeks 3–4" for a two-week period keyed by week 4.
+  const span = (input.periodWeeks ?? 1) > 1 ? `weeks ${input.week - (input.periodWeeks ?? 1) + 1}–${input.week}` : `week ${input.week}`
+  const lastPeriod = (input.periodWeeks ?? 1) > 1 ? "last period's" : "last week's"
   const alive = input.teams.length
   if (input.week < input.eliminationStartWeek) {
     return { ...base, outcome: 'before_first_chop', headline: `No chop in week ${input.week}. The first chop is week ${input.eliminationStartWeek}.` }
@@ -182,9 +193,9 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
   const notes: string[] = []
   if (input.weekState === 'live') notes.push('Games are still being played, so this order will change. The chop only runs once every game is final.')
   if (immunity.protectedIds.length) {
-    notes.push(`${immunity.protectedIds.map((id) => byId.get(id)!.name).join(' and ')} ${immunity.protectedIds.length === 1 ? 'is' : 'are'} immune as last week's top scorer.`)
+    notes.push(`${immunity.protectedIds.map((id) => byId.get(id)!.name).join(' and ')} ${immunity.protectedIds.length === 1 ? 'is' : 'are'} immune as ${lastPeriod} top scorer.`)
   }
-  const tieLabel = stepUsed ? (TIEBREAK_OPTIONS.find((o) => o.value === stepUsed)?.label ?? stepUsed) : null
+  const tieLabel = stepUsed ? tiebreakLabel(stepUsed, input.periodWeeks) : null
   if (stepUsed === 'random') notes.push('A tie on the chop line would be settled by a random draw, so the real chop may pick the other team.')
   if (stepUsed === 'commissioner') notes.push('A tie on the chop line is set to be settled by you. The chop will wait for your pick.')
 
@@ -193,8 +204,8 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     ...base,
     outcome: 'chop',
     headline: input.weekState === 'live'
-      ? `If week ${input.week} ended now, ${names.join(' and ')} would be chopped.`
-      : `Week ${input.week} is final: ${names.join(' and ')} will be chopped when the correction window closes.`,
+      ? `If ${span} ended now, ${names.join(' and ')} would be chopped.`
+      : `${span[0]!.toUpperCase()}${span.slice(1)} ${(input.periodWeeks ?? 1) > 1 ? 'are' : 'is'} final: ${names.join(' and ')} will be chopped when the correction window closes.`,
     chopCount,
     rows,
     chopLine: chopLine == null ? null : round1(chopLine),

@@ -180,6 +180,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isPosInt(value) ? week(value) : null
     case 'playoffWeeksPerRound':
     case 'championshipLength':
+    case 'chopPeriodWeeks':
       return isPosInt(value) ? plural('v.weeks', value) : null
     case 'tradeReviewHours':
     case 'feederTradeLockHours':
@@ -199,6 +200,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'thirdPlaceGame':
     case 'pickTrading':
     case 'pickTerms':
+    case 'bestBallLineups':
       return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
     case 'keeperCount':
     case 'feederRosterSize':
@@ -501,7 +503,10 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
   const steps = Array.isArray(s.chopSteps) ? s.chopSteps.filter((st) => isPosInt(st?.fromWeek) && isPosInt(st?.chops)) : []
   const endgame = s.endgame && ENDGAMES.has(s.endgame) ? s.endgame : null
   const firstTiebreak = Array.isArray(s.tiebreakers) ? s.tiebreakers.find((t) => typeof t === 'string' && TIEBREAKS.has(t)) : undefined
+  // An MLB two-week league (lib/guillotine/eliminationPeriods.ts): "last week" means the last PERIOD.
+  const twoWeek = s.chopPeriodWeeks === 2
   return compact([
+    line('guillotine-period', twoWeek ? text('guillotine.periodWeeks') : null),
     line(
       'guillotine-chop',
       isPosInt(s.chopStartWeek) && isPosInt(s.chopEndWeek)
@@ -510,9 +515,14 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     ),
     line('guillotine-steps', steps.length ? text('guillotine.steps', { list: { list: steps.map((st) => text('v.chopStep', { week: st.fromWeek, n: st.chops })) } }) : null),
     line('guillotine-special', overrides.length ? text('guillotine.specialWeeks', { list: { list: overrides } }) : null),
-    line('guillotine-immunity', s.chopImmunity === 'top_scorer' ? text('guillotine.immunity') : null),
+    line('guillotine-immunity', s.chopImmunity === 'top_scorer' ? text(twoWeek ? 'guillotine.immunityPeriod' : 'guillotine.immunity') : null),
     line('guillotine-endgame', endgame === 'last_team_standing' ? text('guillotine.endgame.last') : endgame ? text('guillotine.endgame.final', { n: ENDGAME_TEAMS[endgame]! }) : null),
-    line('guillotine-tiebreak', firstTiebreak ? text('guillotine.tiebreak', { rule: text(`tiebreak.${firstTiebreak}`) }) : null),
+    line(
+      'guillotine-tiebreak',
+      firstTiebreak
+        ? text('guillotine.tiebreak', { rule: text(twoWeek && firstTiebreak === 'previous_period' ? 'tiebreak.previous_period_twoWeek' : `tiebreak.${firstTiebreak}`) })
+        : null,
+    ),
     line('guillotine-stat-correction', isNum(s.statCorrectionHours) && s.statCorrectionHours > 0 ? plural('guillotine.statCorrection', s.statCorrectionHours) : null),
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),

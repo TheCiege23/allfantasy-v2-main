@@ -36,6 +36,7 @@ import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRul
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
+import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,8 @@ export async function GET(
 
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
+  // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
+  const periodWeeks = readPeriodWeeks((await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings)
 
   return NextResponse.json({
     ...summary,
@@ -145,6 +148,7 @@ export async function GET(
           advanced,
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
+          periodWeeks,
         }
       : null,
   })
