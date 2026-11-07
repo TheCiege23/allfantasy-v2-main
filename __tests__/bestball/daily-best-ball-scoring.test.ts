@@ -33,6 +33,7 @@ const db = vi.hoisted(() => ({
   sportsPlayer: { findFirst: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+vi.mock('server-only', () => ({}))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({
   leagueUsesDevyEngine: vi.fn(async () => false),
   calculateOfficialTeamScore: vi.fn(),
@@ -47,6 +48,10 @@ import { computeOptimalLineup } from '@/lib/lineup-optimizer/optimalLineup'
 import { isDailyBestBallLeague, resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { getBestBallSportProfile, getDefaultBestBallSettings, normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWarRoomPrompt'
+import fs from 'node:fs'
+import path from 'node:path'
+import { normalizeRiGameBox } from '@/lib/sports-data/rollingInsightsGameLogs'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const ONE_G_SEAT = { roster: { config: { sections: [{ slots: { G: 1, BN: 3 } }] } } }
@@ -268,5 +273,115 @@ describe('the stat sync writes per-day rows for a daily best ball league', () =>
     }
     const notBestBall = await runSync(DAILY_BB, false)
     expect(notBestBall.dailyScoresUpserted).toBeUndefined()
+  })
+})
+
+/*
+ * MLB DAILY BEST BALL HAS DATA. The audit (2026-11-06) said "MLB daily has no data until an MLB stat sync
+ * exists" — that was wrong: the scheduled `import-player-game-stats?multiSport=1` sweep writes MLB rows to
+ * `player_game_stats` from Rolling Insights `/live` (riCredentialsFor -> the second account), and the
+ * weekly sync treats MLB as a daily sport (MLB normalizer registered in dailySportStatNormalization.ts),
+ * so it writes the per-day rows the daily scorer reads. These pin that path with the COMMITTED
+ * `/live` MLB fixture, run through the ingest's own box parser — the shape production stores.
+ */
+describe('MLB daily best ball: the sync writes per-day rows and the week scores from them', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'contracts/rolling-insights/fixtures/live.MLB.json'), 'utf8'))
+  const games: unknown[] = Array.isArray(raw) ? raw : (raw.data?.MLB ?? raw.data ?? Object.values(raw)[0])
+  const LINES = games.flatMap((g) => normalizeRiGameBox(g)?.lines ?? [])
+  /** What the ingest stores as `normalizedStatMap` (rollingInsightsGameLogs.normalizedMapFor). */
+  const stored = (line: { group: string; raw: Record<string, unknown> }) => {
+    const stats: Record<string, number> = {}
+    for (const [k, v] of Object.entries(line.raw)) {
+      const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null
+      if (n != null) stats[k] = n
+    }
+    return { group: line.group, stats }
+  }
+  // A hitter with a hit, from the captured response.
+  const batting = LINES.find((l) => l.group === 'batting' && Number((l.raw as Record<string, unknown>).H ?? 0) > 0)!
+  const window = resolveDailySportWeekWindow('MLB', 2026, 1)!
+  const D1 = window.start
+  const D2 = new Date(window.start.getTime() + 86_400_000)
+  const MLB_DAILY_BB = {
+    roster: { config: { sections: [{ slots: { UTIL: 1, BN: 3 } }] } },
+    best_ball_settings: { scoringPeriod: 'daily', dailyBestBall: true, contestStructure: 'season_long' },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.adminAuditLog.create.mockResolvedValue({ id: 'audit-1' })
+    db.playerIdentityMap.findFirst.mockResolvedValue(null)
+    db.playerIdentityMap.findMany.mockResolvedValue([])
+    db.playerWeeklyScore.upsert.mockResolvedValue({})
+    db.playerDailyScore.upsert.mockResolvedValue({})
+    db.playerDailyScore.deleteMany.mockResolvedValue({ count: 0 })
+    db.sportsPlayer.findFirst.mockResolvedValue(null)
+    db.sportsGame.findMany.mockResolvedValue([])
+    db.playerGameLogCache.findMany.mockResolvedValue([])
+    db.exileWeeklyEntry.findMany.mockResolvedValue([])
+    db.redraftRoster.findMany.mockResolvedValue([{ id: 'roster-1' }])
+    db.redraftSeason.findFirst.mockResolvedValue({ id: 'season-1', leagueId: 'league-1', sport: 'MLB', season: 2026, currentWeek: 1 })
+    db.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'h1', sport: 'MLB', position: 'OF', team: 'NYY' }])
+    db.league.findFirst.mockResolvedValue({ sport: 'MLB', settings: MLB_DAILY_BB })
+    db.league.findUnique.mockResolvedValue({ platform: 'allfantasy', survivorMode: false, settings: MLB_DAILY_BB, bestBallMode: true })
+  })
+
+  it('the fixture has a batting line with a hit and MLB 2026 has a week-1 window (else this proves nothing)', () => {
+    expect(batting).toBeTruthy()
+    expect(window).toBeTruthy()
+  })
+
+  it("one per-day row per game day, stats group-aware (a hitter's hits on batting keys)", async () => {
+    db.playerGameStat.findMany.mockResolvedValue([
+      { playerId: 'h1', sportType: 'MLB', season: 2026, gameDate: D1, normalizedStatMap: stored(batting) },
+      { playerId: 'h1', sportType: 'MLB', season: 2026, gameDate: D2, normalizedStatMap: stored(batting) },
+    ])
+    const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
+    const summary = await syncPlayerWeeklyScoresForRedraftSeason({ seasonId: 'season-1', week: 1, actorId: 'admin-1' })
+
+    expect(summary.dailyScoresUpserted).toBe(2)
+    expect(summary.scoresUpserted).toBe(1)
+    const days = db.playerDailyScore.upsert.mock.calls.map(
+      (c: unknown[]) => (c[0] as { create: { scoringDay: Date; sport: string; stats: Record<string, number> } }).create,
+    )
+    expect(days.map((d) => d.scoringDay.toISOString().slice(0, 10))).toEqual([D1, D2].map((d) => d.toISOString().slice(0, 10)))
+    for (const d of days) {
+      expect(d.sport).toBe('MLB')
+      expect(d.stats.h).toBeGreaterThan(0)
+      expect(d.stats.p_h).toBeUndefined()
+    }
+  })
+
+  it("the week scores the sum of each day's best line from those rows", async () => {
+    const bat = { h: 2, single: 1, hr: 1, r: 1, rbi: 2 }
+    const bat2 = { h: 1, single: 1, r: 1, sb: 1 }
+    db.redraftRosterPlayer.findMany.mockResolvedValue(
+      [['h1', 'OF'], ['h2', '1B']].map(([id, pos]) => ({
+        playerId: id, position: pos, slotType: 'BN', rosterId: 'r1', sport: 'MLB', playerName: id, team: 'NYY',
+        droppedAt: null, addedAt: new Date('2026-03-01T00:00:00Z'), acquisitionType: 'drafted',
+      })),
+    )
+    db.roster.findMany.mockResolvedValue([])
+    db.afRosterLineupAssignment.findMany.mockResolvedValue([])
+    db.redraftDailyLineup.findMany.mockResolvedValue([])
+    db.league.findFirst.mockResolvedValue({ sport: 'MLB', settings: MLB_DAILY_BB, bestBallMode: true, leagueType: 'best_ball', leagueVariant: null, platform: 'manual' })
+    db.playerDailyScore.findMany.mockResolvedValue([
+      { playerId: 'h1', scoringDay: D1, stats: bat, isFinalized: true },
+      { playerId: 'h2', scoringDay: D2, stats: bat2, isFinalized: true },
+    ])
+    db.playerWeeklyScore.findUnique.mockImplementation(async ({ where }: { where: { playerId_week_season_sport: { playerId: string } } }) =>
+      ({ stats: where.playerId_week_season_sport.playerId === 'h1' ? bat : bat2, isFinalized: true }))
+
+    const hit = await calculateScoreFromSportConfig('L1', 'h1', 1, bat, 'OF')
+    const hit2 = await calculateScoreFromSportConfig('L1', 'h2', 1, bat2, '1B')
+    expect(hit).toBeGreaterThan(0)
+    expect(hit2).toBeGreaterThan(0)
+
+    const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026 })
+    expect(r.bestBall?.period).toBe('daily')
+    expect(r.missingPlayerIds).toEqual([])
+    // One UTIL seat: one hitter counts on day 1, the other on day 2 — weekly would count only one.
+    expect(r.points).toBe(Math.round((hit + hit2) * 100) / 100)
+    expect(r.bestBall?.counted?.map((c) => c.playerId).sort()).toEqual(['h1', 'h2'])
   })
 })

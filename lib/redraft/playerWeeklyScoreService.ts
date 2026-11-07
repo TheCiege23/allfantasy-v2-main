@@ -248,7 +248,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // `RedraftSeason.sport` stores `NCAAFB`, so this must not be a string compare against 'NCAAF'.
   const isNcaaf = isNcaafSport(sport)
   if (sport !== 'NFL' && !isDailySport && !isNcaaf) {
-    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL and NCAAB; ${sport} is not available yet.`)
+    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL, NCAAB, MLB and SOCCER; ${sport} is not available yet.`)
   }
 
   const rosters = await prisma.redraftRoster.findMany({
