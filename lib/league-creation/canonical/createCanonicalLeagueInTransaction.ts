@@ -35,6 +35,7 @@ import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromW
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { bestBallSettingsHaveNoPlayoffs } from '@/lib/bestball/noPlayoffSeason'
 import { GUILLOTINE_BEST_BALL_KEY } from '@/lib/guillotine/guillotineBestBall'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
@@ -213,6 +214,19 @@ export async function createCanonicalLeagueInTransaction(
           language: body.language ?? null,
         })
       : null
+  /*
+   * 🛑 "NO PLAYOFFS" MUST SAVE NO PLAYOFFS. The normalizer keeps `playoffFormat: 'none'` beside the
+   * team count it was given (6 by default), and that 6 reached League.playoffTeams and the playoff start
+   * week below — so a season-long league was built a bracket it said it did not have. Either signal
+   * (format none, or 0 teams) is no playoffs, saved one way everywhere; the season engine then crowns
+   * the regular-season leader (lib/bestball/noPlayoffSeason.ts). A tournament's rounds are its
+   * post-season and are untouched.
+   */
+  const bestBallNoPlayoffs = bestBallSettings != null && bestBallSettingsHaveNoPlayoffs(bestBallSettings)
+  if (bestBallSettings && bestBallNoPlayoffs) {
+    bestBallSettings.playoffTeams = 0
+    bestBallSettings.playoffFormat = 'none'
+  }
   const foundationDefaults = getFoundationLeagueDefaults({
     sport,
     format: formatId,
@@ -398,6 +412,11 @@ export async function createCanonicalLeagueInTransaction(
       minRankLevel,
       maxRankLevel,
     },
+  }
+
+  if (bestBallNoPlayoffs) {
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: null, playoff_start_week: null, ...(bestBallSettings!.matchupFormat === 'cumulative' ? { seedingRule: 'points_only' } : {}) }
   }
 
   if (bestBallSettings?.contestStructure === 'tournament') {
@@ -633,7 +652,7 @@ export async function createCanonicalLeagueInTransaction(
    */
   const survivorPlanEnd = formatId === 'survivor' ? readSurvivorFullSeasonPlan(mergedSettings)?.endWeek ?? null : null
   const playoffStartWeekColumn: number | null =
-    scoringMode === 'roto' || isGuillotine
+    scoringMode === 'roto' || isGuillotine || bestBallNoPlayoffs
       ? null
       : survivorPlanEnd != null
         ? survivorPlanEnd + 1
