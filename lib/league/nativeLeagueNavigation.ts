@@ -38,8 +38,50 @@ const SURVIVOR_NAV_LABELS: Record<string, [string, string]> = {
   survivor_command: ['league.nav.survivor.command', 'Commissioner hub'],
 }
 
+/**
+ * Big Brother tabs: id → [i18n key, English, icon]. They used to fall into "More tools" with the generic "?" icon,
+ * thirteen items deep, the first one labelled "👁 Big Brother" (2026-11-07, Big Brother audit item 4). Labels match the
+ * in-page view names; the group title says "Big Brother".
+ */
+const BIG_BROTHER_NAV: Record<string, [string, string, string]> = {
+  big_brother: ['league.nav.bb.house', 'House', 'bbHouse'],
+  bb_hoh: ['league.nav.bb.hoh', 'HOH', 'bbHoh'],
+  bb_veto: ['league.nav.bb.veto', 'Veto', 'bbVeto'],
+  bb_voting: ['league.nav.bb.voting', 'Voting', 'bbVoting'],
+  bb_jury: ['league.nav.bb.jury', 'Jury', 'bbJury'],
+  bb_twists: ['league.nav.bb.twists', 'Twists', 'bbTwists'],
+  bb_history: ['league.nav.bb.history', 'History', 'bbHistory'],
+  bb_command: ['league.nav.bb.command', 'Command', 'draft'],
+}
+
+/**
+ * Tab ids that open the SAME screen (LeagueShell renders `matchups` and `matchup` from one `case`). When one of a set
+ * is placed, the rest are not a second destination — they were showing as a second "Matchup" under More tools.
+ */
+const SAME_SCREEN_ALIASES: string[][] = [['matchups', 'matchup']]
+
+/**
+ * More-tools tabs that open a DIFFERENT screen from a main-group item they read as a copy of: `players` is the player
+ * search (the main "Players & waivers" is `waivers`), `commissioner` is commissioner operations (the main
+ * "Commissioner" is `settings`). Both stay reachable, always under a name of their own.
+ */
+const DISTINCT_LEFTOVER_LABELS: Record<string, [string, string]> = {
+  players: ['league.nav.playerSearch', 'Player search'],
+  commissioner: ['league.nav.commissionerTools', 'Commissioner tools'],
+}
+
+/** Icons for the known secondary tools — the ones Zombie leagues already drew — instead of the generic "?". */
+const MORE_TOOL_ICONS: Record<string, string> = {
+  draft_intel: 'intel',
+  schedule: 'schedule',
+  players: 'players',
+  commissioner: 'settings',
+  legacy: 'legacy',
+  matchup: 'matchup',
+}
+
 /** Group ids are stable across languages; `title` is what the reader sees. */
-export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'week' | 'more'
+export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'week' | 'more'
 
 export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
   const tr = translator(t)
@@ -78,17 +120,30 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     const known = SURVIVOR_NAV_LABELS[tab.id]
     return { ...tab, label: known ? tr(known[0], known[1]) : tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'survivor' }
   })
+  const bigBrother = tabs.filter(tab => tab.id in BIG_BROTHER_NAV).map(tab => {
+    used.add(tab.id)
+    const [key, english, icon] = BIG_BROTHER_NAV[tab.id]
+    return { id: tab.id, label: tr(key, english), icon }
+  })
+  for (const set of SAME_SCREEN_ALIASES) if (set.some(id => used.has(id))) for (const id of set) used.add(id)
   const weekly = [
     ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
     ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
     ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
   ]
   // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
-  const more = tabs.filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner')).map(tab => ({ ...tab, icon: 'more' }))
+  const more = tabs
+    .filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner'))
+    .map(tab => {
+      const distinct = DISTINCT_LEFTOVER_LABELS[tab.id]
+      const label = distinct ? tr(distinct[0], distinct[1]) : tab.label
+      return { ...tab, label, icon: MORE_TOOL_ICONS[tab.id] ?? 'more' }
+    })
   const groups: Array<{ id: NativeNavGroupId; title: string; items: WorkspaceNavItem[] }> = [
     { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: primary },
     { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: dynasty },
     { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: survivor },
+    { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: bigBrother },
     { id: 'week', title: tr('league.nav.group.thisWeek', 'This week'), items: weekly },
     { id: 'more', title: tr('league.nav.group.moreTools', 'More tools'), items: more },
   ]
