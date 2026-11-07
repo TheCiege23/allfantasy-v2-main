@@ -16,6 +16,7 @@ import { normalizeRosterSlots } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,9 +58,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
    * resetLeagueRosterToDefault is about to write: refused before anything is written, tight comes back as a
    * warning.
    */
-  const defaultTemplate = service.resolveDefaultTemplate(league.leagueType ?? 'redraft')
-  const poolCheck = league.leagueSize
-    ? checkLeagueBestBallPool(league, { teamCount: league.leagueSize, rosterSlots: defaultTemplate.slots })
+  // Only a best ball league is checked, so a lineup league never resolves the template here.
+  const poolCheck = league.leagueSize && lineupSetsItself(league)
+    ? checkLeagueBestBallPool(league, {
+        teamCount: league.leagueSize,
+        rosterSlots: service.resolveDefaultTemplate(league.leagueType ?? 'redraft').slots,
+      })
     : null
   if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
   await resetLeagueRosterToDefault(leagueId, session.user.id)

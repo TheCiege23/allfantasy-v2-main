@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { mapImportedRosterToAF } from '@/lib/roster-engine/RosterImportMapper'
 import type { SupportedRosterSport } from '@/lib/roster-engine/RosterEngineTypes'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
         where: { id: leagueId },
         select: { sport: true, leagueType: true, leagueVariant: true, settings: true, bestBallMode: true, guillotineMode: true, leagueSize: true },
       })
-      const poolCheck = league?.leagueSize
+      const poolCheck = league?.leagueSize && lineupSetsItself(league)
         ? checkLeagueBestBallPool(league, {
             teamCount: league.leagueSize,
             rosterSlots: mapImportedRosterToAF({ sourcePlatform, sport: league.sport as SupportedRosterSport, importedConfig }).mappedSlots,
