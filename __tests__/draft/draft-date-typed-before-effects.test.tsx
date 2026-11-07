@@ -12,7 +12,7 @@
  * time. Against the old effect this fails 5 of 5; the during-render sync passes.
  */
 import React from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
 vi.hoisted(() => {
@@ -38,6 +38,17 @@ const SETTINGS = {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); cleanup() })
+
+/*
+ * ⚠ DRAIN THE DELAYED FLUSHES BEFORE THE FILE ENDS. Every setImmediate above now lands 30ms later, so the
+ * unmount in the last `cleanup()` leaves React's scheduler a callback that can fire after vitest has torn
+ * down jsdom: "ReferenceError: window is not defined", an unhandled error that fails the whole shard
+ * while every test passes (2026-11-07: twice in a row on one PR, once in seven runs on main). Waiting out
+ * a few 30ms windows here lets those callbacks run while `window` still exists.
+ */
+afterAll(async () => {
+  for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 50))
+})
 
 it('keeps an invalid typed date, and its error, when the mount effects flush late', { repeats: 4 }, async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) =>
