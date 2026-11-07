@@ -192,7 +192,6 @@ export async function POST(request: Request) {
 
     const access = await rosterAccess({ rosterId: body.rosterId, seasonId: body.seasonId, leagueId, userId })
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
-    const commissionerOverride = body.commissionerOverride === true && access.isCommissioner
 
     if (action === 'submit_claim') {
       const addPlayerId = body.addPlayerId?.trim()
@@ -274,12 +273,14 @@ export async function POST(request: Request) {
        * here with Best Ball free agency switched off (`bbFaEnabled`), from a chopped Guilly team, or a
        * player still held on waivers after a chop or a drop. It now passes the native add/drop's own gate
        * (lib/waiver-wire/immediateAddGate.ts) and, inside the league waiver lock, the same eligibility
-       * check `executeImmediateAddDrop` runs — refused with the same codes and messages. A commissioner's
-       * explicit override (`commissionerOverride`, commissioners only) is this runtime's own tool and
-       * stays exempt.
+       * check `executeImmediateAddDrop` runs — refused with the same codes and messages.
+       *
+       * 🛑 NO COMMISSIONER OVERRIDE ON AN ADD (owner's call, 2026-11-07). `commissionerOverride` used to skip
+       * every rule above for a commissioner — including the Guilly chop-pending freeze — and the native add
+       * has no such escape. It is ignored here now; the commissioner's manual waiver run keeps its own.
        */
       let precheck: (() => Promise<void>) | undefined
-      if (!commissionerOverride) {
+      {
         const genericRosterId = await genericRosterIdFor(leagueId, access.roster)
         if (!genericRosterId) {
           return NextResponse.json({ ok: false, code: 'UNAUTHORIZED', error: 'You do not have a roster in this league.' }, { status: addDropErrorStatus('UNAUTHORIZED') })
@@ -315,7 +316,7 @@ export async function POST(request: Request) {
           dropPlayerId,
           dropPlayerName: body.dropPlayerName,
           actorUserId: userId,
-          commissionerOverride,
+          commissionerOverride: false,
           precheck,
         })
       } catch (error) {

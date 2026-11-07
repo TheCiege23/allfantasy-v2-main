@@ -147,6 +147,19 @@ describe('add_free_agent answers exactly as the native add/drop', () => {
     expect(m.runtimeAdd).toHaveBeenCalledTimes(1)
   })
 
+  it("a commissioner's override no longer skips the rules (owner's call, 2026-11-07)", async () => {
+    // A commissioner adding to ANOTHER manager's roster — the only case the old override applied to.
+    m.prisma.redraftRoster.findFirst.mockResolvedValue({ id: 'rr1', ownerId: 'someone-else', seasonId: 's1', leagueId: 'L' })
+    const access = await import('@/lib/league/league-access')
+    vi.mocked(access.assertLeagueCommissioner).mockResolvedValue({ ok: true } as never)
+    m.phase.mockResolvedValue({ immediateAddsAllowed: false, firstComeAdds: false, reason: 'Free agency is off in this Best Ball league.', code: 'best_ball_fa_disabled' })
+    const r = await runtime({ commissionerOverride: true })
+    expect(r.status).toBe(403)
+    expect(r.body.code).toBe('LEAGUE_NOT_ACTIVE')
+    expect(m.runtimeAdd).not.toHaveBeenCalled()
+    vi.mocked(access.assertLeagueCommissioner).mockResolvedValue({ ok: false, status: 403 } as never)
+  })
+
   it('an allowed add goes through, with the eligibility check handed to the locked add', async () => {
     const r = await runtime()
     expect(r.body.ok).toBe(true)
