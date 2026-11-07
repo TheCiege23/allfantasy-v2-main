@@ -163,6 +163,22 @@ export async function GET(request: Request) {
   }
 
   /*
+   * League dues reminders (lib/dues/duesReminders.ts): a week before the due date, the day before, and
+   * once when overdue, to managers who have not paid or said they paid. TRACKING ONLY — the reminder
+   * points at the league's own payment links. Guarded and on its own job identity.
+   */
+  try {
+    const { runDuesReminders } = await import('@/lib/dues/duesReminders')
+    await withSyncJobRun(
+      { jobName: 'cron-dues-reminders', trigger: 'cron' },
+      () => runDuesReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] dues reminders failed', e)
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */

@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getOrCreateLeagueFinance, resolveSeasonForLeague } from '@/lib/league-finance/leagueFinanceService'
+import { isLeagueEntryFeeProcessingEnabled } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 
 type Db = Prisma.TransactionClient | typeof prisma
 
@@ -21,6 +22,12 @@ export async function assertPaidJoinAllowed(params: {
   userId: string
   tx?: Prisma.TransactionClient
 }): Promise<PaidJoinGateResult> {
+  /*
+   * 🛑 WHILE AllFantasy HOLDS NO LEAGUE MONEY, NOBODY CAN PAY IT, SO NOBODY MAY BE BLOCKED FOR NOT PAYING
+   * IT. With checkout off, this gate turned every "paid" league unjoinable unless the commissioner marked
+   * each manager paid by hand. Dues are collected by the league itself and tracked in the dues tracker.
+   */
+  if (!isLeagueEntryFeeProcessingEnabled()) return { ok: true }
   const db = dbClient(params.tx)
   const finance = await getOrCreateLeagueFinance(params.leagueId, params.tx)
   if (!finance) {

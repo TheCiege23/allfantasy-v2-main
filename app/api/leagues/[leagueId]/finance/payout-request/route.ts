@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { leagueMoneyRefusal } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getLeagueRole } from '@/lib/league/permissions'
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   }
 
   const { leagueId } = await ctx.params
+
+  const moneyOff = leagueMoneyRefusal('payout requests')
+  if (moneyOff) return NextResponse.json({ error: moneyOff.error, code: moneyOff.code }, { status: moneyOff.status })
   const role = await getLeagueRole(leagueId, userId)
   if (!role || role === 'viewer') {
     return NextResponse.json({ error: 'Members only' }, { status: 403 })
