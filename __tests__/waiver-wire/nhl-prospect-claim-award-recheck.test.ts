@@ -84,6 +84,8 @@ vi.mock('@/lib/ai-learning-system/resolveLeagueSport', () => ({ resolveLeagueSpo
 vi.mock('@/lib/league-runtime/redraftRosterMoveSync', () => ({ planRedraftRosterMoveWrites: h.moves }))
 vi.mock('@/lib/guillotine/blindWaiverCutoff', () => ({ guillotineClaimsCutoff: async () => null }))
 vi.mock('@/lib/league/faabMirror', () => ({ copyGenericFaabToRedraft: async () => {} }))
+// The cross-engine holder check has its own reads and its own suite (waiver-run-redraft-holder.test.ts).
+vi.mock('@/lib/waiver-wire/redraftRosterHolder', () => ({ redraftHolderOtherThan: async () => null }))
 
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import {

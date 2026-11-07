@@ -24,6 +24,7 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict, isRosterSnapshotConflict, rosterSnapshotWhere } from './claim-snapshot'
 import { withLeagueWaiverLock } from './leagueWaiverLock'
+import { redraftHolderOtherThan } from './redraftRosterHolder'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
@@ -447,6 +448,16 @@ async function processWaiverClaimsForLeagueLocked(
         claimedProspectId = addId
         addId = decision.playerId
       }
+    }
+
+    // The redraft engine (the hourly window run, the waiver runtime's add) awards into
+    // `RedraftRosterPlayer` only, which `rosteredByPlayer` above never reads: without this the run
+    // could award a man that engine already put on another team (redraftRosterHolder.ts — native
+    // leagues, newest season, the claiming team's own row excluded). Checked on the id actually awarded.
+    const redraftHolder = await redraftHolderOtherThan(prisma, { leagueId, genericRosterId: claim.rosterId, playerId: addId })
+    if (redraftHolder) {
+      await pushFail('Player no longer available.', { competingRedraftRosterId: redraftHolder })
+      continue
     }
 
     const irOverflow = irOverflowReported.has(claim.rosterId) ? null : importedIrOverflow(roster.playerData, rosterLimit)
