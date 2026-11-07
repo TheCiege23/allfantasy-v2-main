@@ -43,6 +43,8 @@ export const dashTriageMessages = defineMessages({
     gameTimeCall: "Game-time call: keep the pivot ready and swap before kickoff if he's ruled out.",
     benchedHandled: 'benched ✓',
     moreLeagues: (n: number) => `+${n} more`,
+    showMoreLeagues: (n: number) => (n === 1 ? 'Show 1 more league' : `Show ${n} more leagues`),
+    showFewerLeagues: 'Show fewer leagues',
     setLineup: (platform: string, league: string) => `Set lineup in ${platform} · ${league}`,
     /*
      * The per-league fix row (2026-11-01 home redesign) already names the league and its platform, so
@@ -91,6 +93,8 @@ export const dashTriageMessages = defineMessages({
     gameTimeCall: 'Decisión de último momento: ten el relevo listo y cámbialo antes del inicio si lo descartan.',
     benchedHandled: 'en la banca ✓',
     moreLeagues: (n) => `+${n} más`,
+    showMoreLeagues: (n) => (n === 1 ? 'Mostrar 1 liga más' : `Mostrar ${n} ligas más`),
+    showFewerLeagues: 'Mostrar menos ligas',
     setLineup: (platform, league) => `Corregir alineación en ${platform} · ${league}`,
     setLineupLead: 'Corregir alineación',
     setLineupWhere: (platform, league) => ` en ${platform} · ${league}`,
