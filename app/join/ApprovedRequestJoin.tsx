@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { joinLandingHref } from '@/lib/league-join/joinLanding'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * /join?approved=<leagueId> — a private league's commissioner approved this player's Find a League
@@ -16,6 +17,7 @@ import { joinLandingHref } from '@/lib/league-join/joinLanding'
  */
 export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
   const { status: authStatus } = useSession()
+  const { t } = useOptionalLanguage()
   const [state, setState] = useState<'idle' | 'joining' | 'joined' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -38,7 +40,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
       }
       if (data.success) {
         setState('joined')
-        setMessage(data.alreadyMember ? 'You are already in this league.' : 'You joined the league.')
+        setMessage(data.alreadyMember ? t('joinApproved.alreadyMember') : t('joinApproved.joined'))
         setTimeout(() => {
           window.location.href = joinLandingHref({
             leagueId: typeof data.leagueId === 'string' ? data.leagueId : leagueId,
@@ -48,10 +50,10 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
         return
       }
       setState('error')
-      setMessage(typeof data.error === 'string' && data.error ? data.error : 'That did not work. Try again.')
+      setMessage(typeof data.error === 'string' && data.error ? data.error : t('joinApproved.failed'))
     } catch {
       setState('error')
-      setMessage('Something went wrong. Try again.')
+      setMessage(t('joinApproved.error'))
     }
   }
 
@@ -59,11 +61,10 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
     <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
       <div className="max-w-md mx-auto px-4 w-full" data-testid="league-join-approved">
         <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
-          You&apos;re approved
+          {t('joinApproved.title')}
         </h1>
         <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-          The commissioner approved your request to join. Take your seat — it is not held for you, so a
-          full league or a started draft can still close it.
+          {t('joinApproved.body')}
         </p>
         {authStatus === 'unauthenticated' ? (
           <Link
@@ -71,7 +72,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
             className="block w-full rounded-lg px-4 py-2 text-center text-sm font-medium"
             style={{ background: 'var(--accent)', color: '#ffffff' }}
           >
-            Sign in to take your seat
+            {t('joinApproved.signIn')}
           </Link>
         ) : (
           <button
@@ -82,7 +83,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
             className="w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
             style={{ background: 'var(--accent)', color: '#ffffff' }}
           >
-            {state === 'joining' ? 'Joining…' : 'Take my seat'}
+            {state === 'joining' ? t('joinApproved.joining') : t('joinApproved.take')}
           </button>
         )}
         {message ? (
@@ -96,7 +97,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
           </p>
         ) : null}
         <Link href="/find-league" className="mt-4 inline-block text-sm underline" style={{ color: 'var(--muted)' }}>
-          Back to Find a League
+          {t('joinApproved.back')}
         </Link>
       </div>
     </div>

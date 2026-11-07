@@ -8,6 +8,7 @@ import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { platformLabel, verificationLabel } from "@/lib/public-discovery/externalListing"
 import { vibeLabel } from "@/lib/public-discovery/vibes"
 import {
@@ -514,6 +515,7 @@ type AskState = "idle" | "open" | "sending" | "pending" | "approved" | "member" 
  * being already in, or already approved never reads as an error.
  */
 function AskToJoinButton({ league }: { league: DiscoveryCard }) {
+  const { t } = useOptionalLanguage()
   const [state, setState] = useState<AskState>("idle")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -537,7 +539,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
       setState(body.status === "member" ? "member" : body.status === "accepted" ? "approved" : "pending")
     } catch (e) {
       setState("error")
-      setError(e instanceof Error && e.message ? e.message : "That didn't send. Try again.")
+      setError(e instanceof Error && e.message ? e.message : t("findLeague.ask.sendFailed"))
     }
   }
 
@@ -549,7 +551,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         className="rounded-lg border px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium"
         style={{ borderColor: "var(--border)", color: "var(--text)" }}
       >
-        You&apos;re in this league — open it
+        {t("findLeague.ask.member")}
       </Link>
     )
   }
@@ -562,7 +564,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         className="rounded-lg px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-semibold"
         style={{ background: "var(--accent)", color: "var(--bg)" }}
       >
-        Approved — take your seat
+        {t("findLeague.ask.approved")}
       </Link>
     )
   }
@@ -575,7 +577,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         data-testid={`find-league-ask-pending-${league.id}`}
         role="status"
       >
-        Request sent. The commissioner approves or declines — you&apos;ll get a notification either way.
+        {t("findLeague.ask.pending")}
       </p>
     )
   }
@@ -590,7 +592,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         style={{ background: "var(--accent)", color: "var(--bg)" }}
       >
         <Lock className="h-3.5 w-3.5" />
-        Ask to join
+        {t("findLeague.ask.button")}
       </button>
     )
   }
@@ -601,8 +603,8 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         value={message}
         onChange={(e) => setMessage(e.target.value.slice(0, 500))}
         rows={2}
-        placeholder="Say hi: your experience, what you're looking for (optional)"
-        aria-label="Message to the commissioner"
+        placeholder={t("findLeague.ask.placeholder")}
+        aria-label={t("findLeague.ask.messageLabel")}
         data-testid={`find-league-ask-message-${league.id}`}
         className="w-full rounded-lg border px-3 py-2 text-sm"
         style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
@@ -616,10 +618,10 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
           className="rounded-lg px-3 py-2 min-h-[40px] text-sm font-medium disabled:opacity-60 touch-manipulation"
           style={{ background: "var(--accent)", color: "var(--bg)" }}
         >
-          {state === "sending" ? "Sending…" : "Send request"}
+          {state === "sending" ? t("findLeague.ask.sending") : t("findLeague.ask.send")}
         </button>
         <button type="button" onClick={() => setState("idle")} className="min-h-[40px] text-sm" style={{ color: "var(--muted)" }}>
-          Cancel
+          {t("findLeague.ask.cancel")}
         </button>
       </div>
       {state === "error" ? (

@@ -67,7 +67,7 @@ export function JoinRequestsCard({ leagueId }: { leagueId: string }) {
       setMessage(done)
       await load()
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('That did not save. Try again.'))
+      setMessage(e instanceof Error && e.message ? e.message : t('joinRequests.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -79,13 +79,13 @@ export function JoinRequestsCard({ leagueId }: { leagueId: string }) {
 
   return (
     <section id="ch-join-requests" className="af-tw af-tw-panel" data-testid="join-requests-card">
-      <h2>{pending.length > 0 ? t('Requests to join') : t('Private league in Find a League')}</h2>
+      <h2>{pending.length > 0 ? t('joinRequests.titleRequests') : t('joinRequests.titlePrivate')}</h2>
       {state.listed ? (
         <p>
-          {t('Players can find this private league in Find a League and ask to join. Nobody joins from there without your approval, and only members see rosters and chat.')}
+          {t('joinRequests.listedBody')}
         </p>
       ) : state.hidden ? (
-        <p>{t('Hidden from Find a League. Only people you invite can join.')}</p>
+        <p>{t('joinRequests.hiddenBody')}</p>
       ) : null}
       {state.listed || state.hidden ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -96,12 +96,12 @@ export function JoinRequestsCard({ leagueId }: { leagueId: string }) {
             onClick={() =>
               void patch(
                 { listing: state.listed ? 'hide' : 'show' },
-                state.listed ? t('Hidden from Find a League.') : t('Back in Find a League.'),
+                state.listed ? t('joinRequests.hiddenDone') : t('joinRequests.shownDone'),
               )
             }
             data-testid="join-requests-toggle-listing"
           >
-            {state.listed ? t('Hide from Find a League') : t('Show in Find a League')}
+            {state.listed ? t('joinRequests.hide') : t('joinRequests.show')}
           </button>
         </div>
       ) : null}
@@ -120,19 +120,19 @@ export function JoinRequestsCard({ leagueId }: { leagueId: string }) {
                   type="button"
                   className="af-btn"
                   disabled={busy}
-                  onClick={() => void patch({ requestId: r.id, action: 'approve' }, t('Approved. They can take their seat now.'))}
+                  onClick={() => void patch({ requestId: r.id, action: 'approve' }, t('joinRequests.approvedDone'))}
                   data-testid={`join-request-approve-${r.id}`}
                 >
-                  {t('Approve')}
+                  {t('joinRequests.approve')}
                 </button>
                 <button
                   type="button"
                   className="underline"
                   disabled={busy}
-                  onClick={() => void patch({ requestId: r.id, action: 'decline' }, t('Declined. They were told kindly.'))}
+                  onClick={() => void patch({ requestId: r.id, action: 'decline' }, t('joinRequests.declinedDone'))}
                   data-testid={`join-request-decline-${r.id}`}
                 >
-                  {t('Decline')}
+                  {t('joinRequests.decline')}
                 </button>
               </div>
             </div>

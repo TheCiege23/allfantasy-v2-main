@@ -57,3 +57,44 @@ describe("JoinRequestsCard", () => {
     expect(container.innerHTML).toBe("")
   })
 })
+
+/*
+ * i18n (2026-11-07). The card, the player's "Ask to join" button (FindLeagueCard) and the take-your-seat
+ * page (ApprovedRequestJoin) were English only: the card passed English sentences to t(), which are not
+ * dictionary keys, so every language fell back to the English text itself. They use dictionary keys now,
+ * in English (translations.ts) and Spanish (translations-es-parity.ts) — the pattern the other
+ * Commissioner Hub cards follow (e.g. orphanAuction.*). Other languages fall back as they do for those.
+ */
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { translations } from "@/lib/i18n/translations"
+
+const SOURCES = [
+  "../../components/core-app/commissioner/JoinRequestsCard.tsx",
+  "../../components/discovery/FindLeagueCard.tsx",
+  "../../app/join/ApprovedRequestJoin.tsx",
+]
+const keysUsed = [
+  ...new Set(
+    SOURCES.flatMap((p) =>
+      [...readFileSync(resolve(__dirname, p), "utf8").matchAll(/\bt\(\s*['"]((?:joinRequests|findLeague\.ask|joinApproved)\.[A-Za-z0-9_.]+)['"]/g)].map((m) => m[1]!)
+    )
+  ),
+]
+
+describe("join request copy is translated", () => {
+  it("🛑 every key the three surfaces use exists in English AND Spanish, and the Spanish is Spanish", () => {
+    expect(keysUsed.length).toBeGreaterThanOrEqual(33) // 13 card + 10 button + 10 page (measured): the scan sees the calls
+    expect(keysUsed.filter((k) => !translations.en[k])).toEqual([])
+    expect(keysUsed.filter((k) => !translations.es[k])).toEqual([])
+    expect(translations.es["joinRequests.titleRequests"]).toBe("Solicitudes para unirse")
+    expect(translations.es["joinRequests.approve"]).not.toBe(translations.en["joinRequests.approve"])
+  })
+
+  it("the card renders the resolved text, never a raw key", async () => {
+    render(<JoinRequestsCard leagueId="L1" />)
+    expect(await screen.findByRole("heading", { name: "Requests to join" })).toBeTruthy()
+    expect(screen.getByTestId("join-request-approve-R1").textContent).toBe("Approve")
+    expect(document.body.textContent).not.toMatch(/joinRequests\./)
+  })
+})
