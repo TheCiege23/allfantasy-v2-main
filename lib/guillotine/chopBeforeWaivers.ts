@@ -81,6 +81,10 @@ export type ChopGateLeague = {
 
 export type ChopGateResult = { hold: false } | { hold: true; week: number; message: string }
 
+/** What a manager sees when a free-agent add is refused because a chop is pending (immediateAddGate.ts). */
+export const chopPendingAddFreezeMessage = (week: number) =>
+  `Free-agent adds are paused until week ${week}'s chop lands. You can still put in a waiver claim; it is processed after the chop.`
+
 export const CHOP_PENDING_WAIVER_MESSAGE = (week: number) =>
   `League skipped: week ${week}'s Guilly chop has not landed yet. Pending claims stay pending and settle on the first run after the chop.`
 

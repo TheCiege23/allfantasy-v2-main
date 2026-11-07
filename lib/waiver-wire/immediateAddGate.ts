@@ -27,6 +27,7 @@ import { assertLeagueActionGate } from "@/server/services/leagueActionGate"
 import { assertRosterTransactionsAllowed } from "@/lib/roster-legality/rosterTransactionGates"
 import { POST_DRAFT_ROSTER_LOCK_CODE } from "@/lib/league/postDraftRosterLock"
 import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
+import { chopPendingAddFreezeMessage, guillotineChopPendingForWaivers } from "@/lib/guillotine/chopBeforeWaivers"
 import {
   DROPPED_PLAYER_ON_WAIVERS_MESSAGE,
   loadDroppedPlayerHold,
@@ -90,6 +91,16 @@ export async function checkImmediateAddGate(input: {
   const legality = await assertRosterTransactionsAllowed({ leagueId, rosterIds: [rosterId], userId, kind: "waiver_claim" })
   if (!legality.ok) {
     return refuse(mapAddDropErrorCode(legality.error ?? "", { hasDrop: Boolean(dropPlayerId) }), legality.error)
+  }
+
+  // Guilly: once a week's scoring is done and its chop has not landed, nobody adds a free agent — the
+  // team about to be chopped cannot be named until the chop runs (stat corrections, tiebreaks), so the
+  // freeze covers every team (owner's call, 2026-11-07). Waiver claims are still accepted and settle on
+  // the first run after the chop (lib/guillotine/chopBeforeWaivers.ts holds that run). Same verdict the
+  // waiver run uses, so the two can never disagree about whether a chop is pending.
+  const chop = await guillotineChopPendingForWaivers(leagueId)
+  if (chop.hold) {
+    return refuse("ROSTER_LOCKED", chopPendingAddFreezeMessage(chop.week), { chopPendingWeek: chop.week })
   }
 
   // Decide immediate-add vs waiver. A commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts)
