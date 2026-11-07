@@ -14,6 +14,9 @@ vi.mock('@/lib/prisma', () => ({
     sportsPlayer: { findMany: (...args: unknown[]) => findManySportsPlayer(...args) },
   },
 }))
+// The selector values players through the scorer (computeRosterScoreForWeek). No league rules here, so a
+// row with no stat map counts its own fantasyPoints — the numbers this suite was written around.
+vi.mock('@/lib/multi-sport/MultiSportScoringResolver', () => ({ resolveScoringRulesForLeague: vi.fn(async () => []) }))
 
 
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'

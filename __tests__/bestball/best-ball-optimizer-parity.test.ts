@@ -48,7 +48,18 @@ vi.mock('@/lib/player-identity/findSportsPlayerByLeagueId', () => ({
  * The scoring worker refuses the daily sports outright (their game stats carry no week). That gate is
  * tested in scorers-fail-closed; here it is lifted so the LINEUP half can be compared for every sport.
  */
-vi.mock('@/lib/multi-sport/MultiSportMatchupScoringService', () => ({ weekKeyedStatsUnavailableReason: () => null }))
+vi.mock('@/lib/multi-sport/MultiSportMatchupScoringService', () => ({
+  weekKeyedStatsUnavailableReason: () => null,
+  // The selector values each player through the scorer; here the scorer simply reports the fixture points.
+  computeRosterScoreForWeek: vi.fn(async () => ({
+    status: 'AVAILABLE',
+    unavailableReason: null,
+    totalPoints: m.statRows.reduce((s, r) => s + r.fantasyPoints, 0),
+    byPlayerId: Object.fromEntries(m.statRows.map((r) => [r.playerId, r.fantasyPoints])),
+    usedPlayerIds: m.statRows.map((r) => r.playerId),
+    missingPlayerIds: [],
+  })),
+}))
 vi.mock('@/lib/redraft/scoringEngine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/redraft/scoringEngine')>()),
   scoreRosterForWeek: (...a: unknown[]) => m.scoreRosterForWeek(...a),

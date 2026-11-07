@@ -115,6 +115,8 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findFirst: vi.fn(async () => ({ externalId: '461.l.1.t.4', teamName: 'Mine' })) },
   },
 }))
+// Best ball values players through the scorer (computeRosterScoreForWeek); no league rules are needed here.
+vi.mock('@/lib/multi-sport/MultiSportScoringResolver', () => ({ resolveScoringRulesForLeague: vi.fn(async () => []) }))
 vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   fetchYahooPendingTrades: vi.fn(async () => ({

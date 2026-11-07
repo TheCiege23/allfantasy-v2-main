@@ -47,6 +47,7 @@ import {
 } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'
 import { scoreLeagueWeek } from '@/lib/scoring/scoring-engine'
+import { resolveScoringRulesForLeague } from '@/lib/multi-sport/MultiSportScoringResolver'
 
 const row = (playerId: string, fantasyPoints: number): StatRow => ({ playerId, normalizedStatMap: null, fantasyPoints })
 
@@ -185,6 +186,35 @@ describe('scoreLeagueWeek', () => {
       // QB 20 + the better RB 7 = 27. The whole roster would be 32.
       expect(write.points).toBe(27)
       expect([...write.data.starterIds].sort()).toEqual(['p1', 'p2'])
+    })
+
+    /*
+     * The lineup is chosen on the points the week is SCORED with. Selection used to read each stat row's
+     * own `fantasyPoints` while the score recomputed the row from `normalizedStatMap` under the league's
+     * rules — two pipelines that can disagree on who is better. Here they do: p1's row says 30 (a
+     * PPR-style number from his 10 catches) and p2's says 12, but this league pays 0.1 per rushing yard
+     * and nothing per catch, so under the league's rules p1 is worth 1.0 and p2 20.0.
+     */
+    it('seats the player who is better under the LEAGUE rules, and the score is that lineup', async () => {
+      leagueFindUnique.mockResolvedValue(bestBallLeague({ RB: 1, BN: 4 }))
+      statRows.mockReturnValue([
+        { playerId: 'p1', normalizedStatMap: { receptions: 10, rushing_yards: 10 }, fantasyPoints: 30 },
+        { playerId: 'p2', normalizedStatMap: { rushing_yards: 200 }, fantasyPoints: 12 },
+      ])
+      sportsPlayerFindMany.mockResolvedValue([sleeperRow('p1', 'RB'), sleeperRow('p2', 'RB')])
+      const rules = vi.mocked(resolveScoringRulesForLeague)
+      rules.mockImplementation(async () => [{ statKey: 'rushing_yards', pointsValue: 0.1, multiplier: 1, enabled: true }])
+      try {
+        const r = await scoreLeagueWeek({ leagueId: 'L', season: 2026, weekOrRound: 3 })
+        expect(r.status).toBe('scored')
+        const write = (teamPerformanceUpsert.mock.calls[0] as unknown as [{ create: { points: number; data: { starterIds: string[]; byPlayerId: Record<string, number> } } }])[0].create
+        // p1 seated would score 1.0 — the old answer. p2 is the better RB by the points that count.
+        expect(write.data.starterIds).toEqual(['p2'])
+        expect(write.points).toBe(20)
+        expect(write.data.byPlayerId).toEqual({ p2: 20 })
+      } finally {
+        rules.mockImplementation(async () => [])
+      }
     })
 
     it('a team with no best ball lineup is UNAVAILABLE and nothing is written — not the sum of its roster', async () => {

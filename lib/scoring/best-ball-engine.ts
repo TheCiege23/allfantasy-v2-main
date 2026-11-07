@@ -1,7 +1,6 @@
 import type { LeagueSport } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { computeBestBallLineup, resolveBestBallSlots } from '@/lib/bestball/productionLineup'
-import { weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
+import { computeRosterScoreForWeek, weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'UNRESOLVED'
@@ -38,6 +37,10 @@ export async function selectBestBallLineupForRoster(input: {
    * cannot be answered without it (see `findSportsPlayersForLeague`); `null` names nobody.
    */
   platform: string | null
+  /**
+   * The format the week is SCORED with — the same value `scoreLeagueWeek` passes to
+   * `computeRosterScoreForWeek`, so each player is valued here exactly as the score will count him.
+   */
   formatType?: string | null
   /**
    * `League.settings`. The lineup is seated over `buildBestBallSlots(sport, leagueSettings)` — exactly the
@@ -75,18 +78,26 @@ export async function selectBestBallLineupForRoster(input: {
     }
   }
 
-  const [stats, players] = await Promise.all([
-    prisma.playerGameStat.findMany({
-      where: {
-        sportType: input.leagueSport,
-        season: input.season,
-        weekOrRound: input.weekOrRound,
-        playerId: { in: input.rosterPlayerIds },
-      },
-      select: {
-        playerId: true,
-        fantasyPoints: true,
-      },
+  /*
+   * 🛑 EACH PLAYER IS VALUED BY THE PIPELINE THAT SCORES THE WEEK, NOT BY `playerGameStat.fantasyPoints`.
+   *
+   * This read `fantasyPoints` — the stat row's own number — while `scoreLeagueWeek` then scored the
+   * seated lineup with `computeRosterScoreForWeek`, which recomputes every row from `normalizedStatMap`
+   * under the LEAGUE's scoring rules. Two numbers for one player: the lineup that was best by the first
+   * was scored by the second, so a league whose rules rank two players the other way round was handed
+   * the worse lineup (a PPR-heavy row outranking a league that pays nothing per catch). The whole roster
+   * is now valued by that same call, with the same arguments the score uses, and seated on its
+   * `byPlayerId` — the selection and the score cannot disagree about who is better.
+   */
+  const [scored, players] = await Promise.all([
+    computeRosterScoreForWeek({
+      leagueId: input.leagueId,
+      leagueSport: input.leagueSport,
+      season: input.season,
+      weekOrRound: input.weekOrRound,
+      rosterPlayerIds: input.rosterPlayerIds,
+      starterPlayerIds: input.rosterPlayerIds,
+      formatType: input.formatType ?? undefined,
     }),
     /*
      * 🛑 NOT `externalId IN ids OR sleeperId IN ids`. A roster's ids are in ONE space, fixed by the
@@ -97,14 +108,13 @@ export async function selectBestBallLineupForRoster(input: {
     findSportsPlayersForLeague(input.leagueSport, input.platform, input.rosterPlayerIds),
   ])
 
-  // Presence of a stat row is the availability signal: a row with fantasyPoints 0 is a REAL
-  // zero-point performance; the absence of any row is missing data. The old `?? 0` fallback
-  // conflated the two, so an empty PlayerGameStat table produced an arbitrary "optimized"
-  // lineup with every player valued 0.0 and success-shaped notes.
-  const pointsByPlayerId = new Map<string, number>()
-  for (const row of stats) {
-    pointsByPlayerId.set(row.playerId, (pointsByPlayerId.get(row.playerId) ?? 0) + Number(row.fantasyPoints ?? 0))
-  }
+  // Presence of a stat row is the availability signal: a row worth 0 is a REAL zero-point
+  // performance; the absence of any row is missing data. The old `?? 0` fallback conflated the two,
+  // so an empty PlayerGameStat table produced an arbitrary "optimized" lineup with every player
+  // valued 0.0 and success-shaped notes. `byPlayerId` holds exactly the players with a row.
+  const pointsByPlayerId = new Map<string, number>(
+    scored.status === 'UNAVAILABLE' ? [] : Object.entries(scored.byPlayerId),
+  )
 
   const playersWithStats = input.rosterPlayerIds.filter((id) => pointsByPlayerId.has(id))
   const missingPlayerIds = input.rosterPlayerIds.filter((id) => !pointsByPlayerId.has(id))
