@@ -795,6 +795,11 @@ const TASK_EXACT_ES: Record<string, string> = {
   'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
   'An AI commissioner alert is open for this league.': 'Hay una alerta del comisionado IA abierta en esta liga.',
   'A dispute needs your ruling': 'Una disputa espera tu decisión',
+  'Managers say they paid dues': 'Hay mánagers que dicen haber pagado las cuotas',
+  'A rule change is waiting for you': 'Un cambio de reglas te está esperando',
+  'Lock a draft time': 'Fija la hora del draft',
+  'The draft-time poll has closed. Lock the time most managers can make.': 'La encuesta de horario del draft ya cerró. Fija la hora que le sirve a la mayoría de los mánagers.',
+  'The draft-time poll closes within a day. Lock the time most managers can make.': 'La encuesta de horario del draft cierra en menos de un día. Fija la hora que le sirve a la mayoría de los mánagers.',
 }
 
 const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
@@ -816,6 +821,14 @@ const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
   [
     /^(\d+) of (\d+) teams have not paid (\d{4}) dues: (.+)\.$/,
     (n, total, season, names) => `${n} de ${total} equipos no han pagado las cuotas de ${season}: ${names}.`,
+  ],
+  [
+    /^(.+) (says it|say they) paid\. Confirm it in the dues tracker once the money has arrived\.$/,
+    (names, verb) => `${names} ${verb === 'says it' ? 'dice que pagó' : 'dicen que pagaron'}. Confírmalo en el registro de cuotas cuando llegue el dinero.`,
+  ],
+  [
+    /^A member proposed “(.+)”\. Approve it to open the league vote, or decline it with a reason\.$/,
+    (title) => `Un miembro propuso «${title}». Apruébalo para abrir la votación de la liga, o recházalo explicando el motivo.`,
   ],
   [/^An open (.+) flag needs a commissioner decision\.$/, (kind) => `Una alerta abierta de tipo «${kind}» necesita una decisión del comisionado.`],
   // taskSources.ts — detectStaleImport
