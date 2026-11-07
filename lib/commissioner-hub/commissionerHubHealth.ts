@@ -2,6 +2,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { monitorLeagueHealth, type OverallStatus } from '@/lib/league-health/league-health-engine'
+import { disputeHealthSignals, readDisputes } from '@/lib/disputes/disputeStore'
 import { shouldRunCommissionerHealthShadow, shouldRunCommissionerHealthLive, runCommissionerHealthShadow } from '@/lib/decision-os/commissioner-health/shadow'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { toCommissionerHealthCard, type CommissionerHealthCard } from '@/lib/decision-os/commissioner-health/healthCardAdapter'
@@ -610,6 +611,11 @@ export function buildCommissionerHealthSnapshot(
   ))
   const currentWeek = readCurrentWeek(league.settings)
   const counts = input.counts ?? {}
+  /*
+   * ⚠ THESE WERE HARD-CODED TO 0. The dispute desk has stored disputes since it shipped, and nothing
+   * passed them in, so a league with five open collusion complaints scored as perfectly fair.
+   */
+  const disputes = disputeHealthSignals(readDisputes(league.settings), now)
 
   const healthInput = {
     sport: String(league.sport ?? 'NFL'),
@@ -627,9 +633,12 @@ export function buildCommissionerHealthSnapshot(
     avgFaabSpentPct: 0,
     chatMessageCount: positiveInt(counts.chatMessagesLast7Days, 0),
     voteCount: 0,
-    disputeCount: 0,
+    // The dispute desk's own records (League.settings.league_disputes) — filed by members, never read from chat.
+    disputeCount: disputes.disputeCount,
     commissionerActionsThisSeason: positiveInt(counts.commissionerActions, 0),
-    unresolvedDisputes: 0,
+    unresolvedDisputes: disputes.unresolvedDisputes,
+    collusionComplaints: disputes.collusionComplaints,
+    departureSignals: disputes.departureSignals,
     playoffTeams: positiveInt(league.playoffTeams, Math.ceil(teamCount / 2)),
     waiverType: String(league.waiverType ?? settings.waiverType ?? settings.waiver_type ?? 'rolling'),
     tradeReviewProcess,
