@@ -37,6 +37,8 @@ export default function RedraftCoreMatchupHarnessClient(props: Props) {
       selectedLeagueId={league.id}
       nativeLeague
       redraftSport={redraftSport}
+      /* The app passes this for a dynasty ?league= on EVERY screen (page.tsx, coreShellDynasty). */
+      dynastyEra={props.leagueType === 'dynasty'}
       syncAge={{ label: 'just now', stale: false }}
       syncEligibleCount={0}
       scope={{ value: league.id, label: league.name, favoriteIds: [], leagues: [league, other] }}
