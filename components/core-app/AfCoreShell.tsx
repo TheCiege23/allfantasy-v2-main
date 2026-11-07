@@ -2699,23 +2699,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
-          {active === 'home' ? (
-            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
-              <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
-                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
-                <p>{msg.bracketBody}</p>
-              </div>
-              <div className="af-core-bracket-promo-actions">
-                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {msg.bracketExplore}
-                </Link>
-                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {msg.bracketJoin}
-                </Link>
-              </div>
-            </section>
-          ) : null}
           {/*
             Game-day nudge, in the shell for the same reason the notice above is: every
             /core screen inherits it rather than each one remembering. It renders itself to
@@ -2777,6 +2760,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <PlayerCardProvider>{children}</PlayerCardProvider>
             </CoreNavPendingContext.Provider>
           </ShellSignalsContext.Provider>
+          {/*
+            The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open
+            the page, so on a phone the first screen was a promo and the setup guide while "16
+            lineups to fix" waited below the fold. Work first, offers after.
+          */}
+          {active === 'home' ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
+              <div className="af-core-bracket-promo-copy">
+                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
+                <p>{msg.bracketBody}</p>
+              </div>
+              <div className="af-core-bracket-promo-actions">
+                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {msg.bracketExplore}
+                </Link>
+                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
+                  {msg.bracketJoin}
+                </Link>
+              </div>
+            </section>
+          ) : null}
         </main>
       </div>
 
