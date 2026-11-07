@@ -37,6 +37,16 @@ export type ManagerFlagView = {
   weeksFlagged: number[]
   reply: ManagerReply | null
   canReply: boolean
+  /**
+   * The manager's own Lineup Integrity score, week by week — the same numbers the commissioner sees, so they can
+   * answer them. Only their own team's: it is read from this flag, which names only them.
+   */
+  lineupIntegrity: {
+    weeks: { week: number; ratio: number | null; startedTopCount: number | null; starterCount: number | null }[]
+    below: number | null
+    run: number[]
+    pickNote: string | null
+  } | null
 }
 
 export type ReplyError = 'not_found' | 'closed' | 'empty' | 'too_long'
@@ -99,6 +109,23 @@ function viewOf(flag: FlagRow): ManagerFlagView {
     weeksFlagged: Array.isArray(ev.weeksFlagged) ? ev.weeksFlagged.filter((w): w is number => typeof w === 'number') : [],
     reply: readManagerReply(flag.evidenceJson),
     canReply: flag.status === 'open',
+    lineupIntegrity: lineupIntegrityOf(ev.lineupIntegrity),
+  }
+}
+
+function lineupIntegrityOf(raw: unknown): ManagerFlagView['lineupIntegrity'] {
+  const li = record(raw)
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  const weeks = (Array.isArray(li.weeks) ? li.weeks : [])
+    .map(record)
+    .filter((w) => typeof w.week === 'number')
+    .map((w) => ({ week: w.week as number, ratio: num(w.ratio), startedTopCount: num(w.startedTopCount), starterCount: num(w.starterCount) }))
+  if (weeks.length === 0) return null
+  return {
+    weeks,
+    below: num(li.below),
+    run: Array.isArray(li.run) ? li.run.filter((w): w is number => typeof w === 'number') : [],
+    pickNote: typeof li.pickNote === 'string' ? li.pickNote : null,
   }
 }
 

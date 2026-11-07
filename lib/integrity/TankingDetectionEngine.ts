@@ -15,6 +15,13 @@ import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
 import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS, TANKING_IDLE_STARTS_PER_WEEK } from "./sensitivity"
 import { loadDailySportIdleStarts } from "./dailySportTankingScan"
 import {
+  adjustForPickOwnership,
+  lineupIntegrityPattern,
+  percent,
+  pickOwnershipNote,
+} from "./lineupIntegrityScore"
+import { ownFirstRoundPicks, scoreLineupIntegrityWeek, scoredWeeks, type TeamLineupScores } from "./lineupIntegrityWeek"
+import {
   consecutiveRun,
   eligibleBench,
   maxSeverity,
@@ -55,6 +62,22 @@ export type TankingEvidence = {
   detector?: "rules"
   /** The flagged manager's explanation (lib/integrity/managerReply.ts). Carried across when a week extends the case. */
   managerReply?: { userId: string; text: string; submittedAt: string }
+  /** The Lineup Integrity score behind this case (lib/integrity/lineupIntegrityScore.ts). Absent before snapshots existed. */
+  lineupIntegrity?: LineupIntegrityEvidence
+}
+
+export type LineupIntegrityEvidence = {
+  weeks: Array<{ week: number; ratio: number | null; startedTopCount: number | null; starterCount: number | null; skipReason: string | null }>
+  /** Several scored weeks in a row under the line. */
+  pattern: boolean
+  /** The line (0..1) and how many weeks the league's sensitivity needs. */
+  below: number
+  needed: number
+  /** The low weeks that make the run, ascending. */
+  run: number[]
+  /** Null when the league has no tradeable picks. */
+  ownsOwnFirst: boolean | null
+  pickNote: string | null
 }
 
 export type TankingScanResult = {
@@ -212,6 +235,37 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       : new Map<string, LineupCard>()
 
   /*
+   * The Lineup Integrity score (lib/integrity/lineupIntegrityWeek.ts): each team's started projection
+   * against its best possible, from the projections it could see at kickoff. Empty until the snapshot
+   * migration is applied and a week has been snapshotted — then every claim below is the old one.
+   *
+   * ⚠ THE KICKOFF SNAPSHOT ALSO FILLS THE CARD. The card had no projection at all (so the bench check
+   * never fired) and an injury status as last synced (so a Monday-night injury read as a Sunday start
+   * of an OUT player). Where the snapshot has the player, its projection, status and bye are what the
+   * rules below judge.
+   */
+  const integrityScores =
+    seasonYear != null && rosterIds.length > 0
+      ? await scoreLineupIntegrityWeek({ leagueId, season: seasonYear, week: weekNumber, cards }).catch((error) => {
+          console.warn("[tanking] lineup integrity score failed; scan continues without it", { leagueId, weekNumber, error: String(error) })
+          return new Map<string, TeamLineupScores>()
+        })
+      : new Map<string, TeamLineupScores>()
+  for (const [rid, scores] of integrityScores) {
+    const card = cards.get(rid)
+    const snap = scores.snapshot?.players
+    if (!card || !snap) continue
+    for (const p of [...card.starters, ...card.bench]) {
+      const seen = snap[p.playerId]
+      if (!seen) continue
+      if (typeof seen.proj === "number") p.proj = seen.proj
+      if (seen.status !== undefined) p.status = seen.status ?? undefined
+      if (typeof seen.bye === "number") p.byeWeek = seen.bye
+    }
+  }
+  const picks = integrityScores.size > 0 ? await ownFirstRoundPicks(leagueId).catch(() => ({ season: null, owns: new Map<string, boolean>() })) : { season: null, owns: new Map<string, boolean>() }
+
+  /*
    * NBA / NHL / MLB: idle starters, which the bye-week test below cannot see (these sports have no bye).
    * Daily lineups count idle starts against the sensitivity's weekly threshold (a bench-pattern rule);
    * weekly lineups treat a starter whose team plays no game all week as football's bye (an illegal
@@ -330,7 +384,35 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
         }
       }
 
-      if (suspicious.length === 0) continue
+      /*
+       * ⚠ ONE WEEK OF BENCHING BETTER PLAYERS IS NOT AN ACCUSATION ANY MORE. With kickoff projections
+       * on the card the bench check could fire on any single 5-point gap — a manager who forgot their
+       * lineup once. Where the week has a Lineup Integrity score, a bench-gap claim stands only when
+       * the score shows a PATTERN (several scored weeks in a row under the league's line); and a
+       * pattern opens a case on its own, without any single glaring start. An unplayable starter with
+       * a healthy sub on the bench is a fact, not a judgement, and is untouched.
+       */
+      const scores = integrityScores.get(roster.id)
+      const integrity = scores?.thisWeek?.scored ? lineupIntegrityPattern(scoredWeeks(scores), sensitivity) : null
+      if (integrity && !integrity.pattern) {
+        for (let i = suspicious.length - 1; i >= 0; i--) if (suspicious[i].startedPlayerStatus === "ACTIVE") suspicious.splice(i, 1)
+        pointsLeft = 0
+      }
+      const integrityCase = Boolean(integrity?.pattern && checkBenchPattern)
+      if (suspicious.length === 0 && !integrityCase) continue
+      const ownsOwnFirst = picks.owns.has(roster.id) ? picks.owns.get(roster.id)! : null
+      const lineupIntegrity: LineupIntegrityEvidence | undefined =
+        scores && integrity
+          ? {
+              weeks: scores.weeks,
+              pattern: integrity.pattern,
+              below: integrity.below,
+              needed: integrity.needed,
+              run: integrity.run,
+              ownsOwnFirst,
+              pickNote: pickOwnershipNote(ownsOwnFirst, picks.season),
+            }
+          : undefined
 
       // Resolve ids to names before the evidence is persisted, so the stored
       // payload is readable rather than needing a second lookup at render time.
@@ -350,7 +432,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
 
       const eliminated = roster.isEliminated === true
       const thisWeekPlayers = new Set(suspicious.map((x) => x.startedPlayerId)).size
-      const idleOnly = suspicious.every((x) => x.startedPlayerStatus.startsWith("NO GAME"))
+      const idleOnly = suspicious.length > 0 && suspicious.every((x) => x.startedPlayerStatus.startsWith("NO GAME"))
 
       /*
        * ⚠ ONE OPEN TANKING CASE PER MANAGER — AND A REPEAT WEEK EXTENDS IT. The first version of this
@@ -377,9 +459,17 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
             .map((x) => ({ ...x, week: x.week ?? prior.weekNumber }))
         : []
 
-      const computed = tankingSeverity({ suspiciousStarters: thisWeekPlayers, consecutiveWeeks, eliminated })
+      // A low-score run is repetition by definition, so it counts toward the run like flagged weeks do.
+      const runWeeks = Math.max(consecutiveWeeks, integrityCase ? integrity!.run.length : 0)
+      const computed = adjustForPickOwnership(tankingSeverity({ suspiciousStarters: thisWeekPlayers, consecutiveWeeks: runWeeks, eliminated }), ownsOwnFirst)
       const severity = open ? maxSeverity(open.severity, computed) : computed
-      const summary = tankingSummary({ idleOnly, suspiciousStarters: thisWeekPlayers, consecutiveWeeks })
+      const integrityLine = integrityCase
+        ? `Lineup Integrity under ${percent(integrity!.below)}% of the best possible projection ${integrity!.run.length} weeks in a row.`
+        : null
+      const summary =
+        suspicious.length > 0
+          ? [tankingSummary({ idleOnly, suspiciousStarters: thisWeekPlayers, consecutiveWeeks }), integrityLine].filter(Boolean).join(" ")
+          : `Started lineups well below the best available. ${integrityLine}`
       const evidence: TankingEvidence = {
         rosterId: roster.id,
         teamName: roster.teamName?.trim() || roster.ownerName,
@@ -387,15 +477,17 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
         weekNumber,
         // This week's starts first: the card leads with the newest evidence.
         illegalOrSuspiciousStarters: [...suspicious, ...priorStarts],
-        consecutiveWeeksWithSuspiciousLineup: consecutiveWeeks,
+        // A low-score run IS the suspicious weeks: "1" on a three-week pattern would undersell the case.
+        consecutiveWeeksWithSuspiciousLineup: runWeeks,
         weeksFlagged,
         // A week already in the case is never counted twice (a re-run of the same week).
         pointsLeftOnBench:
           (typeof prior.pointsLeftOnBench === "number" ? prior.pointsLeftOnBench : 0) + (priorWeeks.includes(weekNumber) ? 0 : pointsLeft),
         eliminatedFromPlayoffs: eliminated,
         weeksUntilPlayoffs,
-        redFlags: [],
+        redFlags: lineupIntegrity?.pickNote ? [lineupIntegrity.pickNote] : [],
         detector: "rules",
+        ...(lineupIntegrity ? { lineupIntegrity } : prior.lineupIntegrity ? { lineupIntegrity: prior.lineupIntegrity } : {}),
         // A reply the manager already sent must survive the next week's scan.
         ...(prior.managerReply ? { managerReply: prior.managerReply } : {}),
       }

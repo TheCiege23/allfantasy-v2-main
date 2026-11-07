@@ -164,6 +164,16 @@ export const commissionerScreensMessages = defineMessages({
     integrityEmptySlots: 'Empty slots',
     integrityByeStarters: 'Bye starters',
     integrityUpsell: 'The full-season record, team by team, is part of the AF Commissioner plan.',
+    scoresTitle: 'Lineup Integrity score',
+    scoresIntro: 'Projected points each team started, out of the best lineup it could have started, using the projections it saw at kickoff. Players who could not play are left out of the best lineup.',
+    scoresAverage: (pct: number) => `${pct}% on average`,
+    scoresLowest: (week: number, pct: number) => `lowest: week ${week}, ${pct}%`,
+    scoresWeek: (week: number) => `Wk ${week}`,
+    scoresTop: (top: number, of: number) => `${top}/${of} top`,
+    scoresNotScored: 'not scored',
+    scoresPost: 'Post report to league chat',
+    scoresPosting: 'Posting…',
+    scoresPosted: 'Posted to league chat',
 
     // WeeklyRecapReview
     recapErrChimmyQuiet: 'Chimmy is switched off for this league, so the recap cannot post. Turn Chimmy back on under Automations.',
@@ -353,6 +363,16 @@ export const commissionerScreensMessages = defineMessages({
     integrityEmptySlots: 'Puestos vacíos',
     integrityByeStarters: 'Titulares en semana libre',
     integrityUpsell: 'El historial de toda la temporada, equipo por equipo, es parte del plan AF Commissioner.',
+    scoresTitle: 'Puntaje de integridad de alineación',
+    scoresIntro: 'Puntos proyectados que cada equipo alineó, sobre la mejor alineación que pudo poner, con las proyecciones que veía al inicio de cada partido. Los jugadores que no podían jugar quedan fuera de la mejor alineación.',
+    scoresAverage: (pct) => `${pct}% en promedio`,
+    scoresLowest: (week, pct) => `más bajo: semana ${week}, ${pct}%`,
+    scoresWeek: (week) => `Sem ${week}`,
+    scoresTop: (top, of) => `${top}/${of} mejores`,
+    scoresNotScored: 'sin puntaje',
+    scoresPost: 'Publicar informe en el chat de la liga',
+    scoresPosting: 'Publicando…',
+    scoresPosted: 'Publicado en el chat de la liga',
 
     // WeeklyRecapReview
     recapErrChimmyQuiet: 'Chimmy está apagado en esta liga, así que el resumen no puede publicarse. Vuelve a activarlo en Automatizaciones.',
