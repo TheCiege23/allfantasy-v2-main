@@ -68,6 +68,7 @@ import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerS
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
+import { LeagueDuesTrackerPanel as DuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
@@ -1823,65 +1824,15 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
   )
 }
 
+/**
+ * The league settings modal's dues card is the real tracker.
+ *
+ * 🛑 IT USED TO BE A BROWSER-ONLY TOGGLE. This card saved "track dues" to localStorage ("saved on this
+ * device") and nothing else, so a commissioner who set dues up here believed they were tracked while no
+ * member, no reminder and no other device ever saw it. It now renders the same panel as everywhere else.
+ */
 function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
-  const { t } = useLanguage()
-  const storageKey = `af-league-dues-track-${ctx.league.id}`
-  const [track, setTrack] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    try {
-      const v = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null
-      setTrack(v === '1')
-    } catch {
-      /* ignore */
-    }
-    setLoaded(true)
-  }, [storageKey])
-
-  const save = () => {
-    try {
-      window.localStorage.setItem(storageKey, track ? '1' : '0')
-      toast.success(t('lsPanel.dues.savedDevice'))
-    } catch {
-      toast.error(t('lsPanel.dues.saveFailed'))
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-[15px] font-bold text-white">{t('lsModal.card.leagueDues')}</h3>
-        <p className="mt-1 text-[12px] text-sky-200/55">{t('lsPanel.dues.subtitle')}</p>
-      </div>
-      <label className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0a1228]/80 px-3 py-3">
-        <span className="text-[13px] font-medium text-white/90">{t('lsPanel.dues.track')}</span>
-        <input
-          type="checkbox"
-          className="h-5 w-5 accent-[#ff3d81]"
-          checked={track}
-          disabled={!loaded}
-          onChange={(e) => setTrack(e.target.checked)}
-          data-testid="league-dues-track-toggle"
-        />
-      </label>
-      <p className="text-[11px] leading-relaxed text-sky-200/45">
-        {t('lsPanel.dues.note')}
-      </p>
-      <button
-        type="button"
-        onClick={() => save()}
-        disabled={!loaded}
-        className="w-full rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/15 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:cursor-not-allowed disabled:opacity-40"
-        data-testid="league-dues-save"
-      >
-        {t('lsPanel.save')}
-      </button>
-      <p className="text-[11px] text-white/35">
-        {t('lsPanel.dues.localNote')}
-      </p>
-    </div>
-  )
+  return <DuesTrackerPanel leagueId={ctx.league.id} />
 }
 
 function parseNameList(raw: string): { name: string }[] {
