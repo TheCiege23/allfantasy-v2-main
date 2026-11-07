@@ -23,11 +23,32 @@ export interface FindLeagueCardProps {
   league: DiscoveryCard
 }
 
+type T = (key: string) => string
+
+/*
+ * 🛑 IN SPANISH THE CARD WAS ENGLISH EXCEPT ONE BUTTON (2026-11-07). Only "Ask to join" went through
+ * t(); the badge, the chips, the detail labels and the commissioner-approval line were literals. Every
+ * string the card shows now comes from `findLeague.card.*` (English in translations.ts, Spanish in
+ * translations-es-parity.ts). The English values are the text the card always showed. The older
+ * "Request a spot" button and the imported-league lines are unchanged.
+ */
+
+/** `t(key)`, or `fallback` when the dictionary has no entry (t returns the key itself then). */
+function tOrFallback(t: T, key: string, fallback: string): string {
+  const v = t(key)
+  return v && v !== key ? v : fallback
+}
+
+/** The dictionary label for a raw code (a style, a draft type), or the code made readable. */
+function codeLabel(t: T, prefix: string, raw: string): string {
+  return tOrFallback(t, `${prefix}.${raw}`, raw.replace(/_/g, " "))
+}
+
 /** "Sun, Sep 6, 7:30 PM EDT" on the viewer's clock (see resolveViewerTimeZone). */
-function formatDraftTime(iso: string | null, timeZone: string | null): string {
-  if (!iso) return "Draft not scheduled"
+function formatDraftTime(iso: string | null, timeZone: string | null, notScheduled: string): string {
+  if (!iso) return notScheduled
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return "Draft not scheduled"
+  if (Number.isNaN(d.getTime())) return notScheduled
   try {
     return new Intl.DateTimeFormat(undefined, {
       weekday: "short",
@@ -39,7 +60,7 @@ function formatDraftTime(iso: string | null, timeZone: string | null): string {
       ...(timeZone ? { timeZone } : {}),
     }).format(d)
   } catch {
-    return "Draft not scheduled"
+    return notScheduled
   }
 }
 
@@ -58,25 +79,30 @@ function isNew(createdAt: string): boolean {
   }
 }
 
-function formatLeagueType(league: DiscoveryCard): string {
+function formatLeagueType(league: DiscoveryCard, t: T): string {
   const style = String(league.leagueStyle ?? "").trim()
-  if (style.length > 0) return style.replace(/_/g, " ")
-  return String(league.leagueType ?? league.source ?? "league").replace(/_/g, " ")
+  if (style.length > 0) return codeLabel(t, "findLeague.card.style", style)
+  return codeLabel(t, "findLeague.card.source", String(league.leagueType ?? league.source ?? "league"))
 }
 
-function formatDraftStatus(status: string | null | undefined): string {
+function formatDraftType(draftType: string | null | undefined, t: T): string {
+  const raw = String(draftType ?? "").trim()
+  return raw ? codeLabel(t, "findLeague.card.draftType", raw) : "—"
+}
+
+function formatDraftStatus(status: string | null | undefined, t: T): string {
   const raw = String(status ?? "").trim()
   if (!raw) return "—"
-  return raw.replace(/_/g, " ")
+  return codeLabel(t, "findLeague.card.draftStatus", raw)
 }
 
-function getSourceLabel(league: DiscoveryCard): string {
+function getSourceLabel(league: DiscoveryCard, t: T): string {
   const source = league.source
   if (league.joinMode === "request") return `Plays on ${platformLabel(league.externalPlatform)}`
-  if (league.joinMode === "approval") return "Private league"
-  if (source === "fantasy") return "Public league"
-  if (source === "creator") return "Creator league"
-  return "Bracket"
+  if (league.joinMode === "approval") return t("findLeague.card.privateLeague")
+  if (source === "fantasy") return t("findLeague.card.publicLeague")
+  if (source === "creator") return t("findLeague.card.creatorLeague")
+  return t("findLeague.card.bracket")
 }
 
 function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
@@ -102,6 +128,7 @@ function commishLine(league: DiscoveryCard): string | null {
 }
 
 export function FindLeagueCard({ league }: FindLeagueCardProps) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const { timezone: profileTimeZone } = useUserTimezone()
   const viewerZone = resolveViewerTimeZone(profileTimeZone)
   const leagueRegion = timeZoneRegionFor(league.timezone)
@@ -144,7 +171,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
             style={sourceBadgeStyle}
           >
-            {getSourceLabel(league)}
+            {getSourceLabel(league, t)}
           </span>
         </div>
 
@@ -160,13 +187,13 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
             style={sourceBadgeStyle}
           >
-            {league.source}
+            {codeLabel(t, "findLeague.card.source", league.source)}
           </span>
           <span
             className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
             style={{ background: "rgba(148, 163, 184, 0.14)", color: "rgb(203, 213, 225)" }}
           >
-            {formatLeagueType(league)}
+            {formatLeagueType(league, t)}
           </span>
           {league.isPaid ? (
             <span
@@ -174,14 +201,14 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               title={paidBoundaryDisclosure}
               style={{ background: "rgba(234, 179, 8, 0.15)", color: "rgb(250, 204, 21)" }}
             >
-              Paid
+              {t("findLeague.card.paid")}
             </span>
           ) : (
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(34, 197, 94, 0.12)", color: "rgb(74, 222, 128)" }}
             >
-              Free
+              {t("findLeague.card.free")}
             </span>
           )}
           {fillingFast && (
@@ -190,7 +217,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               style={{ background: "rgba(34, 211, 238, 0.12)", color: "rgb(34, 211, 238)" }}
             >
               <Zap className="h-3 w-3" />
-              Filling fast
+              {t("findLeague.card.fillingFast")}
             </span>
           )}
           {showNew && (
@@ -198,7 +225,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(251, 146, 60, 0.15)", color: "rgb(251, 146, 60)" }}
             >
-              New
+              {t("findLeague.card.new")}
             </span>
           )}
           {hasAI && (
@@ -207,17 +234,17 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
-              AI-enabled
+              {t("findLeague.card.aiEnabled")}
             </span>
           )}
           {rankBand ? (
             <span
               data-testid={`find-league-rank-band-${league.id}`}
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-semibold"
-              title={RANK_BAND_HINTS[rankBand]}
+              title={tOrFallback(t, `findLeague.card.rankBandHint.${rankBand}`, RANK_BAND_HINTS[rankBand])}
               style={RANK_BAND_STYLES[rankBand]}
             >
-              {RANK_BAND_LABELS[rankBand]}
+              {tOrFallback(t, `findLeague.card.rankBand.${rankBand}`, RANK_BAND_LABELS[rankBand])}
             </span>
           ) : rankFitScore > 0 && (
             <span
@@ -231,8 +258,8 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         </div>
         {league.isPaid ? (
           <p className="text-[11px]" style={{ color: "rgba(250, 204, 21, 0.75)" }} data-testid={`find-league-paid-${league.id}`}>
-            {league.entryFee ? `Entry $${league.entryFee}. ` : ""}
-            Dues and payouts are handled by the commissioner through FanCred. AllFantasy never holds the money.
+            {league.entryFee ? `${tInterpolate("findLeague.card.entryFee", { fee: league.entryFee })} ` : ""}
+            {t("findLeague.card.paidNote")}
           </p>
         ) : null}
 
@@ -269,18 +296,23 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           </div>
         ) : null}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:text-xs" style={{ color: "var(--muted)" }}>
-          <span>League type: {formatLeagueType(league)}</span>
-          <span>Draft type: {league.draftType ?? "—"}</span>
-          <span>Draft status: {formatDraftStatus(league.draftStatus)}</span>
+          <span>{tInterpolate("findLeague.card.leagueTypeLine", { value: formatLeagueType(league, t) })}</span>
+          <span>{tInterpolate("findLeague.card.draftTypeLine", { value: formatDraftType(league.draftType, t) })}</span>
+          <span>{tInterpolate("findLeague.card.draftStatusLine", { value: formatDraftStatus(league.draftStatus, t) })}</span>
           <span>
-            Teams filled: {league.memberCount}
-            {league.teamCount > 0 ? ` / ${league.teamCount}` : ""}
+            {tInterpolate("findLeague.card.teamsFilledLine", {
+              value: league.teamCount > 0 ? `${league.memberCount} / ${league.teamCount}` : String(league.memberCount),
+            })}
           </span>
-          <span>AI features: {hasAI ? league.aiFeatures.join(", ") : "None"}</span>
+          <span>
+            {tInterpolate("findLeague.card.aiFeaturesLine", {
+              value: hasAI ? league.aiFeatures.join(", ") : t("findLeague.card.none"),
+            })}
+          </span>
           <span className="flex items-center gap-1" data-testid={`find-league-draft-time-${league.id}`}>
             <Calendar className="h-3.5 w-3.5 shrink-0" />
-            {formatDraftTime(league.draftDate, viewerZone)}
-            {league.draftDate ? <span className="opacity-70">(your time)</span> : null}
+            {formatDraftTime(league.draftDate, viewerZone, t("findLeague.card.draftNotScheduled"))}
+            {league.draftDate ? <span className="opacity-70">{t("findLeague.card.yourTime")}</span> : null}
           </span>
           {leagueRegion ? (
             <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
@@ -317,7 +349,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             data-testid={`find-league-private-note-${league.id}`}
           >
             <Lock className="h-3.5 w-3.5 shrink-0" />
-            The commissioner approves every new manager. Rosters and chat stay members-only.
+            {t("findLeague.card.privateNote")}
           </p>
         ) : null}
         {league.listingNote ? (
@@ -364,7 +396,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             className="rounded-lg px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium"
             style={{ background: "var(--panel2)", color: "var(--muted)" }}
           >
-            Full
+            {t("findLeague.card.full")}
           </span>
         ) : league.inviteOnlyByTier === true || league.canJoinByRanking === false ? (
           <span
