@@ -1,0 +1,92 @@
+/*
+ * Big Brother sub-views in LIGHT mode (2026-11-07, Big Brother audit item 2).
+ *
+ * The sub-views (HOH, Veto, Voting, Jury, Twists, History, Ceremony Center, Commissioner, Command) are dark-only:
+ * navy gradient panels (`from-[#0c1428]`, `bg-[#0c162e]`…) with `text-white` and pale accent text (`text-amber-200`).
+ * In light mode the global readability clamp in app/globals.css turns `text-white` dark but does not know most of
+ * these navy values, so the result was dark text on a dark panel — the ballot, "Submit vote" and the inner tabs all
+ * but disappeared. This file finishes the job for Big Brother only:
+ *
+ *   - the frame and every navy panel become token surfaces (panel, then panel2 one level down)
+ *   - pale accent text (100–400 shades, meant for navy) becomes the matching semantic token colour
+ *   - dark tinted chips (`bg-amber-950/30`…) become the matching soft token
+ *
+ * 🛑 SCOPE: `.af-bb-shell` is the root of BigBrotherHome and of the Command dashboard. The House view's specialty
+ * card keeps its own fixed dark theme: it is styled by a CSS module, so none of the class-substring selectors below
+ * can reach inside it — only the shared button and tab row around it change. Selectors match Tailwind class SUBSTRINGS
+ * (`[class*="text-amber-"]`), the same technique the global clamp uses, so they hold for every shade and opacity
+ * modifier without listing each one. `__tests__/big-brother/bigBrotherLightMode.test.ts` keeps the census honest:
+ * every dark surface and accent hue the components use must be covered here.
+ *
+ * Colours are tokens only.
+ */
+
+/* the frame (BigBrotherHome's root; the Command dashboard's root has no frame of its own) */
+html[data-mode='light'] .af-bb-shell[data-bb-view] {
+  background-color: var(--panel2);
+  background-image: none;
+  border-color: var(--border);
+  box-shadow: none;
+}
+html[data-mode='light'] .af-bb-shell [class*='blur-3xl'] {
+  display: none;
+}
+
+/* navy panels → token surfaces, two levels. A gradient that only ENDS in navy (`from-amber-950/40
+   to-[#0a1228]`) counts: left alone it fades the panel to near-black under now-dark text. */
+html[data-mode='light'] .af-bb-shell :is([class*='bg-[#0'], [class*='bg-[#1'], [class*='from-[#0'], [class*='from-[#1'], [class*='via-[#0'], [class*='to-[#0'], [class*='to-[#1']) {
+  background-color: var(--panel) !important;
+  background-image: none !important;
+  border-color: var(--border);
+  box-shadow: none;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-[#0'], [class*='bg-[#1'], [class*='from-[#0'], [class*='from-[#1'], [class*='via-[#0'], [class*='to-[#0'], [class*='to-[#1']) :is([class*='bg-[#0'], [class*='bg-[#1'], [class*='from-[#0'], [class*='from-[#1'], [class*='via-[#0'], [class*='to-[#0'], [class*='to-[#1']) {
+  background-color: var(--panel2) !important;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-black'], [class*='bg-slate-9']) {
+  background-color: var(--panel2) !important;
+  background-image: none !important;
+}
+
+/* pale accent text → semantic token colour, nudged toward --text: the bare token measured 3.7–3.9:1 on the
+   soft tints these labels sit on ("Submit vote", the selected view tab) */
+html[data-mode='light'] .af-bb-shell :is([class*='text-amber-'], [class*='text-yellow-'], [class*='text-orange-']) {
+  color: color-mix(in srgb, var(--color-warning) 80%, var(--text));
+}
+html[data-mode='light'] .af-bb-shell :is([class*='text-red-'], [class*='text-rose-'], [class*='text-pink-']) {
+  color: color-mix(in srgb, var(--color-danger) 80%, var(--text));
+}
+html[data-mode='light'] .af-bb-shell :is([class*='text-emerald-'], [class*='text-green-'], [class*='text-lime-']) {
+  color: color-mix(in srgb, var(--color-success) 80%, var(--text));
+}
+html[data-mode='light'] .af-bb-shell :is([class*='text-cyan-'], [class*='text-teal-'], [class*='text-sky-']) {
+  color: color-mix(in srgb, var(--color-info) 80%, var(--text));
+}
+html[data-mode='light'] .af-bb-shell :is([class*='text-violet-'], [class*='text-purple-'], [class*='text-fuchsia-'], [class*='text-indigo-']) {
+  color: color-mix(in srgb, var(--color-secondary) 80%, var(--text));
+}
+html[data-mode='light'] .af-bb-shell [class*='text-blue-'] {
+  color: color-mix(in srgb, var(--color-primary) 80%, var(--text));
+}
+
+/* dark tinted chips, callouts and tinted gradients → soft token (after the panel rule, so a tinted panel keeps its hue) */
+html[data-mode='light'] .af-bb-shell :is([class*='bg-amber-9'], [class*='from-amber-9'], [class*='bg-yellow-9'], [class*='from-yellow-9'], [class*='bg-orange-9'], [class*='from-orange-9']) {
+  background-color: var(--color-warning-soft) !important;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-red-9'], [class*='from-red-9'], [class*='bg-rose-9'], [class*='from-rose-9'], [class*='bg-pink-9'], [class*='from-pink-9']) {
+  background-color: var(--color-danger-soft) !important;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-emerald-9'], [class*='from-emerald-9'], [class*='bg-green-9'], [class*='from-green-9']) {
+  background-color: var(--color-success-soft) !important;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-cyan-9'], [class*='from-cyan-9'], [class*='bg-teal-9'], [class*='from-teal-9'], [class*='bg-sky-9'], [class*='from-sky-9']) {
+  background-color: var(--color-info-soft) !important;
+}
+html[data-mode='light'] .af-bb-shell :is([class*='bg-violet-9'], [class*='from-violet-9'], [class*='bg-purple-9'], [class*='from-purple-9'], [class*='bg-fuchsia-9'], [class*='from-fuchsia-9'], [class*='bg-indigo-9'], [class*='from-indigo-9']) {
+  background-color: var(--color-secondary-soft) !important;
+}
+
+/* translucent-white fills are invisible on a light surface: give them the inset token */
+html[data-mode='light'] .af-bb-shell :is([class*='bg-white/5'], [class*='bg-white/['], [class*='bg-white/1']) {
+  background-color: var(--surface-inset);
+}

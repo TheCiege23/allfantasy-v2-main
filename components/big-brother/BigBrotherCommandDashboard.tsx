@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { LayoutDashboard, MessageSquare, Sparkles, Vote, Wand2, Trophy, Users } from 'lucide-react'
+import './big-brother-light.css'
 
 /**
  * Premium commissioner surface for Big Brother — links into league shell, Chimmy cards, and voting center.
@@ -11,7 +12,7 @@ export function BigBrotherCommandDashboard({ leagueId }: { leagueId: string }) {
   const shellChat = `/league/${encodeURIComponent(leagueId)}?tab=Chat&openChat=league`
 
   return (
-    <div className="space-y-6">
+    <div className="af-bb-shell space-y-6">
       <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#120a18] via-[#0a1228] to-[#040915] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl" />
