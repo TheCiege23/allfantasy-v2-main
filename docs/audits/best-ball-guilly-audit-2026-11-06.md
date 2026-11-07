@@ -63,7 +63,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Weekly vs daily | P | One lineup over weekly totals (the best-ball branch returns before the daily branch, `scoringEngine.ts:305` vs `:318`). The UI, rules and AI say "daily" (`lib/bestball/rules.ts:147,171,197`; `sportConfig.ts:81,112,139`). |
 | Rule/settings version stored with a result | M | Assignments and unfilled seats are stored in `lineupSnapshots`. The algorithm id, slot config and scoring version are not. Rescoring an old week uses current settings (`scoringEngine.ts:212-219,805`). |
 | Position-change effective dates | M | Current position everywhere. |
-| Secondary optimizers agree with production | **B** | Greedy `optimizerCore.ts` feeds contests, survivor and the `/api/bestball/optimize` cache, and is wrong on dual eligibility (35 vs 50). The DFS in `leagueOptimizer.ts`/`weeklyProcessor.ts` uses hard-coded slots with no K/DST/superflex, and took 18s on a 30-player MLB roster. `best-ball-engine.ts` falls back to summing the whole roster. |
+| Secondary optimizers agree with production | **Fixed** | `optimizerCore.ts` (contests, survivor, the optimize cache), `leagueOptimizer.ts` (weekly processor) and `best-ball-engine.ts` (scoring worker) now seat with `computeOptimalLineup` over the league's own slots (`lib/bestball/productionLineup.ts`). The dual-eligible case reads 50, the 30-player MLB roster takes under 1s, and a team the worker cannot build a lineup for is left unscored for the week instead of summing the whole roster. `rules.ts` slot counts now come from the same `best_ball` roster template (NBA 11, NHL 14, MLB 23, NCAAB 9, Soccer 12). |
 | NHL: goalie only in G slots | W (Verified) | Pinned against the real `buildBestBallSlots('NHL')`. |
 | MLB: innings as outs (5.2 → 17 outs) | W (Verified) | `inningsFromBaseballNotation`, pinned. |
 | MLB: two-way player | W (policy: one asset) | Hitter and pitcher stat groups go on one asset. `TWP` is eligible for UTIL/hitter seats only (`dailySportRedraftRoster.ts`). Unverified: whether Ohtani is stored as `TWP`. |
@@ -80,9 +80,9 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Autopick keeps a usable roster | **Fixed** | One guard (`lib/live-draft-engine/autopickStarterGuard.ts`) now covers the queue, draft-as-me, need-based, best available and the Chimmy/orphan drafter. It bites only once the team's remaining picks just cover its open starting spots. |
 | Rounds = draftable capacity | P | NFL is correct (18). NBA/NHL/MLB use the generic registry (13/17/24 against 18/21/26 seats; code-read, not executed). |
 | No double-drafting under concurrency | W | Transaction re-reads the pick count; `@@unique([sessionId, overall])` (`PickSubmissionService.ts:413-428`). |
-| Exactly-once finalization | P | `completeDraftSession` updates without a status condition, so draft-ended notifications can duplicate (`DraftSessionService.ts:1217-1247`). |
-| Best Ball draft AI | **B** | `lib/bestball/ai/draftAssistant.ts` returns the first three client-supplied players. |
-| Slow draft still running at season start | M | Weeks before completion get no rosters and no scores. No policy, no warning. |
+| Exactly-once finalization | **Fixed** | Draft completion is a compare-and-set (`updateMany … status <> 'completed'`) in both the ordinary and season-tournament paths, so exactly one completer sends `draft_ended` and writes the lifecycle row. |
+| Best Ball draft AI | **Fixed** | `draftAssistant.ts` ranks by ADP adjusted for roster need, with distinct best/safe/upside/structural picks and tournament stacking only when teams are sent. It uses only ADP and roster need, and says so. No client calls the route today. |
+| Slow draft still running at season start | **Fixed (warning)** | Once week 1 kicks off with the draft open, the hourly week roll writes one commissioner-only league-log row per league per season, and the Best Ball tab says the draft is still running. How weeks played before the draft finishes are counted is still an unpublished policy. |
 
 ### Transactions
 
@@ -91,7 +91,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Classic: waivers/FA blocked on the server | **Fixed** | Previously nothing read `bbWaiversEnabled`/`bbFaEnabled`. Now enforced in the waiver phase gate. |
 | Classic: trades blocked (AF engine) | W | `tradeSettingsResolver.ts:85-100`. |
 | Classic/Guilly: trades blocked (redraft trade path) | **Fixed** | `/api/redraft/trade-proposals` and `trade-runtime` now refuse with `TRADES_DISABLED`. |
-| Classic: manual lineup saves refused | P | Refused only for Guilly+BB (`lineupService.ts:177`). Classic saves "succeed" and change nothing except IR/taxi exclusion. |
+| Classic: manual lineup saves refused | **Fixed** | Saves are refused wherever scoring ignores slots (Classic and Guilly+BB) in both the lineup engine and the redraft roster PATCH; IR/taxi, commissioner and import saves still pass. The Team tab shows no lineup editor and says the lineup sets itself. |
 | Guilly: survivors keep FAAB/waivers | W | Nothing disables them. This branch explicitly exempts Guilly from the new gate. |
 | FAAB ordering, $0 bids, minimum bid, roster space, blind bids | W | `process-engine.ts:398-431,686-707`. Members see only their own claims. |
 | Concurrent waiver runs | **Fixed** | Every run now serializes on `waiver:process:{leagueId}`, taken inside `processWaiverClaimsForLeague`: busy waits ~6s, then skips with claims pending. A team's claims share one roster object for the run; previously a second award overwrote the first. The roster write is a compare-and-set on `playerData` + `faabRemaining`. Instant free-agent adds now take the same lock around their check-then-write (`leagueWaiverLock.ts`). |
@@ -110,7 +110,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Double chops, Final N | W | `chopSchedule.ts`, `endgameRules.ts`. A Final N is not validated against the season length. |
 | Idempotency and recovery | W | Two locks, a unique index on (season, period, roster), the audit row, and `resumeAuditedRosterRelease` every tick. |
 | Calendar = teams − 1 | **Fixed** | `lib/guillotine/calendarFit.ts`: creation plans opening double-chop weeks when one a week cannot finish (refuses only if four a week cannot); the rules and chop-schedule editors refuse a calendar that cannot reach a champion. |
-| Release into the fair process | P | Blind-FAAB hold works. The chop writes no drop transaction, so the after-drop waiver hold may not apply in instant-FA leagues (code-read). |
+| Release into the fair process | **Fixed (free-agent path)** | Confirmed by test: a chopped player could be added instantly. Chop release rows now count as drops for the after-drop hold. The blind FAAB run deliberately ignores them, so bids are not pushed a week past the chop (`includeChopReleases: false`). |
 | Eliminated team: no transactions | **Fixed** | Previously only claims were blocked. Add/drop and trades through the roster gate are now refused. |
 | Eliminated team: keeps view access; commissioner powers separate | W | Membership kept; `commissioner/permissions.ts` is independent of elimination. |
 | Pending trades cancelled at chop | M | Moot while Guilly trades are off (now enforced on both paths). |
@@ -124,7 +124,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 |---|---|---|
 | Best Ball tab shows the scoring lineup | **Fixed** | Hosted leagues now read the matchup snapshot's started lineup and `league_player_weekly_scores` (`lib/bestball/nativeBestBallTabLoad.ts`). Imported leagues keep the legacy tables. |
 | Provisional label and "why he counted" | **Fixed (tab)** | Each card is Final or Provisional, shows unfilled slots and players still awaiting stats, and gives each bench player a one-sentence reason (`benchReason`). My Team now says AllFantasy picks the lineup in hosted leagues. |
-| No "set your lineup" nags for Classic | P | Chimmy lineup and slate-lock alerts skip best ball. The commissioner reminder recipe (off by default) and the AI commissioner alert do not. |
+| No "set your lineup" nags for Classic | **Fixed** | The commissioner lineup-reminder recipe reports itself unavailable for best ball (with a reason, en/es), and the AI commissioner alert skips `LINEUP_REMINDER` for best ball. |
 | Weekly recap / power rankings | **Fixed** | Correction: those two schedule entries never fired (`scripts/cron-tier.mjs` excluded them) and their endpoints are stubs, so they were removed. The recap that does post (`lib/league-chat/nativeWeeklyRecap.ts`) skipped leagues whose season row is from an earlier year; it now falls back to the latest season. |
 | Discovery | P | Public leagues are listed. No Guilly category. |
 | Private join needs approval | **Fixed (finder)** | Private leagues with an open seat are listed in Find a League with no join code or member data; "Ask to join" sends a request the commissioner approves on the Hub. An invite link the commissioner shares still joins directly, by design. |
@@ -136,7 +136,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Chimmy cannot write official state | W | `AIActionWriteScope.ts:5`; no score/chop/pick/FAAB writers found. |
 | Hidden data | W | `get_waiver_status` returns only the asker's own bids. |
 | Dynasty/devy/C2C excluded from standalone presets | W | `bestBallDefaults.ts:309-333`; creation guards at `createCanonical…:474-480`. |
-| Integrity | P | Duplicate-account join gate. The tanking scan is not best-ball-aware. Collusion detection is trade-based. |
+| Integrity | P | Duplicate-account join gate. The tanking scan now files nothing in best ball leagues (every signal it has comes from a lineup the manager cannot set). Collusion detection is trade-based. |
 
 ---
 
@@ -177,7 +177,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 14. **Weekly recap and power rankings** *(fixed in branch; corrected)*. The earlier "405 every week" was wrong: the two cron entries never fired and pointed at stubs, so they were removed, and the recap that does post now finds leagues whose season row is from an earlier year.
 15. **Private-league joins skip commissioner approval**; joins stay open after the draft; revoked links still work for private leagues *(all fixed in branch)*.
 16. **Commissioner Best Ball edits have no lock or audit**, and playoff/season-length edits are not applied *(fixed in branch)*.
-17. **Secondary optimizers disagree with production** (greedy, hard-coded-slot DFS, the scoring-worker whole-roster fallback). Any UI or contest reading them shows different numbers from the matchup.
+17. **Secondary optimizers disagree with production** (greedy, hard-coded-slot DFS, the scoring-worker whole-roster fallback). Any UI or contest reading them shows different numbers from the matchup *(fixed in branch: all repointed to `computeOptimalLineup` over the league's slots)*.
 
 ### P2 — clarity and polish
 
@@ -185,10 +185,10 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 19. "No playoffs" still writes 6 playoff teams; season-total leagues still crown a bracket winner when `playoffTeams > 0` *(fixed in branch)*.
 20. Non-reproducible final Guilly tiebreak *(fixed in branch: seeded order)*.
 21. `GuillySetup` refuses best ball and double chops for stale reasons *(fixed in branch)*.
-22. My Team says "provider" for AF-hosted leagues; the War Room uses sport-default slots.
-23. Best ball draft-rec AI is a stub.
-24. `__tests__/guillotine-summary-escapes-route.test.ts` times out deterministically (likely unmocked DB imports).
-25. `optimalLineup.ts` header cites `__tests__/commissioner-os/efl/optimalLineup.test.ts`, which does not exist.
+22. My Team says "provider" for AF-hosted leagues; the War Room uses sport-default slots *(both fixed in branch: the War Room reads the league's own seats)*.
+23. Best ball draft-rec AI is a stub *(fixed in branch)*.
+24. `__tests__/guillotine-summary-escapes-route.test.ts` times out deterministically (likely unmocked DB imports) *(fixed in branch: five DB-touching imports added since it was written are now mocked; 9/9 in ~11s)*.
+25. `optimalLineup.ts` header cites `__tests__/commissioner-os/efl/optimalLineup.test.ts`, which does not exist *(fixed in branch)*.
 
 ---
 
@@ -260,7 +260,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 7. **Waiver-run mutex on every processing entry point** — **done in this branch**, plus the same-run
    double-award and a roster compare-and-set. Still open: make instant free-agent adds take the same lock.
    against the sealed version.
-9. **Retire or repoint the greedy and DFS optimizers** to `computeOptimalLineup`.
+9. **Retire or repoint the greedy and DFS optimizers** to `computeOptimalLineup` — **done in this branch**.
 10. Close joins after the draft; private join → approval; honour revoked links; reset `bbContestId` on
     renewal; fix the weekly recap — **all done in this branch**.
 
