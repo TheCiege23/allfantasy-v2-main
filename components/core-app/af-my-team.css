@@ -2864,3 +2864,24 @@ li[data-kind='questionable'] .af-mt-check-tag {
     order: -1;
   }
 }
+
+/*
+ * ── Phone header tiles: Record takes only its own width (2026-11-07) ──
+ * After the rule above, Record and Roster value shared the row half and half. The roster-value reason
+ * ("7,396 above the median · QB is your best (1st) · WR your thinnest (9th) · priced 13 of your 15")
+ * then ran to 87px in a 143px column, and the grid stretched "5-3 · Record" to the same 157px.
+ * Record now takes its own width (88px floor), Roster value takes the rest, and the reason keeps its
+ * first two lines; the same per-position breakdown is in the Positional strength card further down.
+ * Measured live at 375px: header 365 -> 313px. Top-level, appended.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-head .af-mt-tiles { grid-template-columns: auto minmax(0, 1fr); }
+  .af-core .af-mt-head .af-mt-tiles > .af-mt-tile:not(.af-mt-tile--grade) { min-width: 88px; }
+  .af-core .af-mt-head .af-mt-tile--grade .af-mt-tile-why {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+}
