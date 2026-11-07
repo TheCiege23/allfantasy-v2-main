@@ -80,7 +80,7 @@ export type NormalizedSalaryCapSettings = {
 }
 
 export type NormalizedLineupBehavior = {
-  /** Best ball / weekly vs daily — from league bbScoringPeriod + platform hints */
+  /** Best ball weekly vs daily — the period the league is actually scored with (lib/bestball/scoringPeriod.ts) */
   scoringPeriod: 'weekly' | 'daily' | 'unknown'
   bestBallMode: boolean
   bestBallSettings?: {
