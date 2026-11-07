@@ -39,16 +39,16 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Feature | Status | Evidence |
 |---|---|---|
 | Live creation path | W | `CreateLeagueWizard` → `POST /api/leagues` → `createCanonicalLeagueInTransaction.ts:620` |
-| Best Ball options in the live wizard | **B** | `BestBallAdvancedSettings.tsx` is reachable only from `CreateLeagueUnifiedForm`, which nothing imports. The wizard always uses `bestBallSetupForTeamCount()` defaults (`CreateLeagueWizard.tsx:220-232`). |
+| Best Ball options in the live wizard | **Fixed** | The draft step now has a Best Ball rules section: competition (season-long, head-to-head, tournament for NFL/NCAAF), playoff teams including No playoffs, weekly or daily lineups (NBA/NHL/MLB), and draft-only or managed (`components/create-league-v2/BestBallSetupPanel.tsx`, `lib/create-league-v2/bestBallWizard.ts`). |
 | Guilly offered from Best Ball creation | M | A league has one concept. |
-| Best Ball offered from Guilly creation | P | The wizard checkbox works (`settings.best_ball=true`, `createCanonical…:526`). `GuillySetup` (NBA) refuses it with a stale reason (`lib/guilly/setup.ts:59,105`). The legacy route accepts `roster_mode:'best_ball'` and drops it. |
+| Best Ball offered from Guilly creation | **Fixed** | `GuillySetup` offers best ball lineups and a double-chop week; the legacy route keeps `roster_mode:'best_ball'` (`legacyManualToCanonicalCreateBody.ts`). |
 | Equivalent saved shape from both paths | **B** | Classic: `leagueType 'best_ball'` + `bestBallMode` + `best_ball_settings` + `bb*` columns. Guilly+BB: `guillotineMode` + `settings.best_ball`, with no `bb*` values. Both run the same optimizer. |
 | Lineup mode / roster policy / competition / lifecycle kept separate | P | Lineup mode lives in two places (`bestBallMode`, `settings.best_ball`). Roster policy is split three ways (`bb*` columns, `best_ball_settings`, trade review). |
-| Rules summary before creation | M | The review step shows sport, concept, team count and draft only (`CreateLeagueWizard.tsx:1505-1515`). |
+| Rules summary before creation | **Fixed** | The review step states lineups, transactions, season window and champion rule in plain words. |
 | League size vs pool / positions / calendar validation | M | Only team-count limits are checked. The chop calendar is checked only in NBA `GuillySetup` (`lib/guilly/setup.ts:79-94`). |
-| Commissioner Best Ball settings edit | P | Role-checked (`app/api/bestball/settings/route.ts:37`). No lifecycle lock, no audit row. Playoff and season-length edits never reach the `playoffTeams`/`playoffStartWeek` columns. A tournament can be enabled with no contest. |
+| Commissioner Best Ball settings edit | **Fixed** | Structural settings lock once the draft starts; each change writes a `settings_patch` audit row with before/after; playoff edits reach the `playoffTeams`/`playoffStartWeek` columns; switching to a tournament is refused (409); playoff teams cannot exceed the team count. |
 | Settings saved and never read | B | `bbFaEnabled`, `bbIrEnabled` and `bbTaxiEnabled` had no reader. This branch makes `bbFaEnabled` and `bbWaiversEnabled` enforced. Also unread: `slowDraftClockMinutes`, `autoPickBehavior`, the draft pause/force toggles, `bestBall.draftDateUtc`, and `bbScoringPeriod` (scoring ignores it). |
-| "No playoffs" | B | Still writes 6 playoff teams and a playoff start week (`createCanonical…:614-616,688-691`). |
+| "No playoffs" | **Fixed** | Saves no playoff teams or start week; the season runs its full length and the points leader (or best record in head-to-head) is crowned (`lib/bestball/noPlayoffSeason.ts`). |
 
 ### Scoring and the optimizer
 
@@ -125,11 +125,11 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Best Ball tab shows the scoring lineup | **Fixed** | Hosted leagues now read the matchup snapshot's started lineup and `league_player_weekly_scores` (`lib/bestball/nativeBestBallTabLoad.ts`). Imported leagues keep the legacy tables. |
 | Provisional label and "why he counted" | **Fixed (tab)** | Each card is Final or Provisional, shows unfilled slots and players still awaiting stats, and gives each bench player a one-sentence reason (`benchReason`). My Team now says AllFantasy picks the lineup in hosted leagues. |
 | No "set your lineup" nags for Classic | P | Chimmy lineup and slate-lock alerts skip best ball. The commissioner reminder recipe (off by default) and the AI commissioner alert do not. |
-| Weekly recap / power rankings | **B** | Scheduled as GET; the routes export POST only, so they 405 every week (`app/api/redraft/ai/weekly-recap/route.ts:8`). |
+| Weekly recap / power rankings | **Fixed** | Correction: those two schedule entries never fired (`scripts/cron-tier.mjs` excluded them) and their endpoints are stubs, so they were removed. The recap that does post (`lib/league-chat/nativeWeeklyRecap.ts`) skipped leagues whose season row is from an earlier year; it now falls back to the latest season. |
 | Discovery | P | Public leagues are listed. No Guilly category. |
-| Private join needs approval | **M** | Anyone holding the code joins directly (`app/api/leagues/join/route.ts:125-160`). Approval exists only via Find-a-League requests. |
-| Revoked invite link | B | A disabled link still works unless visibility is `invite_only` (`InviteValidationResolver.ts:212`). |
-| Joins closed after the draft | **M** | Closed for Survivor only (`join/route.ts:307-314`). |
+| Private join needs approval | **Fixed (finder)** | Private leagues with an open seat are listed in Find a League with no join code or member data; "Ask to join" sends a request the commissioner approves on the Hub. An invite link the commissioner shares still joins directly, by design. |
+| Revoked invite link | **Fixed** | A disabled link is refused for every visibility (`INVITE_DISABLED`). |
+| Joins closed after the draft | **Fixed** | Best Ball and Guillotine refuse a new roster once the draft starts (`DRAFT_STARTED`, `lib/league-join/postDraftJoinLock.ts`); taking over an orphan or open seat still works. |
 | Android → app/Play; iPhone/desktop → web | P | Android relies on App Links (`assetlinks.json`). There is no Play prompt for league invites. Destination is kept through sign-in via `callbackUrl`. |
 | Renewal | P | Duplicate guard, claim/trade cancel and new draft work. Guilly chops reset. **Fixed:** a renewed tournament league no longer ends its new season at once; a stale completed contest is rolled to a fresh one, and a superseded season is left alone (`nativeTournament.ts`). |
 | Chimmy reads real state | P | Sport, scoring and structure come from the league. Lineup slots come from sport defaults, and score history from `weeklyScore`. |
@@ -161,8 +161,8 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
    - Where: `lib/draft/startScheduledRedraftDrafts.ts` filtered `leagueType: 'redraft'`.
    - Now: Best Ball drafts start at their scheduled time, like redraft.
    - ⚠ Server autopick for absent managers still needs `DRAFT_TICK_CRON_ENABLED=true` on the worker. It defaults off, and its production value is unverified; it was not changed here because setting a Railway variable redeploys the service.
-6. **The live wizard has no Best Ball setup** *(code-read)*. Every Best Ball choice the brief lists is silently defaulted, and the rules summary does not exist.
-7. **The Best Ball tab read tables native scoring never writes** *(fixed in branch; screenshots checked in dark and light mode at desktop and phone width)*. Found while checking: `border-white/8` and `/6` are not generated by the app's Tailwind 3.4 config (374 and 35 uses app-wide), so those borders fall back to the default light grey. Avoided in this tab; the app-wide fix is open.
+6. **The live wizard has no Best Ball setup** *(fixed in branch)*. Every Best Ball choice the brief lists is silently defaulted, and the rules summary does not exist.
+7. **The Best Ball tab read tables native scoring never writes** *(fixed in branch; screenshots checked in dark and light mode at desktop and phone width)*. Found while checking: `border-white/8` and `/6` are not generated by the app's Tailwind 3.4 config (374 and 35 uses app-wide), so those borders fall back to the default light grey. Fixed app-wide: the missing opacity steps are in `tailwind.config.js`, and `tailwind-opacity-steps.test.ts` fails on any new ungenerated step.
 
 ### P1 — integrity, automation and correctness gaps
 
@@ -170,21 +170,21 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
    - Found while fixing: a team winning two claims in ONE run lost its first award and was charged from the stale balance. Also fixed.
    - Still open: instant free-agent adds take no lock.
 9. **Autopick could draft an unusable roster** (no QB/G/SP) on the queue-first, draft-as-me and Chimmy/orphan branches *(fixed in branch)*. The orphan branch's wiring is covered by the shared guard's unit tests only, not by an end-to-end test.
-10. **NBA/NHL/MLB draft rounds below roster capacity** (code-read: 13/17/24 rounds against 18/21/26 seats).
+10. **NBA/NHL/MLB draft rounds below roster capacity** *(fixed in branch)*. Measured against the `best_ball` roster templates the seats are 17/22/33 (not 18/21/26 as first read); rounds now equal them.
 11. **The Guilly calendar was not validated** against teams − 1 or Final N length *(fixed in branch)*.
-12. **Missing stats seal as zero** up to the 80% coverage floor, and post-seal corrections are never applied (Guilly: `statCorrectionHandler.ts` stub).
+12. **Missing stats seal as zero** up to the 80% coverage floor, and post-seal corrections are never applied (Guilly: `statCorrectionHandler.ts` stub) *(fixed in branch)*. A player with no stat row is sealed at 0 only with evidence he did not play (a bye, or his team's box score is in). A missing box score holds the week, escalates to the commissioner after a day, and after three days the week closes with those zeros marked unverified so the season cannot freeze. For 6 days after a Guilly chop, corrections update scores and standings, never reverse the chop, and log a commissioner note when the chop would have differed.
 13. **Tournament renewal auto-completed the new season** *(fixed in branch)*. A second path to the same result was also found: last season, still in score-sync's batch, re-finalized the renewed league every tick.
-14. **Weekly recap and power rankings crons 405 every week.**
-15. **Private-league joins skip commissioner approval**; joins stay open after the draft; revoked links still work for private leagues.
-16. **Commissioner Best Ball edits have no lock or audit**, and playoff/season-length edits are not applied.
+14. **Weekly recap and power rankings** *(fixed in branch; corrected)*. The earlier "405 every week" was wrong: the two cron entries never fired and pointed at stubs, so they were removed, and the recap that does post now finds leagues whose season row is from an earlier year.
+15. **Private-league joins skip commissioner approval**; joins stay open after the draft; revoked links still work for private leagues *(all fixed in branch)*.
+16. **Commissioner Best Ball edits have no lock or audit**, and playoff/season-length edits are not applied *(fixed in branch)*.
 17. **Secondary optimizers disagree with production** (greedy, hard-coded-slot DFS, the scoring-worker whole-roster fallback). Any UI or contest reading them shows different numbers from the matchup.
 
 ### P2 — clarity and polish
 
-18. NBA/NHL/MLB labelled "daily" but computed weekly; `bbScoringPeriod` is unread.
-19. "No playoffs" still writes 6 playoff teams; season-total leagues still crown a bracket winner when `playoffTeams > 0`.
+18. NBA/NHL/MLB labelled "daily" but computed weekly; `bbScoringPeriod` is unread *(fixed in branch)*. Weekly is the default; the commissioner can choose daily before the draft, and daily now really scores each day's best lineup and sums the week. Existing leagues stay weekly. MLB daily has no data until an MLB stat sync exists.
+19. "No playoffs" still writes 6 playoff teams; season-total leagues still crown a bracket winner when `playoffTeams > 0` *(fixed in branch)*.
 20. Non-reproducible final Guilly tiebreak *(fixed in branch: seeded order)*.
-21. `GuillySetup` refuses best ball and double chops for stale reasons.
+21. `GuillySetup` refuses best ball and double chops for stale reasons *(fixed in branch)*.
 22. My Team says "provider" for AF-hosted leagues; the War Room uses sport-default slots.
 23. Best ball draft-rec AI is a stub.
 24. `__tests__/guillotine-summary-escapes-route.test.ts` times out deterministically (likely unmocked DB imports).
@@ -235,11 +235,11 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 | Tournament advance/finalize | score-sync | Serializable transactions; archive retried | "Recovery required" errors have no tool |
 | Classic champion | `season-week-roll` hourly | Idempotent finalize | None |
 | Depth alerts | `alert-sweep` every 15 min | Weekly claim | None |
-| Weekly recap / power rankings | Scheduled, **always 405** | — | Everything |
+| Weekly recap | `nativeWeeklyRecap` (fixed: earlier-year season rows) | Next week | None |
 | Renewal | Commissioner POST | Duplicate guard | Selecting returning managers (intended) |
 
 **Manager strategy decisions** (intended to stay human): the draft, queue and rankings; FAAB bids in Guilly.
-**Commissioner administration that should not be needed but is today:** applying stat corrections, and noticing a stalled tournament.
+**Commissioner administration that should not be needed but is today:** noticing a stalled tournament. Stat corrections after a Guilly chop are now applied automatically for 6 days.
 
 ---
 
@@ -253,8 +253,8 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
 3. **Scheduled draft start for Classic Best Ball** and **the starter guard on every autopick branch** —
    **done in this branch**. Still open: confirm or set `DRAFT_TICK_CRON_ENABLED` on the worker (the user's call).
 4. **Wire the live wizard to the existing Best Ball settings model**, and show a rules summary (lineup
-   automation, transaction policy, season window, champion rule).
-5. **Make the Best Ball tab read native scoring** — **done in this branch**. Still open: the My Team banner wording, and the app-wide `border-white/8` / `/6` classes that Tailwind 3.4 does not generate.
+   automation, transaction policy, season window, champion rule) — **done in this branch**.
+5. **Make the Best Ball tab read native scoring** — **done in this branch**. The My Team banner and the app-wide `border-white/8` / `/6` borders are also fixed.
 6. **Guilly calendar validation** at creation and on save (teams − 1 ≤ elimination periods; Final N fits).
    Add MLB two-week periods.
 7. **Waiver-run mutex on every processing entry point** — **done in this branch**, plus the same-run
@@ -262,7 +262,7 @@ rules. NFBKC NBA was read directly. The rest comes from secondary coverage.
    against the sealed version.
 9. **Retire or repoint the greedy and DFS optimizers** to `computeOptimalLineup`.
 10. Close joins after the draft; private join → approval; honour revoked links; reset `bbContestId` on
-    renewal; add GET (or switch to POST) for the recap and power-rankings crons.
+    renewal; fix the weekly recap — **all done in this branch**.
 
 ---
 
@@ -339,6 +339,8 @@ or mocks a changed module.
 - A clean total needs `prisma generate` into an isolated `node_modules`, which was not done because it would
   rewrite a peer checkout's client.
 
+**Batch 4 (wizard, rounds, daily/weekly, commissioner edits, stats, joins, recap, borders):** every fix has tests shown to fail with the fix reverted or mutated. Integrated run over 384 related files: 380 passed; the failures are the stale-client simulation suite (13) and a timeout cascade in `league-create-defaults-api` that passes alone (26/26). All 69 source-scanning suites pass. The ratchet total and gainer list are identical to the pre-batch run (665 on the same stale-client junction), and none of the 55 changed source files gains an error.
+
 **Limitations:**
 
 - No database, no live league, no production data.
@@ -356,7 +358,7 @@ or mocks a changed module.
 - **"Who counted" weekly card.** Per team: the scoring lineup, bench points left behind, and the
   best-ever week. It comes from the snapshots already stored, and it is the single most explanatory thing
   best ball lacks.
-- **Weekly recap that actually runs** (fix the 405), with best-ball framing: the week's highest-scoring
+- **Weekly recap with best-ball framing** (the recap now runs for every hosted league): the week's highest-scoring
   bench, and the late swap that would have mattered.
 - **Draft review at draft close.** Positional depth against the preset's needs ("you have 2 goalies;
   winners average 3"), clearly labelled as projection.
