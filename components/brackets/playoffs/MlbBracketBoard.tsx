@@ -500,6 +500,7 @@ export default function MlbBracketBoard({
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
             {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString(undefined, { timeZone: clientTime ? undefined : "UTC" })}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
+            {rollingCup && view.activeEntry && view.viewerUserId === view.activeEntry.userId && !view.activeEntry.finalizedAt ? <p className="af-pb-sub" role="status" data-testid="cup-entry-draft-status">Picks saved — bracket not finalized. Select Finalize picks to join the standings.</p> : null}
             {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Pick each new round as its matchups are confirmed. Saved picks lock at each game’s tipoff." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
           </div>
           <div className="af-pb-status">
