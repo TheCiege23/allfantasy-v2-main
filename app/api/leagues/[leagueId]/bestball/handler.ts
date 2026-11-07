@@ -6,7 +6,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
 import { loadNativeBestBallTab } from '@/lib/bestball/nativeBestBallTabLoad'
-import { draftPendingNotice } from '@/lib/bestball/nativeBestBallTab'
+import { currentSeasonAwaitsDraft, draftPendingNotice } from '@/lib/bestball/nativeBestBallTab'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
@@ -94,6 +94,22 @@ export async function GET(
   })
   // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
   const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
+  // A league we host whose CURRENT season has no native season yet: that season's draft has not
+  // finished, so nothing in it can be scored. With no native season at all the tab is empty; with an
+  // older one (a renewed league mid-draft) the tab would otherwise show last season as if it were this
+  // one. Either way, say so.
+  let draftNotice: string | null = null
+  if (
+    resolveWriteAuthority(league.platform) === 'NATIVE' &&
+    currentSeasonAwaitsDraft(league.season, native ? native.season : null)
+  ) {
+    try {
+      const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } })
+      draftNotice = draftPendingNotice(draft?.status, native ? native.season : null)
+    } catch {
+      draftNotice = null
+    }
+  }
   if (native) {
     return NextResponse.json({
       league: {
@@ -108,19 +124,8 @@ export async function GET(
       },
       source: 'native',
       ...native.body,
+      draftNotice,
     })
-  }
-
-  // A league we host with no native season yet: its draft has not finished, so nothing can be scored.
-  // Say that instead of "lineups appear once the first games are played", which is false meanwhile.
-  let draftNotice: string | null = null
-  if (resolveWriteAuthority(league.platform) === 'NATIVE') {
-    try {
-      const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } })
-      draftNotice = draftPendingNotice(draft?.status)
-    } catch {
-      draftNotice = null
-    }
   }
 
   const playedWeeks = await prisma.teamWeekResult.findMany({

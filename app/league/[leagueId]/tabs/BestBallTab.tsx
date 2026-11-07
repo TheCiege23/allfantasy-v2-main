@@ -170,16 +170,16 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
             )}{' '}
             Scores stay <span className="font-semibold text-[#fde68a]">provisional</span> until every game and stat for the week is final.
           </p>
-          {data.lineups.length === 0 ? (
-            data.draftNotice ? (
-              <div data-testid="bestball-draft-pending" className="rounded-xl border border-[var(--line)] bg-[#fde68a]/10 p-4 text-sm text-[#fde68a]">
-                {data.draftNotice}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-sm text-white/60">
-                No scored weeks yet. Lineups appear here once the first games are played.
-              </div>
-            )
+          {/* The current season's draft is open: shown whether the tab is empty or still holding last
+              season's lineups (a renewed league mid-draft), so neither reads as this season's scoring. */}
+          {data.draftNotice ? (
+            <div data-testid="bestball-draft-pending" className="rounded-xl border border-[var(--line)] bg-[#fde68a]/10 p-4 text-sm text-[#fde68a]">
+              {data.draftNotice}
+            </div>
+          ) : data.lineups.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-sm text-white/60">
+              No scored weeks yet. Lineups appear here once the first games are played.
+            </div>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             {data.lineups.map((lineup) => (

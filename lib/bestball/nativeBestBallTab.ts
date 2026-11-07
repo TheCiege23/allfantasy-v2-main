@@ -245,15 +245,32 @@ function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0])
  * played." — which is false while the draft runs: games can be played and still nothing is scored,
  * because no team has a roster until the draft finishes. Null once the draft is completed (or there is
  * no draft to speak of), so the ordinary empty state stands.
+ *
+ * `showingSeason`: the tab is showing an OLDER native season (a renewed league whose new season's draft
+ * is still open — its newest native season is last year's). The notice then also says which season the
+ * lineups below belong to, so last year's cards are not read as this year's.
  */
-export function draftPendingNotice(draftStatus: string | null | undefined): string | null {
+export function draftPendingNotice(draftStatus: string | null | undefined, showingSeason?: number | null): string | null {
   const status = String(draftStatus ?? '').trim().toLowerCase()
   if (!status || status === 'completed') return null
   const lead =
     status === 'in_progress' || status === 'paused'
       ? 'The draft is still running.'
       : 'The draft has not started yet.'
-  return `${lead} Best ball scores begin after the draft finishes, because no team has a roster until then.`
+  const base = `${lead} Best ball scores begin after the draft finishes, because no team has a roster until then.`
+  return showingSeason != null && Number.isFinite(showingSeason)
+    ? `${base} The lineups below are from the ${showingSeason} season.`
+    : base
+}
+
+/**
+ * Whether the league's CURRENT season has no native season yet, given the newest native season the tab
+ * found (null: none at all). Only then can an open draft explain an empty — or last year's — tab. Pure.
+ */
+export function currentSeasonAwaitsDraft(leagueSeason: number | null | undefined, newestNativeSeason: number | null): boolean {
+  if (newestNativeSeason == null) return true
+  if (leagueSeason == null || !Number.isFinite(leagueSeason)) return false
+  return newestNativeSeason < leagueSeason
 }
 
 /** The matchup snapshot's side for one roster, or null when the row was never scored. */
