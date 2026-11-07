@@ -2,7 +2,7 @@
  * Client-side service for league creation import: preview fetch and create-from-import submit.
  */
 
-import { isImportProviderAvailable } from './provider-ui-config';
+import { importComingSoonMessage, isImportProviderAvailable } from './provider-ui-config';
 import { parseFantraxLeagueId } from './fantrax/fantraxApi';
 import type { ImportProvider } from './types';
 
@@ -246,7 +246,7 @@ export async function fetchImportPreview(
   options?: { allowPreviewOnly?: boolean }
 ): Promise<FetchPreviewResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
   if (!trimmed) {
@@ -311,7 +311,7 @@ export async function submitImportCreation(
   }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
   if (!trimmed) {
@@ -366,7 +366,7 @@ export async function discoverProviderLeagues(
   options?: { season?: string; sport?: string }
 ): Promise<DiscoverProviderLeaguesResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
 
   const trimmed = accountIdentifier?.trim();

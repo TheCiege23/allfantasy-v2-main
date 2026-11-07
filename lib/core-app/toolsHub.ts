@@ -3,6 +3,7 @@ import 'server-only'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
 /**
  * 25a — the Tools hub, grouped by job rather than alphabetically.
@@ -340,7 +341,7 @@ export function buildToolsHub(input: {
         {
           id: 'import',
           title: 'Import a league',
-          desc: 'Bring in a league from Sleeper, ESPN, Yahoo or Fantrax.',
+          desc: `Bring in a league from ${availableImportPlatformsPhrase()}.`,
           href: '/import?returnTo=%2Fcore%2Ftools',
           live: null,
           tokenCost: null,

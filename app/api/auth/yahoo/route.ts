@@ -14,6 +14,7 @@ import {
   YAHOO_FANTASY_SCOPE,
   YAHOO_RETURN_TO_COOKIE,
 } from '@/lib/yahoo/oauthConfig'
+import { isYahooImportLive, YAHOO_COMING_SOON_ERROR } from '@/lib/yahoo/yahooAvailability'
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID
 const APP_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || 'https://www.allfantasy.ai'
@@ -30,6 +31,16 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
    * felt like a six-page errand.
    */
   const returnTo = sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo'))
+
+  /*
+   * Yahoo is coming soon (provider-ui-config.ts records why). Refuse before login and before the
+   * Yahoo round trip: an unapproved app gets a 403 on every fantasy call, so starting the consent
+   * flow only walks the manager into an error. Back to where they started, with a notice ImportV4
+   * and the legacy page both render.
+   */
+  if (!isYahooImportLive()) {
+    return NextResponse.redirect(buildYahooReturnUrl(returnTo, APP_URL, { yahoo_error: YAHOO_COMING_SOON_ERROR }))
+  }
 
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) {

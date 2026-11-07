@@ -2,6 +2,7 @@
 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config';
 
 export type CreationMode = 'create' | 'import';
 
@@ -33,7 +34,7 @@ export function LeagueCreationImportSelector({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="create">Create New AF League — set sport, scoring, and size manually</SelectItem>
-          <SelectItem value="import">Import Existing League — import from Sleeper, ESPN, Yahoo, Fantrax, or MFL</SelectItem>
+          <SelectItem value="import">Import Existing League — import from {availableImportPlatformsPhrase()}</SelectItem>
         </SelectContent>
       </Select>
     </div>

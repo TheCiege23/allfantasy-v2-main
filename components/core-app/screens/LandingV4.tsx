@@ -131,7 +131,7 @@ function LangSwitch({ lang, label }: { lang: LandingLang; label: string }) {
   )
 }
 
-function Shield() {
+export function Shield() {
   return (
     <svg width="28" height="30" viewBox="0 0 28 30" aria-hidden focusable="false">
       <path
@@ -217,15 +217,17 @@ export function LandingV4({
             that actually answers it. `#faq` was labelled "For commissioners"
             and landed on "Questions managers ask", which has no commissioner
             content; this page is player-only by handoff rule 1, so there is
-            nothing here to link to and it now goes to /pricing, where AF
-            Commissioner is a real tier with its own described feature list.
+            nothing here to link to. It went to /pricing for a while, which put
+            a price in front of a commissioner before a single feature; it now
+            goes to /commissioners, the Commissioner OS page, which shows what
+            the product does first and links to pricing second.
           */}
           <a href="#how">{c.nav.how}</a>
           {/* Out of the iOS app with the #pricing section it scrolls to. */}
           <a href="#pricing" data-hide-in-ios-app>
             {c.nav.pricing}
           </a>
-          <Link href="/pricing">{c.nav.forCommissioners}</Link>
+          <Link href="/commissioners">{c.nav.forCommissioners}</Link>
         </div>
 
         <div className="af-lp-nav-right">
@@ -266,7 +268,7 @@ export function LandingV4({
               <a href="#pricing" data-hide-in-ios-app>
                 {c.nav.pricing}
               </a>
-              <Link href="/pricing">{c.nav.forCommissioners}</Link>
+              <Link href="/commissioners">{c.nav.forCommissioners}</Link>
               <Link href="/core/partners" className="af-lp-partners">
                 {c.nav.partners}
                 <span className="af-lp-api-chip af-num">API</span>
@@ -314,6 +316,17 @@ export function LandingV4({
             </a>
           </div>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
+          {/*
+            The commissioner line sits under the player hero rather than replacing it: `/`
+            stays player-first (handoff rule 1), and this is the one door to the
+            commissioner story for the visitors who run the league.
+          */}
+          <p className="af-lp-commish-line" data-testid="landing-commish-line">
+            <span className="af-lp-commish-line-text">{c.hero.commishLine}</span>{' '}
+            <Link href="/commissioners" className="af-lp-commish-line-link">
+              {c.hero.commishLink}
+            </Link>
+          </p>
         </div>
 
         {/*
@@ -550,6 +563,7 @@ export function LandingV4({
             <span className="af-lp-wordmark">AllFantasy</span>
           </span>
           <nav className="af-lp-footer-links" aria-label="Footer">
+            <Link href="/commissioners">{c.nav.forCommissioners}</Link>
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
             <Link href="/core/partners">{c.nav.partners}</Link>

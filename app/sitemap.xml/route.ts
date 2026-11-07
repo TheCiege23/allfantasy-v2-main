@@ -57,6 +57,7 @@ export async function GET() {
     { path: 'breathing', priority: '0.5', changefreq: 'weekly' },
     { path: 'horoscope', priority: '0.5', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
+    { path: 'commissioners', priority: '0.7', changefreq: 'monthly' },
   ]
 
   const sportUrls = SPORT_SLUGS.map(
