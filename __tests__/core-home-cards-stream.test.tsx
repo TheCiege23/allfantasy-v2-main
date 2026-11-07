@@ -205,7 +205,7 @@ vi.mock('@/lib/analytics/recordDashboardActivation', () => ({ recordDashboardAct
 // The league home — its loader failing is case 6.
 vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: vi.fn(async () => g.leagueHome.data) }))
 // A non-home screen for the badges case.
-vi.mock('@/lib/core-app/trades', () => ({ getTradesData: vi.fn(async () => null) }))
+vi.mock('@/lib/core-app/trades', () => ({ getTradesData: vi.fn(async () => null), startTradesRead: vi.fn(async () => null) }))
 vi.mock('@/lib/core-app/crossLeagueValueActions', () => ({ getCrossLeagueValueActions: vi.fn(async () => []) }))
 
 type AnyElement = ReactElement<Record<string, unknown>>
@@ -305,6 +305,8 @@ describe('/core home cards stream independently', () => {
     const { cards } = await homeCards()
     expect([...cards.keys()]).toEqual([
       'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
+      // The folded trade evaluator (2026-11-06), after the bands.
+      'trade-evaluator',
       'chimmy', 'career', 'rivals', 'following', 'leagues', 'coverage',
     ])
   })
@@ -341,6 +343,8 @@ describe('/core home cards stream independently', () => {
       'carryover',
       'user-os',
       'schedule',
+      // The folded trade evaluator (2026-11-06): one closed row after the bands, before the dashboard.
+      'trade-evaluator',
       'routine',
       'matchups',
       'chimmy',

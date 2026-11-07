@@ -131,7 +131,10 @@ describe('rail projections use the roster availability rules', () => {
     h.byes.mockResolvedValue(null)
     const result = await loadRailProjections(fixtures(['L1', 'L2']))
     expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(0)
-    expect(result.byLeague.get('L2')?.sides.get('team')?.projected).toBe(25)
+    /* The NFL player's OUT does not zero the NBA starter. This used to read 25 — the feed's NFL row for
+       the same id, priced into the NBA side. That was the collision itself (rail-projections-sport-scope
+       test); the NBA side is now unpriced, `PROJ —`, and still not the NFL namesake's 0. */
+    expect(result.byLeague.get('L2')?.sides.get('team')?.projected ?? null).toBeNull()
   })
 })
 

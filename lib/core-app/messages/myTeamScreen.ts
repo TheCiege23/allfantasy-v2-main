@@ -161,6 +161,20 @@ export const myTeamScreenMessages = defineMessages({
     lineupCheckFootnote: 'These are candidates for review. Confirm eligibility, locks, and AutoSubs on your platform before changing the lineup.',
     lineupCheckClear: 'No issues were identified among the starters we could check. Confirm current news and rules on your platform.',
     fixInPlatform: (platform: string) => `Fix in ${platform}`,
+    optimizerTitle: 'Best lineup this week',
+    optimizerGain: (gain: string) => `+${gain} projected`,
+    optimizerTotals: (current: string, best: string) => `${current} now → ${best} with these changes`,
+    optimizerClose: 'Inside the projection’s margin — your lineup is fine either way.',
+    optimizerOptimal: (total: string) => `Your lineup is already the best one we can find (${total} projected).`,
+    optimizerEmptySeat: 'Empty seat',
+    optimizerStart: 'Start',
+    optimizerBench: 'Bench',
+    optimizerEmptySeatAt: (slot: string) => `${slot} · empty seat`,
+    optimizerMoves: (list: string) => `Seat moves: ${list}.`,
+    optimizerMove: (name: string, from: string, to: string) => `${name} ${from} → ${to}`,
+    optimizerLocked: (n: number) =>
+      n === 1 ? '1 starter has kicked off and stays where he is.' : `${n} starters have kicked off and stay where they are.`,
+    optimizerFootnote: 'Every open seat solved at once, each player counted once, using this league’s scoring. Recommendation only — AllFantasy never sets your lineup.',
 
     // BenchCheckStrip
     benchCheck: 'Bench check',
@@ -221,6 +235,19 @@ export const myTeamScreenMessages = defineMessages({
     startersTotal: 'Starters total',
     startersTotalCoverage: (priced: number, starters: number) => `${priced} of ${starters} priced for this league`,
     goToMatchup: 'Go to matchup',
+
+    // The provider-projection column when its source is not one name (projectionSourceLabel.ts)
+    projNeutralColumn: 'PROJ.',
+    projNeutralTitle: 'Projection on file, scored under YOUR league’s rules',
+    projNeutralTile: 'Projected · your league',
+    projNeutralTileBestBall: 'Listed starters · your league',
+    projNeutralKeyAria: 'What PROJ., AF, OWN and START mean',
+    projNeutralExplainer:
+      'PROJ. is the projection on file for each player, re-scored under YOUR league’s settings. ' +
+      'AF is AllFantasy’s own projection engine, adjusted to the same settings.',
+    projNeutralMatchupExplainer:
+      'The large number is the projection on file for each lineup, re-scored under your league’s settings. ' +
+      'AF beneath it is AllFantasy’s own engine on the same lineup and the same settings.',
 
     // MyTeam starters note
     startersNoteNative: 'Native AllFantasy lineup. Save eligible changes in Roster decisions; server rules and locks apply.',
@@ -335,6 +362,19 @@ export const myTeamScreenMessages = defineMessages({
     lineupCheckFootnote: 'Estas son opciones para revisar. Confirma elegibilidad, cierres y AutoSubs en tu plataforma antes de cambiar la alineación.',
     lineupCheckClear: 'No se identificaron problemas entre los titulares que pudimos revisar. Confirma las noticias y las reglas en tu plataforma.',
     fixInPlatform: (platform) => `Corregir en ${platform}`,
+    optimizerTitle: 'Mejor alineación de la semana',
+    optimizerGain: (gain) => `+${gain} proyectados`,
+    optimizerTotals: (current, best) => `${current} ahora → ${best} con estos cambios`,
+    optimizerClose: 'Dentro del margen de la proyección: tu alineación está bien de cualquier forma.',
+    optimizerOptimal: (total) => `Tu alineación ya es la mejor que encontramos (${total} proyectados).`,
+    optimizerEmptySeat: 'Puesto vacío',
+    optimizerStart: 'Titular',
+    optimizerBench: 'A la banca',
+    optimizerEmptySeatAt: (slot) => `${slot} · puesto vacío`,
+    optimizerMoves: (list) => `Cambios de puesto: ${list}.`,
+    optimizerMove: (name, from, to) => `${name} ${from} → ${to}`,
+    optimizerLocked: (n) => `${n} ${n === 1 ? 'titular ya empezó su partido y se queda en su puesto' : 'titulares ya empezaron su partido y se quedan en su puesto'}.`,
+    optimizerFootnote: 'Resolvemos todos los puestos abiertos a la vez, contando a cada jugador una sola vez y con la puntuación de esta liga. Solo es una recomendación: AllFantasy nunca cambia tu alineación.',
 
     benchCheck: 'Revisión del banquillo',
     benchCheckSwap: '{bench} (suplente) proyecta {benchPts} frente a los {starterPts} de {starter}: la mejor opción esta semana.',
@@ -386,6 +426,18 @@ export const myTeamScreenMessages = defineMessages({
     startersTotal: 'Total de titulares',
     startersTotalCoverage: (priced, starters) => `${priced} de ${starters} valorados para esta liga`,
     goToMatchup: 'Ir al enfrentamiento',
+
+    projNeutralColumn: 'PROY.',
+    projNeutralTitle: 'Proyección registrada, puntuada con las reglas de TU liga',
+    projNeutralTile: 'Proyección · tu liga',
+    projNeutralTileBestBall: 'Titulares listados · tu liga',
+    projNeutralKeyAria: 'Qué significan PROY., AF, PROP. y TIT.',
+    projNeutralExplainer:
+      'PROY. es la proyección registrada de cada jugador, recalculada con los ajustes de TU liga. ' +
+      'AF es el motor de proyección propio de AllFantasy, ajustado a los mismos ajustes.',
+    projNeutralMatchupExplainer:
+      'El número grande es la proyección registrada de cada alineación, recalculada con los ajustes de tu liga. ' +
+      'AF debajo es el motor propio de AllFantasy sobre la misma alineación y los mismos ajustes.',
 
     startersNoteNative: 'Liga nativa AllFantasy. Guarda cambios válidos en Decisiones de plantilla; se aplican las reglas y cierres del servidor.',
     startersNoteBestBall: (platform) => `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.`,

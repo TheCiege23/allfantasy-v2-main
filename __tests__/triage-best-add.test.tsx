@@ -1,6 +1,8 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
+import { messagesFor } from '@/lib/i18n/messages'
+import { dashTriageMessages } from '@/lib/core-app/messages/dashTriage'
 
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { bestAddCtaText, bestAddFrom, bestAddHref } from '@/components/core-app/screens/TriageBestAdd'
@@ -81,8 +83,12 @@ describe('the triage card asks for the best add on demand', () => {
     const fetchMock = okBoard([])
     vi.stubGlobal('fetch', fetchMock)
     const leagues = Array.from({ length: 6 }, (_, i) => ({ id: `cap${i}`, name: `League ${i}`, platform: 'sleeper', imageUrl: null, slot: 'starter' as const }))
-    render(<Dash3ATriage book={[row({ leagues, startingIn: 6 })]} now={NOW} />)
-    await waitFor(() => expect(boardCalls(fetchMock).length).toBeGreaterThan(0))
+    const { getByRole } = render(<Dash3ATriage book={[row({ leagues, startingIn: 6 })]} now={NOW} />)
+    // Only the rows on screen ask: two until the card is opened (2026-11-06 phone pass).
+    await waitFor(() => expect(boardCalls(fetchMock).length).toBe(2))
+    fireEvent.click(getByRole('button', { name: 'Show 4 more leagues' }))
+    await waitFor(() => expect(boardCalls(fetchMock).length).toBe(3))
+    await new Promise((r) => setTimeout(r, 50))
     expect(boardCalls(fetchMock).length).toBe(3)
   })
 
@@ -91,6 +97,52 @@ describe('the triage card asks for the best add on demand', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<Dash3ATriage book={[row({ sport: 'NBA', name: 'A', leagues: [{ id: 'x1', name: 'X', platform: 'sleeper', imageUrl: null, slot: 'starter' }] }), row({ sleeperId: null, name: 'B', leagues: [{ id: 'x2', name: 'Y', platform: 'sleeper', imageUrl: null, slot: 'starter' }] })]} now={NOW} />)
     expect(boardCalls(fetchMock)).toEqual([])
+  })
+})
+
+describe('one card per player, not one row per league (2026-11-06 phone pass)', () => {
+  const many = (n: number, slot: 'starter' | 'bench' = 'starter') =>
+    Array.from({ length: n }, (_, i) => ({ id: `${slot}${i}`, name: `${slot} league ${i}`, platform: 'sleeper', imageUrl: null, slot }))
+  const fixRows = (c: HTMLElement) => c.querySelectorAll('.af-triage-fix').length
+
+  it('shows two league rows and puts the rest behind one button, keeping the also-in chips in view', () => {
+    vi.stubGlobal('fetch', okBoard([]))
+    // Live /core 2026-11-06: one receiver starting in 9 of 10 leagues took 1,700px of the home.
+    const { container, getByRole, queryByRole } = render(
+      <Dash3ATriage book={[row({ leagues: [...many(1, 'bench'), ...many(9)], startingIn: 9 })]} now={NOW} />,
+    )
+    expect(fixRows(container)).toBe(2)
+    expect(container.querySelector('.af-triage-leagues')?.textContent).toContain('bench league 0')
+    const more = getByRole('button', { name: 'Show 7 more leagues' })
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('#' + CSS.escape(more.getAttribute('aria-controls') ?? ''))).not.toBeNull()
+    fireEvent.click(more)
+    expect(fixRows(container)).toBe(9)
+    fireEvent.click(getByRole('button', { name: 'Show fewer leagues' }))
+    expect(fixRows(container)).toBe(2)
+    expect(queryByRole('button', { name: /Show fewer/ })).toBeNull()
+  })
+
+  it('adds no button when everything already fits', () => {
+    vi.stubGlobal('fetch', okBoard([]))
+    const { container } = render(<Dash3ATriage book={[row({ leagues: many(2), startingIn: 2 })]} now={NOW} />)
+    expect(fixRows(container)).toBe(2)
+    expect(container.querySelector('.af-triage-more')).toBeNull()
+  })
+
+  it('adds no button for one starter league with benched ones, and keeps those chips in view', () => {
+    vi.stubGlobal('fetch', okBoard([]))
+    const { container } = render(<Dash3ATriage book={[row({ leagues: [...many(1), ...many(3, 'bench')], startingIn: 1 })]} now={NOW} />)
+    expect(fixRows(container)).toBe(1)
+    expect(container.querySelectorAll('.af-triage-league').length).toBe(3)
+    expect(container.querySelector('.af-triage-more')).toBeNull()
+  })
+
+  it('says it in Spanish', () => {
+    const es = messagesFor(dashTriageMessages, 'es')
+    expect(es.showMoreLeagues(1)).toBe('Mostrar 1 liga más')
+    expect(es.showMoreLeagues(8)).toBe('Mostrar 8 ligas más')
+    expect(es.showFewerLeagues).toBe('Mostrar menos ligas')
   })
 })
 

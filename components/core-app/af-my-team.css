@@ -38,8 +38,16 @@
   border-color: var(--bad);
   background: var(--bad-soft);
 }
-.af-mt-lock[data-locked='true'] {
-  opacity: 0.7;
+/*
+ * Games have started: quieter than a countdown, but still readable. This used to be `opacity: 0.7`
+ * on the whole strip, which faded the already-faint label with it — 2.4:1 contrast in light mode.
+ * The time steps down to the muted ink instead, and every line keeps its own contrast.
+ */
+.af-mt-lock[data-locked='true'] .af-mt-lock-time {
+  color: var(--muted);
+}
+.af-mt-lock[data-locked='true'] .af-mt-lock-label {
+  color: var(--muted);
 }
 
 .af-mt-lock-label {
@@ -495,6 +503,56 @@
 .af-mt-projhead--af {
   color: var(--accent);
   opacity: 1;
+}
+
+/*
+ * A column with no value in ANY row of its table leaves the grid, header included
+ * (`emptyProjectionColumns`, set per section as data-proj-engine / data-proj-market).
+ * A Fantrax NHL roster carried three columns of em dashes (live check 2026-11-05). The
+ * cells stay in the DOM — the narrow rules below hide headers by position — so each
+ * width restates its template here, after its base rule, at a higher specificity.
+ */
+.af-mt-section[data-proj-engine='off'] .af-mt-proj--engine,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead--engine,
+.af-mt-section[data-proj-market='off'] .af-mt-share,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead--market {
+  display: none;
+}
+.af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead {
+  grid-template-columns: 54px 44px 46px;
+}
+.af-mt-section[data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px 46px;
+}
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px;
+}
+@media (max-width: 720px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
+}
+@container af-mt (max-width: 500px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
 }
 
 /* ── Game context marks ──────────────────────────────────────────────── */
@@ -2595,4 +2653,144 @@ li[data-kind='questionable'] .af-mt-check-tag {
    * capped flex item fits beside the name, so the name was squeezed to one letter per line.
    */
   .af-core .af-mt-source { flex: 1 1 100%; max-width: none; }
+}
+
+/*
+ * ── Phone header tiles: the projection gets the whole row (2026-11-05) ────────────────────────
+ * The rule above splits the tiles into three equal columns at this width, while the lead tile's own
+ * rule (the 500px container block near "Compare projections") lays it out as value + label on the
+ * left and the toggle on the right, across the full row. Inside a 108px column that left column
+ * computed to 0px and "Compare projections" was drawn on top of "PROJECTED · SLEEPER · YOUR LEAGUE".
+ * Now the projection group spans the row it was written for, and Record and Roster value share
+ * the row below — half-width each, so the roster-value reason no longer runs to seven lines.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-core .af-mt-tiles > .af-mt-projgroup { grid-column: 1 / -1; }
+}
+
+/*
+ * The lineup check, inside the decision card: its list, without a second frame around it. The
+ * `.af-mt-decision` step outranks the redraft stamp's own `.af-mt-check` panel, which loads after
+ * this file and otherwise drew a yellow box inside the card.
+ */
+.af-core .af-mt-decision .af-mt-check--embedded,
+.af-core.af-shell[data-format=redraft] .af-mt-decision .af-mt-check--embedded {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* With the list inside, the card is tall: its buttons stay level with the headline, not mid-card. */
+.af-core .af-mt-decision {
+  align-items: flex-start;
+}
+
+/* ── Best lineup this week (lib/core-app/lineupOptimizer.ts) ───────────── */
+.af-mt-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.af-mt-opt[data-state='optimal'] {
+  border-color: var(--good);
+}
+.af-mt-opt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-mt-opt-head .af-label {
+  margin: 0;
+}
+.af-mt-opt-gain {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line, var(--accent));
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-mt-opt-gain[data-verdict='close'] {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+}
+.af-mt-opt-totals,
+.af-mt-opt-clear,
+.af-mt-opt-close {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-opt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-mt-opt-list li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface2);
+  font-size: 13px;
+}
+/* Start / Bench: the verb is the decision, so it leads the row. */
+.af-mt-opt-tag {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-mt-opt-list li[data-kind='start'] .af-mt-opt-tag {
+  border-color: var(--accent-line, var(--accent));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-mt-opt-slot {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+/* Benched, not removed: muted rather than struck through. */
+.af-mt-opt-out {
+  min-width: 0;
+  color: var(--text2);
+  overflow-wrap: anywhere;
+}
+.af-mt-opt-in {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-mt-opt-in strong {
+  font-weight: 800;
+}
+.af-mt-opt-moves {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 480px) {
+  .af-mt-opt-list li {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+  }
 }

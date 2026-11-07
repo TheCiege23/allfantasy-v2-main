@@ -264,3 +264,56 @@
   }
   .af-home-scope a { margin-left: 0; min-height: 44px; }
 }
+
+/*
+ * ── Evaluate a trade, folded on Home (2026-11-06) ────────────────────────────
+ * One row until opened; then the same league picker and builder as the Trades hub
+ * (`.af-tc-hub-evaluator`, af-trade-center.css). Top-level block at the end of the file.
+ */
+.af-core .af-home-eval {
+  padding: 0;
+  min-width: 0;
+}
+.af-core .af-home-eval-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-home-eval-summary::-webkit-details-marker { display: none; }
+/* Title and note wrap together; the chevron keeps its place at the right of the first line. */
+.af-core .af-home-eval-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; flex: 1 1 auto; }
+.af-core .af-home-eval-title {
+  color: var(--text);
+  font: 800 16px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.01em;
+}
+.af-core .af-home-eval-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.af-core .af-home-eval-chev {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.af-core .af-home-eval[open] > .af-home-eval-summary .af-home-eval-chev { transform: rotate(-135deg); }
+.af-core .af-home-eval-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: inherit; }
+.af-core .af-home-eval-body {
+  padding: 0 18px 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+@media (max-width: 720px) {
+  .af-core .af-home-eval-summary { padding: 12px 14px; }
+  .af-core .af-home-eval-body { padding: 12px 12px 14px; }
+}

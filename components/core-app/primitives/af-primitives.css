@@ -35,6 +35,9 @@
   font: 800 var(--af-title-size, 30px)/1.1 'Archivo', system-ui, sans-serif;
   letter-spacing: -0.02em;
 }
+/* `titleAside`: a chip, tip or link on the title's line, beside the heading rather than inside it. */
+.af-core .af-pg-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.af-core .af-pg-titlerow > * { margin: 0; }
 .af-core .af-pg-sub { max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
 .af-core .af-pg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
@@ -86,6 +89,38 @@
 .af-core .af-pg-stat[data-tone='good'] .af-pg-stat-value { color: var(--good); }
 .af-core .af-pg-stat[data-tone='bad'] .af-pg-stat-value { color: var(--bad); }
 .af-core .af-pg-stat-sub { color: var(--text2); font-size: 12px; line-height: 1.4; }
+/* A missing tile's reason, or a tile's note: quieter than the sub, still above the 11px floor. */
+.af-core .af-pg-stat-why { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.af-core .af-pg-stat[data-missing='true'] .af-pg-stat-value { color: var(--faint, var(--muted)); }
+/*
+ * Value first: the label finishes the figure's sentence ("3 · already clinched", "62% · title odds in
+ * Kings"), so it reads as words in sentence case rather than as a mono caption.
+ */
+.af-core .af-pg-stats[data-order='value-first'] .af-pg-stat-label {
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Movement beside the figure: arrow and amount drawn, the sentence read — colour is never the only signal. */
+.af-core .af-pg-stat-valuerow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.af-core .af-pg-stat-move { color: var(--muted); font: 800 12px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); }
+.af-core .af-pg-stat-move[data-dir='up'] { color: var(--good); }
+.af-core .af-pg-stat-move[data-dir='down'] { color: var(--bad); }
+.af-core .af-pg-stat-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ── Filter chips: a pressed pill is the selection ── */
 .af-core .af-pg-chips { display: flex; flex-wrap: wrap; gap: 8px; }

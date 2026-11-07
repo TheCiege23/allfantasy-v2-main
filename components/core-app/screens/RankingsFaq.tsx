@@ -24,6 +24,7 @@ import {
   WIN_RATE_FLOOR,
   WIN_RATE_PRIOR_GAMES,
 } from '@/lib/core-app/rankingsEngine'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-rankings-screen.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
@@ -85,19 +86,19 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
 
   return (
     <div className="af-rk">
-      <header className="af-rk-head">
-        <div>
-          <h1 className="af-rk-title">How ranking works</h1>
-          <p className="af-rk-sub">
-            Every weight, threshold and scale the product uses to rank a manager.
-          </p>
-        </div>
-        <div className="af-rk-headact">
+      <PageHeader
+        className="af-rk-head"
+        titleClassName="af-rk-title"
+        subClassName="af-rk-sub"
+        actionsClassName="af-rk-headact"
+        title="How ranking works"
+        sub="Every weight, threshold and scale the product uses to rank a manager."
+        actions={
           <Link className="af-rk-btn" href="/core/rankings">
             ← Back to Rankings
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <div className="af-rk-faq">
         {/* 1 — XP formula */}

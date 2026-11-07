@@ -50,3 +50,40 @@
 .af-archive-row-meta{grid-area:meta;min-width:0;font-size:12px;color:var(--text2)}
 .af-archive-row-status{grid-area:status;padding:4px 8px;border-radius:999px;background:var(--chip);color:var(--text2);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',monospace);letter-spacing:.06em;text-transform:uppercase}
 .af-archive-row-status:is([data-status='complete'],[data-status='completed']){background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+/* The archive standing in for Draft HQ (a draft that ran on the platform): the screen's own title,
+   at the 26px/900 the other /core screens settled on, and one line saying which draft this is. */
+.af-archive-hq{display:grid;gap:6px;margin:0 0 1rem;padding-bottom:1rem;border-bottom:1px solid var(--line)}
+.af-archive-hq-title{margin:0;color:var(--text);font:900 26px/1.15 var(--font-archivo,'Archivo',system-ui,sans-serif);letter-spacing:-.02em}
+.af-archive-hq-sub{margin:0;color:var(--text2);font-size:13px}
+.af-archive-hq-sub .af-archive-row-status{display:inline-block;vertical-align:1px}
+/* Source id, UTC clock and coverage notes: collapsed, so the selections lead. */
+.af-archive-tech{margin:.75rem 0;border:1px solid var(--line);border-radius:12px;padding:0 .75rem;background:var(--surface2)}
+.af-archive-tech>summary{color:var(--text2);font-weight:700}
+.af-archive-tech[open]{padding-bottom:.75rem}
+/* "Selected at" broke as "Selecte / d at": the archive's overflow-wrap:anywhere reached the column heads.
+   A head wraps between words, never inside one; the table already scrolls sideways. */
+.af-archive th{overflow-wrap:normal;word-break:normal}
+/* The closed "Timing and source details" label sat at the top of its 44px row; centre it, keep the marker. */
+.af-archive-tech>summary{min-height:0;padding:11px 0;line-height:22px}
+/* Columns with no data for the draft are dropped, so the table is only as wide as what it shows:
+   five columns no longer scroll sideways at the width nine did (112px a column, 1008px for nine). */
+.af-archive table{min-width:calc(var(--af-cols,9) * 112px)}
+.af-archive-cols-note{margin:.5rem 0 0;color:var(--text2);font-size:12px}
+
+/* Draft HQ lower half (2026-11-06): one pick-details switch, and the records grouped in a card. */
+.af-picks-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;margin:1rem 0 .5rem}
+.af-picks-head h3{margin:0}
+.af-archive .af-pick-details-toggle[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+.af-pick-details{display:grid;gap:.1rem;margin-top:.35rem}
+.af-archive-records{margin:1rem 0;padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.af-archive-records h3{margin:0 0 .5rem;font-size:1.05rem}
+.af-archive-records details{margin:0;border-top:1px solid var(--line)}
+.af-archive-records summary{display:flex;align-items:center}
+.af-archive-records nav{margin:.75rem 0 0}
+.af-archive-records-note{margin:.75rem 0 0;color:var(--text2);font-size:13px}
+.af-results-refresh{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem 1rem;padding:0 0 .75rem}
+.af-results-refresh p{margin:0}
+.af-results-refresh [role=status]{flex-basis:100%}
+.af-archive form a{min-height:44px;display:inline-flex;align-items:center}
+@media(max-width:767px){.af-archive-records{padding:.75rem}.af-results-refresh>button{width:100%}}
+

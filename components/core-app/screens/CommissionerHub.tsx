@@ -4,6 +4,13 @@ import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubs
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
 import { Suspense, type CSSProperties, type ReactNode } from 'react'
+/*
+ * The action queue, weekly plan and automation panels below are `.af-tw` panels. Their styles were
+ * reaching this screen only because /core's page also imports LeagueMoves, which imports this
+ * file — so anywhere the hub renders on its own, every one of those panels came out unstyled.
+ * Imported first so the hub's own sheets still win where they overlap, as they do on /core.
+ */
+import '@/components/core-app/af-team-workspace.css'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
 import '@/components/core-app/af-core-redraft-standings.css'

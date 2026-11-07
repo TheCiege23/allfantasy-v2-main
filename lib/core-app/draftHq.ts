@@ -771,6 +771,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
+    sport: boardLeague?.sport,
   })
 
   const teamCount = teams.length
@@ -909,6 +910,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
+    sport: league?.sport,
   })
 
   return {
@@ -1172,6 +1174,7 @@ export async function getDraftHqData(
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const madePicks: SectionState<MadePick[]> =

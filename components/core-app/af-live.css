@@ -24,23 +24,13 @@
   gap: 7px;
   max-width: 64ch;
 }
-.af-live-title {
-  font-size: 30px;
-  letter-spacing: -0.035em;
-  margin: 0;
-}
-.af-live-lede {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and lede: the shared PageHeader (primitives/af-primitives.css). */
 
 /* ── Control bar ─────────────────────────────────────────────────────── */
 
 .af-live-bar {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface2);
   overflow: hidden;
 }
@@ -65,7 +55,7 @@
   padding: 4px;
   background: var(--chip);
   border: 1px solid var(--chip-line);
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 /*
  * 🛑 44px, BECAUSE THIS IS THE CONTROL THAT DECIDES WHETHER YOU SEE REAL GAMES.
@@ -119,7 +109,7 @@
   gap: 8px;
   padding: 0 12px;
   border: 1px solid var(--line2);
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   color: var(--faint);
 }
@@ -142,7 +132,7 @@
   align-items: center;
   gap: 7px;
   padding: 8px 12px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   color: var(--muted);
@@ -197,7 +187,7 @@
   gap: 7px;
   min-height: 36px;
   padding: 0 13px;
-  border-radius: 20px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   color: var(--muted);
@@ -218,7 +208,7 @@
 }
 .af-live-sport-count {
   padding: 3px 6px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip-line);
   font-size: 11px;
   font-weight: 700;
@@ -266,7 +256,7 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
   /*
@@ -423,7 +413,7 @@
   align-items: center;
   gap: 11px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   /* Reserved even when empty so an arriving leader does not grow the card. */
   min-height: 40px;
@@ -458,7 +448,7 @@
   flex-direction: column;
   gap: 9px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
 }
@@ -504,7 +494,7 @@
   gap: 6px;
 }
 .af-live-mine-row {
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -638,7 +628,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -818,7 +808,7 @@
 .af-live-note {
   margin: 0;
   padding: 13px 15px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   font-size: 11px;
@@ -830,7 +820,7 @@
 
 .af-live-empty {
   padding: 32px 24px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
   text-align: center;
@@ -866,9 +856,6 @@
 }
 
 @media (max-width: 620px) {
-  .af-live-title {
-    font-size: 24px;
-  }
   .af-live-bar-top {
     padding: 12px 14px;
   }
@@ -960,7 +947,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   /* Tone on the left edge, the same language the sidebar feed already speaks,
      so a turnover reads as a turnover in both places without a legend. */
@@ -1149,7 +1136,7 @@
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 34px;
   height: 54px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   overflow: hidden;
   border: 1px solid var(--line);
 }
@@ -1263,7 +1250,7 @@
   align-items: center;
   gap: 4px 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
 }
 .af-live-leader-cat {
@@ -1310,7 +1297,7 @@
   gap: 6px;
   min-width: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
 }
 .af-live-teambox-team {
@@ -1423,7 +1410,7 @@
   align-items: center;
   gap: 16px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
 }
 .af-live-diamond {
@@ -1596,7 +1583,7 @@
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   overflow: hidden;
   background: #000;
 }
@@ -1641,7 +1628,7 @@
   align-items: center;
   gap: 16px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -1703,7 +1690,7 @@
 .af-gv-stale {
   margin: 0;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   color: var(--warn);
   font-size: 12px;
@@ -1727,7 +1714,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
   min-width: 0;
@@ -1903,7 +1890,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -1949,7 +1936,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -2021,7 +2008,7 @@
   gap: 12px;
   align-items: start;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -2054,7 +2041,7 @@
   color: var(--faint);
 }
 .af-gv-drive-row {
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -2071,7 +2058,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-gv-drive-toggle:focus-visible {
   outline: 2px solid var(--accent);
@@ -2157,7 +2144,7 @@
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   overflow: hidden;
 }
 .af-gv-court-floor {
@@ -2552,7 +2539,7 @@
  */
 .af-live-lock {
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--warn-soft);
   border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
 }
@@ -2633,7 +2620,7 @@
 .af-live-connection {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
   color: var(--muted);
@@ -2657,7 +2644,7 @@
   min-height: 44px;
   min-width: 44px;
   padding: 7px 11px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   color: var(--muted);
@@ -2829,7 +2816,7 @@
   /* `--af-border` and `--af-good` are defined nowhere, so their dark-only fallbacks always won —
      an invisible border and a ~2:1 green on a light page. The core tokens instead. */
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-live-matchup-row {
   display: flex;
@@ -2883,7 +2870,7 @@
 .af-live-league-contribution dt { font-size:12px; color:var(--muted); }
 .af-live-league-contribution dd { margin:4px 0 0; font-size:19px; font-variant-numeric:tabular-nums; }
 @media(max-width:720px) {
- .af-live-lede,.af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
+ .af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
  .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
  .af-live-scope-btn,.af-live-search { min-height:48px; }
  .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
@@ -2915,7 +2902,7 @@
   margin: 0 0 14px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-live-glance-head {
   margin: 0;
@@ -2992,7 +2979,7 @@
   gap: 6px;
 }
 .af-live-glance-row {
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line);
   background: var(--surface);
@@ -3014,7 +3001,7 @@
 .af-live-glance-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-live-glance-name {
   min-width: 0;
@@ -3071,7 +3058,7 @@
   gap: 6px;
 }
 .af-live-final {
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -3089,7 +3076,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-live-final-toggle:focus-visible {
   outline: 2px solid var(--accent);
@@ -3155,19 +3142,18 @@
 /* Scoreboard: scores first, team identity second, details below. */
 .af-core .af-live { gap: 16px; }
 .af-core .af-live-head { gap: 5px; max-width: 76ch; }
-.af-core .af-live-title { font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; }
 .af-core .af-live-eyebrow { display: none; }
-.af-core .af-live-bar { border-radius: 16px; background: var(--surface); }
+.af-core .af-live-bar { border-radius: var(--af-radius-card, 16px); background: var(--surface); }
 .af-core .af-live-bar-name { display: none; }
 .af-core .af-live-bar-top { gap: 10px; padding: 12px; }
-.af-core .af-live-game { border-radius: 18px; padding: 18px; gap: 16px; box-shadow: 0 3px 14px #0000000a; }
+.af-core .af-live-game { border-radius: var(--af-radius-card, 16px); padding: 18px; gap: 16px; box-shadow: 0 3px 14px #0000000a; }
 .af-core .af-live-game[data-live='true'] { border-color: var(--accent-line); box-shadow: inset 0 3px 0 var(--accent); }
 .af-core .af-live-team-score { font: 800 clamp(28px, 3vw, 38px)/1.1 system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
-.af-core .af-live-team-crest, .af-core .af-live-team-mark { width: 44px; height: 44px; background: transparent; border-radius: 12px; }
+.af-core .af-live-team-crest, .af-core .af-live-team-mark { width: 44px; height: 44px; background: transparent; border-radius: var(--af-radius-inner, 12px); }
 .af-core .af-live-team-name { font-size: 15px; }
 .af-core .af-live-tag, .af-core .af-live-clock { font: 650 12px/1.3 system-ui, sans-serif; letter-spacing: 0; border-radius: 7px; }
 @media (max-width: 720px) {
-  .af-core .af-live-game { padding: 14px; border-radius: 15px; }
+  .af-core .af-live-game { padding: 14px; border-radius: var(--af-radius-card, 16px); }
   .af-core .af-live-teams { gap: 8px; }
   .af-core .af-live-side-team, .af-core .af-live-side-team[data-align='end'] { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; text-align: left; }
   .af-core .af-live-team-score { grid-column: 1 / -1; font-size: 34px; }
@@ -3175,7 +3161,6 @@
   .af-core .af-live-team-name { white-space: normal; font-size: 13px; line-height: 1.3; }
   .af-core .af-live-search { flex: 1 1 100%; order: 2; }
   .af-core .af-live-search input { font-size: 16px; min-width: 0; }
-  .af-core .af-live-lede { font-size: 13px; line-height: 1.5; }
   .af-core .af-live-sports { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 }
 

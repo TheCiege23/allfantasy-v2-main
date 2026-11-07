@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-scout.css'
 // Redraft /core shell only (batch B4): every rule is scoped under .af-shell[data-format=redraft].
 import '@/components/core-app/af-core-redraft-trades.css'
@@ -588,25 +589,32 @@ export function Scout({
   const roomGrid = data.managers.available ? buildRoomGrid(data.managers.data) : null
   return (
     <div className="af-sc">
-      <header className="af-frame af-sc-head">
-        <div className="af-sc-head-text">
-          <p className="af-sc-eyebrow">{m.eyebrow}</p>
-          <h1 className="af-display af-sc-title">Scout · {data.league.name}</h1>
-          <p className="af-sc-blurb">
+      <PageHeader
+        className="af-frame af-sc-head"
+        headlineClassName="af-sc-head-text"
+        eyebrowClassName="af-sc-eyebrow"
+        titleClassName="af-sc-title"
+        subClassName="af-sc-blurb"
+        eyebrow={m.eyebrow}
+        title={<>Scout · {data.league.name}</>}
+        sub={
+          <>
             {m.blurb}
             {data.week ? m.blurbWeek(data.week.week, data.week.seasonYear) : ''}
-          </p>
-        </div>
-        {/*
-          The War Room's other room. Scout is about WHO you are playing; Game
-          Plan is about what you must do before kickoff — different questions,
-          so they are two rooms rather than one crowded screen.
-        */}
-        {/* This league's plan is on this page now (step 4c); the link is to every league's. */}
-        <Link className="af-sc-switch" href={gamePlanHref}>
-          {m.everyLeaguePlan} &rarr;
-        </Link>
-      </header>
+          </>
+        }
+        actions={
+          /*
+            The War Room's other room. Scout is about WHO you are playing; Game
+            Plan is about what you must do before kickoff — different questions,
+            so they are two rooms rather than one crowded screen.
+            This league's plan is on this page now (step 4c); the link is to every league's.
+          */
+          <Link className="af-sc-switch" href={gamePlanHref}>
+            {m.everyLeaguePlan} &rarr;
+          </Link>
+        }
+      />
 
       {data.format.elimination ? (
         <EliminationBanner data={data} standing={eliminationStanding} standingsHref={standingsHref} />

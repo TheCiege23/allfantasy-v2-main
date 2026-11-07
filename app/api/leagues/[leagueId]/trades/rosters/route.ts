@@ -794,7 +794,7 @@ export async function GET(
     /* AllFantasy's own engine, same ids and week as the provider read above. Display only; a failed
        read costs the AF figures and nothing else. */
     stockIds.length > 0
-      ? lookupAfEngineProjections(stockIds, projectionWeek).catch(
+      ? lookupAfEngineProjections(stockIds, projectionWeek, String(league?.sport ?? 'NFL')).catch(
           (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
         )
       : Promise.resolve(new Map() as Awaited<ReturnType<typeof lookupAfEngineProjections>>),

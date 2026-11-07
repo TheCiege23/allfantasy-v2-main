@@ -1,5 +1,7 @@
 'use client'
 
+import { EmptyState } from '@/components/core-app/primitives/EmptyState'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
@@ -966,6 +968,17 @@ export function Matchup({ data }: MatchupProps) {
           leader={leader}
         />
       ) : null}
+      {/*
+        The page title, through the shared header like every other /core screen: "Matchup", with the
+        week as its eyebrow. The week banner and the head-to-head card follow directly, unchanged.
+      */}
+      <PageHeader
+        className="af-mu-head"
+        title={copy('Matchup')}
+        eyebrow={data.week.available ? `${copy('Week')} ${data.week.data.week}` : null}
+        eyebrowTestId="matchup-week-eyebrow"
+      />
+
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
         {/*
@@ -989,15 +1002,11 @@ export function Matchup({ data }: MatchupProps) {
           </span>
         )}
         {/*
-          ⚠ THE PAGE HAD NO h1 AT ALL. Its outline began at "HEAD TO HEAD, SLOT
-          BY SLOT", so a screen reader jumping by heading landed halfway down and
-          nothing named the document — while the two sibling screens both have
-          one (`/core/matchup` renders "Matchup", `/core/my-team?league=` renders
-          the team name). The league is what this page is about and it is already
-          the first thing in the banner, so it is the heading rather than a new
-          one being invented above it.
+          The league's name, in the banner. It was the page's h1 until 2026-11; the h1 is now the
+          shared PageHeader's "Matchup" above (the screen had no h1 at all before that, so a screen
+          reader jumping by heading landed halfway down). The name stays here as text.
         */}
-        <h1 className="af-mu-league-name">{data.league.name}</h1>
+        <p className="af-mu-league-name">{data.league.name}</p>
 
         {data.week.available ? (
           <>
@@ -1111,21 +1120,20 @@ export function Matchup({ data }: MatchupProps) {
           ("no matchup resolved, so…") down an otherwise empty page. One titled card says it once,
           and says when the matchup will appear.
         */
-        <div className="af-empty-card" data-testid="matchup-empty">
-          <span className="af-empty-card-mark" aria-hidden>
-            vs
-          </span>
-          <div className="af-empty-card-text">
-            <p className="af-empty-card-title">{m.noMatchupTitle}</p>
-            {/* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */}
-            <p className="af-empty-card-hint">{m.noMatchupHint}</p>
-            <p className="af-empty-card-links">
-              <Link href={`/core/my-team?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
-                {copy('Check your lineup')} →
-              </Link>
-            </p>
-          </div>
-        </div>
+        /* The raw reason ("no matchup resolved, so…") only restated the title; the hint says when. */
+        <EmptyState
+          testId="matchup-empty"
+          mark="vs"
+          title={m.noMatchupTitle}
+          hint={m.noMatchupHint}
+          links={[
+            {
+              href: `/core/my-team?league=${encodeURIComponent(data.league.id)}`,
+              label: `${copy('Check your lineup')} →`,
+              prefetch: false,
+            },
+          ]}
+        />
       ) : data.league.elimination ? (
         /*
           🛑 NO VERSUS FOR AN ELIMINATION LEAGUE. The lowest score each week goes home, so the

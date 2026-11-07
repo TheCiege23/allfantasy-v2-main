@@ -120,6 +120,20 @@ describe('the Lineup check card', () => {
     const { container } = render(<MyTeam data={data(KBFL, { bestBall: true })} />)
     expect(container.querySelector('.af-mt-check')).toBeNull()
   })
+
+  it('is one card with the lineup decision, not a second card under it', () => {
+    const { container } = render(<MyTeam data={data(KBFL)} />)
+    const checks = container.querySelectorAll('.af-mt-check')
+    expect(checks).toHaveLength(1)
+    const decision = container.querySelector('.af-mt-decision')!
+    expect(decision.contains(checks[0])).toBe(true)
+    // Inside the decision card it carries no frame of its own.
+    expect(checks[0].classList.contains('af-mt-check--embedded')).toBe(true)
+    expect(checks[0].classList.contains('af-frame')).toBe(false)
+    // The decision's headline and the check's list are both still there.
+    expect(decision.textContent).toContain('Jayden Daniels')
+    expect(decision.querySelectorAll('a.af-mt-check-item')).toHaveLength(2)
+  })
 })
 
 describe('lineup evidence gaps', () => {

@@ -109,7 +109,8 @@ export function Portfolio({
           testId="portfolio-empty"
           mark="+"
           title={m.emptyTitle}
-          body={data.leagues.reason}
+          body={m.emptyBody}
+          hint={m.emptyHint}
           actions={
             <>
               <Link href={importHref} className="af-pf-btn af-pf-btn--primary">

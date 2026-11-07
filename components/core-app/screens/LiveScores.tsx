@@ -1,6 +1,7 @@
 'use client'
 
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
@@ -569,18 +570,20 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       data-league-scoped={leagueFilterId ? 'true' : undefined}
       data-low-data={lowData.lowData ? 'true' : undefined}
     >
-      <header className="af-live-head">
-        <p className="af-label af-live-eyebrow">{lsc('Core · Live', language)}</p>
-        <h1 className="af-display af-live-title">{lsc('Live Scores', language)}</h1>
-        <p className="af-live-lede">
-          {/* The lede follows the EFFECTIVE scope, not the URL. Saying "only games
-              affecting starters in this league" while showing every fixture is the
-              same defect as the hidden toggle, wearing different clothes. */}
-          {lsc(leagueFilterId
-            ? 'Only games affecting starters in this league, scored with this league’s rules.'
-            : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.', language)}
-        </p>
-      </header>
+      {/* The lede follows the EFFECTIVE scope, not the URL. Saying "only games
+          affecting starters in this league" while showing every fixture is the
+          same defect as the hidden toggle, wearing different clothes. */}
+      <PageHeader
+        className="af-live-head"
+        eyebrowClassName="af-live-eyebrow"
+        titleClassName="af-live-title"
+        subClassName="af-live-lede"
+        eyebrow={lsc('Core · Live', language)}
+        title={lsc('Live Scores', language)}
+        sub={lsc(leagueFilterId
+          ? 'Only games affecting starters in this league, scored with this league’s rules.'
+          : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.', language)}
+      />
 
       <LiveNowStrip
         strip={slateStrip}

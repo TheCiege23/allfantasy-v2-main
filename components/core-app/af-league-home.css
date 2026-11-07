@@ -1628,3 +1628,17 @@
   .af-lh-kpi-value { font-size: 20px; }
   .af-lh-kpis > .af-lh-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/*
+ * The redraft home's page tools, moved to the foot (LeagueHome `toolsAtFoot`): the imported-league
+ * bar, then "Customize page" and "Back to home" on one row. Top level, not inside any @media.
+ */
+.af-core .af-lh-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.af-core .af-lh-foot-actions {
+  justify-content: flex-start;
+}

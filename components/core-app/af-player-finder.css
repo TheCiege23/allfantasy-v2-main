@@ -89,7 +89,7 @@
   min-height: 44px;
   justify-content: center;
   padding: 6px 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   text-decoration: none;
   border: 1px solid transparent;
 }
@@ -132,7 +132,7 @@
 .af-pf-headshot {
   width: 72px;
   height: 72px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   object-fit: cover;
   background: var(--surface2);
   border: 1px solid var(--line);
@@ -166,39 +166,7 @@
   font-weight: 700;
 }
 
-/* ── Stat tiles ──────────────────────────────────────────────────────── */
-
-.af-pf-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-
-.af-pf-tile {
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface2);
-}
-
-.af-pf-tile-value {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
-  line-height: 1.1;
-}
-/* A missing figure must not read as a measured zero. */
-.af-pf-tile[data-missing='true'] .af-pf-tile-value {
-  color: var(--faint);
-  font-size: 18px;
-}
-
-.af-pf-tile-why {
-  margin-top: 5px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--faint);
-}
+/* ── Stat tiles: the shared StatStrip (primitives/af-primitives.css), value first ── */
 
 /* ── Blocks ──────────────────────────────────────────────────────────── */
 
@@ -399,7 +367,7 @@
 
 .af-pf-impact-row {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   padding: 12px 14px;
   background: var(--panel);
 }
@@ -594,6 +562,7 @@
   overflow-y: auto;
 }
 
+/* The public /players index's h1 (app/players/page.tsx). The /core rail's title is the shared PageHeader. */
 .af-core .af-pf-h1 {
   margin: 0;
   font-size: 26px;
@@ -867,9 +836,7 @@
     padding: 16px;
   }
 
-  .af-core .af-pf-h1 {
-    font-size: 22px;
-  }
+  /* The rail title is the shared PageHeader's (--af-title-size); `.af-pf-h1` is the public index's. */
 
   .af-core .af-pf-main {
     padding: 16px;
@@ -945,7 +912,7 @@
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 .af-core .af-pf-related-list {
@@ -1120,19 +1087,6 @@
   color: var(--bad);
 }
 
-/* ── Tiles: coloured value + the `?` beside the label ────────────────── */
-.af-core .af-pf-tile-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.af-core .af-pf-tile[data-tone='good'] .af-pf-tile-value {
-  color: var(--good);
-}
-.af-core .af-pf-tile[data-tone='warn'] .af-pf-tile-value {
-  color: var(--warn);
-}
 
 /* ── Help dot — own prefix because /players/{slug} never loads the shell ── */
 .af-pf-help {
@@ -1164,7 +1118,7 @@
   z-index: 40;
   width: 252px;
   padding: 12px 13px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line);
   background: var(--surface);
   box-shadow: var(--shadow);
@@ -1389,7 +1343,7 @@
   width: 40px;
   height: 40px;
   flex: none;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   object-fit: cover;
   background: var(--surface2);
   border: 1px solid var(--line);
@@ -1522,9 +1476,6 @@
     border-bottom: 0;
     background: transparent;
   }
-  .af-core .af-pf-h1 {
-    font-size: 28px;
-  }
   .af-core .af-pf-search {
     height: 48px;
     max-width: none;
@@ -1548,7 +1499,7 @@
   .af-core .af-pf-headshot {
     width: 58px;
     height: 58px;
-    border-radius: 12px;
+    border-radius: var(--af-radius-inner, 12px);
   }
   .af-core .af-pf-headshot--none {
     font-size: 22px;
@@ -1705,7 +1656,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2);
   min-width: 0;
@@ -1994,7 +1945,7 @@
   overflow: auto;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 .af-core .af-pf-suggest-item {
@@ -2003,7 +1954,7 @@
   gap: 10px;
   min-height: 44px;
   padding: 6px 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   text-decoration: none;
 }
 .af-core .af-pf-suggest li[aria-selected='true'] .af-pf-suggest-item,
@@ -2059,7 +2010,7 @@
 }
 .af-core .af-pf-avatar {
   flex: none;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   object-fit: cover;
   background: var(--surface2);
   border: 1px solid var(--line);
@@ -2173,7 +2124,7 @@
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface2);
 }
 .af-core .af-pf-cmp-head:first-child {
@@ -2228,7 +2179,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   overflow: hidden;
 }
 .af-core .af-pf-cmp-tile {
@@ -2462,7 +2413,7 @@
   gap: 10px;
   padding: 14px 16px;
   border: 1px solid var(--warn);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--warn-soft);
 }
 .af-core .af-pf-gameday[data-tone='bad'] {
@@ -2788,7 +2739,7 @@
   .af-core .af-pf-triage-lg-btn,
   .af-core .af-pf-triage-lg[data-link='none'] {
     min-height: 44px;
-    border-radius: 10px;
+    border-radius: var(--af-radius-inner, 12px);
     font-size: 13px;
   }
   .af-core .af-pf-triage-lg-where {
@@ -2982,7 +2933,7 @@
   gap: 2px;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 12px;
   color: var(--text);
   min-width: 0;
@@ -3237,7 +3188,7 @@
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--line2);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
 }
@@ -3251,7 +3202,7 @@
   min-height: 34px;
   padding: 4px 10px;
   border: 1px solid var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--text);
   font-size: 13px;
@@ -3260,7 +3211,7 @@
   min-height: 34px;
   padding: 4px 10px;
   border: 1px solid var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--text2);
   font-size: 12px;
@@ -3665,7 +3616,7 @@
   gap: 4px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-core .af-pf-fa-main {
   display: flex;
@@ -3739,7 +3690,7 @@
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-core .af-pf-dc-row.is-him {
   border-color: var(--accent-line);
@@ -3867,7 +3818,7 @@
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-core .af-pf-ws-head {
   display: flex;
@@ -3958,7 +3909,7 @@
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-core .af-pf-vt-head {
   display: flex;
@@ -4038,7 +3989,7 @@
   margin: 10px 0 0;
   padding: 10px 12px;
   border: 1px solid var(--accent-line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--accent-soft);
   color: var(--text);
   font-size: 13px;
@@ -4160,7 +4111,7 @@
   margin: 10px 0 0;
   padding: 10px 12px;
   border: 1px solid var(--warn);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   color: var(--text);
   font-size: 13px;
@@ -4333,7 +4284,7 @@
     gap: 10px;
     padding: 8px 8px 8px 12px;
     border: 1px solid var(--accent-line);
-    border-radius: 14px;
+    border-radius: var(--af-radius-card, 16px);
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
@@ -4478,7 +4429,7 @@
   margin-top: 8px;
   padding: 8px 12px;
   border: 1px dashed var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -4600,7 +4551,7 @@
   .af-core.af-pf--home .af-pf-rail > * {
     margin: 0 16px 14px;
   }
-  .af-core.af-pf--home .af-pf-h1 {
+  .af-core.af-pf--home .af-pf-head {
     margin-top: 16px;
   }
   .af-core.af-pf--home .af-pf-main {
@@ -4649,7 +4600,7 @@
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--line2);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   scroll-snap-align: start;
 }
@@ -4682,7 +4633,7 @@
   height: 44px;
   margin: -8px -8px -8px 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -4752,7 +4703,7 @@
   padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   border: 1px solid var(--line2);
   border-bottom: 0;
-  border-radius: 18px 18px 0 0;
+  border-radius: var(--af-radius-card, 16px) var(--af-radius-card, 16px) 0 0;
   background: var(--surface);
   box-shadow: var(--shadow);
   animation: af-pf-sheet-up 0.18s ease-out;
@@ -4819,7 +4770,7 @@
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid var(--line2);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   color: var(--text);
   font-weight: 700;
   text-decoration: none;
@@ -4947,7 +4898,7 @@
   margin: 14px 0 4px;
   padding: 12px;
   border: 1px solid var(--line2);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
 }
 .af-core .af-pf-flips-head {
@@ -4988,7 +4939,7 @@
   min-height: 72px;
   padding: 10px 8px;
   border: 1px solid var(--line2);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -5056,7 +5007,7 @@
   min-height: 40px;
   padding: 0 12px;
   border: 1px solid var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -5177,7 +5128,7 @@
   margin: 0 0 14px;
   padding: 12px 14px;
   border: 1px solid var(--accent-line);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--accent-soft);
 }
 .af-core .af-pf-follow-wrap .af-pf-pushask {

@@ -21,7 +21,7 @@
   gap: 10px;
   flex-wrap: wrap;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2);
 }
@@ -45,9 +45,10 @@
 }
 
 .af-mu-league-name {
-  /* An h1 now — see the note in Matchup.tsx. The margin has to go explicitly:
-     the banner is a flex row and a default 0.67em block margin would push the
-     crest and the week chip out of line with it. */
+  /* A label in the banner, not the page title: the title is the shared PageHeader's "Matchup"
+     (primitives/af-primitives.css, --af-title-size) since 2026-11, so nothing here sizes a heading.
+     The margin goes explicitly: the banner is a flex row and a paragraph's default block margin
+     would push the crest and the week chip out of line with it. */
   margin: 0;
   font-size: 13px;
   font-weight: 800;
@@ -147,7 +148,7 @@
   flex: 0 0 auto;
   width: 48px;
   height: 48px;
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
   color: var(--text2);
@@ -249,7 +250,7 @@
   align-items: center;
   gap: 4px;
   padding: 12px 10px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   border: 1px dashed var(--line2);
   background: var(--surface2);
   text-align: center;
@@ -320,7 +321,7 @@
 .af-mu-unavailable--block {
   grid-column: 1 / -1;
   padding: 18px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px dashed var(--line2);
   background: var(--surface2);
   text-align: center;
@@ -425,7 +426,7 @@
 
 .af-mu-board-row {
   padding: 6px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2);
 }
@@ -577,7 +578,7 @@
 .af-mu-board-foot {
   margin-top: 2px;
   padding: 8px 10px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--chip-line);
 }
@@ -781,7 +782,7 @@
 .af-mu-identity-gap {
   margin: 0 0 4px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   border: 1px solid var(--warn);
   font-size: 11.5px;
@@ -1254,7 +1255,7 @@
   /*
    * The league is already named, with its crest, in the league card directly above this screen —
    * on a phone it was printed four times before the score. Hidden from sight, NOT from the
-   * accessibility tree: it is still the page's h1.
+   * accessibility tree, so the banner still says whose matchup it is to a screen reader.
    */
   .af-mu-week > .af-mu-league-crest {
     display: none;
@@ -1476,7 +1477,7 @@
     padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
     border: 0;
     border-bottom: 1px solid var(--line);
-    border-radius: 0 0 12px 12px;
+    border-radius: 0 0 var(--af-radius-inner, 12px) var(--af-radius-inner, 12px);
     background: var(--surface);
     color: var(--text);
     font: inherit;
@@ -1651,7 +1652,7 @@
   --warn: var(--mu-sb-warn);
   --warn-soft: color-mix(in srgb, var(--mu-sb-warn) 16%, transparent);
   color-scheme: dark;
-  border-radius: 20px;
+  border-radius: var(--af-radius-card, 16px);
   border: 1px solid var(--mu-sb-line);
   background: var(--mu-sb-bg);
   color: var(--mu-sb-text);
@@ -1759,7 +1760,7 @@
 .af-core .af-mu-weeknav-btn {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 17px;
 }
 
@@ -1775,7 +1776,7 @@
   gap: 8px;
   min-width: 0;
   padding: 16px 18px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   border: 1px solid var(--line);
   background: var(--surface);
 }
