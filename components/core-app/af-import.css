@@ -1731,3 +1731,180 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ═══ Import v5, batch 3 — preview and confirmation in focus ═══════════════ */
+
+/*
+ * While a preview or a confirmation is open, the connect form steps aside (CSS only — it stays
+ * mounted, so Back returns to exactly what was typed). The card then sits directly under the
+ * league list instead of below the form and the whole guide.
+ */
+.af-im[data-phase='preview'] > .af-im-card--connect,
+.af-im[data-phase='preview'] > .af-im-fx-disclosure,
+.af-im[data-phase='attest'] > .af-im-card--connect,
+.af-im[data-phase='attest'] > .af-im-fx-disclosure {
+  display: none;
+}
+
+.af-im-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-im-preview-head .af-platform-mark {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+.af-core .af-im-card--preview .af-im-preview-head .af-label {
+  color: var(--good);
+}
+.af-core .af-im-card--preview[data-blocked='true'] .af-im-preview-head .af-label {
+  color: var(--warn);
+}
+
+.af-im-card--preview {
+  border-color: var(--accent-line);
+  background:
+    radial-gradient(520px 220px at 0% 0%, var(--accent-soft), transparent 70%),
+    var(--surface);
+}
+.af-im-card--preview .af-im-preview-name {
+  font: 900 clamp(22px, 3.4vw, 28px) / 1.12 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+
+/* The platform's own caveat, as a note rather than another grey line. */
+.af-im-card--preview .af-im-coverage {
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+}
+.af-im-card--preview .af-im-coverage .af-im-field-help {
+  margin: 0;
+  color: var(--text2);
+}
+.af-im-card--preview .af-im-coverage .af-im-field-help + .af-im-field-help {
+  margin-top: 4px;
+}
+
+.af-im-coverage-tally {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/*
+ * What comes across, as a grid of status chips. The state stays in WORDS inside each item
+ * ("Partial (41)") — the icon is decoration in ::before, so it adds nothing to the text a screen
+ * reader or a test reads, and colour is never the only signal.
+ */
+.af-im-card--preview .af-im-coverage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.af-im-card--preview .af-im-coverage-list > li {
+  position: relative;
+  margin: 0;
+  padding: 8px 10px 8px 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.af-im-card--preview .af-im-coverage-list > li strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-im-card--preview .af-im-coverage-list > li::before {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='full']::before {
+  content: '✓';
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='partial']::before {
+  content: '◐';
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='partial'] {
+  border-color: var(--warn);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='missing']::before {
+  content: '✕';
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='missing'] {
+  border-style: dashed;
+}
+
+/* Import / Back ride the bottom of the screen while a long team list scrolls past. */
+.af-im-card--preview .af-im-actions,
+.af-im-card--attest .af-im-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.af-core .af-im-card--preview .af-im-actions .af-im-submit,
+.af-core .af-im-card--attest .af-im-actions .af-im-submit {
+  flex: 1 1 200px;
+}
+
+/* ── Confirmation ── */
+.af-im-card--attest {
+  border-color: var(--warn);
+}
+.af-core .af-im-card--attest .af-im-preview-head .af-label {
+  color: var(--warn);
+}
+.af-im-attest-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 900;
+  font-size: 15px;
+}
+.af-im-card--attest .af-im-attest {
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+@media (min-width: 1024px) {
+  .af-im > .af-im-card--preview,
+  .af-im > .af-im-card--attest {
+    max-width: 860px;
+  }
+}

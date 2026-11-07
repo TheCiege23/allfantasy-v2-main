@@ -29,6 +29,28 @@ export function MockFetch({ mode }: { mode: string }) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url.includes('/api/league/auth')) return json({ auths: mode === 'espn-connected' ? [{ platform: 'espn', hasEspnCookies: true, updatedAt: '2026-11-01T00:00:00Z' }] : [] });
       if (url.includes('/api/leagues/import/discover')) return json(mode === 'leagues' ? { leagues, accountLabel: 'ciege82' } : { leagues: [] });
+      if (url.includes('/api/leagues/import/preview')) {
+        await new Promise((r) => setTimeout(r, 900));
+        return json({
+          league: { name: 'Taco Tuesday Superflex' },
+          importable: true,
+          dataQuality: {
+            coverageNarrative: { sentence: 'Sleeper does not publish trade history from before 2024.', missing: [], partial: ['tradeHistory'] },
+            coverageSummary: [
+              { key: 'leagueSettings', state: 'full' }, { key: 'currentRosters', state: 'full', count: 12 },
+              { key: 'scoringSettings', state: 'full' }, { key: 'currentStandings', state: 'full' },
+              { key: 'currentSchedule', state: 'full' }, { key: 'draftHistory', state: 'full', count: 3 },
+              { key: 'tradeHistory', state: 'partial', count: 41 }, { key: 'previousSeasons', state: 'full', count: 3 },
+              { key: 'playerIdentityMap', state: 'full' },
+            ],
+          },
+        });
+      }
+      if (url.includes('/api/leagues/import/commit')) {
+        // Long enough to see the progress screen.
+        await new Promise((r) => setTimeout(r, mode === 'slow' ? 60000 : 6000));
+        return json({ leagueId: 'lg_demo', name: 'Taco Tuesday Superflex', historicalBackfill: { backfill: { success: true, seasonsDiscovered: 3, seasonsImported: 3, seasonsSkipped: 0 } } });
+      }
       return real(input, init);
     };
   })();`

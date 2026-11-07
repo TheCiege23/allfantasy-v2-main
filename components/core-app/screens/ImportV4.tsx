@@ -2056,7 +2056,13 @@ export function ImportV4({
   )
 
   return (
-    <div className="af-core af-im">
+    /*
+     * `data-phase` lets the stylesheet put the moment in focus: while a preview or a confirmation
+     * is open, the connect form steps aside so the card sits directly under the league list.
+     * CSS only — the form stays mounted, so nothing it holds (a typed id, the ESPN panel's
+     * state) is lost when the person presses Back.
+     */
+    <div className="af-core af-im" data-phase={phase.k}>
       {/*
         ── Top bar, per handoffs 4c/4d ──────────────────────────────────
         Brand left; on the right the READ-ONLY chip that every signed-in screen
@@ -3058,8 +3064,13 @@ export function ImportV4({
 
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
-        <section className="af-im-card" ref={outcomeRef}>
-          <h2 className="af-label">One confirmation first</h2>
+        <section className="af-im-card af-im-card--attest" ref={outcomeRef}>
+          <header className="af-im-preview-head">
+            <span className="af-im-attest-mark" aria-hidden>
+              !
+            </span>
+            <h2 className="af-label">One confirmation first</h2>
+          </header>
           <p className="af-im-attest">{phase.message}</p>
           <div className="af-im-actions">
             <button
@@ -3093,8 +3104,15 @@ export function ImportV4({
 
       {/* ── Preview, then commit ────────────────────────────────────── */}
       {phase.k === 'preview' ? (
-        <section className="af-im-card" ref={outcomeRef}>
-          <header className="af-im-result-head">
+        <section
+          className="af-im-card af-im-card--preview"
+          data-blocked={phase.importBlockedReason ? 'true' : undefined}
+          ref={outcomeRef}
+        >
+          <header className="af-im-preview-head">
+            <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
+              {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+            </span>
             <h2 className="af-label">
               {phase.importBlockedReason ? 'Preview only' : 'Ready to import'}
             </h2>
@@ -3141,6 +3159,21 @@ export function ImportV4({
             ── What comes across, bucket by bucket ─────────────────────────────────
             A LIST, and the state is WORDS ("Partial", "Not included"), never colour alone.
           */}
+          {phase.coverageRows.length > 0 ? (
+            <p className="af-im-coverage-tally af-num" aria-hidden>
+              {[
+                `${phase.coverageRows.filter((r) => r.state === 'full').length} included`,
+                phase.coverageRows.some((r) => r.state === 'partial')
+                  ? `${phase.coverageRows.filter((r) => r.state === 'partial').length} partial`
+                  : null,
+                phase.coverageRows.some((r) => r.state === 'missing')
+                  ? `${phase.coverageRows.filter((r) => r.state === 'missing').length} not available`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
           {phase.coverageRows.length > 0 ? (
             <ul
               className="af-im-coverage-list"
