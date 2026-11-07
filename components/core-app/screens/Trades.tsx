@@ -207,6 +207,13 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
   const copy = (value: string) => tradeUiCopy(value, language)
   const assets = trade.playersIn + trade.playersOut + trade.picks
   /*
+   * ⚠ PHONE ONLY: the grade explanations fold behind one button (2026-11-07 phone pass). Live at 375px a
+   * card was 841px for a three-player swap — 134px of it the reasons list, plus two grade notes that end
+   * in the same caveat on both sides. The letters and the first two lines of each note stay in view; the
+   * stylesheet reads `data-why-open` only inside its phone query, so on a wide screen nothing changes.
+   */
+  const [whyOpen, setWhyOpen] = useState(false)
+  /*
    * THE grade (see `TradeRecord.leagueGrade`) — the letter the Trade Center, the grade email and the
    * grade list below all show. It is taken from `players[0]`'s side: that side RECEIVED the grade's
    * `get` and sent its `give`, so `players[1]` reads the mirror (`partnerLetter` is exact).
@@ -228,7 +235,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       : []
 
   return (
-    <li className="af-card af-tr-card" data-trade-id={linkIdOf(trade.transactionId)}>
+    <li className="af-card af-tr-card" data-trade-id={linkIdOf(trade.transactionId)} data-why-open={whyOpen || undefined}>
       <header className="af-tr-card-head">
         <span className="af-tr-when af-num">
           {trade.season ?? '—'}
@@ -345,9 +352,20 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       ) : null}
 
       {reasons.length > 0 ? (
-        <ul className="af-tr-leaguegrade-why" aria-label={copy('Why it graded this way')}>
+        <ul className="af-tr-leaguegrade-why" id={`af-tr-why-${linkIdOf(trade.transactionId)}`} aria-label={copy('Why it graded this way')}>
           {reasons.map((line) => <li key={line}>{copy(line)}</li>)}
         </ul>
+      ) : null}
+      {reasons.length > 0 || trade.players.some((side) => side.gradeBasis) ? (
+        <button
+          type="button"
+          className="af-tr-why-toggle"
+          aria-expanded={whyOpen}
+          aria-controls={reasons.length > 0 ? `af-tr-why-${linkIdOf(trade.transactionId)}` : undefined}
+          onClick={() => setWhyOpen((open) => !open)}
+        >
+          {whyOpen ? m.hideGradeDetails : m.whyTheseGrades}
+        </button>
       ) : null}
       {leagueGrade && !leagueGrade.graded ? (
         <p className="af-tr-leaguegrade-withheld">{copy('League grade withheld:')} {copy(leagueGrade.reason)}</p>
