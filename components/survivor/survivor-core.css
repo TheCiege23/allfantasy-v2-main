@@ -96,6 +96,10 @@
 .svk-head{display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;padding:22px 28px;border-bottom:1px solid rgba(255,255,255,.06)}
 .svk-head h1{margin:0;font-weight:700;font-size:26px;letter-spacing:-.02em}
 .svk-head-sub{font-size:14px;color:var(--svk-text2)}
+/* The title block must not shrink below a readable width: on a phone the season tabs beside it squeezed "Season
+   story" and its subtitle into a ~100px column, eight lines deep (2026-11-07). With a basis, the head (which
+   wraps) moves the tabs to their own line instead. Scoped to .svk-head so other .svk-grow rows are unchanged. */
+.svk-head>.svk-grow{flex:1 1 220px}
 
 /* SeasonTimeline */
 .svs-years{display:inline-flex;gap:4px;padding:4px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:var(--svk-card)}
