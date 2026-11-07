@@ -267,6 +267,9 @@ async function processWaiverClaimsForLeagueLocked(
       dropHolds = await loadDroppedPlayerHolds(leagueId, holdPolicy, {
         now: runAt,
         playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
+        // A Guilly chop's players settle in the blind FAAB run, not after a drop hold
+        // (lib/waiver-wire/dropped-player-waivers.ts header). The free-agent path still holds them.
+        includeChopReleases: false,
       })
     } catch (err) {
       console.warn('[waiver-wire] dropped-player holds unreadable; waiver run deferred', { leagueId, err })
