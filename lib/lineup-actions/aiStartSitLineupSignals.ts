@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { runStartSitAnalysis } from '@/lib/ai-tools-start-sit/runStartSitAnalysis'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
@@ -46,6 +47,10 @@ export async function fetchAiStartSitLineupSignalsForUser(
       sport: true,
       platform: true,
       bestBallMode: true,
+      leagueType: true,
+      leagueVariant: true,
+      guillotineMode: true,
+      settings: true,
     },
     take: 24,
   })
@@ -53,7 +58,8 @@ export async function fetchAiStartSitLineupSignalsForUser(
   const out: LineupActionItem[] = []
 
   for (const lg of leagues.slice(0, maxLeagues)) {
-    if (lg.bestBallMode) continue
+    // Classic Best Ball or best ball Guilly: the optimizer sets the lineup (lib/bestball/bestBallLeagueState.ts).
+    if (bestBallLineupSetsItself(lg)) continue
     const res = await runStartSitAnalysis({
       userId,
       sportFilter: 'ALL',

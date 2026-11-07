@@ -180,6 +180,9 @@ export async function runStartSitAnalysis(input: {
     return { ok: false, error: msg, code, userMessage: msg }
   }
   const leagueCtx = engine.context
+  // Classic Best Ball OR best ball Guilly: the optimizer picks the lineup, so start/sit is informational.
+  // `flags.bestBallMode` alone missed the Guilly shape (lib/bestball/bestBallLeagueState.ts).
+  const lineupSetsItself = leagueCtx.lineupBehavior?.lineupSetsItself ?? leagueCtx.flags.bestBallMode
 
   const tradeLeague = await loadLeagueForTrade({
     leagueId: trimmedLeagueId,
@@ -622,7 +625,7 @@ export async function runStartSitAnalysis(input: {
       .join(' · ') || null
 
   const lineupBehaviorNoteText = lineupBehaviorNote(
-    leagueCtx.flags.bestBallMode,
+    lineupSetsItself,
     leagueCtx.lineupBehavior.scoringPeriod,
   )
 
@@ -732,7 +735,7 @@ export async function runStartSitAnalysis(input: {
     lineupSlotAnalysis,
     playersByNameLower,
     gapThreshold: 2.5,
-    bestBallInformational: leagueCtx.flags.bestBallMode,
+    bestBallInformational: lineupSetsItself,
   })
 
   const validation: StartSitValidationSnapshot = {
@@ -764,12 +767,12 @@ export async function runStartSitAnalysis(input: {
 
   const lockStatusLabel = formatStartSitLockStatusLabel(aiEnvelope.time)
 
-  const summary = leagueCtx.flags.bestBallMode
+  const summary = lineupSetsItself
     ? `Best ball: scoring is weekly optimal — lineup advice is informational only. ${weekLabel} · ${tradeLeague.name ?? 'League'}.`
     : `League-scored Start/Sit for ${weekLabel} · ${tradeLeague.name ?? 'League'}.${lockStatusLabel ? ` ${lockStatusLabel}` : ''}`
 
   let finalConfidence = confidenceScore
-  if (leagueCtx.flags.bestBallMode) finalConfidence = Math.round(clamp(confidenceScore * 0.88, 10, 92))
+  if (lineupSetsItself) finalConfidence = Math.round(clamp(confidenceScore * 0.88, 10, 92))
 
   return {
     ok: true,
@@ -813,7 +816,7 @@ export async function runStartSitAnalysis(input: {
     sourceFlags,
     summary,
     unresolvedDecisions,
-    bestBallInformational: leagueCtx.flags.bestBallMode,
+    bestBallInformational: lineupSetsItself,
     lockStatusLabel,
     dataQuality,
   }

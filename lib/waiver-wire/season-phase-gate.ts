@@ -21,8 +21,7 @@ import {
   type WaiverPhasePolicy,
   type WaiverSeasonPhase,
 } from './season-phase-policy'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
-import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { resolveBestBallLeagueState } from '@/lib/bestball/bestBallLeagueState'
 
 export type WaiverPhaseContext = {
   phase: WaiverSeasonPhase
@@ -53,13 +52,12 @@ export function resolveBestBallRosterPolicy(league: {
   bbWaiversEnabled?: boolean | null
   bbFaEnabled?: boolean | null
 }): BestBallRosterPolicy | null {
-  const bestBall = isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
-  if (!bestBall) return null
-  if (league.guillotineMode === true) return null
-  const kind = `${league.leagueVariant ?? ''} ${league.leagueType ?? ''}`.toLowerCase()
-  if (kind.includes('guillotine')) return null
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return null
-  return { waiversEnabled: league.bbWaiversEnabled === true, freeAgencyEnabled: league.bbFaEnabled === true }
+  // Read through the one best ball read model (lib/bestball/bestBallLeagueState.ts), which applies
+  // exactly the rules above: Classic shape only, never a guillotine row, native only.
+  const state = resolveBestBallLeagueState(league)
+  const { waivers, freeAgency } = state.transactions
+  if (state.shape !== 'classic' || waivers === null || freeAgency === null) return null
+  return { waiversEnabled: waivers, freeAgencyEnabled: freeAgency }
 }
 
 const REGULAR: WaiverPhaseContext = {

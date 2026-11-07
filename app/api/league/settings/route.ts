@@ -9,6 +9,7 @@ import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,8 @@ export async function GET(req: NextRequest) {
       survivorMode: league.survivorMode ?? null,
       guillotineMode: league.guillotineMode ?? null,
       bestBallMode: league.bestBallMode ?? null,
+      // Classic Best Ball or best ball Guilly — the AutoCoach card reads this, not the column alone.
+      lineupSetsItself: bestBallLineupSetsItself(league),
       autoCoachEnabled: league.autoCoachEnabled ?? true,
       rosterSize: league.rosterSize,
       totalRosterSlots,

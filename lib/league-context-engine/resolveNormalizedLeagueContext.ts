@@ -8,6 +8,7 @@ import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeSco
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { hasVerifiedBestBallRuleConfiguration } from '@/lib/best-ball-war-room/bestBallRuleEvidence'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import type {
@@ -139,6 +140,9 @@ export async function resolveNormalizedLeagueContext(
       ? ('daily' as const)
       : ('weekly' as const),
     bestBallMode: league.bestBallMode === true,
+    // Classic Best Ball or best ball Guilly: the lineup is the optimizer's either way, so nothing that
+    // reads this context may offer a start/sit move (lib/bestball/bestBallLeagueState.ts).
+    lineupSetsItself: bestBallLineupSetsItself(league),
     bestBallSettings: bestBallSettings
       ? {
           mode: bestBallSettings.mode,

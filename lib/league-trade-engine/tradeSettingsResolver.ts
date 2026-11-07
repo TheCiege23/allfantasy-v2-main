@@ -8,6 +8,7 @@ import type { TradeReviewType } from '@/lib/league-trade-engine/types'
 import { deadlinePassed, readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { tradeReviewMode as chosenTradeReviewMode } from '@/lib/league-rules-explainer/snapshot'
 import { readVetoRule, type VetoRule } from './vetoRule'
+import { resolveBestBallLeagueState } from '@/lib/bestball/bestBallLeagueState'
 
 export type ResolvedLeagueTradeSettings = {
   tradeReviewMode: TradeReviewType
@@ -84,7 +85,18 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
    */
   const platform = String((league as { platform?: string | null }).platform ?? '').trim().toLowerCase()
   const nativeBestBall = Boolean(league.bestBallMode) && (platform === '' || platform === 'manual' || platform === 'allfantasy')
-  let tradesAllowed = !league.lockAllMoves && !nativeBestBall
+  /*
+   * 🛑 THE COMMISSIONER'S BEST BALL TRADE SWITCH WAS NEVER READ IN THE ON DIRECTION. This was
+   * `!league.lockAllMoves && !nativeBestBall`, so a native Classic Best Ball league refused every trade
+   * even after the commissioner turned trades on in Best Ball settings (`bbTradesEnabled` /
+   * `best_ball_settings.tradesEnabled`, both written by /api/bestball/settings) — the panel, the
+   * creation review ("trades are allowed") and Chimmy's rules all said yes while this said no. The saved
+   * switch is read through the one best ball read model now (lib/bestball/bestBallLeagueState.ts); it
+   * defaults false, so a league nobody changed stays trade-free. Guilly + Best Ball is not `bestBallMode`
+   * and keeps the guillotine rule below.
+   */
+  const bestBallTrades = resolveBestBallLeagueState(league).transactions.trades
+  let tradesAllowed = !league.lockAllMoves && !(nativeBestBall && bestBallTrades !== true)
   if (league.guillotineMode) {
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
     tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false)
@@ -95,10 +107,6 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     const survivorGuillotine = raw.survivorGuillotine as { tradesEnabled?: boolean } | undefined
     tradesAllowed = tradesAllowed && survivorGuillotine?.tradesEnabled === true
   }
-  if (nativeBestBall && league.bbTradesEnabled === false) {
-    tradesAllowed = false
-  }
-
   /*
    * 🛑 THIS DEFAULTED TO THE DRAFT-PICK SETTING, WHICH DEFAULTS TO FALSE.
    *

@@ -21,7 +21,7 @@ import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 import { scoringFormatFromRec, scoringRulesFrom } from '@/lib/decision-os/trade/scoringContextFromWorld'
 import { hasIdpScoring } from './scoringNotes'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { isIdpLeagueVariant } from './idpLeagueVariant'
 import { leagueVariantFor } from './valueBook'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
@@ -42,6 +42,7 @@ export type ClassifiableLeague = {
   settings?: unknown
   leagueVariant?: string | null
   bestBallMode?: boolean | null
+  guillotineMode?: boolean | null
   status?: string | null
   lifecycleState?: string | null
 }
@@ -111,7 +112,8 @@ export function classifyLeagueFormat(league: ClassifiableLeague): LeagueFormatFa
   return {
     concept,
     family: FAMILY[concept] ?? 'other',
-    bestBall: isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null),
+    // Classic Best Ball or best ball Guilly, so the best ball filter finds both (lib/bestball/bestBallLeagueState.ts).
+    bestBall: bestBallLineupSetsItself(league),
     idp: hasIdpScoring(rulebook) || isIdpLeagueVariant(league.leagueVariant ?? null) || aliasIdp,
     superflex: leagueVariantFor(league.settings, league.leagueType ?? null).superflex,
     scoring: scoringFormatFromRec(rec) ?? null,
