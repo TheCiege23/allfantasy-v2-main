@@ -71,6 +71,11 @@ const NOT_A_BEST_BALL_DRAFT_SETTING: Readonly<Record<string, string>> = {
   allowCommissionerResume: 'Use "Commissioner pause / resume / reset timer" in the draft room settings.',
   allowCommissionerForcePick: 'Use the commissioner force auto-pick switch in the draft room settings.',
   draftDateUtc: 'Set the draft date and time in Draft settings.',
+  // Same finding, second pass (zero readers outside lib/bestball/rules.ts): the draft engine's missed-pick
+  // path reads Draft settings' autopick (queue first / best available / need based / skip), never these.
+  queueBehavior: 'A missed pick uses the queue when Autopick is "Queue first" in Draft settings.',
+  missedPickFallback: 'Set Autopick (queue first, best player available, need based or skip) in Draft settings.',
+  allowDuplicatePlayers: 'No such setting exists: a player can be drafted by only one team in a league.',
 }
 
 /** The first refused field in the body, with where it is really set; null when the body has none. */

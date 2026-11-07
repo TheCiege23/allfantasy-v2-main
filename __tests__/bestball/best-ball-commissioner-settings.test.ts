@@ -248,6 +248,9 @@ describe('settings that were saved and never read', () => {
     ['bestBall.allowCommissionerResume', { bestBall: { allowCommissionerResume: false } }, /draft room/],
     ['bestBall.allowCommissionerForcePick', { bestBall: { allowCommissionerForcePick: false } }, /draft room/],
     ['bestBall.draftDateUtc', { bestBall: { draftDateUtc: '2026-12-01T00:00:00.000Z' } }, /Draft settings/],
+    ['bestBall.queueBehavior', { bestBall: { queueBehavior: 'strict' } }, /Queue first.*Draft settings/],
+    ['bestBall.missedPickFallback', { bestBall: { missedPickFallback: 'commissioner' } }, /Autopick.*Draft settings/],
+    ['bestBall.allowDuplicatePlayers', { bestBall: { allowDuplicatePlayers: true } }, /No such setting exists/],
   ])('refuses %s, names where it is really set, and writes nothing', async (field, body, hint) => {
     const res = await patch(body)
     expect(res.status).toBe(400)
