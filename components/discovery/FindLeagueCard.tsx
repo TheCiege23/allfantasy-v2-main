@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import { CommishReputationBadge } from "@/components/commish-reputation/CommishReputationBadge"
-import { Calendar, ExternalLink, ShieldCheck, User, Sparkles, Zap } from "lucide-react"
+import { Calendar, ExternalLink, Lock, ShieldCheck, User, Sparkles, Zap } from "lucide-react"
 import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
@@ -72,6 +72,7 @@ function formatDraftStatus(status: string | null | undefined): string {
 function getSourceLabel(league: DiscoveryCard): string {
   const source = league.source
   if (league.joinMode === "request") return `Plays on ${platformLabel(league.externalPlatform)}`
+  if (league.joinMode === "approval") return "Private league"
   if (source === "fantasy") return "Public league"
   if (source === "creator") return "Creator league"
   return "Bracket"
@@ -116,6 +117,8 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
   const rankFitScore = Math.max(0, Number(league.rankingEffectScore ?? 0))
   const sourceBadgeStyle = getSourceBadgeStyle(league.source)
   const visibleAiFeatures = hasAI ? league.aiFeatures.slice(0, 2) : []
+  // A private league: no page to view and no code to join with — the commissioner approves.
+  const isApproval = league.joinMode === "approval"
 
   return (
     <article
@@ -281,18 +284,20 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           {leagueRegion ? (
             <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
           ) : null}
-          <span className="flex min-w-0 flex-wrap items-center gap-1" data-testid={`find-league-commish-${league.id}`}>
-            <User className="h-3.5 w-3.5 shrink-0" />
-            {league.commissionerUsername ? (
-              <Link href={`/profile/${encodeURIComponent(league.commissionerUsername)}`} className="underline-offset-2 hover:underline">
-                {league.commissionerName || league.commissionerUsername}
-              </Link>
-            ) : (
-              league.commissionerName || "Commissioner"
-            )}
-            <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
-            {commishLine(league) ? <span className="opacity-80">· {commishLine(league)}</span> : null}
-          </span>
+          {isApproval ? null : (
+            <span className="flex min-w-0 flex-wrap items-center gap-1" data-testid={`find-league-commish-${league.id}`}>
+              <User className="h-3.5 w-3.5 shrink-0" />
+              {league.commissionerUsername ? (
+                <Link href={`/profile/${encodeURIComponent(league.commissionerUsername)}`} className="underline-offset-2 hover:underline">
+                  {league.commissionerName || league.commissionerUsername}
+                </Link>
+              ) : (
+                league.commissionerName || "Commissioner"
+              )}
+              <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
+              {commishLine(league) ? <span className="opacity-80">· {commishLine(league)}</span> : null}
+            </span>
+          )}
         </div>
         {league.joinMode === "request" && league.listingVerification ? (
           <p
@@ -302,6 +307,16 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           >
             <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
             {verificationLabel(league.listingVerification, league.externalPlatform)}
+          </p>
+        ) : null}
+        {isApproval ? (
+          <p
+            className="flex items-center gap-1 text-[11px] sm:text-xs"
+            style={{ color: "var(--muted)" }}
+            data-testid={`find-league-private-note-${league.id}`}
+          >
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            The commissioner approves every new manager. Rosters and chat stay members-only.
           </p>
         ) : null}
         {league.listingNote ? (
@@ -328,7 +343,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         className="p-3 sm:p-4 pt-0 flex flex-wrap items-center gap-2 border-t"
         style={{ borderColor: "var(--border)" }}
       >
-        {league.joinMode === "request" ? null : (
+        {league.joinMode === "request" || isApproval ? null : (
         <Link
           href={league.detailUrl}
           data-testid={`find-league-view-${league.id}`}
@@ -338,7 +353,9 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           View
         </Link>
         )}
-        {league.joinMode === "request" && !isFull ? (
+        {isApproval && !isFull ? (
+          <AskToJoinButton league={league} />
+        ) : league.joinMode === "request" && !isFull ? (
           <RequestSpotButton league={league} />
         ) : isFull ? (
           <span
@@ -476,6 +493,132 @@ function RequestSpotButton({ league }: { league: DiscoveryCard }) {
           {state === "sending" ? "Sending…" : "Send request"}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="min-h-[40px] text-sm" style={{ color: "var(--muted)" }}>
+          Cancel
+        </button>
+      </div>
+      {state === "error" ? (
+        <p role="alert" className="text-xs" style={{ color: "rgb(248, 113, 113)" }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+type AskState = "idle" | "open" | "sending" | "pending" | "approved" | "member" | "error"
+
+/**
+ * "Ask to join" for a PRIVATE AllFantasy league (lib/public-discovery/privateLeagueRequests.ts).
+ * The commissioner approves every new manager; once they have, the player takes the seat on
+ * /join?approved=<id>. Each answer the request route can give has a state here, so asking twice,
+ * being already in, or already approved never reads as an error.
+ */
+function AskToJoinButton({ league }: { league: DiscoveryCard }) {
+  const [state, setState] = useState<AskState>("idle")
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
+
+  const send = async () => {
+    setState("sending")
+    setError("")
+    try {
+      const r = await fetch(`/api/find-league/leagues/${encodeURIComponent(league.id)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      })
+      const body = (await r.json().catch(() => ({}))) as { error?: string; status?: string }
+      if (r.status === 401) {
+        window.location.href = `/login?callbackUrl=${encodeURIComponent("/find-league")}`
+        return
+      }
+      if (!r.ok) throw new Error(body.error || "")
+      setState(body.status === "member" ? "member" : body.status === "accepted" ? "approved" : "pending")
+    } catch (e) {
+      setState("error")
+      setError(e instanceof Error && e.message ? e.message : "That didn't send. Try again.")
+    }
+  }
+
+  if (state === "member") {
+    return (
+      <Link
+        href={`/league/${encodeURIComponent(league.id)}`}
+        data-testid={`find-league-ask-member-${league.id}`}
+        className="rounded-lg border px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium"
+        style={{ borderColor: "var(--border)", color: "var(--text)" }}
+      >
+        You&apos;re in this league — open it
+      </Link>
+    )
+  }
+
+  if (state === "approved") {
+    return (
+      <Link
+        href={`/join?approved=${encodeURIComponent(league.id)}`}
+        data-testid={`find-league-ask-approved-${league.id}`}
+        className="rounded-lg px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-semibold"
+        style={{ background: "var(--accent)", color: "var(--bg)" }}
+      >
+        Approved — take your seat
+      </Link>
+    )
+  }
+
+  if (state === "pending") {
+    return (
+      <p
+        className="text-xs sm:text-sm font-medium"
+        style={{ color: "var(--text)" }}
+        data-testid={`find-league-ask-pending-${league.id}`}
+        role="status"
+      >
+        Request sent. The commissioner approves or declines — you&apos;ll get a notification either way.
+      </p>
+    )
+  }
+
+  if (state === "idle") {
+    return (
+      <button
+        type="button"
+        onClick={() => setState("open")}
+        data-testid={`find-league-ask-${league.id}`}
+        className="rounded-lg px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium touch-manipulation"
+        style={{ background: "var(--accent)", color: "var(--bg)" }}
+      >
+        <Lock className="h-3.5 w-3.5" />
+        Ask to join
+      </button>
+    )
+  }
+
+  return (
+    <div className="w-full space-y-2">
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value.slice(0, 500))}
+        rows={2}
+        placeholder="Say hi: your experience, what you're looking for (optional)"
+        aria-label="Message to the commissioner"
+        data-testid={`find-league-ask-message-${league.id}`}
+        className="w-full rounded-lg border px-3 py-2 text-sm"
+        style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={state === "sending"}
+          data-testid={`find-league-ask-send-${league.id}`}
+          className="rounded-lg px-3 py-2 min-h-[40px] text-sm font-medium disabled:opacity-60 touch-manipulation"
+          style={{ background: "var(--accent)", color: "var(--bg)" }}
+        >
+          {state === "sending" ? "Sending…" : "Send request"}
+        </button>
+        <button type="button" onClick={() => setState("idle")} className="min-h-[40px] text-sm" style={{ color: "var(--muted)" }}>
           Cancel
         </button>
       </div>

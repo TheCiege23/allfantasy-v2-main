@@ -241,7 +241,9 @@ export function FindLeagueClient() {
   const [rankBand, setRankBand] = useState<RankBandFilter>(initial.rankBand)
   const [vibe, setVibe] = useState<LeagueVibeFilter>(initial.vibe)
   const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
-  const [visibility, setVisibility] = useState<VisibilityFilter>("public")
+  // Private leagues are listed too, as "Ask to join" (lib/public-discovery/privateLeagueRequests.ts).
+  // "Public" narrows to the leagues anyone can join straight away.
+  const [visibility, setVisibility] = useState<VisibilityFilter>("all")
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)

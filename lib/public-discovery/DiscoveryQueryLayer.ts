@@ -14,6 +14,7 @@ import {
 } from "./externalListing"
 import { readLeagueVibes } from "./vibes"
 import { leaguesWhoseOwnerCommissions } from "./ownerCommissionerTeams"
+import { isPrivateListingOpen, isPrivateRequestableLeague, PRIVATE_JOIN_MODE } from "./privateLeagueRequests"
 import { LEAGUE_PUBLIC_DASHBOARD_KEY, LEAGUE_VISIBILITY_KEY, leagueAudience } from "@/lib/league-privacy/leagueAudience"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
@@ -372,6 +373,132 @@ export async function queryPublicFantasyLeagueCards(options: {
         commissionerUsername: league.user?.username ?? null,
         commissionerLeaguesRun: leaguesRun.get(league.userId) ?? null,
         commissionerSinceYear: league.user?.createdAt ? league.user.createdAt.getUTCFullYear() : null,
+      }
+    })
+    .filter((card): card is DiscoveryCard => card != null)
+}
+
+/**
+ * Private AllFantasy leagues that are recruiting, as "ask to join" cards (privateLeagueRequests.ts).
+ *
+ * 🛑 SAFE FIELDS ONLY, AND THE SELECT IS WHERE THAT IS ENFORCED: the commissioner, the members and
+ * the description are never read, so no later edit to the card can leak them by accident.
+ * `settings` is read for the listing rule and the format only — its join code is never copied out.
+ */
+export async function queryPrivateRequestableFantasyLeagueCards(options: {
+  sport: string | null
+  query: string | null
+  candidateLeagueIds?: string[] | null
+  take?: number
+}): Promise<DiscoveryCard[]> {
+  const sport = normalizeSportFilter(options.sport)
+  const query = typeof options.query === "string" ? options.query.trim().toLowerCase() : null
+  const candidateLeagueIds = Array.isArray(options.candidateLeagueIds)
+    ? [...new Set(options.candidateLeagueIds.map((id) => String(id).trim()).filter(Boolean))]
+    : null
+  if (candidateLeagueIds != null && candidateLeagueIds.length === 0) return []
+
+  const leagues = await prisma.league.findMany({
+    where: {
+      ...(sport ? { sport } : {}),
+      ...(candidateLeagueIds ? { id: { in: candidateLeagueIds } } : {}),
+      platform: { in: [...NATIVE_PLATFORM_VALUES] },
+      settings: { path: [LEAGUE_VISIBILITY_KEY], equals: "private" },
+      // A tournament's leagues are filled by the tournament, never by a request to one of them.
+      tournamentShellLeague: { is: null },
+      legacyTournamentLeague: { is: null },
+    },
+    select: {
+      id: true,
+      platform: true,
+      name: true,
+      sport: true,
+      season: true,
+      leagueVariant: true,
+      leagueSize: true,
+      scoring: true,
+      isDynasty: true,
+      settings: true,
+      createdAt: true,
+      leagueSettings: { select: { draftDateUtc: true } },
+      draftSessions: {
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        take: 1,
+        select: { draftType: true, status: true },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: Math.min(options.take ?? DEFAULT_DISCOVERY_TAKE, DEFAULT_DISCOVERY_TAKE),
+  })
+
+  const eligible = leagues.filter((league) => isPrivateRequestableLeague(league))
+  if (eligible.length === 0) return []
+  const heldSeats = await countSeatsHeldByPeopleByLeague(
+    prisma as unknown as Prisma.TransactionClient,
+    eligible.map((l) => l.id)
+  )
+
+  return eligible
+    .map((league): DiscoveryCard | null => {
+      const settings = toRecord(league.settings)
+      const name = league.name?.trim() || "Private league"
+      if (query && !matchesSearchText([name], query)) return null
+
+      const latestDraftSession = league.draftSessions[0] ?? null
+      const draftStatus =
+        normalizeDraftStatus(latestDraftSession?.status ?? null) ??
+        normalizeDraftStatus(readString(settings, "draft_status")) ??
+        normalizeDraftStatus(readString(settings, "draftStatus")) ??
+        null
+      const memberCount = heldSeats.get(league.id) ?? 0
+      if (!isPrivateListingOpen({ seatsHeld: memberCount, leagueSize: league.leagueSize, draftStatus })) return null
+
+      const maxMembers = Math.max(2, Number(league.leagueSize ?? 12) || 12)
+      return {
+        source: "fantasy",
+        id: league.id,
+        name,
+        description: null,
+        sport: String(league.sport ?? "NFL"),
+        memberCount,
+        maxMembers,
+        // No code and no page: a private league is joined by approval and read by its members only.
+        joinUrl: "",
+        joinMode: PRIVATE_JOIN_MODE,
+        externalPlatform: null,
+        listingVerification: null,
+        listingNote: null,
+        entryFee: leagueEntryFee(settings),
+        detailUrl: "",
+        ownerName: "Commissioner",
+        ownerAvatar: null,
+        creatorSlug: null,
+        creatorName: null,
+        tournamentName: null,
+        season: league.season ?? null,
+        scoringMode: league.scoring ?? null,
+        isPaid: resolvePaidFlag(settings),
+        isPrivate: true,
+        createdAt: league.createdAt.toISOString(),
+        fillPct: buildFillPct(memberCount, maxMembers),
+        leagueType: "fantasy",
+        leagueStyle: resolveFantasyLeagueStyle({ leagueVariant: league.leagueVariant, isDynasty: league.isDynasty, settings }),
+        draftType:
+          normalizeDraftType(latestDraftSession?.draftType ?? null) ??
+          normalizeDraftType(readString(settings, "draft_type")) ??
+          normalizeDraftType(readString(settings, "draftType")) ??
+          null,
+        draftStatus,
+        teamCount: maxMembers,
+        draftDate: league.leagueSettings?.draftDateUtc?.toISOString() ?? null,
+        timezone: null,
+        commissionerName: "Commissioner",
+        aiFeatures: [],
+        leagueTier: extractLeagueCareerTier(settings, 1),
+        vibes: [],
+        commissionerUsername: null,
+        commissionerLeaguesRun: null,
+        commissionerSinceYear: null,
       }
     })
     .filter((card): card is DiscoveryCard => card != null)
