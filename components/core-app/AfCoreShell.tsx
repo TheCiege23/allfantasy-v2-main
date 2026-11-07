@@ -1009,18 +1009,19 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'waivers', 'my-team', 'matchup', 'trades']
 
 /*
- * ⚠ "LEAGUES" IS A BAR SLOT, NOT A LINK, AND IT TOOK LIVE'S PLACE (2026-10-29). A user on Android
- * reported that getting into their leagues was "too complicated and not straightforward": the bar
- * had no Leagues entry, the floating pill (`.af-rail-handle`, since removed) read as an action
- * button rather than navigation, and the text route was the last group of More. The tab opens the
- * league tray in place — not /leagues, whose ProductShell chrome swaps the whole header and bar and
- * was itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
- * to More → This week, one tap further.
+ * ⚠ WAIVERS TOOK THE "LEAGUES" SLOT (2026-11-07, owner's call). Waivers is a weekly in-season job and
+ * was two taps away under More; Leagues duplicated the switcher at the top of every screen, which
+ * changes league in one tap. The league TRAY is still one tap from More: the first entry there,
+ * "Leagues" (`af-more-leagues`), opens it in place.
+ *
+ * History, so this is not undone by accident: a Leagues tab was added 2026-10-29 because an Android
+ * user found getting into their leagues "too complicated and not straightforward" — at the time the
+ * bar had no league entry at all and the only labelled one was a floating pill read as a button. The
+ * header switcher has since become that entry on every screen, which is what made the slot free.
  */
-const MOBILE_BAR_LEAGUES_AFTER_INDEX = 0
 
 /**
  * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
@@ -1598,7 +1599,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * The tray's own header row: its ✕ close control on a phone, and the DESKTOP
    * collapse toggle above 720px. So it is where focus starts when the tray
    * opens, and the only sane place for focus to land when the viewport widens
-   * with the tray open — the phone's opener (the bar's Leagues tab) is
+   * with the tray open — the phone's opener (More's Leagues entry, then the More button) is
    * `display: none` by then, still mounted, which is exactly why the overlay
    * hook's old `isConnected` check waved such an opener through and focus fell
    * to <body>.
@@ -1908,7 +1909,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/*
         ⚠ THERE IS NO FLOATING "LEAGUES" PILL ANY MORE (2026-10-29). The phone opens the league tray
-        from the bar's Leagues tab (`af-tabbar-leagues`), or the league name in the league-first
+        from More → Leagues (`af-more-leagues`; the bar tab went to Waivers 2026-11-07), or the league name in the league-first
         top bar; the tray closes from its own ✕ header row (`.af-rail-toggle`). The pill was the
         tray's only labelled entry for a long time, and users read it as an action button.
       */}
@@ -2869,7 +2870,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         </nav>
       ) : (
         <nav className="af-tabbar" aria-label={msg.mainNavAria}>
-          {mobileItems.map((item, index) => (
+          {mobileItems.map((item) => (
             <Fragment key={item.key}>
               <Link
                 href={item.href}
@@ -2884,22 +2885,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 </span>
                 <span className="af-tabbar-label">{copy(item.label)}</span>
               </Link>
-              {index === MOBILE_BAR_LEAGUES_AFTER_INDEX ? (
-                <button
-                  type="button"
-                  className="af-tabbar-item"
-                  data-testid="af-tabbar-leagues"
-                  data-active={mobileRailOpen}
-                  aria-expanded={railOpen}
-                  aria-controls="af-rail"
-                  onClick={toggleRail}
-                >
-                  <span className="af-tabbar-glyph" aria-hidden>
-                    <CoreNavIcon navKey="my-leagues" size={20} />
-                  </span>
-                  <span className="af-tabbar-label">{copy('Leagues')}</span>
-                </button>
-              ) : null}
             </Fragment>
           ))}
           <button
@@ -2967,6 +2952,33 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             ) : (
             <div className="af-mobile-more-list">
+              {/* The league tray, which had its own bar tab until Waivers took the slot (see MOBILE_BAR_KEYS). */}
+              <div className="af-mobile-more-group">
+                <button
+                  type="button"
+                  className="af-mobile-more-link"
+                  data-testid="af-more-leagues"
+                  aria-controls="af-rail"
+                  onClick={() => {
+                    /*
+                     * Close More FIRST, and open the tray on the next tick. More's own cleanup hands focus
+                     * back to the bar's More button; the tray then records THAT as where to return on
+                     * close. Opening both in one render left the tray restoring focus to this entry,
+                     * which is gone by then, so focus fell to <body>.
+                     */
+                    setMobileMoreOpen(false)
+                    window.setTimeout(() => {
+                      mobileMoreButtonRef.current?.focus()
+                      setRailChoice('open')
+                    }, 0)
+                  }}
+                >
+                  <span className="af-mobile-more-icon" aria-hidden>
+                    <CoreNavIcon navKey="my-leagues" />
+                  </span>
+                  <span>{copy('Leagues')}</span>
+                </button>
+              </div>
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
                   {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
