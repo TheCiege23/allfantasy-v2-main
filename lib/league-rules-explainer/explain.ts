@@ -130,7 +130,20 @@ type OvernightPause = { from: string; to: string; picksAllowed: boolean }
 const isOvernightPause = (v: unknown): v is OvernightPause =>
   !!v && typeof v === 'object' && CLOCK_TIME.test(String((v as OvernightPause).from)) && CLOCK_TIME.test(String((v as OvernightPause).to))
 
-function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot, 'sport'>): RuleText | null {
+/**
+ * What a change line needs to know about the league beyond the two values: the sport, and the
+ * elimination period length. ⚠ Without the period, a tiebreak-order change in an MLB two-week Guilly league
+ * read "lower score last week is chopped" while the rules page said "last period" — the tiebreak compares
+ * the previous PERIOD there (lib/guillotine/eliminationPeriods.ts). Absent: one-week wording.
+ */
+export type ChangeContext = Pick<RuleSnapshot, 'sport'> & Partial<Pick<RuleSnapshot, 'chopPeriodWeeks'>>
+
+/** The copy key for one tiebreak step: the previous-period step says "last period" in a two-week league. */
+function tiebreakKey(step: string, chopPeriodWeeks: number | null | undefined): string {
+  return step === 'previous_period' && chopPeriodWeeks === 2 ? 'tiebreak.previous_period_twoWeek' : `tiebreak.${step}`
+}
+
+function describeValue(key: RuleKey, value: unknown, snapshot: ChangeContext): RuleText | null {
   if (value === null || value === undefined) {
     switch (key) {
       case 'tradeDeadlineWeek':
@@ -250,7 +263,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'tiebreakers': {
       if (!Array.isArray(value)) return null
       const known = value.filter((v): v is string => typeof v === 'string' && TIEBREAKS.has(v))
-      return known.length ? text('v.list', { list: { list: known.map((v) => text(`tiebreak.${v}`)) } }) : null
+      return known.length ? text('v.list', { list: { list: known.map((v) => text(tiebreakKey(v, snapshot.chopPeriodWeeks))) } }) : null
     }
     case 'waiverDays': {
       if (!Array.isArray(value)) return null
@@ -520,7 +533,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line(
       'guillotine-tiebreak',
       firstTiebreak
-        ? text('guillotine.tiebreak', { rule: text(twoWeek && firstTiebreak === 'previous_period' ? 'tiebreak.previous_period_twoWeek' : `tiebreak.${firstTiebreak}`) })
+        ? text('guillotine.tiebreak', { rule: text(tiebreakKey(firstTiebreak, s.chopPeriodWeeks)) })
         : null,
     ),
     line('guillotine-stat-correction', isNum(s.statCorrectionHours) && s.statCorrectionHours > 0 ? plural('guillotine.statCorrection', s.statCorrectionHours) : null),
@@ -876,7 +889,7 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
  * One change, explained — or null when it cannot be (an unknown key, or a value with no sentence).
  * A dropped change is never shown, so a member never sees "teamsPerChop: 2".
  */
-export function explainRuleChange(change: RuleChange, snapshot: Pick<RuleSnapshot, 'sport'> = { sport: '' }): ChangeLine | null {
+export function explainRuleChange(change: RuleChange, snapshot: ChangeContext = { sport: '' }): ChangeLine | null {
   const key = change.key as RuleKey
   if (!isChangeableRuleKey(key)) return null
   const before = describeValue(key, change.before ?? null, snapshot)
@@ -899,7 +912,7 @@ export const CHANGE_GROUP_WINDOW_MS = 10 * 60 * 1000
  */
 export function groupSettingsChanges(
   events: readonly SettingsChangeEvent[],
-  snapshot: Pick<RuleSnapshot, 'sport'>,
+  snapshot: ChangeContext,
   windowMs: number = CHANGE_GROUP_WINDOW_MS,
 ): ChangeGroup[] {
   const sorted = [...events]

@@ -33,6 +33,7 @@ import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { explainLeagueRules, explainRuleChange } from '@/lib/league-rules-explainer/explain'
 import { leagueRulesCopyEn, leagueRulesCopyEs } from '@/lib/i18n/league-rules-copy'
 import { renderChangeLine } from '@/lib/league-rules-explainer/render'
+import { buildRulesExplainerView } from '@/lib/league-rules-explainer/view'
 import { evaluateWeek } from '@/lib/guillotine/GuillotineWeekEvaluator'
 import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
 
@@ -174,6 +175,43 @@ describe('the rules-change announcement includes the period length and best ball
     expect(renderChangeLine(period, en as never, 'en')).toBe('Elimination period: 1 week → 2 weeks')
     expect(renderChangeLine(bb, en as never, 'en')).toBe('Best ball lineups: Off → On')
     expect(renderChangeLine(period, es as never, 'es')).toBe('Periodo de eliminación: 1 semana → 2 semanas')
+  })
+})
+
+describe('the "What changed" card words a tiebreak-order change "last period" in a two-week league', () => {
+  const en = (k: string) => leagueRulesCopyEn[k] ?? k
+  const es = (k: string) => leagueRulesCopyEs[k] ?? k
+  const change = { key: 'tiebreakers', before: ['random', 'previous_period'], after: ['previous_period', 'random'] }
+
+  it('two-week periods: "last period", in English and Spanish', () => {
+    const line = explainRuleChange(change, { sport: 'MLB', chopPeriodWeeks: 2 })!
+    expect(renderChangeLine(line, en as never, 'en')).toBe(
+      'Chop tiebreakers: a random draw and lower score last period is chopped → lower score last period is chopped and a random draw',
+    )
+    const esText = renderChangeLine(line, es as never, 'es')
+    expect(esText).toContain('se elimina al que puntuó menos el periodo pasado')
+    expect(esText).not.toContain('semana pasada')
+  })
+
+  it('one-week periods, or no period known: "last week", as before', () => {
+    for (const ctx of [{ sport: 'MLB', chopPeriodWeeks: 1 }, { sport: 'MLB' }]) {
+      const text = renderChangeLine(explainRuleChange(change, ctx)!, en as never, 'en')
+      expect(text).toContain('lower score last week is chopped')
+      expect(text).not.toContain('last period')
+    }
+  })
+
+  it('the rules view passes the league snapshot\'s period length to its change cards', () => {
+    const view = buildRulesExplainerView({
+      snapshot: { sport: 'MLB', format: 'guillotine', chopPeriodWeeks: 2, tiebreakers: ['previous_period'] } as never,
+      events: [{ id: 'e1', createdAt: '2026-10-19T12:00:00.000Z', actorUserId: 'boss', changes: [change] }],
+      seen: { rulesSeenAt: '2026-09-01T00:00:00.000Z', lastSeenSettingsEventId: null, lastSeenSettingsEventAt: null },
+      viewerUserId: 'member',
+      isCommissioner: false,
+      broadcastsEnabled: true,
+    })
+    const card = view.pendingChanges[0]!.lines[0]!
+    expect(renderChangeLine(card, en as never, 'en')).toContain('lower score last period is chopped')
   })
 })
 
