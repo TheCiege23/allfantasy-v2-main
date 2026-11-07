@@ -114,13 +114,13 @@ describe('after the draft has started', () => {
   })
 
   it('still lets transactions change, and records it', async () => {
-    const res = await patch({ bbTradesEnabled: true, bbIrEnabled: true, bestBall: { substitutionsEnabled: true } })
+    const res = await patch({ bbTradesEnabled: true, bbFaEnabled: true, bestBall: { substitutionsEnabled: true } })
     expect(res.status).toBe(200)
-    expect(m.leagueUpdate.mock.calls[0]![0].data).toMatchObject({ bbTradesEnabled: true, bbIrEnabled: true })
+    expect(m.leagueUpdate.mock.calls[0]![0].data).toMatchObject({ bbTradesEnabled: true, bbFaEnabled: true })
     const audit = m.auditCreate.mock.calls[0]![0].data
     expect(audit).toMatchObject({ leagueId: 'L1', userId: 'commish', actionType: 'settings_patch', entityType: 'league' })
-    expect(audit.afterState).toEqual({ substitutionsEnabled: true, bbTradesEnabled: true, bbIrEnabled: true })
-    expect(audit.beforeState).toEqual({ substitutionsEnabled: false, bbTradesEnabled: false, bbIrEnabled: false })
+    expect(audit.afterState).toEqual({ substitutionsEnabled: true, bbTradesEnabled: true, bbFaEnabled: true })
+    expect(audit.beforeState).toEqual({ substitutionsEnabled: false, bbTradesEnabled: false, bbFaEnabled: false })
   })
 
   it('a save that resends every unchanged field (the panel does) is not a locked change', async () => {
@@ -230,5 +230,45 @@ describe('GET /api/leagues/:id/bestball — what the panel loads', () => {
     const body = await get()
     expect(body.league.settings.scoringPeriod).toBe('daily')
     expect(body.league.structureLock).toBeNull()
+  })
+})
+
+/*
+ * Audit 2026-11-06, "Settings saved and never read": these were saved and nothing read them back, so a
+ * commissioner could change them and the league behaved the same. The route now refuses each one, names
+ * where the real setting lives, and writes nothing.
+ */
+describe('settings that were saved and never read', () => {
+  it.each([
+    ['bbIrEnabled', { bbIrEnabled: true }, /roster/],
+    ['bbTaxiEnabled', { bbTaxiEnabled: true }, /no taxi/],
+    ['bestBall.slowDraftClockMinutes', { bestBall: { slowDraftClockMinutes: 30 } }, /Draft settings/],
+    ['bestBall.autoPickBehavior', { bestBall: { autoPickBehavior: 'best_available' } }, /Draft settings/],
+    ['bestBall.allowCommissionerPause', { bestBall: { allowCommissionerPause: false } }, /draft room/],
+    ['bestBall.allowCommissionerResume', { bestBall: { allowCommissionerResume: false } }, /draft room/],
+    ['bestBall.allowCommissionerForcePick', { bestBall: { allowCommissionerForcePick: false } }, /draft room/],
+    ['bestBall.draftDateUtc', { bestBall: { draftDateUtc: '2026-12-01T00:00:00.000Z' } }, /Draft settings/],
+  ])('refuses %s, names where it is really set, and writes nothing', async (field, body, hint) => {
+    const res = await patch(body)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.field).toBe(field)
+    expect(json.error).toMatch(hint)
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+    expect(m.auditCreate).not.toHaveBeenCalled()
+  })
+
+  it('refuses the field even when false (it would still be a no-op save)', async () => {
+    const res = await patch({ bbTradesEnabled: true, bbIrEnabled: false })
+    expect(res.status).toBe(400)
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('a save without them still lands, and never writes the IR / taxi columns', async () => {
+    const res = await patch({ bbTradesEnabled: true, bestBall: { substitutionsEnabled: true } })
+    expect(res.status).toBe(200)
+    const data = m.leagueUpdate.mock.calls[0]![0].data
+    expect(data).not.toHaveProperty('bbIrEnabled')
+    expect(data).not.toHaveProperty('bbTaxiEnabled')
   })
 })

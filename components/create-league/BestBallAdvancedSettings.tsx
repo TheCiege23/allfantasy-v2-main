@@ -134,15 +134,12 @@ export function BestBallAdvancedSettings({
         />
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        <GlassInput
-          label="Draft Date (UTC)"
-          value={settings.draftDateUtc}
-          onChange={(draftDateUtc) => patchBestBall({ draftDateUtc })}
-          placeholder="2026-08-28T00:00:00.000Z"
-          accent={accent}
-          hint="Leave blank if the commissioner will schedule later."
-        />
+      {/*
+        No "Draft Date (UTC)" or "Slow Draft Clock" here: both were saved into the best ball block and
+        never read (audit 2026-11-06). The draft date and pick clock are the league's draft settings —
+        the wizard's draft schedule and Draft settings after creation.
+      */}
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <GlassInput
           label="Timezone"
           value={settings.timezone}
@@ -275,13 +272,6 @@ export function BestBallAdvancedSettings({
           hint="One end week per round, in increasing order. The last round is the final." />
         <Toggle checked={settings.resetBetweenRounds ?? false} onChange={(resetBetweenRounds) => patchBestBall({ resetBetweenRounds })}
           label="Reset scores between rounds" description="Each new round ranks teams on that round's scores." accent={accent} />
-        <GlassInput
-          label="Slow Draft Clock (min)"
-          value={settings.slowDraftClockMinutes == null ? '' : String(settings.slowDraftClockMinutes)}
-          onChange={(slowDraftClockMinutes) => patchBestBall({ slowDraftClockMinutes: slowDraftClockMinutes.trim() ? Math.max(1, Number.parseInt(slowDraftClockMinutes || '0', 10) || 60) : null })}
-          accent={accent}
-          hint="Use this when the selected draft mode supports a slow clock."
-        />
       </div>
 
       <InnerPanel className="mt-5 space-y-2">

@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
  * The Best Ball settings that decide how the league is SCORED or COMPETED — frozen once the draft has
  * started (`structuralSettingsLockReason`: a draft session past pre-draft, or a season row). Changing any
  * of them after players are drafted re-scores teams built for other rules. The transaction toggles
- * (waivers, trades, FA, IR, taxi, manual substitutions) and the AI toggles stay editable all season.
+ * (waivers, trades, FA, manual substitutions) and the AI toggles stay editable all season.
  */
 const LOCKED_AFTER_DRAFT: ReadonlyArray<{ key: keyof BestBallCreateSettings; label: string }> = [
   { key: 'mode', label: 'operating mode' },
@@ -53,6 +53,38 @@ const FIXED_WITH_CONTEST: ReadonlyArray<keyof BestBallCreateSettings> = [
   'advancersPerPod', 'resetBetweenRounds', 'cumulativeScoring', 'scoringPeriod',
 ]
 
+/**
+ * 🛑 SAVED AND NEVER READ, SO NO LONGER ACCEPTED (audit 2026-11-06, "Settings saved and never read").
+ * Each was written to the League row or `best_ball_settings` and nothing read it back: a commissioner
+ * could set it and the league behaved exactly the same. The column / JSON key stays (no schema change);
+ * the route refuses it and names the setting that actually does the job.
+ */
+const NOT_A_BEST_BALL_SETTING: Readonly<Record<string, string>> = {
+  bbIrEnabled: "IR spots come from the league's roster (its IR slot count), not a best ball switch.",
+  bbTaxiEnabled: 'Best ball rosters have no taxi squad.',
+}
+const NOT_A_BEST_BALL_DRAFT_SETTING: Readonly<Record<string, string>> = {
+  // The draft room's own settings, which the draft engine does read (draft/settings, draft/controls):
+  slowDraftClockMinutes: 'Set the pick clock (timer) in Draft settings.',
+  autoPickBehavior: 'Set CPU autopick in Draft settings.',
+  allowCommissionerPause: 'Use "Commissioner pause / resume / reset timer" in the draft room settings.',
+  allowCommissionerResume: 'Use "Commissioner pause / resume / reset timer" in the draft room settings.',
+  allowCommissionerForcePick: 'Use the commissioner force auto-pick switch in the draft room settings.',
+  draftDateUtc: 'Set the draft date and time in Draft settings.',
+}
+
+/** The first refused field in the body, with where it is really set; null when the body has none. */
+function refusedBestBallSetting(body: Record<string, unknown>): { field: string; hint: string } | null {
+  for (const [field, hint] of Object.entries(NOT_A_BEST_BALL_SETTING)) {
+    if (body[field] !== undefined) return { field, hint }
+  }
+  const bestBall = record(body.bestBall)
+  for (const [field, hint] of Object.entries(NOT_A_BEST_BALL_DRAFT_SETTING)) {
+    if (bestBall && bestBall[field] !== undefined) return { field: `bestBall.${field}`, hint }
+  }
+  return null
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -69,8 +101,6 @@ export async function PATCH(req: NextRequest) {
     bbWaiversEnabled?: boolean
     bbTradesEnabled?: boolean
     bbFaEnabled?: boolean
-    bbIrEnabled?: boolean
-    bbTaxiEnabled?: boolean
     bestBall?: Record<string, unknown>
   }
   try {
@@ -81,6 +111,14 @@ export async function PATCH(req: NextRequest) {
 
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  const refused = refusedBestBallSetting(body as Record<string, unknown>)
+  if (refused) {
+    return NextResponse.json(
+      { error: `${refused.field} is not a Best Ball setting and was not saved. ${refused.hint}`, field: refused.field },
+      { status: 400 },
+    )
+  }
 
   try {
     await requireCommissionerRole(leagueId, userId, 'league')
@@ -101,8 +139,6 @@ export async function PATCH(req: NextRequest) {
       bbWaiversEnabled: true,
       bbTradesEnabled: true,
       bbFaEnabled: true,
-      bbIrEnabled: true,
-      bbTaxiEnabled: true,
       playoffTeams: true,
       playoffStartWeek: true,
       playoffWeeksPerRound: true,
@@ -201,7 +237,7 @@ export async function PATCH(req: NextRequest) {
     if (reason) {
       return NextResponse.json(
         {
-          error: `The ${lockedChanges.join(', ')} cannot change ${reason}: it would re-score teams drafted under the current rules. Waivers, trades, free agency, IR, taxi and manual substitutions can still change.`,
+          error: `The ${lockedChanges.join(', ')} cannot change ${reason}: it would re-score teams drafted under the current rules. Waivers, trades, free agency and manual substitutions can still change.`,
           lockedFields: lockedChanges,
         },
         { status: 409 },
@@ -262,8 +298,6 @@ export async function PATCH(req: NextRequest) {
     bbWaiversEnabled: nextWaivers,
     bbTradesEnabled: nextTrades,
     bbFaEnabled: typeof body.bbFaEnabled === 'boolean' ? body.bbFaEnabled : nextWaivers,
-    ...(typeof body.bbIrEnabled === 'boolean' ? { bbIrEnabled: body.bbIrEnabled } : {}),
-    ...(typeof body.bbTaxiEnabled === 'boolean' ? { bbTaxiEnabled: body.bbTaxiEnabled } : {}),
   }
 
   const league = await prisma.league.update({
