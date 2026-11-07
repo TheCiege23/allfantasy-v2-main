@@ -28,6 +28,8 @@ import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { isPaidLeagueSettings } from '@/lib/league/paidLeague'
+import { draftHasStarted, postDraftJoinLockKind, POST_DRAFT_JOIN_LOCK_MESSAGE } from '@/lib/league-join/postDraftJoinLock'
+import { resolveApprovedRequestLeague } from '@/lib/public-discovery/privateLeagueRequests'
 import { paidLeagueGeoMessage, paidLeagueGeoVerdict } from '@/lib/geo/paidLeagueGeo'
 import {
   CLAIM_REFUSAL_MESSAGE,
@@ -120,41 +122,59 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
+  /*
+   * A private league's commissioner approved this manager's Find a League request
+   * (`app/api/find-league/leagues/[leagueId]/request`). The approval is the invitation: no code,
+   * no password and no invite link is needed, and a link the commissioner later switches off does
+   * not withdraw it. Everything after this — paid-state rule, division gate (an invited path, since
+   * the league is private), capacity, the post-draft lock, duplicate accounts — runs exactly as for
+   * a code.
+   */
+  let result: { leagueId: string }
+  if (body.action === 'join_approved_request') {
+    const approved = await resolveApprovedRequestLeague(body.leagueId, userId)
+    if (!approved.ok) return NextResponse.json({ error: approved.error, code: approved.code }, { status: approved.status })
+    if (approved.alreadyMember) {
+      return NextResponse.json({ success: true, leagueId: approved.leagueId, alreadyMember: true })
+    }
+    result = { leagueId: approved.leagueId }
+  } else {
+    if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
 
-  const validation = await validateFantasyInviteCode(code, { password, userId })
-  if (!validation.valid) {
-    if (validation.error === 'ALREADY_MEMBER' && validation.preview?.leagueId) {
-      return NextResponse.json({
-        success: true,
-        leagueId: validation.preview.leagueId,
-        alreadyMember: true,
-      })
+    const validation = await validateFantasyInviteCode(code, { password, userId })
+    if (!validation.valid) {
+      if (validation.error === 'ALREADY_MEMBER' && validation.preview?.leagueId) {
+        return NextResponse.json({
+          success: true,
+          leagueId: validation.preview.leagueId,
+          alreadyMember: true,
+        })
+      }
+      const statusByError: Record<string, number> = {
+        INVALID_CODE: 404,
+        EXPIRED: 410,
+        LEAGUE_FULL: 409,
+        PASSWORD_REQUIRED: 400,
+        INCORRECT_PASSWORD: 400,
+        INVITE_DISABLED: 403,
+        ALREADY_MEMBER: 409,
+      }
+      const messageByError: Record<string, string> = {
+        INVALID_CODE: 'Invalid invite code',
+        EXPIRED: 'Invite expired',
+        LEAGUE_FULL: 'League is full',
+        PASSWORD_REQUIRED: 'League password is required',
+        INCORRECT_PASSWORD: 'Incorrect password',
+        INVITE_DISABLED: 'Invite link is disabled',
+        ALREADY_MEMBER: 'You are already in this league',
+      }
+      return NextResponse.json(
+        { error: messageByError[validation.error] ?? 'Failed to validate invite' },
+        { status: statusByError[validation.error] ?? 400 }
+      )
     }
-    const statusByError: Record<string, number> = {
-      INVALID_CODE: 404,
-      EXPIRED: 410,
-      LEAGUE_FULL: 409,
-      PASSWORD_REQUIRED: 400,
-      INCORRECT_PASSWORD: 400,
-      INVITE_DISABLED: 403,
-      ALREADY_MEMBER: 409,
-    }
-    const messageByError: Record<string, string> = {
-      INVALID_CODE: 'Invalid invite code',
-      EXPIRED: 'Invite expired',
-      LEAGUE_FULL: 'League is full',
-      PASSWORD_REQUIRED: 'League password is required',
-      INCORRECT_PASSWORD: 'Incorrect password',
-      INVITE_DISABLED: 'Invite link is disabled',
-      ALREADY_MEMBER: 'You are already in this league',
-    }
-    return NextResponse.json(
-      { error: messageByError[validation.error] ?? 'Failed to validate invite' },
-      { status: statusByError[validation.error] ?? 400 }
-    )
+    result = validation.preview
   }
-  const result = validation.preview
 
   /*
    * The division gate (ADR F2.10a), replacing the XP-level gate retired 2026-10-01: career XP
@@ -235,6 +255,9 @@ export async function POST(req: NextRequest) {
           platform: true,
           leagueSize: true,
           leagueVariant: true,
+          leagueType: true,
+          bestBallMode: true,
+          guillotineMode: true,
           userId: true,
         },
       }),
@@ -304,12 +327,15 @@ export async function POST(req: NextRequest) {
       return { success: false as const, status: 409, error: 'League is full' }
     }
 
-    if ((league.leagueVariant === 'survivor' || league.leagueVariant === 'survivor_guillotine') &&
-        draftSession?.status && draftSession.status !== 'pre_draft') {
+    const lockKind = postDraftJoinLockKind(league)
+    const draftStarted = draftHasStarted(draftSession?.status)
+    // Survivor refuses every late join, a team takeover included — unchanged from before.
+    if (lockKind === 'survivor' && draftStarted) {
       return {
         success: false as const,
         status: 409,
-        error: 'Survivor leagues lock new joins after the draft starts.',
+        error: POST_DRAFT_JOIN_LOCK_MESSAGE.survivor,
+        code: 'DRAFT_STARTED' as const,
       }
     }
 
@@ -368,6 +394,22 @@ export async function POST(req: NextRequest) {
         },
       })
       if (unclaimedCount > 0) claimPrompt = true
+    }
+
+    /*
+     * Best Ball and Guillotine teams are made by the draft (lib/league-join/postDraftJoinLock.ts).
+     * Taking over a team that was drafted — an orphan, an open seat, an imported placeholder — is
+     * still allowed above; only a FRESH roster, which would have no players and no contest entry,
+     * is refused once the draft has started. The transaction rolls back nothing here: neither
+     * branch above wrote anything when it found no team.
+     */
+    if (!claim.claimed && !claimPrompt && draftStarted && (lockKind === 'best_ball' || lockKind === 'guillotine')) {
+      return {
+        success: false as const,
+        status: 409,
+        error: POST_DRAFT_JOIN_LOCK_MESSAGE[lockKind],
+        code: 'DRAFT_STARTED' as const,
+      }
     }
 
     const roster = claim.claimed && claim.rosterId
