@@ -341,7 +341,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-waivers-screen" data-rd-screen={rd ? 'waivers' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Players`} title="Players & waivers">
+      <ScreenHead eyebrow="Players" title="Players & waivers">
         {/* Redraft carries these in the header strip below instead. */}
         {!rd && runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
         {!rd && faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
