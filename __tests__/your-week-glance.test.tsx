@@ -27,7 +27,7 @@ describe('yourWeekProgress', () => {
     render(<><YourWeekProgressBar progress={p} /><YourWeekGlance progress={p} /></>)
     expect(screen.getByTestId('your-week-progress').textContent).toContain('2 of 5 decided')
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('2')
-    const tiles = [...screen.getByTestId('your-week-glance').querySelectorAll('.af-wk-glance-value')].map((n) => n.textContent)
+    const tiles = [...screen.getByTestId('your-week-glance').querySelectorAll('.af-pg-stat-value')].map((n) => n.textContent)
     expect(tiles).toEqual(['2', '1', '2', '2'])
   })
 

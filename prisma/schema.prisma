@@ -1845,6 +1845,34 @@ model MatchupOddsSnapshot {
   @@map("matchup_odds_snapshots")
 }
 
+/// Season Outlook odds, one row per team per league-week: the playoff and title probability the stored
+/// league simulation (`lib/core-app/seasonOutlookSims.ts`) gave that team while that week was current.
+/// Written by `lib/core-app/seasonOutlookOddsHistory.ts` from the scheduled pre-compute
+/// (`/api/cron/domain-os-refresh` → `seasonOutlookPrewarm.ts`), the live re-run, and opportunistically
+/// whenever the page computes a run. Upserted, so a re-run of the same week overwrites in place.
+///
+/// `leagueId` is the Season Outlook SCOPE KEY (`weeklyScopeKey`: `sleeper:<id>`, `native:<uuid>`), the
+/// id the stored simulation is keyed on and shared across every manager's League row — not the
+/// AllFantasy league uuid. `teamExternalId` is the platform roster id (`LeagueTeam.externalId`).
+///
+/// Retention: the writer keeps the current and previous season per league and deletes older ones.
+/// Created by `prisma/migrations/20261106120000_league_odds_snapshots`, applied to production on
+/// 2026-11-06 on the owner's instruction. ⚠ Code is raw SQL and treats a missing table as "no
+/// history", so a database that has not run it yet still renders.
+model LeagueOddsSnapshot {
+  id             String   @id
+  leagueId       String   @map("league_id") @db.VarChar(128)
+  season         Int
+  week           Int
+  teamExternalId String   @map("team_external_id") @db.VarChar(64)
+  playoffPct     Float    @map("playoff_pct")
+  titlePct       Float    @map("title_pct")
+  computedAt     DateTime @map("computed_at")
+
+  @@unique([leagueId, season, week, teamExternalId], map: "league_odds_snapshots_league_season_week_team_key")
+  @@map("league_odds_snapshots")
+}
+
 /// A player followed across every league (one row per user, sport and player). Applied to
 /// production 2026-09-16 from `prisma/migrations/20260914190000_player_follows`.
 ///
@@ -1996,6 +2024,8 @@ model LeagueTrade {
 
   @@unique([historyId, transactionId])
   @@index([historyId])
+  // The Trades screen joins LeagueTrade to warehouse facts by `transactionId IN (...)` (lib/core-app/trades.ts).
+  @@index([transactionId])
   @@index([analyzed])
   @@index([season])
   @@index([platform])
@@ -13043,12 +13073,35 @@ model DraftSession {
   league                     League                        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   warRoomSnapshots           WarRoomSnapshot[]
   liveAutopickPreferences    LiveDraftAutopickPreference[]
+  auctionBids                AuctionBid[]
 
   @@index([leagueId])
   @@index([status])
   @@index([leagueId, sportType])
   @@index([sportType, status])
   @@map("draft_sessions")
+}
+
+/// One ACCEPTED bid in an AllFantasy-run auction draft room (lib/live-draft-engine/auction). Written
+/// best-effort after the engine accepts the bid (auctionBidLog.ts) and read for the room's bid ladder.
+/// The bid never depends on this row: a missing table or failed write is caught and skipped.
+/// `playerKey` is `id:<playerId>` or `name:<normalized name>` (lib/draft-room/auctionBidLadder.ts), so
+/// the player on the block and the pick that sold him resolve to the same rows.
+model AuctionBid {
+  id             String       @id @default(cuid())
+  draftSessionId String       @map("draft_session_id")
+  leagueId       String       @map("league_id")
+  playerKey      String       @map("player_key") @db.VarChar(191)
+  playerId       String?      @map("player_id")
+  playerName     String       @map("player_name")
+  rosterId       String       @map("roster_id")
+  amount         Int
+  createdAt      DateTime     @default(now()) @map("created_at")
+  draftSession   DraftSession @relation(fields: [draftSessionId], references: [id], onDelete: Cascade)
+
+  @@index([draftSessionId, playerKey, createdAt])
+  @@index([draftSessionId, createdAt])
+  @@map("auction_bids")
 }
 
 /// Commissioner pick editor audit trail (Neon/Postgres).
@@ -14383,6 +14436,8 @@ model TransactionFact {
   createdAt     DateTime @default(now())
 
   @@index([leagueId, createdAt])
+  // The Trades screen's history read: `leagueId` + `type` filter, newest season/week first (lib/core-app/trades.ts).
+  @@index([leagueId, type, season, weekOrPeriod])
   @@index([playerId, sport])
   @@index([type])
   @@map("dw_transaction_facts")

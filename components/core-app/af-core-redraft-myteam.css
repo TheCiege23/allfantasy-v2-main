@@ -26,7 +26,7 @@
  * than --rd-accent-soft, so every text colour on it keeps the contrast the foundation measured on
  * --surface). The background-image sits OVER .af-frame's own --surface background-color. */
 .af-core.af-shell[data-format=redraft] .af-mt-head{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 62%)}
-.af-core.af-shell[data-format=redraft] .af-mt-crest{border-radius:12px}
+.af-core.af-shell[data-format=redraft] .af-mt-crest{border-radius:var(--af-radius-inner, 12px)}
 /* The lead projection tile reads as THE number of the week. */
 .af-core.af-shell[data-format=redraft] .af-mt-tile--lead{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
 .af-core.af-shell[data-format=redraft] .af-mt-tile--lead .af-mt-tile-value{color:var(--rd-accent-text)}
@@ -124,7 +124,7 @@
 /* Starters / Bench / IR / Taxi are each one card holding a table: a header strip, full-bleed rows and, on
  * Starters, a footer total. `.af-frame` already clips to its radius (af-core.css), so the footer and an
  * empty row's wash take the card's corners without a radius of their own. */
-.af-core.af-shell[data-format=redraft] .af-mt-section{padding:0;border-radius:18px}
+.af-core.af-shell[data-format=redraft] .af-mt-section{padding:0;border-radius:var(--af-radius-card, 16px)}
 .af-core.af-shell[data-format=redraft] .af-mt-section-head{margin:0;padding:12px 20px 10px;border-bottom:1px solid var(--line)}
 .af-core.af-shell[data-format=redraft] .af-mt-section > :not(.af-mt-section-head):not(.af-mt-list):not(.af-mt-total){margin-left:20px;margin-right:20px}
 .af-core.af-shell[data-format=redraft] .af-mt-row{min-height:58px;padding:6px 20px;border-bottom-color:var(--line)}
@@ -150,24 +150,24 @@
  * their own tones (af-my-team.css) — OUT and EMPTY stay red inside the amber card. ⚠ The icon's
  * unscoped rule only HIDES it outside the stamp. */
 .af-mt-check-icon{display:none}
-.af-core.af-shell[data-format=redraft] .af-mt-check{gap:12px;padding:18px 20px;border-radius:18px;border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.af-core.af-shell[data-format=redraft] .af-mt-check{gap:12px;padding:18px 20px;border-radius:var(--af-radius-card, 16px);border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
 .af-core.af-shell[data-format=redraft] .af-mt-check[data-clear='true']{border-color:color-mix(in srgb,var(--good) 45%,transparent);background:color-mix(in srgb,var(--good) 8%,var(--surface))}
 .af-core.af-shell[data-format=redraft] .af-mt-check > h2.af-label{display:flex;align-items:center;gap:8px;margin:0;font-family:inherit;font-size:16px;font-weight:800;letter-spacing:-.01em;text-transform:none;color:var(--warn)}
 .af-core.af-shell[data-format=redraft] .af-mt-check[data-clear='true'] > h2.af-label{color:var(--good)}
 .af-core.af-shell[data-format=redraft] .af-mt-check-icon{display:inline-flex;flex:none}
 .af-core.af-shell[data-format=redraft] .af-mt-check-list{gap:6px}
-.af-core.af-shell[data-format=redraft] .af-mt-check-item{min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:14px}
+.af-core.af-shell[data-format=redraft] .af-mt-check-item{min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--af-radius-inner, 12px);background:var(--surface);font-size:14px}
 .af-core.af-shell[data-format=redraft] .af-mt-check-item:hover,
 .af-core.af-shell[data-format=redraft] .af-mt-check-item:focus-visible{border-color:var(--rd-accent-line);background:var(--surface2)}
 .af-core.af-shell[data-format=redraft] .af-mt-check-tag{border-radius:6px}
 .af-core.af-shell[data-format=redraft] .af-mt-check-fa-link{display:inline-flex;align-items:center;min-height:44px}
 /* The fix action is the card's one solid button: ink on the page colour, in every mode. */
-.af-core.af-shell[data-format=redraft] .af-mt-check-fix{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:1px solid var(--text);border-radius:10px;background:var(--text);color:var(--bg);font-weight:700}
+.af-core.af-shell[data-format=redraft] .af-mt-check-fix{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:1px solid var(--text);border-radius:var(--af-radius-inner, 12px);background:var(--text);color:var(--bg);font-weight:700}
 .af-core.af-shell[data-format=redraft] .af-mt-check-fix:hover,
 .af-core.af-shell[data-format=redraft] .af-mt-check-fix:focus-visible{background:color-mix(in srgb,var(--text) 86%,var(--bg))}
 
 /* ── My team · the matchup card's way through to Matchup ──────────────────────────────────────────── */
-.af-core.af-shell[data-format=redraft] .af-mt-matchup{border-radius:18px}
+.af-core.af-shell[data-format=redraft] .af-mt-matchup{border-radius:var(--af-radius-card, 16px)}
 .af-core.af-shell[data-format=redraft] .af-mt-mu-go{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:700;color:var(--rd-accent-text);text-decoration:none}
 .af-core.af-shell[data-format=redraft] .af-mt-mu-go::after{content:'\2192';margin-left:6px}
 .af-core.af-shell[data-format=redraft] .af-mt-mu-go:hover,
@@ -184,7 +184,7 @@
 .af-core.af-shell[data-format=redraft] .af-wl-prob-you{background:var(--rd-accent)}
 .af-core.af-shell[data-format=redraft] .af-wl-card-bar{background:var(--rd-track)}
 .af-core.af-shell[data-format=redraft] .af-wl-card-bar > span{background:var(--rd-accent)}
-.af-core.af-shell[data-format=redraft] .af-wl-card{border-radius:14px}
+.af-core.af-shell[data-format=redraft] .af-wl-card{border-radius:var(--af-radius-card, 16px)}
 
 /* The season-race line (YourWeekLeague: week · your record · your place by record). ⚠ Unscoped, and it
  * only HIDES: outside the redraft stamp the default look stays exactly what it was. */
@@ -212,7 +212,7 @@ html[data-mode='light'] .af-core.af-shell[data-format=redraft] .af-wbp-calendar{
 .af-core.af-shell[data-format=redraft] .af-dh-title{letter-spacing:-.03em}
 .af-core.af-shell[data-format=redraft] .af-dh-label{display:flex;align-items:center;gap:8px;color:var(--text2)}
 .af-core.af-shell[data-format=redraft] .af-dh-label::before{content:'';width:14px;height:3px;border-radius:2px;background:var(--rd-accent)}
-.af-core.af-shell[data-format=redraft] .af-dh-card{border-radius:14px}
+.af-core.af-shell[data-format=redraft] .af-dh-card{border-radius:var(--af-radius-card, 16px)}
 .af-core.af-shell[data-format=redraft] .af-dh-table{border-color:var(--rd-accent-line);background-image:linear-gradient(115deg,var(--rd-glow),transparent 55%)}
 .af-core.af-shell[data-format=redraft] .af-dh-proj-head,
 .af-core.af-shell[data-format=redraft] .af-dh-proj{color:var(--rd-accent-text)}

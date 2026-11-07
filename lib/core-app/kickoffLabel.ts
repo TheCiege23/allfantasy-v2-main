@@ -1,3 +1,5 @@
+import { kickoffClock, LOCK_ZONE } from './lineupLock'
+
 /**
  * "Sep 3" — the calendar day of a kickoff instant.
  *
@@ -25,4 +27,26 @@ export function kickoffDayLabel(iso: string | null | undefined): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * A daily-sport game's Eastern day and clock, split for a two-column row: `{ day: 'Thu 11/12',
+ * time: '7:00p ET' }` — the two halves of myTeam.ts's `formatKickoff` ("Thu 11/12 7:00p ET"), from the
+ * same pinned `kickoffClock`. `kickoffText` translates `day` ("jue 12/11"); the clock reads the same in
+ * Spanish. Null for no or a bad instant.
+ */
+export function gameDayAndClock(iso: string | null | undefined): { day: string; time: string } | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const clock = kickoffClock(d.toISOString())
+  const space = clock.indexOf(' ')
+  if (space <= 0) return null
+  let monthDay: string
+  try {
+    monthDay = new Intl.DateTimeFormat('en-US', { timeZone: LOCK_ZONE, month: 'numeric', day: 'numeric' }).format(d)
+  } catch {
+    return null
+  }
+  return { day: `${clock.slice(0, space)} ${monthDay}`, time: clock.slice(space + 1) }
 }

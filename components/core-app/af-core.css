@@ -1262,3 +1262,18 @@ html[data-mode='af'] .af-core {
 .af-core .af-info-para:last-child {
   margin-bottom: 0;
 }
+
+/*
+ * Page scale (2026-11-05): ONE page-title size per breakpoint and a two-step card radius, read by
+ * the shared page pieces in components/core-app/primitives. A live audit at 390px found page h1s at
+ * 13–28px and card radii of 8, 12, 14, 15, 16, 18 and 20px across screens; new and migrated screens
+ * use these instead of choosing their own.
+ */
+.af-core {
+  --af-title-size: 30px;
+  --af-radius-inner: 12px;
+  --af-radius-card: 16px;
+}
+@media (max-width: 760px) {
+  .af-core { --af-title-size: 26px; }
+}

@@ -9,6 +9,7 @@ import {
   chainStamps,
   isScoredRow,
   readStandingsRules,
+  standingsSeasonComplete,
   weekStamp,
   type RemainingGame,
   type StandingsBoard,
@@ -402,7 +403,6 @@ export async function getLeagueStandings(
    */
   const firstUnplayed = seasonWeeks.find((w) => w.scored < w.rows)
   const week = firstUnplayed?.week ?? seasonWeeks[seasonWeeks.length - 1].week
-  const seasonComplete = firstUnplayed == null
 
   /*
    * ⚠ THE REFUSAL. Nothing scored means every roster sits on 0.0, and a ranking of twelve zeroes is an
@@ -420,6 +420,8 @@ export async function getLeagueStandings(
 
   const teamCount = new Set(leagueTeams.map((t) => t.externalId)).size || seasonWeeks[0].rows
   const rules = readStandingsRules(league.settings, teamCount, league.platform, `${league.id}:${season}`, league.playoffTeams)
+  // Over only when the league's last regular-season week is on file and scored (standingsModel.ts).
+  const seasonComplete = standingsSeasonComplete(seasonWeeks, rules.regularSeasonEnd)
   /*
    * Playoff weeks are not standings. If the league's regular season would exclude every scored week, the
    * setting is wrong for this data and is ignored rather than emptying the board.

@@ -247,6 +247,8 @@ export type DigestLeague = {
   name: string | null
   platformLeagueId: string
   settings: unknown
+  /** Always 'NFL' today (`loadLeagues` filters on it); carried so the state read is sport-scoped by construction. */
+  sport?: string | null
   leagueType: string | null
   leagueVariant: string | null
   isDynasty: boolean | null
@@ -258,7 +260,7 @@ export type SlateDigestDeps = {
   loadGames: (now: Date) => Promise<SlateGame[]>
   loadLeagues: (season: number) => Promise<DigestLeague[]>
   currentWeek: (platformLeagueId: string, season: number) => Promise<number | null>
-  loadState: (input: { platformLeagueId: string; season: number; week: number; settings: unknown }) => Promise<LeagueWeekState | null>
+  loadState: (input: { platformLeagueId: string; season: number; week: number; settings: unknown; sport?: string | null }) => Promise<LeagueWeekState | null>
   alreadySent: (storedKeys: string[]) => Promise<Set<string>>
   ingest: (events: NotificationEvent[]) => Promise<unknown>
   clock: () => number
@@ -287,6 +289,7 @@ const defaultDeps: SlateDigestDeps = {
         name: true,
         platformLeagueId: true,
         settings: true,
+        sport: true,
         leagueType: true,
         leagueVariant: true,
         isDynasty: true,
@@ -351,7 +354,7 @@ export async function sendSlateDigests(
       const week = await deps.currentWeek(league.platformLeagueId, input.season).catch(() => null)
       const state = week == null
         ? null
-        : await deps.loadState({ platformLeagueId: league.platformLeagueId, season: input.season, week, settings: league.settings }).catch(() => null)
+        : await deps.loadState({ platformLeagueId: league.platformLeagueId, season: input.season, week, settings: league.settings, sport: league.sport }).catch(() => null)
       states.set(league.platformLeagueId, { state, week })
     }
 

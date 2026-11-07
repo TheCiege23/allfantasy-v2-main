@@ -18,7 +18,7 @@ import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
-import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { leagueContextFor, type ClaimedTeamRow, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { loadPickTradeDeadlineView, loadTradeDeadlineCountdown, type PickTradeDeadlineView } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 
@@ -683,22 +683,97 @@ async function resolveAgentIdeas(leagueId: string, userId: string): Promise<{ ag
   }
 }
 
+/**
+ * The part of the Trades screen that paints first: the Trade Center's header and its summary strip
+ * (league, format, team count, deadline chips). Every field is copied verbatim into `TradesData`.
+ */
+export type TradesShell = Pick<TradesData, 'league' | 'gradingContext' | 'deadline' | 'deadlineCountdown' | 'pickTradeDeadline'>
+
+/** The shell, read; and the whole screen's data, still on its way. */
+export type TradesRead = { shell: TradesShell; data: Promise<TradesData> }
+
 export async function getTradesData(
   leagueId: string,
   userId: string,
   /** The render's shared league context — see `leagueContext.ts`. */
   ctx?: LeagueContext | null,
 ): Promise<TradesData | null> {
+  const read = await startTradesRead(leagueId, userId, ctx)
+  return read ? read.data : null
+}
+
+/**
+ * The Trades screen in two parts (2026-11-06), so the page can paint before the slow history lands.
+ *
+ * ⚠ WHAT IS SLOW IS KNOWN, NOT GUESSED — see the timings on `readTradesSections` below: the Sleeper
+ * history (19–30s cold) behind the grade list (1–9s cold), with the live pending-offer scan (0.7–7s)
+ * beside them. The shell needs none of those: it is the league row (already read by the shell's
+ * league context), one team count, the claimed team and the two deadline reads, so it resolves as
+ * soon as they do and `data` keeps going on its own.
+ *
+ * `data` is EXACTLY what `getTradesData` returned before this split — the shell's fields are reused,
+ * not re-read — so the screen renders the same values in the same order once it arrives.
+ */
+export async function startTradesRead(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<TradesRead | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
   /* The shared row. `sport` matters to the pending-offer scan: Sleeper's player
      dictionary is NFL-only, so a non-NFL league must not be handed one. */
   const league = await lc.league()
   if (!league) return null
 
-  const [teamCount, myTeam] = await Promise.all([
-    prisma.leagueTeam.count({ where: { leagueId } }),
-    lc.claimedTeam(),
+  const teamRead = Promise.all([prisma.leagueTeam.count({ where: { leagueId } }), lc.claimedTeam()])
+  // The two deadline reads share nothing with the sections, so they start with the team read.
+  const deadlineReads = Promise.all([
+    loadTradeDeadlineCountdown(league.id).catch(() => null),
+    loadPickTradeDeadlineView(league.id).catch(() => null),
   ])
+  const shellRead: Promise<TradesShell> = Promise.all([teamRead, deadlineReads]).then(
+    ([[teamCount], [deadlineCountdown, pickTradeDeadline]]) => ({
+      league: {
+        id: league.id,
+        name: leagueDisplayName(league.name),
+        platform: String(league.platform ?? 'manual').toLowerCase(),
+        sourceLink: resolveSourceScreenLink({
+          platform: league.platform,
+          sourceLeagueId: league.platformLeagueId,
+          leagueName: leagueDisplayName(league.name),
+          season: league.season,
+          screen: 'trade',
+          action: 'trade',
+        }),
+      },
+      gradingContext: {
+        available: true as const,
+        data: { leagueName: leagueDisplayName(league.name), format: league.leagueType ?? null, teamCount },
+      },
+      deadline: resolveDeadline(league.settings),
+      deadlineCountdown,
+      pickTradeDeadline,
+    }),
+  )
+  const data = teamRead.then(([, myTeam]) => readTradesSections(league, lc, leagueId, userId, myTeam, shellRead))
+  /*
+   * ⚠ When the shell read fails, the caller gets that failure and never sees `data` — which then
+   * rejects with the same error and nobody listening. Marking it handled here stops one failure being
+   * reported twice (the second time as an unhandled rejection). Anyone awaiting `data` still gets it.
+   */
+  data.catch(() => {})
+  return { shell: await shellRead, data }
+}
+
+async function readTradesSections(
+  league: LeagueContextRow,
+  lc: LeagueContext,
+  leagueId: string,
+  userId: string,
+  myTeam: ClaimedTeamRow | null,
+  shellRead: Promise<TradesShell>,
+): Promise<TradesData> {
   const sleeperHistory = String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId
 
   /*
@@ -731,30 +806,17 @@ export async function getTradesData(
       : null
     return { grades, current }
   })()
-  const [{ grades, current }, pendingOffers, agentIdeas] = await Promise.all([
+  // The shell (header fields and the two deadline reads) rides along; its values are reused below.
+  const [{ grades, current }, pendingOffers, agentIdeas, shell] = await Promise.all([
     gradesThenHistory,
     resolvePendingOffers(league, userId, lc),
     resolveAgentIdeas(league.id, userId),
+    shellRead,
   ])
 
   const base = {
-    league: {
-      id: league.id,
-      name: leagueDisplayName(league.name),
-      platform: String(league.platform ?? 'manual').toLowerCase(),
-      sourceLink: resolveSourceScreenLink({
-        platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
-        leagueName: leagueDisplayName(league.name),
-        season: league.season,
-        screen: 'trade',
-        action: 'trade',
-      }),
-    },
-    gradingContext: {
-      available: true as const,
-      data: { leagueName: leagueDisplayName(league.name), format: league.leagueType ?? null, teamCount },
-    },
+    league: shell.league,
+    gradingContext: shell.gradingContext,
     /*
      * Read LIVE off the platform, not from a table.
      *
@@ -771,9 +833,9 @@ export async function getTradesData(
      */
     ...pendingOffers,
     grades,
-    deadline: resolveDeadline(league.settings),
-    deadlineCountdown: await loadTradeDeadlineCountdown(league.id).catch(() => null),
-    pickTradeDeadline: await loadPickTradeDeadlineView(league.id).catch(() => null),
+    deadline: shell.deadline,
+    deadlineCountdown: shell.deadlineCountdown,
+    pickTradeDeadline: shell.pickTradeDeadline,
     ...agentIdeas,
   }
 

@@ -25,6 +25,7 @@ import { RedraftHomeDeck } from './RedraftHomeDeck'
 import { DynastyHomeDeck } from './DynastyHomeDeck'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { platformLabel as platformName } from '@/lib/core-app/platformLinks'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -559,7 +560,7 @@ export function LeagueHome({
   const { league } = data
   const teamDirectory = data.teamDirectory ?? []
   const rosteredPlayerCount = data.rosteredPlayerCount ?? 0
-  const platformLabel = league.platform === 'manual' ? copy('your platform') : league.platform
+  const platformLabel = league.platform === 'manual' ? copy('your platform') : platformName(league.platform)
 
   /*
    * "Needs your attention": the top THREE issues, most urgent first (the redesign
@@ -570,6 +571,45 @@ export function LeagueHome({
   const attention = issues.slice(0, 3)
   const urgent = attention[0] ?? null
   const kpis = buildHomeKpis(data)
+  /*
+   * ON A REDRAFT HOME INSIDE THE SHELL, PAGE TOOLS GO TO THE FOOT. There the header holds nothing
+   * but "Customize page" and "Back to home" (the shell already names the league and has a Home
+   * tab), and the imported-league bar sits under the KPIs — so on a phone two rows of buttons and a
+   * support card stood between the manager and their week. Same controls, same behaviour, moved
+   * below the league's content. Every other format keeps its layout.
+   */
+  const toolsAtFoot = Boolean(data.redraft) && identityInShell
+  const headActions = (
+    <>
+      <CustomizeLeagueLink returnTo={`/core?league=${encodeURIComponent(league.id)}`} className="af-btn af-btn--ghost" />
+      {/*
+        The READ-ONLY chip is on every signed-in screen per the shared
+        contract. At /dashboard?league= this screen renders outside
+        AfCoreShell, so nothing else on the page carries it.
+      */}
+      {identityInShell ? null : (
+        <>
+          <span className="af-readonly">{copy('Read-only')}</span>
+          <span className="af-sync af-num" data-stale={data.syncAge.stale}>
+            {data.syncAge.stale ? '⚠ ' : ''}
+            {data.syncAge.label}
+          </span>
+        </>
+      )}
+      <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
+        {copy('Back to home')} →
+      </Link>
+    </>
+  )
+  const importedActions = !isNativePlatform(league.platform) ? (
+    <ImportedLeagueQuickActions
+      leagueId={league.id}
+      leagueName={league.name}
+      platform={platformLabel}
+      canRemove={data.league.canRemoveImported === true}
+      supportEvent={SUPPORT_OPEN_EVENT}
+    />
+  ) : null
 
   return (
     <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined} data-dynasty={data.dynasty ? 'true' : undefined}>
@@ -599,26 +639,7 @@ export function LeagueHome({
           </div>
         </div>
 
-        <div className="af-lh-headside">
-          <CustomizeLeagueLink returnTo={`/core?league=${encodeURIComponent(league.id)}`} className="af-btn af-btn--ghost" />
-          {/*
-            The READ-ONLY chip is on every signed-in screen per the shared
-            contract. At /dashboard?league= this screen renders outside
-            AfCoreShell, so nothing else on the page carries it.
-          */}
-          {identityInShell ? null : (
-            <>
-              <span className="af-readonly">{copy('Read-only')}</span>
-              <span className="af-sync af-num" data-stale={data.syncAge.stale}>
-                {data.syncAge.stale ? '⚠ ' : ''}
-                {data.syncAge.label}
-              </span>
-            </>
-          )}
-          <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
-            {copy('Back to home')} →
-          </Link>
-        </div>
+        {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
@@ -629,15 +650,7 @@ export function LeagueHome({
 
       <HomeKpiRow data={data} tradeDeadline={tradeDeadline} />
 
-      {!isNativePlatform(league.platform) ? (
-        <ImportedLeagueQuickActions
-          leagueId={league.id}
-          leagueName={league.name}
-          platform={platformLabel}
-          canRemove={data.league.canRemoveImported === true}
-          supportEvent={SUPPORT_OPEN_EVENT}
-        />
-      ) : null}
+      {toolsAtFoot ? null : importedActions}
 
       {league.variant === 'survivor_guillotine' && (
         <section className="af-card" aria-label="Survivor Guilly league">
@@ -1265,6 +1278,13 @@ export function LeagueHome({
             {copy('Back to home')} →
           </Link>
         </section>
+      ) : null}
+
+      {toolsAtFoot ? (
+        <footer className="af-lh-foot" data-testid="league-home-foot">
+          {importedActions}
+          <div className="af-lh-headside af-lh-foot-actions">{headActions}</div>
+        </footer>
       ) : null}
     </div></LeagueDisplayPreferences>
   )

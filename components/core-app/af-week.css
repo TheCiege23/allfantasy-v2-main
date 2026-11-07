@@ -21,29 +21,7 @@
   margin-bottom: 24px;
 }
 
-.af-wk-eyebrow {
-  margin: 0 0 6px;
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-.af-wk-title {
-  margin: 0;
-  font-size: 26px;
-  letter-spacing: -0.035em;
-}
-
-.af-wk-sub {
-  margin: 8px 0 0;
-  max-width: 62ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 
 .af-wk-headactions {
   display: flex;
@@ -617,7 +595,6 @@
  * explicitly, and a row of off-screen matchups is a row nobody reads.
  */
 @media (max-width: 640px) {
-  .af-wk-title { font-size: 21px; }
   .af-wk-flips { grid-template-columns: 1fr; }
   .af-wk-leans { grid-template-columns: 1fr 1fr; }
   .af-rr-grid { grid-template-columns: minmax(0, 1fr); }

@@ -10,7 +10,7 @@
 .af-core .af-llg-note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .af-core .af-llg-list {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 10px;
 }
 .af-core .af-llg-game {
   display: flex; align-items: center; gap: 12px; min-width: 0;
@@ -19,7 +19,9 @@
 .af-core .af-llg-game[data-state='live'] { border-color: color-mix(in srgb, var(--bad, #e11d48) 45%, var(--line)); }
 .af-core .af-llg-teams { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .af-core .af-llg-team { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
-.af-core .af-llg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); font-size: 13.5px; font-weight: 600; }
+/* Names WRAP rather than ellipsis: a name cut mid-word ("Fourth & Fore…") was unreadable at every width.
+   break-word only splits a single token too long for its line; ordinary names break between words. */
+.af-core .af-llg-name { min-width: 0; white-space: normal; overflow-wrap: break-word; line-height: 1.3; color: var(--text2); font-size: 13.5px; font-weight: 600; }
 .af-core .af-llg-pts { flex: none; color: var(--text2); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .af-core .af-llg-team[data-lead='true'] .af-llg-name,
 .af-core .af-llg-team[data-lead='true'] .af-llg-pts { color: var(--text); font-weight: 800; }

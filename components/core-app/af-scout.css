@@ -57,18 +57,7 @@
   border-color: var(--accent);
 }
 
-.af-core .af-sc-title {
-  font-size: 22px;
-  margin: 0 0 6px;
-}
-
-.af-core .af-sc-blurb {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-  max-width: 62ch;
-}
+/* Eyebrow, title and blurb: the shared PageHeader (primitives/af-primitives.css); the head is still a card. */
 
 /* ── This week's opponent ────────────────────────────────────────────── */
 
@@ -144,7 +133,7 @@
 .af-core .af-sc-basis {
   margin: 0;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--warn, var(--line));
   background: color-mix(in srgb, var(--warn, var(--line)) 10%, transparent);
   font-size: 12.5px;
@@ -222,6 +211,12 @@
 }
 
 .af-core .af-sc-team {
+  /*
+   * Named on the token, never inherited: the global heading colour in app/globals.css is the
+   * light-mode ink in AF mode, which painted these names at 1.09 contrast on the AF card (audit
+   * 2026-11-05). Same fix as the Player Finder compare headers.
+   */
+  color: var(--text);
   font-weight: 700;
   font-size: 14px;
   overflow: hidden;
@@ -356,7 +351,7 @@
   align-items: center;
   min-height: 44px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   font-size: 13px;
   font-weight: 700;
@@ -420,7 +415,7 @@
   margin: 0;
   padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   font-size: 12.5px;
   line-height: 1.5;
@@ -433,7 +428,7 @@
 .af-core .af-sc-edge-basis {
   margin: 0;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   font-size: 12.5px;
@@ -457,10 +452,6 @@
 @media (max-width: 560px) {
   .af-core .af-sc-list {
     grid-template-columns: 1fr;
-  }
-
-  .af-core .af-sc-title {
-    font-size: 18px;
   }
 
   /* The switch drops under the title rather than squeezing it. */

@@ -49,6 +49,7 @@ import { prospectIdsOf, type DynastyRosterMarker } from './dynastyRosterMarkers'
 import { readDynastyMarkers } from './dynastyMarkerRead'
 import { isDynastyLeague as isDynastyFormatLeague } from '@/lib/league/isDynastyLeague'
 import { getTeamActivity, type TeamActivity } from './teamActivity'
+import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -136,6 +137,13 @@ export type LineupPlayer = {
    * Optional so every other constructor of a LineupPlayer keeps compiling unchanged.
    */
   afEngineProjectedPoints?: number | null
+  /**
+   * Who made `afProjectedPoints`: the `fantasy_projections.source` of the feed row (`sleeper`, or a
+   * provider-chain name), or `allfantasy` when AllFantasy's own model priced him (the NBA/NHL/MLB
+   * daily-form outlook, college snapshots). The screen names its column from the sources present
+   * instead of assuming Sleeper — Sleeper projects no NHL, yet NHL rows carried that label.
+   */
+  projectionSource?: string | null
   /**
    * He plays indoors this week, so weather is not a factor.
    *
@@ -330,6 +338,12 @@ export type MyTeamData = {
    * fine". Null when every id resolved.
    */
   identityNote: string | null
+  /**
+   * The whole-lineup best answer this week (lib/core-app/lineupOptimizer.ts). Null when it cannot be
+   * answered honestly — best ball, every seat locked, or an open starter we cannot price. Optional so
+   * every other constructor of MyTeamData keeps compiling unchanged.
+   */
+  lineupOptimizer?: LineupOptimization | null
   bench: SectionState<LineupPlayer[]>
   /**
    * Injured reserve and taxi squad, kept apart.
@@ -698,7 +712,7 @@ async function resolvePlayers(
      IS the AF engine's season figure (ncaafProjections.ts). A failed read costs the AF column only. */
   const afEngine = String(sport).toUpperCase() === 'NCAAF'
     ? new Map<string, { projectedPoints: number }>()
-    : await lookupAfEngineProjections(lookupIds, projectionWeek).catch(() => new Map<string, { projectedPoints: number }>())
+    : await lookupAfEngineProjections(lookupIds, projectionWeek, sport).catch(() => new Map<string, { projectedPoints: number }>())
 
   /*
    * ⚠ ONE PASS PER PLAYER, NOT ONE PER ROW. This iterated `rows` and wrote
@@ -764,6 +778,7 @@ async function resolvePlayers(
           ? null
           : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
+      projectionSource: leagueScored ? projection?.source ?? null : null,
       afEngineProjectedPoints: ruledOut
         ? 0
         : afEngineForLeague(afEngine.get(sleeperId), feedProjection, leagueScored?.points ?? null, scoringSettings),
@@ -856,7 +871,7 @@ async function resolvePlayers(
         const player = out.get(id)
         if (!player || !projection.componentStats) continue
         const scored = computeLeagueProjectedPoints(projection.componentStats, scoringSettings)
-        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points })
+        if (scored) out.set(id, { ...player, afProjectedPoints: player.ruledOut ? 0 : scored.points, projectionSource: 'allfantasy' })
       }
     }
 
@@ -1780,6 +1795,7 @@ async function loadMyTeamData(
             : null,
         priceLineups,
         bestBall: base.league.bestBall === true,
+        sport,
       }).catch(() => null))
     : null
 
@@ -1858,6 +1874,7 @@ async function loadMyTeamData(
       starters.length > 0
         ? { available: true, data: starters }
         : { available: false, reason: 'no starting lineup recorded on this roster' },
+    lineupOptimizer: optimizeLineup({ starters, bench: benchPlayers, sport, bestBall: Boolean(base.league.bestBall), now: new Date(adviceAt) }),
     /*
      * Counted over filled starting slots only. An EMPTY slot is a hole in the
      * lineup, not an id we failed to resolve, and folding the two together

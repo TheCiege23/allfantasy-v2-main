@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
+import { screenFromCorePath } from '@/lib/core-app/screenSkeletonKind'
 
 /**
  * The moment between clicking a /core tab and the new screen arriving.
@@ -82,9 +83,23 @@ export function pendingCoreNavTarget(input: {
  */
 export function CoreScreenArea({ children }: { children: React.ReactNode }) {
   const pending = useContext(CoreNavPendingContext)
+  /*
+   * Which screen is arriving, so the skeleton can take its shape. The context only says THAT a
+   * navigation is pending (the shell owns it), so this listens for the same marked-link clicks the
+   * shell does, in the capture phase, and keeps the target's segment. Unknown → the generic cards.
+   */
+  const [arriving, setArriving] = useState<string | null>(null)
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest?.(`a[${CORE_NAV_ATTRIBUTE}]`)
+      setArriving(link ? screenFromCorePath(link.getAttribute('href')) : null)
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
   return (
     <>
-      {pending ? <CoreScreenSkeleton /> : null}
+      {pending ? <CoreScreenSkeleton screen={arriving} /> : null}
       <div style={{ display: pending ? 'none' : 'contents' }}>{children}</div>
     </>
   )

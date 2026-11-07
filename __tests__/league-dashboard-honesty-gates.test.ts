@@ -362,9 +362,14 @@ describe('every nav item resolves to a real screen', () => {
       const next = keyMatches[i + 1]?.index ?? shell.length
       return { key: m[1], window: shell.slice(start, Math.min(next, start + 400)) }
     })
-    const branchKeys = new Set(
-      [...route.matchAll(/activeKey === '([a-z-]+)'/g)].map((m) => m[1]),
-    )
+    /*
+     * A screen can also be a `segment === '…'` branch inside another screen's render — Schedule and
+     * Moves render inside the league-home branch that way. Both forms land on a real screen.
+     */
+    const branchKeys = new Set([
+      ...[...route.matchAll(/activeKey === '([a-z-]+)'/g)].map((m) => m[1]),
+      ...[...route.matchAll(/segment === '([a-z-]+)' \?/g)].map((m) => m[1]),
+    ])
 
     const intoCore = entries.filter((e) => e.window.includes('/core'))
     const orphans = intoCore.map((e) => e.key).filter((k) => !branchKeys.has(k))

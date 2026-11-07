@@ -2,14 +2,10 @@
    the redesign stamp, so nothing else that reuses an af-tl- class moves. /core tokens only. */
 .af-tl[data-redesign='tools'] { gap: 22px; max-width: 1240px; }
 
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). The head stays a column. */
 .af-tl[data-redesign='tools'] .af-tl-head { position: relative; gap: 6px; padding-right: 0; }
-.af-tl[data-redesign='tools'] .af-tl-eyebrow {
-  margin: 0; color: var(--faint);
-  font: 600 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
-  letter-spacing: 0.1em; text-transform: uppercase;
-}
-.af-tl[data-redesign='tools'] .af-tl-title { font: 800 30px/1.1 'Archivo', system-ui, sans-serif; letter-spacing: -0.02em; }
-.af-tl[data-redesign='tools'] .af-tl-sub { font-size: 14px; color: var(--text2); }
+/* The plan chip lays out as the head's own child (absolute on wide screens), not inside a row. */
+.af-tl[data-redesign='tools'] .af-tl-head > .af-pg-actions { display: contents; }
 .af-tl[data-redesign='tools'] .af-tl-planchip {
   align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin-top: 6px; padding: 0 14px;
   border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
@@ -40,14 +36,7 @@
 }
 .af-tl[data-redesign='tools'] .af-tl-chimmy-ask:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 
-/* Plan filter. */
-.af-tl[data-redesign='tools'] .af-tl-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.af-tl[data-redesign='tools'] .af-tl-filters button {
-  min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line2);
-  background: var(--surface); color: var(--text2); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
-}
-.af-tl[data-redesign='tools'] .af-tl-filters button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.af-tl[data-redesign='tools'] .af-tl-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Plan filter: the shared FilterChips (primitives/af-primitives.css). */
 .af-tl[data-redesign='tools'] .af-tl-empty {
   margin: 0; padding: 32px; border-radius: 16px; border: 1px dashed var(--line2); background: var(--surface);
   text-align: center; font-size: 15px; color: var(--muted);
@@ -98,9 +87,6 @@
 .af-tl[data-redesign='tools'] .af-tl-upsell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (max-width: 760px) {
-  .af-tl[data-redesign='tools'] .af-tl-title { font-size: 26px; }
   .af-tl[data-redesign='tools'] .af-tl-chimmy { flex-direction: column; align-items: stretch; }
-  .af-tl[data-redesign='tools'] .af-tl-filters { flex-wrap: nowrap; overflow-x: auto; }
-  .af-tl[data-redesign='tools'] .af-tl-filters button { flex: none; }
   .af-tl[data-redesign='tools'] .af-tl-grid { grid-template-columns: minmax(0, 1fr); }
 }

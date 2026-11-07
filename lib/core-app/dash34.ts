@@ -5,7 +5,7 @@ import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLink
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
-import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
+import { isForeignIdSpace, isKnownNonNflSport, sleeperReadableRosters } from './rosterIdSpace'
 import { lineupActionability } from './lineupActionability'
 import { getByeWeeks } from './byeWeeks'
 import { isRuledOut } from './injuryStatus'
@@ -1721,6 +1721,9 @@ async function loadDash34Data(
     : new Map()
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
   function pointsIn(leagueId: string, pid: string): number | null {
+    // The feed is NFL rows keyed by Sleeper id. A Sleeper NBA league's ids are another namespace and
+    // match NFL strangers, so a non-NFL league's cover is never priced from it (market order instead).
+    if (isKnownNonNflSport(sportByLeague.get(leagueId))) return null
     const proj = projectionById.get(pid)
     if (!proj) return null
     if (!scoringByLeague.has(leagueId)) {

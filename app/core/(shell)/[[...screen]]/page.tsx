@@ -53,7 +53,7 @@ import {
 } from '@/lib/league-import/importCoverageSummary'
 import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
-  Matchup, Trades, Waivers, DraftHq, DraftBoard,
+  Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
   GamePlan, WarRoomWeek, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
@@ -124,7 +124,8 @@ import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { MatchupPickerBlurb, MatchupPickerNotice } from '@/components/core-app/MatchupPickerCopy'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
-import { getTradesData } from '@/lib/core-app/trades'
+import { startTradesRead } from '@/lib/core-app/trades'
+import { TradesHistorySlot, completedHistoryOf } from '@/components/core-app/screens/TradesHistorySection'
 import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
 import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
@@ -204,6 +205,7 @@ import { WeekHistoryNotice } from '@/components/core-app/WeekHistoryNotice'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { readOddsHistory } from '@/lib/core-app/seasonOutlookOddsHistory'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
@@ -239,7 +241,7 @@ import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
 import { warRoomIssueHref } from '@/lib/core-app/warRoomIssueHref'
-import LeagueTabs from '@/components/core-app/LeagueTabs'
+import LeagueTabs, { OpenLeagueLink } from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { loadDynastyStandingsHistory } from '@/lib/core-app/dynastyStandingsHistoryLoader'
@@ -1688,6 +1690,10 @@ export default async function AfCorePage({
   // ONE read shared by the bar's two streamed slots (the promise, not two calls).
   const leagueOs =
     showContextBar && selectedLeagueId ? resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null) : null
+  // Decided once: the bar renders on exactly this, and the tab row hands it Open League when it does.
+  const contextBarShown = Boolean(
+    showContextBar && selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) && leagueOs,
+  )
 
   return (
     <AfCoreShell
@@ -1794,6 +1800,8 @@ export default async function AfCorePage({
       {selectedRailLeague?.hub && selectedLeagueId ? <ConnectedLeagueContext hub={selectedRailLeague.hub} selectedLeagueId={selectedLeagueId} /> : null}
       {selectedLeagueId && selectedLeagueName ? (
         <LeagueTabs
+          /* The context bar carries Open League when it is drawn, so this row can take no space. */
+          workspaceLinkElsewhere={contextBarShown}
           commissionerHref={playedLeagues.some(l => l.id === selectedLeagueId && l.isCommissioner) ? `/core/commissioner?league=${encodeURIComponent(selectedLeagueId!)}` : null}
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
@@ -1813,11 +1821,13 @@ export default async function AfCorePage({
         />
       ) : null}
 
-      {showContextBar && selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) && leagueOs ? (
+      {/* The repeated checks narrow types for the props below; `contextBarShown` is the same decision. */}
+      {contextBarShown && selectedLeagueId && selectedLeagueName && isCoreSurfaceKey(activeKey) && leagueOs ? (
         <CoreLeagueContextBar
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeaguePlatform ?? 'manual')}
+          workspaceLink={<OpenLeagueLink leagueId={selectedLeagueId} platform={platformLabel(selectedLeaguePlatform)} />}
           /*
            * The source chip opens the Overview's "what's on file" panel, from any tab. Only for an
            * imported league: a native one has no panel, and a link to a missing anchor lands on the
@@ -1860,7 +1870,7 @@ export default async function AfCorePage({
       */}
       <CoreScreenArea>
         <CoreScreenErrorBoundary resetKey={errorResetKey}>
-          <Suspense key={screenKey} fallback={<CoreScreenSkeleton />}>
+          <Suspense key={screenKey} fallback={<CoreScreenSkeleton screen={segment} />}>
             {body}
           </Suspense>
         </CoreScreenErrorBoundary>
@@ -2103,6 +2113,53 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'draft-hq' ||
     activeKey === 'war-room'
       ? resolveCorePaywall(userId, { email: viewerEmail, now })
+      : Promise.resolve(null)
+
+  /*
+   * ⚠ THE TRADE CENTER'S TWO READS START HERE, BESIDE THE PAYWALL, not after every await above where
+   * they are used: they need neither the paywall nor each other, and starting them late put the
+   * paywall and the value actions in front of the trades read on the screen's load time. Awaited
+   * where they always were; the failure flag is still set before anything reads it.
+   *
+   * ⚠ ONLY THE SHELL IS AWAITED (2026-11-06). `startTradesRead` resolves once the header's reads are
+   * in and hands back the rest — grades, the 19–30s cold Sleeper history, offers, ideas — as a
+   * promise that streams into the history slot (TradesHistorySection). A failure HERE is still the
+   * whole-screen ScreenLoadError; a failure in the streamed part is that card in the slot alone.
+   */
+  let tradesLoadFailed = false
+  const tradesRead =
+    activeKey === 'trades' && selectedLeagueId
+      ? startTradesRead(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/trades] read failed', e)
+          tradesLoadFailed = true
+          return null
+        })
+      : Promise.resolve(null)
+  const tradeValueActionsRead =
+    activeKey === 'trades' && selectedLeagueId
+      ? getCrossLeagueValueActions(
+          userId,
+          playedLeagues.filter((league) => league.id === selectedLeagueId).map((league) => ({
+            id: league.id,
+            name: league.name,
+            platform: String(league.platform ?? 'manual'),
+            sport: String(league.sport ?? 'NFL'),
+          })),
+        ).catch(() => [])
+      : Promise.resolve([])
+
+  /*
+   * The paired franchise half for the connected tool screens, started here for the same reason: it
+   * needs nothing awaited below, and it used to begin only after the trades, waivers and draft reads.
+   * A missing pairing is the normal case; null says nothing went wrong.
+   */
+  const connectedToolScreen = ['war-room', 'trades', 'waivers', 'my-team', 'draft-hq', 'players'].includes(activeKey)
+  const connectedFranchiseRead =
+    connectedToolScreen && selectedLeagueId
+      ? resolvePairedHalf(selectedLeagueId, userId, {
+          includeOperationalSummary: activeKey === 'war-room',
+          leagueContext: leagueCtx,
+        }).catch(() => null)
       : Promise.resolve(null)
 
   // Rendered above the matchup and the league home (league-first only; null everywhere else).
@@ -2956,29 +3013,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       )
     : null
 
-  /* Same split as my-team above: a failed read must not read as "no league". */
-  let tradesLoadFailed = false
-  const trades =
-    activeKey === 'trades' && selectedLeagueId
-      ? await getTradesData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
-          console.error('[core/trades] read failed', e)
-          tradesLoadFailed = true
-          return null
-        })
-      : null
-
-  const tradeValueActions =
-    activeKey === 'trades' && selectedLeagueId
-      ? await getCrossLeagueValueActions(
-          userId,
-          playedLeagues.filter((league) => league.id === selectedLeagueId).map((league) => ({
-            id: league.id,
-            name: league.name,
-            platform: String(league.platform ?? 'manual'),
-            sport: String(league.sport ?? 'NFL'),
-          })),
-        ).catch(() => [])
-      : []
+  /* Same split as my-team above: a failed read must not read as "no league". Both reads started near the top. */
+  const tradesStart = await tradesRead
+  /* The header's fields — every value the Trade Center's head and summary strip read. */
+  const trades = tradesStart?.shell ?? null
+  const tradeValueActions = await tradeValueActionsRead
 
   /*
    * The cross-league waiver board. Bounded to one candidate-pool read for the
@@ -3086,7 +3125,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const gamePlanView = activeKey === 'war-room' && sp.view === 'plan'
 
   /* The War Room's first room: every manager in the league, profiled. */
-  const connectedToolScreen = ['war-room', 'trades', 'waivers', 'my-team', 'draft-hq', 'players'].includes(activeKey)
   /*
    * ⚠ SCOUT ONLY, NOT THE PAIRED HALF. A missing franchise pairing is the NORMAL case — most
    * leagues have none — so `resolvePairedHalf` returning null says nothing went wrong. Scout is
@@ -3118,12 +3156,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           return null
         })
       : Promise.resolve(null),
-    connectedToolScreen && selectedLeagueId
-      ? resolvePairedHalf(selectedLeagueId, userId, {
-          includeOperationalSummary: activeKey === 'war-room',
-          leagueContext: leagueCtx,
-        }).catch(() => null)
-      : Promise.resolve(null),
+    connectedFranchiseRead,
     loadScoutEdgeForScreen({ leagueId: scoutEdgeAccess ? selectedLeagueId : null, access: scoutEdgeAccess, userId }),
     wantsLeaguePlan && selectedLeagueId ? loadGameDayTriage(userId, [selectedLeagueId]).catch(() => null) : Promise.resolve(null),
   ])
@@ -3331,6 +3364,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const outlookOnSummary = standingsOnSummary
 
+  /* Every played league, in the shape Season Outlook reads. Pure; the standings odds and the outlook share it. */
+  const outlookLeagues = playedLeagues.map((l) => ({
+    id: l.id,
+    name: l.name,
+    sport: String(l.sport ?? ''),
+    leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
+    platform: String(l.platform ?? ''),
+    platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+    settings: (l as { settings?: unknown }).settings ?? null,
+  }))
+
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
       ? await readLeagueStandingsSummary(selectedLeagueId, userId, leagueCtx).catch(() => null)
@@ -3344,28 +3388,77 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * ⚠ EVERY STANDINGS READ BELOW NEEDS THE TABLE AND NOTHING ELSE, SO THEY ALL START HERE, TOGETHER,
+   * and each is awaited where its section is built. They used to run one after another — eliminations,
+   * lineups, the odds simulation, the league row, dynasty history, then efficiency and draft order —
+   * which put the whole chain on the screen's load time. Each keeps its own `.catch(() => null)`, so a
+   * failed read still costs its own section and nothing else.
+   */
+  const standingsLoaded = activeKey === 'standings' && Boolean(selectedLeagueId) && Boolean(standings)
+  const standingsAvailable = activeKey === 'standings' && Boolean(selectedLeagueId) && Boolean(standings?.available)
+
+  /*
    * An elimination league has no playoffs (owner's report, 2026-10-03): its table reads Safe / On the
    * bubble / Eliminated. Who is out comes from the same read as Scout's cards; the bubble is the rail's
    * own ordering for this week, so the table, Scout and the cut banner agree. Null for any other league,
    * and a failed read keeps the ordinary table rather than inventing a status.
    */
-  const standingsEliminated =
-    activeKey === 'standings' && selectedLeagueId && standings
-      ? await getLeagueEliminations(selectedLeagueId, userId, leagueCtx).catch(() => null)
-      : null
+  const standingsEliminatedRead =
+    standingsLoaded && selectedLeagueId
+      ? getLeagueEliminations(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      : Promise.resolve(null)
 
   /*
    * This week's lineups, projected by AllFantasy's engine (AF) and the provider (API), for every team
    * in the league — only on the standings screen, only when the table itself loaded. A failed read
    * costs that section and nothing else.
    */
-  const standingsLineups =
-    activeKey === 'standings' && selectedLeagueId && standings && leagueCtx
-      ? await leagueCtx
+  const standingsLineupsRead =
+    standingsLoaded && leagueCtx
+      ? leagueCtx
           .league()
           .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
           .catch(() => null)
-      : null
+      : Promise.resolve(null)
+
+  /* The odds, the league row (efficiency, draft order) and dynasty history — see where each is awaited. */
+  const standingsOutlookLeague =
+    standingsAvailable ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null) : null
+  const standingsOddsRead = standingsOutlookLeague
+    ? getSeasonOutlook(userId, [standingsOutlookLeague], null)
+        .then((o) => {
+          const league = o.leagues.find((l) => l.leagueId === selectedLeagueId)
+          return league ? toStandingsOdds(league, o.swingByLeague[league.leagueId] ?? null, o.basis) : null
+        })
+        .catch(() => null)
+    : Promise.resolve(null)
+  const standingsLeagueRowRead =
+    standingsAvailable && leagueCtx ? leagueCtx.league().catch(() => null) : Promise.resolve(null)
+  const standingsExtrasRead = standingsLeagueRowRead.then(async (row) => {
+    if (!standings?.available || !row) return [null, null] as const
+    return Promise.all([
+      getLineupEfficiency({
+        league: row,
+        season: standings.season,
+        throughWeek: standings.board.throughWeek,
+      }).catch(() => null),
+      readDraftOrderRule(row)
+        .then((rule) => (rule ? buildDraftOrderPreview(standings.board, rule) : null))
+        .catch(() => null),
+    ])
+  })
+  const standingsDynastyRead =
+    standingsLoaded && selectedLeagueId && leagueCtx
+      ? leagueCtx
+          .league()
+          .then((league) =>
+            league && usesDynastyBackground(league) ? loadDynastyStandingsHistory(selectedLeagueId, userId, league.season ?? null) : null,
+          )
+          .catch(() => null)
+      : Promise.resolve(null)
+
+  const standingsEliminated = await standingsEliminatedRead
+  const standingsLineups = await standingsLineupsRead
 
   /*
    * Point 9's visible half. The envelope's age becomes a chip in the board's header.
@@ -3502,16 +3595,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ⚠ `.catch(() => null)` ON BOTH ARMS, as with standings: a rebuild fails for the same reasons
    * the direct read does, and the screen already renders an outlook-less state. Rejecting here
    * would replace it with a Suspense error boundary.
+   *
+   * (`outlookLeagues` itself is defined above the standings reads, which start the table's odds early.)
    */
-  const outlookLeagues = playedLeagues.map((l) => ({
-    id: l.id,
-    name: l.name,
-    sport: String(l.sport ?? ''),
-    leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
-    platform: String(l.platform ?? ''),
-    platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-    settings: (l as { settings?: unknown }).settings ?? null,
-  }))
 
   /*
    * ⚠ THE FINGERPRINT IS PART OF THE SUMMARY KEY. A scored week, an import, a roster move, an
@@ -3576,20 +3662,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * Outlook's own panel, and the expensive part. The swing game and rooting guide do not need it; they
    * run for any league where your odds are still in play.
    *
-   * ⚠ ONLY AFTER THE TABLE ITSELF LOADED. A failed read costs the odds and nothing else.
+   * ⚠ ONLY AFTER THE TABLE ITSELF LOADED. A failed read costs the odds and nothing else. Started beside
+   * the table's other reads (`standingsOddsRead`, above).
    */
-  const standingsOutlookLeague =
-    activeKey === 'standings' && selectedLeagueId && standings?.available
-      ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null)
-      : null
-  const standingsOdds = standingsOutlookLeague
-    ? await getSeasonOutlook(userId, [standingsOutlookLeague], null)
-        .then((o) => {
-          const league = o.leagues.find((l) => l.leagueId === selectedLeagueId)
-          return league ? toStandingsOdds(league, o.swingByLeague[league.leagueId] ?? null, o.basis) : null
-        })
-        .catch(() => null)
-    : null
+  const standingsOdds = await standingsOddsRead
 
   /*
    * Lineup efficiency (Sleeper only) and next season's draft order, for the same table.
@@ -3599,11 +3675,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    *
    * ⚠ EFFICIENCY STOPS AT THE TABLE'S `throughWeek`, so a week the platform has not finalised is never
    * scored against the lineup someone may still be changing.
+   *
+   * Both run off `standingsLeagueRowRead`, started beside the table's other reads (`standingsExtrasRead`).
    */
-  const standingsLeagueRow =
-    activeKey === 'standings' && selectedLeagueId && standings?.available && leagueCtx
-      ? await leagueCtx.league().catch(() => null)
-      : null
   /*
    * Dynasty history (rafters + every franchise's all-time record) — a DYNASTY league only, by the same
    * `usesDynastyBackground` rule as the shell's Dynasty Era stamp; every other league gets null and the
@@ -3611,29 +3685,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * costs the section and nothing else. Drawn on the unavailable branch too: an offseason dynasty
    * league is exactly when its history matters.
    */
-  const standingsDynasty =
-    activeKey === 'standings' && selectedLeagueId && standings && leagueCtx
-      ? await leagueCtx
-          .league()
-          .then((league) =>
-            league && usesDynastyBackground(league) ? loadDynastyStandingsHistory(selectedLeagueId, userId, league.season ?? null) : null,
-          )
-          .catch(() => null)
-      : null
+  const standingsDynasty = await standingsDynastyRead
 
-  const [standingsEfficiency, standingsDraftOrder] =
-    standings?.available && standingsLeagueRow
-      ? await Promise.all([
-          getLineupEfficiency({
-            league: standingsLeagueRow,
-            season: standings.season,
-            throughWeek: standings.board.throughWeek,
-          }).catch(() => null),
-          readDraftOrderRule(standingsLeagueRow)
-            .then((rule) => (rule ? buildDraftOrderPreview(standings.board, rule) : null))
-            .catch(() => null),
-        ])
-      : [null, null]
+  const [standingsEfficiency, standingsDraftOrder] = await standingsExtrasRead
 
   /*
    * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
@@ -3649,6 +3703,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .league()
           .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
           .catch(() => null)
+      : null
+
+  /*
+   * Your playoff and title odds by week this season, for the same one league (`league_odds_snapshots`).
+   * Null when the table is missing, the read fails or fewer than two weeks are on file — the screen then
+   * draws no chart at all. Display only; a failed read costs the chart and nothing else.
+   */
+  const outlookHistoryLeague =
+    activeKey === 'season-outlook' && selectedLeagueId
+      ? outlook?.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null
+      : null
+  const outlookHistoryInput = outlookHistoryLeague ? outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null : null
+  const outlookHistory =
+    outlookHistoryLeague?.you && outlookHistoryInput
+      ? await readOddsHistory(outlookHistoryInput, outlookHistoryLeague.season, outlookHistoryLeague.you.rosterId).catch(() => null)
       : null
 
   /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
@@ -4813,8 +4882,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={tradeStripLeagues}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
-              history={<Trades data={trades} hidePending />}
-              completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
+              /*
+                The slow half streams in here (TradesHistorySection): same `<Trades data hidePending />`
+                once the read lands, a shaped placeholder until then, and its own "did not load" card if
+                it fails. `completedHistory` is the same Sleeper list, delivered when it arrives.
+              */
+              history={
+                tradesStart ? (
+                  <TradesHistorySlot
+                    data={tradesStart.data}
+                    screen={navLabel('trades')}
+                    retryHref={retryHref}
+                    language={language}
+                  />
+                ) : null
+              }
+              completedHistory={tradesStart ? completedHistoryOf(tradesStart.data) : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
               startWithOfferEntry={sp.enter === 'offer' && trades.league.platform === 'sleeper'}
             />
@@ -4942,8 +5025,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
             {draftArchiveFirst ? null : draftArchiveSlot}
           </>
-        ) : selectedLeagueId && draftArchiveSlot ? (
-          draftArchiveSlot
+        ) : selectedLeagueId && draftArchive ? (
+          /* No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it carries the title. */
+          <DraftArchive {...draftArchive} asDraftHq />
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
@@ -5386,6 +5470,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               priorities={outlook.priorities}
               freshness={outlookFreshness}
               lineups={outlookLineups}
+              history={outlookHistory}
             />
           ) : (
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />
@@ -5578,6 +5663,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         homeLoads ? (
           <CoreHomeCards
             loads={homeLoads}
+            tradeLeagues={tradeStripLeagues.filter((l) => homePlayed.some((p) => p.id === l.id))}
+            viewerId={userId}
             now={now}
             resetKey={errorResetKey}
             planName={plan?.name ?? null}

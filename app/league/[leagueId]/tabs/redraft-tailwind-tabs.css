@@ -122,6 +122,7 @@ html[data-mode='light'] .rdt{--rdt-on-bad:#ffffff}
 .rdt-select option{background-color:var(--rdt-surface);color:var(--rdt-text)}
 
 /* ── Schedule: the season calendar ──────────────────────────────────────────────────────────── */
+/* 76px, not 64: "Deadline"/"Playoffs" need ~59px with the tag's letter-spacing; at 64 they reached the tile border. */
 .rdt-cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px}
 .rdt-cal-cell{position:relative;display:flex;min-height:64px;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:4px;border:1px solid var(--rdt-line2);border-radius:10px;padding:7px 8px;background-color:var(--rdt-surface2);color:var(--rdt-muted);text-align:left}
 .rdt-cal-cell:disabled{cursor:default}
@@ -171,7 +172,9 @@ html[data-mode='light'] .rdt-bridge :is(input,select,textarea){background-color:
 @media (max-width:767px){
   .rdt-head h1{font-size:19px}
   .rdt-bugs{grid-template-columns:minmax(0,1fr)}
-  .rdt-cal{grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:5px}
+  /* 70px, not 48: six 49px tiles spilled "Deadline"/"Playoffs" 12px out of the tile at 390. Four a row at 390,
+     three at 360, every tag inside (__tests__/league-media/scheduleFit.test.tsx). */
+  .rdt-cal{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:5px}
   .rdt-cal-cell{min-height:54px;padding:6px}
   .rdt-cal-tag{letter-spacing:0}
 }

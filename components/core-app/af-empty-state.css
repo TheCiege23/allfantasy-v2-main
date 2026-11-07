@@ -1,0 +1,30 @@
+/*
+ * The "nothing here yet" card a /core screen shows when its data is missing for an ordinary reason
+ * — before the draft, before week 1 is scored, before a sync. A titled card that says what will
+ * appear and when, instead of a loader's lowercase reason on its own (which read as broken).
+ * /core tokens only, so light, dark and AF all follow.
+ */
+.af-core .af-empty-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 20px 22px; border: 1px dashed var(--line2, var(--line)); border-radius: 16px;
+  background: var(--surface); color: var(--text);
+}
+.af-core .af-empty-card-mark {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--accent-soft, var(--chip)); color: var(--accent);
+  font-size: 18px; font-weight: 800; line-height: 1;
+}
+.af-core .af-empty-card-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-core .af-empty-card-title { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+/* Loader reasons arrive lowercase ("this league has no scored weeks yet"); as a sentence they lead with a capital. */
+.af-core .af-empty-card-body { margin: 0; color: var(--text2); font-size: 14px; line-height: 1.5; }
+.af-core .af-empty-card-body::first-letter { text-transform: uppercase; }
+.af-core .af-empty-card-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.af-core .af-empty-card-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 0; font-size: 13px; font-weight: 700; }
+.af-core .af-empty-card-links a { color: var(--accent); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+.af-core .af-empty-card-links a:hover { text-decoration: underline; }
+@media (max-width: 480px) {
+  .af-core .af-empty-card { padding: 16px; gap: 12px; }
+  .af-core .af-empty-card-mark { width: 30px; height: 30px; font-size: 15px; }
+}

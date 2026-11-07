@@ -154,7 +154,12 @@
 .af-tr-count-label {
   margin-top: 2px;
   font-size: 11px;
-  color: var(--faint);
+  color: var(--muted);
+}
+
+/* 11px labels need 4.5:1; --faint measured 3.8 (dark) and 4.0 (AF) here. */
+.af-core .af-tr-side .af-label {
+  color: var(--muted);
 }
 
 .af-tr-swap {

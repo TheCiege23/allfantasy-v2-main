@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -386,6 +387,59 @@ function sportFromMeta(meta: string | null | undefined): string | null {
   return ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(first) ? first : null
 }
 
+/**
+ * The league trade evaluator on its own: a league picker, then that league's builder with Team A as
+ * you and Team B a manager dropdown — or, for an offer from somewhere AllFantasy cannot see, the
+ * no-league analyzer. The Trades hub renders it in its evaluator section; Home renders it inside a
+ * folded card (HomeTradeEvaluatorCard). One component, so the two cannot drift apart.
+ */
+export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?: string | null }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  /*
+   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
+   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
+   * from somewhere AllFantasy cannot see.
+   */
+  const OUTSIDE = 'outside'
+  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
+  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
+  return (
+    <>
+      <label className="af-tc-hub-league-select">
+        <span>{copy('League')}</span>
+        <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
+          {props.leagues.map((league) => (
+            <option key={league.id} value={league.id}>
+              {league.name}{league.meta ? ` · ${league.meta}` : ''}
+            </option>
+          ))}
+          <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
+        </select>
+      </label>
+      {evalLeague ? (
+        <>
+          <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
+          {/*
+            The league's own Trade Center builder, keyed by league so switching leagues starts a
+            clean deal instead of carrying one team's players into another league.
+          */}
+          <TradeCenter
+            key={evalLeague.id}
+            embedded
+            viewerId={props.viewerId}
+            league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
+            platform={evalLeague.platform}
+            sport={sportFromMeta(evalLeague.meta)}
+          />
+        </>
+      ) : (
+        <GenericTradeAnalyzer viewerId={props.viewerId} />
+      )}
+    </>
+  )
+}
+
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
@@ -395,14 +449,6 @@ function AllLeaguesTradeHub(props: {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const [query, setQuery] = useState('')
-  /*
-   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
-   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
-   * from somewhere AllFantasy cannot see.
-   */
-  const OUTSIDE = 'outside'
-  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
-  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
@@ -410,11 +456,13 @@ function AllLeaguesTradeHub(props: {
 
   return (
     <div className="af-tc af-tc--hub">
-      <header className="af-tc-head af-tc-hub-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade command center')}</h1>
-        <p className="af-tc-lede">{copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}</p>
-      </header>
+      <PageHeader
+        className="af-tc-head af-tc-hub-head"
+        subClassName="af-tc-lede"
+        eyebrow={<>{copy("Core · ")}{copy('Trades')}</>}
+        title={copy('Trade command center')}
+        sub={copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}
+      />
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
 
@@ -425,36 +473,7 @@ function AllLeaguesTradeHub(props: {
             <h2>{copy('Build a trade in one of your leagues')}</h2>
           </div>
         </div>
-        <label className="af-tc-hub-league-select">
-          <span>{copy('League')}</span>
-          <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
-            {props.leagues.map((league) => (
-              <option key={league.id} value={league.id}>
-                {league.name}{league.meta ? ` · ${league.meta}` : ''}
-              </option>
-            ))}
-            <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
-          </select>
-        </label>
-        {evalLeague ? (
-          <>
-            <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
-            {/*
-              The league's own Trade Center builder, keyed by league so switching leagues starts a
-              clean deal instead of carrying one team's players into another league.
-            */}
-            <TradeCenter
-              key={evalLeague.id}
-              embedded
-              viewerId={props.viewerId}
-              league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
-              platform={evalLeague.platform}
-              sport={sportFromMeta(evalLeague.meta)}
-            />
-          </>
-        ) : (
-          <GenericTradeAnalyzer viewerId={props.viewerId} />
-        )}
+        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} />
       </section>
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
@@ -567,6 +586,33 @@ function toInput(a: PickedAsset) {
   return { kind: 'faab' as const, amount: a.amount }
 }
 
+/**
+ * `completedHistory` as a list, whether the caller passed one or a promise of one.
+ *
+ * ⚠ RESOLVED INTO STATE, NOT `use()`d. Suspending on it would hold the whole Trade Center — header,
+ * builder and all — behind the one read it was split out to stop waiting for. Until a promise lands
+ * the offers and timeline render without the imported rows (the timeline's own native rows are read
+ * client-side regardless), and `ready` stays false so nothing decides "this trade is not in the
+ * history" on a list that has not arrived. A rejected promise counts as an empty list.
+ */
+export function useCompletedHistory(
+  source: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]> | undefined,
+): { ready: boolean; list: readonly TradeRecord[] | undefined } {
+  const pending = source != null && typeof (source as PromiseLike<unknown>).then === 'function'
+  const [landed, setLanded] = useState<{ from: unknown; list: readonly TradeRecord[] } | null>(null)
+  useEffect(() => {
+    if (!pending) return
+    let live = true
+    Promise.resolve(source as PromiseLike<readonly TradeRecord[]>).then(
+      (list) => { if (live) setLanded({ from: source, list }) },
+      () => { if (live) setLanded({ from: source, list: [] }) },
+    )
+    return () => { live = false }
+  }, [source, pending])
+  if (!pending) return { ready: true, list: source as readonly TradeRecord[] | undefined }
+  return landed && landed.from === source ? { ready: true, list: landed.list } : { ready: false, list: undefined }
+}
+
 export function TradeCenter(props: {
   /** Authenticated account identity, supplied by the server for device draft isolation. */
   viewerId?: string | null
@@ -612,7 +658,12 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
-  completedHistory?: readonly TradeRecord[]
+  /**
+   * The league's completed Sleeper trades, merged into the offers fold and the timeline. A promise
+   * when the page streams them (`/core/trades`: the history read is the slow one, so the Trade Center
+   * paints without it and merges them in when they land); a list when the caller already has them.
+   */
+  completedHistory?: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]>
   /**
    * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
@@ -691,11 +742,14 @@ export function TradeCenter(props: {
    * agree on the first paint, and before the focus hook scrolls.
    */
   const [offersOpen, setOffersOpen] = useState(false)
+  const completedHistory = useCompletedHistory(props.completedHistory)
   useEffect(() => {
+    // ⚠ Not before a streamed history has landed: "not in the history" is unknowable until then.
+    if (!completedHistory.ready) return
     const tradeId = new URLSearchParams(window.location.search).get('trade')
     if (!tradeId) return
-    if (!props.completedHistory?.some((trade) => trade.transactionId === tradeId)) setOffersOpen(true)
-  }, [props.completedHistory])
+    if (!completedHistory.list?.some((trade) => trade.transactionId === tradeId)) setOffersOpen(true)
+  }, [completedHistory.ready, completedHistory.list])
   /* The control that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
@@ -1631,35 +1685,37 @@ export function TradeCenter(props: {
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       {props.embedded ? null : (
-      <header className="af-tc-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade Center')}</h1>
-        <p className="af-tc-lede">
-          {copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
-        </p>
-        {/*
-          🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
-          AllFantasy is read-only on every connected platform — Sleeper's API has
-          no write endpoint at all — so a deal built here does not exist until it
-          is re-entered on the source platform. My Team and Matchup have carried a
-          `sourceLink` for that reason since they shipped; the trade builder, the
-          one screen whose entire output is an action the user must take
-          somewhere else, did not. The flow dead-ended on a verdict.
+      <PageHeader
+        className="af-tc-head"
+        subClassName="af-tc-lede"
+        eyebrow={<>{copy("Core · ")}{copy('Trades')}</>}
+        title={copy('Trade Center')}
+        sub={copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
+        actions={
+          /*
+            🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
+            AllFantasy is read-only on every connected platform — Sleeper's API has
+            no write endpoint at all — so a deal built here does not exist until it
+            is re-entered on the source platform. My Team and Matchup have carried a
+            `sourceLink` for that reason since they shipped; the trade builder, the
+            one screen whose entire output is an action the user must take
+            somewhere else, did not. The flow dead-ended on a verdict.
 
-          `screen: 'trade'` lands on the platform's own trade page (Sleeper
-          /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
-          home, and renders nothing at all for a native league or an unresolved
-          host — never a guessed href.
-        */}
-        {props.sourceLink ? (
-          <div className="af-tc-handoff">
-            <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
-            <span className="af-tc-handoff-note">
-              {copy('AllFantasy never sends a trade for you — build it here, then send it there.')}
-            </span>
-          </div>
-        ) : null}
-      </header>
+            `screen: 'trade'` lands on the platform's own trade page (Sleeper
+            /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
+            home, and renders nothing at all for a native league or an unresolved
+            host — never a guessed href.
+          */
+          props.sourceLink ? (
+            <div className="af-tc-handoff">
+              <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
+              <span className="af-tc-handoff-note">
+                {copy('AllFantasy never sends a trade for you — build it here, then send it there.')}
+              </span>
+            </div>
+          ) : null
+        }
+      />
       )}
 
       {props.league && !props.embedded ? (
@@ -2076,8 +2132,9 @@ export function TradeCenter(props: {
               return (
                 <details className="af-tc-roster" open={rostersOpenAtStart}>
                   <summary className="af-tc-roster-head">
-                    <span className="af-label">
-                      {copy(r.ownerName ? `${r.ownerName}'s roster` : 'On this roster')}{copy(" · ")}{players.length}
+                    <span className="af-label af-tc-roster-label">
+                      {/* "Gridiron Ghosts' roster", not "Gridiron Ghosts's roster". */}
+                      {copy(r.ownerName ? `${r.ownerName}${/s$/i.test(r.ownerName) ? "'" : "'s"} roster` : 'On this roster')}{copy(" · ")}{players.length}
                     </span>
                     <span className="af-tc-row-sub af-tc-roster-hint">{copy("Tap a player to add them")}</span>
                     <span className="af-tc-row-sub af-tc-roster-browse">{copy('Browse roster')}</span>
@@ -2278,7 +2335,7 @@ export function TradeCenter(props: {
             screenshotDone={screenshotRead.done ?? null}
             onCounter={startCounter}
             reloadToken={inboxReloadToken}
-            importedHistory={props.completedHistory}
+            importedHistory={completedHistory.list}
             onNeedsYouCount={setNeedsYou}
           />
         </div>
@@ -2879,7 +2936,7 @@ export function TradeCenter(props: {
             onCounter={startCounter}
             reloadToken={inboxReloadToken}
             onChanged={bumpInboxReload}
-            importedHistory={props.completedHistory}
+            importedHistory={completedHistory.list}
           />
         ) : null}
       </div>

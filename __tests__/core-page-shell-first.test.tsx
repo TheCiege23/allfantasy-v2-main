@@ -115,7 +115,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 // Screen loaders: the spies whose silence during the page function is the whole point.
-vi.mock('@/lib/core-app/trades', () => ({ getTradesData: (screens.trades = vi.fn(async () => null)) }))
+vi.mock('@/lib/core-app/trades', () => ({ startTradesRead: (screens.trades = vi.fn(async () => null)) }))
 vi.mock('@/lib/core-app/dash34', () => ({ getDash34Data: (screens.dash34 = vi.fn(async () => null)), imageOf: () => null }))
 vi.mock('@/lib/core-app/urgencyBadges', () => ({
   getUrgencyBadges: (screens.urgency = vi.fn(async () => null)),

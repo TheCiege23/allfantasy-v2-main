@@ -2,6 +2,8 @@ import CoreTradeRefresh from '@/components/core-app/CoreTradeRefresh'
 import Link from 'next/link'
 import { Suspense, type ComponentProps, type ReactNode } from 'react'
 import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
+import { HomeTradeEvaluatorCard } from '@/components/core-app/home/HomeTradeEvaluatorCard'
+import type { StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import { CardFreshness } from '@/components/core-app/home/CardFreshness'
 import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
 import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
@@ -499,6 +501,8 @@ export function CoreHomeCards({
   prefetch,
   lead,
   hiddenSections,
+  tradeLeagues,
+  viewerId,
 }: {
   loads: HomeLoads
   now: Date
@@ -528,6 +532,12 @@ export function CoreHomeCards({
    * cards are not rendered at all — not drawn and collapsed — so they also stream nothing.
    */
   hiddenSections?: ReadonlySet<HomeSectionId>
+  /**
+   * The leagues in scope, for the folded "Evaluate a trade" card. Absent or empty, the card is not
+   * drawn. Not part of `order` and not a Settings section: it is one closed row, never news.
+   */
+  tradeLeagues?: StripLeague[]
+  viewerId?: string | null
 }) {
   const hidden = hiddenSections ? hiddenHomeCards(hiddenSections) : null
   const isHidden = (name: string) => hidden?.has(name) ?? false
@@ -631,6 +641,16 @@ export function CoreHomeCards({
           )}
 
           {shown(order.bands).map((name) => bands[name])}
+
+          {/*
+            The league trade evaluator, folded to one row (owner, 2026-11-06). After the news bands so
+            decisions and news still lead; it opens into the Trades hub's own picker and builder.
+          */}
+          {tradeLeagues && tradeLeagues.length > 0 ? (
+            <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
+              <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues} viewerId={viewerId} /></Suspense>
+            </CoreCardBoundary>
+          ) : null}
 
           {/*
             3a mounted as the screen BODY. It ships its own rail/nav/topbar

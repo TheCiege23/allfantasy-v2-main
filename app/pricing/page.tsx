@@ -11,6 +11,7 @@ import { aiAccessResolver } from "@/lib/ai-access/AIAccessResolver";
 import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access";
 import { getDisplayPlanName } from "@/lib/subscription/feature-access";
 import type { PricingAccount } from "@/lib/core-app/pricingAccount";
+import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -103,11 +104,13 @@ export default async function PricingPage(
   const userId = session?.user?.id ?? null;
   let account: PricingAccount | null = null;
   if (userId) {
-    const access = await aiAccessResolver
-      .resolveForUser({ userId, userEmail: session?.user?.email, now: new Date() })
-      .catch(() => null);
+    const [access, weeklySpend] = await Promise.all([
+      aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now: new Date() }).catch(() => null),
+      readWeeklyTokenSpend(userId),
+    ]);
     if (isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)) {
-      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null };
+      // The spend chart reads the viewer's own ledger, which an admin account has like anyone else.
+      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null, weeklySpend };
     } else if (access) {
       const planIds = access.hasSubscription ? access.subscription.plans : [];
       account = {
@@ -115,6 +118,7 @@ export default async function PricingPage(
         planName: planIds[0] ? getDisplayPlanName(planIds[0]) : null,
         renewsAt: access.hasSubscription ? access.subscription.currentPeriodEnd : null,
         tokenBalance: access.tokenBalance,
+        weeklySpend,
       };
     }
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { navSectionFor } from '@/lib/core-app/leagueDestinations'
 
 /**
  * The Defense Hub entry in the /core rail.
@@ -24,9 +25,10 @@ const SHELL = read('components/core-app/AfCoreShell.tsx')
 const PAGE = read('app/core/(shell)/[[...screen]]/page.tsx')
 
 describe('/core Defense Hub rail entry', () => {
-  it('declares the nav key and places it in the league section', () => {
+  it('declares the nav key and places it in a league section', () => {
     expect(SHELL).toContain("| 'defense-hub'")
-    expect(SHELL).toMatch(/keys: \[[^\]]*'defense-hub'[^\]]*\]/)
+    // The rail's sections live in lib/core-app/leagueDestinations.ts now, one list for every surface.
+    expect(navSectionFor('defense-hub')).toBe('plan')
   })
 
   /**

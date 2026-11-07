@@ -14,6 +14,7 @@ import {
   type TeamCompareData,
   type TeamCompareSide,
 } from '@/lib/core-app/rankings'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-rankings-screen.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
@@ -66,17 +67,19 @@ export function RankingsCompare({
 }) {
   return (
     <div className="af-rk">
-      <header className="af-rk-head">
-        <div>
-          <h1 className="af-rk-title">Compare</h1>
-          <p className="af-rk-sub">Side by side, on the same scale the rankings use.</p>
-        </div>
-        <div className="af-rk-headact">
+      <PageHeader
+        className="af-rk-head"
+        titleClassName="af-rk-title"
+        subClassName="af-rk-sub"
+        actionsClassName="af-rk-headact"
+        title="Compare"
+        sub="Side by side, on the same scale the rankings use."
+        actions={
           <Link className="af-rk-btn" href={`/core/rankings${qs(filterPairs)}`}>
             ← Rankings
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <nav className="af-rk-tabs" aria-label="What to compare">
         {KINDS.map((k) => (

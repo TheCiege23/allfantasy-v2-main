@@ -154,6 +154,58 @@ function AccountBanner({ account, nativeApp, onManageNative }: { account: Pricin
   )
 }
 
+/**
+ * Tokens spent per week, net of refunds (lib/tokens/weeklyTokenSpend.ts). One series, so the title
+ * names it and there is no legend box; every bar answers on hover and keyboard focus, and the same
+ * numbers sit in a table under "Show the numbers". The current week is partial and drawn lighter.
+ */
+function TokenSpendChart({ weeks }: { weeks: { weekStart: string; spent: number }[] }) {
+  const m = useMessages(plansScreenMessages)
+  const locale = getAppIntlLocale()
+  const day = (iso: string) => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`))
+  const total = weeks.reduce((sum, w) => sum + w.spent, 0)
+  const max = Math.max(1, ...weeks.map((w) => w.spent))
+  return (
+    <section className="af-pr-spend" data-testid="pricing-spend" aria-label={m.spendTitle}>
+      <header className="af-pr-spend-head">
+        <h2 className="af-pr-spend-title">{m.spendTitle}</h2>
+        {total > 0 ? <span className="af-pr-spend-total">{m.spendTotal(total.toLocaleString(locale))}</span> : null}
+      </header>
+      {total === 0 ? (
+        <p className="af-pr-spend-none">{m.spendNone}</p>
+      ) : (
+        <>
+          <ol className="af-pr-spend-bars">
+            {weeks.map((w, i) => {
+              const current = i === weeks.length - 1
+              const label = m.spendWeek(day(w.weekStart), w.spent.toLocaleString(locale)) + (current ? ` (${m.spendThisWeek})` : '')
+              return (
+                <li key={w.weekStart} className="af-pr-spend-col" data-current={current || undefined} data-testid="pricing-spend-bar">
+                  <span className="af-pr-spend-bar" tabIndex={0} aria-label={label} title={label}
+                    style={{ height: `${w.spent > 0 ? Math.max(4, Math.round((w.spent / max) * 100)) : 0}%` }}>
+                    <span className="af-pr-spend-tip" aria-hidden>{w.spent.toLocaleString(locale)}</span>
+                  </span>
+                  <span className="af-pr-spend-x" aria-hidden>{day(w.weekStart)}</span>
+                </li>
+              )
+            })}
+          </ol>
+          <p className="af-pr-spend-note">{m.spendNote}</p>
+          <details className="af-pr-spend-data">
+            <summary>{m.spendTable}</summary>
+            <table>
+              <thead><tr><th scope="col">{m.spendColWeek}</th><th scope="col">{m.spendColTokens}</th></tr></thead>
+              <tbody>
+                {weeks.map((w) => <tr key={w.weekStart}><td>{day(w.weekStart)}</td><td>{w.spent.toLocaleString(locale)}</td></tr>)}
+              </tbody>
+            </table>
+          </details>
+        </>
+      )}
+    </section>
+  )
+}
+
 type Interval = 'month' | 'year'
 
 /**
@@ -415,6 +467,7 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
           onManageNative={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))}
         />
       ) : null}
+      {account?.weeklySpend?.length ? <TokenSpendChart weeks={account.weeklySpend} /> : null}
 
       {blocked ? (
         <p className="af-pr-blocked">

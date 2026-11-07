@@ -250,6 +250,21 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <path d="M20 4.5v4.1h-4.1M4 19.5v-4.1h4.1" />
     </>
   ),
+  /* Calendar — the league's fixtures and rule dates. */
+  schedule: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13.5h2.5M14 13.5h2.5M7.5 17h2.5" />
+    </>
+  ),
+  /* Two opposed arrows with a plus — trades and waiver adds, the moves you can make. */
+  moves: (
+    <>
+      <path d="M4 8h12.5M13.5 5l3 3-3 3" />
+      <path d="M20 16H7.5M10.5 13l-3 3 3 3" />
+      <path d="M19.5 4v4M17.5 6h4" />
+    </>
+  ),
   /* Shield — the Defense Hub. */
   'defense-hub': (
     <>
