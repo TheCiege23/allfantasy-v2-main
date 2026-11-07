@@ -190,6 +190,15 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       </>
       ) : null}
 
+      {/*
+        The sub-views live in the Salary Cap specialty shell, which is dark in BOTH modes (Cap home reads fine in light
+        mode because it is styled by a CSS module). They are written with Tailwind's text-white, which the global
+        light-mode readability rule (app/globals.css, `.mode-readable [class*="text-white"]`) turns dark — dark text on
+        the shell's dark backdrop, ~1:1 contrast (2026-11-07, Salary Cap audit item 3). `af-draft-dark` is that rule's
+        existing opt-out, so the sub-views keep the shell's theme like Cap home does.
+      */}
+      {view !== 'home' ? (
+      <div className="af-draft-dark" data-cap-subview={view}>
       {view === 'cap-dashboard' && summary && (
         <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
@@ -208,6 +217,8 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       {view === 'rules' && summary && (
         <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
+      </div>
+      ) : null}
     </div>
     </SpecialtyShell>
   )
