@@ -180,9 +180,16 @@ export function getImportPlatformStatus(provider: ImportProvider): ImportPlatfor
 export function importComingSoonMessage(provider: ImportProvider): string {
   const name = SHORT_LABEL[provider] ?? getImportProviderLabel(provider);
   const reason = COMING_SOON_REASON[provider];
-  return reason
-    ? `${name} import is coming soon — ${reason}. You can import from ${availableImportPlatformsPhrase()} today.`
-    : `${name} import is coming soon. You can import from ${availableImportPlatformsPhrase()} today.`;
+  // The refused platform is never in its own "you can import from" list — even if a caller's view of
+  // availability (a test spy, a stale flag) disagrees with the config this list is read from.
+  const others = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available && o.provider !== provider).map(
+    (o) => SHORT_LABEL[o.provider] ?? o.label,
+  );
+  const alternatives =
+    others.length === 0
+      ? ''
+      : ` You can import from ${others.length === 1 ? others[0] : `${others.slice(0, -1).join(', ')} or ${others[others.length - 1]}`} today.`;
+  return reason ? `${name} import is coming soon — ${reason}.${alternatives}` : `${name} import is coming soon.${alternatives}`;
 }
 
 export function getImportProviderLabel(provider: ImportProvider): string {
