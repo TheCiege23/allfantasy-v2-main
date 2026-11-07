@@ -21,6 +21,9 @@ export const waiverLineupBoardMessages = defineMessages({
     colOver: 'Replaces',
     showing: (shown: number, total: number) => `${shown} of ${total}`,
     yourBestLineup: 'your best lineup',
+    /** Phone only: the coverage notes under Worth adding fold behind this (WaiverLineupBoard). */
+    howThisListWasBuilt: 'How this list was built',
+    hideListNotes: 'Hide these notes',
     perGame: ' per game',
     weekSuffix: (week: number) => ` · wk ${week}`,
     proj: 'proj',
@@ -67,6 +70,8 @@ export const waiverLineupBoardMessages = defineMessages({
     colOver: 'Reemplaza a',
     showing: (shown, total) => `${shown} de ${total}`,
     yourBestLineup: 'tu mejor alineación',
+    howThisListWasBuilt: 'Cómo se armó esta lista',
+    hideListNotes: 'Ocultar estas notas',
     perGame: ' por partido',
     weekSuffix: (week) => ` · sem ${week}`,
     proj: 'proy',
