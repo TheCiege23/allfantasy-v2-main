@@ -58,6 +58,15 @@ describe('/commissioners', () => {
     cards.forEach((c) => expect(c.querySelector('.af-cx-soon-badge')?.textContent).toMatch(/coming soon/i))
   })
 
+  it('shows the dues tracker as live (it shipped in #3373), never on the roadmap, and never as holding money', async () => {
+    const doc = await renderCommissioners()
+    const dues = doc.getElementById('dues-tracker')
+    expect(dues).not.toBeNull()
+    expect(dues!.textContent).toMatch(/never holds or moves league money/)
+    const roadmap = doc.querySelector('.af-cx-roadmap')?.textContent ?? ''
+    expect(roadmap).not.toMatch(/dues/i)
+  })
+
   it('platform chips follow the import config — Yahoo marked coming soon, never named as importable', async () => {
     const doc = await renderCommissioners()
     for (const p of getImportPlatforms()) {
