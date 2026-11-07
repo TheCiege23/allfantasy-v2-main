@@ -1,10 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 
 import { LINEUP_INTEGRITY_ALGORITHM, scoreLineupWeek, type ScoredWeek, type WeekScore } from './lineupIntegrityScore'
-import { readLineupLockSnapshots, writeLineupScore, type LineupLockSnapshotRow } from './lineupLockSnapshots'
+import { readLineupLockSnapshots, writeLineupScore, type LineupLockSnapshotRow } from './lineupLockStore'
 import type { LineupCard } from './nativeLineupCards'
 
 /**
@@ -76,6 +75,8 @@ export function scoredWeeks(t: TeamLineupScores): ScoredWeek[] {
  * and the card says nothing about picks.
  */
 export async function ownFirstRoundPicks(leagueId: string): Promise<{ season: number | null; owns: Map<string, boolean> }> {
+  // Loaded on demand: the trade engine's graph is not needed by the score itself.
+  const { loadNativeFuturePicks } = await import('@/lib/league-trade-engine/nativeFuturePicks')
   const inventory = await loadNativeFuturePicks(leagueId).catch(() => null)
   if (!inventory || inventory.seasons.length === 0) return { season: null, owns: new Map() }
   const season = Math.min(...inventory.seasons)

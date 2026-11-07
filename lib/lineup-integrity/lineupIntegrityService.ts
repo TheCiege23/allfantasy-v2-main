@@ -10,7 +10,7 @@ import type { WorkspaceTaskCandidate } from '@/lib/commissioner-workspace/taskSo
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadNativeLineupCards } from '@/lib/integrity/nativeLineupCards'
 import { auditLineups, describeFinding, isFlagged, type TeamSeasonSummary, type TeamWeekFinding, type WeeklyStarterRow } from './lineupIntegrity'
-import { readLineupLockSnapshots } from '@/lib/integrity/lineupLockSnapshots'
+import { readLineupLockSnapshots } from '@/lib/integrity/lineupLockStore'
 import { buildLineupReportText, summarizeTeamScores, type TeamScoreSummary } from '@/lib/integrity/lineupIntegrityScore'
 
 /**
