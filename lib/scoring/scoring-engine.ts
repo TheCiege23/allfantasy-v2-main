@@ -130,9 +130,6 @@ export async function scoreLeagueWeek(input: {
     const teamId = teamIdByRosterExternalId.get(roster.platformUserId)
     if (!teamId) continue
 
-    // On UNAVAILABLE/unfillable the engine returns EMPTY starterIds by contract, so the
-    // fallback below uses the roster's actual starters instead of an arbitrary all-zero
-    // "optimized" lineup. The status is persisted so the stored score is auditable.
     const bestBallResult = bestBallEnabled
       ? await selectBestBallLineupForRoster({
           leagueId: league.id,
@@ -142,11 +139,27 @@ export async function scoreLeagueWeek(input: {
           rosterPlayerIds,
           platform: league.platform,
           formatType,
+          leagueSettings: league.settings,
         })
       : null
-    const derivedStarterIds = bestBallResult?.starterIds ?? []
 
-    const starterIds = derivedStarterIds.length > 0 ? derivedStarterIds : extractStarterIds(roster.playerData)
+    /*
+     * 🛑 A BEST BALL TEAM IS SCORED ON ITS OPTIMAL LINEUP OR NOT AT ALL. When the engine has no lineup
+     * (no stats, an unfillable lineup, unresolvable slots) this used to fall back to the draft's stale
+     * starters — and, with none, to `rosterPlayerIds`: the WHOLE ROSTER summed as a best ball score
+     * (audit 2026-11-06, finding #17). Now the team is unavailable, and the week is written for nobody,
+     * exactly like any other team this function cannot score.
+     */
+    if (bestBallResult && bestBallResult.starterIds.length === 0) {
+      unavailableTeams.push({
+        rosterId: roster.id,
+        teamId,
+        reason: `best_ball_${bestBallResult.status.toLowerCase()}: ${bestBallResult.notes[0] ?? 'no best ball lineup'}`,
+      })
+      continue
+    }
+
+    const starterIds = bestBallResult ? bestBallResult.starterIds : extractStarterIds(roster.playerData)
     const score = await computeRosterScoreForWeek({
       leagueId: league.id,
       leagueSport: league.sport as LeagueSport,

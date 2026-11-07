@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
 import { bestBallSportSupportsDaily } from '@/lib/bestball/scoringPeriod'
+import { bestBallDisplaySlots } from '@/lib/bestball/productionLineup'
 
 export const BEST_BALL_SUPPORTED_SPORTS = [
   'NFL',
@@ -59,6 +60,17 @@ export type BestBallSportProfile = {
   defaultMatchupFormat: BestBallMatchupFormat
   lineupTemplateId: string
   rosterTemplateId: string
+  /**
+   * The starter seats best ball scoring seats — read from the same source as matchup scoring
+   * (`buildBestBallSlots` via `lib/bestball/productionLineup.ts`), never restated here.
+   *
+   * 🛑 THESE WERE A HAND-WRITTEN COPY AND THEY DRIFTED: NBA 9 starters against the 11 of the `best_ball`
+   * roster template a league is given, NHL 9 against 14, MLB 17 against 23, NCAAB 8 against 9, SOCCER 11
+   * against 12 (audit 2026-11-06, finding #22). The settings copy, the War Room and the old weekly
+   * optimizer all read this, so each showed a lineup the matchup never scored. Without league settings
+   * this is the sport's `best_ball` template; pass the league's settings to `getBestBallSportProfile` for
+   * that league's own seats.
+   */
   lineupSlots: BestBallLineupSlot[]
   notes: string[]
 }
@@ -132,7 +144,12 @@ export type BestBallCreateSettings = {
   userAi: BestBallAiToggles
 }
 
-const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
+/*
+ * `lineupSlots` is not stored here: `getBestBallSportProfile` reads it, at call time, from the source
+ * matchup scoring seats (see the field's comment). Computed lazily so importing this module never runs
+ * the roster resolver.
+ */
+const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, Omit<BestBallSportProfile, 'lineupSlots'>> = {
   NFL: {
     sport: 'NFL',
     label: 'NFL',
@@ -147,13 +164,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'h2h',
     lineupTemplateId: 'best_ball_nfl_default',
     rosterTemplateId: 'nfl-best_ball',
-    lineupSlots: [
-      { code: 'QB', count: 1, allowedPositions: ['QB'] },
-      { code: 'RB', count: 2, allowedPositions: ['RB'] },
-      { code: 'WR', count: 3, allowedPositions: ['WR'] },
-      { code: 'TE', count: 1, allowedPositions: ['TE'] },
-      { code: 'FLEX', count: 2, allowedPositions: ['RB', 'WR', 'TE'] },
-    ],
     notes: ['Draft-only by default.', 'Ceiling and depth matter more than weekly lineup decisions.'],
   },
   NBA: {
@@ -170,16 +180,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'cumulative',
     lineupTemplateId: 'best_ball_nba_default',
     rosterTemplateId: 'nba-best_ball',
-    lineupSlots: [
-      { code: 'PG', count: 1, allowedPositions: ['PG'] },
-      { code: 'SG', count: 1, allowedPositions: ['SG'] },
-      { code: 'SF', count: 1, allowedPositions: ['SF'] },
-      { code: 'PF', count: 1, allowedPositions: ['PF'] },
-      { code: 'C', count: 1, allowedPositions: ['C'] },
-      { code: 'G', count: 1, allowedPositions: ['PG', 'SG'] },
-      { code: 'F', count: 1, allowedPositions: ['SF', 'PF'] },
-      { code: 'UTIL', count: 2, allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] },
-    ],
     notes: ['Weekly by default; the commissioner can switch to daily best ball before the draft.', 'Depth through schedule density and load-management spikes is captured automatically.'],
   },
   MLB: {
@@ -196,18 +196,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'cumulative',
     lineupTemplateId: 'best_ball_mlb_default',
     rosterTemplateId: 'mlb-best_ball',
-    lineupSlots: [
-      { code: 'C', count: 1, allowedPositions: ['C'] },
-      { code: '1B', count: 1, allowedPositions: ['1B'] },
-      { code: '2B', count: 1, allowedPositions: ['2B'] },
-      { code: '3B', count: 1, allowedPositions: ['3B'] },
-      { code: 'SS', count: 1, allowedPositions: ['SS'] },
-      { code: 'OF', count: 4, allowedPositions: ['OF', 'LF', 'CF', 'RF'] },
-      { code: 'UTIL', count: 1, allowedPositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH'] },
-      { code: 'SP', count: 3, allowedPositions: ['SP'] },
-      { code: 'RP', count: 2, allowedPositions: ['RP'] },
-      { code: 'P', count: 2, allowedPositions: ['SP', 'RP'] },
-    ],
     notes: ['Weekly by default; the commissioner can switch to daily best ball before the draft.', 'Pitching depth matters more than manual lineup timing.'],
   },
   NHL: {
@@ -224,13 +212,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'cumulative',
     lineupTemplateId: 'best_ball_nhl_default',
     rosterTemplateId: 'nhl-best_ball',
-    lineupSlots: [
-      { code: 'C', count: 2, allowedPositions: ['C'] },
-      { code: 'W', count: 3, allowedPositions: ['LW', 'RW', 'W'] },
-      { code: 'D', count: 2, allowedPositions: ['D'] },
-      { code: 'G', count: 1, allowedPositions: ['G'] },
-      { code: 'UTIL', count: 1, allowedPositions: ['C', 'LW', 'RW', 'W', 'D'] },
-    ],
     notes: ['Goalie volatility is absorbed by roster depth.', 'Weekly by default; the commissioner can switch to daily best ball before the draft.'],
   },
   NCAAF: {
@@ -247,12 +228,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'h2h',
     lineupTemplateId: 'best_ball_ncaaf_default',
     rosterTemplateId: 'ncaaf-best_ball',
-    lineupSlots: [
-      { code: 'QB', count: 1, allowedPositions: ['QB'] },
-      { code: 'RB', count: 2, allowedPositions: ['RB'] },
-      { code: 'WR', count: 3, allowedPositions: ['WR'] },
-      { code: 'FLEX', count: 2, allowedPositions: ['RB', 'WR', 'TE'] },
-    ],
     notes: ['Spike weeks matter because of higher variance.', 'Short regular season makes playoff seeding tighter.'],
   },
   NCAAB: {
@@ -269,11 +244,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'cumulative',
     lineupTemplateId: 'best_ball_ncaab_default',
     rosterTemplateId: 'ncaab-best_ball',
-    lineupSlots: [
-      { code: 'G', count: 3, allowedPositions: ['G', 'PG', 'SG'] },
-      { code: 'F', count: 3, allowedPositions: ['F', 'SF', 'PF'] },
-      { code: 'UTIL', count: 2, allowedPositions: ['G', 'F', 'C', 'PG', 'SG', 'SF', 'PF'] },
-    ],
     notes: ['Advancement-style playoff defaults fit tournament-heavy calendars.', 'Weekly scoring captures dense conference schedules.'],
   },
   SOCCER: {
@@ -290,12 +260,6 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     defaultMatchupFormat: 'cumulative',
     lineupTemplateId: 'best_ball_soccer_default',
     rosterTemplateId: 'soccer-best_ball',
-    lineupSlots: [
-      { code: 'GK', count: 1, allowedPositions: ['GK', 'GKP'] },
-      { code: 'DEF', count: 3, allowedPositions: ['DEF', 'CB', 'LB', 'RB', 'LWB', 'RWB'] },
-      { code: 'MID', count: 4, allowedPositions: ['MID', 'CM', 'CDM', 'CAM', 'LM', 'RM', 'AM'] },
-      { code: 'FWD', count: 3, allowedPositions: ['FWD', 'ST', 'CF', 'LW', 'RW', 'SS'] },
-    ],
     notes: ['Soccer optimization chooses the highest-scoring valid formation each period.', 'Long season defaults to cumulative scoring.'],
   },
 }
@@ -329,9 +293,26 @@ export function isBestBallSupportedSport(sport: string | null | undefined): spor
   return !!sport && (BEST_BALL_SUPPORTED_SPORTS as readonly string[]).includes(String(sport).toUpperCase())
 }
 
-export function getBestBallSportProfile(sport: LeagueSport | string): BestBallSportProfile {
+/**
+ * `leagueSettings` (a league's `settings`) swaps `lineupSlots` for that league's own seats — what its
+ * matchups are actually scored on. Omitted, the sport's default `best_ball` seats.
+ */
+export function getBestBallSportProfile(sport: LeagueSport | string, leagueSettings?: unknown): BestBallSportProfile {
   const normalized = String(sport ?? 'NFL').trim().toUpperCase() as BestBallSport
-  return BEST_BALL_SPORT_PROFILES[normalized] ?? BEST_BALL_SPORT_PROFILES.NFL
+  const profile = BEST_BALL_SPORT_PROFILES[normalized] ?? BEST_BALL_SPORT_PROFILES.NFL
+  let lineupSlots: BestBallLineupSlot[] | null = null
+  // A lazy, enumerable getter: callers that only want the other defaults never run the roster resolver,
+  // and a serialized profile (the Best Ball API returns one) still carries the slots.
+  return Object.defineProperty({ ...profile }, 'lineupSlots', {
+    enumerable: true,
+    get: () => {
+      if (!lineupSlots) {
+        const leagueSlots = leagueSettings === undefined ? [] : bestBallDisplaySlots(profile.sport, leagueSettings)
+        lineupSlots = leagueSlots.length ? leagueSlots : bestBallDisplaySlots(profile.sport)
+      }
+      return lineupSlots
+    },
+  }) as BestBallSportProfile
 }
 
 export function resolveBestBallDraftModeDraftOrderType(mode: BestBallDraftMode): 'snake' | 'linear' | 'auction' {

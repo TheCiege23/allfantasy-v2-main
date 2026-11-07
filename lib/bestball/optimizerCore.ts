@@ -1,83 +1,67 @@
 import type { LineupSlotDef, OptimizerPlayer, OptimizerResult, SlotAssignment } from './types'
 import { optimizeSoccerFormation } from './soccerFormationOptimizer'
+import { OPTIMAL_LINEUP_ALGORITHM, type LineupSlotSpec } from '@/lib/lineup-optimizer/optimalLineup'
+import { normalizeToken } from '@/lib/redraft/lineupValidation'
+import { computeBestBallLineup } from './productionLineup'
 
-const ALGO_VERSION = 'bestball-greedy-v1'
+/*
+ * 🛑 THIS WAS `bestball-greedy-v1` AND IT WAS WRONG ON DUAL ELIGIBILITY. It filled every non-FLEX/UTIL
+ * slot in array order with the highest-scoring eligible player, so a RB/WR worth 30 went into RB and the
+ * WR seat took a 5 — 35 where the optimum is 50 (audit 2026-11-06, finding #17). It fed contest scoring,
+ * survivor and the `/api/bestball/optimize` cache, so all three could disagree with the matchup.
+ *
+ * It now seats the lineup with the production primitive (`computeOptimalLineup`, exact) through
+ * `lib/bestball/productionLineup.ts`. Signatures and the `OptimizerResult` shape are unchanged; the name
+ * `runGreedyOptimizer` is kept only so its importers do not move — nothing about it is greedy any more.
+ */
 
-function sortRanked(players: OptimizerPlayer[]): OptimizerPlayer[] {
-  return [...players].sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points
-    return a.playerId.localeCompare(b.playerId)
-  })
-}
-
-function positionsForPlayer(p: OptimizerPlayer): string[] {
-  const raw = p.position.trim()
-  if (raw.includes('/')) {
-    return raw.split('/').map((s) => s.trim()).filter(Boolean)
-  }
-  return [raw]
-}
-
-function playerEligibleForSlot(p: OptimizerPlayer, slot: LineupSlotDef): boolean {
-  const pos = positionsForPlayer(p)
-  if (slot.eligible.includes('*')) return true
-  return pos.some((x) => slot.eligible.includes(x))
+function toSpecs(slots: LineupSlotDef[]): LineupSlotSpec[] {
+  /*
+   * Normalized with the same token rules as the players (`DST`→`DEF`), so a template that says `DST` and a
+   * player listed as `DEF` still meet. `slotOrder` keeps the caller's order for the reported assignment.
+   */
+  return slots.map((s, i) => ({
+    slot: s.slot,
+    eligible: (s.eligible ?? []).map((e) => (e === '*' ? '*' : normalizeToken(e))),
+    count: Math.max(0, Math.floor(Number(s.count) || 0)),
+    slotOrder: i,
+  }))
 }
 
 /**
- * Greedy multi-slot fill + FLEX/UTIL pass. SOCCER uses formation optimizer (caller).
+ * Exact best ball lineup over the given slots. SOCCER formation templates (slots with `min`/`max`) use the
+ * formation optimizer instead (caller: `optimizeLineupForSport`).
  */
 export function runGreedyOptimizer(ranked: OptimizerPlayer[], slots: LineupSlotDef[], sport: string): OptimizerResult {
-  const used = new Set<string>()
-  const lineup: SlotAssignment[] = []
-  const log: Record<string, unknown> = { algorithm: ALGO_VERSION, sport, unfilledSlots: [] as string[] }
-
-  const nonFlex = slots.filter((s) => s.slot !== 'FLEX' && s.slot !== 'UTIL')
-  const flexSlots = slots.filter((s) => s.slot === 'FLEX' || s.slot === 'UTIL')
-
-  for (const slot of nonFlex) {
-    for (let i = 0; i < slot.count; i++) {
-      const eligible = ranked.filter((p) => playerEligibleForSlot(p, slot) && !used.has(p.playerId))
-      const pick = eligible[0]
-      if (!pick) {
-        ;(log.unfilledSlots as string[]).push(
-          `${slot.slot} #${i + 1} — no eligible player (required=${slot.required !== false})`,
-        )
-        continue
-      }
-      lineup.push({ slot: slot.slot, player: pick })
-      used.add(pick.playerId)
-    }
+  const byId = new Map<string, OptimizerPlayer>()
+  for (const p of ranked) {
+    const prev = byId.get(p.playerId)
+    if (!prev || p.points > prev.points) byId.set(p.playerId, p)
   }
+  const result = computeBestBallLineup({
+    slots: toSpecs(slots),
+    players: [...byId.values()].map((p) => ({ playerId: p.playerId, position: p.position, points: p.points, playerName: p.playerName })),
+  })
 
-  for (const slot of flexSlots) {
-    for (let i = 0; i < slot.count; i++) {
-      const eligible = ranked.filter((p) => playerEligibleForSlot(p, slot) && !used.has(p.playerId))
-      const pick = eligible[0]
-      if (!pick) {
-        ;(log.unfilledSlots as string[]).push(`${slot.slot} #${i + 1} — no eligible player`)
-        continue
-      }
-      lineup.push({ slot: slot.slot, player: pick })
-      used.add(pick.playerId)
-    }
-  }
-
-  const totalPoints = lineup.reduce((s, a) => s + a.player.points, 0)
-
-  // Tie: detect alternate with same total (swap equal-score players in same slot group) — rare; mark if any duplicate scores at margin
-  let alternateExists = false
-  const scores = lineup.map((x) => x.player.points)
-  const dup = scores.filter((s, i) => scores.indexOf(s) !== i)
-  if (dup.length) alternateExists = true
+  const assignments: SlotAssignment[] = result.assignments.map((a) => ({ slot: a.slot, player: byId.get(a.playerId)! }))
+  const requiredBySlot = new Map(slots.map((s) => [s.slot, s.required !== false]))
+  const unfilledSlots = result.unfilledSlots.map(
+    (u) => `${u.slot} #${u.seat} — no eligible player (required=${requiredBySlot.get(u.slot) ?? true})`,
+  )
+  const alternateExists = result.provenance.tiedAlternativeExists
 
   return {
-    assignments: lineup,
-    totalPoints,
+    assignments,
+    totalPoints: result.total,
     alternateExists,
     alternateLineup: alternateExists ? { note: 'possible tie alternate' } : null,
-    optimizerLog: log,
+    optimizerLog: { algorithm: OPTIMAL_LINEUP_ALGORITHM, sport, unfilledSlots },
   }
+}
+
+/** A SOCCER contest template that states a formation range (`min`/`max` per line) rather than fixed seats. */
+function isFormationTemplate(slots: LineupSlotDef[]): boolean {
+  return slots.some((s) => s.min != null || s.max != null)
 }
 
 export function optimizeLineupForSport(
@@ -85,21 +69,21 @@ export function optimizeLineupForSport(
   slots: LineupSlotDef[],
   sport: string,
 ): OptimizerResult {
-  const ranked = sortRanked(players)
-  if (sport === 'SOCCER') {
+  const ranked = [...players].sort((a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId))
+  /*
+   * Only a formation-range template takes the formation path: that contract (any of seven formations) is
+   * not a fixed set of seats, so it is not a matroid. A soccer LEAGUE is scored by production over its
+   * fixed roster seats, and its slots come from `buildBestBallSlots` with no min/max — so it is seated
+   * exactly, like every other sport.
+   */
+  if (sport === 'SOCCER' && isFormationTemplate(slots)) {
     const soc = optimizeSoccerFormation(ranked, { lineupSlots: slots })
-    const log: Record<string, unknown> = {
-      algorithm: ALGO_VERSION,
-      sport: 'SOCCER',
-      formation: soc.formation,
-      note: soc.log,
-    }
     return {
       assignments: soc.assignments,
       totalPoints: soc.totalPoints,
       alternateExists: false,
       alternateLineup: null,
-      optimizerLog: log,
+      optimizerLog: { algorithm: 'soccer-formation-v1', sport: 'SOCCER', formation: soc.formation, note: soc.log },
     }
   }
   return runGreedyOptimizer(ranked, slots, sport)

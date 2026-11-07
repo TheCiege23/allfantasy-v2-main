@@ -160,6 +160,19 @@ describe('the API route', () => {
     expect(body.lineups.find((l: { rosterId: string }) => l.rosterId === 'R1')).toMatchObject({ status: 'final', winLoss: 'W' })
     expect(db.teamWeekResult.findMany).not.toHaveBeenCalled()
   })
+
+  it("states the league's own starter seats in its profile, not the sport default (finding #22)", async () => {
+    db.league.findUnique.mockResolvedValue({
+      id: 'L1', name: 'L', sport: 'NFL', season: 2026, bestBallMode: true, bbMatchupFormat: 'h2h', bbScoringPeriod: 'weekly',
+      settings: { roster: { config: { sections: [{ key: 'primary', slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 8 } }] } } },
+      platform: 'manual', rosters: [], teams: [],
+    })
+    const req = { nextUrl: new URL('http://localhost/api/leagues/L1/bestball?week=3') } as never
+    const body = await (await bestBallGET(req, { params: Promise.resolve({ leagueId: 'L1' }) })).json()
+    const slots = body.league.profile.lineupSlots as Array<{ code: string; count: number }>
+    expect(slots.reduce((n, s) => n + s.count, 0)).toBe(10)
+    expect(slots.map((s) => s.code)).toContain('SUPERFLEX')
+  })
 })
 
 describe('the tab', () => {

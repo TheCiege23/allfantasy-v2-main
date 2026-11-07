@@ -15,6 +15,7 @@ const playerGameStatFindMany = vi.fn(async (args: { where: { playerId: { in: str
   statRows(args.where.playerId.in).filter((r) => args.where.playerId.in.includes(r.playerId)),
 )
 const leagueFindUnique = vi.fn()
+const sportsPlayerFindMany = vi.fn(async (): Promise<unknown[]> => [])
 const teamPerformanceUpsert = vi.fn(async () => ({}))
 const leagueTeamUpdate = vi.fn(async () => ({}))
 const snapshotCreate = vi.fn(async () => ({}))
@@ -23,7 +24,7 @@ const leagueUpdate = vi.fn(async () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     playerGameStat: { findMany: (args: never) => playerGameStatFindMany(args) },
-    sportsPlayer: { findMany: vi.fn(async () => []) },
+    sportsPlayer: { findMany: (...a: unknown[]) => sportsPlayerFindMany(...(a as [])) },
     league: { findUnique: (...a: unknown[]) => leagueFindUnique(...a), update: (...a: unknown[]) => leagueUpdate(...(a as [])) },
     teamPerformance: {
       upsert: (...a: unknown[]) => teamPerformanceUpsert(...(a as [])),
@@ -52,6 +53,7 @@ const row = (playerId: string, fantasyPoints: number): StatRow => ({ playerId, n
 beforeEach(() => {
   vi.clearAllMocks()
   statRows.mockReturnValue([])
+  sportsPlayerFindMany.mockResolvedValue([])
 })
 
 describe('weekKeyedStatsUnavailableReason', () => {
@@ -161,6 +163,40 @@ describe('scoreLeagueWeek', () => {
     expect(r.unavailable.map((u) => u.teamId)).toEqual(['t1', 't2'])
     expect(playerGameStatFindMany).not.toHaveBeenCalled()
     expectNothingWritten()
+  })
+
+  describe('a best ball league (audit 2026-11-06, finding #17)', () => {
+    const bestBallLeague = (sections: Record<string, number>) => ({
+      ...league('NFL'),
+      platform: 'sleeper',
+      settings: { best_ball: true, roster: { config: { sections: [{ key: 'primary', slots: sections }] } } },
+      rosters: [{ id: 'r1', platformUserId: 'u1', playerData: { players: ['p1', 'p2', 'p3'] } }],
+      teams: [{ id: 't1', externalId: 'u1' }],
+    })
+    const sleeperRow = (id: string, position: string) => ({ externalId: id, sleeperId: id, name: id, position, team: 'KC', source: 'sleeper', updatedAt: new Date(0) })
+
+    it("scores the optimal lineup over the LEAGUE'S slots, never the whole roster", async () => {
+      leagueFindUnique.mockResolvedValue(bestBallLeague({ QB: 1, RB: 1, BN: 4 }))
+      statRows.mockReturnValue([row('p1', 20), row('p2', 7), row('p3', 5)])
+      sportsPlayerFindMany.mockResolvedValue([sleeperRow('p1', 'QB'), sleeperRow('p2', 'RB'), sleeperRow('p3', 'RB')])
+      const r = await scoreLeagueWeek({ leagueId: 'L', season: 2026, weekOrRound: 3 })
+      expect(r.status).toBe('scored')
+      const write = (teamPerformanceUpsert.mock.calls[0] as unknown as [{ create: { points: number; data: { starterIds: string[] } } }])[0].create
+      // QB 20 + the better RB 7 = 27. The whole roster would be 32.
+      expect(write.points).toBe(27)
+      expect([...write.data.starterIds].sort()).toEqual(['p1', 'p2'])
+    })
+
+    it('a team with no best ball lineup is UNAVAILABLE and nothing is written — not the sum of its roster', async () => {
+      leagueFindUnique.mockResolvedValue(bestBallLeague({ QB: 1, RB: 1, BN: 4 }))
+      statRows.mockReturnValue([row('p1', 20), row('p2', 7), row('p3', 5)])
+      // No player resolves to a position, so no seat can be filled and no lineup exists.
+      sportsPlayerFindMany.mockResolvedValue([])
+      const r = await scoreLeagueWeek({ leagueId: 'L', season: 2026, weekOrRound: 3 })
+      expect(r.status).toBe('unavailable')
+      expect(r.unavailable).toEqual([{ rosterId: 'r1', teamId: 't1', reason: expect.stringMatching(/^best_ball_/) }])
+      expectNothingWritten()
+    })
   })
 
   it('still scores and writes a week every team can be scored for', async () => {

@@ -306,11 +306,13 @@ describe('16 · IDP is supported, not silently treated as offense-only', () => {
 })
 
 describe('17 · the primitive is reusable, and Best Ball is measured rather than assumed', () => {
-  it('🛑 the Best Ball greedy optimizer is NOT safe for Max PF — measured, both answers pinned', () => {
+  it('🛑 the Best Ball optimizer now agrees with the exact primitive on the case that justified it', () => {
     /*
-     * This is the justification for building a new optimizer, kept as a measurement so nobody has to
-     * take the claim on trust. `SUPER_FLEX` is not named `FLEX`, so `runGreedyOptimizer` fills it in
-     * the first pass in ARRAY ORDER and burns the best quarterback there.
+     * This was the justification for building a new optimizer: `SUPER_FLEX` is not named `FLEX`, so the
+     * old greedy `runGreedyOptimizer` filled it in the first pass in ARRAY ORDER and burnt the best
+     * quarterback there — 35 where the optimum is 55. Best Ball was repointed at the exact primitive
+     * (audit 2026-11-06, finding #17), so the same case must now read 55 from BOTH. The old `35` pinned
+     * the defect; it is the assertion that changed.
      */
     const slots = [
       { slot: 'SUPER_FLEX', eligible: ['QB', 'RB', 'WR', 'TE'], count: 1 },
@@ -330,15 +332,15 @@ describe('17 · the primitive is reusable, and Best Ball is measured rather than
       slots: slots.map((s, i) => ({ ...s, slotOrder: i })),
     })
 
-    expect(greedy.totalPoints).toBe(35)
+    expect(greedy.totalPoints).toBe(55)
     expect(exact.total).toBe(55)
-    expect(exact.total).toBeGreaterThan(greedy.totalPoints)
+    expect(greedy.totalPoints).toBe(exact.total)
   })
 
-  it('Best Ball behaviour is UNCHANGED — the greedy optimizer still returns what it always did', () => {
+  it('Best Ball runs on the exact primitive — the repoint is pinned, not assumed', () => {
     /*
-     * ⚠ A GUARD, NOT A COMPLIMENT. Repointing Best Ball at the exact primitive is a separate,
-     * user-visible decision. This fails if somebody quietly rewires it.
+     * ⚠ A GUARD. This used to pin `bestball-greedy-v1` so nobody could repoint Best Ball quietly; it was
+     * repointed deliberately (audit plan item 9), and now fails if somebody puts the greedy fill back.
      */
     const result = runGreedyOptimizer(
       [
@@ -352,7 +354,7 @@ describe('17 · the primitive is reusable, and Best Ball is measured rather than
       'NFL',
     )
     expect(result.totalPoints).toBe(38)
-    expect(result.optimizerLog).toMatchObject({ algorithm: 'bestball-greedy-v1' })
+    expect(result.optimizerLog).toMatchObject({ algorithm: 'exact-transversal-matroid-v1' })
   })
 
   it('the exact primitive handles a Best Ball shaped lineup', () => {

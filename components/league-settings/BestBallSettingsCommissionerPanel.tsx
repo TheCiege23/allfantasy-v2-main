@@ -165,6 +165,11 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
   /** Why scoring and competition settings are frozen ("after the draft has started"), or null. */
   const [structureLock, setStructureLock] = useState<string | null>(null)
   const [loadedTournament, setLoadedTournament] = useState(false)
+  /**
+   * The league's own starter seats, from the API (`getBestBallSportProfile(sport, league.settings)` — what
+   * its matchups are scored on). Until it loads, the sport's default best ball seats. Finding #22.
+   */
+  const [starterSeats, setStarterSeats] = useState<number>(() => profile.lineupSlots.reduce((sum, s) => sum + s.count, 0))
 
   const [settings, setSettings] = useState<LoadedSettings>({
     mode: 'standard',
@@ -193,11 +198,19 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
           cache: 'no-store',
         })
         const json = (await res.json()) as {
-          league?: { settings?: Record<string, unknown>; structureLock?: string | null }
+          league?: {
+            settings?: Record<string, unknown>
+            structureLock?: string | null
+            profile?: { lineupSlots?: Array<{ count?: unknown }> }
+          }
           error?: string
         }
         if (!res.ok) throw new Error(json.error ?? t('lsRules.bb.loadFailed'))
         if (!cancelled) setStructureLock(typeof json.league?.structureLock === 'string' ? json.league.structureLock : null)
+        const leagueSlots = json.league?.profile?.lineupSlots
+        if (!cancelled && Array.isArray(leagueSlots) && leagueSlots.length > 0) {
+          setStarterSeats(leagueSlots.reduce((sum, s) => sum + (typeof s.count === 'number' ? s.count : 0), 0))
+        }
         if (!cancelled && json.league?.settings) {
           const raw = json.league.settings as Record<string, unknown>
           setLoadedTournament(raw.contestStructure === 'tournament')
@@ -523,7 +536,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         </h4>
         <p className="text-[12px] text-white/60">
           {t('lsRules.bb.profileLine')
-            .replace('{{starters}}', String(profile.lineupSlots.reduce((sum, s) => sum + s.count, 0)))
+            .replace('{{starters}}', String(starterSeats))
             .replace('{{roster}}', String(profile.recommendedRosterSize))
             .replace('{{period}}', settings.scoringPeriod === 'daily' ? t('lsRules.bb.periodDaily') : t('lsRules.bb.periodWeekly'))}
         </p>

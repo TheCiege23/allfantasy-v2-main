@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { templateSlotsToLineupSlots } from './soccerFormationOptimizer'
 import { optimizeLineupForSport } from './optimizerCore'
+import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
+import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { resolveBestBallScoringPeriod } from './scoringPeriod'
 import type { LineupSlotDef, OptimizerPlayer } from './types'
 
 export type RunBestBallOptimizerArgs = {
@@ -20,36 +23,6 @@ async function loadTemplate(sport: string, variant: string) {
   return prisma.bestBallSportTemplate.findUnique({
     where: { sport_variant: { sport: s, variant } },
   })
-}
-
-/**
- * Only players with a real (finalized-if-required) `PlayerWeeklyScore` row end up in the
- * returned map. A missing row is absent from the map — never coerced to a fabricated 0 — so
- * callers can tell "no data" apart from a real zero-point week.
- */
-async function loadWeeklyPoints(
-  players: { playerId: string; sport: string }[],
-  week: number,
-  seasonYear: number,
-  requireFinalized: boolean,
-): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  for (const p of players) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: {
-          playerId: p.playerId,
-          week,
-          season: seasonYear,
-          sport: p.sport,
-        },
-      },
-    })
-    if (!row) continue
-    if (requireFinalized && !row.isFinalized) continue
-    map.set(p.playerId, row.fantasyPts)
-  }
-  return map
 }
 
 export type BestBallDataQuality = {
@@ -188,12 +161,19 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
 
   if (!rosterId) throw new Error('rosterId or entryId required')
 
+  /*
+   * 🛑 A LEAGUE ROSTER'S CACHED LINEUP IS THE MATCHUP'S LINEUP, COMPUTED BY THE MATCHUP'S CODE.
+   *
+   * This used to seat the roster over the `BestBallSportTemplate` DB row's slots (not the league's), on
+   * the generic `fantasyPts` (not the league's scoring), with the greedy optimizer, over the CURRENT
+   * roster (not the roster as of the week, with IR / taxi excluded). Four differences, any of which made
+   * this cache — which `/api/bestball/optimize` serves and survivor scores from — disagree with the
+   * matchup. It now asks production for the week (`scoreRosterForWeek`, the same call a guillotine week
+   * and the stat-correction path use) and only reshapes the answer into this table.
+   */
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId },
-    include: {
-      season: true,
-      players: { where: { droppedAt: null } },
-    },
+    include: { season: true, players: true },
   })
   if (!roster) throw new Error('RedraftRoster not found')
 
@@ -202,51 +182,31 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
   seasonYear = roster.season.season
   const league = await prisma.league.findFirst({
     where: { id: roster.leagueId },
-    select: {
-      bestBallVariant: true,
-      bbOptimizerTiming: true,
-    },
+    select: { sport: true, settings: true, bbOptimizerTiming: true },
   })
-  variant = league?.bestBallVariant ?? 'standard'
   if (league?.bbOptimizerTiming === 'realtime') requireFinalized = false
 
-  const template = await loadTemplate(sport, variant)
-  if (!template) throw new Error(`No BestBallSportTemplate for ${sport}/${variant}`)
-
-  const slots = templateSlotsToLineupSlots(template.lineupSlots)
-  const ptsMap = await loadWeeklyPoints(
-    roster.players.map((p) => ({ playerId: p.playerId, sport: p.sport })),
-    week,
-    seasonYear,
-    requireFinalized,
-  )
-
-  const players: OptimizerPlayer[] = roster.players
-    .filter((p) => ptsMap.has(p.playerId))
-    .map((p) => ({
-      playerId: p.playerId,
-      playerName: p.playerName,
-      position: p.position,
-      points: ptsMap.get(p.playerId)!,
-    }))
-  const dataQuality = buildDataQuality(
-    roster.players.map((p) => p.playerId),
-    new Set(ptsMap.keys()),
-  )
-
-  const opt = optimizeLineupForSport(players, slots as LineupSlotDef[], sport)
-  const starterIds = opt.assignments.map((a) => a.player.playerId)
-  const used = new Set(starterIds)
-  const benchIds = players.map((p) => p.playerId).filter((id) => !used.has(id))
-
-  const lineupBreakdown = players.map((p) => ({
+  const summary = await scoreRosterForWeek({ leagueId, rosterId, week, seasonYear, collectPlayerPoints: true })
+  const scored = summary.playerPoints ?? []
+  const rowById = new Map(roster.players.map((p) => [p.playerId, p]))
+  const slotById = new Map((summary.bestBall?.assignments ?? []).map((a) => [a.playerId, a.slot]))
+  const daily = summary.bestBall?.period === 'daily'
+  const starterIds = scored.filter((p) => p.isStarter).map((p) => p.playerId)
+  const benchIds = scored.filter((p) => !p.isStarter).map((p) => p.playerId)
+  const lineupBreakdown = scored.map((p) => ({
     playerId: p.playerId,
-    playerName: p.playerName,
-    position: p.position,
-    slot: opt.assignments.find((a) => a.player.playerId === p.playerId)?.slot ?? 'bench',
+    playerName: rowById.get(p.playerId)?.playerName ?? p.playerId,
+    position: rowById.get(p.playerId)?.position ?? null,
+    slot: p.isStarter ? (slotById.get(p.playerId) ?? (daily ? 'daily' : 'starter')) : 'bench',
     points: p.points,
-    wasUsed: used.has(p.playerId),
+    wasUsed: p.isStarter,
   }))
+  const dataQuality = buildDataQuality(
+    [...scored.map((p) => p.playerId), ...summary.missingPlayerIds],
+    new Set(scored.map((p) => p.playerId)),
+  )
+  // Final only when production says every candidate's week is sealed — never on the caller's say-so.
+  const isFinalized = requireFinalized && summary.allFinal && summary.missingPlayerIds.length === 0
 
   const existing = await prisma.bestBallOptimizedLineup.findFirst({
     where: { seasonId, rosterId, week, entryId: null },
@@ -259,16 +219,22 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
     contestId: null,
     entryId: null,
     week,
-    scoringPeriod: template.scoringPeriod,
+    scoringPeriod: resolveBestBallScoringPeriod({ sport: league?.sport ?? sport, settings: league?.settings }),
     starterIds,
     benchIds,
-    totalPoints: opt.totalPoints,
+    totalPoints: summary.points,
     lineupBreakdown,
-    alternateExists: opt.alternateExists,
-    alternateLineup: opt.alternateLineup as object | undefined,
-    optimizerLog: { ...(opt.optimizerLog as object), dataQuality },
-    isFinalized: requireFinalized,
-    finalizedAt: requireFinalized ? new Date() : null,
+    alternateExists: false,
+    alternateLineup: undefined,
+    optimizerLog: {
+      algorithm: OPTIMAL_LINEUP_ALGORITHM,
+      source: 'redraft-scoringEngine.scoreRosterForWeek',
+      sport,
+      unfilledSlots: (summary.bestBall?.unfilledSlots ?? []).map((u) => `${u.slot} #${u.seat}`),
+      dataQuality,
+    },
+    isFinalized,
+    finalizedAt: isFinalized ? new Date() : null,
   }
 
   if (existing) {

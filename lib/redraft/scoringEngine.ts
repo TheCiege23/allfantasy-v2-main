@@ -15,8 +15,8 @@ import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scorin
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
-import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
-import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
+import { bestBallPlayerPositions, buildBestBallSlots } from '@/lib/bestball/productionLineup'
+import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
@@ -178,26 +178,13 @@ export function leagueIsBestBall(
   return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
 }
 
-/**
- * The league's starter slots as optimizer input: the commissioner's roster (a superflex league
- * gets its SF seat), with the same slot eligibility lineup validation enforces.
+/*
+ * `buildBestBallSlots` and the roster-position split live in `lib/bestball/productionLineup.ts` (pure, so
+ * the contest optimizer, the weekly processor, the scoring worker and the War Room seat the SAME slots
+ * without importing Prisma). Re-exported so every existing importer of this module is unchanged.
  */
-export function buildBestBallSlots(sport: string, leagueSettings: unknown): LineupSlotSpec[] {
-  const config = resolveRedraftRosterConfig(sport, leagueSettings)
-  const slots: LineupSlotSpec[] = []
-  let order = 0
-  for (const [token, count] of config.starterCapacities) {
-    slots.push({ slot: token, eligible: allowedPositionsForSlot(sport, token), count, slotOrder: order++ })
-  }
-  return slots
-}
-
-function playerPositions(position: string | null | undefined): string[] {
-  return String(position ?? '')
-    .split(/[/,]/)
-    .map((p) => normalizeToken(p))
-    .filter(Boolean)
-}
+export { buildBestBallSlots }
+const playerPositions = bestBallPlayerPositions
 
 /** A league's own scoring, resolved once: raw stat line (and the player's position) to fantasy points. */
 export type LeagueStatScorer = (rawStats: Record<string, number>, position?: string | null) => number

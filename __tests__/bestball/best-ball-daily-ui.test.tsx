@@ -51,6 +51,30 @@ describe('the commissioner panel', () => {
     expect(body.bestBall.scoringPeriod).toBe('daily')
   })
 
+  it("states the LEAGUE'S starter seats (what its matchups score), not the sport default — finding #22", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        league: {
+          structureLock: null,
+          settings: { mode: 'standard', contestStructure: 'season_long', matchupFormat: 'h2h', scoringPeriod: 'weekly' },
+          profile: { lineupSlots: [{ code: 'PG', count: 1 }, { code: 'SG', count: 1 }, { code: 'C', count: 2 }, { code: 'UTIL', count: 4 }] },
+        },
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<BestBallSettingsCommissionerPanel leagueId="L1" sport="NBA" canEdit />)
+    await screen.findByTestId('bb-scoring-period')
+    await waitFor(() => expect(screen.getByText(/^8 starter slots/)).toBeTruthy())
+  })
+
+  it('before the league loads, the sport default is the best_ball template (NBA 11, not the old 9)', async () => {
+    stubPanelFetch({}, null)
+    render(<BestBallSettingsCommissionerPanel leagueId="L1" sport="NBA" canEdit />)
+    await screen.findByTestId('bb-scoring-period')
+    expect(screen.getByText(/^11 starter slots/)).toBeTruthy()
+  })
+
   it('offers weekly only for NFL, and never offers a tournament switch to a league that is not one', async () => {
     stubPanelFetch({}, null)
     render(<BestBallSettingsCommissionerPanel leagueId="L1" sport="NFL" canEdit />)

@@ -105,8 +105,13 @@ function parseRosterPlayers(playerData: unknown): RawRosterPlayer[] {
   return out
 }
 
-function buildRosterSettings(sport: string): BestBallRosterSettings {
-  const profile = getBestBallSportProfile(sport)
+/*
+ * 🛑 THE WAR ROOM USED THE SPORT-DEFAULT SLOTS (audit 2026-11-06, finding #22) — NBA's 9 starters while
+ * the league's matchups were scored on its 11. It now reads the league's own seats, from the same
+ * source matchup scoring seats (`getBestBallSportProfile(sport, settings)` → `buildBestBallSlots`).
+ */
+export function buildRosterSettings(sport: string, leagueSettings: unknown): BestBallRosterSettings {
+  const profile = getBestBallSportProfile(sport, leagueSettings ?? {})
   const lineupSlots: BestBallLineupSlot[] = profile.lineupSlots.map((s) => ({
     code: s.code,
     count: s.count,
@@ -174,7 +179,7 @@ export async function buildBestBallWarRoomContext(
     conceptSetup: withEffectiveScoringPeriod(sport, settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
   })
-  const roster = buildRosterSettings(sport)
+  const roster = buildRosterSettings(sport, league.settings)
 
   const scoring: BestBallScoringSettings = {
     sport,

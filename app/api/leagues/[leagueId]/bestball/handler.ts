@@ -79,7 +79,8 @@ export async function GET(
     timezone: typeof settingsRecord.timezone === 'string' ? settingsRecord.timezone : null,
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
   })
-  const profile = getBestBallSportProfile(league.sport)
+  // The league's own seats (what its matchups are scored on), not the sport default — finding #22.
+  const profile = getBestBallSportProfile(league.sport, league.settings ?? {})
 
   // A league AllFantasy scores itself is read from what native scoring writes; the legacy tables below
   // stay for the leagues that have no native season.
