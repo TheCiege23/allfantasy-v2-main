@@ -570,7 +570,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
   if (state === "pending") {
     return (
       <p
-        className="text-xs sm:text-sm font-medium"
+        className="py-2 text-xs sm:text-sm font-medium"
         style={{ color: "var(--text)" }}
         data-testid={`find-league-ask-pending-${league.id}`}
         role="status"

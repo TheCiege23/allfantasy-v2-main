@@ -69,7 +69,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
           <Link
             href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
             className="block w-full rounded-lg px-4 py-2 text-center text-sm font-medium"
-            style={{ background: 'var(--accent)', color: 'var(--bg)' }}
+            style={{ background: 'var(--accent)', color: '#ffffff' }}
           >
             Sign in to take your seat
           </Link>
@@ -80,7 +80,7 @@ export function ApprovedRequestJoin({ leagueId }: { leagueId: string }) {
             disabled={state === 'joining' || state === 'joined'}
             data-testid="league-join-approved-button"
             className="w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
-            style={{ background: 'var(--accent)', color: 'var(--bg)' }}
+            style={{ background: 'var(--accent)', color: '#ffffff' }}
           >
             {state === 'joining' ? 'Joining…' : 'Take my seat'}
           </button>
