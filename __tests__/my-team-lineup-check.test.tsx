@@ -9,7 +9,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 import { summariseLineupCheck } from '@/lib/core-app/lineupCheck'
-import { MyTeam } from '@/components/core-app/screens/MyTeam'
+import { MyTeam, checkDrawsFix } from '@/components/core-app/screens/MyTeam'
 import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 
 function player(id: string, over: Partial<LineupPlayer> = {}): LineupPlayer {
@@ -133,6 +133,33 @@ describe('the Lineup check card', () => {
     // The decision's headline and the check's list are both still there.
     expect(decision.textContent).toContain('Jayden Daniels')
     expect(decision.querySelectorAll('a.af-mt-check-item')).toHaveLength(2)
+  })
+})
+
+describe('one platform link per decision card (2026-11-06 phone pass)', () => {
+  it('draws "Fix in <platform>" once when the check names a certain problem', () => {
+    const { container } = render(<MyTeam data={data(KBFL)} />)
+    const decision = container.querySelector('.af-mt-decision')!
+    const toPlatform = [...decision.querySelectorAll('a')].filter((a) => a.getAttribute('href') === 'https://example.test/lineup')
+    expect(toPlatform).toHaveLength(1)
+    expect(toPlatform[0].classList.contains('af-mt-check-fix')).toBe(true)
+    expect(decision.querySelector('.af-mt-decision-actions a[href="#af-mt-starters"]')).not.toBeNull()
+  })
+
+  it('keeps the action-row link when the check has nothing certain to fix', () => {
+    const { container } = render(<MyTeam data={data([slot('WR', player('ok'))])} />)
+    const actions = container.querySelector('.af-mt-decision-actions')!
+    expect([...actions.querySelectorAll('a')].some((a) => a.getAttribute('href') === 'https://example.test/lineup')).toBe(true)
+    expect(container.querySelector('a.af-mt-check-fix')).toBeNull()
+  })
+
+  it('agrees with the card about when it draws its own button', () => {
+    const item = (kind: string) => ({ kind, anchor: 'a', slotLabel: 'WR', name: 'X' })
+    expect(checkDrawsFix(null, 'h')).toBe(false)
+    expect(checkDrawsFix({ items: [item('out')] } as never, null)).toBe(false)
+    expect(checkDrawsFix({ items: [] } as never, 'h')).toBe(false)
+    expect(checkDrawsFix({ items: [item('questionable')] } as never, 'h')).toBe(false)
+    expect(checkDrawsFix({ items: [item('questionable'), item('bye')] } as never, 'h')).toBe(true)
   })
 })
 

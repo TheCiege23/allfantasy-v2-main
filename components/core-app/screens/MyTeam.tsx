@@ -1173,6 +1173,11 @@ function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
+/** Whether LineupCheckCard draws its own "Fix in <platform>" button — the same rule it renders by. */
+export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: string | null | undefined): boolean {
+  return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
+}
+
 function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
@@ -2027,7 +2032,12 @@ export function MyTeam({ data }: MyTeamProps) {
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
-            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/*
+              One platform link per card (2026-11-06 phone pass). The embedded check already draws
+              "Fix in <platform>" whenever it names a certain problem, and the same href here made two
+              identical buttons a few lines apart. Kept only when the check does not draw its own.
+            */}
+            {data.league.sourceLink && !checkDrawsFix(lineupCheck, data.league.sourceLink.href) ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
           </div>
         </section>
       ) : null}
