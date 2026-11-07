@@ -76,6 +76,7 @@ export default async function RedraftCoreStandingsHarnessPage({
       active={screen === 'bracket' ? 'tools' : screen}
       sport={sport}
       redraftSport={redraftSport}
+      dynastyEra={sp.leagueType === 'dynasty'}
       leagueId={HARNESS_LEAGUE_ID}
       leagueName={HARNESS_LEAGUE_NAME}
       checklist={checklist}

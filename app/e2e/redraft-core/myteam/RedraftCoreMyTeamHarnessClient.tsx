@@ -60,6 +60,8 @@ export default function RedraftCoreMyTeamHarnessClient(props: Props) {
       selectedLeagueId={league.id}
       nativeLeague
       redraftSport={redraftSport}
+      /* The app passes this for a dynasty ?league= on EVERY screen (page.tsx, coreShellDynasty). */
+      dynastyEra={props.leagueType === 'dynasty'}
       hasIdpDefense={props.screen === 'defense-hub'}
       syncAge={{ label: 'just now', stale: false }}
       syncEligibleCount={0}
