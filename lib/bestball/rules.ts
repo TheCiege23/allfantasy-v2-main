@@ -1,5 +1,6 @@
 import type { LeagueSport } from '@prisma/client'
 import { regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
+import { bestBallSportSupportsDaily } from '@/lib/bestball/scoringPeriod'
 
 export const BEST_BALL_SUPPORTED_SPORTS = [
   'NFL',
@@ -43,7 +44,15 @@ export type BestBallSportProfile = {
   label: string
   recommendedRosterSize: number
   recommendedBenchSize: number
+  /**
+   * The DEFAULT scoring period — weekly for every sport. It used to say `daily` for NBA / NHL / MLB /
+   * NCAAB while scoring was weekly for all of them; see lib/bestball/scoringPeriod.ts.
+   */
   scoringPeriod: BestBallScoringPeriod
+  /** Whether a commissioner may choose daily best ball (NBA / NHL / MLB). */
+  supportsDailyScoring: boolean
+  /** The default tiebreaker (unchanged when the period defaults moved to weekly). */
+  defaultTieRule: BestBallTieRule
   defaultRegularSeasonLength: number
   defaultPlayoffTeams: number
   defaultPlayoffFormat: BestBallPlayoffFormat
@@ -81,6 +90,12 @@ export type BestBallCreateSettings = {
   regularSeasonLength: number
   playoffTeams: number
   scoringPeriod: BestBallScoringPeriod
+  /**
+   * Written beside `scoringPeriod` on every normalize: true only for a daily choice the league can use.
+   * Scoring reads a league as daily only when this marker is present (lib/bestball/scoringPeriod.ts) —
+   * the legacy rows that defaulted to `'daily'` without it were always scored weekly.
+   */
+  dailyBestBall: boolean
   waiversEnabled: boolean
   tradesEnabled: boolean
   substitutionsEnabled: boolean
@@ -124,6 +139,8 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 18,
     recommendedBenchSize: 9,
     scoringPeriod: 'weekly',
+    supportsDailyScoring: false,
+    defaultTieRule: 'max_week',
     defaultRegularSeasonLength: 14,
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
@@ -144,7 +161,9 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     label: 'NBA',
     recommendedRosterSize: 15,
     recommendedBenchSize: 7,
-    scoringPeriod: 'daily',
+    scoringPeriod: 'weekly',
+    supportsDailyScoring: true,
+    defaultTieRule: 'points_for',
     defaultRegularSeasonLength: regularSeasonWeeksFor('NBA'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
@@ -161,14 +180,16 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
       { code: 'F', count: 1, allowedPositions: ['SF', 'PF'] },
       { code: 'UTIL', count: 2, allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] },
     ],
-    notes: ['Daily aggregation rewards depth through schedule density.', 'Load-management spikes are captured automatically.'],
+    notes: ['Weekly by default; the commissioner can switch to daily best ball before the draft.', 'Depth through schedule density and load-management spikes is captured automatically.'],
   },
   MLB: {
     sport: 'MLB',
     label: 'MLB',
     recommendedRosterSize: 23,
     recommendedBenchSize: 10,
-    scoringPeriod: 'daily',
+    scoringPeriod: 'weekly',
+    supportsDailyScoring: true,
+    defaultTieRule: 'points_for',
     defaultRegularSeasonLength: regularSeasonWeeksFor('MLB'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
@@ -187,14 +208,16 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
       { code: 'RP', count: 2, allowedPositions: ['RP'] },
       { code: 'P', count: 2, allowedPositions: ['SP', 'RP'] },
     ],
-    notes: ['Daily aggregation captures double-headers and streaming value.', 'Pitching depth matters more than manual lineup timing.'],
+    notes: ['Weekly by default; the commissioner can switch to daily best ball before the draft.', 'Pitching depth matters more than manual lineup timing.'],
   },
   NHL: {
     sport: 'NHL',
     label: 'NHL',
     recommendedRosterSize: 17,
     recommendedBenchSize: 8,
-    scoringPeriod: 'daily',
+    scoringPeriod: 'weekly',
+    supportsDailyScoring: true,
+    defaultTieRule: 'points_for',
     defaultRegularSeasonLength: regularSeasonWeeksFor('NHL'),
     defaultPlayoffTeams: 6,
     defaultPlayoffFormat: 'bracket',
@@ -208,7 +231,7 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
       { code: 'G', count: 1, allowedPositions: ['G'] },
       { code: 'UTIL', count: 1, allowedPositions: ['C', 'LW', 'RW', 'W', 'D'] },
     ],
-    notes: ['Goalie volatility is absorbed by roster depth.', 'Scoring periods aggregate across condensed game weeks.'],
+    notes: ['Goalie volatility is absorbed by roster depth.', 'Weekly by default; the commissioner can switch to daily best ball before the draft.'],
   },
   NCAAF: {
     sport: 'NCAAF',
@@ -216,6 +239,8 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 16,
     recommendedBenchSize: 9,
     scoringPeriod: 'weekly',
+    supportsDailyScoring: false,
+    defaultTieRule: 'max_week',
     defaultRegularSeasonLength: 12,
     defaultPlayoffTeams: 4,
     defaultPlayoffFormat: 'bracket',
@@ -235,7 +260,9 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     label: 'College Basketball',
     recommendedRosterSize: 12,
     recommendedBenchSize: 5,
-    scoringPeriod: 'daily',
+    scoringPeriod: 'weekly',
+    supportsDailyScoring: false,
+    defaultTieRule: 'points_for',
     defaultRegularSeasonLength: 18,
     defaultPlayoffTeams: 4,
     defaultPlayoffFormat: 'advancement',
@@ -247,7 +274,7 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
       { code: 'F', count: 3, allowedPositions: ['F', 'SF', 'PF'] },
       { code: 'UTIL', count: 2, allowedPositions: ['G', 'F', 'C', 'PG', 'SG', 'SF', 'PF'] },
     ],
-    notes: ['Advancement-style playoff defaults fit tournament-heavy calendars.', 'Daily aggregation captures dense conference schedules.'],
+    notes: ['Advancement-style playoff defaults fit tournament-heavy calendars.', 'Weekly scoring captures dense conference schedules.'],
   },
   SOCCER: {
     sport: 'SOCCER',
@@ -255,6 +282,8 @@ const BEST_BALL_SPORT_PROFILES: Record<BestBallSport, BestBallSportProfile> = {
     recommendedRosterSize: 16,
     recommendedBenchSize: 5,
     scoringPeriod: 'weekly',
+    supportsDailyScoring: false,
+    defaultTieRule: 'max_week',
     defaultRegularSeasonLength: 34,
     defaultPlayoffTeams: 4,
     defaultPlayoffFormat: 'none',
@@ -341,6 +370,7 @@ export function getDefaultBestBallSettings(
     regularSeasonLength: profile.defaultRegularSeasonLength,
     playoffTeams: profile.defaultPlayoffTeams,
     scoringPeriod: profile.scoringPeriod,
+    dailyBestBall: false,
     waiversEnabled: underdog ? false : false,
     tradesEnabled: underdog ? false : false,
     substitutionsEnabled: false,
@@ -352,7 +382,7 @@ export function getDefaultBestBallSettings(
     advancersPerPod: 1,
     resetBetweenRounds: false,
     finalRoundStructure: cumulativeScoring ? 'cumulative_final' : 'single_week_final',
-    tieRule: profile.scoringPeriod === 'weekly' ? 'max_week' : 'points_for',
+    tieRule: profile.defaultTieRule,
     slowDraftClockMinutes: draftMode === 'snake' ? 60 : null,
     draftDateUtc: '',
     timezone: 'America/New_York',
@@ -425,6 +455,10 @@ export function normalizeBestBallSettings(input: {
     : cumulativeScoring
       ? 'cumulative'
       : defaults.matchupFormat
+  // Daily is offered only where per-day stats exist (lib/bestball/scoringPeriod.ts); anywhere else a
+  // stored 'daily' was a profile default nobody chose, and was always scored weekly.
+  const scoringPeriod: BestBallScoringPeriod =
+    nested.scoringPeriod === 'daily' && bestBallSportSupportsDaily(defaults.sport) ? 'daily' : 'weekly'
   const playoffFormat: BestBallPlayoffFormat = isOneOf(nested.playoffFormat, BEST_BALL_PLAYOFF_FORMATS)
     ? nested.playoffFormat
     : matchupFormat === 'cumulative'
@@ -443,9 +477,9 @@ export function normalizeBestBallSettings(input: {
     rosterTemplateId: asString(nested.rosterTemplateId, defaults.rosterTemplateId),
     regularSeasonLength: asInt(nested.regularSeasonLength, defaults.regularSeasonLength, 1, 60),
     playoffTeams: contestStructure === 'tournament' ? 0 : asInt(nested.playoffTeams, Math.min(defaults.playoffTeams, input.teamCount ?? defaults.playoffTeams), 0, 16),
-    scoringPeriod: isOneOf(nested.scoringPeriod, ['weekly', 'daily'] as const)
-      ? nested.scoringPeriod
-      : defaults.scoringPeriod,
+    scoringPeriod,
+    // A tournament is weekly-only; creation validation refuses the combination, so the marker stays off.
+    dailyBestBall: scoringPeriod === 'daily' && contestStructure !== 'tournament',
     waiversEnabled: asBool(nested.waiversEnabled, defaults.waiversEnabled),
     tradesEnabled: asBool(nested.tradesEnabled, defaults.tradesEnabled),
     substitutionsEnabled: asBool(nested.substitutionsEnabled, defaults.substitutionsEnabled),
@@ -516,6 +550,7 @@ export function buildBestBallSettingsSummary(settings: BestBallCreateSettings): 
     `${settings.mode === 'underdog' ? 'Underdog-style' : 'Standard'} Best Ball`,
     `${settings.draftMode} draft`,
     `${settings.matchupFormat === 'cumulative' ? 'cumulative points' : 'head-to-head'} scoring`,
+    settings.scoringPeriod === 'daily' ? 'daily lineups' : 'weekly lineups',
     restrictions.join(', '),
   ].join(' · ')
 }

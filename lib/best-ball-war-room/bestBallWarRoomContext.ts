@@ -20,6 +20,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getBestBallSportProfile, normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { hasVerifiedBestBallRuleConfiguration } from './bestBallRuleEvidence'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
@@ -169,7 +170,8 @@ export async function buildBestBallWarRoomContext(
   const ruleConfigurationVerified = hasVerifiedBestBallRuleConfiguration(settingsRecord)
   const bbSettings = normalizeBestBallSettings({
     sport,
-    conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
+    // The period the league is ACTUALLY scored with: a legacy NBA/NHL/MLB "daily" was only a default.
+    conceptSetup: withEffectiveScoringPeriod(sport, settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
   })
   const roster = buildRosterSettings(sport)
@@ -177,7 +179,8 @@ export async function buildBestBallWarRoomContext(
   const scoring: BestBallScoringSettings = {
     sport,
     scoringPreset: String((settingsRecord.scoringSettings as Record<string, unknown> | undefined)?.preset ?? bbSettings.mode ?? 'PPR').toUpperCase(),
-    scoringPeriod: String(league.bbScoringPeriod ?? bbSettings.scoringPeriod ?? 'weekly'),
+    // Never `League.bbScoringPeriod`: legacy rows say "daily" for leagues that were always scored weekly.
+    scoringPeriod: resolveBestBallScoringPeriod({ sport, settings: settingsRecord }),
     matchupFormat: String(league.bbMatchupFormat ?? bbSettings.matchupFormat ?? 'h2h'),
     cumulative: bbSettings.cumulativeScoring,
   }

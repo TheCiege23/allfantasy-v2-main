@@ -13,8 +13,13 @@ export type BestBallSportConfig = {
   starterCount: number
   /** Lineup slot configuration */
   lineupSlots: Array<{ position: string; count: number; flex?: string[] }>
-  /** Scoring period type */
-  scoringPeriod: 'weekly' | 'daily_aggregate'
+  /**
+   * Default scoring period: weekly for every sport. Daily best ball is a commissioner choice for
+   * NBA / NHL / MLB only, decided per league (lib/bestball/scoringPeriod.ts), never by this config.
+   */
+  scoringPeriod: 'weekly'
+  /** Whether the commissioner may switch this sport to daily best ball. */
+  dailyAvailable: boolean
   /** Total scoring weeks in a season */
   scoringWeeks: number
   /** Default tiebreaker */
@@ -50,6 +55,7 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'K', count: 1 },
     ],
     scoringPeriod: 'weekly',
+    dailyAvailable: false,
     scoringWeeks: 17,
     tiebreaker: 'max_week',
     lockRule: 'game_start',
@@ -78,7 +84,8 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'C', count: 1 },
       { position: 'UTIL', count: 3, flex: ['PG', 'SG', 'SF', 'PF', 'C'] },
     ],
-    scoringPeriod: 'daily_aggregate',
+    scoringPeriod: 'weekly',
+    dailyAvailable: true,
     scoringWeeks: 21,
     tiebreaker: 'points_for',
     lockRule: 'game_start',
@@ -89,7 +96,7 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
     tournamentSupported: true,
     notes: [
       'Load management and rest days make depth critical',
-      'Daily auto-optimization captures all active players',
+      "Weekly by default; daily best ball (each day's best lineup, summed) is a commissioner option",
       'Back-to-backs create natural variance for boom weeks',
     ],
   },
@@ -109,7 +116,8 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'SP', count: 2 },
       { position: 'RP', count: 2 },
     ],
-    scoringPeriod: 'daily_aggregate',
+    scoringPeriod: 'weekly',
+    dailyAvailable: true,
     scoringWeeks: 23,
     tiebreaker: 'points_for',
     lockRule: 'game_start',
@@ -120,7 +128,7 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
     tournamentSupported: true,
     notes: [
       'Pitcher streaming value is captured automatically',
-      'Doubleheader days create natural scoring spikes',
+      'Doubleheader weeks create natural scoring spikes',
       'Deeper rosters reward drafting depth over stars',
     ],
   },
@@ -136,7 +144,8 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'UTIL', count: 1, flex: ['C', 'LW', 'RW', 'D'] },
       { position: 'G', count: 1 },
     ],
-    scoringPeriod: 'daily_aggregate',
+    scoringPeriod: 'weekly',
+    dailyAvailable: true,
     scoringWeeks: 23,
     tiebreaker: 'points_for',
     lockRule: 'game_start',
@@ -163,6 +172,7 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'FLEX', count: 1, flex: ['RB', 'WR', 'TE'] },
     ],
     scoringPeriod: 'weekly',
+    dailyAvailable: false,
     scoringWeeks: 14,
     tiebreaker: 'max_week',
     lockRule: 'game_start',
@@ -187,7 +197,8 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'F', count: 2, flex: ['SF', 'PF'] },
       { position: 'C', count: 1 },
     ],
-    scoringPeriod: 'daily_aggregate',
+    scoringPeriod: 'weekly',
+    dailyAvailable: false,
     scoringWeeks: 18,
     tiebreaker: 'points_for',
     lockRule: 'game_start',
@@ -214,6 +225,7 @@ export const BESTBALL_SPORT_CONFIGS: Record<string, BestBallSportConfig> = {
       { position: 'FWD', count: 3 },
     ],
     scoringPeriod: 'weekly',
+    dailyAvailable: false,
     scoringWeeks: 38,
     tiebreaker: 'points_for',
     lockRule: 'game_start',

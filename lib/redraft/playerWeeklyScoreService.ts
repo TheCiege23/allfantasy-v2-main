@@ -47,6 +47,7 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
 import { addDatedGameRow, buildPlayerDailyStatLines, type DatedGameRows } from '@/lib/redraft/playerDailyStatLines'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
 import {
@@ -260,10 +261,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // has released the team for the following week.
   const survivorLeague = await prisma.league.findUnique({
     where: { id: season.leagueId },
-    select: { platform: true, survivorMode: true, settings: true },
+    select: { platform: true, survivorMode: true, settings: true, bestBallMode: true },
   })
-  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats.
-  const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
+  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats — and so
+  // is a DAILY best ball league (lib/bestball/scoringPeriod.ts), whose week is each day's best lineup.
+  const dailyLineupScoring =
+    isDailySport &&
+    (isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport) ||
+      isDailyBestBallLeague(survivorLeague ? { sport, settings: survivorLeague.settings, bestBallMode: survivorLeague.bestBallMode } : null))
   // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
   // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
   let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)

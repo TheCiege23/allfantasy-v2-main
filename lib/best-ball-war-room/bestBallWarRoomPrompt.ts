@@ -5,7 +5,8 @@
  * The AI explains/recommends over THESE facts only; it never invents projections, ADP,
  * stacks, correlations, exposure, or bye weeks, and states when data is unavailable.
  * CRITICAL: best ball has an AUTOMATIC optimal lineup — the AI must NEVER give manual
- * start/sit advice; if asked, it explains the lineup is auto-selected each scoring period.
+ * start/sit advice; if asked, it explains the lineup is auto-selected each week (weekly best ball) or each
+ * day, summed over the week (daily best ball) — whichever the league uses.
  * No network/AI calls here.
  */
 
@@ -63,7 +64,11 @@ export function buildBestBallWarRoomPrompt(inputs: BestBallWarRoomPromptInputs):
     lines.push('Scoring presets, lineup slots, roster-size targets and construction grades from the generic Best Ball profile are withheld. Use the selected-league roster and scoring tools for verified facts, and disclose any missing data.')
     return lines.join('\n')
   }
-  lines.push(`AUTOMATIC LINEUP: the optimal lineup is auto-selected each ${context.scoring.scoringPeriod} period — there is NO manual start/sit.`)
+  lines.push(
+    context.scoring.scoringPeriod === 'daily'
+      ? 'AUTOMATIC LINEUP (DAILY BEST BALL): each day the optimal legal lineup from the players rostered that day is auto-selected on the stats of that day, and the week score is the sum of the days — there is NO manual start/sit.'
+      : 'AUTOMATIC LINEUP (WEEKLY BEST BALL): one optimal legal lineup is auto-selected each week from the whole roster on weekly totals — there is NO manual start/sit.',
+  )
   lines.push(`Scoring: ${context.scoring.scoringPreset} ${context.scoring.matchupFormat}${context.scoring.cumulative ? ' (cumulative)' : ''}, period=${context.scoring.scoringPeriod}`)
   lines.push(
     `Best-ball settings: mode=${context.bestBall.mode} draft=${context.bestBall.draftMode} waivers=${context.bestBall.waiversEnabled ? 'ON' : 'OFF'} trades=${context.bestBall.tradesEnabled ? 'ON' : 'OFF'} subs=${context.bestBall.substitutionsEnabled ? 'ON' : 'OFF'}`,

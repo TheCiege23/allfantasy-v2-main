@@ -45,9 +45,14 @@ export type BestBallRosterRow = {
 
 const HELD_FROM_SEASON_START = new Set(['drafted', 'keeper', 'kept'])
 
+/** A drafted or kept row: held from before the season, whatever its `addedAt` says (see above). Pure. */
+export function heldFromSeasonStart(row: Pick<BestBallRosterRow, 'isKept' | 'acquisitionType'>): boolean {
+  return row.isKept === true || HELD_FROM_SEASON_START.has(String(row.acquisitionType ?? '').toLowerCase())
+}
+
 /** True when the row's team held the player at `lock`. Pure. */
 export function heldAtLock(row: BestBallRosterRow, lock: Date): boolean {
-  const fromSeasonStart = row.isKept === true || HELD_FROM_SEASON_START.has(String(row.acquisitionType ?? '').toLowerCase())
+  const fromSeasonStart = heldFromSeasonStart(row)
   if (!fromSeasonStart && row.addedAt && row.addedAt.getTime() >= lock.getTime()) return false
   if (row.droppedAt && row.droppedAt.getTime() < lock.getTime()) return false
   return true
