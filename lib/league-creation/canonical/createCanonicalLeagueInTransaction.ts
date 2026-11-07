@@ -27,6 +27,7 @@ import type { SoccerPipeline } from '@/lib/redraft-creation/sport-config'
 import { soccerPipelineToPrismaVariant } from '@/lib/redraft-creation/create-redraft-league'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { guillotineCalendarFit, planGuillotineChopSchedule } from '@/lib/guillotine/calendarFit'
+import { PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 import { ADVANCED_KEY, readAdvanced } from '@/lib/guillotine/chopSchedule'
 import type { PresetEngineOutput } from '@/lib/league-creation/canonical/types'
 import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/validateCreateLeague'
@@ -545,6 +546,9 @@ export async function createCanonicalLeagueInTransaction(
   // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
+  // MLB Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Anything else is
+  // refused by validateCreateLeague; the default (no key) is one week.
+  if (isGuillotine && supportsTwoWeekPeriods(sport) && body.conceptSetup?.guillotinePeriodWeeks === 2) mergedSettings[PERIOD_WEEKS_KEY] = 2
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
   /*
    * 🛑 A LARGE GUILLY COULD NOT FINISH. The config below is one chop a week from week 1 to the sport's
@@ -561,12 +565,13 @@ export async function createCanonicalLeagueInTransaction(
       baseChops: 1,
       threshold: guillotineEndgame.threshold,
       finalPeriods: guillotineEndgame.cumulativePeriods,
+      periodWeeks: readPeriodWeeks(mergedSettings),
     }
     if (!guillotineCalendarFit({ ...calendar, advanced: readAdvanced(mergedSettings) }).fits) {
       const planned = planGuillotineChopSchedule(calendar)
       if (!planned) {
         throw new Error(
-          `A ${managerCount}-team Guilly league cannot reach a champion in ${calendar.endWeek} weeks, even with four chops every week. Choose fewer teams.`,
+          `A ${managerCount}-team Guilly league cannot reach a champion in ${calendar.endWeek} weeks, even with four chops every ${calendar.periodWeeks === 2 ? 'two-week period' : 'week'}. Choose fewer teams.`,
         )
       }
       mergedSettings[ADVANCED_KEY] = planned

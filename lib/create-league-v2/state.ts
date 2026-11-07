@@ -178,6 +178,8 @@ export interface CreateLeagueV2State {
   medianGame: boolean
   /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   guillotineBestBall: boolean
+  /** MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Absent = one week. */
+  guillotineTwoWeekPeriods?: boolean
   draftDate: string
   draftTime: string
   /**

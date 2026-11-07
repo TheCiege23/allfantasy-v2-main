@@ -13,6 +13,7 @@ import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { resolveGuillotineEndgame } from './endgameRules'
 import { readAdvanced } from './chopSchedule'
+import { periodEndWeek, previousPeriodEnd, readPeriodWeeks, weeksInPeriod } from './eliminationPeriods'
 import { readFaabOnChop } from './faabOnChop'
 import { rosterIdForOwner } from './finishGuillotineSeason'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
@@ -41,7 +42,9 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
       select: { choppedInPeriod: true },
     }),
   ])
-  const week = Math.max(Math.max(lastChop?.choppedInPeriod ?? 0, gSeason?.currentScoringPeriod ?? 0) + 1, config.eliminationStartWeek)
+  // A two-week MLB period is keyed by its last week and scores both weeks (./eliminationPeriods.ts).
+  const periodWeeks = readPeriodWeeks(league.settings)
+  const week = periodEndWeek(Math.max(Math.max(lastChop?.choppedInPeriod ?? 0, gSeason?.currentScoringPeriod ?? 0) + 1, config.eliminationStartWeek), config.eliminationStartWeek, periodWeeks)
 
   const [active, rosters, choppedStates] = await Promise.all([
     prisma.redraftRoster.findMany({ where: { seasonId: season.id, isEliminated: false }, select: { id: true, ownerId: true, teamName: true } }),
@@ -74,7 +77,7 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
   const lastWeek = new Map<string, number>()
   for (const p of previous) {
     cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
-    if (p.weekOrPeriod === week - 1) lastWeek.set(p.rosterId, p.periodPoints)
+    if (p.weekOrPeriod === previousPeriodEnd(week, periodWeeks)) lastWeek.set(p.rosterId, p.periodPoints)
   }
   const countByRedraft = new Map(playerCounts.map((c) => [c.rosterId, c._count._all]))
   const faabByRoster = new Map(rosters.map((r) => [r.id, r.faabRemaining]))
@@ -82,14 +85,20 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
   // Scored the same way the chop scores them. A week not started yet reads as 0 for everyone.
   const teams: ChopPreviewTeam[] = []
   for (const p of placed) {
-    const s = await scoreRosterForWeek({ leagueId, rosterId: p.redraftId, week, seasonYear: season.season, includeBench: true }).catch(() => null)
-    const periodPoints = s?.points ?? 0
+    let periodPoints = 0
+    let benchPoints: number | null = null
+    for (const w of weeksInPeriod(week, periodWeeks)) {
+      const s = await scoreRosterForWeek({ leagueId, rosterId: p.redraftId, week: w, seasonYear: season.season, includeBench: true }).catch(() => null)
+      periodPoints += s?.points ?? 0
+      if (typeof s?.benchPoints === 'number') benchPoints = (benchPoints ?? 0) + s.benchPoints
+    }
+    if (periodWeeks > 1) periodPoints = Math.round(periodPoints * 100) / 100
     teams.push({
       rosterId: p.rosterId,
       name: p.teamName?.trim() || names.get(p.rosterId) || 'Unnamed team',
       periodPoints,
       seasonPointsCumul: Math.round(((cumulBefore.get(p.rosterId) ?? 0) + periodPoints) * 100) / 100,
-      ...(typeof s?.benchPoints === 'number' ? { benchPoints: s.benchPoints } : {}),
+      ...(benchPoints !== null ? { benchPoints } : {}),
       ...(lastWeek.has(p.rosterId) ? { previousPeriodPoints: lastWeek.get(p.rosterId) } : {}),
       faab: faabByRoster.get(p.rosterId) ?? null,
       playerCount: countByRedraft.get(p.redraftId) ?? 0,

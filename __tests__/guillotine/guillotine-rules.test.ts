@@ -277,3 +277,46 @@ describe('saveGuillotineRules', () => {
     }))
   })
 })
+
+describe('two-week elimination periods (lib/guillotine/eliminationPeriods.ts)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getGuillotineConfig.mockResolvedValue({ ...CONFIG, sport: 'MLB', eliminationStartWeek: 1, eliminationEndWeek: 26 })
+    configFindUnique.mockResolvedValue({ id: 'cfg1' })
+    hasFirstChopHappened.mockResolvedValue(false)
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: false })
+  })
+  const league = (over: Record<string, unknown> = {}) => ({ sport: 'MLB', settings: {}, guillotineEndgame: 'last_team_standing', status: 'pre_draft', lifecycleState: null, ...over })
+
+  it('an MLB commissioner can switch to two weeks (free), stored in League.settings', async () => {
+    leagueFindUnique.mockResolvedValue(league())
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotine_period_weeks).toBe(2)
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+  })
+
+  it('back to one week removes the key, so the league reads exactly as before', async () => {
+    leagueFindUnique.mockResolvedValue(league({ settings: { guillotine_period_weeks: 2 } }))
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 1 })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings).not.toHaveProperty('guillotine_period_weeks')
+  })
+
+  it('refused outside MLB (400) and after the first chop (409); nothing written', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NBA' }))
+    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 400, field: 'periodWeeks' })
+    leagueFindUnique.mockResolvedValue(league())
+    hasFirstChopHappened.mockResolvedValue(true)
+    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 409, field: 'periodWeeks' })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refused when the calendar cannot finish on two-week periods (15 teams, 13 periods)', async () => {
+    leagueFindUnique.mockResolvedValue(league())
+    rosterCount.mockResolvedValueOnce(15)
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'periodWeeks' })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+})

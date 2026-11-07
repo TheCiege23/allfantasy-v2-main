@@ -7,6 +7,7 @@ import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
  */
@@ -486,6 +487,18 @@ export function validateCreatePayload(
         errors: poolCheck.refusals.map((r) => ({ path: 'teamCount', message: r.message, code: 'BEST_BALL_POOL_EXHAUSTED' })),
       }
     }
+  }
+
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // than dropped, so a league is never created on a period length it did not ask for.
+  if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
+    const message =
+      schedule.guillotinePeriodWeeks !== 2
+        ? 'An elimination period is one week or two.'
+        : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
+          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          : null
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
   }
 
   if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {

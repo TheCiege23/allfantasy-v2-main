@@ -36,6 +36,7 @@ import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finis
 import { recordChoppedReleases } from '@/lib/guillotine/choppedReleases'
 import { firstChopWeekAfterDraft } from '@/lib/guillotine/draftWeekFloor'
 import { recordGuillotineCorrectionBaseline } from '@/lib/guillotine/statCorrectionHandler'
+import { periodEndWeek, previousPeriodEnd, readPeriodWeeks, weeksInPeriod } from '@/lib/guillotine/eliminationPeriods'
 
 export type NativeGuillotineOutcome =
   | 'not_guillotine'
@@ -107,6 +108,9 @@ export async function runNativeGuillotineWeek(
   })
   const endgameLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, guillotineEndgame: true } })
   const lastTeamStanding = resolveGuillotineEndgame(endgameLeague ?? {}).format === 'last_team_standing'
+  // One week, or two (MLB, ./eliminationPeriods.ts). A period is keyed by its last week, so `week` below
+  // is always a period's last week and everything keyed by it is unchanged for a one-week league.
+  const periodWeeks = readPeriodWeeks(endgameLeague?.settings)
 
   const finalSeason = gSeason.ok ? await prisma.guillotineSeason.findUnique({ where: { id: gSeason.seasonId }, select: { currentScoringPeriod: true, status: true } }) : null
   const lastChop = await prisma.guillotineRosterState.findFirst({
@@ -130,7 +134,9 @@ export async function runNativeGuillotineWeek(
       await prisma.guillotineLeagueConfig.updateMany({ where: { leagueId: season.leagueId, eliminationStartWeek: { lt: afterDraft } }, data: { eliminationStartWeek: afterDraft } })
     }
   }
-  const week = Math.max(recoveryWeek ?? Math.max(lastChop?.choppedInPeriod ?? 0, finalSeason?.currentScoringPeriod ?? 0) + 1, startWeek)
+  const nextWeek = Math.max(recoveryWeek ?? Math.max(lastChop?.choppedInPeriod ?? 0, finalSeason?.currentScoringPeriod ?? 0) + 1, startWeek)
+  const week = recoveryWeek != null ? nextWeek : periodEndWeek(nextWeek, startWeek, periodWeeks)
+  const periodWeekList = weeksInPeriod(week, periodWeeks)
   /*
    * 🛑 PAST THE LAST CHOP WEEK WITH TEAMS STILL STANDING WAS A DEAD END: no chop, no champion, no
    * archive, forever. It happens to a league with more teams than chop weeks, to no-chop weeks that
@@ -150,13 +156,17 @@ export async function runNativeGuillotineWeek(
    * team's game is missing its box score (weekStatEvidence.ts). A team must never be chopped on zeros
    * the feed never sent, so either stat refusal gets one backfill and then waits.
    */
-  let sealed = await finalizeRedraftWeek({ seasonId: season.id, week })
-  const backfillable = ['stat_coverage_below_floor', 'game_stats_missing', 'game_stats_missing_escalated'].includes(String(sealed.refusal))
-  if (backfillable && deps.syncWeekStats) {
-    await deps.syncWeekStats({ seasonId: season.id, week })
-    sealed = await finalizeRedraftWeek({ seasonId: season.id, week })
+  // A two-week period seals both of its weeks; the period's last week supplies the chop's end time.
+  let sealed!: Awaited<ReturnType<typeof finalizeRedraftWeek>>
+  for (const w of periodWeekList) {
+    sealed = await finalizeRedraftWeek({ seasonId: season.id, week: w })
+    const backfillable = ['stat_coverage_below_floor', 'game_stats_missing', 'game_stats_missing_escalated'].includes(String(sealed.refusal))
+    if (backfillable && deps.syncWeekStats) {
+      await deps.syncWeekStats({ seasonId: season.id, week: w })
+      sealed = await finalizeRedraftWeek({ seasonId: season.id, week: w })
+    }
+    if (sealed.refusal) return { ...base, outcome: 'waiting', week, reason: sealed.refusal }
   }
-  if (sealed.refusal) return { ...base, outcome: 'waiting', week, reason: sealed.refusal }
 
   const lastStart = sealed.slate?.lastStartTime ?? (await lastKickoff(season, week, now))
   if (!lastStart) return { ...base, outcome: 'waiting', week, reason: 'period_end_unknown' }
@@ -199,29 +209,47 @@ export async function runNativeGuillotineWeek(
      * A refresh that throws chops on the sealed stats, exactly as before, rather than stall the season.
      */
     if (config.correctionWindow !== 'immediate' && deps.syncWeekStats) {
-      let refreshed = false
-      try {
-        await deps.syncWeekStats({ seasonId: season.id, week })
-        refreshed = true
-      } catch (error) {
-        console.error('[native-guillotine] pre-chop stat refresh failed; chopping on the sealed stats', { seasonId: season.id, week, error })
-      }
-      if (refreshed) {
-        const resealed = await finalizeRedraftWeek({ seasonId: season.id, week })
-        if (resealed.refusal) return { ...base, outcome: 'waiting', week, reason: `pre_chop_refresh:${resealed.refusal}` }
+      for (const w of periodWeekList) {
+        let refreshed = false
+        try {
+          await deps.syncWeekStats({ seasonId: season.id, week: w })
+          refreshed = true
+        } catch (error) {
+          console.error('[native-guillotine] pre-chop stat refresh failed; chopping on the sealed stats', { seasonId: season.id, week: w, error })
+        }
+        if (refreshed) {
+          const resealed = await finalizeRedraftWeek({ seasonId: season.id, week: w })
+          if (resealed.refusal) return { ...base, outcome: 'waiting', week, reason: `pre_chop_refresh:${resealed.refusal}` }
+        }
       }
     }
 
-    // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
+    /*
+     * Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
+     * A two-week period is the sum of its two weekly scores — each week scored on its own, so a best ball
+     * team plays its best lineup of EACH week under the weekly ownership rule — and so are bench points.
+     */
     const points = new Map<string, number>()
     const benchPoints = new Map<string, number>()
     // Each counted player's points too: the baseline a later stat correction is measured against.
     const playerPoints = new Map<string, Array<{ playerId: string; points: number; isStarter: boolean }>>()
     for (const r of active) {
-      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
-      points.set(r.id, s.points)
-      if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
-      playerPoints.set(r.id, s.playerPoints ?? [])
+      if (periodWeeks === 1) {
+        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
+        points.set(r.id, s.points)
+        if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
+        playerPoints.set(r.id, s.playerPoints ?? [])
+        continue
+      }
+      let total = 0
+      let bench: number | null = null
+      for (const w of periodWeekList) {
+        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week: w, seasonYear: season.season, includeBench: true })
+        total += s.points
+        if (typeof s.benchPoints === 'number') bench = (bench ?? 0) + s.benchPoints
+      }
+      points.set(r.id, Math.round(total * 100) / 100)
+      if (bench !== null) benchPoints.set(r.id, Math.round(bench * 100) / 100)
     }
 
     // Into the engine's id space. A team that cannot be placed would silently escape the chop.
@@ -259,7 +287,7 @@ export async function runNativeGuillotineWeek(
     const lastWeek = new Map<string, number>()
     for (const p of previous) {
       cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
-      if (p.weekOrPeriod === week - 1) lastWeek.set(p.rosterId, p.periodPoints)
+      if (p.weekOrPeriod === previousPeriodEnd(week, periodWeeks)) lastWeek.set(p.rosterId, p.periodPoints)
     }
     /*
      * The tiebreak's `bench_points` and `previous_period` steps read these. They were never filled on the
@@ -283,7 +311,12 @@ export async function runNativeGuillotineWeek(
      * correction after the chop updates the scores against it; it never reverses the chop. Best-effort:
      * without it that week is simply never corrected, and the chop must not wait on bookkeeping.
      */
-    try {
+    /*
+     * ⚠ NOT FOR A TWO-WEEK PERIOD. The correction handler re-scores ONE week's stats against the baseline,
+     * so a two-week baseline would be "corrected" down to its last week alone. Without a baseline the
+     * period is simply never corrected after the chop (`no_baseline`); the chop itself is unaffected.
+     */
+    if (periodWeeks === 1) try {
       await recordGuillotineCorrectionBaseline({
         seasonId: season.id,
         leagueId: season.leagueId,

@@ -6,6 +6,7 @@ import { ADVANCED_KEY, isDefault, normalizeAdvanced, readAdvanced, type Guilloti
 import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveGuillotineEndgame } from './endgameRules'
+import { isPeriodEndWeek, periodEndWeek, readPeriodWeeks } from './eliminationPeriods'
 
 /**
  * Save the guillotine chop schedule and immunity (rules in ./chopSchedule). AF Commissioner
@@ -32,6 +33,12 @@ export async function saveGuillotineAdvanced(
   // A schedule that cannot reach a champion is refused here, with the reason (calendarFit.ts).
   const calendar = await loadCalendarForSchedule(leagueId, n.value).catch(() => null)
   if (calendar) {
+    // Two-week periods (MLB): a chop can only land on a period's last week, so a special week anywhere
+    // else would save and never happen.
+    const deadWeek = Object.keys(n.value.overrides).map(Number).find((w) => !isPeriodEndWeek(w, calendar.startWeek, calendar.periodWeeks))
+    if (deadWeek != null) {
+      return { ok: false, error: 'bad_override', message: `This league chops every two weeks, so week ${deadWeek} cannot have its own chop count. Use the last week of a period (week ${periodEndWeek(deadWeek, calendar.startWeek, calendar.periodWeeks)}).` }
+    }
     const fit = guillotineCalendarFit(calendar)
     if (!fit.fits) return { ok: false, error: 'calendar_too_short', message: calendarFitMessage(calendar, fit) }
   }
@@ -77,5 +84,6 @@ async function loadCalendarForSchedule(leagueId: string, advanced: GuillotineAdv
     advanced,
     threshold: endgame.threshold,
     finalPeriods: endgame.cumulativePeriods,
+    periodWeeks: readPeriodWeeks(league.settings),
   }
 }

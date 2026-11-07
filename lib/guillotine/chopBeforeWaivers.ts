@@ -33,6 +33,7 @@ import { prisma } from '@/lib/prisma'
 import { nativeGuillotineState } from '@/lib/league/nativeFormatPatch'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { readAdvanced, scheduledChops } from './chopSchedule'
+import { periodEndWeek, readPeriodWeeks } from './eliminationPeriods'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week/seasonWeekService'
 import { SCORING_SEASON_STATUSES } from '@/lib/redraft/seasonStatus'
 
@@ -47,6 +48,11 @@ export type ChopPendingInput = {
   eliminationEndWeek: number | null
   /** Teams the commissioner's schedule chops in a week (0 = a no-chop week). */
   chopsInWeek: (week: number) => number
+  /**
+   * Weeks per elimination period (./eliminationPeriods.ts). Absent = 1. In a two-week league only a
+   * period's last week chops, so the first week finishing holds nothing.
+   */
+  periodWeeks?: number
 }
 
 export type ChopPendingVerdict =
@@ -55,7 +61,8 @@ export type ChopPendingVerdict =
 
 /** Pure. Whether a finished week's chop is due and not yet applied. */
 export function chopPendingVerdict(input: ChopPendingInput): ChopPendingVerdict {
-  const week = Math.max(Math.max(input.lastChoppedWeek ?? 0, input.currentScoringPeriod ?? 0) + 1, input.eliminationStartWeek)
+  const next = Math.max(Math.max(input.lastChoppedWeek ?? 0, input.currentScoringPeriod ?? 0) + 1, input.eliminationStartWeek)
+  const week = periodEndWeek(next, input.eliminationStartWeek, input.periodWeeks ?? 1)
   if (input.eliminationEndWeek != null && week > input.eliminationEndWeek) return { hold: false, week, reason: 'elimination_window_ended' }
   const finished = week < input.fantasyWeek || (week === input.fantasyWeek && input.currentWeekComplete)
   if (!finished) return { hold: false, week, reason: 'week_in_progress' }
@@ -127,6 +134,7 @@ export async function guillotineChopPendingForWaivers(
       eliminationStartWeek: config.eliminationStartWeek,
       eliminationEndWeek: config.eliminationEndWeek,
       chopsInWeek: (week) => scheduledChops(advanced, week, config.teamsPerChop),
+      periodWeeks: readPeriodWeeks(league.settings),
     })
     if (verdict.hold) return { hold: true, week: verdict.week, message: CHOP_PENDING_WAIVER_MESSAGE(verdict.week) }
     if (verdict.reason === 'chop_overdue') {

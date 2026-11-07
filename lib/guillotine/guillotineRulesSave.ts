@@ -22,6 +22,7 @@ import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
 import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { isPeriodEndWeek, PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from './eliminationPeriods'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -46,6 +47,8 @@ export type GuillotineRulesView = {
   endgameLocked: boolean
   /** The draft has started: best ball lineups are fixed for the season. */
   bestBallLocked: boolean
+  /** Two-week elimination periods can be chosen (MLB only, ./eliminationPeriods.ts). */
+  periodWeeksAvailable: boolean
   /** The viewer can change the AF Commissioner fields — the same check the save enforces. */
   canEditPaid: boolean
   /** The viewer's plan includes Chimmy recaps (AF Pro or AF Commissioner), so `aiRecapAuto` takes effect. */
@@ -84,10 +87,13 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
       faabOnChop: readFaabOnChop(settings),
       bestBall: readGuillotineBestBall(settings),
+      periodWeeks: readPeriodWeeks(settings),
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
     endgameLocked,
+    // A league already on two weeks keeps the control, so it can always be put back to one.
+    periodWeeksAvailable: supportsTwoWeekPeriods(sport) || readPeriodWeeks(settings) === 2,
     bestBallLocked: !canChangeGuillotineBestBall(league),
     canEditPaid,
     aiRecapAvailable,
@@ -119,6 +125,19 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
+  /*
+   * Two-week periods (./eliminationPeriods.ts): MLB only, and fixed once a chop has happened — the
+   * periods are paired from the first chop week, so switching mid-season would re-pair weeks already scored.
+   */
+  if (patch.periodWeeks !== undefined && patch.periodWeeks !== current.rules.periodWeeks) {
+    if (current.endgameLocked) {
+      return { ok: false, status: 409, error: 'The first chop has happened, so the elimination period is fixed for this season.', field: 'periodWeeks' }
+    }
+    if (patch.periodWeeks === 2 && !current.periodWeeksAvailable) {
+      return { ok: false, status: 400, error: 'Two-week elimination periods are for MLB leagues.', field: 'periodWeeks' }
+    }
+  }
+
   if (patch.bestBall !== undefined && patch.bestBall !== current.rules.bestBall && current.bestBallLocked) {
     return {
       ok: false,
@@ -142,7 +161,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
 
   // The calendar must still reach a champion with the patched end week, chops a week and endgame
   // (lib/guillotine/calendarFit.ts). Checked against the league's chop schedule and team count.
-  if (patch.eliminationEndWeek !== undefined || patch.teamsPerChop !== undefined || patch.endgame !== undefined) {
+  if (patch.eliminationEndWeek !== undefined || patch.teamsPerChop !== undefined || patch.endgame !== undefined || patch.periodWeeks !== undefined) {
     const nextEndgame = resolveGuillotineEndgame({ settings: { guillotineEndgame: patch.endgame ?? current.rules.endgame } })
     const teamCount = (await prisma.roster.count({ where: { leagueId } })) ?? 0
     const advanced = teamCount > 0 ? await readGuillotineAdvanced(leagueId) : null
@@ -154,14 +173,19 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       advanced: advanced ?? { steps: [], overrides: {}, immunity: 'off' as const },
       threshold: nextEndgame.threshold,
       finalPeriods: nextEndgame.cumulativePeriods,
+      periodWeeks: patch.periodWeeks ?? current.rules.periodWeeks,
+    }
+    const deadWeek = Object.keys(calendar.advanced.overrides).map(Number).find((w) => !isPeriodEndWeek(w, calendar.startWeek, calendar.periodWeeks))
+    if (deadWeek != null) {
+      return { ok: false, status: 400, error: `Week ${deadWeek} has its own chop count under Chop rules, and with two-week periods only the second week of a period can chop. Move or clear it first.`, field: 'periodWeeks' }
     }
     const fit = teamCount > 0 ? guillotineCalendarFit(calendar) : null
     if (fit && !fit.fits) {
-      return { ok: false, status: 400, error: calendarFitMessage(calendar, fit), field: patch.eliminationEndWeek !== undefined ? 'eliminationEndWeek' : patch.teamsPerChop !== undefined ? 'teamsPerChop' : 'endgame' }
+      return { ok: false, status: 400, error: calendarFitMessage(calendar, fit), field: patch.eliminationEndWeek !== undefined ? 'eliminationEndWeek' : patch.teamsPerChop !== undefined ? 'teamsPerChop' : patch.endgame !== undefined ? 'endgame' : 'periodWeeks' }
     }
   }
 
-  const { endgame, aiRecapAuto, faabOnChop, bestBall, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -190,7 +214,8 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const recapChanged = aiRecapAuto !== undefined && aiRecapAuto !== current.rules.aiRecapAuto
   const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
   const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
-  if (endgameChanged || recapChanged || faabChanged || bestBallChanged) {
+  const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
+  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -200,6 +225,11 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
       if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
+      // One week is the default: the key is removed rather than stored, so the league reads as before.
+      if (periodChanged) {
+        if (periodWeeks === 2) settings[PERIOD_WEEKS_KEY] = 2
+        else delete settings[PERIOD_WEEKS_KEY]
+      }
       await tx.league.update({
         where: { id: leagueId },
         data: {

@@ -1089,6 +1089,31 @@ export function LeagueBasicsStep({
       </label>
       ) : null}
 
+      {/* MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' && state.sport === 'MLB' ? (
+      <label
+        className={cx(
+          'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
+          state.guillotineTwoWeekPeriods === true
+            ? 'border-violet-500 bg-violet-600/10'
+            : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+        )}
+        data-testid="g30-guillotine-two-week-periods"
+      >
+        <CheckBox
+          className="mt-0.5"
+          checked={state.guillotineTwoWeekPeriods === true}
+          onChange={(checked) => onChange({ guillotineTwoWeekPeriods: checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.guillotineTwoWeekPeriods.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.guillotineTwoWeekPeriods.body')}
+          </span>
+        </span>
+      </label>
+      ) : null}
+
       <BestBallPoolNote state={state} t={t} />
     </section>
   )
