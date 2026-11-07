@@ -10,6 +10,8 @@ import type { WorkspaceTaskCandidate } from '@/lib/commissioner-workspace/taskSo
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadNativeLineupCards } from '@/lib/integrity/nativeLineupCards'
 import { auditLineups, describeFinding, isFlagged, type TeamSeasonSummary, type TeamWeekFinding, type WeeklyStarterRow } from './lineupIntegrity'
+import { readLineupLockSnapshots } from '@/lib/integrity/lineupLockSnapshots'
+import { buildLineupReportText, summarizeTeamScores, type TeamScoreSummary } from '@/lib/integrity/lineupIntegrityScore'
 
 /**
  * Lineup-integrity monitor — reads. Rules in ./lineupIntegrity.
@@ -62,7 +64,22 @@ export type LineupIntegrityReport =
       summary: TeamSeasonSummary[] | null
       fullSeason: boolean
       basis: string
+      /**
+       * The Lineup Integrity score per team (lib/integrity/lineupIntegrityScore.ts), AllFantasy-run
+       * leagues only. Null when no week has been snapshotted yet — the score starts the first week
+       * after its migration is applied with the tanking monitor on.
+       */
+      scores: TeamLineupScoreView[] | null
     }
+
+export type TeamLineupScoreView = {
+  rosterId: string
+  teamName: string
+  weeks: Array<{ week: number; ratio: number | null; startedTopCount: number | null; starterCount: number | null; skipReason: string | null }>
+  summary: TeamScoreSummary
+  /** The text "Post to league chat" sends — built here so the client never authors it. */
+  reportText: string
+}
 
 const BASIS: Record<'sleeper' | 'native', string> = {
   sleeper:
@@ -147,7 +164,34 @@ export async function readLineupIntegrity(leagueId: string, opts: { fullSeason: 
     summary: opts.fullSeason ? audit.summary : null,
     fullSeason: opts.fullSeason,
     basis: BASIS[source],
+    scores: source === 'native' ? await readLineupScores(league, opts.fullSeason) : null,
   }
+}
+
+/**
+ * Each team's scored weeks. Scored weeks only: a snapshot exists from the first hour of a week, but
+ * it is a score only once the week has been closed. Without the full-season plan, the latest scored
+ * week only — the same split as the findings above.
+ */
+export async function readLineupScores(league: Pick<LeagueRow, 'id' | 'season'>, fullSeason: boolean, onlyRosterId?: string): Promise<TeamLineupScoreView[] | null> {
+  const rows = (await readLineupLockSnapshots({ leagueId: league.id, season: league.season, ...(onlyRosterId ? { rosterIds: [onlyRosterId] } : {}) }).catch(() => [])).filter((r) => r.scoredAt != null)
+  if (rows.length === 0) return null
+  const latest = Math.max(...rows.map((r) => r.week))
+  const kept = fullSeason ? rows : rows.filter((r) => r.week === latest)
+  const rosters = await prisma.redraftRoster.findMany({ where: { id: { in: [...new Set(kept.map((r) => r.rosterId))] } }, select: { id: true, teamName: true, ownerName: true } })
+  const nameOf = new Map(rosters.map((r) => [r.id, r.teamName?.trim() || r.ownerName?.trim() || 'A team']))
+  const byRoster = new Map<string, typeof kept>()
+  for (const r of kept) byRoster.set(r.rosterId, [...(byRoster.get(r.rosterId) ?? []), r])
+  const out: TeamLineupScoreView[] = []
+  for (const [rosterId, list] of byRoster) {
+    const weeks = list
+      .map((r) => ({ week: r.week, ratio: r.ratio, startedTopCount: r.startedTopCount, starterCount: r.starterCount, skipReason: r.skipReason }))
+      .sort((a, b) => a.week - b.week)
+    const teamName = nameOf.get(rosterId) ?? 'A team'
+    out.push({ rosterId, teamName, weeks, summary: summarizeTeamScores(weeks), reportText: buildLineupReportText({ teamName, season: league.season, weeks }) })
+  }
+  // Lowest average first: the team a commissioner is most likely to be asked about.
+  return out.sort((a, b) => (a.summary.averageRatio ?? 2) - (b.summary.averageRatio ?? 2) || a.teamName.localeCompare(b.teamName))
 }
 
 async function readSleeperRows(league: LeagueRow, fullSeason: boolean): Promise<SourceRows> {
