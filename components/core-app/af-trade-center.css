@@ -3105,3 +3105,72 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
     flex-basis: 100%;
   }
 }
+
+/* ── Rebuild plan (components/core-app/screens/RebuildPlanCard.tsx) ─────────────────────────────── */
+.af-tc-rebuild-group {
+  margin-top: 16px;
+}
+.af-tc-rebuild-group[data-group='sell'] .af-tc-rebuild-h { color: var(--warn); }
+.af-tc-rebuild-group[data-group='hold'] .af-tc-rebuild-h { color: var(--good, #34d399); }
+.af-tc-rebuild-group[data-group='target'] .af-tc-rebuild-h,
+.af-tc-rebuild-group[data-group='package'] .af-tc-rebuild-h { color: var(--accent); }
+.af-tc-rebuild-h {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-tc-rebuild-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-tc-rebuild-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+  padding: 10px 12px;
+}
+.af-tc-rebuild-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+.af-tc-rebuild-pos {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-rebuild-why {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-rebuild-buyers {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-rebuild-buyers small {
+  color: var(--muted);
+}
+.af-tc-rebuild-buyers ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+.af-tc-rebuild-buyers li + li {
+  margin-top: 2px;
+}
+.af-tc-rebuild-foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}

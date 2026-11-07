@@ -52,6 +52,7 @@ import {
   suggestionToPickedAssets,
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
@@ -1158,7 +1159,8 @@ export function TradeCenter(props: {
    * different one.
    */
   const startSuggestedDeal = useCallback(
-    (p: PartnerRecommendation) => {
+    // Only the partner and the two sides are read, so a rebuild-plan package loads through here too.
+    (p: Pick<PartnerRecommendation, 'rosterId' | 'ownerName' | 'suggestion'>) => {
       if (!p.suggestion || !rosterData) return
       setDraftTouched(true)
       setRecoverableDraft(null)
@@ -2247,6 +2249,30 @@ export function TradeCenter(props: {
         attention. Children stay mounted while closed, so the inbox still loads and still reports
         its count.
       */}
+      {/*
+        The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
+        team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
+        team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
+      */}
+      {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
+        <details className="af-tc-fold af-tc-rebuild-fold" open={rosterData?.rebuildPlan?.trigger === 'eliminated' || undefined}>
+          <summary>
+            <span>{copy('Rebuild plan')}</span>
+            <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
+          </summary>
+          {rosterData?.rebuildPlanLocked && depthAccess ? (
+            <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
+          ) : (
+            <RebuildPlanCard
+              plan={rosterData?.rebuildPlan ?? null}
+              onStartWith={(pkg) =>
+                startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
+              }
+            />
+          )}
+        </details>
+      ) : null}
+
       {otherRosters.length > 0 && !props.embedded ? (
         <details className="af-tc-fold af-tc-ideas">
           <summary>
