@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-commish.css'
+import { LineupScoreStrip } from '@/components/commish/IntegrityFlagCard'
 
 const MAX = 1000
 
@@ -27,6 +28,12 @@ type FlagView = {
   weeksFlagged: number[]
   reply: { text: string; submittedAt: string } | null
   canReply: boolean
+  lineupIntegrity?: {
+    weeks: { week: number; ratio: number | null; startedTopCount: number | null; starterCount: number | null }[]
+    below: number | null
+    run: number[]
+    pickNote: string | null
+  } | null
 }
 
 function startLine(s: FlagView['starts'][number]): string {
@@ -121,6 +128,7 @@ export default function TankingFlagReplyPage() {
                 ))}
               </ul>
             ) : null}
+            {flag.lineupIntegrity ? <LineupScoreStrip li={{ ...flag.lineupIntegrity, below: flag.lineupIntegrity.below ?? undefined }} /> : null}
 
             <p className="af-cm-threshold">
               Nothing has been taken from your team. If there is a reason — a late scratch, a player ruled out after you set

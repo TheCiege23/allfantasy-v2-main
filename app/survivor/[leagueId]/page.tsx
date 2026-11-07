@@ -14,6 +14,8 @@ import { legacyIslandScene } from '@/lib/survivor/survivorLegacyIsland'
 import { SurvivorStatusCard } from '@/app/survivor/components/SurvivorStatusCard'
 import { buildSurvivorStatusCard } from '@/lib/survivor/survivorStatusCard'
 import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
+import { SurvivorStateCard } from '@/components/survivor/core/SurvivorStateCard'
+import { SvkSkeleton } from '@/components/survivor/core/SurvivorKit'
 
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return 'Soon'
@@ -134,6 +136,40 @@ export default function SurvivorIslandHomePage() {
               : ctx.canVote
                 ? 'vulnerable'
                 : 'safe'
+
+  /*
+   * ⚠ NO SEASON YET MEANS "WAIT" OR "IT FAILED", NEVER "PRE-DRAFT". Until /api/survivor/season answers,
+   * `leaguePhase` defaults to 'pre_draft', so this page used to draw a pre-draft island — "Survivor
+   * League", "Pre Draft · Week 1", "Tribes form after the draft", "Open draft board" — for a league in
+   * week 9; and when the read FAILED it drew that permanently, with nothing saying so (2026-11-07).
+   * Same rule SurvivorNativeHome already follows. After every hook, so hook order is unchanged.
+   */
+  if (!ctx.season && ctx.error) {
+    return (
+      <div className="min-h-screen px-3 py-4 md:px-6 md:py-6">
+        <div className="survivor-panel rounded-xl px-4 py-6">
+          <SurvivorStateCard state="island_error">
+            <button type="button" className="sv-btn sv-btn-primary" onClick={() => ctx.refetch()}>Try again</button>
+          </SurvivorStateCard>
+        </div>
+      </div>
+    )
+  }
+  if (!ctx.season) {
+    return (
+      <div className="min-h-screen px-3 py-4 md:px-6 md:py-6">
+        <div className="survivor-panel grid gap-3 rounded-xl px-4 py-5" role="status" aria-label="Loading the island" data-testid="survivor-island-loading">
+          <SvkSkeleton height={22} width="55%" />
+          <SvkSkeleton height={12} width="80%" />
+          <SvkSkeleton height={12} width="65%" />
+          <SvkSkeleton height={44} width="40%" radius={10} />
+        </div>
+        <div className="survivor-panel mt-3 grid gap-3 rounded-xl px-4 py-4" aria-hidden>
+          {[0, 1, 2].map((i) => <SvkSkeleton key={i} height={40} radius={10} />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

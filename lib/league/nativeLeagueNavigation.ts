@@ -80,8 +80,22 @@ const MORE_TOOL_ICONS: Record<string, string> = {
   matchup: 'matchup',
 }
 
+/**
+ * Salary Cap tabs (lib/salary-cap/workspaceTabs.ts): id → [i18n key, English, icon]. A group of their own, like
+ * Survivor and Dynasty, rather than seven "?" items under More tools.
+ */
+const SALARY_CAP_NAV: Record<string, [string, string, string]> = {
+  salary_cap: ['league.nav.cap.home', 'Cap home', 'capHome'],
+  cap_dashboard: ['league.nav.cap.space', 'Cap space', 'capSpace'],
+  cap_contracts: ['league.nav.cap.contracts', 'Contracts', 'capContracts'],
+  cap_team_builder: ['league.nav.cap.teamBuilder', 'Team builder', 'capBuilder'],
+  cap_auction: ['league.nav.cap.auction', 'Startup auction', 'capAuction'],
+  cap_ai: ['league.nav.cap.ai', 'Cap AI', 'insight'],
+  cap_rules: ['league.nav.cap.rules', 'Cap rules', 'capRules'],
+}
+
 /** Group ids are stable across languages; `title` is what the reader sees. */
-export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'week' | 'more'
+export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'salarycap' | 'week' | 'more'
 
 export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
   const tr = translator(t)
@@ -125,6 +139,11 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     const [key, english, icon] = BIG_BROTHER_NAV[tab.id]
     return { id: tab.id, label: tr(key, english), icon }
   })
+  const salaryCap = tabs.filter(tab => tab.id in SALARY_CAP_NAV).map(tab => {
+    used.add(tab.id)
+    const [key, english, icon] = SALARY_CAP_NAV[tab.id]
+    return { id: tab.id, label: tr(key, english), icon }
+  })
   for (const set of SAME_SCREEN_ALIASES) if (set.some(id => used.has(id))) for (const id of set) used.add(id)
   const weekly = [
     ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
@@ -144,6 +163,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: dynasty },
     { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: survivor },
     { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: bigBrother },
+    { id: 'salarycap', title: tr('league.nav.group.salaryCap', 'Salary cap'), items: salaryCap },
     { id: 'week', title: tr('league.nav.group.thisWeek', 'This week'), items: weekly },
     { id: 'more', title: tr('league.nav.group.moreTools', 'More tools'), items: more },
   ]

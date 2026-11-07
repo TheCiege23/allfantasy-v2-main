@@ -9,6 +9,7 @@ type Props = {
   active: CoreNavKey
   sport: string
   redraftSport: RedraftSportTheme | null
+  dynastyEra?: boolean
   leagueId: string
   leagueName: string
   /** The commissioner checklist the real WeeklyChecklist island fetches; null answers 404 (it then hides). */
@@ -54,6 +55,7 @@ export default function RedraftCoreStandingsHarnessShell(props: Props) {
       selectedLeagueId={league.id}
       nativeLeague
       redraftSport={props.redraftSport}
+      dynastyEra={props.dynastyEra}
       syncAge={{ label: 'just now', stale: false }}
       syncEligibleCount={0}
       scope={{ value: league.id, label: league.name, favoriteIds: [], leagues: [league, other] }}

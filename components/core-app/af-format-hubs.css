@@ -225,7 +225,16 @@ html[data-mode='light'] .af-core .afh[data-format='efl'] { --afh: #82621f; --afh
   flex-direction: column;
   justify-content: flex-end;
   gap: 16px;
-  background: linear-gradient(100deg, rgba(6, 7, 15, 0.94) 40%, rgba(6, 7, 15, 0.4) 70%, rgba(6, 7, 15, 0.72));
+  /*
+   * ⚠ TWO LAYERS, AND THE FIRST ONE IS WHAT KEEPS THE STATS READABLE. The sideways veil alone thins to
+   * 40% by 70% of the width, and on a phone the four stats spread across the whole row — so the last
+   * two sat on the lit half of the art: "You commission" measured 1.7:1 and "At risk this week" 2.5:1
+   * on the Guilly hero (2026-11-07). The bottom-up scrim darkens only the band the stats sit in (the
+   * body is bottom-aligned), so the art above them still shows.
+   */
+  background:
+    linear-gradient(to top, rgba(6, 7, 15, 0.9) 0%, rgba(6, 7, 15, 0.78) 30%, rgba(6, 7, 15, 0) 56%),
+    linear-gradient(100deg, rgba(6, 7, 15, 0.94) 40%, rgba(6, 7, 15, 0.4) 70%, rgba(6, 7, 15, 0.72));
 }
 .af-core .afh-hero .afh-label { color: #98a0c4; }
 .af-core .afh-stats { display: flex; gap: 28px; flex-wrap: wrap; }

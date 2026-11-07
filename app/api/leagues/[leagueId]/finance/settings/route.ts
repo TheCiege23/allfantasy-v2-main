@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { leagueMoneyRefusal } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { LeagueTreasuryProvider } from '@prisma/client'
@@ -17,6 +18,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   }
 
   const { leagueId } = await ctx.params
+
+  const moneyOff = leagueMoneyRefusal('paid-league settings')
+  if (moneyOff) return NextResponse.json({ error: moneyOff.error, code: moneyOff.code }, { status: moneyOff.status })
 
   try {
     await requireCommissionerRole(leagueId, userId, 'money')
