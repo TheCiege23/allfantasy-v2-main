@@ -285,7 +285,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
   {
     q: 'Do you take league dues?',
-    a: "No. League dues and payouts are handled on FanCred — AllFantasy never holds your league's money.",
+    a: "No. AllFantasy never holds your league's money. Members pay dues straight to the league — Venmo, Cash App, PayPal, LeagueSafe or FanCred — and the commissioner tracks who has paid in the dues tracker.",
   },
   {
     q: 'Can I cancel?',
@@ -699,8 +699,8 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
         {nativeApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
         {nativeApp && <button type="button" onClick={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
         {!nativeApp && <p>
-          Checkout is handled by Stripe — we never see your card details. League dues and payouts
-          are handled on FanCred, separately from your AllFantasy subscription.
+          Checkout is handled by Stripe — we never see your card details. League dues are paid
+          straight to your league, never to AllFantasy, and are separate from your subscription.
         </p>}
         {signedIn ? (
           <Link href="/core" className="af-pr-foot-cta">Back to app</Link>

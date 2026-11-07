@@ -206,7 +206,7 @@ export const translationsEsParity: Record<string, string> = {
   "dashboard.onboarding.step1.label": "Elige deportes favoritos",
   "dashboard.onboarding.step2.cta": "Conectar",
   "dashboard.onboarding.step2.desc":
-    "Sleeper, Discord, Yahoo, ESPN, Fantrax, MFL, Fleaflicker: importa o vincula cuentas.",
+    "Sleeper, Discord, ESPN, Fantrax, MFL, Fleaflicker: importa o vincula cuentas. Yahoo llega pronto.",
   "dashboard.onboarding.step2.label": "Conecta una plataforma",
   "dashboard.onboarding.step3.cta": "Explorar",
   "dashboard.onboarding.step3.desc": "Entra en una liga para que el shell abra el modo liga.",
