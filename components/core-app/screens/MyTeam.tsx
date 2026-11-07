@@ -2251,7 +2251,7 @@ export function MyTeam({ data }: MyTeamProps) {
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section" {...offColumns(data.bench?.available ? data.bench.data : [])}>
+      <section className="af-frame af-mt-section af-mt-bench" {...offColumns(data.bench?.available ? data.bench.data : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
@@ -2272,7 +2272,7 @@ export function MyTeam({ data }: MyTeamProps) {
 
       {/* ── Injured reserve ─────────────────────────────────────────── */}
       {data.ir.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.ir.data)}>
+        <section className="af-frame af-mt-section af-mt-ir" {...offColumns(data.ir.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
@@ -2291,7 +2291,7 @@ export function MyTeam({ data }: MyTeamProps) {
         was labelled "IR", which says a healthy taxi rookie is injured.
       */}
       {data.taxi.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.taxi.data)}>
+        <section className="af-frame af-mt-section af-mt-taxi" {...offColumns(data.taxi.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
