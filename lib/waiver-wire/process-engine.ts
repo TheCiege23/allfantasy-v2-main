@@ -22,7 +22,8 @@ import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invaria
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
-import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
+import { claimSnapshotWhere, isClaimSnapshotConflict, isRosterSnapshotConflict, rosterSnapshotWhere } from './claim-snapshot'
+import { withLeagueWaiverLock } from './leagueWaiverLock'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
@@ -36,7 +37,7 @@ import {
 } from './nhlProspectFreeAgency'
 
 /** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
-export type WaiverRunSkipReason = 'league_moves_locked'
+export type WaiverRunSkipReason = 'league_moves_locked' | 'run_in_progress'
 
 type ClaimRow = {
   id: string
@@ -68,14 +69,42 @@ function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
   return 'failed'
 }
 
+type ProcessWaiverOpts = {
+  processedByUserId?: string | null
+  runType?: string
+  idempotencyKey?: string | null
+  onSkip?: (reason: WaiverRunSkipReason) => void
+}
+
+/**
+ * 🛑 ONLY THE CRON TOOK A LOCK, SO TWO RUNS FOR ONE LEAGUE COULD OVERLAP. `processLeagueWaiversJob`
+ * holds `waiver:league:{id}`, but the commissioner's "Process waivers", the manual process route,
+ * FCFS-immediate processing on every claim submit and the workers all called straight in here. Each run
+ * builds its own "who is rostered" map from one read and writes rosters from that read, so two runs
+ * settling the same league could both award one player, or the later write could erase the earlier
+ * one's award and FAAB spend. In Guilly that is the released-roster auction.
+ *
+ * Every run now serializes on `waiver:process:{leagueId}`, taken HERE so no caller can skip it. It is a
+ * different key from the cron's, because the cron already holds that one around this call and the lock
+ * is not re-entrant.
+ *   - Busy: wait briefly for the other run to finish, then skip. Its claims stay pending; nothing is lost.
+ *   - The lock cannot be read at all (infrastructure): run anyway, loudly. A broken lock table must not
+ *     stop every league's waivers; the per-roster compare-and-set below still refuses a lost update.
+ */
 export async function processWaiverClaimsForLeague(
   leagueId: string,
-  opts?: {
-    processedByUserId?: string | null
-    runType?: string
-    idempotencyKey?: string | null
-    onSkip?: (reason: WaiverRunSkipReason) => void
-  }
+  opts?: ProcessWaiverOpts,
+): Promise<ProcessedClaimResult[]> {
+  const out = await withLeagueWaiverLock(leagueId, 'waiver-process', () => processWaiverClaimsForLeagueLocked(leagueId, opts))
+  if (out.ran) return out.value
+  console.info(`[waiver-process] league ${leagueId} skipped: another waiver run is in progress; pending claims stay pending`)
+  opts?.onSkip?.('run_in_progress')
+  return []
+}
+
+async function processWaiverClaimsForLeagueLocked(
+  leagueId: string,
+  opts?: ProcessWaiverOpts,
 ): Promise<ProcessedClaimResult[]> {
   if (opts?.idempotencyKey != null) {
     logEngineInvariantOptional(assertNonEmptyIdempotencyKey(opts.idempotencyKey), 'waiver_process.idempotency_key', {
@@ -149,6 +178,20 @@ export async function processWaiverClaimsForLeague(
   ])
 
   if (!league) return []
+  /*
+   * 🛑 ONE ROSTER OBJECT PER TEAM FOR THE WHOLE RUN. Each claim row arrives with its OWN copy of its
+   * roster, and only the awarded claim's copy was refreshed after an award. A team winning two claims
+   * in one run had the second award written from the stale copy: the first player vanished from
+   * `playerData` and the second bid was charged against the balance before the first one.
+   */
+  {
+    const shared = new Map<string, unknown>()
+    for (const c of pendingClaims as Array<{ rosterId: string; roster: unknown }>) {
+      const seen = shared.get(c.rosterId)
+      if (seen) c.roster = seen
+      else shared.set(c.rosterId, c.roster)
+    }
+  }
   // Per-day schedule: an automated run on a Free-agents or Locked day processes nothing (guards stale
   // engine processing days). A commissioner's manual run is never blocked.
   if (isAutomatedWaiverRunBlocked(league.settings, new Date(), league.timezone, opts?.runType)) return []
@@ -224,6 +267,9 @@ export async function processWaiverClaimsForLeague(
       dropHolds = await loadDroppedPlayerHolds(leagueId, holdPolicy, {
         now: runAt,
         playerIds: Array.from(new Set(orderedAll.map((c) => String(c.addPlayerId)))),
+        // A Guilly chop's players settle in the blind FAAB run, not after a drop hold
+        // (lib/waiver-wire/dropped-player-waivers.ts header). The free-agent path still holds them.
+        includeChopReleases: false,
       })
     } catch (err) {
       console.warn('[waiver-wire] dropped-player holds unreadable; waiver run deferred', { leagueId, err })
@@ -494,7 +540,10 @@ export async function processWaiverClaimsForLeague(
         data: { status: 'processed', processedAt: new Date(), resultMessage: 'Awarded' },
       }),
       (prisma as any).roster.update({
-        where: { id: claim.rosterId },
+        // Compare-and-set (`isRosterSnapshotConflict`): written only if the roster is still what this run
+        // read. An instant add, a FAAB trade or a Guilly chop's FAAB split in between leaves the claim
+        // pending for the next run instead of being overwritten.
+        where: rosterSnapshotWhere(claim.rosterId, roster),
         data: {
           playerData: newPlayerData,
           ...(faabSpent != null && { faabRemaining: Math.max(0, faabRem - faabSpent) }),
@@ -593,7 +642,12 @@ export async function processWaiverClaimsForLeague(
       // A newer override/cancellation or another processor won. The guarded
       // award transaction rolls back its roster and ledger writes. Leave a
       // changed pending claim for the next run to evaluate with fresh metadata.
-      if (!isClaimSnapshotConflict(error)) throw error
+      if (isClaimSnapshotConflict(error)) continue
+      if (!isRosterSnapshotConflict(error)) throw error
+      // A Roster P2025 is either the compare-and-set losing a race (the roster still exists: leave the
+      // claim pending for the next run) or the roster being gone, which stays the hard failure it was.
+      const stillThere = await (prisma as any).roster.findUnique({ where: { id: claim.rosterId }, select: { id: true } })
+      if (!stillThere) throw error
     }
   }
 

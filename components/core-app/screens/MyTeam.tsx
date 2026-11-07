@@ -30,6 +30,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import {
   defaultProjectionKind,
@@ -1950,7 +1951,10 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {bestBall ? <div className="af-mt-lock" data-urgent={false}>
         <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
-        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
+        {/* A league AllFantasy hosts is scored by AllFantasy, not by "your provider". */}
+        <span className="af-mt-lock-note">{isNativePlatform(data.league.platform)
+          ? copy('AllFantasy counts your highest-scoring legal lineup each week automatically. Review injuries and roster depth; no lineup changes are needed.')
+          : copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
       </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*

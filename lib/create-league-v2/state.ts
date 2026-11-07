@@ -307,7 +307,11 @@ export function getDefaultBestBallSetup(
   mode: BestBallModeId = 'standard',
   draftType: WizardDraftType = 'snake',
 ): BestBallSetupState {
-  return getDefaultBestBallSettings(sport, mode, draftType === 'auction' || draftType === 'linear' || draftType === 'offline' || draftType === 'auto' || draftType === 'snake' ? draftType : 'snake')
+  const settings = getDefaultBestBallSettings(sport, mode, draftType === 'auction' || draftType === 'linear' || draftType === 'offline' || draftType === 'auto' || draftType === 'snake' ? draftType : 'snake')
+  // The wizard starts every sport on WEEKLY lineups; daily is a choice the commissioner makes
+  // (NBA / NHL / MLB only — lib/create-league-v2/bestBallWizard.ts). The sport profile's "daily"
+  // default was never a choice anyone saw.
+  return { ...settings, scoringPeriod: 'weekly', tieRule: settings.scoringPeriod === 'weekly' ? settings.tieRule : 'max_week' }
 }
 
 /**

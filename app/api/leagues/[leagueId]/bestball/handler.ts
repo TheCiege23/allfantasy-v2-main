@@ -5,6 +5,12 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
+import { loadNativeBestBallTab } from '@/lib/bestball/nativeBestBallTabLoad'
+import { draftPendingNotice } from '@/lib/bestball/nativeBestBallTab'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,10 +30,12 @@ export async function GET(
       name: true,
       sport: true,
       season: true,
+      leagueSize: true,
       bestBallMode: true,
       settings: true,
       bbMatchupFormat: true,
       bbScoringPeriod: true,
+      platform: true,
       rosters: {
         select: {
           id: true,
@@ -61,14 +69,59 @@ export async function GET(
     league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
       ? (league.settings as Record<string, unknown>)
       : {}
+  // The period the league is ACTUALLY scored with (a legacy NBA/NHL/MLB "daily" default reads weekly), and
+  // the same team count the settings PATCH normalizes with, so the panel round-trips without a "change".
   const bestBallSettings = normalizeBestBallSettings({
     sport: league.sport as LeagueSport,
-    conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
+    teamCount: typeof league.leagueSize === 'number' && league.leagueSize > 0 ? league.leagueSize : undefined,
+    conceptSetup: withEffectiveScoringPeriod(String(league.sport), settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
     timezone: typeof settingsRecord.timezone === 'string' ? settingsRecord.timezone : null,
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
   })
-  const profile = getBestBallSportProfile(league.sport)
+  // The league's own seats (what its matchups are scored on), not the sport default — finding #22.
+  const profile = getBestBallSportProfile(league.sport, league.settings ?? {})
+
+  // A league AllFantasy scores itself is read from what native scoring writes; the legacy tables below
+  // stay for the leagues that have no native season.
+  const native = await loadNativeBestBallTab({
+    leagueId,
+    platform: league.platform,
+    sport: String(league.sport),
+    settings: league.settings,
+    requestedWeek: Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10),
+    rankBy: bestBallSettings.matchupFormat === 'cumulative' ? 'points' : 'record',
+  })
+  // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
+  const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
+  if (native) {
+    return NextResponse.json({
+      league: {
+        id: league.id,
+        name: league.name,
+        sport: league.sport,
+        season: native.season,
+        summary: buildBestBallSettingsSummary(bestBallSettings),
+        settings: bestBallSettings,
+        profile,
+        structureLock,
+      },
+      source: 'native',
+      ...native.body,
+    })
+  }
+
+  // A league we host with no native season yet: its draft has not finished, so nothing can be scored.
+  // Say that instead of "lineups appear once the first games are played", which is false meanwhile.
+  let draftNotice: string | null = null
+  if (resolveWriteAuthority(league.platform) === 'NATIVE') {
+    try {
+      const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } })
+      draftNotice = draftPendingNotice(draft?.status)
+    } catch {
+      draftNotice = null
+    }
+  }
 
   const playedWeeks = await prisma.teamWeekResult.findMany({
     where: { leagueId, season: league.season },
@@ -184,9 +237,11 @@ export async function GET(
       summary: buildBestBallSettingsSummary(bestBallSettings),
       settings: bestBallSettings,
       profile,
+      structureLock,
     },
     selectedWeek,
     weeksAvailable,
+    draftNotice,
     lineups: lineupCards,
     rosterComposition,
     standings: standings.map((row) => ({

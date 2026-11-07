@@ -207,6 +207,7 @@ const spanish: Record<string, string> = {
   'Open league overview': 'Abrir resumen de la liga',
   'Best Ball · automatic lineup': 'Best Ball · alineación automática',
   'Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.': 'Tu proveedor selecciona la alineación que puntúa. Revisa lesiones y profundidad; no necesitas cambiar titulares manualmente.',
+  'AllFantasy counts your highest-scoring legal lineup each week automatically. Review injuries and roster depth; no lineup changes are needed.': 'AllFantasy cuenta automáticamente tu mejor alineación válida cada semana. Revisa lesiones y profundidad; no necesitas cambiar la alineación.',
   'Lineup lock': 'Cierre de alineación',
   'Listed starters · Sleeper · your league': 'Titulares mostrados · Sleeper · tu liga',
   'Listed starters · Sleeper + AF IDP · your league': 'Titulares mostrados · Sleeper + IDP de AF · tu liga',

@@ -14,7 +14,7 @@ import {
   type DailyTransactionPolicy,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { getLeagueWaiverState } from './waiver-state-service'
-import { loadDroppedPlayerHold } from './dropped-player-waivers'
+import { activeDropHolds, loadChopReleaseDropRows, loadDroppedPlayerHold } from './dropped-player-waivers'
 import { droppedPlayerHoldPolicy, type DroppedPlayerHoldPolicy } from './hold-by-position'
 import { parseWaiverEngineConfig } from './waiver-engine-config'
 
@@ -93,7 +93,9 @@ export async function isPlayerInDropHold(
     orderBy: { processedAt: 'desc' },
     select: { processedAt: true },
   })
-  return isWithinDropHold(recent?.processedAt ? new Date(recent.processedAt) : null, now, holdHours)
+  if (isWithinDropHold(recent?.processedAt ? new Date(recent.processedAt) : null, now, holdHours)) return true
+  // A Guilly chop released him: held like a drop (lib/waiver-wire/dropped-player-waivers.ts header).
+  return activeDropHolds(await loadChopReleaseDropRows(leagueId, since, [playerId]), now, holdHours).size > 0
 }
 
 /**

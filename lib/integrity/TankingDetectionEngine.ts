@@ -9,6 +9,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { ourIdOrSleeperIdWhere, playerRowKeys } from "@/lib/player-identity/externalIdNamespace"
 import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
+import { isBestBallLeagueRow } from "@/lib/core-app/leagueBestBall"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
@@ -179,6 +180,27 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
   const checkIllegalLineups = settings.tankingIllegalLineupCheck !== false
   const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    select: { playoffStartWeek: true, sport: true, platform: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+  })
+
+  /*
+   * 🛑 BEST BALL HAS NO LINEUP DECISION TO JUDGE. A Best Ball league, or a best ball Guilly league
+   * (`settings.best_ball`), is scored on the best lineup its players could have filled
+   * (lib/redraft/scoringEngine.ts `scoreRosterBestBall`); nobody sets the slots, so a starter who was
+   * out, on bye or idle, or a better player "left on the bench", is what the stored card happens to say,
+   * not anything a manager chose. Every signal this scan has is one of those, so the scan files nothing
+   * — it would otherwise accuse innocent managers. `isBestBallLeagueRow` is the test Chimmy's lineup
+   * alerts skip by (lib/core-app/leagueBestBall.ts); the imported scan already refuses best ball the
+   * same way (lib/lineup-integrity/lineupIntegrityService.ts `reason: 'best_ball'`). Collusion
+   * detection is trade-based and unaffected.
+   */
+  if (league && isBestBallLeagueRow(league)) {
+    await prisma.leagueIntegritySettings.update({ where: { leagueId }, data: { lastTankingScanAt: new Date() } })
+    return { leagueId, weekNumber, flags: [], scannedAt }
+  }
+
   const matchups = await prisma.redraftMatchup.findMany({
     where: { leagueId, week: weekNumber, ...(seasonId ? { seasonId } : {}) },
     include: {
@@ -186,11 +208,6 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       awayRoster: true,
       season: { select: { season: true } },
     },
-  })
-
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { playoffStartWeek: true, sport: true, platform: true, settings: true },
   })
   // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
   // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).

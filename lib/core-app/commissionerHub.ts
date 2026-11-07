@@ -72,6 +72,7 @@ import { readDynastyRolloverView, type DynastyRolloverView } from '@/lib/season-
 import type { DynastyRolloverStep } from '@/lib/season-rollover/dynastyRolloverWizard'
 import type { DynastyPickBalance, DynastyTaxiOverLimit } from '@/lib/commissioner-hub/dynastyHealthSignals'
 import { pickBalanceFlag, rookieOrderFlag, taxiOverLimitFlag } from './commissioner/dynastyHealthFlags'
+import { isBestBallLeagueRow } from './leagueBestBall'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -1254,7 +1255,7 @@ export async function getCommissionerHub(input: {
     recipes: {
       ...recipeSettings,
       sendEnabled,
-      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport }, language)),
+      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport, bestBall: isBestBallLeagueRow(league) }, language)),
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {

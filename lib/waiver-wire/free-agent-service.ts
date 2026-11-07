@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
 import { addPlayerToRosterData, removePlayerFromRosterData, getRosterPlayerIds } from './roster-utils'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { withLeagueWaiverLock } from './leagueWaiverLock'
 
 /**
  * Immediate free-agent add/drop (Step 3B).
@@ -31,6 +32,16 @@ export interface ImmediateAddDropResult {
   rosterPlayerIds: string[]
 }
 
+/** Refusal while a waiver run (or another instant add) holds the league's lock past the short wait. */
+export const WAIVER_RUN_IN_PROGRESS_MESSAGE = 'Waivers are processing for this league right now. Try the add again in a moment.'
+
+/**
+ * 🛑 AN INSTANT ADD AND A WAIVER RUN COULD BOTH TAKE ONE PLAYER. The availability check runs in
+ * `assertWaiverClaimEligibility`, BEFORE this function's transaction, and the transaction re-checks only
+ * that the player is not already on THIS roster — so two teams' simultaneous adds, or an add racing a
+ * waiver run's award, could each see him free and each write him. The whole check-then-write now holds
+ * the league's waiver lock (leagueWaiverLock.ts), the same one every waiver run holds.
+ */
 export async function executeImmediateAddDrop(
   leagueId: string,
   rosterId: string,
@@ -39,6 +50,17 @@ export async function executeImmediateAddDrop(
     /** The commissioner opened the offseason as first-come free agency (season-phase-policy.ts). */
     offseasonFreeAgency?: boolean
   } = {},
+): Promise<ImmediateAddDropResult> {
+  const out = await withLeagueWaiverLock(leagueId, 'instant-add', () => executeImmediateAddDropLocked(leagueId, rosterId, input, opts))
+  if (!out.ran) throw new Error(WAIVER_RUN_IN_PROGRESS_MESSAGE)
+  return out.value
+}
+
+async function executeImmediateAddDropLocked(
+  leagueId: string,
+  rosterId: string,
+  input: { addPlayerId: string; dropPlayerId?: string | null },
+  opts: { offseasonFreeAgency?: boolean },
 ): Promise<ImmediateAddDropResult> {
   const addPlayerId = String(input.addPlayerId)
   const dropPlayerId = input.dropPlayerId ? String(input.dropPlayerId) : null

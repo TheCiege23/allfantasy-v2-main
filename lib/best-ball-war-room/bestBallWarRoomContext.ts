@@ -20,6 +20,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getBestBallSportProfile, normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { hasVerifiedBestBallRuleConfiguration } from './bestBallRuleEvidence'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
@@ -104,8 +105,13 @@ function parseRosterPlayers(playerData: unknown): RawRosterPlayer[] {
   return out
 }
 
-function buildRosterSettings(sport: string): BestBallRosterSettings {
-  const profile = getBestBallSportProfile(sport)
+/*
+ * 🛑 THE WAR ROOM USED THE SPORT-DEFAULT SLOTS (audit 2026-11-06, finding #22) — NBA's 9 starters while
+ * the league's matchups were scored on its 11. It now reads the league's own seats, from the same
+ * source matchup scoring seats (`getBestBallSportProfile(sport, settings)` → `buildBestBallSlots`).
+ */
+export function buildRosterSettings(sport: string, leagueSettings: unknown): BestBallRosterSettings {
+  const profile = getBestBallSportProfile(sport, leagueSettings ?? {})
   const lineupSlots: BestBallLineupSlot[] = profile.lineupSlots.map((s) => ({
     code: s.code,
     count: s.count,
@@ -169,15 +175,17 @@ export async function buildBestBallWarRoomContext(
   const ruleConfigurationVerified = hasVerifiedBestBallRuleConfiguration(settingsRecord)
   const bbSettings = normalizeBestBallSettings({
     sport,
-    conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
+    // The period the league is ACTUALLY scored with: a legacy NBA/NHL/MLB "daily" was only a default.
+    conceptSetup: withEffectiveScoringPeriod(sport, settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
   })
-  const roster = buildRosterSettings(sport)
+  const roster = buildRosterSettings(sport, league.settings)
 
   const scoring: BestBallScoringSettings = {
     sport,
     scoringPreset: String((settingsRecord.scoringSettings as Record<string, unknown> | undefined)?.preset ?? bbSettings.mode ?? 'PPR').toUpperCase(),
-    scoringPeriod: String(league.bbScoringPeriod ?? bbSettings.scoringPeriod ?? 'weekly'),
+    // Never `League.bbScoringPeriod`: legacy rows say "daily" for leagues that were always scored weekly.
+    scoringPeriod: resolveBestBallScoringPeriod({ sport, settings: settingsRecord }),
     matchupFormat: String(league.bbMatchupFormat ?? bbSettings.matchupFormat ?? 'h2h'),
     cumulative: bbSettings.cumulativeScoring,
   }

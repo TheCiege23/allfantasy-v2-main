@@ -6,6 +6,12 @@
  * Calls PATCH /api/bestball/settings and surfaces all fields normalized
  * by normalizeBestBallSettings: mode, contest structure, scoring model,
  * waivers/trades/subs, tiebreaker, and scoring period.
+ *
+ * Once the draft has started (`structureLock` from GET /api/leagues/:id/bestball) everything that changes
+ * how the league is scored or competed is read-only (the PATCH refuses it too) and only the in-season
+ * transaction toggles stay editable. Daily best ball is offered for NBA / NHL / MLB only, never for a
+ * tournament (lib/bestball/scoringPeriod.ts). A tournament is set up at creation, so it is offered here
+ * only to a league that already is one.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -68,18 +74,21 @@ function SelectField({
   options,
   onChange,
   disabled,
+  testId,
 }: {
   value: string
   options: { value: string; label: string }[]
   onChange: (v: string) => void
   disabled: boolean
+  testId?: string
 }) {
   return (
     <select
+      data-testid={testId}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="w-full rounded-lg border border-white/15 bg-[#0a1228] px-3 py-2 text-[12px] text-white disabled:opacity-50"
+      className="w-full rounded-lg border border-[#2a3654] bg-[#0a1228] px-3 py-2 text-[12px] text-white disabled:opacity-50"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -142,7 +151,7 @@ function IntField({
         if (Number.isFinite(parsed)) onChange(Math.max(min, Math.min(max, parsed)))
       }}
       disabled={disabled}
-      className="w-full rounded-lg border border-white/15 bg-[#0a1228] px-3 py-2 text-[12px] text-white disabled:opacity-50"
+      className="w-full rounded-lg border border-[#2a3654] bg-[#0a1228] px-3 py-2 text-[12px] text-white disabled:opacity-50"
     />
   )
 }
@@ -153,6 +162,14 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  /** Why scoring and competition settings are frozen ("after the draft has started"), or null. */
+  const [structureLock, setStructureLock] = useState<string | null>(null)
+  const [loadedTournament, setLoadedTournament] = useState(false)
+  /**
+   * The league's own starter seats, from the API (`getBestBallSportProfile(sport, league.settings)` — what
+   * its matchups are scored on). Until it loads, the sport's default best ball seats. Finding #22.
+   */
+  const [starterSeats, setStarterSeats] = useState<number>(() => profile.lineupSlots.reduce((sum, s) => sum + s.count, 0))
 
   const [settings, setSettings] = useState<LoadedSettings>({
     mode: 'standard',
@@ -180,10 +197,23 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/bestball?week=1`, {
           cache: 'no-store',
         })
-        const json = (await res.json()) as { league?: { settings?: Record<string, unknown> }; error?: string }
+        const json = (await res.json()) as {
+          league?: {
+            settings?: Record<string, unknown>
+            structureLock?: string | null
+            profile?: { lineupSlots?: Array<{ count?: unknown }> }
+          }
+          error?: string
+        }
         if (!res.ok) throw new Error(json.error ?? t('lsRules.bb.loadFailed'))
+        if (!cancelled) setStructureLock(typeof json.league?.structureLock === 'string' ? json.league.structureLock : null)
+        const leagueSlots = json.league?.profile?.lineupSlots
+        if (!cancelled && Array.isArray(leagueSlots) && leagueSlots.length > 0) {
+          setStarterSeats(leagueSlots.reduce((sum, s) => sum + (typeof s.count === 'number' ? s.count : 0), 0))
+        }
         if (!cancelled && json.league?.settings) {
           const raw = json.league.settings as Record<string, unknown>
+          setLoadedTournament(raw.contestStructure === 'tournament')
           setSettings((prev) => ({
             ...prev,
             mode: (raw.mode as BestBallModeId) ?? prev.mode,
@@ -275,6 +305,9 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
   const isUnderdog = settings.mode === 'underdog'
   const isTournament = settings.contestStructure === 'tournament'
   const isSitAndGo = settings.contestStructure === 'sit_and_go'
+  // Scoring and competition: frozen once the draft has started. Transactions stay editable.
+  const locked = !canEdit || structureLock != null
+  const dailyOffered = profile.supportsDailyScoring && !isTournament
 
   if (loading) {
     return (
@@ -294,6 +327,18 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
 
   return (
     <div className="space-y-6">
+      {structureLock ? (
+        <div
+          data-testid="bb-structure-lock"
+          role="note"
+          className="rounded-2xl border border-[#f59e0b]/35 bg-[#2a1d06] px-4 py-3 text-[12px] leading-relaxed text-[#fde68a]"
+        >
+          <span className="font-semibold">
+            {/draft/i.test(structureLock) ? t('lsRules.bb.lockedDraft') : t('lsRules.bb.lockedSeason')}
+          </span>{' '}
+          {t('lsRules.bb.lockedBody')}
+        </div>
+      ) : null}
       {/* Mode */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
         <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsRules.bb.operatingMode')}</h4>
@@ -312,7 +357,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                   : {}),
               })
             }
-            disabled={!canEdit}
+            disabled={locked}
           />
         </Row>
         {isUnderdog ? (
@@ -332,10 +377,16 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               options={[
                 { value: 'season_long', label: t('lsRules.bb.seasonLong') },
                 { value: 'sit_and_go', label: t('lsRules.bb.sitAndGo') },
-                { value: 'tournament', label: t('lsRules.bb.tournament') },
+                // A tournament needs its contest and round calendar, written at creation.
+                ...(loadedTournament ? [{ value: 'tournament', label: t('lsRules.bb.tournament') }] : []),
               ]}
-              onChange={(v) => patch({ contestStructure: v as LoadedSettings['contestStructure'] })}
-              disabled={!canEdit}
+              onChange={(v) =>
+                patch({
+                  contestStructure: v as LoadedSettings['contestStructure'],
+                  ...(v === 'tournament' ? { scoringPeriod: 'weekly' as const } : {}),
+                })
+              }
+              disabled={locked}
             />
           </Row>
           <Row label={t('lsRules.bb.scoringModel')}>
@@ -346,7 +397,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 { value: 'h2h', label: t('lsRules.bb.h2h') },
               ]}
               onChange={(v) => patch({ matchupFormat: v as LoadedSettings['matchupFormat'] })}
-              disabled={!canEdit}
+              disabled={locked}
             />
           </Row>
           <Row label={t('lsRules.bb.playoffFormat')}>
@@ -358,7 +409,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 { value: 'none', label: t('lsRules.bb.noPlayoffs') },
               ]}
               onChange={(v) => patch({ playoffFormat: v as LoadedSettings['playoffFormat'] })}
-              disabled={!canEdit}
+              disabled={locked}
             />
           </Row>
           <Row label={t('lsRules.bb.scoringPeriod')}>
@@ -366,12 +417,20 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               value={settings.scoringPeriod}
               options={[
                 { value: 'weekly', label: t('lsRules.bb.weekly') },
-                { value: 'daily', label: t('lsRules.bb.daily') },
+                ...(dailyOffered || settings.scoringPeriod === 'daily' ? [{ value: 'daily', label: t('lsRules.bb.daily') }] : []),
               ]}
               onChange={(v) => patch({ scoringPeriod: v as LoadedSettings['scoringPeriod'] })}
-              disabled={!canEdit}
+              disabled={locked}
+              testId="bb-scoring-period"
             />
           </Row>
+          <p data-testid="bb-scoring-period-help" className="text-[11px] leading-relaxed text-[#94a3b8]">
+            {settings.scoringPeriod === 'daily'
+              ? t('lsRules.bb.dailyHelp')
+              : dailyOffered
+                ? `${t('lsRules.bb.weeklyHelp')} ${t('lsRules.bb.dailyOptionHelp')}`
+                : t('lsRules.bb.weeklyHelp')}
+          </p>
           <Row label={t('lsRules.bb.tiebreaker')}>
             <SelectField
               value={settings.tieRule}
@@ -381,7 +440,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 { value: 'advance_all', label: t('lsRules.bb.tieAll') },
               ]}
               onChange={(v) => patch({ tieRule: v as LoadedSettings['tieRule'] })}
-              disabled={!canEdit}
+              disabled={locked}
             />
           </Row>
         </div>
@@ -397,7 +456,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               onChange={(v) => patch({ regularSeasonLength: v })}
               min={1}
               max={60}
-              disabled={!canEdit}
+              disabled={locked}
             />
           </Row>
           <Row label={t('lsRules.bb.playoffTeams')}>
@@ -406,7 +465,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               onChange={(v) => patch({ playoffTeams: v })}
               min={0}
               max={16}
-              disabled={!canEdit}
+              disabled={locked}
             />
           </Row>
           {isTournament ? (
@@ -416,7 +475,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 onChange={(v) => patch({ tournamentAdvancementRounds: v })}
                 min={0}
                 max={10}
-                disabled={!canEdit}
+                disabled={locked}
               />
             </Row>
           ) : null}
@@ -427,7 +486,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 onChange={(v) => patch({ podSize: v })}
                 min={2}
                 max={64}
-                disabled={!canEdit}
+                disabled={locked}
               />
             </Row>
           ) : null}
@@ -477,9 +536,9 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         </h4>
         <p className="text-[12px] text-white/60">
           {t('lsRules.bb.profileLine')
-            .replace('{{starters}}', String(profile.lineupSlots.reduce((sum, s) => sum + s.count, 0)))
+            .replace('{{starters}}', String(starterSeats))
             .replace('{{roster}}', String(profile.recommendedRosterSize))
-            .replace('{{period}}', profile.scoringPeriod === 'daily' ? t('lsRules.bb.periodDaily') : profile.scoringPeriod === 'weekly' ? t('lsRules.bb.periodWeekly') : String(profile.scoringPeriod))}
+            .replace('{{period}}', settings.scoringPeriod === 'daily' ? t('lsRules.bb.periodDaily') : t('lsRules.bb.periodWeekly'))}
         </p>
         <ul className="mt-2 space-y-1 text-[11px] text-white/40">
           {profile.notes.map((note) => (

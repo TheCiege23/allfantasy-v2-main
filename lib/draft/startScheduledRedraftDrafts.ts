@@ -5,7 +5,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { withControlLock } from '@/lib/draft/draftLock'
 import { buildSlotOrderForLeague, startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
-import { SCHEDULED_REDRAFT_SPORTS, startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
+import { SCHEDULED_REDRAFT_SPORTS, SCHEDULED_SEASONAL_LEAGUE_TYPES, startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { logStructured } from '@/lib/logging/structured'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
@@ -128,8 +128,8 @@ async function startDueDraft(
 }
 
 /**
- * Called by the minute draft tick (`/api/cron/draft-tick`). Starts native redraft drafts (NFL, NBA,
- * NHL, MLB) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
+ * Called by the minute draft tick (`/api/cron/draft-tick`). Starts native redraft and Classic Best Ball
+ * drafts (NFL, NBA, NHL, MLB) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
  * commissioner's Start button calls. A scheduled redraft draft starts at its time whether or not
  * "Autostart Draft" is on (owner's decision, 2026-10-20): the draft time is the commitment.
  *
@@ -142,7 +142,7 @@ export async function startScheduledRedraftDrafts(now: Date = new Date()): Promi
   const rows = await prisma.leagueSettings.findMany({
     where: {
       draftDateUtc: { lte: now, gte: new Date(now.getTime() - LOOKBACK_MS) },
-      league: { is: { leagueType: 'redraft', isDynasty: false, sport: { in: [...SCHEDULED_REDRAFT_SPORTS] } } },
+      league: { is: { leagueType: { in: [...SCHEDULED_SEASONAL_LEAGUE_TYPES] }, isDynasty: false, sport: { in: [...SCHEDULED_REDRAFT_SPORTS] } } },
     },
     select: {
       leagueId: true,

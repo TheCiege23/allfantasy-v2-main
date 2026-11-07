@@ -244,6 +244,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     commissionerChoppedRosterIds: input.commissionerChoppedRosterIds?.length
       ? input.commissionerChoppedRosterIds
       : undefined,
+    tiebreakSeed: `${input.leagueId}:${input.season ?? ''}`,
   })
 
   if (choppedRosterIds.length === 0) {

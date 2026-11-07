@@ -18,17 +18,20 @@ import {
   getCachedComputedDiscoveryList,
   getCachedCreatorCards,
   getCachedFantasyCards,
+  getCachedPrivateFantasyCards,
   getComputedDiscoveryListCacheKey,
   setCachedBracketCards,
   setCachedComputedDiscoveryList,
   setCachedCreatorCards,
   setCachedFantasyCards,
+  setCachedPrivateFantasyCards,
   clearDiscoveryCache as clearDiscoveryCardCaches,
 } from "./DiscoveryCache"
 import {
   queryPublicBracketLeagueCards,
   queryPublicCreatorLeagueCards,
   queryPublicFantasyLeagueCards,
+  queryPrivateRequestableFantasyLeagueCards,
 } from "./DiscoveryQueryLayer"
 import type {
   DiscoveryCard,
@@ -315,6 +318,26 @@ async function fetchPublicFantasyLeagues(options: {
   return cards
 }
 
+/**
+ * Private leagues that are recruiting, as "ask to join" cards. Only the finder's "Public & private"
+ * view reads them (discoverPublicLeagues with visibility "all"); every other caller of discovery —
+ * Chimmy, saved-search alerts, creator pages, recommendations — keeps seeing public leagues only.
+ */
+async function fetchPrivateRequestableFantasyLeagues(options: {
+  sport: string | null
+  query: string | null
+}): Promise<DiscoveryCard[]> {
+  const cached = getCachedPrivateFantasyCards(options.sport, options.query)
+  if (cached) return cached
+  const cards = await queryPrivateRequestableFantasyLeagueCards({
+    sport: options.sport,
+    query: options.query,
+    take: DISCOVERY_TAKE,
+  })
+  setCachedPrivateFantasyCards(options.sport, options.query, cards)
+  return cards
+}
+
 async function fetchPublicBracketLeagues(options: {
   sport: string | null
   query: string | null
@@ -434,12 +457,15 @@ async function getOwnedLeagueSets(viewerUserId: string | null) {
  * it would pass the division gate; any other card keeps the career-tier window. Pure.
  */
 export function isCardInViewerRange(
-  card: Pick<DiscoveryCard, "source" | "id">,
+  card: Pick<DiscoveryCard, "source" | "id"> & Partial<Pick<DiscoveryCard, "joinMode">>,
   ctx: { viewerTier: number; leagueTier: number; viewerClass: ManagerClass; fantasyDivisions: Map<string, number | null> }
 ): boolean {
   if (card.source === "fantasy") {
     const leagueDivision = ctx.fantasyDivisions.get(card.id) ?? null
-    return decideDivisionGate({ user: ctx.viewerClass, leagueDivision, path: "open" }).outcome !== "deny"
+    // A private league is joined by the commissioner's approval, which is an invitation: the band
+    // that gates an OPEN join does not decide whether the viewer may ask.
+    const path = card.joinMode === "approval" ? "invited" : "open"
+    return decideDivisionGate({ user: ctx.viewerClass, leagueDivision, path }).outcome !== "deny"
   }
   return isLeagueVisibleForCareerTier(ctx.viewerTier, ctx.leagueTier, 1)
 }
@@ -608,9 +634,12 @@ export async function discoverPublicLeagues(
     }
   }
 
-  const [fantasyCards, bracketCards, creatorCards] = await Promise.all([
+  const [fantasyCards, privateFantasyCards, bracketCards, creatorCards] = await Promise.all([
     format === "all" || format === "fantasy"
       ? fetchPublicFantasyLeagues({ sport, query, baseUrl })
+      : Promise.resolve([]),
+    visibility === "all" && (format === "all" || format === "fantasy")
+      ? fetchPrivateRequestableFantasyLeagues({ sport, query })
       : Promise.resolve([]),
     format === "all" || format === "bracket"
       ? fetchPublicBracketLeagues({ sport, query, baseUrl })
@@ -620,7 +649,7 @@ export async function discoverPublicLeagues(
       : Promise.resolve([]),
   ])
 
-  let combined = [...fantasyCards, ...bracketCards, ...creatorCards]
+  let combined = [...fantasyCards, ...privateFantasyCards, ...bracketCards, ...creatorCards]
   combined = applyVisibility(combined, visibility)
   const tierResolved = await applyTierPolicy(combined, viewerContext)
   combined = tierResolved.cards

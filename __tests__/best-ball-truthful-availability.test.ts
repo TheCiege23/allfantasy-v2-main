@@ -15,14 +15,6 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({
-  getRosterTemplateForLeague: vi.fn(async () => ({
-    slots: [
-      { slotName: 'QB', starterCount: 1, allowedPositions: ['QB'] },
-      { slotName: 'RB', starterCount: 1, allowedPositions: ['RB'] },
-    ],
-  })),
-}))
 
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'
 
@@ -33,6 +25,8 @@ const BASE_INPUT = {
   weekOrRound: 3,
   rosterPlayerIds: ['1001', '1002'],
   platform: 'sleeper',
+  // The league's own roster: one QB seat and one RB seat (what this suite's old template mock stated).
+  leagueSettings: { roster: { config: { sections: [{ key: 'primary', slots: { QB: 1, RB: 1, BN: 4 } }] } } },
 }
 
 const PLAYERS = [

@@ -47,6 +47,12 @@ const h = vi.hoisted(() => ({
   sportsPlayerFindMany: vi.fn(),
 }))
 
+// The engine takes its per-league run lock through this module; its Postgres path calls
+// `prisma.$transaction`, which these tests count, so it is stubbed to always acquire.
+vi.mock('@/lib/automation/locks', () => ({
+  acquireAutomationLock: async () => ({ ok: true, backend: 'postgres' }),
+  releaseAutomationLock: async () => {},
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: h.leagueFindUnique },

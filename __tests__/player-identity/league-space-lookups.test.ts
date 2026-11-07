@@ -32,9 +32,9 @@ const h = vi.hoisted(() => {
     identities: [] as Row[],
     identityWheres: [] as Array<Record<string, unknown>>,
     optimizerPlayers: [] as Array<{
-      id: string
-      name: string
-      positions: string[]
+      playerId: string
+      playerName?: string | null
+      positions: readonly string[]
     }>,
     sportsPlayerRows(where: Record<string, unknown>): Row[] {
       return this.sportsPlayers.filter((r) => matches(r, where))
@@ -134,17 +134,17 @@ vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', async (importOrigin
     ],
   })),
 }))
-vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({
-  getRosterTemplateForLeague: vi.fn(async () => ({
-    slots: [{ slotName: 'QB', starterCount: 1, allowedPositions: ['QB'] }],
-  })),
-}))
-vi.mock('@/lib/lineup-optimizer-engine/LineupOptimizerEngine', () => ({
-  optimizeLineupDeterministic: vi.fn((input: { players: typeof h.optimizerPlayers }) => {
-    h.optimizerPlayers = input.players
-    return { starters: [], unfilledSlots: [], totalProjectedPoints: 0, deterministicNotes: [] }
-  }),
-}))
+// Best ball now seats with the production optimizer (lib/bestball/productionLineup.ts); spy on its input.
+vi.mock('@/lib/lineup-optimizer/optimalLineup', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/lineup-optimizer/optimalLineup')>()
+  return {
+    ...actual,
+    computeOptimalLineup: vi.fn((input: Parameters<typeof actual.computeOptimalLineup>[0]) => {
+      h.optimizerPlayers = [...input.players]
+      return actual.computeOptimalLineup(input)
+    }),
+  }
+})
 
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'
@@ -187,21 +187,24 @@ describe('findSportsPlayersForLeague — the platform decides the space', () => 
 
 describe('best ball — the position that decides slot eligibility is the right player’s', () => {
   it('optimises 9228 as Bryce Young the QB, not an offensive tackle', async () => {
-    await selectBestBallLineupForRoster({
+    const r = await selectBestBallLineupForRoster({
       leagueId: 'l1',
       leagueSport: 'NFL' as never,
       season: 2026,
       weekOrRound: 4,
       rosterPlayerIds: ['9228'],
       platform: 'sleeper',
+      leagueSettings: { roster: { config: { sections: [{ key: 'primary', slots: { QB: 1 } }] } } },
     })
     expect(h.optimizerPlayers).toEqual([
       expect.objectContaining({
-        id: '9228',
-        name: 'Bryce Young',
+        playerId: '9228',
+        playerName: 'Bryce Young',
         positions: ['QB'],
       }),
     ])
+    // And he is seated at QB — a tackle could not have been.
+    expect(r.starterIds).toEqual(['9228'])
   })
 })
 

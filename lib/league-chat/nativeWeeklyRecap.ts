@@ -64,10 +64,22 @@ export async function buildNativeRecapForLeague(input: {
   leagueName: string
   seasonYear: number
 }): Promise<{ ok: true; season: number; week: number; text: string } | { ok: false; reason: string }> {
-  const season = await prisma.redraftSeason.findUnique({
-    where: { leagueId_season: { leagueId: input.leagueId, season: input.seasonYear } },
-    select: { id: true, season: true },
-  })
+  /*
+   * 🛑 THE CALENDAR YEAR IS NOT THE SEASON. The weekly sweep passes `new Date().getUTCFullYear()`, but an
+   * NBA or NHL season that tips off in October is stored under the year it STARTED — so from January to
+   * April every NBA/NHL league read "no current season" and got no recap all winter. The year asked for
+   * still wins when it exists; otherwise the league's latest earlier season is the current one.
+   */
+  const season =
+    (await prisma.redraftSeason.findUnique({
+      where: { leagueId_season: { leagueId: input.leagueId, season: input.seasonYear } },
+      select: { id: true, season: true },
+    })) ??
+    (await prisma.redraftSeason.findFirst({
+      where: { leagueId: input.leagueId, season: { lt: input.seasonYear } },
+      orderBy: [{ season: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, season: true },
+    }))
   if (!season) return { ok: false, reason: 'no current season' }
 
   const latest = await prisma.redraftMatchup.findFirst({

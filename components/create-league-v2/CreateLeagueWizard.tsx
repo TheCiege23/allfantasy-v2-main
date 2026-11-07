@@ -3,6 +3,8 @@
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
+import { BestBallRulesSummary, BestBallSetupPanel } from './BestBallSetupPanel'
+import { fitBestBallToTeamCount } from '@/lib/create-league-v2/bestBallWizard'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
@@ -769,7 +771,7 @@ export function LeagueBasicsStep({
       ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
       ? { survivorTribeCount: tribeOptions[0] ?? 2 } : {}),
       ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}),
-      ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
+      ...(state.leagueType === 'best_ball' ? { bestBall: fitBestBallToTeamCount(state.bestBall, teamCount) } : {}) })
   }
   const canFewer = teamCountOptions.some((count) => count < state.teamCount)
   const canMore = teamCountOptions.some((count) => count > state.teamCount)
@@ -1215,6 +1217,9 @@ export function DraftStep({
 
       <DynastySportPresetPicker state={state} onChange={onChange} />
 
+      {/* Classic Best Ball: how the league competes (lib/create-league-v2/bestBallWizard.ts). */}
+      {leagueType === 'best_ball' && !state.idpSelected ? <BestBallSetupPanel state={state} onChange={onChange} /> : null}
+
       {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}
       {state.sport === 'NFL' ? (
         <div
@@ -1516,6 +1521,7 @@ export function ReviewCreateStep({
       </div>
 
       <SurvivorSeasonPreview state={state} />
+      {getEffectiveLeagueType(state) === 'best_ball' && !state.idpSelected ? <BestBallRulesSummary state={state} /> : null}
       {completionIssues.length > 0 ? (
         <div className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4" data-testid="g30-review-issues">
           <p className="text-sm font-black text-amber-700 dark:text-amber-200">{t('createLeague.g30.review.needsAttention')}</p>

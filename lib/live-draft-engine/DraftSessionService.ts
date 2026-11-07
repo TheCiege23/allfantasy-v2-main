@@ -1,5 +1,5 @@
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
-import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
@@ -1207,12 +1207,24 @@ export async function swapDraftManagers(
   return { ok: true, fromRosterId: fromEntry.rosterId, toRosterId: toEntry.rosterId }
 }
 
+/**
+ * Finish the current draft. Safe to call from every completer at once — the last pick, draft-tick,
+ * auto-draft fill, import commit, the self-heal — and EXACTLY ONE of them announces it.
+ *
+ * 🛑 THE TRANSITION IS A COMPARE-AND-SET, NOT A READ FOLLOWED BY A WRITE. This used to read the status,
+ * then `update` by id with no condition. Two callers could both read `in_progress`; the second's
+ * update waited on the first's row lock and then wrote anyway, so both returned `transitioned` and
+ * the league got two `draft_ended` notifications, two lifecycle log rows, two achievements. The
+ * season-tournament branch had the same race one level up: it compared a status read BEFORE the call
+ * with the result after it. Now the write is `updateMany … status <> 'completed'` and only the caller
+ * whose write changed the row (count 1) runs the once-only side effects. Under Postgres READ COMMITTED
+ * the blocked second update re-checks its WHERE against the committed row and matches nothing.
+ */
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
-  const beforeCompletion = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true } })
-  const seasonCompleted = await completeSeasonDraft(leagueId)
-  if (seasonCompleted !== null) {
-    if (seasonCompleted && beforeCompletion?.status !== 'completed') await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', beforeCompletion?.id)).catch(err => console.error('[draft] completion notification failed', err))
-    return seasonCompleted
+  const season = await completeSeasonDraftWithOutcome(leagueId)
+  if (season !== null) {
+    if (season.transitioned) await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', season.sessionId ?? undefined)).catch(err => console.error('[draft] completion notification failed', err))
+    return season.completed
   }
   const outcome = await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
@@ -1234,8 +1246,8 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     }
 
     const completedAt = session.completedAt ?? new Date()
-    await tx.draftSession.update({
-      where: { id: session.id },
+    const claimed = await tx.draftSession.updateMany({
+      where: { id: session.id, status: { not: COMPLETED_DRAFT_SESSION_STATUS } },
       data: {
         status: 'completed',
         timerEndAt: null,
@@ -1245,6 +1257,14 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
         version: { increment: 1 },
       },
     })
+    if (claimed.count !== 1) {
+      // Another completer won the race. Re-read: completed means it is done (idempotent, no announce);
+      // anything else (the row vanished under a reset) is not a completion.
+      const now = await tx.draftSession.findUnique({ where: { id: session.id }, select: { status: true } })
+      return now?.status === COMPLETED_DRAFT_SESSION_STATUS
+        ? { ok: true as const, transitioned: false as const, lifecycle: null, sessionId: session.id }
+        : { ok: false as const, transitioned: false as const, lifecycle: null }
+    }
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)

@@ -149,7 +149,22 @@ export async function validateFantasyInviteCode(
   const normalized = normalizeFantasyInviteCode(code)
   if (!normalized) return { valid: false, error: "INVALID_CODE" }
 
-  const leagues = await prisma.league.findMany({
+  /*
+   * ⚠ ONE LEAGUE, FOUND IN THE DATABASE. This used to read EVERY league on the platform, each with
+   * its whole `settings` JSON, and pick the match in memory — on every preview, every join and
+   * every class-exception request. The comparison is unchanged: trimmed and case-insensitive, the
+   * same rule the in-memory `find` applied. Parameterised, never interpolated.
+   */
+  const matches = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM leagues
+    WHERE lower(btrim(settings->>'inviteCode')) = lower(${normalized})
+    LIMIT 1
+  `
+  const matchedId = Array.isArray(matches) ? matches[0]?.id : undefined
+  if (!matchedId) return { valid: false, error: "INVALID_CODE" }
+
+  const league = await prisma.league.findUnique({
+    where: { id: matchedId },
     select: {
       id: true,
       name: true,
@@ -157,12 +172,6 @@ export async function validateFantasyInviteCode(
       leagueSize: true,
       settings: true,
     },
-  })
-
-  const league = leagues.find((l) => {
-    const settings = (l.settings as Record<string, unknown>) ?? {}
-    const inviteCode = typeof settings.inviteCode === "string" ? settings.inviteCode.trim() : ""
-    return inviteCode.toLowerCase() === normalized.toLowerCase()
   })
 
   if (!league) return { valid: false, error: "INVALID_CODE" }
@@ -213,9 +222,6 @@ export async function validateFantasyInviteCode(
   }
 
   if (expired) return { valid: false, error: "EXPIRED", preview }
-  if (visibility === "invite_only" && !allowInviteLink) {
-    return { valid: false, error: "INVITE_DISABLED", preview }
-  }
   if (options?.userId) {
     const existing = await prisma.roster.findUnique({
       where: {
@@ -224,6 +230,15 @@ export async function validateFantasyInviteCode(
       select: { id: true },
     })
     if (existing) return { valid: false, error: "ALREADY_MEMBER", preview }
+  }
+  /*
+   * ⚠ A TURNED-OFF LINK IS OFF FOR EVERY LEAGUE, NOT ONLY AN INVITE-ONLY ONE. This refused only
+   * when visibility was `invite_only`, so a private (the default) or public league whose
+   * commissioner switched the link off still let anyone holding the code walk in. Checked after
+   * the member lookup so a manager already in the league who taps an old link is still sent to it.
+   */
+  if (!allowInviteLink) {
+    return { valid: false, error: "INVITE_DISABLED", preview }
   }
 
   if (isFull) return { valid: false, error: "LEAGUE_FULL", preview }

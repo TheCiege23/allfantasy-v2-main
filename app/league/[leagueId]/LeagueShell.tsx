@@ -15,7 +15,7 @@ import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQu
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
@@ -101,7 +101,6 @@ import { NativeLineupScreen } from '@/components/league/native/screens/NativeLin
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
 import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -2422,8 +2421,10 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself. The same
+    // test the lineup saves refuse by (guillotineBestBall.ts `lineupSetsItself`), so no editor is shown for a
+    // save that would be refused.
+    const bestBall = lineupSetsItself(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':

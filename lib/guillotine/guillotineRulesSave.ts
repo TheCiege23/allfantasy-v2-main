@@ -6,6 +6,8 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import { DEFAULT_END_WEEK_BY_SPORT, getGuillotineConfig, upsertGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveGuillotineEndgame } from './endgameRules'
+import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
+import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
 import { hasFirstChopHappened } from './guillotineFirstChopWeek'
 import {
   normalizeGuillotineRulesPatch,
@@ -122,6 +124,27 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       status: 409,
       error: 'The draft has started, so best ball lineups are fixed for this season.',
       field: 'bestBall',
+    }
+  }
+
+  // The calendar must still reach a champion with the patched end week, chops a week and endgame
+  // (lib/guillotine/calendarFit.ts). Checked against the league's chop schedule and team count.
+  if (patch.eliminationEndWeek !== undefined || patch.teamsPerChop !== undefined || patch.endgame !== undefined) {
+    const nextEndgame = resolveGuillotineEndgame({ settings: { guillotineEndgame: patch.endgame ?? current.rules.endgame } })
+    const teamCount = (await prisma.roster.count({ where: { leagueId } })) ?? 0
+    const advanced = teamCount > 0 ? await readGuillotineAdvanced(leagueId) : null
+    const calendar = {
+      teamCount,
+      startWeek: current.startWeek,
+      endWeek: patch.eliminationEndWeek ?? current.rules.eliminationEndWeek,
+      baseChops: patch.teamsPerChop ?? current.rules.teamsPerChop,
+      advanced: advanced ?? { steps: [], overrides: {}, immunity: 'off' as const },
+      threshold: nextEndgame.threshold,
+      finalPeriods: nextEndgame.cumulativePeriods,
+    }
+    const fit = teamCount > 0 ? guillotineCalendarFit(calendar) : null
+    if (fit && !fit.fits) {
+      return { ok: false, status: 400, error: calendarFitMessage(calendar, fit), field: patch.eliminationEndWeek !== undefined ? 'eliminationEndWeek' : patch.teamsPerChop !== undefined ? 'teamsPerChop' : 'endgame' }
     }
   }
 

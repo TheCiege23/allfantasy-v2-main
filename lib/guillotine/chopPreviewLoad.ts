@@ -99,6 +99,7 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
   const endgame = resolveGuillotineEndgame(league)
   return buildChopPreview({
     week,
+    tiebreakSeed: `${leagueId}:${season.season ?? ''}`,
     weekState: week < season.currentWeek ? 'final' : 'live',
     eliminationStartWeek: config.eliminationStartWeek,
     eliminationEndWeek: config.eliminationEndWeek ?? null,
