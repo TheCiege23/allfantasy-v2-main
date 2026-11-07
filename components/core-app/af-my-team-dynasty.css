@@ -72,3 +72,14 @@ html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
   .af-mt-dyn{margin-left:0}
   .af-mt-dyn-key{gap:6px 10px}
 }
+
+/* Stacked layout (the page is under 900px, measured on itself), dynasty only: the starters come right after the
+ * header and the lock banner. The shared order — Sleeper check, lineup decision (742px), matchup, then the roster —
+ * put the first player at y~1945 on a 390px phone; the user chose starters first for dynasty. All three are ordered
+ * because the shared header(-2)/lock(-1) orders apply only at <=500px: a bare order:-1 here would jump the starters
+ * ABOVE the header between 501 and 899px. __tests__/dynasty/dynastyMyTeamStartersFirst.test.ts */
+@container af-mt (max-width: 899px){
+  .af-core.af-shell[data-dynasty-background=true] .af-mt > .af-mt-head{order:-3}
+  .af-core.af-shell[data-dynasty-background=true] .af-mt > .af-mt-lock{order:-2}
+  .af-core.af-shell[data-dynasty-background=true] .af-mt #af-mt-starters{order:-1}
+}
