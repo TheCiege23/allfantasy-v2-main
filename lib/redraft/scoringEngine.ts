@@ -44,6 +44,13 @@ import { heldFromSeasonStart, loadBestBallWeekRosterRows } from '@/lib/redraft/b
 import { resolveBestBallScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { computeDailyBestBall, type DailyBestBallCandidate, type DailyBestBallCounted, type DailyBestBallDay } from '@/lib/bestball/dailyBestBall'
 import { writeNativePlayerWeeklyScores, type NativePlayerPoints } from './nativePlayerWeeklyScores'
+import {
+  frozenBestBallSlots,
+  nextBestBallRuleStamp,
+  readBestBallRuleStamp,
+  scoringRulesFingerprint,
+  type BestBallRuleStamp,
+} from '@/lib/bestball/resultRuleStamp'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -920,6 +927,22 @@ async function loadBestBallContext(leagueId: string): Promise<BestBallScoringCon
 }
 
 /**
+ * A stored result's best ball rules (lib/bestball/resultRuleStamp.ts). Once the result has been sealed
+ * under a stamp, its rescore seats the STORED slots, never the league's current ones: a commissioner who
+ * changes the roster seats mid-season must not silently rescore weeks that are already closed. A result
+ * with no stamp (or a legacy one) scores on the current slots, exactly as before.
+ */
+function withStoredBestBallRules(
+  bestBall: BestBallScoringContext | null,
+  lineupSnapshots: unknown,
+): { bestBall: BestBallScoringContext | null; stored: BestBallRuleStamp | null } {
+  if (!bestBall) return { bestBall, stored: null }
+  const stored = readBestBallRuleStamp(lineupSnapshots)
+  const frozen = frozenBestBallSlots(stored)
+  return { bestBall: frozen ? { ...bestBall, slots: frozen } : bestBall, stored }
+}
+
+/**
  * One roster's score for one week, by the same rules a matchup uses (devy engine, best ball, or
  * starter slots). For formats scored outside a head-to-head matchup — a guillotine week is every
  * surviving team against the chop line, not against an opponent.
@@ -1014,7 +1037,10 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? resolveLeagueCategories(scoringSettings, categoryId) : null
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
-  const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
+  const { bestBall, stored: storedBestBallRules } = withStoredBestBallRules(
+    useDevyEngine ? null : await loadBestBallContext(leagueId),
+    m.lineupSnapshots,
+  )
   const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
   if (scoringLeague && isNativePlatform(scoringLeague.platform) && isBasketballC2CLeague(scoringLeague) && (scoringMode !== 'points' || bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
 
@@ -1129,6 +1155,18 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           redraftScoring: {
             scoredAt: new Date().toISOString(),
             isComplete,
+            ...(bestBall
+              ? {
+                  bestBallRules: nextBestBallRuleStamp({
+                    previous: storedBestBallRules,
+                    previousStatus: m.status,
+                    slotsUsed: bestBall.slots,
+                    scoringFingerprint: scoringLeague ? scoringRulesFingerprint(scoringLeague) : null,
+                    isFinal,
+                    now: new Date(),
+                  }),
+                }
+              : {}),
             ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
             ...(campus ? { campus } : {}),
             ...(basketballCampus ? { campus: basketballCampus } : {}),
@@ -1262,6 +1300,7 @@ async function updateByeRowScore(row: {
   week: number
   homeRosterId: string
   lineupSnapshots: unknown
+  status?: string | null
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
@@ -1288,7 +1327,10 @@ async function updateByeRowScore(row: {
   if (await leagueUsesC2CEngine(m.leagueId)) return
 
   const useDevyEngine = await leagueUsesDevyEngine(m.leagueId)
-  const bestBall = useDevyEngine ? null : await loadBestBallContext(m.leagueId)
+  const { bestBall, stored: storedBestBallRules } = withStoredBestBallRules(
+    useDevyEngine ? null : await loadBestBallContext(m.leagueId),
+    m.lineupSnapshots,
+  )
   if (isNativePlatform(league.platform) && isBasketballC2CLeague(league) && (bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   const home = await scoreRosterStarters({
     leagueId: m.leagueId,
@@ -1311,17 +1353,30 @@ async function updateByeRowScore(row: {
   const missingPlayerIds = [...home.missingPlayerIds, ...(basketballCampus?.home.missingPlayerIds ?? [])]
   const isComplete =
     missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+  const isFinal = isComplete && home.allFinal && (basketballCampus?.home.allFinal ?? true)
   await prisma.redraftMatchup.update({
     where: { id: m.id },
     data: {
       homeScore: home.points,
-      status: isComplete && home.allFinal && (basketballCampus?.home.allFinal ?? true) ? 'final' : 'active',
+      status: isFinal ? 'final' : 'active',
       lineupSnapshots: {
         ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
           bye: true,
+          ...(bestBall
+            ? {
+                bestBallRules: nextBestBallRuleStamp({
+                  previous: storedBestBallRules,
+                  previousStatus: m.status,
+                  slotsUsed: bestBall.slots,
+                  scoringFingerprint: scoringRulesFingerprint(league),
+                  isFinal,
+                  now: new Date(),
+                }),
+              }
+            : {}),
           home,
           missingPlayerIds,
           ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),

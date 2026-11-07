@@ -24,6 +24,8 @@ const state = vi.hoisted(() => ({
   rosterPlayers: [] as Row[],
   guillotineSeasons: [] as Row[],
   forbidden: [] as string[],
+  /** The league's CURRENT best ball seats; null = the one-QB default below. */
+  slots: null as null | Array<{ slot: string; eligible: string[]; count: number; slotOrder?: number }>,
 }))
 ;(globalThis as any).__guillyForbidden = state.forbidden
 
@@ -113,7 +115,7 @@ vi.mock('@/lib/automation/locks', () => ({
 // One QB seat, so a best ball lineup is easy to reason about.
 vi.mock('@/lib/redraft/scoringEngine', async (orig) => ({
   ...(await orig<typeof import('@/lib/redraft/scoringEngine')>()),
-  buildBestBallSlots: () => [{ slot: 'QB', eligible: ['QB'], count: 1, slotOrder: 0 }],
+  buildBestBallSlots: () => state.slots ?? [{ slot: 'QB', eligible: ['QB'], count: 1, slotOrder: 0 }],
 }))
 
 import {
@@ -132,6 +134,7 @@ const NOW = new Date('2026-10-02T12:00:00.000Z')
 async function arrange(opts: { bestBall?: boolean } = {}) {
   state.cache.clear()
   state.forbidden.length = 0
+  state.slots = null
   state.league = { sport: 'NFL', settings: {}, bestBallMode: opts.bestBall === true, leagueVariant: 'guillotine', leagueType: 'redraft', guillotineMode: true, userId: 'owner-1' }
   state.rosterPlayers = [
     { rosterId: 'rr-a', playerId: 'a1', sport: 'NFL', position: 'QB' },
@@ -322,6 +325,40 @@ describe('a stat correction after the chop', () => {
     correct('b2', 80) // the bench QB now outscores the starter
     const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
     expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 72.5, after: 80 }])
+  })
+
+  /*
+   * Audit 2026-11-06 ("Rule/settings version stored with a result"): the correction re-solved the lineup
+   * over the league's CURRENT seats, so a commissioner who added a second QB seat after the chop moved a
+   * closed week's scores by the whole bench QB. The baseline now keeps the chop's own slots.
+   */
+  it("best ball re-solves over the CHOP's slots, not seats the commissioner changed afterwards", async () => {
+    await arrange({ bestBall: true })
+    const baseline = state.cache.get(guillotineCorrectionKey('s1', 3))
+    expect(baseline.bestBallRules.slots).toEqual([{ slot: 'QB', eligible: ['QB'], count: 1, slotOrder: 0 }])
+    expect(typeof baseline.bestBallRules.algorithm).toBe('string')
+
+    state.slots = [{ slot: 'QB', eligible: ['QB'], count: 2, slotOrder: 0 }]
+    correct('b2', 80)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    // One QB seat: 72.5 + (80 - 72.5). Two seats would have read 72.5 + (152.5 - 82.5) = 142.5.
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 72.5, after: 80 }])
+  })
+
+  it('a baseline recorded before the slots were kept reads the current seats, as before', async () => {
+    await arrange({ bestBall: true })
+    const key = guillotineCorrectionKey('s1', 3)
+    const { bestBallRules: _dropped, ...legacy } = state.cache.get(key)
+    state.cache.set(key, legacy)
+    state.slots = [{ slot: 'QB', eligible: ['QB'], count: 2, slotOrder: 0 }]
+    correct('b2', 80)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 72.5, after: 142.5 }])
+  })
+
+  it("a lineup league's baseline keeps no best ball rules", async () => {
+    await arrange()
+    expect(state.cache.get(guillotineCorrectionKey('s1', 3)).bestBallRules).toBeUndefined()
   })
 
   it('a lineup league counts starters only: a corrected bench player changes nothing', async () => {

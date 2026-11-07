@@ -50,6 +50,8 @@ import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
 import { readGamesLimits } from '@/lib/redraft/gamesLimits'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
+import { readStoredSlots, scoringRulesFingerprint, toStoredSlots, type StoredSlot } from '@/lib/bestball/resultRuleStamp'
 
 /** How long after a chop its week is re-checked. Matches the free correction window (6 days). */
 export const GUILLOTINE_CORRECTION_WINDOW_MS = 6 * 24 * 60 * 60 * 1000
@@ -89,6 +91,13 @@ export type CorrectionBaseline = {
   teams: BaselineTeam[]
   lastCheckedAt?: string
   lastFingerprint?: string
+  /**
+   * Best ball Guilly only: the rules the chop's lineups were seated under (lib/bestball/resultRuleStamp.ts).
+   * A correction re-solves the lineup over these SAME slots, so a commissioner who changes the roster seats
+   * after the chop cannot move a closed week's scores. Absent on a baseline recorded before this existed
+   * (or for a lineup league): the correction then reads the league's current slots, as before.
+   */
+  bestBallRules?: { algorithm: string; slots: StoredSlot[]; scoringFingerprint: string | null }
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -132,6 +141,7 @@ export async function recordGuillotineCorrectionBaseline(args: {
       })
     : []
   const meta = new Map(rows.map((r) => [`${r.rosterId}|${r.playerId}`, r]))
+  const bestBallRules = await chopBestBallRules(args.leagueId)
   await writeBaseline({
     v: 1,
     seasonId: args.seasonId,
@@ -149,7 +159,29 @@ export async function recordGuillotineCorrectionBaseline(args: {
         return m ? [{ playerId: p.playerId, sport: m.sport, position: m.position ?? null, points: p.points, isStarter: p.isStarter }] : []
       }),
     })),
+    ...(bestBallRules ? { bestBallRules } : {}),
   })
+}
+
+/**
+ * The slots and scoring a best ball Guilly chop was just scored on — read the way `scoreRosterForWeek`
+ * read them moments earlier (`buildBestBallSlots` over the league's settings). Null for a lineup league,
+ * or when the league cannot be read: the baseline is then written exactly as before.
+ */
+async function chopBestBallRules(leagueId: string): Promise<CorrectionBaseline['bestBallRules'] | null> {
+  const league = await prisma.league
+    .findUnique({
+      where: { id: leagueId },
+      select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
+    })
+    .catch(() => null)
+  if (!league || !leagueIsBestBall(league)) return null
+  const sport = String(league.sport ?? 'NFL')
+  return {
+    algorithm: OPTIMAL_LINEUP_ALGORITHM,
+    slots: toStoredSlots(buildBestBallSlots(sport, league.settings)),
+    scoringFingerprint: scoringRulesFingerprint({ sport, settings: league.settings }),
+  }
 }
 
 export type GuillotineCorrectionOutcome =
@@ -279,7 +311,8 @@ export async function applyGuillotineStatCorrectionsForWeek(
       deps.scorePlayer ??
       ((a: { leagueId: string; playerId: string; week: number; stats: Record<string, number>; position: string | null }) =>
         calculateScoreFromSportConfig(a.leagueId, a.playerId, a.week, a.stats, a.position))
-    const slots = bestBall ? buildBestBallSlots(sport, league.settings) : null
+    // The chop's own slots when the baseline kept them; a baseline from before that reads today's.
+    const slots = bestBall ? readStoredSlots(baseline.bestBallRules?.slots) ?? buildBestBallSlots(sport, league.settings) : null
 
     const corrected: Array<{ team: BaselineTeam; points: number }> = []
     for (const team of baseline.teams) {
