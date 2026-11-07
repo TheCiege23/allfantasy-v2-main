@@ -3942,6 +3942,8 @@ html[data-mode='light'] .af-core {
   .af-core .af-core-bracket-promo { padding: 16px; }
   .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
   .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
+  /* "Join a league" was a 32px text link beside the 44px button (2026-11-07 tap-target pass). */
+  .af-core .af-core-bracket-promo-browse { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
 }
 
 /*
