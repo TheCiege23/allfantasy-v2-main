@@ -12,6 +12,8 @@ import type { FeedAnimation, Pack, TeamRow } from '@/app/zombie/[leagueId]/Zombi
 import type { Row } from '@/app/zombie/[leagueId]/standings/page'
 import type { MatchupsPayload } from '@/app/zombie/[leagueId]/matchups/page'
 import type { InvPayload } from '@/app/zombie/[leagueId]/items/page'
+import type { ZombieRulesDocument } from '@prisma/client'
+import type { ZombieRulesResolved } from '@/lib/zombie/zombieRules'
 
 type Team = TeamRow & Row
 
@@ -109,7 +111,7 @@ export const matchups = {
   ],
 } satisfies MatchupsPayload
 
-export const inventory = {
+const INVENTORY = {
   appliedItemBonus: null,
   itemPolicy: 'beta_2025',
   week: 10,
@@ -130,3 +132,42 @@ export const inventory = {
   isCommissionerView: false,
   experienceMode: 'enhanced',
 } satisfies InvPayload
+
+/** The same /api/zombie/inventory payload: Armory reads InvPayload, Chat also reads the viewer's role fields. */
+export const inventory = { ...INVENTORY, isWhisperer: false, ambushesRemaining: null, pendingBashingDecision: null }
+
+/** GET /api/zombie/settings — the commissioner's paid/free panel. */
+export const settings = {
+  isPaid: true, buyInAmount: 50, commissionerFee: 0, currencyLabel: 'Outbreak Points', weeklyPayoutEnabled: true, ultimateSurvivorPot: false,
+}
+
+/** What app/zombie/[leagueId]/rules/page.tsx resolves server-side, minus the HTML (built by the harness page). */
+export const rules = {
+  sport: 'NFL', bashingThreshold: 60, maulingThreshold: 60, weaponShieldThreshold: 140, weaponAmbushThreshold: 150,
+  weaponAxeMargin: 40, reviveThreshold: 2, serumMaxHold: 3, lineupLockDesc: 'Thursday 8:15 PM ET earliest kickoff for NFL scoring week.',
+} satisfies ZombieRulesResolved
+
+const section = (...lines: string[]) => lines.join('\n')
+
+/** A stored rules document; getRulesDocAsHtml turns it into the page's HTML exactly as production does. */
+export const rulesDocument = {
+  id: 'e2e-rules-doc', leagueId: 'e2e-zombie-league', sport: 'NFL', version: 3, isPaid: true,
+  sectionOverview: section('Outbreak League is an 8-team Zombie league. Everyone starts as a Survivor except one hidden Whisperer.', 'Lose to the Horde and you turn.'),
+  sectionInfection: section('A Survivor who loses to a Zombie or the Whisperer becomes a Zombie when the week resolves.', 'Infections are final once stat corrections close on Tuesday.'),
+  sectionWhisperer: section('One manager is secretly the Whisperer. They win by turning Survivors and can ambush once per week.', 'Whisperers cannot trade players at any time.'),
+  sectionSurvivor: section('Survivors win by lasting the season. Weapons and serums keep you alive.'),
+  sectionZombie: section('Zombies keep playing every week. A Zombie who wins big can bash or maul the loser and take a share of their winnings.'),
+  sectionScoring: section('Standard PPR scoring. Item bonuses are added to your matchup score, never to player stats.'),
+  sectionRoster: section('QB, 2 RB, 3 WR, TE, FLEX, K, DST. 7 bench spots. No IR.'),
+  sectionAmbush: section('The Whisperer may ambush one Survivor per week before lineups lock.'),
+  sectionBashing: section("Win by 60 or more as a Zombie: the loser hands over 10% of the week's winnings."),
+  sectionMauling: section('Win by 60 or more against a Survivor: they hand over 25% and are infected.'),
+  sectionSerums: section('Top score each week earns a serum. Hold up to 3. Two serums revive a Zombie.'),
+  sectionWeapons: section('Knife at 140+, Bow at 150+, Axe for winning by 40+. Your strongest two count every week.'),
+  sectionWinnings: section('Weekly winnings are tracked in Outbreak Points. AllFantasy never holds entry fees; dues go through LeagueSafe or FanCred.'),
+  sectionUniverseMovement: section("Top Survivors move up a level in the universe next season; the Horde's leaders move with them."),
+  sectionWeeklyTiming: section('Lineups lock at the first kickoff. Results resolve Tuesday morning after stat corrections.'),
+  sectionChimmy: section('Ask @Chimmy in league chat to use a serum, check your items or explain a ruling.'),
+  sectionPaidVsFree: section('Paid leagues track dues and payouts. Free leagues play for Outbreak Points only.'),
+  generatedAt: new Date('2026-09-01T12:00:00.000Z'), lastUpdatedAt: new Date('2026-11-01T12:00:00.000Z'),
+} satisfies ZombieRulesDocument

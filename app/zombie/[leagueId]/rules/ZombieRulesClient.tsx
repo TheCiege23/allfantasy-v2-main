@@ -101,8 +101,14 @@ export function ZombieRulesClient({
       {/* Tab content */}
       {tab === 'rules' && (
         <div>
+          {/*
+            The generated rules (lib/zombie/rulesDocGenerator.ts) put each section body in a <pre> to keep its
+            line breaks. These were `prose-*` classes, but @tailwindcss/typography is not installed, so none
+            applied and every rule rendered in the browser's monospace (2026-11-07 Zombie audit). Style the
+            <pre> directly: the app's font, and the bordered panel the prose classes asked for.
+          */}
           <div
-            className="prose prose-invert max-w-none prose-headings:text-[var(--zombie-text-full)] prose-p:text-[var(--zombie-text-mid)] prose-li:text-[var(--zombie-text-mid)] prose-pre:bg-black/30 prose-pre:border prose-pre:border-[var(--zombie-border)] prose-pre:rounded-xl"
+            className="zombie-rules-body max-w-none text-[var(--zombie-text-mid)] [&_h2]:text-[var(--zombie-text-full)] [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--zombie-border)] [&_pre]:bg-black/30 [&_pre]:p-3 [&_pre]:font-sans [&_pre]:text-[13px] [&_pre]:leading-relaxed"
             dangerouslySetInnerHTML={{ __html: rulesHtml }}
           />
           <p className="mt-6 text-[11px] text-[var(--zombie-text-dim)]">
