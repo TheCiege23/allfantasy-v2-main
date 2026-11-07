@@ -263,12 +263,14 @@ const GUIDES: Partial<Record<ImportProvider, Guide>> = {
         steps: [
           {
             title: 'Open your Fantrax profile',
-            body: <>Sign in at fantrax.com, then open your User Profile from the menu.</>,
-            url: { before: 'fantrax.com/newui/', id: 'userProfile.go' },
+            body: <>Sign in at fantrax.com, then open your profile page.</>,
+            /* Location from the one public guide that shows it (Prospects Live's Fantrax sync page,
+               which links fantrax.com/user/profile). Fantrax publishes no doc for it. */
+            url: { before: 'fantrax.com/user/', id: 'profile' },
           },
           {
             title: 'Copy your Secret ID',
-            body: <>It&rsquo;s listed on that page. It lets us read your leagues — it can&rsquo;t change anything.</>,
+            body: <>It&rsquo;s listed on your profile. We only ever use it to read your leagues.</>,
           },
           {
             title: 'Paste it below → Connect Fantrax',

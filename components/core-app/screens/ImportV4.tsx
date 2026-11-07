@@ -2741,7 +2741,7 @@ export function ImportV4({
                   {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
                 </button>
                 <span className="af-im-field-help">
-                  Fantrax → User Profile (fantrax.com/newui/userProfile.go). Read-only, and it is stored encrypted. With it
+                  It is on your Fantrax profile page (fantrax.com/user/profile). We only read with it, and it is stored encrypted. With it
                   connected we can name your leagues and your team without you typing either. Prefer
                   not to? Paste a league ID below instead.
                 </span>
