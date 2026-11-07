@@ -3340,7 +3340,7 @@ function LeagueHeader({
               ['Picks', `/devy/${leagueId}/picks`],
               ['Matchup', `/league/${leagueId}`],
               ['Chat', `/league/${leagueId}`],
-              ['History', `/devy/${leagueId}/history`],
+              ['History', `/league/${leagueId}?view=history`],
               ['Commissioner', '__commish__'],
             ] as const
           ).map(([label, href]) =>

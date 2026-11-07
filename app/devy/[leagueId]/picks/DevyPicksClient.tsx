@@ -4,18 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PicksBoard, type PickRow } from '@/app/devy/components/PicksBoard'
 
+/** GET /api/devy/picks?rosterId= — one roster's picks, by draft year. */
+export type DevyPickInventory = {
+  years?: { year: number; rookiePicks: PickRow[]; devyPicks: PickRow[] }[]
+  seasonStart?: number
+}
+
 export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId: string }) {
   const [tab, setTab] = useState<'yours' | 'board'>('yours')
   const [year, setYear] = useState(2026)
   const [config, setConfig] = useState<Record<string, unknown> | null>(null)
   const [rosterId, setRosterId] = useState<string | null>(null)
-  type Inv = {
-    years?: { year: number; rookiePicks: PickRow[]; devyPicks: PickRow[] }[]
-    seasonStart?: number
-  }
+  type Inv = DevyPickInventory
   const [inventory, setInventory] = useState<Inv | null>(null)
   const [allPicks, setAllPicks] = useState<PickRow[]>([])
   const [leagueRosterIds, setLeagueRosterIds] = useState<string[]>([])
+  /** Pick owners are roster ids; the season's rosters carry their team names. */
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [sheet, setSheet] = useState<PickRow | null>(null)
 
@@ -33,10 +38,11 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
       })
       if (!sr.ok) throw new Error('No season')
       const sj = (await sr.json()) as {
-        season?: { rosters?: { id: string; ownerId: string | null }[] }
+        season?: { rosters?: { id: string; ownerId: string | null; teamName?: string | null }[] }
       }
       const rosters = sj.season?.rosters ?? []
       setLeagueRosterIds(rosters.map((r) => r.id))
+      setTeamNames(Object.fromEntries(rosters.filter((r) => r.teamName).map((r) => [r.id, r.teamName as string])))
       const rid = rosters.find((r) => r.ownerId === userId)?.id ?? null
       setRosterId(rid)
 
@@ -79,6 +85,8 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
   }, [inventory, year])
 
   const yearData = inventory?.years?.find((y) => y.year === year)
+  const teamLabel = (ownerRosterId: string) =>
+    ownerRosterId === rosterId ? 'You' : teamNames[ownerRosterId] ?? 'Another team'
   const combined = config?.futureDraftFormat === 'combined'
 
   if (loading) {
@@ -145,6 +153,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
                   Rookie + Devy picks
                 </h2>
                 <PickTable
+                  teamLabel={teamLabel}
                   picks={[...(yearData?.rookiePicks ?? []), ...(yearData?.devyPicks ?? [])]}
                   rosterId={rosterId}
                   onPick={(p) => setSheet(p)}
@@ -156,13 +165,13 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
                   <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-sky-200/90">
                     Rookie picks
                   </h2>
-                  <PickTable picks={yearData?.rookiePicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
+                  <PickTable teamLabel={teamLabel} picks={yearData?.rookiePicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
                 </section>
                 <section>
                   <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-violet-200/90">
                     Devy picks
                   </h2>
-                  <PickTable picks={yearData?.devyPicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
+                  <PickTable teamLabel={teamLabel} picks={yearData?.devyPicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
                 </section>
               </>
             )}
@@ -171,6 +180,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
           <section className="rounded-xl border border-white/[0.08] bg-[#0a1228] p-3">
             <h2 className="mb-3 text-[12px] font-bold uppercase text-white/70">All teams · {year}</h2>
             <PicksBoard
+              teamLabel={teamLabel}
               picks={allPicks.filter((p) => (p.season ?? year) === year)}
               rosterIdByColumn={leagueRosterIds.length ? leagueRosterIds : ['a', 'b']}
             />
@@ -193,7 +203,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
               Round {sheet.round} · {sheet.pickType}
             </p>
             <p className="mt-2 text-[11px] text-white/55">
-              Owner {sheet.currentOwnerId === rosterId ? 'You' : sheet.currentOwnerId.slice(0, 8)}…
+              Owner: {teamLabel(sheet.currentOwnerId)}
             </p>
             {sheet.isTradeable && !sheet.isUsed ? (
               <button
@@ -221,10 +231,12 @@ function PickTable({
   picks,
   rosterId,
   onPick,
+  teamLabel,
 }: {
   picks: PickRow[]
   rosterId: string | null
   onPick: (p: PickRow) => void
+  teamLabel: (ownerRosterId: string) => string
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
@@ -247,8 +259,8 @@ function PickTable({
                 onClick={() => onPick(p)}
               >
                 <td className="px-2 py-2 font-mono">{p.round}</td>
-                <td className="px-2 py-2 text-white/55">{p.originalOwnerId.slice(0, 6)}…</td>
-                <td className="px-2 py-2">{p.currentOwnerId.slice(0, 6)}…</td>
+                <td className="px-2 py-2 text-white/55">{teamLabel(p.originalOwnerId)}</td>
+                <td className="px-2 py-2">{teamLabel(p.currentOwnerId)}</td>
                 <td className="px-2 py-2">
                   {p.isUsed ? '✓ Used' : mine ? 'Owned by you' : 'Traded'}
                 </td>

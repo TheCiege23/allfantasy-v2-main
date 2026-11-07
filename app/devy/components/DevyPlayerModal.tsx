@@ -182,7 +182,7 @@ export function DevyPlayerModal({
                 ) : null}
               </div>
             ) : (
-              <p className="text-[11px] text-white/35">AI prospect evaluation requires AfSub.</p>
+              <p className="text-[11px] text-white/35">AI prospect evaluation requires AF Commissioner.</p>
             )}
             {payload.hasEnteredNfl ? (
               <section className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-[12px]">
@@ -204,7 +204,7 @@ export function DevyPlayerModal({
               </section>
             ) : null}
             <div className="flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
-              <span className="text-[11px] text-white/40">Trade rights · Drop · History (wiring soon)</span>
+              <span className="text-[11px] text-white/40">Trade rights · Drop · History (coming soon)</span>
             </div>
           </div>
         )}
