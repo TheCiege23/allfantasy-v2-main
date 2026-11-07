@@ -411,7 +411,7 @@ export default function CommissionerIntegrityPage() {
               </button>
             </div>
             {payload?.settings ? (
-              <IntegritySettings value={payload.settings} saving={saving} readOnly={payload.canReview === false} onSave={saveSettings} />
+              <IntegritySettings value={payload.settings} saving={saving} readOnly={payload.canReview === false} onSave={saveSettings} leagueId={leagueId} />
             ) : loading ? (
               <p className="af-cm-sub">Loading settings…</p>
             ) : (

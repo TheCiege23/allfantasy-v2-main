@@ -68,6 +68,8 @@ export type TankingEvidenceLike = {
   redFlags?: string[]
   /** `rules`: raised by the lineup rules (lib/integrity/tankingRules.ts) — no model confidence to show. */
   detector?: string
+  /** The flagged manager's explanation (lib/integrity/managerReply.ts). */
+  managerReply?: { text?: string; submittedAt?: string }
 }
 
 export type IntegrityFlagRow = {
@@ -331,6 +333,9 @@ export function IntegrityFlagCard({
   }, [ev, isCollusion])
 
   const age = ageLabel(flag.createdAt)
+  const reply = isCollusion ? undefined : (ev as TankingEvidenceLike).managerReply
+  const managerReplyText = typeof reply?.text === 'string' && reply.text.trim() ? reply.text.trim() : null
+  const managerReplyAt = typeof reply?.submittedAt === 'string' ? ageLabel(reply.submittedAt)?.replace('flagged', 'sent') ?? null : null
   const fromReview = isCollusion && typeof (ev as CollusionEvidenceLike).reviewModel === 'string'
   // A rules-raised tanking flag has no confidence; showing its stored 0 (or an imported flag's 1) would read as a score.
   const fromLineupRules = !isCollusion && (ev as TankingEvidenceLike).detector === 'rules'
@@ -446,6 +451,23 @@ export function IntegrityFlagCard({
               <li key={i}>{line}</li>
             ))}
           </ul>
+        ) : null}
+
+        {/*
+          The manager's side, read before ruling. Shown as their words, quoted, never merged into the
+          evidence: it is a claim to weigh, not a fact the scan established.
+        */}
+        {managerReplyText ? (
+          <blockquote className="af-cm-manager-reply" data-testid="integrity-manager-reply">
+            <div className="af-label">
+              Manager&rsquo;s reply{managerReplyAt ? ` · ${managerReplyAt}` : ''}
+            </div>
+            <p>{managerReplyText}</p>
+          </blockquote>
+        ) : !isCollusion && flag.status === 'open' ? (
+          <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 10 }}>
+            The manager was told privately and can reply before you rule.
+          </p>
         ) : null}
 
         {/*

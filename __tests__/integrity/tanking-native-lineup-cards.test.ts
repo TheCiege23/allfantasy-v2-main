@@ -181,3 +181,12 @@ describe('tanking scan — a repeat week extends the open case', () => {
     expect(h.notified).toEqual(['open-1'])
   })
 })
+
+describe('tanking scan — the manager’s reply survives the next week', () => {
+  it('carries a reply already on the open case into the rebuilt evidence', async () => {
+    const managerReply = { userId: 'pat', text: 'Late scratch.', submittedAt: '2026-11-02T00:00:00.000Z' }
+    h.open = { id: 'open-1', severity: 'low', evidenceJson: { weekNumber: 4, weeksFlagged: [4], illegalOrSuspiciousStarters: [], managerReply } }
+    await scanWeekForTanking('L1', 5)
+    expect((h.updated[0].data as { evidenceJson: { managerReply?: unknown } }).evidenceJson.managerReply).toEqual(managerReply)
+  })
+})

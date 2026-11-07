@@ -20,6 +20,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { GET } from '@/app/api/leagues/[leagueId]/integrity/handler'
+import { prisma } from '@/lib/prisma'
 
 const get = async () => {
   const res = await GET(createMockNextRequest('http://x/api/leagues/L/integrity') as never, { params: Promise.resolve({ leagueId: 'L' }) })
@@ -44,5 +45,17 @@ describe('GET integrity settings', () => {
     const body = await get()
     expect(body.coverage.tanking.status).toBe('never_scanned')
     expect(body.settings.tankingPenalties).toMatchObject({ enabled: expect.any(Boolean) })
+  })
+})
+
+describe('default on (owner decision 2026-11-06)', () => {
+  it('a league with no settings yet starts with the tanking monitor on from week 4 — an existing row is left alone', async () => {
+    m.platform = 'allfantasy'
+    await get()
+    expect(prisma.leagueIntegritySettings.upsert).toHaveBeenCalledWith({
+      where: { leagueId: 'L' },
+      create: { leagueId: 'L', tankingMonitorEnabled: true, tankingStartWeek: 4 },
+      update: {},
+    })
   })
 })
