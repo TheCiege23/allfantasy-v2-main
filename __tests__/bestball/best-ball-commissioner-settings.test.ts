@@ -114,19 +114,19 @@ describe('after the draft has started', () => {
   })
 
   it('still lets transactions change, and records it', async () => {
-    const res = await patch({ bbTradesEnabled: true, bbFaEnabled: true, bestBall: { substitutionsEnabled: true } })
+    const res = await patch({ bbWaiversEnabled: true, bbFaEnabled: true, bestBall: { substitutionsEnabled: true } })
     expect(res.status).toBe(200)
-    expect(m.leagueUpdate.mock.calls[0]![0].data).toMatchObject({ bbTradesEnabled: true, bbFaEnabled: true })
+    expect(m.leagueUpdate.mock.calls[0]![0].data).toMatchObject({ bbWaiversEnabled: true, bbTradesEnabled: false, bbFaEnabled: true })
     const audit = m.auditCreate.mock.calls[0]![0].data
     expect(audit).toMatchObject({ leagueId: 'L1', userId: 'commish', actionType: 'settings_patch', entityType: 'league' })
-    expect(audit.afterState).toEqual({ substitutionsEnabled: true, bbTradesEnabled: true, bbFaEnabled: true })
-    expect(audit.beforeState).toEqual({ substitutionsEnabled: false, bbTradesEnabled: false, bbFaEnabled: false })
+    expect(audit.afterState).toEqual({ substitutionsEnabled: true, bbWaiversEnabled: true, bbFaEnabled: true })
+    expect(audit.beforeState).toEqual({ substitutionsEnabled: false, bbWaiversEnabled: false, bbFaEnabled: false })
   })
 
   it('a save that resends every unchanged field (the panel does) is not a locked change', async () => {
     const res = await patch({
       bbWaiversEnabled: false,
-      bbTradesEnabled: true,
+      bbTradesEnabled: false,
       bestBall: { mode: 'standard', contestStructure: 'season_long', matchupFormat: 'h2h', playoffFormat: 'bracket', scoringPeriod: 'weekly', playoffTeams: 6, regularSeasonLength: 21 },
     })
     expect(res.status).toBe(200)
@@ -134,7 +134,7 @@ describe('after the draft has started', () => {
 
   it('a legacy league whose stored "daily" was only the old default saves as weekly without tripping the lock', async () => {
     m.leagueFindUnique.mockResolvedValue(league({}, { scoringPeriod: 'daily', dailyBestBall: undefined }))
-    const res = await patch({ bbTradesEnabled: true, bestBall: { scoringPeriod: 'weekly' } })
+    const res = await patch({ bbWaiversEnabled: true, bestBall: { scoringPeriod: 'weekly' } })
     expect(res.status).toBe(200)
     const data = m.leagueUpdate.mock.calls[0]![0].data
     expect(data.bbScoringPeriod).toBe('weekly')
@@ -190,7 +190,7 @@ describe('before the draft', () => {
   })
 
   it('a transaction-only save leaves the playoff columns alone', async () => {
-    await patch({ bbTradesEnabled: true })
+    await patch({ bbWaiversEnabled: true })
     const data = m.leagueUpdate.mock.calls[0]![0].data
     expect(data).not.toHaveProperty('playoffTeams')
     expect(data).not.toHaveProperty('playoffStartWeek')
@@ -262,16 +262,60 @@ describe('settings that were saved and never read', () => {
   })
 
   it('refuses the field even when false (it would still be a no-op save)', async () => {
-    const res = await patch({ bbTradesEnabled: true, bbIrEnabled: false })
+    const res = await patch({ bbWaiversEnabled: true, bbIrEnabled: false })
     expect(res.status).toBe(400)
     expect(m.leagueUpdate).not.toHaveBeenCalled()
   })
 
   it('a save without them still lands, and never writes the IR / taxi columns', async () => {
-    const res = await patch({ bbTradesEnabled: true, bestBall: { substitutionsEnabled: true } })
+    const res = await patch({ bbWaiversEnabled: true, bestBall: { substitutionsEnabled: true } })
     expect(res.status).toBe(200)
     const data = m.leagueUpdate.mock.calls[0]![0].data
     expect(data).not.toHaveProperty('bbIrEnabled')
     expect(data).not.toHaveProperty('bbTaxiEnabled')
+  })
+})
+
+/*
+ * Trades are off in Best Ball (owner's decision 2026-11-07): best ball scoring does not split a traded
+ * player's week (audit 2026-11-06, "Ownership history"), so the trade engine refuses every native Best Ball
+ * trade. The route used to save `true` and every surface then said trades were on.
+ */
+describe('trades cannot be turned on', () => {
+  it.each([
+    ['bbTradesEnabled', { bbTradesEnabled: true }],
+    ['bestBall.tradesEnabled', { bestBall: { tradesEnabled: true } }],
+  ])('refuses %s: true with a 400 that says why, and writes nothing', async (field, body) => {
+    const res = await patch(body)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.field).toBe(field)
+    expect(json.error).toMatch(/Trades are off in Best Ball leagues/)
+    expect(json.error).toMatch(/does not split a traded player's week/)
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+    expect(m.auditCreate).not.toHaveBeenCalled()
+  })
+
+  it('accepts false', async () => {
+    const res = await patch({ bbTradesEnabled: false, bestBall: { tradesEnabled: false } })
+    expect(res.status).toBe(200)
+    expect(m.leagueUpdate.mock.calls[0]![0].data).toMatchObject({ bbTradesEnabled: false })
+  })
+
+  it('a league that saved trades ON earlier is written back as off on its next save, column and JSON', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ bbTradesEnabled: true }, { tradesEnabled: true }))
+    const res = await patch({ bbWaiversEnabled: true })
+    expect(res.status).toBe(200)
+    const data = m.leagueUpdate.mock.calls[0]![0].data
+    expect(data.bbTradesEnabled).toBe(false)
+    expect(data.settings.best_ball_settings.tradesEnabled).toBe(false)
+  })
+
+  it('the Best Ball tab reads trades as off for a league that saved them on', async () => {
+    m.leagueFindUnique.mockResolvedValue({ ...league({ bbTradesEnabled: true }, { tradesEnabled: true }), name: 'L', season: 2026, platform: 'manual', rosters: [], teams: [] })
+    const res = await GET({ nextUrl: new URL('http://localhost/api/leagues/L1/bestball?week=1') } as never, { params: Promise.resolve({ leagueId: 'L1' }) })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { league: { settings: Record<string, unknown> } }
+    expect(json.league.settings.tradesEnabled).toBe(false)
   })
 })

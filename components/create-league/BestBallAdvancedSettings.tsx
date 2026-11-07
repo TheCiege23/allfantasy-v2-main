@@ -222,13 +222,8 @@ export function BestBallAdvancedSettings({
           description="Commissioner-controlled in standard mode. Underdog-style defaults this off."
           accent={accent}
         />
-        <Toggle
-          checked={settings.tradesEnabled}
-          onChange={(tradesEnabled) => patchBestBall({ tradesEnabled })}
-          label="Trades"
-          description="Best Ball leagues can disable trades completely; underdog-style should keep this off."
-          accent={accent}
-        />
+        {/* No Trades toggle: trades are off in every Best Ball league — best ball scoring does not split a
+            traded player's week, and the server forces it off (lib/bestball/rules.ts). */}
         <Toggle
           checked={settings.substitutionsEnabled}
           onChange={(substitutionsEnabled) => patchBestBall({ substitutionsEnabled })}

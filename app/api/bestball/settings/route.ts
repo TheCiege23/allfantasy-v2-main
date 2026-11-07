@@ -78,6 +78,15 @@ const NOT_A_BEST_BALL_DRAFT_SETTING: Readonly<Record<string, string>> = {
   allowDuplicatePlayers: 'No such setting exists: a player can be drafted by only one team in a league.',
 }
 
+/**
+ * 🛑 TRADES CANNOT BE TURNED ON IN A BEST BALL LEAGUE (owner's decision, 2026-11-07). Best ball scoring does
+ * not split a traded player's week (audit 2026-11-06, "Ownership history"), so the trade engine refuses every
+ * native Best Ball trade (tradeSettingsResolver.ts). This route used to save `true` anyway, and the panel,
+ * the rules summary and Chimmy then said trades were on. `false` is still accepted (it changes nothing).
+ */
+const BEST_BALL_TRADES_OFF_REASON =
+  "Trades are off in Best Ball leagues: best ball scoring does not split a traded player's week, so a trade cannot be scored fairly."
+
 /** The first refused field in the body, with where it is really set; null when the body has none. */
 function refusedBestBallSetting(body: Record<string, unknown>): { field: string; hint: string } | null {
   for (const [field, hint] of Object.entries(NOT_A_BEST_BALL_SETTING)) {
@@ -116,6 +125,16 @@ export async function PATCH(req: NextRequest) {
 
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  if (body.bbTradesEnabled === true || record(body.bestBall)?.tradesEnabled === true) {
+    return NextResponse.json(
+      {
+        error: `Trades cannot be turned on and were not saved. ${BEST_BALL_TRADES_OFF_REASON}`,
+        field: body.bbTradesEnabled === true ? 'bbTradesEnabled' : 'bestBall.tradesEnabled',
+      },
+      { status: 400 },
+    )
+  }
 
   const refused = refusedBestBallSetting(body as Record<string, unknown>)
   if (refused) {
@@ -223,8 +242,9 @@ export async function PATCH(req: NextRequest) {
 
   const nextWaivers =
     typeof body.bbWaiversEnabled === 'boolean' ? body.bbWaiversEnabled : normalizedBestBall.waiversEnabled
-  const nextTrades =
-    typeof body.bbTradesEnabled === 'boolean' ? body.bbTradesEnabled : normalizedBestBall.tradesEnabled
+  // Always false (refused above when true; normalizeBestBallSettings reads a stored true as false). Written
+  // on every save, so a league that saved `true` before 2026-11-07 is corrected the next time it saves.
+  const nextTrades = false
 
   if (normalizedBestBall.mode === 'underdog' && (nextWaivers || nextTrades || normalizedBestBall.substitutionsEnabled)) {
     return NextResponse.json(

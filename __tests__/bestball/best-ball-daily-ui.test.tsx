@@ -101,7 +101,9 @@ describe('the commissioner panel', () => {
     expect(select.disabled).toBe(true)
     for (const s of screen.getAllByRole('combobox')) expect((s as HTMLSelectElement).disabled).toBe(true)
     for (const input of screen.getAllByRole('spinbutton')) expect((input as HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('switch', { name: 'Trades' }) as HTMLButtonElement).disabled).toBe(false)
+    // No Trades switch at all: trades are off in every Best Ball league (owner 2026-11-07); the row says so.
+    expect(screen.queryByRole('switch', { name: 'Trades' })).toBeNull()
+    expect(screen.getByTestId('best-ball-trades-off').textContent).toMatch(/cannot split a traded player's week/)
     expect((screen.getByRole('switch', { name: 'Waivers' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

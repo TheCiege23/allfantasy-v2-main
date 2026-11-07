@@ -17,6 +17,8 @@ import { resolveBestBallRosterPolicy } from '@/lib/waiver-wire/season-phase-gate
 import { classifyLeagueFormat } from '@/lib/core-app/portfolioClassify'
 import { fetchAiStartSitLineupSignalsForUser } from '@/lib/lineup-actions/aiStartSitLineupSignals'
 import type { League } from '@prisma/client'
+import { normalizeBestBallSettings, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
+import { bestBallRulesSummary } from '@/lib/create-league-v2/bestBallWizard'
 
 /** What `POST /api/leagues` saves for Classic Best Ball (createCanonicalLeagueInTransaction.ts). */
 const CLASSIC = {
@@ -53,12 +55,12 @@ describe('resolveBestBallLeagueState — both saved shapes', () => {
     expect(resolveBestBallLeagueState(league)).toEqual(expected)
   })
 
-  it('Classic reads its own switches, daily period and competition', () => {
+  it('Classic reads its waiver/FA switches, daily period and competition — and trades stay OFF even when saved on', () => {
     const s = resolveBestBallLeagueState({
       ...CLASSIC, bbWaiversEnabled: true, bbFaEnabled: false, bbTradesEnabled: true,
       settings: { best_ball_settings: { scoringPeriod: 'daily', dailyBestBall: true, matchupFormat: 'cumulative' } },
     })
-    expect(s.transactions).toEqual({ waivers: true, freeAgency: false, trades: true })
+    expect(s.transactions).toEqual({ waivers: true, freeAgency: false, trades: false })
     expect(s.scoringPeriod).toBe('daily')
     expect(s.competition).toBe('cumulative')
     expect(resolveBestBallLeagueState({ ...CLASSIC, settings: { best_ball_settings: { contestStructure: 'tournament' } } }).competition).toBe('tournament')
@@ -130,10 +132,26 @@ describe('transaction policy — where Guilly legitimately keeps its own rule', 
     expect(resolveLeagueTradeSettings(asLeague(CLASSIC)).tradesAllowed).toBe(false)
   })
 
-  it('🛑 trades: Classic follows the commissioner turning trades ON (bbTradesEnabled)', () => {
-    expect(resolveLeagueTradeSettings(asLeague({ ...CLASSIC, bbTradesEnabled: true })).tradesAllowed).toBe(true)
-    // The commissioner's move lock still wins.
-    expect(resolveLeagueTradeSettings(asLeague({ ...CLASSIC, bbTradesEnabled: true, lockAllMoves: true })).tradesAllowed).toBe(false)
+  it('🛑 trades: Classic stays OFF even for a league that saved bbTradesEnabled=true (owner 2026-11-07)', () => {
+    // Best ball scoring does not split a traded player's week (audit "Ownership history").
+    const saved = { ...CLASSIC, bbTradesEnabled: true, settings: { best_ball_settings: { tradesEnabled: true } } }
+    expect(resolveLeagueTradeSettings(asLeague(saved)).tradesAllowed).toBe(false)
+    expect(resolveBestBallLeagueState(saved).transactions.trades).toBe(false)
+  })
+
+  it('every reader of the normalized settings says trades are off, whatever was stored', () => {
+    const bb = normalizeBestBallSettings({ sport: 'NFL', conceptSetup: { bestBall: { tradesEnabled: true, waiversEnabled: true } } })
+    expect(bb.tradesEnabled).toBe(false)
+    expect(bb.waiversEnabled).toBe(true)
+    expect(buildBestBallSettingsSummary(bb)).toContain('trades off')
+    expect(buildBestBallSettingsSummary(bb)).not.toContain('trades on')
+  })
+
+  it.each([true, false])('the creation review never says trades are allowed (waivers %s, stale tradesEnabled true)', (waiversEnabled) => {
+    const bb = { ...normalizeBestBallSettings({ sport: 'NFL' }), waiversEnabled, tradesEnabled: true }
+    const line = bestBallRulesSummary(bb as never, 'NFL', 12).find((l) => l.id === 'transactions')!
+    expect(line.text).not.toMatch(/trades are allowed/i)
+    expect(line.text).toMatch(/trades are off|no trades/i)
   })
 
   it('trades: an imported Classic league is not AllFantasy-gated', () => {

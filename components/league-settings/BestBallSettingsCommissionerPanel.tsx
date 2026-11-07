@@ -277,7 +277,6 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         body: JSON.stringify({
           leagueId,
           bbWaiversEnabled: settings.waiversEnabled,
-          bbTradesEnabled: settings.tradesEnabled,
           bestBall: {
             mode: settings.mode,
             contestStructure: settings.contestStructure,
@@ -520,13 +519,10 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               disabled={!canEdit || isUnderdog}
             />
           </Row>
+          {/* No toggle: trades are off in every Best Ball league (owner's decision 2026-11-07) — best ball
+              scoring does not split a traded player's week, and /api/bestball/settings refuses `true`. */}
           <Row label={t('lsRules.bb.trades')}>
-            <Toggle
-              checked={settings.tradesEnabled}
-              onChange={(v) => patch({ tradesEnabled: isUnderdog ? false : v })}
-              label={t('lsRules.bb.trades')}
-              disabled={!canEdit || isUnderdog}
-            />
+            <p className="text-[12px] text-white/55" data-testid="best-ball-trades-off">{t('lsRules.bb.tradesOff')}</p>
           </Row>
           <Row label={t('lsRules.bb.subs')}>
             <Toggle

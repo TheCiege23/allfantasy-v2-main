@@ -199,9 +199,12 @@ export function bestBallRulesSummary(bb: BestBallSetupState, sport: CreateLeague
     {
       id: 'transactions',
       label: 'Transactions',
+      // Trades are never on in a Best Ball league: best ball scoring does not split a traded player's week, so
+      // the server forces `tradesEnabled` false (lib/bestball/rules.ts normalizeBestBallSettings). This copy
+      // must not read `bb.tradesEnabled`, which a stale draft state could still carry as true.
       text: bb.waiversEnabled
-        ? `Managed Best Ball: waivers and free agency are open all season${bb.tradesEnabled ? ', and trades are allowed' : '; trades are off'}.`
-        : `Draft only: no waivers, no free agency${bb.tradesEnabled ? '' : ', no trades'}. The team you draft is the team you play.`,
+        ? 'Managed Best Ball: waivers and free agency are open all season; trades are off.'
+        : 'Draft only: no waivers, no free agency, no trades. The team you draft is the team you play.',
     },
   ]
   if (competition === 'tournament') {

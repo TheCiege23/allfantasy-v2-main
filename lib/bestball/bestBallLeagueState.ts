@@ -25,8 +25,9 @@
  *   scoringPeriod     `resolveBestBallScoringPeriod` for Classic. Guilly + Best Ball is weekly by
  *                     construction: a chop is decided on a week's (or a two-week period's) total, and it
  *                     has no `best_ball_settings` block that could choose daily.
- *   transactions      Classic native: its saved switches (`bbWaiversEnabled`, `bbFaEnabled`,
- *                     `bbTradesEnabled`; all default false = draft-only). Guilly + Best Ball: NO best ball
+ *   transactions      Classic native: its saved waiver / free-agency switches (`bbWaiversEnabled`,
+ *                     `bbFaEnabled`; default false = draft-only). Trades are ALWAYS false: best ball scoring
+ *                     does not split a traded player's week, so `bbTradesEnabled` is never read as permission. Guilly + Best Ball: NO best ball
  *                     restriction (null). Its survivors must claim chopped rosters through waivers/FAAB
  *                     (lib/waiver-wire/season-phase-gate.ts), and its trades follow the guillotine rule
  *                     (`guillotineSettings.tradesAllowed`, off by default) in tradeSettingsResolver — a
@@ -115,7 +116,10 @@ export function resolveBestBallLeagueState(league: BestBallLeagueStateInput | nu
         ? {
             waivers: league.bbWaiversEnabled === true,
             freeAgency: league.bbFaEnabled === true,
-            trades: league.bbTradesEnabled === true,
+            // Always false, whatever `bbTradesEnabled` says: Classic Best Ball does not trade, because
+            // best ball scoring does not split a traded player's week (owner's decision 2026-11-07; audit
+            // "Ownership history"). The column is kept (no schema change) but never read as permission.
+            trades: false,
           }
         : NO_POLICY,
       competition: classicCompetition(league),

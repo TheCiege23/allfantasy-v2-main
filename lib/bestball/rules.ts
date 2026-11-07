@@ -462,7 +462,16 @@ export function normalizeBestBallSettings(input: {
     // A tournament is weekly-only; creation validation refuses the combination, so the marker stays off.
     dailyBestBall: scoringPeriod === 'daily' && contestStructure !== 'tournament',
     waiversEnabled: asBool(nested.waiversEnabled, defaults.waiversEnabled),
-    tradesEnabled: asBool(nested.tradesEnabled, defaults.tradesEnabled),
+    /*
+     * 🛑 ALWAYS FALSE: AN ALLFANTASY BEST BALL LEAGUE DOES NOT TRADE (owner's decision, 2026-11-07). Best
+     * ball scoring does not split a traded player's week — a week is scored on the roster as of that week
+     * and a trade moves the roster row without a dated split (audit 2026-11-06, "Ownership history") — so
+     * the trade engine refuses every native Best Ball trade (tradeSettingsResolver.ts). A stored
+     * `tradesEnabled: true` (an old commissioner toggle) is read as false here, so every reader that goes
+     * through this normalizer — the rules summary, the Best Ball tab, the War Room, Chimmy's normalized
+     * rules, creation — says what the engine does. No data migration: the stored key is left as it is.
+     */
+    tradesEnabled: false,
     substitutionsEnabled: asBool(nested.substitutionsEnabled, defaults.substitutionsEnabled),
     sitAndGoEnabled: asBool(nested.sitAndGoEnabled, defaults.sitAndGoEnabled),
     tournamentEnabled: asBool(nested.tournamentEnabled, defaults.tournamentEnabled),

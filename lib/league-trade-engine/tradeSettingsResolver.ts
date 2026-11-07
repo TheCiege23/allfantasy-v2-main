@@ -8,7 +8,6 @@ import type { TradeReviewType } from '@/lib/league-trade-engine/types'
 import { deadlinePassed, readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { tradeReviewMode as chosenTradeReviewMode } from '@/lib/league-rules-explainer/snapshot'
 import { readVetoRule, type VetoRule } from './vetoRule'
-import { resolveBestBallLeagueState } from '@/lib/bestball/bestBallLeagueState'
 
 export type ResolvedLeagueTradeSettings = {
   tradeReviewMode: TradeReviewType
@@ -86,17 +85,16 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   const platform = String((league as { platform?: string | null }).platform ?? '').trim().toLowerCase()
   const nativeBestBall = Boolean(league.bestBallMode) && (platform === '' || platform === 'manual' || platform === 'allfantasy')
   /*
-   * 🛑 THE COMMISSIONER'S BEST BALL TRADE SWITCH WAS NEVER READ IN THE ON DIRECTION. This was
-   * `!league.lockAllMoves && !nativeBestBall`, so a native Classic Best Ball league refused every trade
-   * even after the commissioner turned trades on in Best Ball settings (`bbTradesEnabled` /
-   * `best_ball_settings.tradesEnabled`, both written by /api/bestball/settings) — the panel, the
-   * creation review ("trades are allowed") and Chimmy's rules all said yes while this said no. The saved
-   * switch is read through the one best ball read model now (lib/bestball/bestBallLeagueState.ts); it
-   * defaults false, so a league nobody changed stays trade-free. Guilly + Best Ball is not `bestBallMode`
+   * 🛑 A NATIVE CLASSIC BEST BALL LEAGUE NEVER TRADES, WHATEVER `bbTradesEnabled` SAYS (owner's decision,
+   * 2026-11-07). Best ball scoring does not split a traded player's week (audit 2026-11-06, "Ownership
+   * history"). Deliberately NOT read from any switch, so no saved value can reopen it; the best ball read
+   * model says the same (lib/bestball/bestBallLeagueState.ts: `transactions.trades` is false for
+   * Classic), and every surface that used to offer a trade switch — /api/bestball/settings, the
+   * commissioner panel, creation — now refuses or omits it. A league that
+   * saved `bbTradesEnabled: true` earlier is still refused here. Guilly + Best Ball is not `bestBallMode`
    * and keeps the guillotine rule below.
    */
-  const bestBallTrades = resolveBestBallLeagueState(league).transactions.trades
-  let tradesAllowed = !league.lockAllMoves && !(nativeBestBall && bestBallTrades !== true)
+  let tradesAllowed = !league.lockAllMoves && !nativeBestBall
   if (league.guillotineMode) {
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
     tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false)
