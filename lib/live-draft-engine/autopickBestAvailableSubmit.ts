@@ -27,6 +27,7 @@ import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { fitsOpenStarterSlot, mustFillStarter, openStarterSlots, starterSlotsFromTemplate } from '@/lib/live-draft-engine/autopickStarterNeeds'
 
@@ -269,6 +270,15 @@ export async function loadAutopickDraftContextForOnClock(
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
   const draftedNames = new Set(draftSession.picks.map((p) => p.playerName.trim().toLowerCase()))
+  /*
+   * Players already on a league roster are refused by pick validation (rosteredPlayerGuard.ts); a refused
+   * autopick retries the same player and stalls the clock. So they leave the candidate pool here, by name
+   * (which the warm and rebuilt pools both honor) and by id below — the id catches a roster row whose
+   * stored name differs from the pool's ("Jr.", a nickname). Keepers and dispersal drafts are not
+   * autopicked from this pool, so the guard's exemptions do not apply here.
+   */
+  const rosteredPlayers = await loadLeagueRosteredPlayers(leagueId).catch(() => null)
+  if (rosteredPlayers) for (const name of rosteredPlayers.byName.keys()) draftedNames.add(name)
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -292,6 +302,7 @@ export async function loadAutopickDraftContextForOnClock(
     fallbackPoolRaw.filter((entry) => {
       if (!entry.playerName || !entry.position) return false
       if (draftedNames.has(normalizeName(entry.playerName))) return false
+      if (rosteredPlayers && rosteredHolder(rosteredPlayers, entry)) return false
       if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions, sport)) {
         return false
       }
