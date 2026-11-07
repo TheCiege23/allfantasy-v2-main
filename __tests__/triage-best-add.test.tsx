@@ -105,19 +105,20 @@ describe('one card per player, not one row per league (2026-11-06 phone pass)', 
     Array.from({ length: n }, (_, i) => ({ id: `${slot}${i}`, name: `${slot} league ${i}`, platform: 'sleeper', imageUrl: null, slot }))
   const fixRows = (c: HTMLElement) => c.querySelectorAll('.af-triage-fix').length
 
-  it('shows two league rows and puts the rest behind one button, keeping the also-in chips in view', () => {
+  it('shows two league rows and puts the rest, and the also-in chips, behind one button', () => {
     vi.stubGlobal('fetch', okBoard([]))
     // Live /core 2026-11-06: one receiver starting in 9 of 10 leagues took 1,700px of the home.
     const { container, getByRole, queryByRole } = render(
       <Dash3ATriage book={[row({ leagues: [...many(1, 'bench'), ...many(9)], startingIn: 9 })]} now={NOW} />,
     )
     expect(fixRows(container)).toBe(2)
-    expect(container.querySelector('.af-triage-leagues')?.textContent).toContain('bench league 0')
-    const more = getByRole('button', { name: 'Show 7 more leagues' })
+    expect(container.querySelector('.af-triage-leagues')).toBeNull()
+    const more = getByRole('button', { name: 'Show 8 more leagues' })
     expect(more.getAttribute('aria-expanded')).toBe('false')
     expect(container.querySelector('#' + CSS.escape(more.getAttribute('aria-controls') ?? ''))).not.toBeNull()
     fireEvent.click(more)
     expect(fixRows(container)).toBe(9)
+    expect(container.querySelector('.af-triage-leagues')?.textContent).toContain('bench league 0')
     fireEvent.click(getByRole('button', { name: 'Show fewer leagues' }))
     expect(fixRows(container)).toBe(2)
     expect(queryByRole('button', { name: /Show fewer/ })).toBeNull()
@@ -130,12 +131,13 @@ describe('one card per player, not one row per league (2026-11-06 phone pass)', 
     expect(container.querySelector('.af-triage-more')).toBeNull()
   })
 
-  it('adds no button for one starter league with benched ones, and keeps those chips in view', () => {
+  it('folds the also-in chips behind the button too, so one starter league reads as one row', () => {
     vi.stubGlobal('fetch', okBoard([]))
-    const { container } = render(<Dash3ATriage book={[row({ leagues: [...many(1), ...many(3, 'bench')], startingIn: 1 })]} now={NOW} />)
+    const { container, getByRole } = render(<Dash3ATriage book={[row({ leagues: [...many(1), ...many(3, 'bench')], startingIn: 1 })]} now={NOW} />)
     expect(fixRows(container)).toBe(1)
+    expect(container.querySelector('.af-triage-leagues')).toBeNull()
+    fireEvent.click(getByRole('button', { name: 'Show 3 more leagues' }))
     expect(container.querySelectorAll('.af-triage-league').length).toBe(3)
-    expect(container.querySelector('.af-triage-more')).toBeNull()
   })
 
   it('says it in Spanish', () => {
