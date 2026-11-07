@@ -6,9 +6,9 @@ describe('detectProviderFromLink', () => {
   it.each([
     ['https://fantasy.espn.com/football/league?leagueId=123456', 'espn'],
     ['fantasy.espn.com/basketball/league?leagueId=9', 'espn'],
-    ['https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home', 'fantrax'],
+    ['www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home', 'fantrax'],
     ['https://www44.myfantasyleague.com/2026/home/12345', 'mfl'],
-    ['https://www.fleaflicker.com/nfl/leagues/206154', 'fleaflicker'],
+    ['www.fleaflicker.com/nfl/leagues/206154', 'fleaflicker'],
     ['https://sleeper.com/leagues/1180000000000000000', 'sleeper'],
     ['https://football.fantasysports.yahoo.com/f1/123456/2', 'yahoo'],
   ])('%s → %s', (input, provider) => {
