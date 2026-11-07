@@ -78,14 +78,16 @@ describe('the Exile page under secrecy', () => {
     m.ui = { ...m.ui, playerState: 'active', season: { exileMembershipHidden: true, players: [{ ...players[0], playerState: 'eliminated' }, players[1]] } }
     render(<SurvivorExilePage />)
     expect(screen.getByTestId('survivor-exile-headcount').textContent).toContain('Who is on Exile is secret')
-    expect(screen.queryByText(/players marooned/)).toBeNull()
+    // `/marooned/`, not `/players marooned/`: one exile now reads "1 player marooned", which the old
+    // pattern would never match — so it could not catch a leaked headcount.
+    expect(screen.queryByText(/marooned/)).toBeNull()
     expect(screen.queryByText('Ana')).toBeNull()
   })
 
   it('without secrecy the headcount shows as before; an exile sees the others', async () => {
     m.ui = { ...m.ui, playerState: 'active', season: { exileMembershipHidden: false, players } }
     render(<SurvivorExilePage />)
-    expect(screen.getByTestId('survivor-exile-headcount').textContent).toBe('1 players marooned · Week 6')
+    expect(screen.getByTestId('survivor-exile-headcount').textContent).toBe('1 player marooned · Week 6')
     cleanup()
     m.ui = { ...m.ui, playerState: 'exile', season: { exileMembershipHidden: false, players } }
     render(<SurvivorExilePage />)
