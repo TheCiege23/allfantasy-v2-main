@@ -6,6 +6,7 @@ import { seatContestLineup } from './optimizerCore'
 import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { resolveBestBallScoringPeriod } from './scoringPeriod'
+import { contestBestBallRuleStamp } from './resultRuleStamp'
 import type { LineupSlotDef, OptimizerPlayer } from './types'
 
 export type RunBestBallOptimizerArgs = {
@@ -145,7 +146,16 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
       lineupBreakdown,
       alternateExists: opt.alternateExists,
       alternateLineup: opt.alternateLineup as object | undefined,
-      optimizerLog: { ...(opt.optimizerLog as object), dataQuality },
+      // The rules this row was scored under, beside the result (lib/bestball/resultRuleStamp.ts): the
+      // optimizer that actually ran and the template slots it seated. No schema change.
+      optimizerLog: {
+        ...(opt.optimizerLog as object),
+        dataQuality,
+        bestBallRules: contestBestBallRuleStamp({
+          algorithm: (opt.optimizerLog as { algorithm?: unknown } | null)?.algorithm,
+          slots,
+        }),
+      },
       isFinalized: requireFinalized,
       finalizedAt: requireFinalized ? new Date() : null,
     }

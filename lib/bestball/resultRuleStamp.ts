@@ -24,6 +24,9 @@
  *                       and says so, instead of freezing whatever the seats happen to be now.
  *
  * Lives in JSON beside the result: no schema change.
+ *
+ * Contest rows (`BestBallOptimizedLineup` for a `BestBallEntry`, which contest scoring reads) carry the
+ * same record in `optimizerLog.bestBallRules` — see `contestBestBallRuleStamp` below.
  */
 import { createHash } from 'node:crypto'
 import { OPTIMAL_LINEUP_ALGORITHM, type LineupSlotSpec } from '@/lib/lineup-optimizer/optimalLineup'
@@ -31,7 +34,21 @@ import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 
 export const BEST_BALL_RULE_STAMP_VERSION = 1
 
-export type StoredSlot = { slot: string; eligible: string[]; count: number; slotOrder?: number }
+/**
+ * `min` / `max` / `required` are kept when the slot list states them: a SOCCER contest template is a
+ * formation range (`min`/`max` per line), and dropping them would record a different contract from the
+ * one that was seated. League slot lists never carry them, so their stamps are unchanged.
+ */
+export type StoredSlot = { slot: string; eligible: string[]; count: number; slotOrder?: number; min?: number; max?: number; required?: boolean }
+export type StoredSlotSpec = LineupSlotSpec & { min?: number; max?: number; required?: boolean }
+
+function slotBounds(s: { min?: unknown; max?: unknown; required?: unknown }) {
+  return {
+    ...(typeof s.min === 'number' && Number.isFinite(s.min) ? { min: s.min } : {}),
+    ...(typeof s.max === 'number' && Number.isFinite(s.max) ? { max: s.max } : {}),
+    ...(typeof s.required === 'boolean' ? { required: s.required } : {}),
+  }
+}
 
 export type BestBallRuleStamp = {
   v: 1
@@ -48,20 +65,20 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /** The slot list as stored: plain JSON, nothing a later reader can mistake. Null if any slot is malformed. */
-export function readStoredSlots(raw: unknown): LineupSlotSpec[] | null {
+export function readStoredSlots(raw: unknown): StoredSlotSpec[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
-  const out: LineupSlotSpec[] = []
+  const out: StoredSlotSpec[] = []
   for (const s of raw) {
     if (!isRecord(s) || typeof s.slot !== 'string' || !Array.isArray(s.eligible)) return null
     const count = Number(s.count)
     if (!Number.isInteger(count) || count < 0 || !s.eligible.every((e) => typeof e === 'string')) return null
-    out.push({ slot: s.slot, eligible: [...(s.eligible as string[])], count, ...(typeof s.slotOrder === 'number' ? { slotOrder: s.slotOrder } : {}) })
+    out.push({ slot: s.slot, eligible: [...(s.eligible as string[])], count, ...(typeof s.slotOrder === 'number' ? { slotOrder: s.slotOrder } : {}), ...slotBounds(s) })
   }
   return out.some((s) => s.count > 0) ? out : null
 }
 
-export function toStoredSlots(slots: readonly LineupSlotSpec[]): StoredSlot[] {
-  return slots.map((s) => ({ slot: s.slot, eligible: [...s.eligible], count: s.count, ...(typeof s.slotOrder === 'number' ? { slotOrder: s.slotOrder } : {}) }))
+export function toStoredSlots(slots: readonly StoredSlotSpec[]): StoredSlot[] {
+  return slots.map((s) => ({ slot: s.slot, eligible: [...s.eligible], count: s.count, ...(typeof s.slotOrder === 'number' ? { slotOrder: s.slotOrder } : {}), ...slotBounds(s) }))
 }
 
 /** The stamp on a matchup's `lineupSnapshots`, or null when there is none (or it is unreadable). */
@@ -119,6 +136,42 @@ export function nextBestBallRuleStamp(args: {
         }
       : {}),
     ...(legacy ? { legacy: true as const } : {}),
+  }
+}
+
+/**
+ * The record on a contest entry's optimized lineup, `optimizerLog.bestBallRules`: the optimizer that
+ * actually ran (`seatContestLineup` reports `soccer-formation-v1` for a formation template, the exact
+ * optimizer otherwise), the template slots it seated, and the scoring fingerprint.
+ *
+ * ⚠ `scoringFingerprint` is null, and `scoringSource` says why. A contest has no league and no scoring
+ * settings of its own: it seats `PlayerWeeklyScore.fantasyPts`, a row shared by every league that rosters
+ * the player and written by whichever league's scorer ran last. There is no rule set to hash, and hashing
+ * the sport's defaults would record rules the points were not necessarily computed with.
+ *
+ * A record of this write, not a lock: a contest week rescored later is stamped with what that rescore
+ * used. No `sealedAt` is written, because nothing freezes a contest's slots.
+ */
+export type ContestBestBallRuleStamp = {
+  v: 1
+  algorithm: string
+  slots: StoredSlot[]
+  scoringFingerprint: string | null
+  scoringSource: typeof CONTEST_SCORING_SOURCE
+}
+
+export const CONTEST_SCORING_SOURCE = 'PlayerWeeklyScore.fantasyPts' as const
+
+export function contestBestBallRuleStamp(args: {
+  algorithm: unknown
+  slots: readonly StoredSlotSpec[]
+}): ContestBestBallRuleStamp {
+  return {
+    v: BEST_BALL_RULE_STAMP_VERSION,
+    algorithm: typeof args.algorithm === 'string' && args.algorithm ? args.algorithm : OPTIMAL_LINEUP_ALGORITHM,
+    slots: toStoredSlots(args.slots),
+    scoringFingerprint: null,
+    scoringSource: CONTEST_SCORING_SOURCE,
   }
 }
 
