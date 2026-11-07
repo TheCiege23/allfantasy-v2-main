@@ -429,9 +429,19 @@ export function Dash3ATriageView({
               ))),
           ]
           const hasChips = otherLeagues.length > 0 || p.leagueCount > p.leagues.length
-          // Only fix rows fold. The chips stay: they are one short line, and "benched ✓" is the reassurance.
+          // Fix rows fold after VISIBLE_FIX_ROWS. The chips fold separately, on a phone only (see chipsOpen).
           const hiddenCount = Math.max(0, fixItems.length - VISIBLE_FIX_ROWS)
           const open = expanded.has(p.key)
+          /*
+           * ⚠ PHONE ONLY: the "also in" chips fold behind one summary line (2026-11-07 phone pass). Live at
+           * 375px each chip — platform, league name, "benched ✓" — took its own ~52px row, so seven of them
+           * were 365px of a 720px card. The summary keeps the count and the reassurance ("benched in 5")
+           * in view; the stylesheet hides the chips and shows the button only inside its phone query.
+           */
+          const chipCount = otherLeagues.length + Math.max(0, p.leagueCount - p.leagues.length)
+          const handledCount = p.tone === 'bad' ? otherLeagues.filter((l) => l.slot === 'bench').length : 0
+          const chipsKey = `chips:${p.key}`
+          const chipsOpen = expanded.has(chipsKey)
           return (
             <li key={p.key} className="af-triage-row" data-tone={p.tone}>
               {p.imageUrl ? (
@@ -530,7 +540,18 @@ export function Dash3ATriageView({
                   </button>
                 ) : null}
                 {hasChips ? (
-                  <div className="af-triage-leagues">
+                  <button
+                    type="button"
+                    className="af-triage-chips-toggle"
+                    aria-expanded={chipsOpen}
+                    aria-controls={`af-triage-chips-${p.key}`}
+                    onClick={() => toggle(chipsKey)}
+                  >
+                    {chipsOpen ? m.hideOtherLeagues : m.otherLeaguesSummary(chipCount, handledCount)}
+                  </button>
+                ) : null}
+                {hasChips ? (
+                  <div className="af-triage-leagues" id={`af-triage-chips-${p.key}`} data-open={chipsOpen || undefined}>
                     {starterLeagues.length > 0 ? <span className="af-triage-also">{m.alsoIn}</span> : null}
                     {otherLeagues.map((l) => (
                       <Link key={l.id} href={l.href} className="af-triage-league" data-slot={l.slot ?? undefined}>
