@@ -477,7 +477,7 @@ export function Standings({
         actionsClassName="af-st-headactions"
         eyebrow={league.name}
         title={copy('Standings')}
-        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek })}
+        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek, headToHead: board.hasHeadToHead })}
         actions={
           <>
             {chip}
@@ -651,10 +651,13 @@ export function Standings({
         </>
       ) : null}
 
-      <p className="af-st-foot">
-        {copy('Projected records on this page are a model’s expectation.')} {' '}
-        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
-      </p>
+      {/* About projected records and playoff odds: a points-only or elimination league has neither. */}
+      {board.hasHeadToHead && !elimination ? (
+        <p className="af-st-foot">
+          {copy('Projected records on this page are a model’s expectation.')} {' '}
+          <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
+        </p>
+      ) : null}
       <SeasonHistory rows={history} />
     </div>
   )

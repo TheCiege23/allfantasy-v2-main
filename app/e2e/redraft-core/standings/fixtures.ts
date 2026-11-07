@@ -81,7 +81,8 @@ function score(week: number, id: string): number {
   return Math.round((96 + STRENGTH[id] * 3.4 + wobble * 2.6) * 10) / 10
 }
 
-function weekRows(week: number): WeekRow[] {
+/** `headToHead: false` — a points-only league (a guillotine with no weekly games): no matchup, so no result. */
+function weekRows(week: number, headToHead = true): WeekRow[] {
   const rows: WeekRow[] = []
   pairings(week).forEach(([a, b], m) => {
     let pa = score(week, a)
@@ -89,8 +90,8 @@ function weekRows(week: number): WeekRow[] {
     // The stronger side wins its game unless the gap is small; keeps the table readable and deterministic.
     if (STRENGTH[a] - STRENGTH[b] > 1.2 && pa <= pb) [pa, pb] = [pb + 4.2, pa]
     if (STRENGTH[b] - STRENGTH[a] > 1.2 && pb <= pa) [pa, pb] = [pb, pa + 4.2]
-    rows.push({ week, rosterId: a, matchupId: m + 1, pointsFor: pa, pointsAgainst: pb })
-    rows.push({ week, rosterId: b, matchupId: m + 1, pointsFor: pb, pointsAgainst: pa })
+    rows.push({ week, rosterId: a, matchupId: headToHead ? m + 1 : null, pointsFor: pa, pointsAgainst: headToHead ? pb : 0 })
+    rows.push({ week, rosterId: b, matchupId: headToHead ? m + 1 : null, pointsFor: pb, pointsAgainst: headToHead ? pa : 0 })
   })
   return rows
 }
@@ -99,16 +100,16 @@ function teamMeta(): TeamMeta[] {
   return IDS.map((id, i) => ({ rosterId: id, name: TEAM_NAMES[i], avatarUrl: null, isYou: id === YOU, division: null, reported: null }))
 }
 
-export function harnessStandings(): LeagueStandingsResult {
+export function harnessStandings({ headToHead = true }: { headToHead?: boolean } = {}): LeagueStandingsResult {
   const snapshots: WeekSnapshot[] = []
   const all: WeekRow[][] = []
   for (let w = 1; w <= SCORED; w += 1) {
-    const rows = weekRows(w)
+    const rows = weekRows(w, headToHead)
     all.push(rows)
     snapshots.push(advanceWeek(snapshots[w - 2] ?? null, SEASON, w, rows, IDS, `harness-${w}`))
   }
   const unplayed: RemainingGame[] = []
-  for (let w = SCORED + 1; w <= WEEKS; w += 1) for (const [a, b] of pairings(w)) unplayed.push({ week: w, a, b })
+  if (headToHead) for (let w = SCORED + 1; w <= WEEKS; w += 1) for (const [a, b] of pairings(w)) unplayed.push({ week: w, a, b })
   const board = buildStandingsBoard({ season: SEASON, snapshots, unplayed, teams: teamMeta(), rules: RULES })
 
   const pf = new Map(IDS.map((id) => [id, 0]))
