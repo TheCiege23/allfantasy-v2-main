@@ -179,6 +179,21 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Draft reminders (lib/draft-schedule/draftStartReminders.ts): the day before and the hour before a
+   * scheduled draft, in each member's own time zone, once each. Guarded and on its own job identity.
+   */
+  try {
+    const { runDraftStartReminders } = await import('@/lib/draft-schedule/draftStartReminders')
+    await withSyncJobRun(
+      { jobName: 'cron-draft-start-reminders', trigger: 'cron' },
+      () => runDraftStartReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] draft start reminders failed', e)
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */

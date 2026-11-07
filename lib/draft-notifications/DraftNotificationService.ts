@@ -13,6 +13,7 @@ import type { DraftNotificationEventType, DraftNotificationPayload } from './typ
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { formatSlot, groupByTimeZone } from '@/lib/draft-schedule/draftSchedule'
 
 const DRAFT_ROOM_PATH = (leagueId: string) => `/league/${leagueId}/draft`
 
@@ -74,7 +75,8 @@ function getTitleAndBody(
   const league = payload.leagueName ? ` — ${payload.leagueName}` : ''
   switch (eventType) {
     case 'draft_time_set':
-      return { title: `Draft time set${league}`, body: payload.draftTime ? `The draft is scheduled for ${new Date(payload.draftTime).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })} ET.` : 'The commissioner set the draft time.', severity: 'high' }
+      // In the recipient's own zone, named ("8:00 PM PDT"), never a blanket "ET".
+      return { title: `Draft time set${league}`, body: payload.draftTime ? `The draft is scheduled for ${formatSlot(payload.draftTime, payload.timeZone ?? 'America/New_York')}.` : 'The commissioner set the draft time.', severity: 'high' }
     case 'draft_started':
       return { title: `Draft started${league}`, body: 'The draft is live. Open the draft room.', severity: 'high' }
     case 'draft_ended':
@@ -154,7 +156,10 @@ function getTitleAndBody(
     case 'draft_starting_soon':
       return {
         title: `Draft starting soon${league}`,
-        body: 'Your league draft is about to start.',
+        body:
+          payload.draftTime && typeof payload.minutesUntilStart === 'number'
+            ? `Your league draft starts in ${payload.minutesUntilStart >= 120 ? `about ${Math.round(payload.minutesUntilStart / 60)} hours` : payload.minutesUntilStart >= 60 ? 'about an hour' : `${payload.minutesUntilStart} minutes`} — ${formatSlot(payload.draftTime, payload.timeZone ?? 'America/New_York')}.`
+            : 'Your league draft is about to start.',
         severity: 'high',
       }
     case 'draft_intel_queue_ready':
@@ -407,12 +412,47 @@ export async function notifyDraftLifecycle(leagueId: string, eventType: 'draft_s
   })
 }
 
+/**
+ * Members grouped by the zone their message is written in: their profile's zone, else the league's.
+ * One dispatch per zone, so every member reads the time in their own clock.
+ */
+async function audienceByTimeZone(leagueId: string, userIds: string[]): Promise<Map<string, string[]>> {
+  const [profiles, settings] = await Promise.all([
+    prisma.userProfile.findMany({ where: { userId: { in: userIds } }, select: { userId: true, timezone: true } }).catch(() => [] as Array<{ userId: string; timezone: string | null }>),
+    prisma.leagueSettings.findUnique({ where: { leagueId }, select: { timezone: true } }).catch(() => null),
+  ])
+  const tzById = new Map(profiles.map((p) => [p.userId, p.timezone]))
+  return groupByTimeZone(userIds.map((userId) => ({ userId, timeZone: tzById.get(userId) ?? null })), settings?.timezone ?? 'America/New_York')
+}
+
 export async function notifyDraftTimeSet(leagueId: string, draftTime: Date): Promise<void> {
   const userIds = await getDraftAudience(leagueId)
   if (!userIds.length) return
-  await createDraftNotificationForUsers(userIds, 'draft_time_set', {
-    leagueId, leagueName: await getLeagueName(leagueId), draftTime: draftTime.toISOString(), eventKey: draftTime.toISOString(),
-  })
+  const leagueName = await getLeagueName(leagueId)
+  for (const [timeZone, ids] of await audienceByTimeZone(leagueId, userIds)) {
+    await createDraftNotificationForUsers(ids, 'draft_time_set', {
+      leagueId, leagueName, draftTime: draftTime.toISOString(), timeZone, eventKey: draftTime.toISOString(),
+    })
+  }
+}
+
+/**
+ * The scheduled pre-draft reminders (lib/draft-schedule/draftStartReminders.ts): the day before and
+ * the hour before, each in the member's own zone. Keyed on the draft time and the window, so moving the
+ * draft sends a fresh pair and re-running the job sends nothing new.
+ */
+export async function notifyDraftStartsIn(leagueId: string, draftTime: Date, window: '24h' | '1h', now: Date = new Date()): Promise<number> {
+  const userIds = await getDraftAudience(leagueId)
+  if (!userIds.length) return 0
+  const leagueName = await getLeagueName(leagueId)
+  const minutesUntilStart = Math.max(1, Math.round((draftTime.getTime() - now.getTime()) / 60_000))
+  let sent = 0
+  for (const [timeZone, ids] of await audienceByTimeZone(leagueId, userIds)) {
+    sent += await createDraftNotificationForUsers(ids, 'draft_starting_soon', {
+      leagueId, leagueName, draftTime: draftTime.toISOString(), timeZone, minutesUntilStart, eventKey: `${draftTime.toISOString()}:${window}`,
+    })
+  }
+  return sent
 }
 
 /**
