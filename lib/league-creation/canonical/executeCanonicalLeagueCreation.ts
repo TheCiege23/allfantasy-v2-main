@@ -203,6 +203,19 @@ async function finishCreatedLeague(
     console.warn(`${LOG_PREFIX} post_create_bootstrap_non_fatal`, e)
   }
 
+  // The tanking monitor starts on (lib/integrity/integrityDefaults.ts). Non-fatal: a league is never
+  // refused over its integrity settings, and the integrity page creates the same row on first visit.
+  try {
+    const { NEW_LEAGUE_INTEGRITY_DEFAULTS } = await import('@/lib/integrity/integrityDefaults')
+    await prisma.leagueIntegritySettings.upsert({
+      where: { leagueId: createdLeagueId },
+      create: { leagueId: createdLeagueId, ...NEW_LEAGUE_INTEGRITY_DEFAULTS },
+      update: {},
+    })
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} integrity_defaults_non_fatal`, e)
+  }
+
   // Post-create roster bootstrap can install a sport/format roster smaller than the generic
   // draft preset (NHL guillotine was 18 rounds for a 14-slot roster). Reconcile the actual
   // draft gate's template before returning a league whose first draft cannot finish.

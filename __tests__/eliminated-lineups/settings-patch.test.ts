@@ -57,7 +57,7 @@ describe('executeLeagueSettingsPatch: eliminated_lineup_minimum', () => {
     m.hasSub = true
     const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', settingsMerge: { eliminated_lineup_minimum: { enabled: true, standard: 'playable', autoFill: true, extra: 'dropped' } } })
     expect(res.status).toBe(200)
-    expect(settingsInDb.eliminated_lineup_minimum).toEqual({ enabled: true, standard: 'playable', autoFill: true })
+    expect(settingsInDb.eliminated_lineup_minimum).toEqual({ enabled: true, standard: 'playable', autoFill: true, optimize: false })
     expect(settingsInDb.inviteCode).toBe('KEEP-ME')
   })
 

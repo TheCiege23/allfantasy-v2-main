@@ -1090,6 +1090,101 @@
   color: var(--text);
 }
 
+/* Anti-tanking penalties, beside the monitor they govern. Rows here are tighter than a numrow. */
+.af-core .af-cm-penalties {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-cm-penalties .af-cm-numrow {
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: 0;
+}
+.af-core .af-cm-select {
+  max-width: 60%;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  padding: 8px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-core .af-cm-select:disabled {
+  opacity: 0.55;
+}
+
+/* "Take away the reason to tank": links to the league options that make tanking pointless. */
+.af-core .af-cm-motive-link {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  text-decoration: none;
+}
+.af-core .af-cm-motive-link:hover {
+  border-color: var(--accent-line);
+}
+.af-core .af-cm-motive-link strong {
+  display: block;
+  font-size: 13px;
+  color: var(--accent);
+}
+.af-core .af-cm-motive-link span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* The flagged manager's explanation: their words, quoted, set apart from the evidence. */
+.af-core .af-cm-manager-reply {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent-line);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface2);
+}
+.af-core .af-cm-manager-reply p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* The manager's reply form (app/league/[leagueId]/tanking-flag). */
+.af-core .af-cm-reply-form {
+  margin-top: 16px;
+}
+.af-core .af-cm-reply-input {
+  display: block;
+  box-sizing: border-box; /* 100% wide including its padding — content-box overflowed the card by 11px */
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  resize: vertical;
+}
+.af-core .af-cm-reply-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
 .af-core .af-cm-save {
   width: 100%;
   border: 1px solid var(--accent-line);

@@ -53,6 +53,8 @@ export type TankingEvidence = {
   redFlags: string[]
   /** `rules`: raised by the lineup rules (lib/integrity/tankingRules.ts), which carry no model confidence. */
   detector?: "rules"
+  /** The flagged manager's explanation (lib/integrity/managerReply.ts). Carried across when a week extends the case. */
+  managerReply?: { userId: string; text: string; submittedAt: string }
 }
 
 export type TankingScanResult = {
@@ -394,6 +396,8 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
         weeksUntilPlayoffs,
         redFlags: [],
         detector: "rules",
+        // A reply the manager already sent must survive the next week's scan.
+        ...(prior.managerReply ? { managerReply: prior.managerReply } : {}),
       }
 
       if (open) {

@@ -80,7 +80,13 @@ async function personAt(seat: string): Promise<string | null> {
   return user?.id ?? null
 }
 
-async function tellManager(leagueId: string, rosterId: string, title: string, body: string): Promise<void> {
+async function tellManager(
+  leagueId: string,
+  rosterId: string,
+  title: string,
+  body: string,
+  link: { href: string; label: string } = { href: `/league/${leagueId}`, label: 'Open league' },
+): Promise<void> {
   const { userId } = await resolveTankingTeam(leagueId, rosterId)
   if (!userId) return
   await dispatchNotification({
@@ -91,8 +97,8 @@ async function tellManager(leagueId: string, rosterId: string, title: string, bo
     body,
     severity: 'high',
     leagueId,
-    actionHref: `/league/${leagueId}`,
-    actionLabel: 'Open league',
+    actionHref: link.href,
+    actionLabel: link.label,
     meta: { leagueId, rosterId },
   }).catch((err) => console.error('[tankingPenalty] notify manager failed', err))
 }
@@ -119,7 +125,9 @@ export async function onTankingFlagOpened(flagId: string): Promise<void> {
       'Your lineup was flagged for review',
       `The league's integrity monitor flagged your lineup as possible tanking: starters who could not play, or a much stronger bench. Your commissioner will review it. ${
         left <= 1 ? `If it is confirmed, your team loses ${describePenalty(policy)}.` : `Confirmed cases count as strikes; ${left} more costs your team ${describePenalty(policy)}.`
-      }`,
+      } You can explain your lineup to your commissioner before they decide.`,
+      // Straight to the case, where the manager can see what was flagged and reply (lib/integrity/managerReply.ts).
+      { href: `/league/${flag.leagueId}/tanking-flag/${encodeURIComponent(flagId)}`, label: 'Review and reply' },
     )
     await logAction({ leagueId: flag.leagueId, userId: null, actionType: TANKING_WARNING_ACTION, entityType: 'roster', entityId: rosterId, metadata: { flagId, confirmedStrikes: confirmed } })
   }
