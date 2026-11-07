@@ -1,5 +1,6 @@
 'use client'
 
+import { formatCapMoney } from '@/lib/salary-cap/capMoney'
 import { Users, ArrowLeft, TrendingUp } from 'lucide-react'
 import type { SalaryCapSummary } from './types'
 
@@ -10,7 +11,8 @@ export function TeamBuilderView({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const ledger = summary.ledger
   const config = summary.config
@@ -24,13 +26,15 @@ export function TeamBuilderView({
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
@@ -55,7 +59,7 @@ export function TeamBuilderView({
           <div className="rounded-xl border border-white/10 bg-black/20 p-4">
             <p className="text-xs text-white/50">Cap space</p>
             <p className="text-xl font-semibold text-emerald-300">
-              {ledger ? `$${ledger.capSpace}` : '—'}
+              {ledger ? formatCapMoney(ledger.capSpace) : '—'}
             </p>
           </div>
         </div>
@@ -68,7 +72,7 @@ export function TeamBuilderView({
               className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-sm"
             >
               <span className="text-white/80">{pos}</span>
-              <span className="tabular-nums text-white/70">{count} contracts</span>
+              <span className="tabular-nums text-white/70">{count} {count === 1 ? 'contract' : 'contracts'}</span>
             </li>
           ))}
         </ul>

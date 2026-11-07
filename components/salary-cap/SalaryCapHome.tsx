@@ -191,22 +191,22 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       ) : null}
 
       {view === 'cap-dashboard' && summary && (
-        <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <CapDashboard summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'contracts' && summary && (
-        <ContractsPage summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <ContractsPage summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'team-builder' && summary && (
-        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'draft' && summary && (
-        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'ai' && summary && (
-        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'rules' && summary && (
-        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
     </div>
     </SpecialtyShell>
