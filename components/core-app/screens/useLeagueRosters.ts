@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import type { RebuildPlan } from '@/lib/trade-intel/rebuildAdvisor'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import type { TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 
@@ -122,6 +123,13 @@ export type LeagueRostersData = {
    * team, or the ranking could not be produced. Either way the chips fall back to roster order.
    */
   partnerRanking?: PartnerRanking | null
+  /**
+   * The rebuild plan (lib/trade-intel/rebuildAdvisor.ts): for a viewer out of the race or rebuilding
+   * by choice, in a dynasty or keeper league. Null when it does not apply or the viewer lacks AF Pro.
+   */
+  rebuildPlan?: RebuildPlan | null
+  /** A plan exists but the viewer lacks AF Pro, so the screen shows the lock rather than nothing. */
+  rebuildPlanLocked?: boolean
   /** Optional: absent from a server that predates imported picks. */
   pickCoverage?: PickCoverage
   pickPreviewBook?: TradePickPreviewBook | null
@@ -175,6 +183,8 @@ export function useLeagueRosters(
           viewerRosterId: j.viewerRosterId ?? null,
           viewerTeamRosterId: j.viewerTeamRosterId ?? null,
           partnerRanking: j.partnerRanking ?? null,
+          rebuildPlan: j.rebuildPlan ?? null,
+          rebuildPlanLocked: j.rebuildPlanLocked === true,
           pickCoverage: j.pickCoverage ?? 'none',
           pickPreviewBook: j.pickPreviewBook ?? null,
           pickPolicy: j.pickPolicy ?? null,
