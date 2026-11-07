@@ -82,6 +82,10 @@ import {
   Landmark,
   CarTaxiFront,
   Ticket,
+  Gauge,
+  FileText,
+  Hammer,
+  Gavel,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -176,6 +180,8 @@ import { BigBrotherFirstEntryModal } from '@/components/big-brother/BigBrotherFi
 import { IDPFirstEntryModal } from '@/components/idp/IDPFirstEntryModal'
 import { BigBrotherHome } from '@/components/big-brother/BigBrotherHome'
 import { BigBrotherCommandDashboard } from '@/components/big-brother/BigBrotherCommandDashboard'
+import { SalaryCapHome } from '@/components/salary-cap/SalaryCapHome'
+import { SALARY_CAP_TABS, SALARY_CAP_TAB_ALIASES, isSalaryCapWorkspaceLeague, salaryCapViewForTab } from '@/lib/salary-cap/workspaceTabs'
 import IDPHome from '@/components/idp/IDPHome'
 import { DevyFirstEntryModal } from '@/components/devy/DevyFirstEntryModal'
 import { GuillotineFirstEntryModal } from '@/components/guillotine/GuillotineFirstEntryModal'
@@ -587,6 +593,12 @@ export function LeagueShell({
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
+    // Salary Cap had no tabs at all, so its screens were unreachable (lib/salary-cap/workspaceTabs.ts says why).
+    if (isSalaryCapWorkspaceLeague(league)) {
+      const idx = base.findIndex((t) => t.id === 'redraft')
+      const block: TabDef[] = SALARY_CAP_TABS.map(({ id, label }) => ({ id, label }))
+      base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
+    }
     if (isIdpLeagueVariant(league.leagueVariant)) {
       /*
        * Case-insensitive because production stores `DYNASTY_IDP`, and the exact-match comparison
@@ -912,6 +924,7 @@ export function LeagueShell({
       bb_history: 'bb_history',
       bb_command: 'bb_command',
       bb_commissioner: 'bb_command',
+      ...SALARY_CAP_TAB_ALIASES,
     }
     let target = map[key]
     if (!target) return
@@ -2546,6 +2559,18 @@ function LeagueTabRouter({
         <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} />
       )
     }
+    case 'salary_cap':
+    case 'cap_dashboard':
+    case 'cap_contracts':
+    case 'cap_team_builder':
+    case 'cap_auction':
+    case 'cap_ai':
+    case 'cap_rules':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <SalaryCapHome leagueId={leagueId} initialView={salaryCapViewForTab(activeTab)} shellNav />
+        </div>
+      )
     case 'bb_command':
       return isCommissioner ? (
         <BigBrotherCommandDashboard leagueId={leagueId} />
@@ -2780,6 +2805,13 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   bb_twists: Wand2,
   bb_history: ScrollText,
   bb_command: LayoutDashboard,
+  salary_cap: Wallet,
+  cap_dashboard: Gauge,
+  cap_contracts: FileText,
+  cap_team_builder: Hammer,
+  cap_auction: Gavel,
+  cap_ai: Bot,
+  cap_rules: ScrollText,
   idp: ShieldPlus,
   keeper: Lock,
   settings: Settings,

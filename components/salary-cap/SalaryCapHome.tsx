@@ -21,6 +21,15 @@ import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCa
 
 export interface SalaryCapHomeProps {
   leagueId: string
+  /** The view a league-workspace tab opens (lib/salary-cap/workspaceTabs.ts). */
+  initialView?: SalaryCapView
+  /**
+   * Inside the league workspace, whose sidebar / Section picker lists every Salary Cap view and links Chat, Waivers,
+   * Trades and Settings. The quick-link row and the in-page tab row / View menu would be a second and third way to
+   * navigate (the same duplication Big Brother had), so they are not drawn. A child view's "Back" returns to the
+   * cap home view, as before.
+   */
+  shellNav?: boolean
 }
 
 const VIEW_LABELS: Record<SalaryCapView, string> = {
@@ -33,11 +42,14 @@ const VIEW_LABELS: Record<SalaryCapView, string> = {
   rules: 'Rules & Settings',
 }
 
-export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
+export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false }: SalaryCapHomeProps) {
   const [summary, setSummary] = useState<SalaryCapSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<SalaryCapView>('home')
+  const [view, setView] = useState<SalaryCapView>(initialView)
+  useEffect(() => {
+    setView(initialView)
+  }, [initialView])
   /** The free-agent bid check (specialty handoff SalaryCapBid) — a full-screen view over the home. */
   const [bidOpen, setBidOpen] = useState(false)
 
@@ -111,6 +123,8 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
         />
       )}
 
+      {!shellNav ? (
+      <>
       {/* Quick links */}
       <div className="flex flex-wrap gap-2">
         <Link
@@ -173,6 +187,8 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
           ))}
         </div>
       </div>
+      </>
+      ) : null}
 
       {view === 'cap-dashboard' && summary && (
         <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
