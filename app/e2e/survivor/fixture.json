@@ -1,5 +1,5 @@
 {
-  "_comment": "Harness fixture for /e2e/survivor/[leagueId]/[screen] — SurvivorSeasonPayload and LeagueSettingsBrief (lib/survivor/survivorUiTypes.ts), plus the ballot (`state`: /api/leagues/:id/survivor/state, lib/survivor/survivorTribalView.ts), as the capture script serves them. Week 9, two tribes; Tala (the viewer's tribe) lost the immunity challenge and is at tribal with voting open; Manu is immune; the viewer holds an idol; one player voted out to Exile.",
+  "_comment": "Harness fixture for /e2e/survivor/[leagueId]/[screen] — SurvivorSeasonPayload and LeagueSettingsBrief (lib/survivor/survivorUiTypes.ts), plus the ballot (`state`: /api/leagues/:id/survivor/state, lib/survivor/survivorTribalView.ts), as the capture script serves them. Week 9, two tribes; Tala (the viewer's tribe) lost the immunity challenge and is at tribal with voting open; Manu is immune; the viewer holds an idol; one player voted out to Exile. Also served: rules, episodes, confessionals, exile (page + token wallet), exileBoss (?view=boss), exileWaivers (POST intent=waivers); and variants.exileViewer, the same season seen by a manager voted out to Exile (requested with ?viewer=exile).",
   "season": {
     "phase": "pre_merge",
     "mode": true,
@@ -337,6 +337,447 @@
       "host": null,
       "revote": null,
       "reveal": null
+    }
+  },
+  "rules": {
+    "sections": [
+      {
+        "topic": "overview",
+        "title": "How the season works",
+        "lines": [
+          "Two tribes compete every week; your fantasy points add to your tribe total.",
+          "The lower-scoring tribe goes to Tribal Council and votes someone out.",
+          "Voted-out managers go to Exile Island and can earn their way back."
+        ]
+      },
+      {
+        "topic": "immunity",
+        "title": "Immunity",
+        "lines": [
+          "The higher-scoring tribe is safe for the week.",
+          "Winning a tribe challenge can also grant immunity."
+        ]
+      },
+      {
+        "topic": "voting",
+        "title": "Voting at Tribal Council",
+        "lines": [
+          "Every manager at council casts one secret vote before Mon 8:00 PM.",
+          "You cannot vote for yourself.",
+          "A missed vote counts for nothing; it does not count against you."
+        ]
+      },
+      {
+        "topic": "idols",
+        "title": "Hidden immunity idols",
+        "lines": [
+          "An idol cancels every vote cast against you at one Tribal Council.",
+          "Play it before votes close. Nobody else is told you hold one."
+        ]
+      }
+    ]
+  },
+  "episodes": {
+    "episodes": [
+      {
+        "week": 9,
+        "title": "Week 9 · The tide turns",
+        "scenes": [
+          {
+            "label": "Challenge",
+            "text": "Manu took immunity with 184.5 points, led by Lee’s 96.4."
+          },
+          {
+            "label": "Camp",
+            "text": "Tala heads to Tribal Council for the second week running. Morgan and Avery were seen talking at the well."
+          },
+          {
+            "label": "Exile",
+            "text": "Drew beat the Exile boss by 12.3 points and earned a token."
+          }
+        ]
+      },
+      {
+        "week": 8,
+        "title": "Week 8 · Blindside",
+        "scenes": [
+          {
+            "label": "Tribal",
+            "text": "Riley Castellanos-Whitmore survived 3–2 after a late switch."
+          },
+          {
+            "label": "Idols",
+            "text": "A hidden idol was found. Its holder has not been revealed."
+          }
+        ]
+      }
+    ]
+  },
+  "confessionals": {
+    "revealed": [
+      {
+        "id": "cf1",
+        "author": "Morgan",
+        "text": "I trust Avery. I just don’t trust Avery’s bench.",
+        "createdAt": "2026-11-06T22:10:00.000Z"
+      },
+      {
+        "id": "cf2",
+        "author": "Jordan",
+        "text": "If we lose immunity again, I’m playing my own game.",
+        "createdAt": "2026-11-05T19:40:00.000Z"
+      }
+    ]
+  },
+  "exile": {
+    "island": {
+      "isActive": true,
+      "currentWeek": 9,
+      "bossName": "The Warden",
+      "bossWinsEnabled": true,
+      "bossTokenResetOnWin": true
+    },
+    "user": {
+      "tokenBalance": 2,
+      "playerState": "exile"
+    },
+    "bossMode": "median",
+    "bossContest": null,
+    "returnRules": {
+      "enabled": true,
+      "week": 11,
+      "tokensRequired": 3,
+      "resolved": false,
+      "slots": 1
+    },
+    "latestResult": {
+      "id": "er8",
+      "week": 8,
+      "weeklyScore": 112.6,
+      "bossScore": 100.3,
+      "tokenEarned": 1,
+      "tokenWiped": false
+    },
+    "tokenCap": 5
+  },
+  "exileBoss": {
+    "board": {
+      "week": 9,
+      "status": "live",
+      "mode": "median",
+      "modeLabel": "Median of the Exile field",
+      "boss": 104.8,
+      "bossKnown": true,
+      "wipeOnLoss": true,
+      "myOutcome": null,
+      "rows": [
+        {
+          "userId": "u-10",
+          "displayName": "Drew",
+          "rank": 1,
+          "score": 117.1,
+          "projected": 121.4,
+          "margin": 12.3,
+          "tokens": 2,
+          "wipedTokens": 0,
+          "earnedToken": false,
+          "liveStatus": "ahead",
+          "finalStatus": null
+        },
+        {
+          "userId": "u-11",
+          "displayName": "Casey Vandermolen-Ruiz",
+          "rank": 2,
+          "score": 98.2,
+          "projected": 103.0,
+          "margin": -6.6,
+          "tokens": 1,
+          "wipedTokens": 0,
+          "earnedToken": false,
+          "liveStatus": "behind",
+          "finalStatus": null
+        },
+        {
+          "userId": "u-12",
+          "displayName": "Kai",
+          "rank": 3,
+          "score": 91.7,
+          "projected": 95.5,
+          "margin": -13.1,
+          "tokens": 0,
+          "wipedTokens": 0,
+          "earnedToken": false,
+          "liveStatus": "behind",
+          "finalStatus": null
+        }
+      ]
+    }
+  },
+  "exileWaivers": {
+    "week": 9,
+    "sport": "NFL",
+    "anchor": {
+      "code": "QB",
+      "label": "Quarterback"
+    },
+    "roster": {
+      "version": 1,
+      "anchorId": null,
+      "team": null,
+      "players": [],
+      "closedAt": null,
+      "lockedAt": null
+    },
+    "takenTeamIds": [],
+    "players": [
+      {
+        "id": "p1",
+        "name": "Jalen Hurts",
+        "position": "QB",
+        "team": "PHI"
+      },
+      {
+        "id": "p2",
+        "name": "Jordan Love",
+        "position": "QB",
+        "team": "GB"
+      },
+      {
+        "id": "p3",
+        "name": "Kyler Murray",
+        "position": "QB",
+        "team": "ARI"
+      }
+    ],
+    "slots": [
+      "QB",
+      "RB",
+      "WR",
+      "TE",
+      "FLEX"
+    ],
+    "endsAt": "2026-11-09T18:00:00.000Z",
+    "locked": false
+  },
+  "variants": {
+    "exileViewer": {
+      "season": {
+        "phase": "pre_merge",
+        "mode": true,
+        "visualThemeId": null,
+        "exileEnabled": true,
+        "exileMembershipHidden": false,
+        "exileStatus": {
+          "isActive": true,
+          "currentWeek": 9,
+          "bossName": "The Warden"
+        },
+        "tribes": [
+          {
+            "id": "tribe-tala",
+            "name": "Tala",
+            "emoji": "🌊",
+            "colorHex": "#22d3ee",
+            "slotIndex": 0,
+            "mascot": "Sea Turtle",
+            "members": [
+              {
+                "rosterId": "r1",
+                "userId": "u-you"
+              },
+              {
+                "rosterId": "r2",
+                "userId": "u-2"
+              },
+              {
+                "rosterId": "r3",
+                "userId": "u-3"
+              },
+              {
+                "rosterId": "r4",
+                "userId": "u-4"
+              },
+              {
+                "rosterId": "r5",
+                "userId": "u-5"
+              }
+            ]
+          },
+          {
+            "id": "tribe-manu",
+            "name": "Manu",
+            "emoji": "🔥",
+            "colorHex": "#fb923c",
+            "slotIndex": 1,
+            "mascot": "Fire Hawk",
+            "members": [
+              {
+                "rosterId": "r6",
+                "userId": "u-6"
+              },
+              {
+                "rosterId": "r7",
+                "userId": "u-7"
+              },
+              {
+                "rosterId": "r8",
+                "userId": "u-8"
+              },
+              {
+                "rosterId": "r9",
+                "userId": "u-9"
+              }
+            ]
+          }
+        ],
+        "players": [
+          {
+            "userId": "u-you",
+            "displayName": "Ciege",
+            "tribeId": null,
+            "playerState": "exile",
+            "hasImmunityThisWeek": false,
+            "tokenBalance": 3,
+            "idolIds": [],
+            "canAccessTribeChat": true,
+            "eliminatedWeek": 6
+          },
+          {
+            "userId": "u-2",
+            "displayName": "Morgan",
+            "tribeId": "tribe-tala",
+            "playerState": "active",
+            "hasImmunityThisWeek": false
+          },
+          {
+            "userId": "u-3",
+            "displayName": "Riley Castellanos-Whitmore",
+            "tribeId": "tribe-tala",
+            "playerState": "active",
+            "hasImmunityThisWeek": false
+          },
+          {
+            "userId": "u-4",
+            "displayName": "Jordan",
+            "tribeId": "tribe-tala",
+            "playerState": "active",
+            "hasImmunityThisWeek": false
+          },
+          {
+            "userId": "u-5",
+            "displayName": "Avery",
+            "tribeId": "tribe-tala",
+            "playerState": "active",
+            "hasImmunityThisWeek": false
+          },
+          {
+            "userId": "u-6",
+            "displayName": "Lee",
+            "tribeId": "tribe-manu",
+            "playerState": "active",
+            "hasImmunityThisWeek": true
+          },
+          {
+            "userId": "u-7",
+            "displayName": "Sam",
+            "tribeId": "tribe-manu",
+            "playerState": "active",
+            "hasImmunityThisWeek": true
+          },
+          {
+            "userId": "u-8",
+            "displayName": "Taylor",
+            "tribeId": "tribe-manu",
+            "playerState": "active",
+            "hasImmunityThisWeek": true
+          },
+          {
+            "userId": "u-9",
+            "displayName": "Quinn",
+            "tribeId": "tribe-manu",
+            "playerState": "active",
+            "hasImmunityThisWeek": true
+          },
+          {
+            "userId": "u-10",
+            "displayName": "Drew",
+            "tribeId": "tribe-tala",
+            "playerState": "active",
+            "eliminatedWeek": null
+          }
+        ],
+        "activeCouncil": {
+          "id": "council-9",
+          "week": 9,
+          "status": "voting_open",
+          "phase": "voting",
+          "attendingTribeId": "tribe-tala",
+          "votingDeadline": "2026-11-10T01:00:00.000Z",
+          "voteDeadlineAt": "2026-11-10T01:00:00.000Z",
+          "isRevealed": false,
+          "revealMode": "one_at_a_time",
+          "revealSequence": null
+        },
+        "currentChallenge": {
+          "id": "challenge-9",
+          "week": 9,
+          "status": "closed",
+          "title": "Highest-scoring QB",
+          "challengeType": "prediction",
+          "scope": "tribe",
+          "submissionMode": "pick",
+          "locksAt": "2026-11-09T18:00:00.000Z",
+          "lockAt": "2026-11-09T18:00:00.000Z",
+          "rewardType": "immunity",
+          "instructions": "Pick the quarterback who scores the most fantasy points this week. The tribe with the most correct picks wins immunity.",
+          "description": "Tribe immunity challenge"
+        },
+        "userState": {
+          "userId": "u-you",
+          "displayName": "Ciege",
+          "tribeId": null,
+          "playerState": "exile",
+          "hasImmunityThisWeek": false,
+          "tokenBalance": 2,
+          "idolIds": [],
+          "canAccessTribeChat": false,
+          "canAccessExileChat": true,
+          "canAccessJuryChat": false,
+          "canAccessMergeChat": false,
+          "canAccessFinaleChat": false,
+          "eliminatedWeek": 6
+        },
+        "weeklyScores": [
+          {
+            "userId": "u-you",
+            "finalScore": 124.6,
+            "tribeId": "tribe-tala",
+            "countedTowardTribeTotal": true,
+            "isFinalized": false
+          },
+          {
+            "userId": "u-2",
+            "finalScore": 118.2,
+            "tribeId": "tribe-tala",
+            "countedTowardTribeTotal": true,
+            "isFinalized": false
+          },
+          {
+            "userId": "u-6",
+            "finalScore": 96.4,
+            "tribeId": "tribe-manu",
+            "countedTowardTribeTotal": true,
+            "isFinalized": false
+          },
+          {
+            "userId": "u-7",
+            "finalScore": 88.1,
+            "tribeId": "tribe-manu",
+            "countedTowardTribeTotal": true,
+            "isFinalized": false
+          }
+        ]
+      }
     }
   }
 }
