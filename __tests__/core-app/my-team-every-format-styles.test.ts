@@ -54,3 +54,17 @@ describe('My Team styles that every league format gets', () => {
     expect(() => topLevelRule('.a[data-format=redraft] .x { color: red }', '.x')).toThrow()
   })
 })
+
+describe('the live standing strip, in every league format', () => {
+  const live = read('components/core-app/af-live.css')
+
+  it('"See the field" is a link-coloured tap target, not only under the redraft stamp', () => {
+    const rule = topLevelRule(live, '.af-live-matchup a')
+    expect(rule).toMatch(/color:\s*var\(--accent\)/)
+    expect(rule).toMatch(/min-height:\s*44px/)
+  })
+
+  it('keeps "+14.6 over the cut" on one line', () => {
+    expect(topLevelRule(live, '.af-live-matchup-team.af-live-matchup-cut')).toMatch(/white-space:\s*nowrap/)
+  })
+})

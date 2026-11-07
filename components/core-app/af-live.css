@@ -3039,6 +3039,24 @@
 .af-live-matchup[data-state='standing'][data-lead='trail'] .af-live-matchup-score[data-side='you'] { color: var(--bad); }
 .af-live-matchup-team.af-live-matchup-cut {
   text-align: right;
+  /* "+14.6 over the cut" is one figure: it broke after "over" on a phone. Kept whole, it moves to its
+     own line as a unit when the row is too narrow (the row wraps). */
+  flex: 0 1 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+/* "of 12" is a few characters, not a team name: its 120px basis is what pushed the margin to a second row. */
+.af-live-matchup[data-state='standing'] .af-live-matchup-team:not(.af-live-matchup-cut) {
+  flex: 0 1 auto;
+}
+/* ⚠ THE BASE LOOK FOR EVERY LEAGUE. "See the field" was styled only under `[data-format=redraft]`
+   (af-core-redraft-live.css), so every other format got a link in the same colour as the sentence. */
+.af-live-matchup a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ── Finals, one line each ───────────────────────────────────────── */
