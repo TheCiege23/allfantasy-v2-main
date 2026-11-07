@@ -77,10 +77,8 @@ describe('the comms drawer league scope <select>', () => {
   it('gives colliding leagues distinct option labels and leaves unique names unchanged', () => {
     render(<LeagueScopePicker leagues={leagues} value={null} onChange={() => {}} allowGlobal />)
     const options = within(screen.getByRole('combobox', { name: 'League scope' })).getAllByRole('option')
-    expect(options.map((o) => o.textContent)).toEqual([
-      'All leagues',
-      ...EXPECTED.map((label) => `${label} (manual)`),
-    ])
+    /* No "(manual)" / "(sleeper)" tail since 2026-11-05: the distinct labels already tell them apart. */
+    expect(options.map((o) => o.textContent)).toEqual(['All leagues', ...EXPECTED])
   })
 
   it('matches the filter against the suffix, so a colliding league can be found by it', () => {
@@ -92,7 +90,7 @@ describe('the comms drawer league scope <select>', () => {
     render(<LeagueScopePicker leagues={many} value={null} onChange={() => {}} allowGlobal />)
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter leagues' }), { target: { value: '0d42' } })
     const options = within(screen.getByRole('combobox', { name: 'League scope' })).getAllByRole('option')
-    expect(options.map((o) => o.textContent)).toEqual(['All leagues', `${TWELVE} · 0d42 (manual)`])
+    expect(options.map((o) => o.textContent)).toEqual(['All leagues', `${TWELVE} · 0d42`])
   })
 })
 

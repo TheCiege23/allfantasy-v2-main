@@ -19,11 +19,11 @@ vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'u1
 import CommsDrawer, { type CommsTab } from '@/components/core-app/comms/CommsDrawer'
 import { readCommsTabCounts, tabBadgeText, useCommsTabCounts } from '@/components/core-app/comms/useCommsTabCounts'
 
-const UNREAD = { total: 12, mentions: 1, dm: 5, league: 4, chimmy: 3, byThreadType: { dm: 2, group: 3 } }
+const UNREAD = { total: 12, mentions: 1, dm: 5, league: 4, chimmy: 3, byThreadType: { dm: 2, group: 3 }, byLeague: {} }
 
 describe('readCommsTabCounts', () => {
   it('maps the bubble endpoint onto the tabs, Discord excluded', () => {
-    expect(readCommsTabCounts(UNREAD)).toEqual({ league: 4, chimmy: 3, dms: 2, huddle: 3 })
+    expect(readCommsTabCounts(UNREAD)).toEqual({ league: 4, chimmy: 3, dms: 2, huddle: 3, byLeague: {} })
   })
 
   it('treats a response from before the DM/huddle split as zero for those two, not as a failure', () => {
@@ -32,6 +32,14 @@ describe('readCommsTabCounts', () => {
       chimmy: 0,
       dms: 0,
       huddle: 0,
+      byLeague: {},
+    })
+  })
+
+  it('carries the per-league counts for the expanded league list, dropping zeros and junk', () => {
+    expect(readCommsTabCounts({ league: 3, chimmy: 0, byLeague: { L1: 2, L2: 1, L3: 0, L4: 'x' } })?.byLeague).toEqual({
+      L1: 2,
+      L2: 1,
     })
   })
 
@@ -141,7 +149,7 @@ describe('useCommsTabCounts', () => {
     expect(fetchMock).not.toHaveBeenCalled() // waits for the drawer to name its tab
 
     rerender({ open: true, tab: 'chimmy' })
-    await waitFor(() => expect(result.current).toEqual({ league: 4, chimmy: 3, dms: 2, huddle: 3 }))
+    await waitFor(() => expect(result.current).toEqual({ league: 4, chimmy: 3, dms: 2, huddle: 3, byLeague: {} }))
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     rerender({ open: true, tab: 'dms' })

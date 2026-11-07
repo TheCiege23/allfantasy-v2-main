@@ -61,7 +61,7 @@ function respond(url: string): unknown {
         { id: 't3', threadType: 'dm', title: 'Hail Mary U', lastMessageAt: minsAgo(60 * 30), unreadCount: 0, memberCount: 2, context: { lastMessagePreview: 'Sup!', lastMessageMine: true, lastMessageCreatedAt: minsAgo(60 * 30), members: [person('u3', 'Hail Mary U')] } },
         { id: 't4', threadType: 'group', title: 'Week 9 · vs Gridiron Gang', lastMessageAt: minsAgo(3), unreadCount: 3, memberCount: 2, context: { lastMessagePreview: 'you sure about benching Kincaid?', lastMessageCreatedAt: minsAgo(3), members: [person('u5', 'Gridiron Gang'), person(ME, 'You')] } },
         { id: 't5', threadType: 'group', title: 'Commish council', lastMessageAt: minsAgo(60 * 50), unreadCount: 0, memberCount: 3, context: { lastMessagePreview: 'vote closes tonight', lastMessageCreatedAt: minsAgo(60 * 50), members: [person('u3', 'Hail Mary U'), person('u4', 'Texan Two-Step'), person(ME, 'You')] } },
-        { id: 't6', threadType: 'group', title: "Week 8 · vs Pinto's Bean Store", lastMessageAt: minsAgo(60 * 24 * 6), unreadCount: 0, memberCount: 2, context: { members: [person('u6', "Pinto's Bean Store"), person(ME, 'You')] } },
+        { id: 't6', threadType: 'group', title: "Week 8 · vs Pinto's Bean Store", lastMessageAt: minsAgo(60 * 24 * 12), unreadCount: 0, memberCount: 2, context: { members: [person('u6', "Pinto's Bean Store"), person(ME, 'You')] } },
       ],
     }
   }
@@ -104,7 +104,7 @@ export default function CommsDrawerPreviewClient({ tab, league, mode }: { tab: s
           chimmyTokenCost={10}
           initialTab={tab as CommsTab}
           userId={ME}
-          tabCounts={{ league: 4, chimmy: 1, huddle: 3, dms: 2 }}
+          tabCounts={{ league: 4, chimmy: 1, huddle: 3, dms: 2, byLeague: { L2: 3, L3: 1 } }}
         />
       </div>
     </SessionProvider>

@@ -5,6 +5,7 @@ import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
 import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
+import { splitThreadsByRecency } from './threadSections'
 import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
@@ -954,6 +955,7 @@ export function ThreadPanel({
           dropZoneRef={panelRef}
           onTypingChange={signalTyping}
           mentionMembers={mentionMembers}
+          toolsLayout="menu"
         />
 
         {kind === 'group' && huddleSheet === 'members' ? (
@@ -1005,6 +1007,25 @@ export function ThreadPanel({
                 : 'A huddle is a group thread. Add a few AllFantasy usernames above to start one.'}
             </p>
           </div>
+        ) : kind === 'group' ? (
+          /*
+           * "This week" and "Earlier" (2026-11-05): a weekly matchup huddle is added every week, and a
+           * season of finished ones buried the room that matters now. Headings only when both exist.
+           */
+          (() => {
+            const { recent, earlier } = splitThreadsByRecency(threads, now)
+            const rows = (list: typeof threads) =>
+              list.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
+            if (recent.length === 0 || earlier.length === 0) return rows(threads)
+            return (
+              <>
+                <h3 className="af-cm-section-label">This week</h3>
+                {rows(recent)}
+                <h3 className="af-cm-section-label">Earlier</h3>
+                {rows(earlier)}
+              </>
+            )
+          })()
         ) : (
           threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}

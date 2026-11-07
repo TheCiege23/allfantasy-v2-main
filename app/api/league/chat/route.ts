@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { teamAvatarFallback } from '@/lib/league-chat/teamAvatarFallback'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import {
   createLeagueChatMessage,
@@ -248,6 +249,7 @@ export async function GET(req: NextRequest) {
     },
   })
   const presence = await readChatPresence(presenceScope)
+  const teamAvatars = await teamAvatarFallback(leagueId, filteredMessages)
 
   return NextResponse.json({
     /*
@@ -267,7 +269,8 @@ export async function GET(req: NextRequest) {
         parentMessageId: message.parentMessageId ?? null,
         senderUserId: message.senderUserId ?? null,
         senderName: message.senderName ?? null,
-        senderAvatarUrl: message.senderAvatarUrl ?? null,
+        senderAvatarUrl:
+          message.senderAvatarUrl ?? (message.senderUserId ? teamAvatars.get(message.senderUserId) : null) ?? null,
         body: message.body,
         createdAt: message.createdAt,
         messageType: message.messageType ?? 'text',

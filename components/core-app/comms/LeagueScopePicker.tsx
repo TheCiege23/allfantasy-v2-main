@@ -30,7 +30,11 @@ export function LeagueScopePicker({ leagues, value, onChange, allowGlobal = fals
     {showSearch ? <label className="af-cm-league-search"><Search size={16} aria-hidden /><input type="search" aria-label="Filter leagues" placeholder="Search" value={query} onChange={e => setQuery(e.target.value)} /></label> : null}
     <select aria-label="League scope" value={value ?? ''} onChange={e => onChange(e.target.value || null)}>
       <option value="">{allowGlobal ? 'All leagues' : 'Select a league'}</option>
-      {visible.map(l => <option key={l.id} value={l.id}>{labelOf(l)} ({l.platform})</option>)}
+      {/*
+        No "(sleeper)" tail (2026-11-05: it read as "Dynasty Bros '26 (sleeper)" at the top of every chat).
+        Same-named leagues are already told apart by `labels`; the filter still matches the platform.
+      */}
+      {visible.map(l => <option key={l.id} value={l.id}>{labelOf(l)}</option>)}
     </select>
   </div>
 }

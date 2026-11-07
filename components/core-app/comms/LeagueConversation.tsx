@@ -1084,6 +1084,8 @@ export function LeagueConversation({
         onTypingChange={signalTyping}
         /* A prediction poll is posted by the server from the matchup row, then shows up on reload. */
         predictions={!tribe && leagueId ? { leagueId, onPosted: () => void load(true) } : null}
+        /* One line with a "+" menu — except the draft room, whose dock and specs drive the tool row. */
+        toolsLayout={surface === 'draft_room' ? 'row' : 'menu'}
       />
     </div>
   )

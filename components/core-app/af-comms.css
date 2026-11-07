@@ -4352,3 +4352,185 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
   .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto); justify-content: space-between; }
   .af-cm .af-cm-tab { gap: 4px; padding: 0 4px; }
 }
+
+/*
+ * ── One-line message box (2026-11-05, ChatComposer toolsLayout="menu") ──
+ * Owner: "as simple as Sleeper or Discord". The box was two rows on a phone — the text, then six
+ * faint emoji-glyph tools (GIF 😀 📊 🎤 📷 🎥) — about 110px for a one-line message. Now it is one
+ * line: "+" (GIF, Poll, Photo, Video, Voice note), the text, emoji, send; the "+" menu opens above
+ * the line inside the box. The draft room keeps the tool row (toolsLayout="row").
+ */
+.af-cm .af-chat-box:has(> .af-chat-line) { border-radius: 24px; }
+.af-cm .af-chat-line { display: flex; align-items: flex-end; gap: 2px; padding: 2px; }
+.af-cm .af-chat-line-input { flex: 1; min-width: 0; }
+.af-cm .af-chat-line-input textarea { min-height: 44px; padding: 11px 6px; font-size: 16px; line-height: 1.4; }
+.af-cm .af-chat-line .af-chat-more,
+.af-cm .af-chat-line .af-chat-emoji,
+.af-cm .af-chat-line .af-chat-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-cm .af-chat-line .af-chat-more { background: var(--chip); color: var(--text2); }
+.af-cm .af-chat-line .af-chat-more[aria-expanded='true'] { background: var(--accent-soft); color: var(--accent); }
+.af-cm .af-chat-line .af-chat-emoji[aria-pressed='true'] { color: var(--accent); }
+.af-cm .af-chat-line .af-chat-send:disabled { background: transparent; color: var(--faint); }
+.af-cm .af-chat-line .af-chat-more:hover,
+.af-cm .af-chat-line .af-chat-emoji:hover { color: var(--text); }
+
+.af-cm .af-chat-moremenu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.af-cm .af-chat-moreitem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 64px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--chip);
+  color: var(--text2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm .af-chat-moreitem:hover { background: var(--accent-soft); color: var(--accent); }
+.af-cm .af-chat-moreitem-spark { color: var(--accent); font-size: 16px; line-height: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm .af-chat-moremenu { animation: af-cm-msg-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}
+
+/*
+ * Chimmy's league row (2026-11-05): the picker and "Open full-page analysis" share ONE line — the link
+ * was a band of its own above the picker. The icon is a 44px square that matches the picker's height.
+ */
+.af-cm .af-cm-scope > .af-cm-scope-row { display: flex; flex: 1 1 100%; align-items: center; gap: 8px; min-width: 0; }
+.af-cm .af-cm-scope-row > .af-cm-league-picker { flex: 1; min-width: 0; }
+.af-cm .af-cm-expand.af-cm-expand-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+}
+.af-cm .af-cm-expand.af-cm-expand-icon:hover { background: var(--accent-soft); }
+
+/*
+ * ── One underline that slides between tabs (2026-11-05) ── CommsDrawer measures the open tab and moves
+ * this line to it; each tab's own inset underline is switched off while it is there. No motion for
+ * people who asked for less of it — the line still moves, it just does not animate.
+ */
+.af-cm .af-cm-tabs { position: relative; }
+.af-cm .af-cm-tabs[data-line='true'] .af-cm-tab[data-on='true'] { box-shadow: none; }
+.af-cm .af-cm-tabline {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm .af-cm-tabline { transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), width 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+
+/*
+ * ── Expanded desktop chat (2026-11-05) ── the header's expand button widens the panel and turns the
+ * League tab into two panes: leagues with their unread counts on the left, the conversation on the
+ * right. Desktop only: under 1024px the button is hidden and every rule below falls back, so a window
+ * that narrows while expanded is simply the normal panel again.
+ */
+.af-cm-split { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.af-cm-split-main { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+.af-cm-leaguelist { display: none; }
+@media (max-width: 1023px) {
+  .af-cm .af-cm-widebtn { display: none; }
+}
+@media (min-width: 1024px) {
+  .af-core .af-cm[data-mode='overlay'][data-wide='true'] {
+    width: min(1040px, calc(100vw - 40px));
+    height: min(860px, calc(100dvh - 40px));
+  }
+  .af-cm[data-wide='true'] .af-cm-split[data-wide='true'] { flex-direction: row; }
+  .af-cm[data-wide='true'] .af-cm-split[data-wide='true'] .af-cm-scope > .af-cm-league-picker { display: none; }
+  .af-cm[data-wide='true'] .af-cm-leaguelist {
+    display: flex;
+    flex: 0 0 272px;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px;
+    border-right: 1px solid var(--line);
+    background: var(--surface2);
+    scrollbar-width: thin;
+  }
+}
+.af-cm .af-cm-leaguerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.af-cm .af-cm-leaguerow:hover { background: var(--chip); color: var(--text); }
+.af-cm .af-cm-leaguerow[data-on='true'] { background: var(--accent-soft); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.af-cm .af-cm-leaguerow-av {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+}
+.af-cm .af-cm-leaguerow[data-on='true'] .af-cm-leaguerow-av { color: var(--accent); }
+.af-cm .af-cm-leaguerow-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Huddles' "This week" / "Earlier" headings (ThreadPanel, 2026-11-05). */
+.af-cm .af-cm-section-label {
+  margin: 12px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-cm .af-cm-section-label:first-child { margin-top: 4px; }
