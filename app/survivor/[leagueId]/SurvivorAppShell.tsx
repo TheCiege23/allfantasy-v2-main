@@ -134,8 +134,16 @@ function SurvivorAppShellInner({
 
   return (
     <>
+      {/*
+        ⚠ `af-draft-dark` IS THE APP'S "ALWAYS DARK" OPT-OUT, NOT A DRAFT STYLE. globals.css recolours every
+        `text-white*`, `bg-black`, `bg-slate-*`… to light-mode ink inside `.mode-readable`, except under
+        `.af-draft-dark` (181 rules carry that exclusion). The island is dark in every mode, so without it a
+        light-mode reader got dark text on the dark island — names, scores, the bottom nav, all of Intel —
+        and white tiles (2026-11-07). The only rule keyed on the class itself is `.af-draft-dark .af-core.af-dr`,
+        which matches nothing here.
+      */}
       <div
-        className="sv-island relative z-[1] flex min-h-screen flex-col text-[var(--survivor-text-bright)]"
+        className="sv-island af-draft-dark relative z-[1] flex min-h-screen flex-col text-[var(--survivor-text-bright)]"
         data-scene={backdropScene}
         style={{ '--sv-scene': `url('/survivor/scenes/${backdropScene}.svg')` } as React.CSSProperties}
       >

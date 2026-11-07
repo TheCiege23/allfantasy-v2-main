@@ -1,55 +1,342 @@
 {
-  "_comment": "Harness fixture for /e2e/survivor/[leagueId]/[screen] — SurvivorSeasonPayload and LeagueSettingsBrief (lib/survivor/survivorUiTypes.ts) as the capture script serves them. Week 9, two tribes, Manu at tribal with voting open, an immunity challenge open, the viewer on Tala holding an idol, one player voted out to Exile.",
+  "_comment": "Harness fixture for /e2e/survivor/[leagueId]/[screen] — SurvivorSeasonPayload and LeagueSettingsBrief (lib/survivor/survivorUiTypes.ts), plus the ballot (`state`: /api/leagues/:id/survivor/state, lib/survivor/survivorTribalView.ts), as the capture script serves them. Week 9, two tribes; Tala (the viewer's tribe) lost the immunity challenge and is at tribal with voting open; Manu is immune; the viewer holds an idol; one player voted out to Exile.",
   "season": {
     "phase": "pre_merge",
     "mode": true,
     "visualThemeId": null,
     "exileEnabled": true,
     "exileMembershipHidden": false,
-    "exileStatus": { "isActive": true, "currentWeek": 9, "bossName": "The Warden" },
+    "exileStatus": {
+      "isActive": true,
+      "currentWeek": 9,
+      "bossName": "The Warden"
+    },
     "tribes": [
-      { "id": "tribe-tala", "name": "Tala", "emoji": "🌊", "colorHex": "#22d3ee", "slotIndex": 0, "mascot": "Sea Turtle",
-        "members": [{ "rosterId": "r1", "userId": "u-you" }, { "rosterId": "r2", "userId": "u-2" }, { "rosterId": "r3", "userId": "u-3" }, { "rosterId": "r4", "userId": "u-4" }, { "rosterId": "r5", "userId": "u-5" }] },
-      { "id": "tribe-manu", "name": "Manu", "emoji": "🔥", "colorHex": "#fb923c", "slotIndex": 1, "mascot": "Fire Hawk",
-        "members": [{ "rosterId": "r6", "userId": "u-6" }, { "rosterId": "r7", "userId": "u-7" }, { "rosterId": "r8", "userId": "u-8" }, { "rosterId": "r9", "userId": "u-9" }] }
+      {
+        "id": "tribe-tala",
+        "name": "Tala",
+        "emoji": "🌊",
+        "colorHex": "#22d3ee",
+        "slotIndex": 0,
+        "mascot": "Sea Turtle",
+        "members": [
+          {
+            "rosterId": "r1",
+            "userId": "u-you"
+          },
+          {
+            "rosterId": "r2",
+            "userId": "u-2"
+          },
+          {
+            "rosterId": "r3",
+            "userId": "u-3"
+          },
+          {
+            "rosterId": "r4",
+            "userId": "u-4"
+          },
+          {
+            "rosterId": "r5",
+            "userId": "u-5"
+          }
+        ]
+      },
+      {
+        "id": "tribe-manu",
+        "name": "Manu",
+        "emoji": "🔥",
+        "colorHex": "#fb923c",
+        "slotIndex": 1,
+        "mascot": "Fire Hawk",
+        "members": [
+          {
+            "rosterId": "r6",
+            "userId": "u-6"
+          },
+          {
+            "rosterId": "r7",
+            "userId": "u-7"
+          },
+          {
+            "rosterId": "r8",
+            "userId": "u-8"
+          },
+          {
+            "rosterId": "r9",
+            "userId": "u-9"
+          }
+        ]
+      }
     ],
     "players": [
-      { "userId": "u-you", "displayName": "Ciege", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true, "tokenBalance": 3, "idolIds": ["idol-1"], "canAccessTribeChat": true },
-      { "userId": "u-2", "displayName": "Morgan", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true },
-      { "userId": "u-3", "displayName": "Riley Castellanos-Whitmore", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true },
-      { "userId": "u-4", "displayName": "Jordan", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true },
-      { "userId": "u-5", "displayName": "Avery", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true },
-      { "userId": "u-6", "displayName": "Lee", "tribeId": "tribe-manu", "playerState": "active" },
-      { "userId": "u-7", "displayName": "Sam", "tribeId": "tribe-manu", "playerState": "active" },
-      { "userId": "u-8", "displayName": "Taylor", "tribeId": "tribe-manu", "playerState": "active" },
-      { "userId": "u-9", "displayName": "Quinn", "tribeId": "tribe-manu", "playerState": "active" },
-      { "userId": "u-10", "displayName": "Drew", "tribeId": null, "playerState": "exile", "eliminatedWeek": 6 }
+      {
+        "userId": "u-you",
+        "displayName": "Ciege",
+        "tribeId": "tribe-tala",
+        "playerState": "active",
+        "hasImmunityThisWeek": false,
+        "tokenBalance": 3,
+        "idolIds": [
+          "idol-1"
+        ],
+        "canAccessTribeChat": true
+      },
+      {
+        "userId": "u-2",
+        "displayName": "Morgan",
+        "tribeId": "tribe-tala",
+        "playerState": "active",
+        "hasImmunityThisWeek": false
+      },
+      {
+        "userId": "u-3",
+        "displayName": "Riley Castellanos-Whitmore",
+        "tribeId": "tribe-tala",
+        "playerState": "active",
+        "hasImmunityThisWeek": false
+      },
+      {
+        "userId": "u-4",
+        "displayName": "Jordan",
+        "tribeId": "tribe-tala",
+        "playerState": "active",
+        "hasImmunityThisWeek": false
+      },
+      {
+        "userId": "u-5",
+        "displayName": "Avery",
+        "tribeId": "tribe-tala",
+        "playerState": "active",
+        "hasImmunityThisWeek": false
+      },
+      {
+        "userId": "u-6",
+        "displayName": "Lee",
+        "tribeId": "tribe-manu",
+        "playerState": "active",
+        "hasImmunityThisWeek": true
+      },
+      {
+        "userId": "u-7",
+        "displayName": "Sam",
+        "tribeId": "tribe-manu",
+        "playerState": "active",
+        "hasImmunityThisWeek": true
+      },
+      {
+        "userId": "u-8",
+        "displayName": "Taylor",
+        "tribeId": "tribe-manu",
+        "playerState": "active",
+        "hasImmunityThisWeek": true
+      },
+      {
+        "userId": "u-9",
+        "displayName": "Quinn",
+        "tribeId": "tribe-manu",
+        "playerState": "active",
+        "hasImmunityThisWeek": true
+      },
+      {
+        "userId": "u-10",
+        "displayName": "Drew",
+        "tribeId": null,
+        "playerState": "exile",
+        "eliminatedWeek": 6
+      }
     ],
     "activeCouncil": {
-      "id": "council-9", "week": 9, "status": "voting_open", "phase": "voting", "attendingTribeId": "tribe-manu",
-      "votingDeadline": "2026-11-10T01:00:00.000Z", "voteDeadlineAt": "2026-11-10T01:00:00.000Z",
-      "isRevealed": false, "revealMode": "one_at_a_time", "revealSequence": null
+      "id": "council-9",
+      "week": 9,
+      "status": "voting_open",
+      "phase": "voting",
+      "attendingTribeId": "tribe-tala",
+      "votingDeadline": "2026-11-10T01:00:00.000Z",
+      "voteDeadlineAt": "2026-11-10T01:00:00.000Z",
+      "isRevealed": false,
+      "revealMode": "one_at_a_time",
+      "revealSequence": null
     },
     "currentChallenge": {
-      "id": "challenge-9", "week": 9, "status": "open", "title": "Highest-scoring QB", "challengeType": "prediction", "scope": "tribe",
-      "submissionMode": "pick", "locksAt": "2026-11-09T18:00:00.000Z", "lockAt": "2026-11-09T18:00:00.000Z", "rewardType": "immunity",
+      "id": "challenge-9",
+      "week": 9,
+      "status": "closed",
+      "title": "Highest-scoring QB",
+      "challengeType": "prediction",
+      "scope": "tribe",
+      "submissionMode": "pick",
+      "locksAt": "2026-11-09T18:00:00.000Z",
+      "lockAt": "2026-11-09T18:00:00.000Z",
+      "rewardType": "immunity",
       "instructions": "Pick the quarterback who scores the most fantasy points this week. The tribe with the most correct picks wins immunity.",
       "description": "Tribe immunity challenge"
     },
-    "userState": { "userId": "u-you", "displayName": "Ciege", "tribeId": "tribe-tala", "playerState": "active", "hasImmunityThisWeek": true, "tokenBalance": 3, "idolIds": ["idol-1"], "canAccessTribeChat": true, "canAccessExileChat": false, "canAccessJuryChat": false, "canAccessMergeChat": false, "canAccessFinaleChat": false },
+    "userState": {
+      "userId": "u-you",
+      "displayName": "Ciege",
+      "tribeId": "tribe-tala",
+      "playerState": "active",
+      "hasImmunityThisWeek": false,
+      "tokenBalance": 3,
+      "idolIds": [
+        "idol-1"
+      ],
+      "canAccessTribeChat": true,
+      "canAccessExileChat": false,
+      "canAccessJuryChat": false,
+      "canAccessMergeChat": false,
+      "canAccessFinaleChat": false
+    },
     "weeklyScores": [
-      { "userId": "u-you", "finalScore": 124.6, "tribeId": "tribe-tala", "countedTowardTribeTotal": true, "isFinalized": false },
-      { "userId": "u-2", "finalScore": 118.2, "tribeId": "tribe-tala", "countedTowardTribeTotal": true, "isFinalized": false },
-      { "userId": "u-6", "finalScore": 96.4, "tribeId": "tribe-manu", "countedTowardTribeTotal": true, "isFinalized": false },
-      { "userId": "u-7", "finalScore": 88.1, "tribeId": "tribe-manu", "countedTowardTribeTotal": true, "isFinalized": false }
+      {
+        "userId": "u-you",
+        "finalScore": 124.6,
+        "tribeId": "tribe-tala",
+        "countedTowardTribeTotal": true,
+        "isFinalized": false
+      },
+      {
+        "userId": "u-2",
+        "finalScore": 118.2,
+        "tribeId": "tribe-tala",
+        "countedTowardTribeTotal": true,
+        "isFinalized": false
+      },
+      {
+        "userId": "u-6",
+        "finalScore": 96.4,
+        "tribeId": "tribe-manu",
+        "countedTowardTribeTotal": true,
+        "isFinalized": false
+      },
+      {
+        "userId": "u-7",
+        "finalScore": 88.1,
+        "tribeId": "tribe-manu",
+        "countedTowardTribeTotal": true,
+        "isFinalized": false
+      }
     ]
   },
   "settings": {
-    "league": { "name": "Island of Champions", "sport": "NFL" },
+    "league": {
+      "name": "Island of Champions",
+      "sport": "NFL"
+    },
     "userRole": "member",
     "canEdit": false,
     "hasAfCommissionerSub": false,
     "viewerHasTeam": true,
     "survivorFairPlayLimited": false
+  },
+  "state": {
+    "tribalCouncil": {
+      "active": true,
+      "councilId": "council-9",
+      "status": "voting_open",
+      "phase": "voting",
+      "week": 9,
+      "attendingTribeId": "tribe-tala",
+      "votingOpensAt": "2026-11-08T05:00:00.000Z",
+      "votingDeadline": "2026-11-10T01:00:00.000Z",
+      "ballotsDueAt": "2026-11-10T01:00:00.000Z",
+      "isRevealed": false,
+      "you": {
+        "isEligibleVoter": true,
+        "hasVoted": false,
+        "yourVoteTargetUserId": null,
+        "yourVoteTargetName": null,
+        "voteLocked": false,
+        "voteLate": false,
+        "voteDoesNotCount": false,
+        "eligibleTargets": [
+          {
+            "userId": "u-2",
+            "displayName": "Morgan"
+          },
+          {
+            "userId": "u-3",
+            "displayName": "Riley Castellanos-Whitmore"
+          },
+          {
+            "userId": "u-4",
+            "displayName": "Jordan"
+          },
+          {
+            "userId": "u-5",
+            "displayName": "Avery"
+          }
+        ],
+        "playableIdols": [
+          {
+            "idolId": "idol-1",
+            "powerType": "immunity",
+            "label": "Hidden immunity idol",
+            "alreadyPlayed": false
+          }
+        ],
+        "additionalVotes": [],
+        "isSafeFromVote": false,
+        "voteChangeAllowed": true
+      },
+      "ballot": {
+        "selfVotesAllowed": false,
+        "candidates": [
+          {
+            "userId": "u-you",
+            "rosterId": "r1",
+            "displayName": "Ciege",
+            "weekScore": 101.4,
+            "isSelf": true,
+            "isImmune": false,
+            "canReceiveYourVote": false
+          },
+          {
+            "userId": "u-2",
+            "rosterId": "r2",
+            "displayName": "Morgan",
+            "weekScore": 118.2,
+            "isSelf": false,
+            "isImmune": false,
+            "canReceiveYourVote": true
+          },
+          {
+            "userId": "u-3",
+            "rosterId": "r3",
+            "displayName": "Riley Castellanos-Whitmore",
+            "weekScore": 96.8,
+            "isSelf": false,
+            "isImmune": false,
+            "canReceiveYourVote": true
+          },
+          {
+            "userId": "u-4",
+            "rosterId": "r4",
+            "displayName": "Jordan",
+            "weekScore": 87.3,
+            "isSelf": false,
+            "isImmune": false,
+            "canReceiveYourVote": true
+          },
+          {
+            "userId": "u-5",
+            "rosterId": "r5",
+            "displayName": "Avery",
+            "weekScore": 109.9,
+            "isSelf": false,
+            "isImmune": false,
+            "canReceiveYourVote": true
+          }
+        ]
+      },
+      "votesIn": {
+        "submittedCount": 2,
+        "eligibleVoterCount": 5
+      },
+      "host": null,
+      "revote": null,
+      "reveal": null
+    }
   }
 }
