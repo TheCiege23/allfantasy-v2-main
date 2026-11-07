@@ -31,6 +31,7 @@ import {
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
+import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -50,6 +51,7 @@ import {
   type PreviewCoverage,
 } from '@/lib/league-import/previewCoverageView'
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
+import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 
@@ -710,6 +712,28 @@ const PROVIDER_PILL_TAG: Partial<Record<ImportProvider, string>> = {
   fleaflicker: 'league ID',
 }
 
+/*
+ * The hero's numbers. Derived from provider-ui-config so they move when a platform is switched on
+ * or off, the same rule the row itself follows — a literal "5 platforms" would be wrong the day
+ * Yahoo comes back.
+ */
+const LIVE_PLATFORM_COUNT = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).length
+const LIVE_SPORT_COUNT = new Set(
+  IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).flatMap((o) => [...o.supportedSports]),
+).size
+
+/*
+ * How much work each platform is, on its tile — the thing people want to know before they press
+ * one. ESPN is the honest outlier: a one-time cookie copy on a computer.
+ */
+const PROVIDER_EFFORT: Partial<Record<ImportProvider, string>> = {
+  sleeper: '30 sec',
+  espn: '3 min · once',
+  fantrax: '1 min',
+  mfl: '2 min · once',
+  fleaflicker: '20 sec',
+}
+
 /**
  * 6a build rule 2: the read / never-do split IS the trust contract for the whole import flow, and
  * it has to appear on this first screen rather than being discovered later. It replaces the older
@@ -903,6 +927,7 @@ export function ImportV4({
   // Provider display name comes from the shared config, never a local literal — the same
   // reason availability does (see the header note).
   const providerLabel = getImportProviderLabel(provider)
+  const pastedProvider = detectProviderFromLink(account)
   const field = FIELD_BY_PROVIDER[provider]
   const canDiscover = supportsImportProviderDiscovery(provider)
   /*
@@ -1030,6 +1055,8 @@ export function ImportV4({
         warning?: string
       }
       const found = payload?.leagues ?? []
+      // Explicit lookup that found something: bring the list (rendered ABOVE the form) into view.
+      if (found.length > 0) scrollToLeagues.current = true
       setLeagues(found)
       setHandleLinkedElsewhere(provider === 'sleeper' && payload?.handleLinkedElsewhere === true)
       setExcluded(defaultExclusionsFor(found))
@@ -1144,6 +1171,20 @@ export function ImportV4({
     if (!error) return
     errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [error])
+
+  /*
+   * ⚠ THE LIST RENDERS ABOVE THE FORM, SO A LOOKUP CAN SUCCEED OUT OF SIGHT. The person pressed
+   * "Find my leagues" at the field; the leagues appear higher up the page, and scroll anchoring
+   * keeps the viewport on the button — the press looks like it did nothing. Only an EXPLICIT lookup
+   * sets the flag: the silent lookup on load already puts the list at the top of the page.
+   */
+  const leaguesRef = useRef<HTMLElement | null>(null)
+  const scrollToLeagues = useRef(false)
+  useEffect(() => {
+    if (!scrollToLeagues.current || leagues.length === 0) return
+    scrollToLeagues.current = false
+    leaguesRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [leagues])
 
   const deepLinked = useRef(false)
 
@@ -2066,24 +2107,54 @@ export function ImportV4({
       */}
       <StepBar current={stepsFilled} total={3} />
 
+      {/*
+        ── The hero, on the /core page language ─────────────────────────────
+        A lit card with the kicker, one sentence, and three numbers that are derived rather than
+        written: platforms and sports come from provider-ui-config, so the strip cannot claim a
+        platform the row below greys out. "0 passwords" is the trust contract stated as a number.
+        The two side doors (native copy, new league) moved under it as quiet links — they were two
+        full paragraphs between the title and the platform row, which is the one thing every
+        visitor came to press.
+      */}
       <header className="af-im-head">
-        <span className="af-label">Set up your league</span>
-        <h1 className="af-im-title">Connect an existing league.</h1>
-        <p className="af-im-sub">
-          Pick your platform and drop in your Sleeper username or league ID. We build a read-only
-          copy of your real teams, matchups and scoring &mdash; AllFantasy analyzes your league but
-          never changes anything on the external platform.
-        </p>
-        <p className="af-im-create-option">
-          Commissioners can then make a native copy to play here with supported rules. Already imported?{' '}
-          <Link href="/create-league#imported-leagues">Make an imported league native <span aria-hidden>&rarr;</span></Link>
-        </p>
-        <p className="af-im-create-option">
-          Starting fresh?{' '}
-          <Link href="/create-league" data-testid="import-create-league">
-            Create a new league <span aria-hidden>&rarr;</span>
-          </Link>
-        </p>
+        <div className="af-im-hero">
+          <div className="af-im-hero-copy">
+            <span className="af-label">Set up your league</span>
+            <h1 className="af-im-title">Bring your league to AllFantasy.</h1>
+            <p className="af-im-sub">
+              Pick where you play and follow the steps. We build a read-only copy of your teams,
+              matchups and scoring &mdash; nothing on your platform ever changes.
+            </p>
+          </div>
+          <dl className="af-im-hero-stats">
+            <div className="af-im-hero-stat">
+              <dt>Platforms</dt>
+              <dd className="af-num">{LIVE_PLATFORM_COUNT}</dd>
+            </div>
+            <div className="af-im-hero-stat">
+              <dt>Sports</dt>
+              <dd className="af-num">{LIVE_SPORT_COUNT}</dd>
+            </div>
+            <div className="af-im-hero-stat">
+              <dt>Passwords asked</dt>
+              <dd className="af-num">0</dd>
+            </div>
+          </dl>
+        </div>
+        <nav className="af-im-create-row" aria-label="Other ways to start">
+          <p className="af-im-create-option">
+            Already imported?{' '}
+            <Link href="/create-league#imported-leagues">
+              Make it native <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
+          <p className="af-im-create-option">
+            Starting fresh?{' '}
+            <Link href="/create-league" data-testid="import-create-league">
+              Create a new league <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
+        </nav>
       </header>
 
       {/*
@@ -2120,9 +2191,280 @@ export function ImportV4({
         </div>
       ) : null}
 
+      {/*
+        ⚠ THE LIST COMES FIRST ONCE THERE IS ONE. It used to render after the connect card, so a
+        linked Sleeper account — discovered automatically on load — opened on "Step 3 of 3 · Choose
+        leagues" with the leagues a full form, guide and trust panel further down the page. The
+        step you are on is the thing on top; the form to look somewhere else stays right below it.
+      */}
+      {/* ── Discovered leagues ──────────────────────────────────────── */}
+      {leagues.length > 0 && phase.k !== 'done' && !importTakeover ? (
+        <section
+          className="af-im-card af-im-card--leagues"
+          data-many={leagues.length > 4 ? 'true' : undefined}
+          ref={leaguesRef}
+        >
+          <header className="af-im-result-head">
+            <h2 className="af-label">
+              {rowsAreTeams
+                ? accountLabel
+                  ? `Which team is yours in ${accountLabel}?`
+                  : 'Which team is yours?'
+                : accountLabel
+                  ? `Leagues for ${accountLabel}`
+                  : 'Leagues we found'}
+            </h2>
+            <span className="af-chip af-num">{leagues.length}</span>
+            {/*
+              Select all / clear. A 55-league Sleeper account was the case that asked for it: the
+              only way to import three of them was to untick fifty-two boxes. "Select all" goes
+              back to the DEFAULT ticks, so a previously-deleted league stays unticked — its tick
+              is still the confirmation and a bulk control must not sweep it back in.
+            */}
+            {leagues.length > 1 && !rowsAreTeams ? (
+              <span className="af-im-select-tools">
+                <button
+                  type="button"
+                  className="af-im-select-btn"
+                  disabled={bulkRunning}
+                  onClick={() => setExcluded(defaultExclusionsFor(leagues))}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="af-im-select-btn"
+                  disabled={bulkRunning}
+                  onClick={() => {
+                    const next: Record<string, true> = {}
+                    for (const l of leagues) next[l.sourceId] = true
+                    setExcluded(next)
+                  }}
+                >
+                  Clear
+                </button>
+              </span>
+            ) : null}
+          </header>
+
+          {handleLinkedElsewhere ? (
+            <p className="af-im-field-help" role="status" data-testid="import-sleeper-linked-elsewhere">
+              This Sleeper account is already linked to a different AllFantasy login. Sign in with that
+              account to import these leagues.
+            </p>
+          ) : null}
+
+          <ul className="af-im-league-list">
+            {leagues.map((l) => {
+              /*
+               * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
+               * DOING. It marked the one row being previewed or committed while the
+               * list stayed on screen. 6c replaced that: those two phases now unmount
+               * the whole list and show the progress screen instead, so this could
+               * only ever have been false — TypeScript said so (TS2367, and
+               * `phase.sourceId` on type `never`), and the compiler was right.
+               */
+              return (
+                <li
+                  key={l.sourceId}
+                  className="af-im-league"
+                  data-picked={
+                    !excluded[l.sourceId] && leagues.length > 1 && !rowsAreTeams ? 'true' : undefined
+                  }
+                >
+                  {/*
+                    Only offered when there is more than one league — a lone
+                    result has nothing to choose between, and a checkbox there
+                    would imply the single "Import" button below it might not
+                    apply to it.
+
+                    ⚠ EXCEPT FOR A PREVIOUSLY-DELETED LEAGUE, WHICH ALWAYS GETS
+                    ONE. Such a row starts unticked, and the tick IS the
+                    confirmation — so suppressing the checkbox on a lone result
+                    would leave it excluded with no control to include it, i.e.
+                    a league the user could see and could not import.
+                  */}
+                  {(leagues.length > 1 || l.previouslyDeleted) && !rowsAreTeams ? (
+                    <input
+                      type="checkbox"
+                      className="af-im-league-check"
+                      checked={!excluded[l.sourceId]}
+                      disabled={bulkRunning || Boolean(bulkStatus[l.sourceId])}
+                      onChange={() => toggleLeague(l.sourceId)}
+                      aria-label={`Include ${l.name} in the import`}
+                    />
+                  ) : null}
+                  <span className="af-im-league-main">
+                    <span className="af-im-league-name">{l.name}</span>
+                    <span className="af-im-league-meta af-num">
+                      {[l.season, l.sport?.toUpperCase(), l.totalTeams ? `${l.totalTeams} teams` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                    {/*
+                      An unticked row has to say WHY it is unticked, or it reads
+                      as a bug — the user sees a league they recognise, sitting
+                      there excluded, with no explanation. This is also the
+                      confirmation prompt itself: the sentence states what
+                      ticking the box will do.
+                    */}
+                    {l.previouslyDeleted ? (
+                      <span className="af-im-league-reason">
+                        You removed this league from AllFantasy. Tick it to import it again.
+                      </span>
+                    ) : null}
+                    {/*
+                      ⚠ WHY IT FAILED, NOT JUST THAT IT DID. "Failed" on its own makes
+                      Retry a coin flip — a league that failed because it does not exist
+                      will fail identically however many times it is pressed, and the
+                      user has no way to tell that from a timeout worth re-running.
+                      Only rendered for `failed`: the `needs-attestation` reason is the
+                      attestation panel's job and would be duplicated here.
+                    */}
+                    {(bulkStatus[l.sourceId] === 'failed' ||
+                      bulkStatus[l.sourceId] === 'not-found' ||
+                      bulkStatus[l.sourceId] === 'provider-unavailable') &&
+                    bulkMessage[l.sourceId] ? (
+                      <span className="af-im-league-reason">{bulkMessage[l.sourceId]}</span>
+                    ) : null}
+                  </span>
+                  {bulkStatus[l.sourceId] ? (
+                    <span className="af-im-league-outcome">
+                      <span
+                        className={`af-im-league-status af-im-league-status--${bulkStatus[l.sourceId]}`}
+                        role="status"
+                      >
+                        {BULK_STATUS_LABEL[bulkStatus[l.sourceId]]}
+                      </span>
+                      {/*
+                        ⚠ THE BADGE ALONE WAS A DEAD END. Any bulk status replaced the
+                        row's "Import" button outright, so the one status that asks the
+                        user to DO something -- "Needs your confirmation" -- left them
+                        nothing to click. The summary line says "do those individually",
+                        and the only way to obey it was to reload /import and re-run
+                        discovery. Observed on a real 55-league Sleeper run.
+
+                        Goes straight to the attestation panel rather than re-previewing:
+                        the commit already told us this exact league needs one, so routing
+                        back through preview -> commit -> 403 -> attest would just make the
+                        user re-earn a refusal we have already recorded.
+                      */}
+                      {bulkStatus[l.sourceId] === 'needs-attestation' ? (
+                        <button
+                          type="button"
+                          className="af-btn af-btn--ghost af-im-league-btn"
+                          disabled={bulkRunning}
+                          onClick={() =>
+                            setPhase({
+                              k: 'attest',
+                              sourceId: l.sourceId,
+                              message:
+                                bulkMessage[l.sourceId] ||
+                                'Confirm you are authorized to import this league.',
+                            })
+                          }
+                        >
+                          Confirm
+                        </button>
+                      ) : null}
+                      {/*
+                        A failed row was as much a dead end as an unconfirmed one: the
+                        badge replaced the button, so the only way to re-attempt a league
+                        that hit a transient provider error midway through a long run was
+                        to reload and re-discover. Retries in place instead.
+                      */}
+                      {bulkStatus[l.sourceId] === 'failed' ||
+                      bulkStatus[l.sourceId] === 'not-found' ||
+                      bulkStatus[l.sourceId] === 'provider-unavailable' ? (
+                        <button
+                          type="button"
+                          className="af-btn af-btn--ghost af-im-league-btn"
+                          disabled={bulkRunning}
+                          onClick={() => void retryLeague(l.sourceId)}
+                        >
+                          Retry
+                        </button>
+                      ) : null}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="af-btn af-btn--ghost af-im-league-btn"
+                      disabled={bulkRunning}
+                      /*
+                       * A TEST HOOK, AND IT IS LOAD-BEARING. `import-league-select-<sourceId>`
+                       * is the contract `e2e/import-sleeper-canonical.spec.ts` drives the
+                       * canonical import with; it came from `LeagueImportFlow`, which used to
+                       * own `/import`, and moving the route to this screen left it behind. The
+                       * spec has been dying on this exact click on every core run since — it
+                       * said so in its own comment and left the call to a human. Keep it.
+                       */
+                      data-testid={`import-league-select-${l.sourceId}`}
+                      onClick={() => void runPreview(l.sourceId)}
+                    >
+                      {rowsAreTeams ? 'This is my team' : 'Import'}
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+
+          {/*
+            Import all. Only worth offering when there is more than one, and hidden
+            once a single import has taken over the screen.
+          */}
+          {leagues.length > 1 && !rowsAreTeams ? (
+            <div className="af-im-bulk" role="region" aria-label="Import selected leagues">
+              <span className="af-im-bulk-count af-num">
+                {selectedLeagues.length} of {leagues.length} selected
+              </span>
+              {/*
+                ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
+                rule 3). A button reading "Import 4 leagues" beside three ticked
+                boxes is the kind of small lie that costs trust at the last step
+                of a funnel — and this IS the last step.
+
+                While running, the count names the league IN PROGRESS, not the
+                ones finished. The loop is sequential and one commit can take a
+                minute, so a finished count sits on "1 of 5" while league 2 works
+                and reads as frozen.
+              */}
+              <button
+                type="button"
+                className="af-btn af-im-bulk-btn"
+                disabled={bulkRunning || selectedLeagues.length === 0}
+                onClick={() => void runBulkImport()}
+              >
+                {bulkRunning
+                  ? `Importing league ${Math.min(bulkCounts.processed + 1, selectedLeagues.length)} of ${selectedLeagues.length}…`
+                  : selectedLeagues.length === 0
+                    ? 'Pick at least one league'
+                    : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
+              </button>
+              {bulkDone ? (
+                <p className="af-im-bulk-summary" role="status">
+                  {[
+                    bulkCounts.done ? `${bulkCounts.done} imported` : null,
+                    bulkCounts.exists ? `${bulkCounts.exists} already imported` : null,
+                    bulkCounts.needsAttestation
+                      ? `${bulkCounts.needsAttestation} need you to confirm you can import them — do those individually`
+                      : null,
+                    bulkCounts.failed ? `${bulkCounts.failed} failed` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <ReadOnlyPromise />
+        </section>
+      ) : null}
+
       {/* ── Step 1: provider picker ─────────────────────────────────── */}
       {importTakeover ? null : (
-      <section className="af-im-card">
+      <section className="af-im-card af-im-card--connect">
         {/*
           The section heading used to repeat the h1 verbatim ("Where do you already play?"),
           so the page asked the same question twice in a row. 6a asks it once, in the h1.
@@ -2188,6 +2530,9 @@ export function ImportV4({
                   <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
                   {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
                 </span>
+                {available && PROVIDER_EFFORT[opt.provider] ? (
+                  <span className="af-im-effort af-num">{PROVIDER_EFFORT[opt.provider]}</span>
+                ) : null}
               </button>
             )
           })}
@@ -2223,6 +2568,25 @@ export function ImportV4({
               </span>
             ))}
         </p>
+
+        {/*
+          ── The guide ────────────────────────────────────────────────────────
+          One render. On a wide screen af-import.css places it in the card's right-hand column
+          (it is a direct child of this grid on purpose); on a phone it stays here, between the
+          platform you picked and the box it asks you to fill. See ImportGuide's header for why
+          each step and snag exists.
+        */}
+        <ImportGuide
+          provider={provider}
+          providerLabel={providerLabel}
+          available={selectable}
+          espnConnected={espnConnected}
+          mark={
+            <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
+              {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+            </span>
+          }
+        />
 
         {/*
           ── 6a: why a provider is unavailable ─────────────────────────────────
@@ -2370,7 +2734,7 @@ export function ImportV4({
                   {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
                 </button>
                 <span className="af-im-field-help">
-                  Fantrax → Settings → API Access. Read-only, and it is stored encrypted. With it
+                  Fantrax → User Profile (fantrax.com/newui/userProfile.go). Read-only, and it is stored encrypted. With it
                   connected we can name your leagues and your team without you typing either. Prefer
                   not to? Paste a league ID below instead.
                 </span>
@@ -2421,6 +2785,41 @@ export function ImportV4({
                   />
                   {submitButton}
                 </span>
+                {/*
+                  ⚠ THE WRONG-BOX PASTE. An ESPN link in the Sleeper box, a Fantrax link in the ESPN
+                  box — the import then fails with a sentence about the WRONG platform, which is the
+                  most confusing failure on the screen. A pasted LINK names its platform by host, so
+                  say so and offer the switch; bare ids are never guessed at (see the helper).
+                */}
+                {pastedProvider && pastedProvider !== provider ? (
+                  <span className="af-im-wrongbox" role="status">
+                    <span>
+                      That looks like a{/^[aeiou]/i.test(getImportProviderLabel(pastedProvider)) ? 'n' : ''}{' '}
+                      <strong>{getImportProviderLabel(pastedProvider)}</strong> link
+                      {isImportProviderAvailable(pastedProvider)
+                        ? pastedProvider === 'sleeper'
+                          ? ' — Sleeper connects by username, not a link.'
+                          : '.'
+                        : ` — ${getImportProviderLabel(pastedProvider)} import is coming soon.`}
+                    </span>
+                    {isImportProviderAvailable(pastedProvider) ? (
+                      <button
+                        type="button"
+                        className="af-im-wrongbox-btn"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          const typed = account
+                          setProvider(pastedProvider)
+                          reset()
+                          // A Sleeper league link is not a username; every other box takes the link.
+                          setAccount(pastedProvider === 'sleeper' ? '' : typed)
+                        }}
+                      >
+                        Switch to {providerPillLabel(getImportProviderLabel(pastedProvider))} &rarr;
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
                 <span className="af-im-field-help">
                   {/*
                     ⚠ "CONNECT ESPN ABOVE" IS WRONG ONCE ESPN IS CONNECTED — it tells
@@ -2655,234 +3054,6 @@ export function ImportV4({
           <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
           <FantraxUpload />
         </details>
-      ) : null}
-
-      {/* ── Discovered leagues ──────────────────────────────────────── */}
-      {leagues.length > 0 && phase.k !== 'done' && !importTakeover ? (
-        <section className="af-im-card">
-          <header className="af-im-result-head">
-            <h2 className="af-label">
-              {rowsAreTeams
-                ? accountLabel
-                  ? `Which team is yours in ${accountLabel}?`
-                  : 'Which team is yours?'
-                : accountLabel
-                  ? `Leagues for ${accountLabel}`
-                  : 'Leagues we found'}
-            </h2>
-            <span className="af-chip af-num">{leagues.length}</span>
-          </header>
-
-          {handleLinkedElsewhere ? (
-            <p className="af-im-field-help" role="status" data-testid="import-sleeper-linked-elsewhere">
-              This Sleeper account is already linked to a different AllFantasy login. Sign in with that
-              account to import these leagues.
-            </p>
-          ) : null}
-
-          {/*
-            Import all. Only worth offering when there is more than one, and hidden
-            once a single import has taken over the screen.
-          */}
-          {leagues.length > 1 && !rowsAreTeams ? (
-            <div className="af-im-bulk">
-              {/*
-                ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
-                rule 3). A button reading "Import 4 leagues" beside three ticked
-                boxes is the kind of small lie that costs trust at the last step
-                of a funnel — and this IS the last step.
-
-                While running, the count names the league IN PROGRESS, not the
-                ones finished. The loop is sequential and one commit can take a
-                minute, so a finished count sits on "1 of 5" while league 2 works
-                and reads as frozen.
-              */}
-              <button
-                type="button"
-                className="af-btn af-im-bulk-btn"
-                disabled={bulkRunning || selectedLeagues.length === 0}
-                onClick={() => void runBulkImport()}
-              >
-                {bulkRunning
-                  ? `Importing league ${Math.min(bulkCounts.processed + 1, selectedLeagues.length)} of ${selectedLeagues.length}…`
-                  : selectedLeagues.length === 0
-                    ? 'Pick at least one league'
-                    : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
-              </button>
-              {bulkDone ? (
-                <p className="af-im-bulk-summary" role="status">
-                  {[
-                    bulkCounts.done ? `${bulkCounts.done} imported` : null,
-                    bulkCounts.exists ? `${bulkCounts.exists} already imported` : null,
-                    bulkCounts.needsAttestation
-                      ? `${bulkCounts.needsAttestation} need you to confirm you can import them — do those individually`
-                      : null,
-                    bulkCounts.failed ? `${bulkCounts.failed} failed` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          <ul className="af-im-league-list">
-            {leagues.map((l) => {
-              /*
-               * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
-               * DOING. It marked the one row being previewed or committed while the
-               * list stayed on screen. 6c replaced that: those two phases now unmount
-               * the whole list and show the progress screen instead, so this could
-               * only ever have been false — TypeScript said so (TS2367, and
-               * `phase.sourceId` on type `never`), and the compiler was right.
-               */
-              return (
-                <li
-                  key={l.sourceId}
-                  className="af-im-league"
-                  data-picked={
-                    !excluded[l.sourceId] && leagues.length > 1 && !rowsAreTeams ? 'true' : undefined
-                  }
-                >
-                  {/*
-                    Only offered when there is more than one league — a lone
-                    result has nothing to choose between, and a checkbox there
-                    would imply the single "Import" button below it might not
-                    apply to it.
-
-                    ⚠ EXCEPT FOR A PREVIOUSLY-DELETED LEAGUE, WHICH ALWAYS GETS
-                    ONE. Such a row starts unticked, and the tick IS the
-                    confirmation — so suppressing the checkbox on a lone result
-                    would leave it excluded with no control to include it, i.e.
-                    a league the user could see and could not import.
-                  */}
-                  {(leagues.length > 1 || l.previouslyDeleted) && !rowsAreTeams ? (
-                    <input
-                      type="checkbox"
-                      className="af-im-league-check"
-                      checked={!excluded[l.sourceId]}
-                      disabled={bulkRunning || Boolean(bulkStatus[l.sourceId])}
-                      onChange={() => toggleLeague(l.sourceId)}
-                      aria-label={`Include ${l.name} in the import`}
-                    />
-                  ) : null}
-                  <span className="af-im-league-main">
-                    <span className="af-im-league-name">{l.name}</span>
-                    <span className="af-im-league-meta af-num">
-                      {[l.season, l.sport?.toUpperCase(), l.totalTeams ? `${l.totalTeams} teams` : null]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                    {/*
-                      An unticked row has to say WHY it is unticked, or it reads
-                      as a bug — the user sees a league they recognise, sitting
-                      there excluded, with no explanation. This is also the
-                      confirmation prompt itself: the sentence states what
-                      ticking the box will do.
-                    */}
-                    {l.previouslyDeleted ? (
-                      <span className="af-im-league-reason">
-                        You removed this league from AllFantasy. Tick it to import it again.
-                      </span>
-                    ) : null}
-                    {/*
-                      ⚠ WHY IT FAILED, NOT JUST THAT IT DID. "Failed" on its own makes
-                      Retry a coin flip — a league that failed because it does not exist
-                      will fail identically however many times it is pressed, and the
-                      user has no way to tell that from a timeout worth re-running.
-                      Only rendered for `failed`: the `needs-attestation` reason is the
-                      attestation panel's job and would be duplicated here.
-                    */}
-                    {(bulkStatus[l.sourceId] === 'failed' ||
-                      bulkStatus[l.sourceId] === 'not-found' ||
-                      bulkStatus[l.sourceId] === 'provider-unavailable') &&
-                    bulkMessage[l.sourceId] ? (
-                      <span className="af-im-league-reason">{bulkMessage[l.sourceId]}</span>
-                    ) : null}
-                  </span>
-                  {bulkStatus[l.sourceId] ? (
-                    <span className="af-im-league-outcome">
-                      <span
-                        className={`af-im-league-status af-im-league-status--${bulkStatus[l.sourceId]}`}
-                        role="status"
-                      >
-                        {BULK_STATUS_LABEL[bulkStatus[l.sourceId]]}
-                      </span>
-                      {/*
-                        ⚠ THE BADGE ALONE WAS A DEAD END. Any bulk status replaced the
-                        row's "Import" button outright, so the one status that asks the
-                        user to DO something -- "Needs your confirmation" -- left them
-                        nothing to click. The summary line says "do those individually",
-                        and the only way to obey it was to reload /import and re-run
-                        discovery. Observed on a real 55-league Sleeper run.
-
-                        Goes straight to the attestation panel rather than re-previewing:
-                        the commit already told us this exact league needs one, so routing
-                        back through preview -> commit -> 403 -> attest would just make the
-                        user re-earn a refusal we have already recorded.
-                      */}
-                      {bulkStatus[l.sourceId] === 'needs-attestation' ? (
-                        <button
-                          type="button"
-                          className="af-btn af-btn--ghost af-im-league-btn"
-                          disabled={bulkRunning}
-                          onClick={() =>
-                            setPhase({
-                              k: 'attest',
-                              sourceId: l.sourceId,
-                              message:
-                                bulkMessage[l.sourceId] ||
-                                'Confirm you are authorized to import this league.',
-                            })
-                          }
-                        >
-                          Confirm
-                        </button>
-                      ) : null}
-                      {/*
-                        A failed row was as much a dead end as an unconfirmed one: the
-                        badge replaced the button, so the only way to re-attempt a league
-                        that hit a transient provider error midway through a long run was
-                        to reload and re-discover. Retries in place instead.
-                      */}
-                      {bulkStatus[l.sourceId] === 'failed' ||
-                      bulkStatus[l.sourceId] === 'not-found' ||
-                      bulkStatus[l.sourceId] === 'provider-unavailable' ? (
-                        <button
-                          type="button"
-                          className="af-btn af-btn--ghost af-im-league-btn"
-                          disabled={bulkRunning}
-                          onClick={() => void retryLeague(l.sourceId)}
-                        >
-                          Retry
-                        </button>
-                      ) : null}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="af-btn af-btn--ghost af-im-league-btn"
-                      disabled={bulkRunning}
-                      /*
-                       * A TEST HOOK, AND IT IS LOAD-BEARING. `import-league-select-<sourceId>`
-                       * is the contract `e2e/import-sleeper-canonical.spec.ts` drives the
-                       * canonical import with; it came from `LeagueImportFlow`, which used to
-                       * own `/import`, and moving the route to this screen left it behind. The
-                       * spec has been dying on this exact click on every core run since — it
-                       * said so in its own comment and left the call to a human. Keep it.
-                       */
-                      data-testid={`import-league-select-${l.sourceId}`}
-                      onClick={() => void runPreview(l.sourceId)}
-                    >
-                      {rowsAreTeams ? 'This is my team' : 'Import'}
-                    </button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-          <ReadOnlyPromise />
-        </section>
       ) : null}
 
       {/* ── Attestation gate ────────────────────────────────────────── */}
