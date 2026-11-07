@@ -94,6 +94,23 @@
   text-decoration: underline;
 }
 
+/*
+ * The player's name on a phone: 26px tall, and it is the link to the player (2026-11-07 tap-target pass).
+ * Not a min-height floor; see the note further down on why this row keeps its text height. Instead an
+ * invisible box lifts the hit area to 44px without moving a pixel, the same way `.af-info-tip` does.
+ * Its own top-level @media, inserted at depth 0.
+ */
+@media (max-width: 640px) {
+  .af-core .af-triage-name {
+    position: relative;
+  }
+  .af-core .af-triage-name::after {
+    content: '';
+    position: absolute;
+    inset: -9px -4px;
+  }
+}
+
 .af-triage-meta {
   font-size: 11.5px;
   color: var(--muted);
