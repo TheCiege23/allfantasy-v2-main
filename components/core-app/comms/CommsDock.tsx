@@ -215,6 +215,7 @@ export function CommsDock({
    */
   const launchRef = useRef<HTMLButtonElement | null>(null)
   const launcher = useDraggableLauncher(launchRef, !open)
+  const scrollHidden = useHideOnScrollDown(!open)
   /* The server's count, kept current between page loads — see useChatBadge. */
   const badge = useChatBadge(unread, mentions, open)
   /* The open drawer's per-tab counts, re-read on every tab switch — see useCommsTabCounts. */
@@ -231,6 +232,7 @@ export function CommsDock({
           style={launcher.style}
           data-dragging={launcher.dragging || undefined}
           data-moved={launcher.moved || undefined}
+          data-scroll-hidden={scrollHidden || undefined}
           {...launcher.handlers}
           onClick={() => {
             /* The click a browser fires at the end of a drag is not a tap. */
@@ -300,3 +302,43 @@ export function CommsDock({
 }
 
 export default CommsDock
+
+/**
+ * The bubble steps aside while the reader scrolls DOWN, and comes back on any scroll up (2026-11-06
+ * phone pass). Live at 375px it sat over the roster-value text on My team and the win probability on
+ * Matchup, and a fixed 56px circle over a phone's content is in the way exactly while reading. Only
+ * the phone stylesheet acts on the attribute; on a wide screen it is inert.
+ *
+ * ⚠ CHEAP BY CONSTRUCTION: one passive listener, at most one read per frame, and a state change only
+ * when the direction flips (React drops an identical value). Near the top or the bottom it always
+ * shows: at the top nothing is under it yet, and the last card already clears it.
+ */
+export function useHideOnScrollDown(enabled: boolean): boolean {
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') {
+      setHidden(false)
+      return
+    }
+    let last = window.scrollY
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        const y = window.scrollY
+        const dy = y - last
+        if (Math.abs(dy) < 8) return
+        last = y
+        const atEdge = y < 80 || y + window.innerHeight >= document.documentElement.scrollHeight - 80
+        setHidden(dy > 0 && !atEdge)
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [enabled])
+  return hidden
+}
