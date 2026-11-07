@@ -202,3 +202,18 @@ describe('the hourly redraft run and a Guilly chop that has not landed', () => {
     expect(db.sportsPlayer.findFirst).not.toHaveBeenCalled()
   })
 })
+
+describe("the runtime add runs the native eligibility check inside the lock", () => {
+  it('a refusing precheck stops the add before anything is read or written, with the lock held', async () => {
+    let heldDuringCheck = false
+    const precheck = vi.fn(async () => {
+      heldDuringCheck = h.locks.has(leagueWaiverLockKey('L'))
+      throw new Error('This player is already on another roster in this league.')
+    })
+    await expect(addNflRedraftFreeAgent({ seasonId: 's1', rosterId: 'rrB', addPlayerId: 'P', precheck })).rejects.toThrow('already on another roster')
+    expect(heldDuringCheck).toBe(true)
+    expect(db.sportsPlayer.findFirst).not.toHaveBeenCalled()
+    expect(db.$transaction).not.toHaveBeenCalled()
+    expect(h.locks.size).toBe(0)
+  })
+})

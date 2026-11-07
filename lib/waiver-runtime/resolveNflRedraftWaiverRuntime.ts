@@ -858,6 +858,11 @@ type AddNflRedraftFreeAgentInput = {
   dropPlayerName?: string | null
   actorUserId?: string | null
   commissionerOverride?: boolean
+  /**
+   * Runs INSIDE the league waiver lock, before anything is read or written: the native add's own
+   * eligibility check (`/api/redraft/waiver-runtime` passes `assertWaiverClaimEligibility`). Throws to refuse.
+   */
+  precheck?: () => Promise<void>
 }
 
 export async function addNflRedraftFreeAgent(input: AddNflRedraftFreeAgentInput) {
@@ -872,6 +877,7 @@ async function addNflRedraftFreeAgentLocked(
   input: AddNflRedraftFreeAgentInput,
   season: NonNullable<Awaited<ReturnType<typeof resolveSeason>>>,
 ) {
+  if (input.precheck) await input.precheck()
   const meta = await resolvePlayerMeta({
     playerId: input.addPlayerId,
     playerName: input.addPlayerName,
