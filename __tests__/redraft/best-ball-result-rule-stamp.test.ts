@@ -29,6 +29,7 @@ vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false
 import { calculateScoreFromSportConfig, updateMatchupScores } from '@/lib/redraft/scoringEngine'
 import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
 import {
+  frozenBestBallPositions,
   frozenBestBallSlots,
   nextBestBallRuleStamp,
   readBestBallRuleStamp,
@@ -183,6 +184,73 @@ describe('rescoring a SEALED week uses its stored slots, not the league\'s curre
   })
 })
 
+/*
+ * Audit 2026-11-06, row "Position-change effective dates". Nothing in the schema keeps a player's position
+ * history, so every rescore read today's position: an RB re-listed as a WR in week 10 re-seated a CLOSED
+ * week 3. The seal now records each scored player's position, and a sealed week is rescored at it.
+ */
+describe('a SEALED week keeps the positions its players were seated at', () => {
+  const r2 = HOME.find((p) => p.playerId === 'r2')!
+  async function sealedSnapshot() {
+    arrange(WITH_SF, { status: 'active' })
+    await updateMatchupScores('m1')
+    return { snapshot: written().lineupSnapshots, score: written().homeScore as number }
+  }
+
+  it('the seal records every scored player position on both teams', async () => {
+    const { snapshot } = await sealedSnapshot()
+    expect(snapshot.redraftScoring.bestBallRules.sealedPositions).toEqual({
+      q1: 'QB', q2: 'QB', r1: 'RB', r2: 'RB', w1: 'WR', a1: 'WR',
+    })
+  })
+
+  it('the RB re-listed as a WR after the seal: the sealed week still seats him at RB and keeps its score', async () => {
+    const { snapshot, score } = await sealedSnapshot()
+    const seatedAt = (data: ReturnType<typeof written>) =>
+      Object.fromEntries(data.lineupSnapshots.redraftScoring.home.bestBall.assignments.map((a: { playerId: string; slot: string }) => [a.playerId, a.slot]))
+    expect(seatedAt(written()).r2).toBe('RB')
+    r2.position = 'WR'
+    try {
+      // Control: an OPEN week takes the new position — he moves to WR and the lineup changes.
+      vi.clearAllMocks()
+      arrange(WITH_SF, { status: 'active' })
+      await updateMatchupScores('m1')
+      expect(seatedAt(written()).r2).not.toBe('RB') // seated as a WR now (the optimizer puts him at WR or SF)
+      expect(written().homeScore).not.toBe(score)
+
+      vi.clearAllMocks()
+      arrange(WITH_SF, { status: 'final', lineupSnapshots: snapshot })
+      const summary = await updateMatchupScores('m1')
+      expect(summary?.homeScore).toBe(score)
+      expect(seatedAt(written()).r2).toBe('RB')
+      // Carried forward unchanged, not overwritten by today's position.
+      expect(written().lineupSnapshots.redraftScoring.bestBallRules.sealedPositions.r2).toBe('RB')
+    } finally {
+      r2.position = 'RB'
+    }
+  })
+
+  it('a week sealed before positions were recorded never gains them: it keeps current positions', async () => {
+    const { snapshot } = await sealedSnapshot()
+    const { sealedPositions: _dropped, ...olderSeal } = snapshot.redraftScoring.bestBallRules
+    const older = { ...snapshot, redraftScoring: { ...snapshot.redraftScoring, bestBallRules: olderSeal } }
+    r2.position = 'WR'
+    try {
+      vi.clearAllMocks()
+      arrange(WITH_SF, { status: 'final', lineupSnapshots: older })
+      await updateMatchupScores('m1')
+      const stamp = written().lineupSnapshots.redraftScoring.bestBallRules
+      expect(stamp.sealedAt).toBe(olderSeal.sealedAt)
+      expect(stamp.sealedPositions).toBeUndefined()
+      expect(
+        written().lineupSnapshots.redraftScoring.home.bestBall.assignments.find((a: { playerId: string }) => a.playerId === 'r2').slot,
+      ).not.toBe('RB')
+    } finally {
+      r2.position = 'RB'
+    }
+  })
+})
+
 describe('a median-game bye row is stamped and frozen the same way', () => {
   function arrangeBye(settings: unknown, matchup: { status: string; lineupSnapshots?: unknown }) {
     arrange(settings, matchup)
@@ -240,6 +308,22 @@ describe('resultRuleStamp helpers', () => {
     expect(readBestBallRuleStamp({ redraftScoring: { bestBallRules: JSON.parse(JSON.stringify(stamp)) } })).toEqual(stamp)
     expect(readBestBallRuleStamp({ redraftScoring: { bestBallRules: { v: 2 } } })).toBeNull()
     expect(readBestBallRuleStamp(null)).toBeNull()
+  })
+
+  it('freezes positions only when recorded AT the seal, and reads them back', () => {
+    const now = new Date('2026-10-01T00:00:00Z')
+    const positionsUsed = { p1: 'TE', p2: null }
+    const open = nextBestBallRuleStamp({ previous: null, previousStatus: 'active', slotsUsed: slots, scoringFingerprint: null, isFinal: false, now, positionsUsed })
+    expect(open.sealedPositions).toBeUndefined()
+    expect(frozenBestBallPositions(open)).toBeNull()
+    const sealed = nextBestBallRuleStamp({ previous: open, previousStatus: 'active', slotsUsed: slots, scoringFingerprint: null, isFinal: true, now, positionsUsed })
+    expect(frozenBestBallPositions(sealed)).toEqual(positionsUsed)
+    const later = nextBestBallRuleStamp({ previous: sealed, previousStatus: 'final', slotsUsed: slots, scoringFingerprint: null, isFinal: true, now, positionsUsed: { p1: 'WR' } })
+    expect(later.sealedPositions).toEqual(positionsUsed)
+    const legacy = nextBestBallRuleStamp({ previous: null, previousStatus: 'final', slotsUsed: slots, scoringFingerprint: null, isFinal: true, now, positionsUsed })
+    expect(frozenBestBallPositions(legacy)).toBeNull()
+    expect(readBestBallRuleStamp({ redraftScoring: { bestBallRules: JSON.parse(JSON.stringify(sealed)) } })?.sealedPositions).toEqual(positionsUsed)
+    expect(readBestBallRuleStamp({ redraftScoring: { bestBallRules: { ...sealed, sealedPositions: { p1: 7 } } } })?.sealedPositions).toBeUndefined()
   })
 
   it('a scoring edit moves the fingerprint', () => {

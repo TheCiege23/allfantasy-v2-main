@@ -19,6 +19,15 @@
  *                       every rescore seats `slots` from here, never the league's current seats. A
  *                       correction that drops the matchup back to active and re-finals it keeps them.
  *   sealedScoringFingerprint  the scoring fingerprint at the seal, kept beside the latest one.
+ *   sealedPositions     each scored player's position AT THE SEAL (playerId -> position). Like the slots,
+ *                       FROZEN from then on: a rescore seats and scores those players at these positions,
+ *                       never at today's. There is no position history anywhere in the schema
+ *                       (`SportsPlayer.position` and the roster rows hold the CURRENT position only), so a
+ *                       TE re-listed as a WR in week 10 silently re-seated every closed week on rescore
+ *                       (audit 2026-11-06, row "Position-change effective dates"). Recorded only at the
+ *                       moment of sealing: a stamp sealed before this field existed never gains one, for the
+ *                       same reason `legacy` never freezes - today's positions are not the week's.
+ *                       ⚠ An OPEN week still uses current positions; only the seal can record them.
  *   legacy              the result was already final before this stamp existed. Its original slots
  *                       are unknown, so it is NEVER frozen: it keeps today's behaviour (current seats),
  *                       and says so, instead of freezing whatever the seats happen to be now.
@@ -57,7 +66,19 @@ export type BestBallRuleStamp = {
   scoringFingerprint: string | null
   sealedAt?: string
   sealedScoringFingerprint?: string | null
+  sealedPositions?: Record<string, string | null>
   legacy?: true
+}
+
+/** A stored playerId -> position map, or null when it is absent or malformed. */
+function readStoredPositions(raw: unknown): Record<string, string | null> | null {
+  if (!isRecord(raw)) return null
+  const out: Record<string, string | null> = {}
+  for (const [id, pos] of Object.entries(raw)) {
+    if (pos !== null && typeof pos !== 'string') return null
+    out[id] = pos
+  }
+  return out
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -97,6 +118,10 @@ export function readBestBallRuleStamp(lineupSnapshots: unknown): BestBallRuleSta
     ...(stamp.sealedScoringFingerprint !== undefined
       ? { sealedScoringFingerprint: typeof stamp.sealedScoringFingerprint === 'string' ? stamp.sealedScoringFingerprint : null }
       : {}),
+    ...(() => {
+      const positions = readStoredPositions(stamp.sealedPositions)
+      return positions ? { sealedPositions: positions } : {}
+    })(),
     ...(stamp.legacy === true ? { legacy: true as const } : {}),
   }
 }
@@ -111,6 +136,16 @@ export function frozenBestBallSlots(stamp: BestBallRuleStamp | null): LineupSlot
 }
 
 /**
+ * The positions a rescore must seat and score players at: the ones recorded when the result was sealed,
+ * else null (every player at his current position, as before). A player absent from the map - one with no
+ * stat row at the seal - is at his current position.
+ */
+export function frozenBestBallPositions(stamp: BestBallRuleStamp | null): Record<string, string | null> | null {
+  if (!stamp || !stamp.sealedAt || stamp.legacy || !stamp.sealedPositions) return null
+  return { ...stamp.sealedPositions }
+}
+
+/**
  * The stamp to write with this scoring. `previousStatus` is the matchup's status BEFORE this write: a
  * result that was already final with no stamp is legacy and stays unfrozen.
  */
@@ -121,9 +156,17 @@ export function nextBestBallRuleStamp(args: {
   scoringFingerprint: string | null
   isFinal: boolean
   now: Date
+  /** playerId -> the position each scored player was seated and scored at in THIS scoring. */
+  positionsUsed?: Record<string, string | null>
 }): BestBallRuleStamp {
   const legacy = args.previous ? args.previous.legacy === true : args.previousStatus === 'final'
   const sealedAt = legacy ? undefined : args.previous?.sealedAt ?? (args.isFinal ? args.now.toISOString() : undefined)
+  // Carried once sealed; recorded only by the write that seals (never back-filled onto an older seal).
+  const sealedPositions = !sealedAt
+    ? undefined
+    : args.previous?.sealedAt
+      ? args.previous.sealedPositions
+      : args.positionsUsed
   return {
     v: 1,
     algorithm: OPTIMAL_LINEUP_ALGORITHM,
@@ -133,6 +176,7 @@ export function nextBestBallRuleStamp(args: {
       ? {
           sealedAt,
           sealedScoringFingerprint: args.previous?.sealedAt ? args.previous.sealedScoringFingerprint ?? null : args.scoringFingerprint,
+          ...(sealedPositions ? { sealedPositions: { ...sealedPositions } } : {}),
         }
       : {}),
     ...(legacy ? { legacy: true as const } : {}),

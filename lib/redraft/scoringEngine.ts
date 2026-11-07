@@ -45,6 +45,7 @@ import { resolveBestBallScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { computeDailyBestBall, type DailyBestBallCandidate, type DailyBestBallCounted, type DailyBestBallDay } from '@/lib/bestball/dailyBestBall'
 import { writeNativePlayerWeeklyScores, type NativePlayerPoints } from './nativePlayerWeeklyScores'
 import {
+  frozenBestBallPositions,
   frozenBestBallSlots,
   nextBestBallRuleStamp,
   readBestBallRuleStamp,
@@ -273,6 +274,11 @@ export type RosterScoreSummary = {
     period?: 'daily'
     days?: DailyBestBallDay[]
     counted?: DailyBestBallCounted[]
+    /**
+     * playerId -> the position each SCORED player was seated and scored at. Feeds the result stamp's
+     * `sealedPositions` (lib/bestball/resultRuleStamp.ts) on the write that seals the week.
+     */
+    positions?: Record<string, string | null>
   }
   /** Daily-lineup leagues with games limits on only (`gamesLimits.ts`): usage against each limit. */
   gamesLimits?: GamesLimitsSummary
@@ -296,6 +302,18 @@ type BestBallScoringContext = {
   asOfWeek?: boolean
   /** Daily best ball (lib/bestball/scoringPeriod.ts). Absent for every weekly league. */
   daily?: boolean
+  /**
+   * A SEALED week's stored positions (`frozenBestBallPositions`): a player in it is seated and scored at
+   * that position, not his current one. Absent for an open, unstamped or legacy week.
+   */
+  frozenPositions?: Record<string, string | null>
+}
+
+/** The position a best ball player is seated and scored at: the sealed one when the week froze it. */
+function bestBallPositionOf(ctx: BestBallScoringContext, p: { playerId: string; position?: string | null }): string | null {
+  const frozen = ctx.frozenPositions
+  if (frozen && Object.prototype.hasOwnProperty.call(frozen, p.playerId)) return frozen[p.playerId] ?? null
+  return p.position ?? null
 }
 
 export type MatchupScoreUpdateSummary = {
@@ -775,6 +793,7 @@ async function scoreRosterBestBall(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
+  const positionsUsed: Record<string, string | null> = {}
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: {
@@ -786,14 +805,16 @@ async function scoreRosterBestBall(args: {
       allFinal = false
       continue
     }
+    const position = bestBallPositionOf(args.bestBall, p)
+    positionsUsed[p.playerId] = position
     const points = await calculateScoreFromSportConfig(
       args.leagueId,
       p.playerId,
       args.week,
       row.stats as Record<string, number>,
-      p.position,
+      position,
     )
-    inputs.push({ playerId: p.playerId, positions: playerPositions(p.position), points, playerName: p.playerName ?? null })
+    inputs.push({ playerId: p.playerId, positions: playerPositions(position), points, playerName: p.playerName ?? null })
     scored += 1
     if (!row.isFinalized) allFinal = false
   }
@@ -815,7 +836,7 @@ async function scoreRosterBestBall(args: {
       : {}),
     missingPlayerIds,
     allFinal,
-    bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
+    bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots, positions: positionsUsed },
     ...(args.collectPlayerPoints
       ? { playerPoints: inputs.map((i) => ({ playerId: i.playerId, points: i.points, isStarter: started.has(i.playerId) })) }
       : {}),
@@ -872,6 +893,7 @@ async function scoreRosterBestBallDaily(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const inputs: DailyBestBallCandidate[] = []
+  const positionsUsed: Record<string, string | null> = {}
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
@@ -888,13 +910,15 @@ async function scoreRosterBestBallDaily(args: {
     // A drafted or kept row is held from before the season, whatever its `addedAt` says.
     const rosterRow = heldFromSeasonStart(p) ? { addedAt: null, droppedAt: p.droppedAt } : p
     const onRosterDays = new Set(daysOnRoster(rosterRow, days, lockStartOnFor(lockStarts, p)).map((d) => dayKey(d)))
+    const position = bestBallPositionOf(args.bestBall, p)
+    positionsUsed[p.playerId] = position
     const pointsByDay = new Map<string, number>()
     for (const key of onRosterDays) {
       const line = byDay?.get(key)
       if (!line) continue
-      pointsByDay.set(key, await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, p.position))
+      pointsByDay.set(key, await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, position))
     }
-    inputs.push({ playerId: p.playerId, positions: playerPositions(p.position), playerName: p.playerName ?? null, onRosterDays, pointsByDay })
+    inputs.push({ playerId: p.playerId, positions: playerPositions(position), playerName: p.playerName ?? null, onRosterDays, pointsByDay })
   }
 
   const result = computeDailyBestBall({ candidates: inputs, slots: args.bestBall.slots, days: days.map((d) => dayKey(d)) })
@@ -907,7 +931,7 @@ async function scoreRosterBestBallDaily(args: {
     ...(args.includeBench ? { benchPoints: result.benchPoints } : {}),
     missingPlayerIds,
     allFinal,
-    bestBall: { assignments: [], unfilledSlots: [], period: 'daily', days: result.days, counted: result.counted },
+    bestBall: { assignments: [], unfilledSlots: [], period: 'daily', days: result.days, counted: result.counted, positions: positionsUsed },
     ...(args.collectPlayerPoints
       ? { playerPoints: [...result.pointsByPlayer].map(([playerId, points]) => ({ playerId, points, isStarter: counted.has(playerId) })) }
       : {}),
@@ -939,7 +963,15 @@ function withStoredBestBallRules(
   if (!bestBall) return { bestBall, stored: null }
   const stored = readBestBallRuleStamp(lineupSnapshots)
   const frozen = frozenBestBallSlots(stored)
-  return { bestBall: frozen ? { ...bestBall, slots: frozen } : bestBall, stored }
+  const frozenPositions = frozenBestBallPositions(stored)
+  return {
+    bestBall: {
+      ...bestBall,
+      ...(frozen ? { slots: frozen } : {}),
+      ...(frozenPositions ? { frozenPositions } : {}),
+    },
+    stored,
+  }
 }
 
 /**
@@ -1164,6 +1196,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
                     scoringFingerprint: scoringLeague ? scoringRulesFingerprint(scoringLeague) : null,
                     isFinal,
                     now: new Date(),
+                    positionsUsed: { ...home.bestBall?.positions, ...away.bestBall?.positions },
                   }),
                 }
               : {}),
@@ -1374,6 +1407,7 @@ async function updateByeRowScore(row: {
                   scoringFingerprint: scoringRulesFingerprint(league),
                   isFinal,
                   now: new Date(),
+                  positionsUsed: { ...home.bestBall?.positions },
                 }),
               }
             : {}),
