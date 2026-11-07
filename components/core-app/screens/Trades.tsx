@@ -17,12 +17,20 @@ import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { RedraftTradeDeadlineBar } from '@/components/core-app/RedraftTradeDeadlineBar'
+import { useEffect, useState } from 'react'
 import { redraftGradeTone } from '@/lib/core-app/redraftCoreTrades'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
  * History rows carry the graded ledger's `<leagueId>:<transactionId>`; offers carry it bare.
  */
+/**
+ * How many completed trades show before "Show all" (2026-11-06 phone pass). Live at 375px the history
+ * was 2,500px, half of the Trades screen, below everything a manager acts on. The newest few are the
+ * ones anyone reads; the rest are one tap away, and a `?trade=` link to an older one opens the list.
+ */
+export const HISTORY_PREVIEW = 5
+
 function linkIdOf(id: string): string {
   return id.split(':').pop() ?? id
 }
@@ -366,8 +374,19 @@ export function Trades({ data, hidePending = false }: TradesProps) {
   const language = useOptionalLanguage().language
   const m = useMessages(tradesScreenMessages)
   const copy = (value: string) => tradeUiCopy(value, language)
+  const history = data.history.available ? data.history.data : []
+  const [showAllTrades, setShowAllTrades] = useState(false)
+  const [focusReady, setFocusReady] = useState(false)
+  // A `?trade=` link to a trade past the preview opens the full list first, then the hook looks for it.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('trade')?.trim()
+    if (wanted && history.findIndex((t) => linkIdOf(t.transactionId) === wanted) >= HISTORY_PREVIEW) setShowAllTrades(true)
+    setFocusReady(true)
+    // Once, on arrival: the link is read from the URL the page opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // A trade email or push lands here with `?trade=`; bring that trade into view.
-  useFocusTradeFromUrl()
+  useFocusTradeFromUrl(focusReady)
   return (
     /*
       Names on this screen belong to THIS league, so the card opens in its
@@ -460,11 +479,24 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
         {data.history.available ? (
           data.history.data.length > 0 ? (
-            <ul className="af-tr-list">
-              {data.history.data.map((t) => (
-                <TradeCard key={t.transactionId} trade={t} />
-              ))}
-            </ul>
+            <>
+              <ul className="af-tr-list" id="af-tr-history-list">
+                {(showAllTrades ? history : history.slice(0, HISTORY_PREVIEW)).map((t) => (
+                  <TradeCard key={t.transactionId} trade={t} />
+                ))}
+              </ul>
+              {history.length > HISTORY_PREVIEW ? (
+                <button
+                  type="button"
+                  className="af-tr-history-more"
+                  aria-expanded={showAllTrades}
+                  aria-controls="af-tr-history-list"
+                  onClick={() => setShowAllTrades((v) => !v)}
+                >
+                  {showAllTrades ? m.showFewerTrades : m.showAllTrades(history.length)}
+                </button>
+              ) : null}
+            </>
           ) : (
             <Unavailable reason="No trades recorded in this league." />
           )

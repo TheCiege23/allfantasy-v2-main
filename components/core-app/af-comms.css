@@ -4352,3 +4352,24 @@ html[data-mode='light'] .af-cm .af-cm-empty-icon[data-kind='discord'] { backgrou
   .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto); justify-content: space-between; }
   .af-cm .af-cm-tab { gap: 4px; padding: 0 4px; }
 }
+
+/*
+ * Phone pass (2026-11-06): the bubble slides out while the reader scrolls down and returns on scroll
+ * up (useHideOnScrollDown in CommsDock.tsx). Phone only; never while it is being dragged, and a
+ * keyboard focus brings it straight back. Appended at depth 0.
+ */
+@media (max-width: 720px) {
+  .af-cm-launch[data-scroll-hidden='true']:not([data-dragging='true']):not(:focus-visible) {
+    transform: translateY(calc(100% + 96px));
+    opacity: 0;
+    pointer-events: none;
+  }
+  .af-cm-launch {
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  }
+}
+@media (max-width: 720px) and (prefers-reduced-motion: reduce) {
+  .af-cm-launch {
+    transition: none;
+  }
+}
