@@ -392,3 +392,30 @@ describe('elimination from a native league\'s own standings (no season forecast)
     expect(check.explanation).toBe('No season forecast has been run for this league.')
   })
 })
+
+describe('reviewStoredTrade — a completed trade is judged at the value it had when it happened', () => {
+  const done = { ok: true, trade: trade({ status: 'completed', completedAt: '2026-09-01T00:00:00.000Z' }), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world }
+
+  it('uses the audited gap, not today’s re-price, and says which it used', async () => {
+    const auditedGap = vi.fn(async () => ({ gapPct: -4, basis: 'at_completion' }))
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ evaluate: (async () => done) as never, auditedGap }))
+    if (!r.ok) throw new Error('refused')
+    expect(auditedGap).toHaveBeenCalledWith({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, sideATeamId: 'rA' })
+    expect(r.facts.gapPct).toEqual({ ok: true, value: -4 })
+    expect(r.gapBasis).toBe('at_completion')
+    expect(Object.fromEntries(r.review.checks.map((c) => [c.code, c.status])).heavily_lopsided).not.toBe('raised')
+  })
+
+  it('positive control: with no audit row the same trade is still lopsided on today’s values', async () => {
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ evaluate: (async () => done) as never, auditedGap: async () => null }))
+    if (!r.ok) throw new Error('refused')
+    expect(r.gapBasis).toBe('today')
+    expect(Object.fromEntries(r.review.checks.map((c) => [c.code, c.status])).heavily_lopsided).toBe('raised')
+  })
+
+  it('a pending trade never reads an audit', async () => {
+    const auditedGap = vi.fn(async () => ({ gapPct: 0, basis: 'at_completion' }))
+    await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ auditedGap }))
+    expect(auditedGap).not.toHaveBeenCalled()
+  })
+})
