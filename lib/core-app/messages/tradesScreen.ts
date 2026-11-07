@@ -24,6 +24,9 @@ export const tradesScreenMessages = defineMessages({
     historyLoading: 'Loading completed trades…',
     showAllTrades: (n: number) => `Show all ${n} trades`,
     showFewerTrades: 'Show fewer trades',
+    /** Phone only: opens a trade card's grade reasons and full grade notes (TradeCard). */
+    whyTheseGrades: 'Why these grades',
+    hideGradeDetails: 'Hide grade details',
   },
   es: {
     perspectiveAria: (manager) => `Intercambio desde la perspectiva de ${manager ?? 'el primer mánager'}`,
@@ -36,5 +39,7 @@ export const tradesScreenMessages = defineMessages({
     historyLoading: 'Cargando intercambios completados…',
     showAllTrades: (n) => `Ver los ${n} intercambios`,
     showFewerTrades: 'Ver menos intercambios',
+    whyTheseGrades: 'Por qué estas calificaciones',
+    hideGradeDetails: 'Ocultar detalles de la calificación',
   },
 })

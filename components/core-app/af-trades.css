@@ -582,3 +582,53 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/*
+ * A trade card on a phone (2026-11-07 phone pass). Live at 375px one three-for-three trade was 841px:
+ *  - the In / Out count strip (71px) repeats the player lists right under it, so it goes;
+ *  - the reasons list (134px) and the full grade notes fold behind "Why these grades";
+ *  - closed, each grade note keeps its first two lines, enough for "got 19,716 for 17,525" and
+ *    "net -5.6 fantasy points", and the letters never hide.
+ * The toggle exists only here; on a wide screen it is display:none and the card is unchanged.
+ * Appended at depth 0, like every block below the @media above.
+ */
+.af-core .af-tr-why-toggle {
+  display: none;
+}
+@media (max-width: 640px) {
+  .af-core .af-tr-card .af-tr-sides {
+    display: none;
+  }
+  .af-core .af-tr-card:not([data-why-open]) .af-tr-leaguegrade-why {
+    display: none;
+  }
+  .af-core .af-tr-card:not([data-why-open]) .af-tr-grade-why,
+  .af-core .af-tr-card:not([data-why-open]) .af-tr-leaguegrade-line {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  .af-core .af-tr-why-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    margin: 10px 0 0;
+    padding: 0 12px;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .af-core .af-tr-why-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
