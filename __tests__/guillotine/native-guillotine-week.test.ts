@@ -254,6 +254,17 @@ describe('runNativeGuillotineWeek', () => {
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
   })
 
+  it('🛑 a game missing its box score is backfilled once, and while it stays missing nobody is chopped', async () => {
+    arrange()
+    m.finalizeRedraftWeek.mockResolvedValue({ refusal: 'game_stats_missing', slate: null })
+    const syncWeekStats = vi.fn(async () => undefined)
+    expect(await run(4, { syncWeekStats })).toMatchObject({ outcome: 'waiting', week: 3, reason: 'game_stats_missing' })
+    expect(syncWeekStats).toHaveBeenCalledOnce()
+    expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(2)
+    expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).not.toHaveBeenCalled()
+  })
+
   describe('pre-chop stat refresh (a correction inside the window decides the chop)', () => {
     it('re-pulls the week and re-seals it before any team is scored', async () => {
       arrange()

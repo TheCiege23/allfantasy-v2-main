@@ -183,6 +183,27 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written by the week finalizer (lib/redraft/weekFinalizer.ts) when a team's game is final but its box
+  // score has been missing from the feed for a day past the grace period. The week is NOT closed on zeros;
+  // it keeps waiting, and this is how the commissioner learns why.
+  week_stat_gap: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} is waiting on missing stats`,
+        es: `${wk.es} espera estadísticas que faltan`,
+        detailEn: `${named ? `No box score has arrived for ${named}. ` : ''}The week stays open rather than score those players 0, and closes on its own once the stats land.`,
+        detailEs: `${named ? `No ha llegado la ficha de ${named}. ` : ''}La semana sigue abierta en vez de dar 0 a esos jugadores, y se cierra sola cuando lleguen las estadísticas.`,
+      }
+    },
+  },
   score_adjustment_added: {
     category: 'scoring',
     members: true,
