@@ -35,6 +35,7 @@ import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/l
 import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finishGuillotineSeason'
 import { recordChoppedReleases } from '@/lib/guillotine/choppedReleases'
 import { firstChopWeekAfterDraft } from '@/lib/guillotine/draftWeekFloor'
+import { recordGuillotineCorrectionBaseline } from '@/lib/guillotine/statCorrectionHandler'
 
 export type NativeGuillotineOutcome =
   | 'not_guillotine'
@@ -214,10 +215,13 @@ export async function runNativeGuillotineWeek(
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
     const points = new Map<string, number>()
     const benchPoints = new Map<string, number>()
+    // Each counted player's points too: the baseline a later stat correction is measured against.
+    const playerPoints = new Map<string, Array<{ playerId: string; points: number; isStarter: boolean }>>()
     for (const r of active) {
-      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true })
+      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
       points.set(r.id, s.points)
       if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
+      playerPoints.set(r.id, s.playerPoints ?? [])
     }
 
     // Into the engine's id space. A team that cannot be placed would silently escape the chop.
@@ -273,6 +277,33 @@ export async function runNativeGuillotineWeek(
       }
     })
     await savePeriodScores({ leagueId: season.leagueId, weekOrPeriod: week, season: season.season, scores: periodScores })
+    /*
+     * The stat-correction baseline (./statCorrectionHandler.ts): the exact numbers this chop is decided
+     * on, per player, while every roster — the one about to be chopped included — still holds them. A
+     * correction after the chop updates the scores against it; it never reverses the chop. Best-effort:
+     * without it that week is simply never corrected, and the chop must not wait on bookkeeping.
+     */
+    try {
+      await recordGuillotineCorrectionBaseline({
+        seasonId: season.id,
+        leagueId: season.leagueId,
+        season: season.season,
+        week,
+        capturedAt: now,
+        teams: active.map((r) => ({
+          redraftRosterId: r.id,
+          engineRosterId: rosterForRedraft.get(r.id)!,
+          recordedPoints: points.get(r.id) ?? 0,
+          playerPoints: playerPoints.get(r.id) ?? [],
+        })),
+      })
+    } catch (error) {
+      console.warn('[native-guillotine] stat-correction baseline not recorded; the chop proceeds', {
+        seasonId: season.id,
+        week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     // The chop is announced in league chat, authored by the league owner (there is no system user);
     // a league with no owner goes unannounced rather than unchopped.

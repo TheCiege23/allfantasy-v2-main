@@ -183,6 +183,31 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written by the Guilly correction pass (lib/guillotine/statCorrectionHandler.ts): a stat correction
+  // after a chop moved that week's scores. Applied to scores and history; the chop always stands.
+  guillotine_stat_correction: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const a = obj(ctx.row.afterState)
+      const week = num(m.week)
+      const changes = Array.isArray(a.changes) ? a.changes.length : 0
+      const disputed = a.chopDisputed === true
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` in week ${week}` : '', es: week != null ? ` en la semana ${week}` : '' }
+      return {
+        en: `Stat corrections updated ${changes} team score${changes === 1 ? '' : 's'}${wk.en}`,
+        es: `Las correcciones de estadísticas cambiaron ${changes} puntuaci${changes === 1 ? 'ón' : 'ones'}${wk.es}`,
+        detailEn: disputed
+          ? `With the corrected scores ${names(a.wouldHaveChoppedRedraftRosterIds, 'en') || 'another team'} would have been chopped instead of ${names(a.choppedRedraftRosterIds, 'en') || 'the chopped team'}. The chop stands.`
+          : 'The chop would have been the same. The chop stands.',
+        detailEs: disputed
+          ? `Con las puntuaciones corregidas habría caído ${names(a.wouldHaveChoppedRedraftRosterIds, 'es') || 'otro equipo'} en lugar de ${names(a.choppedRedraftRosterIds, 'es') || 'el equipo eliminado'}. La eliminación se mantiene.`
+          : 'La eliminación habría sido la misma. La eliminación se mantiene.',
+      }
+    },
+  },
   // Written by the week finalizer (lib/redraft/weekFinalizer.ts) when a team's game is final but its box
   // score has been missing from the feed for a day past the grace period. The week is NOT closed on zeros;
   // it keeps waiting, and this is how the commissioner learns why.
@@ -493,6 +518,12 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_stat_correction') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRedraftRosterIds, a.wouldHaveChoppedRedraftRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
   }
   return [...ids]

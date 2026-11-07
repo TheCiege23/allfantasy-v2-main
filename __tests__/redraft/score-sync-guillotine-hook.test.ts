@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   standings: vi.fn(),
   pirateCapture: vi.fn(),
   chopZone: vi.fn(),
+  correction: vi.fn(),
 }))
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
@@ -65,6 +66,7 @@ vi.mock('@/lib/pirate/service', () => ({
 vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: m.pirateCapture }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
 vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopZoneWarningsForSeason: m.chopZone }))
+vi.mock('@/lib/guillotine/statCorrectionHandler', () => ({ checkGuillotineStatCorrectionsForSeason: m.correction }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))
 
@@ -84,6 +86,7 @@ beforeEach(() => {
   })
   m.housekeeping.mockResolvedValue({ leaguesChecked: 0, announcementsPosted: 0, errors: [] })
   m.pirateCapture.mockResolvedValue(0)
+  m.correction.mockResolvedValue({ outcome: 'no_baseline' })
 })
 
 describe('score-sync — native guillotine', () => {
@@ -128,6 +131,27 @@ describe('score-sync — native guillotine', () => {
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
     expect(m.chopZone).toHaveBeenCalledTimes(3)
     expect(body.result.redraft).toMatchObject({ guillotineFailed: 0, guillotineOutcomes: { waiting: 3, chop_zone_warning_failed: 3 } })
+  })
+})
+
+describe('score-sync — Guilly stat corrections after a chop', () => {
+  it('re-checks a guillotine season’s chopped weeks with the stat sync, never a non-guillotine one', async () => {
+    m.correction.mockImplementation(async (seasonId: string) => ({ outcome: seasonId === 's-guillotine' ? 'applied' : 'throttled' }))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    // s-broken threw in the chop pass and s-plain is not guillotine: only s-guillotine is checked.
+    expect(m.correction.mock.calls.map((c) => c[0])).toEqual(['s-guillotine'])
+    const deps = m.correction.mock.calls[0][1] as { syncWeekStats: (a: { seasonId: string; week: number }) => Promise<void> }
+    expect(typeof deps.syncWeekStats).toBe('function')
+    expect(body.result.redraft).toMatchObject({ statCorrectionOutcomes: { guilly_applied: 1 } })
+  })
+
+  it('a correction pass that throws is counted and never stops the chop accounting', async () => {
+    m.correction.mockRejectedValue(new Error('db blip'))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(body.result.redraft).toMatchObject({ guillotineChops: 1, guillotineFailed: 1 })
+    expect(Number(body.result.redraft.statCorrectionFailed)).toBeGreaterThanOrEqual(1)
   })
 })
 

@@ -124,3 +124,8 @@ export type GuillotineEventType =
   | 'next_chop_pick'
   /** The once-a-week chop-zone warning went out (./chopAlerts.ts); its presence stops a resend. */
   | 'chop_zone_warning'
+  /**
+   * A stat correction moved a finished week's scores (./statCorrectionHandler.ts). The chop stands;
+   * metadata says whether the corrected scores would have chopped someone else.
+   */
+  | 'stat_correction'
