@@ -2794,3 +2794,17 @@ li[data-kind='questionable'] .af-mt-check-tag {
     grid-template-columns: 64px minmax(0, 1fr) auto;
   }
 }
+
+/*
+ * Phone pass (2026-11-06): the lineup check INSIDE the decision card. On a 375px phone the card was
+ * 731px, the tallest thing before the first starter, and part of that was saying things twice: a
+ * second "Lineup check" heading under the card's own "Replace <player>", and the confirm-on-your-
+ * platform caveat the card's paragraph already gives. On a phone those two go; the list, the free
+ * agents and the fix button stay. The standalone check (not embedded) keeps both. Appended at depth 0.
+ */
+@media (max-width: 720px) {
+  .af-mt-check--embedded > h2.af-label,
+  .af-mt-check--embedded > .af-mt-footnote {
+    display: none;
+  }
+}
