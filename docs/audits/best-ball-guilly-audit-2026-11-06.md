@@ -60,7 +60,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Negative scores, unfilled slots, deterministic ties | W (Verified) | A required seat takes a negative player only as a last resort. Unfilled seats are reported. Ties break on `playerId`. |
 | IR/IL/taxi exclusion | W | Uses that week's saved lineup (`scoringEngine.ts:738-745`). |
 | Roster *as of the scoring week* | **Fixed** | It was the current roster (`droppedAt: null`). Now a player counts for whoever held him at his first game lock that week (`lib/redraft/bestBallWeekRoster.ts`). Native leagues only; the scorer and the week finalizer share it. See P0-3. |
-| Weekly vs daily | P | One lineup over weekly totals (the best-ball branch returns before the daily branch, `scoringEngine.ts:305` vs `:318`). The UI, rules and AI say "daily" (`lib/bestball/rules.ts:147,171,197`; `sportConfig.ts:81,112,139`). |
+| Weekly vs daily | **Fixed** | Weekly is the default and is what existing leagues are scored on; a commissioner can choose daily (NBA/NHL/MLB) before the draft, and daily scores each day's best lineup and sums the week. The rules, UI, Chimmy and start/sit/waiver context read the resolved period. MLB daily has no data until an MLB stat sync exists. |
 | Rule/settings version stored with a result | M | Assignments and unfilled seats are stored in `lineupSnapshots`. The algorithm id, slot config and scoring version are not. Rescoring an old week uses current settings (`scoringEngine.ts:212-219,805`). |
 | Position-change effective dates | M | Current position everywhere. |
 | Secondary optimizers agree with production | **Fixed** | `optimizerCore.ts` (contests, survivor, the optimize cache), `leagueOptimizer.ts` (weekly processor) and `best-ball-engine.ts` (scoring worker) now seat with `computeOptimalLineup` over the league's own slots (`lib/bestball/productionLineup.ts`). The dual-eligible case reads 50, the 30-player MLB roster takes under 1s, and a team the worker cannot build a lineup for is left unscored for the week instead of summing the whole roster. `rules.ts` slot counts now come from the same `best_ball` roster template (NBA 11, NHL 14, MLB 23, NCAAB 9, Soccer 12). |
@@ -78,7 +78,7 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 | Scheduled auto-start, Classic BB | **Fixed** | The tick started `leagueType:'redraft'` only. `SCHEDULED_SEASONAL_LEAGUE_TYPES` (`redraftScheduledStart.ts`) now adds `best_ball` under redraft's rule: the draft time is the commitment. The tick's query and the settings UI read the same list. Guilly start still needs Autostart on. |
 | Server autopick when nobody is online | P / U | Needs `DRAFT_TICK_CRON_ENABLED==='true'`, which defaults off (`app/api/cron/draft-tick/route.ts:40-42`). Production value unverified. |
 | Autopick keeps a usable roster | **Fixed** | One guard (`lib/live-draft-engine/autopickStarterGuard.ts`) now covers the queue, draft-as-me, need-based, best available and the Chimmy/orphan drafter. It bites only once the team's remaining picks just cover its open starting spots. |
-| Rounds = draftable capacity | P | NFL is correct (18). NBA/NHL/MLB use the generic registry (13/17/24 against 18/21/26 seats; code-read, not executed). |
+| Rounds = draftable capacity | **Fixed** | NFL 18; NBA/NHL/MLB now equal their `best_ball` template's playable seats (17/22/33). |
 | No double-drafting under concurrency | W | Transaction re-reads the pick count; `@@unique([sessionId, overall])` (`PickSubmissionService.ts:413-428`). |
 | Exactly-once finalization | **Fixed** | Draft completion is a compare-and-set (`updateMany … status <> 'completed'`) in both the ordinary and season-tournament paths, so exactly one completer sends `draft_ended` and writes the lifecycle row. |
 | Best Ball draft AI | **Fixed** | `draftAssistant.ts` ranks by ADP adjusted for roster need, with distinct best/safe/upside/structural picks and tournament stacking only when teams are sent. It uses only ADP and roster need, and says so. No client calls the route today. |
@@ -104,8 +104,8 @@ W = Working · P = Partial · M = Missing · B = Broken · U = Unverified
 |---|---|---|
 | Trigger | W | `/api/redraft/score-sync` every 5 min → `runNativeGuillotineWeek` (`route.ts:425`). |
 | Final-only before a chop | W | All games final + 12h grace + coverage floor + correction window (`weekFinalizer.ts:439-449`; `nativeGuillotineWeek.ts:155-166`). |
-| Missing stats | P | Above 80% coverage, the missing players are sealed at 0 (`weekFinalizer.ts:60-69,618-639`). |
-| Post-chop stat corrections | M | `statCorrectionHandler.ts:13-35` is a stub. |
+| Missing stats | **Fixed** | A player with no stat row is sealed at 0 only with evidence he did not play (bye, or his team's box score is in). A missing box score holds the week, escalates after a day, and closes after three days with the zeros marked unverified. |
+| Post-chop stat corrections | **Fixed** | For 6 days after a chop, corrections update scores, totals and standings; the chop is never reversed, and a commissioner note names both teams when the corrected scores would have chopped someone else. Chops before the deploy have no baseline. |
 | Ties | **Fixed** | Configurable order. The `random` step and the every-step-spent fallback now use a seeded order (`leagueId:season`, period, roster), so a retry, the preview and an audit agree (`GuillotineTiebreakResolver.seededOrder`). |
 | Double chops, Final N | W | `chopSchedule.ts`, `endgameRules.ts`. A Final N is not validated against the season length. |
 | Idempotency and recovery | W | Two locks, a unique index on (season, period, roster), the audit row, and `resumeAuditedRosterRelease` every tick. |
