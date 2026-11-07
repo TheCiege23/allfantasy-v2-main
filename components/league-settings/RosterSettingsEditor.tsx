@@ -247,7 +247,8 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('lsEd.ro.resetFailed')); return }
       setConfig(data.config)
-      setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
+      // Best ball: the default seats saved but leave the player pool tight (lib/bestball/poolCapacity.ts).
+      setWarnings([...(data.unifiedConfig?.rosterWarnings ?? []), ...(data.bestBallPoolWarnings ?? [])])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       applyPayload({ ...data, sport: data.sport ?? rosterSport, templates }, slotDefs)
       if (!data.config?.templateKey) setSelectedTemplateKey(defaultTemplateKey ?? 'custom')

@@ -374,6 +374,9 @@ export async function executeLeagueSettingsPatch(
     const refusal = weeklyResetSurvivorRefusal(hubWaiver.options, league.survivorMode === true || (await isSurvivorLeague(leagueId)))
     if (refusal) return jsonError(refusal, 400)
   }
+  // Best ball pool warnings for a new team count that fits but leaves the pool tight; returned with the
+  // success body so the General tab can show them, as the roster editor does for its own saves.
+  let bestBallPoolWarnings: string[] = []
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
@@ -382,6 +385,7 @@ export async function executeLeagueSettingsPatch(
     if (size !== league.leagueSize) {
       const poolCheck = checkLeagueBestBallPool(league, { teamCount: size })
       if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
+      bestBallPoolWarnings = poolCheck?.warnings.map((w) => w.message) ?? []
     }
   }
 
@@ -1587,6 +1591,7 @@ export async function executeLeagueSettingsPatch(
     // Commissioner edits on an imported league rewrite AllFantasy's twin only. The source
     // league's real settings on ESPN/Yahoo/Sleeper are unchanged, and the response says so.
     writeAuthority: buildWriteAuthorityEnvelope('settings', league.platform),
+    bestBallPoolWarnings,
     settings: lsOut
       ? {
           ...lsOut,

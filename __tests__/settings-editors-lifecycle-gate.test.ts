@@ -19,6 +19,8 @@ import { NextRequest } from 'next/server'
 
 const h = vi.hoisted(() => ({
   leagueRow: {} as Record<string, unknown>,
+  // The roster engine's default template, for reset-default's pool check.
+  defaultTemplate: { key: 'default', slots: { QB: 1 } as Record<string, number> },
   saveScoring: vi.fn(),
   updateRoster: vi.fn(),
   resetRoster: vi.fn(),
@@ -90,7 +92,7 @@ vi.mock('@/lib/roster-engine', () => ({
   getLeagueRosterConfig: vi.fn(async () => null),
   getRosterEngineRegistry: () => ({
     isSupported: () => true,
-    getService: () => ({ getConfig: vi.fn(async () => ({})) }),
+    getService: () => ({ getConfig: vi.fn(async () => ({})), resolveDefaultTemplate: () => h.defaultTemplate }),
   }),
   updateLeagueRosterConfig: h.updateRoster,
 }))
@@ -125,6 +127,8 @@ vi.mock('@/lib/league/commissioner-settings-derived-sync', () => ({ syncCommissi
 vi.mock('@/lib/analytics/recordAnalyticsEvent', () => ({ recordProductEvent: vi.fn(async () => undefined) }))
 vi.mock('@/lib/waiver-wire/settings-service', () => ({ upsertLeagueWaiverSettings: vi.fn() }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ refreshLeagueWaiverNextRunAt: vi.fn() }))
+// A team-count save that passes the pool check reaches the resize; the write itself is not under test.
+vi.mock('@/lib/league/resizeNativeLeague', () => ({ resizeNativeLeague: vi.fn(async () => undefined) }))
 
 import { PUT as nflPut } from '@/app/api/commissioner/leagues/[leagueId]/nfl-scoring/route'
 import { PUT as nbaPut } from '@/app/api/commissioner/leagues/[leagueId]/nba-scoring/route'
@@ -222,6 +226,7 @@ beforeEach(() => {
   h.resetRoster.mockReset()
   h.applyImportedRoster.mockReset()
   h.replaceOverrides.mockReset()
+  h.defaultTemplate = { key: 'default', slots: { QB: 1 } }
   h.logAction.mockClear()
   h.publish.mockClear()
 })
@@ -361,6 +366,65 @@ describe('best ball player-pool check on the commissioner saves', () => {
     bestBallLeague({ leagueSize: 20, settings: { roster: { config: { sections: [{ slots: NFL_GUILLY }] } } } })
     const res = await call(rosterPut as Handler, { slots: { ...NFL_GUILLY, DEF: 2 }, templateKey: 'custom' })
     expect(res.status).toBe(200)
+  })
+
+  it('roster reset-default: a default template the league is too big for is refused, nothing written', async () => {
+    // The league dropped to one DEF-free layout; the sport default it resets to has two DEF seats at 20 teams.
+    bestBallLeague({ leagueSize: 20 })
+    h.defaultTemplate = { key: 'nfl_default', slots: { ...NFL_GUILLY, DEF: 2 } }
+    const res = await call(rosterResetPost as Handler, {})
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { code?: string; error?: string }
+    expect(json.code).toBe('BEST_BALL_POOL_EXHAUSTED')
+    expect(json.error).toContain('40 players in its DEF seat')
+    expect(h.resetRoster).not.toHaveBeenCalled()
+  })
+
+  it('roster reset-default: a tight default saves and returns the warning for the editor', async () => {
+    bestBallLeague({ leagueSize: 28 })
+    h.defaultTemplate = { key: 'nfl_default', slots: NFL_GUILLY }
+    const res = await call(rosterResetPost as Handler, {})
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { bestBallPoolWarnings?: string[] }
+    expect(json.bestBallPoolWarnings?.join(' ')).toContain('28 of the about 32 K players')
+    expect(h.resetRoster).toHaveBeenCalled()
+  })
+
+  it('roster reset-default: a lineup league is not checked', async () => {
+    bestBallLeague({ leagueSize: 20, settings: { roster: { config: { sections: [{ slots: NFL_GUILLY }] } } } })
+    h.defaultTemplate = { key: 'nfl_default', slots: { ...NFL_GUILLY, DEF: 2 } }
+    const res = await call(rosterResetPost as Handler, {})
+    expect(res.status).toBe(200)
+    expect(h.resetRoster).toHaveBeenCalled()
+  })
+
+  it('roster import apply: an imported layout the league is too big for is refused, nothing written', async () => {
+    bestBallLeague({ leagueSize: 20 })
+    const res = await call(rosterImportPost as Handler, {
+      action: 'apply', sourcePlatform: 'yahoo', importedConfig: { ...NFL_GUILLY, DEF: 2 },
+    })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { code?: string }).code).toBe('BEST_BALL_POOL_EXHAUSTED')
+    expect(h.applyImportedRoster).not.toHaveBeenCalled()
+    // Positive control: the same import with one DEF seat applies.
+    const ok = await call(rosterImportPost as Handler, { action: 'apply', sourcePlatform: 'yahoo', importedConfig: NFL_GUILLY })
+    expect(ok.status).toBe(200)
+    expect(h.applyImportedRoster).toHaveBeenCalled()
+  })
+
+  it('league settings: a team count that fits but leaves the pool tight saves and returns the warning', async () => {
+    bestBallLeague({ leagueSize: 16 })
+    const res = await patch({ leagueId: 'L1', leagueSize: 28 })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { bestBallPoolWarnings?: string[] }
+    expect(json.bestBallPoolWarnings?.join(' ')).toContain('28 of the about 32 K players')
+  })
+
+  it('league settings: a roomy team count returns no warning', async () => {
+    bestBallLeague({ leagueSize: 16 })
+    const res = await patch({ leagueId: 'L1', leagueSize: 18 })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { bestBallPoolWarnings?: string[] }).bestBallPoolWarnings).toEqual([])
   })
 
   it('league settings: growing a best ball league past the pool is refused, nothing written', async () => {
