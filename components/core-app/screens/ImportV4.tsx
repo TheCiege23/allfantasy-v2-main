@@ -26,6 +26,7 @@ import '@/components/core-app/af-import.css'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
   getImportProviderLabel,
+  importComingSoonMessage,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
@@ -2091,7 +2092,13 @@ export function ImportV4({
         the query string and read by nothing, so a failed connect looked identical
         to never having tried.
       */}
-      {yahooError ? (
+      {yahooError === 'coming_soon' ? (
+        /* Not an error: the entry point refused because Yahoo is not live. No retry link — it
+           would only send them round the same refusal. */
+        <div className="af-im-note" role="status">
+          <p>{importComingSoonMessage('yahoo')}</p>
+        </div>
+      ) : yahooError ? (
         <div className="af-im-error" role="alert">
           <p className="af-im-error-text">{describeYahooError(yahooError, yahooErrorDesc)}</p>
           <a className="af-im-error-link" href={YAHOO_CONNECT_HREF}>

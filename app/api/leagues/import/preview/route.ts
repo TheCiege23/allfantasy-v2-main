@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { getSleeperImportPreview } from '@/lib/league-import/sleeper/SleeperImportPreviewService'
 import {
   assertImportCommissioner,
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   if (!isImportProviderAvailable(provider)) {
     return NextResponse.json(
-      { error: `Import from ${provider} is not yet available.` },
+      { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }
     )
   }

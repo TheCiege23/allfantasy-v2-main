@@ -10,6 +10,7 @@ const FOOTER_SECTIONS = [
   {
     heading: 'Product',
     links: [
+      { href: '/commissioners', label: 'For Commissioners' },
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/discover/leagues', label: 'Leagues' },
       { href: '/war-room', label: 'AF Legacy' },

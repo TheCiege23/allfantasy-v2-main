@@ -551,7 +551,6 @@ const spanish: Record<string, string> = {
   'Your balance, what every action costs, and top-ups.': 'Tu saldo, el coste de cada acción y recargas.',
   'Compare tiers and what each one unlocks.': 'Compara planes y lo que incluye cada uno.',
   'Profile, notifications, language and connected accounts.': 'Perfil, notificaciones, idioma y cuentas conectadas.',
-  'Bring in a league from Sleeper, ESPN, Yahoo or Fantrax.': 'Importa una liga de Sleeper, ESPN, Yahoo o Fantrax.',
   'Run the leagues you commission — settings, integrity, recaps.': 'Gestiona tus ligas: ajustes, integridad y resúmenes.',
   'No connected leagues to simulate': 'No hay ligas conectadas para simular',
   'We could not count your trades just now': 'No pudimos contar tus intercambios ahora mismo',
@@ -1624,6 +1623,8 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `Cómo se sugiere una oferta: es nuestra regla, no datos del mercado. El presupuesto FAAB completo equivale más o menos al jugador número ${m[1]}, y la oferta de cada jugador es su parte de eso.`,
   ],
   [/^No suggestion is more than (\d+)% of the budget\.$/, (m) => `Ninguna sugerencia supera el ${m[1]}% del presupuesto.`],
+  // The platform list is read from provider-ui-config, so it is matched rather than keyed exactly.
+  [/^Bring in a league from (.+)\.$/, (m) => `Importa una liga de ${m[1].replace(/ or ([^,]+)$/, ' o $1')}.`],
 ]
 
 export function coreUiCopy(english: string, language: string): string {
