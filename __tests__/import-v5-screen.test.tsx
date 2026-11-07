@@ -33,7 +33,16 @@ beforeEach(() => {
   submitImportCreation.mockReset()
   fetchImportPreview.mockReset()
   discoverProviderLeagues.mockResolvedValue({ ok: false, error: 'needs an identifier' })
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ auths: [] }) })) as unknown as typeof fetch)
+  // Only the ESPN status read gets an answer; anything else (the done screen's own widgets) is a
+  // plain failure, which every one of them already handles.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: unknown) =>
+      String(input).includes('/api/league/auth')
+        ? { ok: true, json: async () => ({ auths: [] }) }
+        : { ok: false, status: 404, json: async () => ({}) },
+    ) as unknown as typeof fetch,
+  )
 })
 
 describe('wrong-box paste hint', () => {
@@ -102,5 +111,46 @@ describe('the connect guide', () => {
     expect(screen.getByRole('tab', { name: /Secret ID/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: /League ID/ }))
     expect(screen.getByText('Pick which team is yours')).toBeTruthy()
+  })
+})
+
+describe('bring your leaguemates', () => {
+  async function importOne(provider: 'sleeper' | 'fantrax', commitData: Record<string, unknown>) {
+    discoverProviderLeagues.mockResolvedValue({
+      ok: true,
+      data: { leagues: [{ sourceId: 'lg-77', name: 'Taco Tuesday', season: '2026', totalTeams: 12 }], accountLabel: 'me' },
+    })
+    fetchImportPreview.mockResolvedValue({ ok: true, data: { league: { name: 'Taco Tuesday' } } })
+    submitImportCreation.mockResolvedValue({ ok: true, data: commitData })
+    render(<ImportV4 defaultProvider={provider} />)
+    if (provider === 'sleeper') {
+      fireEvent.click(await screen.findByTestId('import-league-select-lg-77'))
+    } else {
+      fireEvent.click(await screen.findByRole('button', { name: /This is my team/ }))
+    }
+    fireEvent.click(await screen.findByTestId('import-commit'))
+  }
+
+  it('offers a deep link into /import for the league just imported', async () => {
+    await importOne('sleeper', { leagueId: 'af_1', name: 'Taco Tuesday' })
+    const url = await screen.findByTestId('import-invite-url')
+    const parsed = new URL(url.textContent!)
+    expect(parsed.pathname).toBe('/import')
+    expect(parsed.searchParams.get('provider')).toBe('sleeper')
+    expect(parsed.searchParams.get('leagueId')).toBe('lg-77')
+    expect(screen.getByRole('link', { name: 'Text it' }).getAttribute('href')).toMatch(/^sms:/)
+  })
+
+  it('is not offered to someone who just joined another account’s copy', async () => {
+    await importOne('sleeper', { leagueId: 'af_1', name: 'Taco Tuesday', joinedExisting: true })
+    await screen.findByText(/already on AllFantasy/)
+    expect(screen.queryByTestId('import-invite-card')).toBeNull()
+  })
+
+  it('is not offered for Fantrax, whose picked row is a team rather than the league', async () => {
+    await importOne('fantrax', { leagueId: 'af_2', name: 'Taco Tuesday' })
+    await waitFor(() => expect(submitImportCreation).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId('import-invite-card')).toBeNull()
   })
 })

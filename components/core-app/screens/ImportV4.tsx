@@ -32,6 +32,7 @@ import {
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
+import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -3391,6 +3392,22 @@ export function ImportV4({
           />
           <ReadOnlyPromise />
         </section>
+      ) : null}
+
+      {/*
+        ── Bring your leaguemates ──────────────────────────────────────────────
+        The link is this league's deep link into /import; a leaguemate who imports it is attached
+        to their own team by claimExistingLeagueForMember. Not offered to someone who just JOINED
+        another account's copy (they are the leaguemate), and not for Fantrax, whose picked row is
+        a TEAM — its sourceId would send leaguemates to the importer's own team.
+      */}
+      {phase.k === 'done' && phase.leagueId && !phase.joinedExisting && provider !== 'fantrax' ? (
+        <ImportInviteCard
+          provider={provider}
+          providerLabel={providerLabel}
+          sourceId={phase.sourceId}
+          leagueName={phase.leagueName}
+        />
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}
