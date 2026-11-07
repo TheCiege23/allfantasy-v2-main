@@ -99,27 +99,36 @@ export async function recordBestBallDraftsUnfinishedAtSeasonStart(deps: Deps = {
 
     try {
       const entityId = String(season)
-      const already = await db.leagueAuditLog.findFirst({
-        where: { leagueId: c.leagueId, actionType: BEST_BALL_DRAFT_UNFINISHED_ACTION, entityId },
-        select: { id: true },
+      // 🛑 ONCE PER LEAGUE PER SEASON MUST HOLD ACROSS OVERLAPPING RUNS. `audit_logs` has no unique key on
+      // (leagueId, actionType, entityId), and a slow hourly roll can still be running when the next one
+      // starts, so a bare find-then-create lets both runs see "no row" and both write. The check and the
+      // insert therefore run in one transaction behind a transaction-scoped advisory lock on
+      // (action, league, season): the second run waits, then finds the first run's row. No schema change.
+      const lockKey = JSON.stringify([BEST_BALL_DRAFT_UNFINISHED_ACTION, c.leagueId, entityId])
+      const outcome = await db.$transaction(async (tx) => {
+        // pg_advisory_xact_lock returns void, which $queryRaw cannot deserialize — execute it instead.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+        const already = await tx.leagueAuditLog.findFirst({
+          where: { leagueId: c.leagueId, actionType: BEST_BALL_DRAFT_UNFINISHED_ACTION, entityId },
+          select: { id: true },
+        })
+        if (already) return 'already' as const
+        if (deps.dryRun) return 'dry_run' as const
+        await tx.leagueAuditLog.create({
+          data: {
+            leagueId: c.leagueId,
+            userId: null,
+            actionType: BEST_BALL_DRAFT_UNFINISHED_ACTION,
+            entityType: 'league_season',
+            entityId,
+            afterState: { draftStatus: c.status, sessionId: c.id },
+            metadata: { season, sport, sportWeek: week.sportWeek, draftStatus: c.status },
+          },
+        })
+        return 'recorded' as const
       })
-      if (already) {
-        result.alreadyRecorded++
-        continue
-      }
-      if (deps.dryRun) continue
-      await db.leagueAuditLog.create({
-        data: {
-          leagueId: c.leagueId,
-          userId: null,
-          actionType: BEST_BALL_DRAFT_UNFINISHED_ACTION,
-          entityType: 'league_season',
-          entityId,
-          afterState: { draftStatus: c.status, sessionId: c.id },
-          metadata: { season, sport, sportWeek: week.sportWeek, draftStatus: c.status },
-        },
-      })
-      result.recorded++
+      if (outcome === 'already') result.alreadyRecorded++
+      else if (outcome === 'recorded') result.recorded++
     } catch (error) {
       result.errors.push({ leagueId: c.leagueId, error: error instanceof Error ? error.message : String(error) })
     }

@@ -58,20 +58,52 @@ function sweepDb(opts: {
   seasons?: Array<{ leagueId: string; season: number }>
 }) {
   const audit: Array<{ leagueId: string; actionType: string; entityId: string; metadata: unknown }> = []
+  // Every read and write yields to the event loop, as a real query does, so two runs started together
+  // genuinely interleave — without that, a missing lock could never show up as a second row.
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+  // pg_advisory_xact_lock, in memory: held per key until the transaction that took it ends.
+  const locks = new Map<string, Promise<void>>()
+  const lockKeys: string[] = []
+  const leagueAuditLog = {
+    findFirst: vi.fn(async ({ where }: { where: { leagueId: string; actionType: string; entityId: string } }) => {
+      await tick()
+      return audit.find((r) => r.leagueId === where.leagueId && r.actionType === where.actionType && r.entityId === where.entityId) ?? null
+    }),
+    create: vi.fn(async ({ data }: { data: (typeof audit)[number] }) => {
+      await tick()
+      audit.push(data)
+      return data
+    }),
+  }
   const fake = {
     draftSession: { findMany: vi.fn(async () => opts.sessions) },
     redraftSeason: { findMany: vi.fn(async () => opts.seasons ?? []) },
-    leagueAuditLog: {
-      findFirst: vi.fn(async ({ where }: { where: { leagueId: string; actionType: string; entityId: string } }) =>
-        audit.find((r) => r.leagueId === where.leagueId && r.actionType === where.actionType && r.entityId === where.entityId) ?? null,
-      ),
-      create: vi.fn(async ({ data }: { data: (typeof audit)[number] }) => {
-        audit.push(data)
-        return data
-      }),
-    },
+    leagueAuditLog,
+    $transaction: vi.fn(async <T,>(fn: (tx: unknown) => Promise<T>): Promise<T> => {
+      const mine: Array<{ key: string; release: () => void }> = []
+      const tx = {
+        leagueAuditLog,
+        $executeRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+          const key = String(values[0])
+          lockKeys.push(key)
+          while (locks.has(key)) await locks.get(key)
+          let release!: () => void
+          locks.set(key, new Promise<void>((resolve) => (release = resolve)))
+          mine.push({ key, release })
+          return 0
+        },
+      }
+      try {
+        return await fn(tx)
+      } finally {
+        for (const m of mine) {
+          locks.delete(m.key)
+          m.release()
+        }
+      }
+    }),
   }
-  return { fake, audit }
+  return { fake, audit, lockKeys }
 }
 
 const NATIVE = { id: 'D1', leagueId: 'L1', status: 'in_progress', league: { sport: 'NFL', season: 2026, platform: 'manual' } }
@@ -94,6 +126,28 @@ describe('the season-start sweep', () => {
     expect(second).toMatchObject({ recorded: 0, alreadyRecorded: 1 })
     expect(audit).toHaveLength(1)
     expect(fake.leagueAuditLog.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('two overlapping runs still write one row: the second waits on the lock, then finds the first one\'s row', async () => {
+    const { fake, audit, lockKeys } = sweepDb({ sessions: [NATIVE, { ...NATIVE, id: 'D2', leagueId: 'L2' }] })
+    const resolveWeek = vi.fn(async () => week())
+    const [a, b] = await Promise.all([
+      recordBestBallDraftsUnfinishedAtSeasonStart({ db: fake as never, resolveWeek }),
+      recordBestBallDraftsUnfinishedAtSeasonStart({ db: fake as never, resolveWeek }),
+    ])
+    expect(audit.filter((r) => r.leagueId === 'L1')).toHaveLength(1)
+    expect(audit.filter((r) => r.leagueId === 'L2')).toHaveLength(1)
+    expect(a.recorded + b.recorded).toBe(2)
+    expect(a.alreadyRecorded + b.alreadyRecorded).toBe(2)
+    expect(a.errors).toEqual([])
+    expect(b.errors).toEqual([])
+    // One lock per league and season — not one global lock, and not per run.
+    expect(new Set(lockKeys)).toEqual(
+      new Set([
+        JSON.stringify([BEST_BALL_DRAFT_UNFINISHED_ACTION, 'L1', '2026']),
+        JSON.stringify([BEST_BALL_DRAFT_UNFINISHED_ACTION, 'L2', '2026']),
+      ]),
+    )
   })
 
   it('writes nothing before kickoff, for an imported league, or for a season that already exists', async () => {
