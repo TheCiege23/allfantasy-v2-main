@@ -29,8 +29,13 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: leagueFindUniqueMock,
       update: leagueUpdateMock,
     },
+    // Pre-draft: no draft session has started and no season exists, so nothing is locked.
+    draftSession: { findFirst: vi.fn(async () => null) },
+    redraftSeason: { findFirst: vi.fn(async () => null) },
+    leagueAuditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   },
 }))
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: vi.fn(async () => undefined) }))
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 

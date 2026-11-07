@@ -6,6 +6,8 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
 import { loadNativeBestBallTab } from '@/lib/bestball/nativeBestBallTabLoad'
+import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,7 @@ export async function GET(
       name: true,
       sport: true,
       season: true,
+      leagueSize: true,
       bestBallMode: true,
       settings: true,
       bbMatchupFormat: true,
@@ -63,9 +66,12 @@ export async function GET(
     league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
       ? (league.settings as Record<string, unknown>)
       : {}
+  // The period the league is ACTUALLY scored with (a legacy NBA/NHL/MLB "daily" default reads weekly), and
+  // the same team count the settings PATCH normalizes with, so the panel round-trips without a "change".
   const bestBallSettings = normalizeBestBallSettings({
     sport: league.sport as LeagueSport,
-    conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
+    teamCount: typeof league.leagueSize === 'number' && league.leagueSize > 0 ? league.leagueSize : undefined,
+    conceptSetup: withEffectiveScoringPeriod(String(league.sport), settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
     timezone: typeof settingsRecord.timezone === 'string' ? settingsRecord.timezone : null,
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
@@ -82,6 +88,8 @@ export async function GET(
     requestedWeek: Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10),
     rankBy: bestBallSettings.matchupFormat === 'cumulative' ? 'points' : 'record',
   })
+  // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
+  const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
   if (native) {
     return NextResponse.json({
       league: {
@@ -92,6 +100,7 @@ export async function GET(
         summary: buildBestBallSettingsSummary(bestBallSettings),
         settings: bestBallSettings,
         profile,
+        structureLock,
       },
       source: 'native',
       ...native.body,
@@ -212,6 +221,7 @@ export async function GET(
       summary: buildBestBallSettingsSummary(bestBallSettings),
       settings: bestBallSettings,
       profile,
+      structureLock,
     },
     selectedWeek,
     weeksAvailable,
