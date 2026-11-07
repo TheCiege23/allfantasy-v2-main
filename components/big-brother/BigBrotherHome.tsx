@@ -17,6 +17,7 @@ import { BigBrotherTwistsPanel } from './BigBrotherTwistsPanel'
 import { BigBrotherHistoryPanel } from './BigBrotherHistoryPanel'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { BigBrotherSpecialtyHome, type BigBrotherSpecialtySummary } from './BigBrotherSpecialtyHome'
+import './big-brother-light.css'
 
 const VIEW_LABELS: Record<BigBrotherView, string> = {
   house: 'House',
@@ -101,7 +102,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
   )
 
   return (
-    <div className="relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
+    <div data-bb-view={view} className="af-bb-shell relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
       <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-amber-500/[0.07] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-28 left-0 h-48 w-48 rounded-full bg-cyan-500/[0.06] blur-3xl" />
       {/* The house view opens with the specialty-league home (2026-10-18), which carries the title and your status. */}
