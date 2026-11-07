@@ -234,7 +234,7 @@ function DepthChecks({ alerts, language }: { alerts: TriageViewDepthAlert[]; lan
  * league is right for two leagues and wrong for ten: on an 81-league account one injured receiver took
  * 1,700px of the home, nine near-identical rows of a league name and two buttons. The header line already
  * says "In 10 of 81 leagues: starting in 9", so the first rows show the shape and the rest wait one tap
- * away. The "also in" chips go behind the same tap; with no fix rows they ARE the message, so they stay.
+ * away. The "also in" chips stay in view: one short line, and "benched ✓" is the part that reassures.
  */
 export const VISIBLE_FIX_ROWS = 2
 
@@ -423,13 +423,9 @@ export function Dash3ATriageView({
               ))),
           ]
           const hasChips = otherLeagues.length > 0 || p.leagueCount > p.leagues.length
-          // Everything past the first rows waits behind the button: later fix rows, and the chips when fix
-          // rows lead. Its count is every league he is in minus the rows already showing — leagues past the
-          // first six arrive both as extra fix rows and in leagueCount, so adding the parts double-counts.
-          const hasHidden = fixItems.length > VISIBLE_FIX_ROWS || (fixItems.length > 0 && hasChips)
-          const hiddenCount = hasHidden ? Math.max(1, p.leagueCount - Math.min(fixItems.length, VISIBLE_FIX_ROWS)) : 0
+          // Only fix rows fold. The chips stay: they are one short line, and "benched ✓" is the reassurance.
+          const hiddenCount = Math.max(0, fixItems.length - VISIBLE_FIX_ROWS)
           const open = expanded.has(p.key)
-          const showChips = hasChips && (open || fixItems.length === 0)
           return (
             <li key={p.key} className="af-triage-row" data-tone={p.tone}>
               {p.imageUrl ? (
@@ -527,7 +523,7 @@ export function Dash3ATriageView({
                     {open ? m.showFewerLeagues : m.showMoreLeagues(hiddenCount)}
                   </button>
                 ) : null}
-                {showChips ? (
+                {hasChips ? (
                   <div className="af-triage-leagues">
                     {starterLeagues.length > 0 ? <span className="af-triage-also">{m.alsoIn}</span> : null}
                     {otherLeagues.map((l) => (
