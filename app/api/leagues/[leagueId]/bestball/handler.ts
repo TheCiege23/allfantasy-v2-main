@@ -6,6 +6,9 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
 import { loadNativeBestBallTab } from '@/lib/bestball/nativeBestBallTabLoad'
+import { draftPendingNotice } from '@/lib/bestball/nativeBestBallTab'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 
@@ -105,6 +108,18 @@ export async function GET(
       source: 'native',
       ...native.body,
     })
+  }
+
+  // A league we host with no native season yet: its draft has not finished, so nothing can be scored.
+  // Say that instead of "lineups appear once the first games are played", which is false meanwhile.
+  let draftNotice: string | null = null
+  if (resolveWriteAuthority(league.platform) === 'NATIVE') {
+    try {
+      const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } })
+      draftNotice = draftPendingNotice(draft?.status)
+    } catch {
+      draftNotice = null
+    }
   }
 
   const playedWeeks = await prisma.teamWeekResult.findMany({
@@ -225,6 +240,7 @@ export async function GET(
     },
     selectedWeek,
     weeksAvailable,
+    draftNotice,
     lineups: lineupCards,
     rosterComposition,
     standings: standings.map((row) => ({

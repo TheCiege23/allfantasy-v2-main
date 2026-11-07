@@ -250,6 +250,26 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written once per league per season by lib/bestball/draftUnfinishedAtSeasonStart.ts when a best ball
+  // league's first scoring week kicks off with its draft still open. Commissioner-only: it is the
+  // commissioner's to act on (finish the draft), and no manager is notified.
+  best_ball_draft_unfinished_at_season_start: {
+    category: 'draft',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const season = num(m.season)
+      const yr = season != null ? `${season} ` : ''
+      return {
+        en: `The ${yr}season started before the draft finished`,
+        es: `La temporada ${yr}empezó antes de terminar el draft`,
+        detailEn:
+          'No team has a roster until the draft finishes, so best ball scoring has not started. Weeks played before the draft finishes may not count. Finish the draft to start scoring.',
+        detailEs:
+          'Ningún equipo tiene plantilla hasta que termine el draft, así que la puntuación de best ball no ha empezado. Las semanas jugadas antes de terminar el draft pueden no contar. Termina el draft para empezar a puntuar.',
+      }
+    },
+  },
   score_adjustment_added: {
     category: 'scoring',
     members: true,

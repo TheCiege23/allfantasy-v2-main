@@ -239,6 +239,23 @@ function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0])
   }
 }
 
+/**
+ * What the tab says when a league AllFantasy hosts has no native season yet because its draft is still
+ * open. Without it the tab read "No scored weeks yet. Lineups appear here once the first games are
+ * played." — which is false while the draft runs: games can be played and still nothing is scored,
+ * because no team has a roster until the draft finishes. Null once the draft is completed (or there is
+ * no draft to speak of), so the ordinary empty state stands.
+ */
+export function draftPendingNotice(draftStatus: string | null | undefined): string | null {
+  const status = String(draftStatus ?? '').trim().toLowerCase()
+  if (!status || status === 'completed') return null
+  const lead =
+    status === 'in_progress' || status === 'paused'
+      ? 'The draft is still running.'
+      : 'The draft has not started yet.'
+  return `${lead} Best ball scores begin after the draft finishes, because no team has a roster until then.`
+}
+
 /** The matchup snapshot's side for one roster, or null when the row was never scored. */
 export function snapshotSide(lineupSnapshots: unknown, side: 'home' | 'away'): SnapshotSide | null {
   if (!lineupSnapshots || typeof lineupSnapshots !== 'object' || Array.isArray(lineupSnapshots)) return null
