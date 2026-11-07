@@ -525,6 +525,8 @@ export async function runStartSitAnalysis(input: {
       leagueSport,
       sport,
       players: cand,
+      // A best ball league is shown the seats its matchups are scored on, not the sport's standard template.
+      ...(leagueCtx.flags.bestBallMode ? { bestBallSettings: leagueRow?.settings ?? {} } : {}),
     })
     dataGaps.push(...slotRes.dataGaps)
     lineupSlotAnalysis = slotRes.slots.map((s) => ({

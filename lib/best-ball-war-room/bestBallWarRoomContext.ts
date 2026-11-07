@@ -22,6 +22,8 @@ import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getBestBallSportProfile, normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { hasVerifiedBestBallRuleConfiguration } from './bestBallRuleEvidence'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
 import type {
@@ -138,6 +140,46 @@ export function buildRosterSettings(sport: string, leagueSettings: unknown): Bes
   }
 }
 
+type WarRoomWeeklyScoreRow = { playerId: string; points: number; isStarter: boolean; createdAt: Date }
+
+/*
+ * 🛑 A LEAGUE WE HOST HAD NO SCORE HISTORY HERE (audit 2026-11-06, "Chimmy reads real state"). This read
+ * only `weeklyScore`, which the legacy weekly processor fills and native scoring never writes — the same
+ * gap the Best Ball tab had (lib/bestball/nativeBestBallTab.ts). Native best ball scoring
+ * (`scoreRosterBestBall`) writes every player's counted points, and whether he was in the counted lineup,
+ * to `league_player_weekly_scores` keyed on OUR league id with source `allfantasy`
+ * (lib/redraft/nativePlayerWeeklyScores.ts). So a native league reads that; an imported league keeps
+ * `weeklyScore`, the table its processor writes.
+ */
+export async function loadWarRoomWeeklyScores(args: {
+  leagueId: string
+  season: number
+  platform: string | null | undefined
+  playerIds: string[]
+}): Promise<WarRoomWeeklyScoreRow[]> {
+  if (!args.playerIds.length) return []
+  if (resolveWriteAuthority(args.platform) === 'NATIVE') {
+    const rows = (await prisma.leaguePlayerWeeklyScore
+      .findMany({
+        where: {
+          leagueId: args.leagueId,
+          seasonYear: args.season,
+          source: NATIVE_PLAYER_SCORE_SOURCE,
+          playerId: { in: args.playerIds },
+        },
+        select: { playerId: true, points: true, isStarter: true, updatedAt: true },
+      })
+      .catch(() => [])) as Array<{ playerId: string; points: number; isStarter: boolean; updatedAt: Date }>
+    return rows.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter, createdAt: r.updatedAt }))
+  }
+  return (await prisma.weeklyScore
+    .findMany({
+      where: { leagueId: args.leagueId, season: args.season, playerId: { in: args.playerIds } },
+      select: { playerId: true, points: true, isStarter: true, createdAt: true },
+    })
+    .catch(() => [])) as WarRoomWeeklyScoreRow[]
+}
+
 export async function buildBestBallWarRoomContext(
   input: BuildBestBallWarRoomContextInput,
 ): Promise<BuildBestBallWarRoomContextResult> {
@@ -154,6 +196,7 @@ export async function buildBestBallWarRoomContext(
       season: true,
       leagueSize: true,
       bestBallMode: true,
+      platform: true,
       bbMatchupFormat: true,
       bbScoringPeriod: true,
       settings: true,
@@ -222,15 +265,7 @@ export async function buildBestBallWarRoomContext(
   const injuryNews = await fetchRedraftInjuryNews(sport)
 
   // --- weekly scores → spike-week ceiling (real, when present) ---
-  type WSRow = { playerId: string; points: number; isStarter: boolean; createdAt: Date }
-  const wsRows = allIds.length
-    ? ((await prisma.weeklyScore
-        .findMany({
-          where: { leagueId, season, playerId: { in: allIds } },
-          select: { playerId: true, points: true, isStarter: true, createdAt: true },
-        })
-        .catch(() => [])) as WSRow[])
-    : []
+  const wsRows = await loadWarRoomWeeklyScores({ leagueId, season, platform: league.platform, playerIds: allIds })
   const wsAgg = new Map<string, { sum: number; n: number; max: number; started: number }>()
   let scoresAsOf: Date | null = null
   for (const row of wsRows) {
