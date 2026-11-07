@@ -121,6 +121,7 @@ const LEAGUE_TYPE_OPTIONS: { value: LeagueStyleFilter; label: string }[] = [
   { value: "best_ball", label: "Best Ball" },
   { value: "keeper", label: "Keeper" },
   { value: "survivor", label: "Survivor" },
+  { value: "guillotine", label: "Guilly" },
   { value: "bracket", label: "Bracket" },
   { value: "community", label: "Community" },
 ]

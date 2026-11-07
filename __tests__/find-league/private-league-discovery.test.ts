@@ -98,3 +98,18 @@ describe("private cards in discovery", () => {
     expect(q.privateCards).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * Guilly has its own category (audit 2026-11-06, row "Discovery"). The filter value must survive the
+ * service's style normalizer, or "Guilly" silently means "any style".
+ */
+describe("the Guilly filter", () => {
+  it("lists public and private Guilly leagues and nothing else", async () => {
+    q.publicCards.mockResolvedValue([card("pub-guilly", { leagueStyle: "guillotine" }), card("pub-redraft")])
+    q.privateCards.mockResolvedValue([
+      card("priv-guilly", { leagueStyle: "guillotine", joinMode: "approval", isPrivate: true, joinUrl: "", detailUrl: "" }),
+    ])
+    const result = await discoverPublicLeagues({ visibility: "all", style: "guillotine" })
+    expect(result.leagues.map((l) => l.id).sort()).toEqual(["priv-guilly", "pub-guilly"])
+  })
+})

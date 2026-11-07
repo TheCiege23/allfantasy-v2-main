@@ -100,6 +100,7 @@ function normalizeStyle(value: unknown): LeagueStyleFilter {
     value === "best_ball" ||
     value === "keeper" ||
     value === "survivor" ||
+    value === "guillotine" ||
     value === "bracket" ||
     value === "community"
     ? value
@@ -145,11 +146,11 @@ export function calculateDiscoveryRankingEffectScore(
 }
 
 export function matchesDiscoveryLeagueStyle(
-  card: Pick<DiscoveryCard, "leagueStyle">,
+  card: Pick<DiscoveryCard, "leagueStyle" | "alsoStyles">,
   style: LeagueStyleFilter
 ): boolean {
   if (style === "all") return true
-  return card.leagueStyle === style
+  return card.leagueStyle === style || (card.alsoStyles ?? []).includes(style)
 }
 
 function applyVisibility(cards: DiscoveryCard[], visibility: "public" | "all"): DiscoveryCard[] {

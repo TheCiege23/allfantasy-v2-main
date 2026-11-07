@@ -42,6 +42,7 @@ function toRecord(value: unknown): Record<string, unknown> {
 function normalizeLeagueStyleCandidate(value: unknown): DiscoveryLeagueStyle | null {
   const raw = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_")
   if (!raw) return null
+  if (raw.includes("guillotine") || raw.includes("guilly")) return "guillotine"
   if (raw.includes("best") && raw.includes("ball")) return "best_ball"
   if (raw.includes("dynasty")) return "dynasty"
   if (raw.includes("redraft")) return "redraft"
@@ -50,6 +51,28 @@ function normalizeLeagueStyleCandidate(value: unknown): DiscoveryLeagueStyle | n
   if (raw.includes("bracket")) return "bracket"
   if (raw.includes("community")) return "community"
   return null
+}
+
+/*
+ * 🛑 GUILLY HAD NO CATEGORY (audit 2026-11-06, row "Discovery"). A guillotine league read as redraft,
+ * so nobody could look for one. `League.guillotineMode` (or a guillotine variant) now makes it
+ * `guillotine`; any other style it has (best ball, dynasty, keeper) stays reachable through `alsoStyles`.
+ */
+function resolveFantasyLeagueStyles(input: {
+  leagueVariant?: string | null
+  isDynasty?: boolean | null
+  guillotineMode?: boolean | null
+  settings?: Record<string, unknown>
+}): { leagueStyle: DiscoveryLeagueStyle; alsoStyles: DiscoveryLeagueStyle[] } {
+  const style = resolveFantasyLeagueStyle(input)
+  if (input.guillotineMode === true && style !== "guillotine") {
+    return { leagueStyle: "guillotine", alsoStyles: style === "redraft" ? [] : [style] }
+  }
+  if (style === "guillotine") {
+    const other = resolveFantasyLeagueStyle({ ...input, leagueVariant: null })
+    return { leagueStyle: style, alsoStyles: other === "redraft" || other === "guillotine" ? [] : [other] }
+  }
+  return { leagueStyle: style, alsoStyles: [] }
 }
 
 function resolveFantasyLeagueStyle(input: {
@@ -80,17 +103,23 @@ function resolveFantasyLeagueStyle(input: {
 
 function resolveCreatorLeagueStyle(input: {
   creatorLeagueType: string
-  linkedLeague?: { leagueVariant?: string | null; isDynasty?: boolean | null; settings?: unknown } | null
-}): DiscoveryLeagueStyle {
-  if (String(input.creatorLeagueType).toUpperCase() === "BRACKET") return "bracket"
+  linkedLeague?: {
+    leagueVariant?: string | null
+    isDynasty?: boolean | null
+    guillotineMode?: boolean | null
+    settings?: unknown
+  } | null
+}): { leagueStyle: DiscoveryLeagueStyle; alsoStyles: DiscoveryLeagueStyle[] } {
+  if (String(input.creatorLeagueType).toUpperCase() === "BRACKET") return { leagueStyle: "bracket", alsoStyles: [] }
   if (input.linkedLeague) {
-    return resolveFantasyLeagueStyle({
+    return resolveFantasyLeagueStyles({
       leagueVariant: input.linkedLeague.leagueVariant ?? null,
       isDynasty: input.linkedLeague.isDynasty ?? false,
+      guillotineMode: input.linkedLeague.guillotineMode ?? false,
       settings: toRecord(input.linkedLeague.settings),
     })
   }
-  return "community"
+  return { leagueStyle: "community", alsoStyles: [] }
 }
 
 function resolvePaidFlag(raw: Record<string, unknown>): boolean {
@@ -230,6 +259,7 @@ export async function queryPublicFantasyLeagueCards(options: {
       leagueSize: true,
       scoring: true,
       isDynasty: true,
+      guillotineMode: true,
       settings: true,
       timezone: true,
       createdAt: true,
@@ -309,9 +339,10 @@ export async function queryPublicFantasyLeagueCards(options: {
       const memberCount = external
         ? Math.max(0, maxMembers - Math.min(external.openSpots, maxMembers))
         : heldSeats.get(league.id) ?? 0
-      const leagueStyle = resolveFantasyLeagueStyle({
+      const { leagueStyle, alsoStyles } = resolveFantasyLeagueStyles({
         leagueVariant: league.leagueVariant,
         isDynasty: league.isDynasty,
+        guillotineMode: league.guillotineMode,
         settings,
       })
       const leagueTier = extractLeagueCareerTier(settings, 1)
@@ -355,6 +386,7 @@ export async function queryPublicFantasyLeagueCards(options: {
         fillPct: buildFillPct(memberCount, maxMembers),
         leagueType: "fantasy",
         leagueStyle,
+        alsoStyles,
         draftType,
         draftStatus,
         teamCount: maxMembers,
@@ -418,6 +450,8 @@ export async function queryPrivateRequestableFantasyLeagueCards(options: {
       leagueSize: true,
       scoring: true,
       isDynasty: true,
+      // A format flag, like leagueVariant: it puts the card under Guilly.
+      guillotineMode: true,
       settings: true,
       createdAt: true,
       leagueSettings: { select: { draftDateUtc: true } },
@@ -482,7 +516,12 @@ export async function queryPrivateRequestableFantasyLeagueCards(options: {
         createdAt: league.createdAt.toISOString(),
         fillPct: buildFillPct(memberCount, maxMembers),
         leagueType: "fantasy",
-        leagueStyle: resolveFantasyLeagueStyle({ leagueVariant: league.leagueVariant, isDynasty: league.isDynasty, settings }),
+        ...resolveFantasyLeagueStyles({
+          leagueVariant: league.leagueVariant,
+          isDynasty: league.isDynasty,
+          guillotineMode: league.guillotineMode,
+          settings,
+        }),
         draftType:
           normalizeDraftType(latestDraftSession?.draftType ?? null) ??
           normalizeDraftType(readString(settings, "draft_type")) ??
@@ -692,6 +731,7 @@ export async function queryPublicCreatorLeagueCards(options: {
             id: true,
             leagueVariant: true,
             isDynasty: true,
+            guillotineMode: true,
             settings: true,
             scoring: true,
           },
@@ -752,7 +792,7 @@ export async function queryPublicCreatorLeagueCards(options: {
         linkedFantasyLeague?.id != null ? fantasySessionByLeagueId.get(linkedFantasyLeague.id) ?? null : null
       const maxMembers = Math.max(2, Number(league.maxMembers ?? 100) || 100)
       const memberCount = Number(league.memberCount ?? 0)
-      const leagueStyle = resolveCreatorLeagueStyle({
+      const { leagueStyle, alsoStyles } = resolveCreatorLeagueStyle({
         creatorLeagueType: league.type,
         linkedLeague: linkedFantasyLeague,
       })
@@ -803,6 +843,7 @@ export async function queryPublicCreatorLeagueCards(options: {
         fillPct: buildFillPct(memberCount, maxMembers),
         leagueType: "creator",
         leagueStyle,
+        alsoStyles,
         draftType,
         draftStatus,
         teamCount: maxMembers,

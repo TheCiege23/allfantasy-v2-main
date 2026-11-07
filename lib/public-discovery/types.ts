@@ -19,6 +19,8 @@ export type DiscoveryLeagueStyle =
   | "best_ball"
   | "keeper"
   | "survivor"
+  /** Guilly: the lowest score is chopped every week (`League.guillotineMode`). */
+  | "guillotine"
   | "bracket"
   | "community"
 export type LeagueStyleFilter = "all" | DiscoveryLeagueStyle
@@ -67,6 +69,11 @@ export interface DiscoveryCard {
   leagueType: DiscoverySource
   /** League style for discovery filtering (dynasty, redraft, best_ball, etc.). */
   leagueStyle?: DiscoveryLeagueStyle | null
+  /**
+   * Further styles the league also matches. A Guilly league's style is `guillotine`; one that is also
+   * best ball (or dynasty, keeper) keeps answering that filter too, as it did before Guilly had its own.
+   */
+  alsoStyles?: DiscoveryLeagueStyle[]
   /** Draft type when available (snake | linear | auction). */
   draftType: string | null
   /** Draft session status when available (pre_draft | in_progress | paused | completed). */
