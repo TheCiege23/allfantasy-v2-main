@@ -11,7 +11,7 @@
  * Pure: the handler loads rows, this shapes them. Every sentence a member reads about why a player did or
  * did not count is decided here, so it is testable without a database.
  */
-import { frozenBestBallSlots, readBestBallRuleStamp } from '@/lib/bestball/resultRuleStamp'
+import { frozenBestBallPositions, frozenBestBallSlots, readBestBallRuleStamp } from '@/lib/bestball/resultRuleStamp'
 
 export type SnapshotAssignment = { slot: string; seat?: number; playerId: string; playerName?: string | null; points: number }
 
@@ -55,8 +55,12 @@ export type NativeLineupCard = {
   /** Head-to-head result once the week is final; null while provisional or with no opponent. */
   winLoss: string | null
   /** Daily: `slot` is how many days he counted ("3 days"), `points` his counted points summed over them. */
-  starters: Array<{ playerId: string; name: string; position: string; team: string | null; points: number; slot: string; days?: number }>
-  bench: Array<{ playerId: string; name: string; position: string; team: string | null; points: number | null; reason: string }>
+  /**
+   * `position` is the position the player was SEATED AND SCORED at: for a sealed week with stored
+   * positions, the stored one. `positionNow` is set only when his current position differs from it.
+   */
+  starters: Array<{ playerId: string; name: string; position: string; positionNow?: string; team: string | null; points: number; slot: string; days?: number }>
+  bench: Array<{ playerId: string; name: string; position: string; positionNow?: string; team: string | null; points: number | null; reason: string }>
   unfilledSlots: string[]
   /** Players whose stats have not arrived yet; the total can still move. */
   awaitingStats: number
@@ -75,6 +79,19 @@ function describeSeats(slots: readonly SlotEligibility[]): string {
     .join(', ')
 }
 
+/**
+ * What makes two seat lists the same for scoring: each seat's name, count and eligible positions.
+ *
+ * ⚠ ORDER IS LEFT OUT ON PURPOSE (both the array order and `slotOrder`), because it cannot change a best
+ * ball result. `computeOptimalLineup` (lib/lineup-optimizer/optimalLineup.ts) sorts seats by
+ * `slotOrder` then name before matching, and the players it keeps are the greedy basis of a transversal
+ * matroid taken in points-then-playerId order: whether a player can be added depends only on WHICH seats
+ * exist, never on their order. So the counted players and the total are identical for any seat order;
+ * at most the seat label a dual-eligible starter is reported under can differ, and the card reads that
+ * label from the stored snapshot, not from a re-run. Pinned in
+ * __tests__/bestball/best-ball-tab-sealed-positions.test.tsx. A note for an order-only difference would
+ * tell members "the seats changed" when nothing about their score did.
+ */
 const seatKey = (slots: readonly SlotEligibility[]) =>
   slots
     .filter((s) => (s.count ?? 1) > 0)
@@ -105,6 +122,36 @@ export function lineupSlotsForWeek(
     slots,
     sealedSeatsNote: `Scored on the seats this week was sealed with (${describeSeats(slots)}); the league's seats have changed since.`,
   }
+}
+
+/**
+ * The positions a week's lineup card is read at: the ones stored when the week was sealed, else null
+ * (every player at his current position).
+ *
+ * 🛑 A SEALED WEEK SEATS AND SCORES ITS PLAYERS AT THE POSITIONS STORED AT THE SEAL
+ * (`bestBallRules.sealedPositions`, lib/bestball/resultRuleStamp.ts; `bestBallPositionOf` in
+ * lib/redraft/scoringEngine.ts). The tab read today's position, so an RB re-listed as a WR after the
+ * week was sealed was told "No lineup slot takes a WR" for a week he was seated and scored as an RB.
+ * Same rule as scoring: a player IN the map is at the stored position (a stored null is no position); a
+ * player absent from it (no stat row at the seal) is at his current one. An open, legacy or unstamped
+ * week, or a stamp sealed before positions were recorded, has none.
+ */
+export function lineupPositionsForWeek(lineupSnapshots: unknown): Record<string, string | null> | null {
+  return frozenBestBallPositions(readBestBallRuleStamp(lineupSnapshots))
+}
+
+/** The week roster at the positions this week was seated at, with `positionNow` where that differs. */
+function atSealedPositions(
+  roster: readonly WeekRosterPlayer[],
+  sealed: Readonly<Record<string, string | null>> | null | undefined,
+): Array<WeekRosterPlayer & { positionNow?: string }> {
+  if (!sealed) return [...roster]
+  return roster.map((p) => {
+    if (!Object.prototype.hasOwnProperty.call(sealed, p.playerId)) return p
+    const stored = sealed[p.playerId] ?? ''
+    const sameAsNow = stored.trim().toUpperCase() === String(p.position ?? '').trim().toUpperCase()
+    return sameAsNow ? { ...p, position: stored } : { ...p, position: stored, positionNow: p.position }
+  })
 }
 
 const RESERVE = new Set(['ir', 'injured_reserve', 'taxi', 'devy', 'reserve'])
@@ -172,11 +219,14 @@ export function buildNativeLineupCard(args: {
   /** playerId → that week's points, from `league_player_weekly_scores`. */
   pointsByPlayer: ReadonlyMap<string, number>
   slots: readonly SlotEligibility[]
+  /** A sealed week's stored positions (`lineupPositionsForWeek`); absent or null: current positions. */
+  sealedPositions?: Readonly<Record<string, string | null>> | null
 }): NativeLineupCard {
   if (args.side?.bestBall?.period === 'daily') return buildDailyLineupCard(args)
   const assignments = args.side?.bestBall?.assignments ?? []
   const missing = new Set(args.side?.missingPlayerIds ?? [])
-  const byId = new Map(args.weekRoster.map((p) => [p.playerId, p]))
+  const weekRoster = atSealedPositions(args.weekRoster, args.sealedPositions)
+  const byId = new Map(weekRoster.map((p) => [p.playerId, p]))
   const startedIds = new Set(assignments.map((a) => a.playerId))
   const status: LineupStatus = args.matchupFinal && args.side?.allFinal !== false ? 'final' : 'provisional'
   const total = typeof args.side?.points === 'number' ? args.side.points : assignments.reduce((s, a) => s + a.points, 0)
@@ -187,13 +237,14 @@ export function buildNativeLineupCard(args: {
       playerId: a.playerId,
       name: a.playerName || p?.playerName || a.playerId,
       position: p?.position ?? '',
+      ...(p?.positionNow !== undefined ? { positionNow: p.positionNow } : {}),
       team: p?.team ?? null,
       points: a.points,
       slot: a.slot,
     }
   })
 
-  const bench = args.weekRoster
+  const bench = weekRoster
     .filter((p) => !startedIds.has(p.playerId))
     .map((p) => {
       const points = args.pointsByPlayer.has(p.playerId) ? args.pointsByPlayer.get(p.playerId)! : null
@@ -201,6 +252,7 @@ export function buildNativeLineupCard(args: {
         playerId: p.playerId,
         name: p.playerName,
         position: p.position,
+        ...(p.positionNow !== undefined ? { positionNow: p.positionNow } : {}),
         team: p.team,
         points,
         reason: benchReason(p, points, assignments, args.slots, missing),
@@ -236,7 +288,8 @@ export function buildNativeLineupCard(args: {
 function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0]): NativeLineupCard {
   const counted = args.side?.bestBall?.counted ?? []
   const missing = new Set(args.side?.missingPlayerIds ?? [])
-  const byId = new Map(args.weekRoster.map((p) => [p.playerId, p]))
+  const weekRoster = atSealedPositions(args.weekRoster, args.sealedPositions)
+  const byId = new Map(weekRoster.map((p) => [p.playerId, p]))
   const countedIds = new Set(counted.map((c) => c.playerId))
   const status: LineupStatus = args.matchupFinal && args.side?.allFinal !== false ? 'final' : 'provisional'
   const total = typeof args.side?.points === 'number' ? args.side.points : counted.reduce((s, c) => s + c.points, 0)
@@ -247,6 +300,7 @@ function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0])
       playerId: c.playerId,
       name: c.playerName || p?.playerName || c.playerId,
       position: p?.position ?? '',
+      ...(p?.positionNow !== undefined ? { positionNow: p.positionNow } : {}),
       team: p?.team ?? null,
       points: c.points,
       slot: `${c.days} day${c.days === 1 ? '' : 's'}`,
@@ -254,7 +308,7 @@ function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0])
     }
   })
 
-  const bench = args.weekRoster
+  const bench = weekRoster
     .filter((p) => !countedIds.has(p.playerId))
     .map((p) => {
       const points = args.pointsByPlayer.has(p.playerId) ? args.pointsByPlayer.get(p.playerId)! : null
@@ -263,7 +317,15 @@ function buildDailyLineupCard(args: Parameters<typeof buildNativeLineupCard>[0])
       else if (points == null || missing.has(p.playerId)) reason = 'No stats yet for this week.'
       else if (points === 0) reason = 'No points on any day he was on the roster this week.'
       else reason = `Scored ${fmt(points)} this week, but on every day he played a higher scorer filled each slot he fits.`
-      return { playerId: p.playerId, name: p.playerName, position: p.position, team: p.team, points, reason }
+      return {
+        playerId: p.playerId,
+        name: p.playerName,
+        position: p.position,
+        ...(p.positionNow !== undefined ? { positionNow: p.positionNow } : {}),
+        team: p.team,
+        points,
+        reason,
+      }
     })
     .sort((a, b) => (b.points ?? -Infinity) - (a.points ?? -Infinity) || a.name.localeCompare(b.name))
 

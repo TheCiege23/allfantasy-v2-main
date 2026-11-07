@@ -47,8 +47,9 @@ type BestBallApiResponse = {
     winLoss: string | null
     /** Native leagues: `provisional` until every game and stat for the week is final. */
     status?: 'final' | 'provisional'
-    starters: Array<{ playerId: string; name: string; position: string; team: string | null; points: number; slot: string | null }>
-    bench: Array<{ playerId: string; name: string; position: string; team: string | null; points: number | null; reason?: string }>
+    /** `position`: the one he was scored at; `positionNow`: native sealed weeks, when today's differs. */
+    starters: Array<{ playerId: string; name: string; position: string; positionNow?: string; team: string | null; points: number; slot: string | null }>
+    bench: Array<{ playerId: string; name: string; position: string; positionNow?: string; team: string | null; points: number | null; reason?: string }>
     unfilledSlots?: string[]
     awaitingStats?: number
     /** Native: the week was sealed on seats that differ from the league's current ones — which ones. */
@@ -241,6 +242,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                           <div className="truncate font-medium text-white">{starter.name}</div>
                           <div className="truncate text-white/45">
                             {starter.position}
+                            {starter.positionNow ? <span data-testid="bestball-position-now"> (now {starter.positionNow})</span> : null}
                             {starter.team ? ` · ${starter.team}` : ''}
                           </div>
                         </div>
@@ -268,7 +270,12 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                         <div key={player.playerId} data-testid="bestball-bench-row" className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0 truncate text-white/80">
-                              {player.name} <span className="text-white/40">{player.position}{player.team ? ` · ${player.team}` : ''}</span>
+                              {player.name}{' '}
+                              <span className="text-white/40">
+                                {player.position}
+                                {player.positionNow ? <span data-testid="bestball-position-now"> (now {player.positionNow})</span> : null}
+                                {player.team ? ` · ${player.team}` : ''}
+                              </span>
                             </div>
                             <div className="shrink-0 text-white/50">{player.points == null ? '—' : player.points.toFixed(2)}</div>
                           </div>

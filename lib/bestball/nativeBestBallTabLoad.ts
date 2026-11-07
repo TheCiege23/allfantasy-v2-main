@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { buildBestBallSlots } from '@/lib/redraft/scoringEngine'
 import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
-import { buildNativeLineupCard, lineupSlotsForWeek, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
+import { buildNativeLineupCard, lineupPositionsForWeek, lineupSlotsForWeek, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
 
 /** Matchup rows that have been scored at least once. */
 const SCORED = ['active', 'final']
@@ -89,6 +89,8 @@ export async function loadNativeBestBallTab(args: {
   const lineups: NativeLineupCard[] = []
   for (const m of weekMatchups) {
     const { slots, sealedSeatsNote } = lineupSlotsForWeek(m.lineupSnapshots, currentSlots)
+    // ...and at the positions it was seated at (a sealed week with stored positions only).
+    const sealedPositions = lineupPositionsForWeek(m.lineupSnapshots)
     const sides: Array<{ rosterId: string | null; side: 'home' | 'away'; opp: number | null }> = [
       { rosterId: m.homeRosterId, side: 'home', opp: m.awayRosterId ? m.awayScore : null },
       { rosterId: m.awayRosterId, side: 'away', opp: m.homeScore },
@@ -110,6 +112,7 @@ export async function loadNativeBestBallTab(args: {
         })),
         pointsByPlayer,
         slots,
+        sealedPositions,
       })
       lineups.push(sealedSeatsNote ? { ...card, sealedSeatsNote } : card)
     }
