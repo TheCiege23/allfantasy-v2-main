@@ -156,8 +156,20 @@ html[data-mode='light'] .af-core .afh[data-format='efl'] { --afh: #82621f; --afh
 .af-core .afh-connect p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .af-core .afh-connect-row {
   display: flex;
+  /* The Tournament hub puts TWO fixed-width buttons here; without wrapping the second ran off a phone
+     ("Your tournaments an…", clipped at 508px on a 390px screen, 2026-11-07). */
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+/* …and on the narrowest phones (320px) the longer label is wider than the row itself, so it may shrink
+   and wrap its words rather than overflow. */
+.af-core .afh-connect-row > .afh-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
   padding: 11px;
   background: var(--surface2);
   border: 1px solid var(--line);
