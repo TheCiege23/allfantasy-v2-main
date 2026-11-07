@@ -713,6 +713,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsRules.bb.weeklyHelp": "Weekly: one best lineup per week, chosen on each player’s weekly total.",
     "lsRules.bb.dailyOptionHelp": "Daily (NBA, NHL and MLB): each day’s best lineup from the players rostered that day counts, and the week is the sum of the days.",
     "lsRules.bb.dailyHelp": "Daily: each day the best lineup from the players rostered that day counts, and the week score is the sum of the days.",
+    "lsRules.bb.dailyWaitingSchedule": "Daily scoring is waiting for the {{season}} season schedule: the regular-season opener is not in our stored schedule yet, so daily weeks cannot be scored until it is. It starts on its own once the opener arrives.",
     "lsRules.bb.lockedDraft": "Scoring and competition settings are locked: the draft has started.",
     "lsRules.bb.lockedSeason": "Scoring and competition settings are locked: the season has started.",
     "lsRules.bb.lockedBody": "Changing the scoring period, lineup, contest, playoffs or season length now would re-score teams drafted under the current rules. Waivers, trades and manual substitutions can still change.",

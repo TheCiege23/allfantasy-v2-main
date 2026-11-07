@@ -35,7 +35,9 @@ import {
   type PlayerDailyStats,
 } from './dailyLineups'
 import { gamesCountActive } from './gamesCount'
-import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
+import { warnDailyBestBallWaitingForSchedule } from '@/lib/bestball/dailyScheduleStatus'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
@@ -881,6 +883,13 @@ async function scoreRosterBestBall(args: {
  * as games-count): he is missing until it does, never silently scored 0.
  *
  * Null when the week has no daily date window; the caller then scores the week weekly.
+ *
+ * 🛑 A SEASON PAST THE CURATED TABLE HAS NO WINDOW UNTIL SOMETHING PRIMES IT. Its opener is derived from
+ * the stored schedule by `ensureDailySportSeasonStart`, which records it in-process. The stat sync primes
+ * it, but scoring often runs in a different process (a cron, a request), where the synchronous resolver
+ * returned null and every daily league silently scored weekly. So this primes it itself, and when there
+ * is still no opener it says so (the commissioner panel and the Best Ball tab say it too —
+ * lib/bestball/dailyScheduleStatus.ts).
  */
 async function scoreRosterBestBallDaily(args: {
   leagueId: string
@@ -893,7 +902,12 @@ async function scoreRosterBestBallDaily(args: {
   collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary | null> {
   const sport = String(args.bestBall.sport).toUpperCase()
-  const window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+  let window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+  if (!window && !resolveDailySportSeasonStart(sport, args.seasonYear)) {
+    await ensureDailySportSeasonStart(sport, args.seasonYear, { db: prisma as never }).catch(() => null)
+    window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+    if (!resolveDailySportSeasonStart(sport, args.seasonYear)) warnDailyBestBallWaitingForSchedule(sport, args.seasonYear)
+  }
   if (!window) return null
   const players = await loadBestBallWeekRosterRows(prisma, {
     rosterIds: [args.rosterId],

@@ -38,6 +38,8 @@ type BestBallApiResponse = {
   source?: 'native'
   /** A hosted league whose draft is not finished: why nothing is scored yet. */
   draftNotice?: string | null
+  /** A daily league whose season has no regular-season opener yet: daily scoring is waiting for it. */
+  dailyScheduleNotice?: string | null
   lineups: Array<{
     rosterId: string
     teamName: string
@@ -173,6 +175,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
             )}{' '}
             Scores stay <span className="font-semibold text-[#fde68a]">provisional</span> until every game and stat for the week is final.
           </p>
+          {daily && data.dailyScheduleNotice ? (
+            <div data-testid="bestball-daily-schedule-pending" className="rounded-xl border border-[var(--line)] bg-[#38bdf8]/10 p-4 text-sm text-[#bae6fd]">
+              {data.dailyScheduleNotice}
+            </div>
+          ) : null}
           {/* The current season's draft is open: shown whether the tab is empty or still holding last
               season's lineups (a renewed league mid-draft), so neither reads as this season's scoring. */}
           {data.draftNotice ? (

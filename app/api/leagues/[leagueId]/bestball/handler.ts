@@ -11,6 +11,7 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
+import { dailyScheduleWaitingNotice, loadDailyBestBallScheduleStatus } from '@/lib/bestball/dailyScheduleStatus'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +95,17 @@ export async function GET(
   })
   // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
   const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
+  // Daily best ball needs the season's regular-season opener (recorded, or derived from the stored
+  // schedule). Without one it cannot score days, and the panel and the tab say so rather than nothing.
+  // Only for a league we score ourselves, and never for a tournament (always weekly).
+  const dailySchedule =
+    resolveWriteAuthority(league.platform) === 'NATIVE' && bestBallSettings.contestStructure !== 'tournament'
+      ? await loadDailyBestBallScheduleStatus(
+          { sport: String(league.sport), season: native ? native.season : league.season },
+          { db: prisma as never },
+        ).catch(() => null)
+      : null
+  const dailyScheduleNotice = bestBallSettings.scoringPeriod === 'daily' ? dailyScheduleWaitingNotice(dailySchedule) : null
   // A league we host whose CURRENT season has no native season yet: that season's draft has not
   // finished, so nothing in it can be scored. With no native season at all the tab is empty; with an
   // older one (a renewed league mid-draft) the tab would otherwise show last season as if it were this
@@ -125,6 +137,8 @@ export async function GET(
       source: 'native',
       ...native.body,
       draftNotice,
+      dailySchedule,
+      dailyScheduleNotice,
     })
   }
 
@@ -247,6 +261,8 @@ export async function GET(
     selectedWeek,
     weeksAvailable,
     draftNotice,
+    dailySchedule,
+    dailyScheduleNotice,
     lineups: lineupCards,
     rosterComposition,
     standings: standings.map((row) => ({

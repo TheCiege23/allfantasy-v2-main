@@ -165,6 +165,8 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
   /** Why scoring and competition settings are frozen ("after the draft has started"), or null. */
   const [structureLock, setStructureLock] = useState<string | null>(null)
   const [loadedTournament, setLoadedTournament] = useState(false)
+  /** The season daily best ball is waiting on (no regular-season opener stored yet), or null. */
+  const [dailyWaitingSeason, setDailyWaitingSeason] = useState<number | null>(null)
   /**
    * The league's own starter seats, from the API (`getBestBallSportProfile(sport, league.settings)` — what
    * its matchups are scored on). Until it loads, the sport's default best ball seats. Finding #22.
@@ -203,10 +205,15 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
             structureLock?: string | null
             profile?: { lineupSlots?: Array<{ count?: unknown }> }
           }
+          dailySchedule?: { state?: unknown; season?: unknown } | null
           error?: string
         }
         if (!res.ok) throw new Error(json.error ?? t('lsRules.bb.loadFailed'))
         if (!cancelled) setStructureLock(typeof json.league?.structureLock === 'string' ? json.league.structureLock : null)
+        if (!cancelled) {
+          const ds = json.dailySchedule
+          setDailyWaitingSeason(ds?.state === 'waiting' && typeof ds.season === 'number' ? ds.season : null)
+        }
         const leagueSlots = json.league?.profile?.lineupSlots
         if (!cancelled && Array.isArray(leagueSlots) && leagueSlots.length > 0) {
           setStarterSeats(leagueSlots.reduce((sum, s) => sum + (typeof s.count === 'number' ? s.count : 0), 0))
@@ -431,6 +438,14 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
                 ? `${t('lsRules.bb.weeklyHelp')} ${t('lsRules.bb.dailyOptionHelp')}`
                 : t('lsRules.bb.weeklyHelp')}
           </p>
+          {dailyWaitingSeason != null && (dailyOffered || settings.scoringPeriod === 'daily') ? (
+            <p
+              data-testid="bb-daily-schedule-pending"
+              className="rounded-lg border border-[var(--line)] bg-[#38bdf8]/10 px-3 py-2 text-[11px] leading-relaxed text-[#bae6fd]"
+            >
+              {t('lsRules.bb.dailyWaitingSchedule').replace('{{season}}', String(dailyWaitingSeason))}
+            </p>
+          ) : null}
           <Row label={t('lsRules.bb.tiebreaker')}>
             <SelectField
               value={settings.tieRule}

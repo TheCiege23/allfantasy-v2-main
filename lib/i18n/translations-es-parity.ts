@@ -2817,6 +2817,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsRules.bb.weeklyHelp": "Semanal: una mejor alineación por semana, elegida con el total semanal de cada jugador.",
   "lsRules.bb.dailyOptionHelp": "Diaria (NBA, NHL y MLB): cuenta la mejor alineación de cada día con los jugadores en plantilla ese día, y la semana es la suma de los días.",
   "lsRules.bb.dailyHelp": "Diaria: cada día cuenta la mejor alineación con los jugadores en plantilla ese día, y la puntuación de la semana es la suma de los días.",
+  "lsRules.bb.dailyWaitingSchedule": "La puntuación diaria espera el calendario de la temporada {{season}}: el primer partido de la temporada regular aún no está en nuestro calendario guardado, así que las semanas diarias no se pueden puntuar hasta que llegue. Empieza sola en cuanto llegue.",
   "lsRules.bb.lockedDraft": "Los ajustes de puntuación y competición están bloqueados: el draft ya empezó.",
   "lsRules.bb.lockedSeason": "Los ajustes de puntuación y competición están bloqueados: la temporada ya empezó.",
   "lsRules.bb.lockedBody": "Cambiar ahora el periodo de puntuación, la alineación, el concurso, los playoffs o la duración de la temporada volvería a puntuar equipos drafteados con las reglas actuales. Los reclamos, los trades y las sustituciones manuales todavía pueden cambiar.",

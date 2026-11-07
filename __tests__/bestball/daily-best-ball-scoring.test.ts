@@ -19,7 +19,8 @@ const db = vi.hoisted(() => ({
   league: { findFirst: vi.fn(), findUnique: vi.fn() },
   exileWeeklyEntry: { findMany: vi.fn() },
   playerGameLogCache: { findMany: vi.fn() },
-  playerGameStat: { findMany: vi.fn() },
+  playerGameStat: { findMany: vi.fn(), findFirst: vi.fn(async () => null) },
+  sportsDataCache: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
   playerIdentityMap: { findFirst: vi.fn(), findMany: vi.fn() },
   playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   playerDailyScore: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
@@ -51,7 +52,9 @@ import { buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWar
 import fs from 'node:fs'
 import path from 'node:path'
 import { normalizeRiGameBox } from '@/lib/sports-data/rollingInsightsGameLogs'
-import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { clearDerivedDailySportSeasonStarts, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { resetDailySportSeasonStartChecks } from '@/lib/season-week/deriveDailySportSeasonStart'
+import { resetDailyBestBallScheduleWarnings } from '@/lib/bestball/dailyScheduleStatus'
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const ONE_G_SEAT = { roster: { config: { sections: [{ slots: { G: 1, BN: 3 } }] } } }
@@ -411,5 +414,67 @@ describe('MLB daily best ball: the sync writes per-day rows and the week scores 
     // One UTIL seat: one hitter counts on day 1, the other on day 2 — weekly would count only one.
     expect(r.points).toBe(Math.round((hit + hit2) * 100) / 100)
     expect(r.bestBall?.counted?.map((c) => c.playerId).sort()).toEqual(['h1', 'h2'])
+  })
+})
+
+/*
+ * A SEASON PAST THE CURATED TABLE (NBA curates 2026 only; 2027 is a dynasty league's year 2). Its opener
+ * is derived from the stored schedule — here a played game the Rolling Insights `/live` ingest labelled
+ * regular season on Tue 19 Oct 2027. The scorer must derive it itself: scoring runs in processes the stat
+ * sync never primed, and it used to find no window there and silently score the daily league weekly.
+ */
+describe('daily best ball in a season the curated table does not list', () => {
+  const STATS_2027: Record<string, Array<[string, number]>> = { X: [['2027-10-19', 30]], Y: [['2027-10-20', 25]] }
+  function arrange2027(opts: { labelledOpener: boolean }) {
+    db.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: DAILY_BB, bestBallMode: true, leagueType: 'best_ball', leagueVariant: null, platform: 'manual' })
+    db.redraftRosterPlayer.findMany.mockResolvedValue(
+      ['X', 'Y'].map((id) => ({
+        playerId: id, position: 'PG', slotType: 'BN', rosterId: 'r1', sport: 'NBA', playerName: id, team: 'BOS',
+        droppedAt: null, addedAt: new Date('2027-10-01T00:00:00Z'), acquisitionType: 'drafted',
+      })),
+    )
+    db.roster.findMany.mockResolvedValue([])
+    db.afRosterLineupAssignment.findMany.mockResolvedValue([])
+    db.redraftDailyLineup.findMany.mockResolvedValue([])
+    db.playerGameStat.findFirst.mockResolvedValue(opts.labelledOpener ? { gameDate: day('2027-10-19') } : null)
+    db.playerDailyScore.findMany.mockResolvedValue(
+      Object.entries(STATS_2027).flatMap(([playerId, days]) => days.map(([d, pts]) => ({ playerId, scoringDay: day(d), stats: { pts }, isFinalized: false }))),
+    )
+    db.playerWeeklyScore.findUnique.mockImplementation(async ({ where }: { where: { playerId_week_season_sport: { playerId: string } } }) => {
+      const id = where.playerId_week_season_sport.playerId
+      return { stats: { pts: (STATS_2027[id] ?? []).reduce((s, [, p]) => s + p, 0) }, isFinalized: true }
+    })
+  }
+  const f = (n: number) => calculateScoreFromSportConfig('L1', 'x', 1, { pts: n }, 'PG')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearDerivedDailySportSeasonStarts()
+    resetDailySportSeasonStartChecks()
+    resetDailyBestBallScheduleWarnings()
+  })
+
+  it('precondition: 2027 has no window until something derives the opener (else this proves nothing)', () => {
+    expect(resolveDailySportWeekWindow('NBA', 2027, 1)).toBeNull()
+  })
+
+  it('derives the opener from the stored schedule and scores the week daily: 30 + 25', async () => {
+    arrange2027({ labelledOpener: true })
+    const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2027 })
+    expect(r.bestBall?.period).toBe('daily')
+    expect(r.bestBall?.days?.map((d) => d.day)).toEqual(['2027-10-19', '2027-10-20'])
+    expect(r.points).toBe(Math.round(((await f(30)) + (await f(25))) * 100) / 100)
+  })
+
+  it('with no labelled game stored it still falls back, and says so once', async () => {
+    arrange2027({ labelledOpener: false })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const r = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2027 })
+    await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2027 })
+    expect(r.bestBall?.period).toBeUndefined()
+    expect(db.playerDailyScore.findMany).not.toHaveBeenCalled()
+    const ours = warn.mock.calls.filter((c) => String(c[0]).startsWith('[bestball] daily best ball NBA 2027'))
+    expect(ours).toHaveLength(1)
+    warn.mockRestore()
   })
 })
