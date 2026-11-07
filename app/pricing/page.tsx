@@ -35,7 +35,7 @@ import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
 export const metadata: Metadata = buildSeoMeta({
   title: "Pricing & Plans — AllFantasy.ai | Fantasy Tools & Subscriptions",
   description:
-    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
+    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. AllFantasy never holds league dues; commissioners track who has paid.",
   canonicalPath: "/pricing",
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:

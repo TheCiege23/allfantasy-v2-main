@@ -2396,7 +2396,7 @@ export function ImportV4({
                     else — the swap alone does not say so.
                   */}
                   <Hint label="Why this field changes">
-                    Sleeper connects by username. ESPN, Yahoo, MFL, Fantrax and Fleaflicker connect
+                    Sleeper connects by username. ESPN, MFL, Fantrax and Fleaflicker connect
                     by league ID — the field swaps when you pick a platform.
                   </Hint>
                 </span>
