@@ -4926,8 +4926,3 @@ button.af-rail-sport:focus-visible {
    */
   body:has(.af-core.af-shell) [data-af-back-to-top] { display: none; }
 }
-
-/* The bracket promo now follows the home screen (2026-11-06): space above it, not below. */
-.af-core .af-core-bracket-promo {
-  margin: 18px 0 0;
-}
