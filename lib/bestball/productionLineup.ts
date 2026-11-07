@@ -14,7 +14,7 @@
  * whole roster, and a sport profile (`lib/bestball/rules.ts`) whose NBA lineup had 9 starters while the
  * `best_ball` roster template a league is actually given has 11.
  *
- * Pure: no DB, no clock. `buildBestBallSlots` moved here unchanged from `scoringEngine.ts` (which still
+ * Pure: no DB, no clock. `buildBestBallSlots` moved here from `scoringEngine.ts` (which still
  * re-exports it) so client code and pure modules can use it without importing Prisma.
  */
 import {
@@ -30,8 +30,8 @@ import { resolveNbaRosterTemplate } from '@/lib/nba-roster/NbaRosterTemplates'
 import { resolveNhlRosterTemplate } from '@/lib/nhl-roster/NhlRosterTemplates'
 import { resolveMlbRosterTemplate } from '@/lib/mlb-roster/MlbRosterTemplates'
 import { resolveNcaafRosterTemplate } from '@/lib/ncaaf-roster/NcaafRosterTemplates'
-import { resolveNcaabRosterTemplate } from '@/lib/ncaab-roster/NcaabRosterTemplates'
-import { resolveSoccerRosterTemplate } from '@/lib/soccer-roster/SoccerRosterTemplates'
+import { getAllNcaabSlots, resolveNcaabRosterTemplate } from '@/lib/ncaab-roster/NcaabRosterTemplates'
+import { getAllSoccerSlots, resolveSoccerRosterTemplate } from '@/lib/soccer-roster/SoccerRosterTemplates'
 
 /**
  * The league's starter slots as optimizer input: the commissioner's roster (a superflex league
@@ -42,9 +42,42 @@ export function buildBestBallSlots(sport: string, leagueSettings: unknown): Line
   const slots: LineupSlotSpec[] = []
   let order = 0
   for (const [token, count] of config.starterCapacities) {
-    slots.push({ slot: token, eligible: allowedPositionsForSlot(sport, token), count, slotOrder: order++ })
+    slots.push({ slot: token, eligible: bestBallSlotEligibility(sport, token), count, slotOrder: order++ })
   }
   return slots
+}
+
+/**
+ * Sports whose redraft slot eligibility (`allowedPositionsForSlot`) cannot fill their own best ball seats,
+ * so the roster template's `eligiblePositions` are added to it for best ball.
+ *
+ * 🛑 TWO SEATS NOBODY COULD FILL (audit 2026-11-06; fixed on the owner's call 2026-11-07, knowing it
+ * changes live best ball scores in these two sports):
+ *  - SOCCER's `best_ball` template has a FLEX seat, but the redraft soccer config has no `flexPositions`,
+ *    so FLEX accepted only the literal token `FLX` and sat empty every week. Its DEF/MID/FWD/GK seats
+ *    likewise took only the literal code, so a player stored as `CB` or `GKP` was never seated.
+ *  - NCAAB's G and F seats took only a literal `G` / `F`, while UTIL took `PG/SG/SF/PF/C` but not `G` /
+ *    `F` — so whichever way a player's position is stored, some seats could not be filled.
+ * Additive only: every position accepted before is still accepted. Other sports are untouched, so their
+ * scores cannot move.
+ */
+const TEMPLATE_ELIGIBILITY: Record<string, () => Array<{ key: string; eligiblePositions: string[] }>> = {
+  NCAAB: getAllNcaabSlots,
+  SOCCER: getAllSoccerSlots,
+}
+
+export function bestBallSlotEligibility(sport: string, token: string): string[] {
+  const base = allowedPositionsForSlot(sport, token)
+  const defs = TEMPLATE_ELIGIBILITY[String(sport ?? '').trim().toUpperCase()]
+  if (!defs) return base
+  const def = defs().find((d) => normalizeToken(d.key) === normalizeToken(token))
+  if (!def) return base
+  const merged = [...base]
+  for (const p of def.eligiblePositions) {
+    const t = normalizeToken(p)
+    if (t && !merged.includes(t)) merged.push(t)
+  }
+  return merged
 }
 
 /** A roster row's position string as optimizer positions (`WR/RB` is both), normalized like the slots. */
