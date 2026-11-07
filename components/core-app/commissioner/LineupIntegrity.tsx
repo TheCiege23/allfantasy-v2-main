@@ -113,7 +113,10 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
         </table>
       )}
 
-      {view.scores && view.scores.length > 0 && <LineupScores leagueId={leagueId} scores={view.scores} m={m} />}
+      {view.scores && view.scores.length > 0 && (
+        <LineupScores leagueId={leagueId} scores={view.scores} m={m} intro={view.scoresSource === 'sleeper' ? m.scoresIntroSleeper : undefined} />
+      )}
+      {view.coverage && <SnapshotCoverageLine coverage={view.coverage} m={m} />}
 
       {!view.entitled && (
         <p className="af-ch-recipe-meta" style={{ marginTop: 8 }}>
@@ -130,7 +133,8 @@ const pct = (ratio: number) => Math.round(ratio * 100)
 /** Below this a week reads as a warning on the chip. Display only; the flag uses the league's line. */
 const LOW_CHIP = 0.85
 
-export function LineupScores({ leagueId, scores, m }: { leagueId: string; scores: TeamLineupScoreView[]; m: M }) {
+/** `intro` replaces the default line when the scores were not built from what the manager saw (an imported league). */
+export function LineupScores({ leagueId, scores, m, intro }: { leagueId: string; scores: TeamLineupScoreView[]; m: M; intro?: string }) {
   const [state, setState] = useState<Record<string, 'posting' | 'posted' | string>>({})
 
   async function post(rosterId: string) {
@@ -152,7 +156,7 @@ export function LineupScores({ leagueId, scores, m }: { leagueId: string; scores
   return (
     <section className="af-li-scores" data-testid="lineup-integrity-scores" style={{ marginTop: 14 }}>
       <p className="af-ch-recipe-label">{m.scoresTitle}</p>
-      <p className="af-ch-recipe-meta">{m.scoresIntro}</p>
+      <p className="af-ch-recipe-meta">{intro ?? m.scoresIntro}</p>
       <ul className="af-ch-recipe-list">
         {scores.map((team) => {
           const st = state[team.rosterId]
@@ -200,5 +204,29 @@ export function LineupScores({ leagueId, scores, m }: { leagueId: string; scores
         })}
       </ul>
     </section>
+  )
+}
+
+/**
+ * How much of the league the kickoff snapshots cover. Without it, a league whose snapshots silently
+ * stopped (monitor off, slots unreadable, a sync gap) just shows no scores, which reads as "all fine".
+ */
+export function SnapshotCoverageLine({ coverage, m }: { coverage: NonNullable<Extract<View, { supported: true }>['coverage']>; m: M }) {
+  const lines: string[] = []
+  if (!coverage.monitorOn) lines.push(m.coverageMonitorOff)
+  else if (!coverage.latest) lines.push(m.coverageNone)
+  if (coverage.latest) lines.push(m.coverageLatest(coverage.latest.week, coverage.latest.snapshotted, coverage.teams))
+  if (coverage.lastScored) lines.push(m.coverageScored(coverage.lastScored.week, coverage.lastScored.scored, coverage.teams))
+  const gap = (coverage.latest && coverage.latest.snapshotted < coverage.teams) || (coverage.lastScored && coverage.lastScored.scored < coverage.teams)
+  if (gap) lines.push(m.coverageGap)
+  return (
+    <div className="af-li-coverage" data-testid="lineup-integrity-coverage" data-gap={gap ? 'true' : undefined} style={{ marginTop: 10 }}>
+      <p className="af-ch-recipe-label">{m.coverageTitle}</p>
+      {lines.map((l) => (
+        <p key={l} className="af-ch-recipe-meta">
+          {l}
+        </p>
+      ))}
+    </div>
   )
 }
