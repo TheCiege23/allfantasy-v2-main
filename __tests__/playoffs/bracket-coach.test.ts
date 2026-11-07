@@ -17,6 +17,20 @@ export const coachView = (): PlayoffChallengeView => ({
   picks: ["live", "future", "final"].map((id) => ({ id, seriesId: id, entryId: "mine", pickTeamName: "Boston Celtics", createdAt: "", updatedAt: "" })), rounds: ["cup_group_play"],
 })
 describe("private bracket coach", () => {
+  it("does not count a game-day draft from a finalized entry", () => {
+    const view = coachView()
+    view.picks.find(p => p.seriesId === "final")!.confirmedAt = null
+    expect(buildBracketCoach(view, null, now).recap.pointsEarned).toBe(0)
+  })
+  it("shows the last confirmed choice if a live update arrives while an edit remains unconfirmed", () => {
+    const view = coachView()
+    const pick = view.picks.find(p => p.seriesId === "live")!
+    pick.pickTeamName = "Atlanta Hawks"
+    pick.confirmedTeamName = "Boston Celtics"
+    pick.confirmedAt = "2026-11-06T20:00:00Z"
+    pick.draftTeamName = "Atlanta Hawks"
+    expect(buildBracketCoach(view, null, now).tonight.find(game => game.id === "live")?.pick).toBe("Boston Celtics")
+  })
   it("reveals rival picks only for locked games and excludes draft brackets", () => {
     const view = coachView()
     const result = buildBracketCoach(view, { id: "rival", name: "Rival", totalScore: 4, finalizedAt: view.entries[1].finalizedAt,

@@ -13,9 +13,14 @@ type Filter = "next" | "results" | "all"
 export type CupGroupPlaySectionProps = {
   scoringExcludedReasonFor?: (game: PlayoffSeriesView) => "draft" | "late" | null
   games: PlayoffSeriesView[]
+  allGames?: PlayoffSeriesView[]
   groups: CupGroup[]
   sport: string
   picks: Map<string, string>
+  pendingIds: Set<string>
+  canFinalize: boolean
+  finalizingDay: string | null
+  onFinalizeDay: (day: string) => void
   teamLogos: Record<string, string>
   savingId: string | null
   lockedReasonFor: (game: PlayoffSeriesView) => string | null
@@ -35,7 +40,7 @@ function startMs(game: PlayoffSeriesView): number {
  * "Live & upcoming"; finished games move to Results so the next pick is always
  * at the top.
  */
-export default function CupGroupPlaySection({ games, groups, sport, picks, teamLogos, savingId, lockedReasonFor, onPick, onOpen, scoringExcludedReasonFor }: CupGroupPlaySectionProps) {
+export default function CupGroupPlaySection({ games, allGames = games, groups, sport, picks, pendingIds, canFinalize, finalizingDay, onFinalizeDay, teamLogos, savingId, lockedReasonFor, onPick, onOpen, scoringExcludedReasonFor }: CupGroupPlaySectionProps) {
   const [filter, setFilter] = useState<Filter>("next")
   const [selectedDay, setSelectedDay] = useState("all")
   const clientTime = useClientTime()
@@ -77,8 +82,8 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
 
   const groupLabel = (game: PlayoffSeriesView) => groupForTeam(groups, game.homeTeamName)?.label ?? null
   const schedule = days.map((day) => {
-    const open = day.list.filter((game) => !lockedReasonFor(game))
-    return { ...day, openCount: open.length, savedCount: open.filter((game) => picks.has(game.id)).length }
+    const open = allGames.filter((game) => localDayKey(game.startsAt, clientTime ? undefined : "UTC") === day.key && !lockedReasonFor(game))
+    return { ...day, openCount: open.length, savedCount: open.filter((game) => picks.has(game.id)).length, pendingCount: open.filter((game) => pendingIds.has(game.id)).length }
   })
   const visibleSchedule = schedule.some((day) => day.key === selectedDay)
     ? schedule.filter((day) => day.key === selectedDay)
@@ -104,7 +109,7 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
         <summary>How to fill out your NBA Cup bracket</summary>
         <ol>
           <li><strong>Pick Group Play winners.</strong> Use the date shortcuts to pick every available game. You can pick ahead across dates, and each game locks at its own tipoff.</li>
-          <li><strong>Finalize picks.</strong> Use the button at the top of your entry before your first picked game starts. After that, changes to upcoming picks save automatically.</li>
+          <li><strong>Finalize each game day.</strong> Pick every open game on that day, then use its Finalize button. Saved edits do not replace your last finalized pick until you finalize again.</li>
           <li><strong>Come back for the knockout rounds.</strong> Quarterfinal picks open after Group Play ends and the NBA confirms the teams and tipoff times.</li>
         </ol>
         <p>Use My Brackets to return to your entry. League owners can use Invite friends to share the league.</p>
@@ -150,6 +155,17 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
           <div className="af-cup-day-head">
             <h3>{day.heading}</h3>
             <span>{day.sub}{day.openCount ? ` · ${day.savedCount}/${day.openCount} open picks saved` : ""}</span>
+            {canFinalize && day.key !== "tba" && day.openCount > 0 ? (
+              <div>
+                <span role="status">{day.savedCount < day.openCount ? "Picks missing" : day.pendingCount ? "Saved — not finalized" : "Finalized"}</span>
+                {day.pendingCount ? <small>Previously finalized picks still count until you finalize these changes.</small> : null}
+                <button type="button" className="af-pb-btn af-pb-btn--accent"
+                  disabled={Boolean(savingId || finalizingDay) || day.savedCount < day.openCount || day.pendingCount === 0}
+                  onClick={() => onFinalizeDay(day.key)}>
+                  {finalizingDay === day.key ? "Finalizing…" : "Finalize this day"}
+                </button>
+              </div>
+            ) : null}
           </div>
           {visibleSchedule[index + 1] ? (
             <a className="af-cup-next-date" href={`#cup-day-${visibleSchedule[index + 1].key}`}>
@@ -169,6 +185,7 @@ export default function CupGroupPlaySection({ games, groups, sport, picks, teamL
                 recordOf={recordOf}
                 lockedReason={cupGameState(game) === "scheduled" ? lockedReasonFor(game) : null}
                 saving={savingId === game.id}
+                isDraft={pendingIds.has(game.id)}
                 onPick={(team) => onPick(game, team)}
                 onOpen={() => onOpen(game)}
               />

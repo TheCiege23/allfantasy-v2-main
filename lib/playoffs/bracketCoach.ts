@@ -2,7 +2,7 @@ import type { PlayoffChallengeView, PlayoffSeriesView } from "./types"
 import { pointsForSeries } from "./playoffScoring"
 import { nbaCupGroupStandings, cupTeamName } from "./nbaCupProgress"
 
-export type CoachPick = { seriesId: string; pickTeamName: string }
+export type CoachPick = { seriesId: string; pickTeamName: string; confirmedAt?: string | Date | null }
 export type CoachRival = { id: string; name: string; totalScore: number; finalizedAt?: string | null; picks: CoachPick[] }
 export type CoachGame = {
   id: string; home: string; away: string; startsAt: string | null; status: string; points: number
@@ -28,15 +28,17 @@ export function validCoachTimeZone(value: string | null): string {
 export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival | null, now = Date.now(), zone = "America/New_York") {
   if (rival && !rival.finalizedAt) rival = null
   const timeZone = validCoachTimeZone(zone)
-  const myPicks = new Map(view.picks.map((pick) => [pick.seriesId, pick.pickTeamName]))
-  const rivalPicks = new Map(rival?.picks.map((pick) => [pick.seriesId, pick.pickTeamName]) ?? [])
+  const myPicks = new Map(view.picks.map((pick) => [pick.seriesId, pick]))
+  const rivalPicks = new Map(rival?.picks.map((pick) => [pick.seriesId, pick]) ?? [])
   const finalized = Boolean(view.activeEntry?.isComplete && view.activeEntry.finalizedAt)
   const games: CoachGame[] = view.series.map((game) => {
-    const selected = myPicks.get(game.id)
+    const mine = myPicks.get(game.id)
+    const selected = view.challenge.sport === "nba_cup" && gameHasLocked(game, now) && mine?.confirmedAt
+      ? mine.confirmedTeamName ?? mine.pickTeamName : mine?.pickTeamName
     const pick = selected && [game.homeTeamName, game.awayTeamName].includes(selected) ? selected : null
     return { id: game.id, home: game.homeTeamName, away: game.awayTeamName, startsAt: game.startsAt,
       status: game.status, points: pointsForSeries(game, view.challenge.sport), pick,
-      eligible: finalized && eligibleCoachPick(view, game, view.activeEntry?.finalizedAt),
+      eligible: finalized && eligibleCoachPick(view, game, view.challenge.sport === "nba_cup" && mine?.confirmedAt !== undefined ? mine.confirmedAt : view.activeEntry?.finalizedAt),
       locked: gameHasLocked(game, now), homeScore: game.liveHomeScore ?? null, awayScore: game.liveAwayScore ?? null }
   })
   const byId = new Map(view.series.map((game) => [game.id, game]))
@@ -49,7 +51,7 @@ export function buildBracketCoach(view: PlayoffChallengeView, rival: CoachRival 
   const comparisons = rival ? games.filter((game) => game.locked).map((game) => {
     const original = byId.get(game.id)!
     const other = rivalPicks.get(game.id)
-    const theirPick = other && [game.home, game.away].includes(other) && eligibleCoachPick(view, original, rival.finalizedAt) ? other : null
+    const theirPick = other && [game.home, game.away].includes(other.pickTeamName) && eligibleCoachPick(view, original, view.challenge.sport === "nba_cup" && other.confirmedAt !== undefined ? other.confirmedAt?.toString() : rival.finalizedAt) ? other.pickTeamName : null
     return { ...game, myPick: game.eligible ? game.pick : null, theirPick, winner: original.winnerTeamName }
   }).filter((game) => game.myPick || game.theirPick) : []
   const rooting = comparisons.filter((game) => game.status !== "final" && !game.winner && game.myPick && game.myPick !== game.theirPick).map((game) => ({

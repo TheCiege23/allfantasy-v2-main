@@ -21,6 +21,7 @@ export type CupGameCardProps = {
   recordOf?: (team: string) => string | null
   lockedReason: string | null
   saving: boolean
+  isDraft?: boolean
   onPick: (team: string) => void
   onOpen: () => void
 }
@@ -32,7 +33,7 @@ export type CupGameCardProps = {
  *
  * Away is listed above home, the order a scoreboard reads.
  */
-export default function CupGameCard({ series, sport, pick, teamLogos, stageLabel, groupLabel, recordOf, lockedReason, saving, onPick, onOpen, scoringExcludedReason }: CupGameCardProps) {
+export default function CupGameCard({ series, sport, pick, teamLogos, stageLabel, groupLabel, recordOf, lockedReason, saving, isDraft, onPick, onOpen, scoringExcludedReason }: CupGameCardProps) {
   const clientTime = useClientTime()
   const { language } = useOptionalLanguage(), copy = bracketCompanionCopy(language)
   const state = cupGameState(series)
@@ -140,6 +141,7 @@ export default function CupGameCard({ series, sport, pick, teamLogos, stageLabel
       <div className="af-cup-card-foot">
         <span className="af-cup-meta">{state === "scheduled" ? when ?? "Tipoff to be announced" : when ? when.split(" · ")[0] : ""}{venue ? `${state === "scheduled" || when ? " · " : ""}${venue}` : ""}</span>
         <span className="af-cup-result" data-tone={tone}>{result}</span>
+        {state === "scheduled" && pick && isDraft ? <span role="status">Saved — finalize this day to confirm.</span> : null}
         {groupLine ? <span className="af-cup-group-line">{groupLine}</span> : null}
         <button type="button" className="af-cup-details" onClick={onOpen}>
           {state === "scheduled" ? "Matchup details & Chimmy read →" : state === "live" ? "Live game details →" : "Box score & recap →"}
