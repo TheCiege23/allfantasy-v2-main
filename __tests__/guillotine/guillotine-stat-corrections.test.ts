@@ -400,6 +400,127 @@ describe('a stat correction after the chop', () => {
   })
 })
 
+/**
+ * MLB two-week periods (lib/guillotine/eliminationPeriods.ts): weeks 3-4 are one period keyed 4.
+ * A: 40 + 30 = 70, B: 10 + 50 = 60 (chopped), C: 35 + 30 = 65. Each week's players are different, so a
+ * correction to either week can only be seen through that week's own baseline.
+ */
+async function arrangePeriod() {
+  state.cache.clear()
+  state.forbidden.length = 0
+  state.slots = null
+  state.league = { sport: 'MLB', settings: { guillotine_period_weeks: 2 }, bestBallMode: false, leagueVariant: 'guillotine', leagueType: 'redraft', guillotineMode: true, userId: 'owner-1' }
+  state.rosterPlayers = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2'].map((playerId) => ({ rosterId: `rr-${playerId[0]}`, playerId, sport: 'MLB', position: 'OF' }))
+  const pts: Record<string, [number, number]> = { a1: [3, 40], a2: [4, 30], b1: [3, 10], b2: [4, 50], c1: [3, 35], c2: [4, 30] }
+  state.weekly = Object.entries(pts).map(([playerId, [week, p]]) => ({ playerId, sport: 'MLB', week, season: 2026, stats: { pts: p } }))
+  state.periods = [
+    { leagueId: 'L1', rosterId: 'R-a', weekOrPeriod: 2, season: 2026, periodPoints: 100, seasonPointsCumul: 100 },
+    { leagueId: 'L1', rosterId: 'R-b', weekOrPeriod: 2, season: 2026, periodPoints: 90, seasonPointsCumul: 90 },
+    { leagueId: 'L1', rosterId: 'R-c', weekOrPeriod: 2, season: 2026, periodPoints: 80, seasonPointsCumul: 80 },
+    { leagueId: 'L1', rosterId: 'R-a', weekOrPeriod: 4, season: 2026, periodPoints: 70, seasonPointsCumul: 170 },
+    { leagueId: 'L1', rosterId: 'R-b', weekOrPeriod: 4, season: 2026, periodPoints: 60, seasonPointsCumul: 150 },
+    { leagueId: 'L1', rosterId: 'R-c', weekOrPeriod: 4, season: 2026, periodPoints: 65, seasonPointsCumul: 145 },
+  ]
+  state.survival = ['rr-a', 'rr-b', 'rr-c'].map((rosterId, i) => ({ leagueId: 'L1', rosterId, scoringPeriod: 4, totalScore: [70, 60, 65][i] }))
+  state.rosterStates = [{ leagueId: 'L1', rosterId: 'R-b', choppedInPeriod: 4 }]
+  state.events = []
+  state.audit = []
+  state.guillotineSeasons = [{ id: 'g1', redraftSeasonId: 's1' }]
+  const team = (k: 'a' | 'b' | 'c', recordedPoints: number) => ({
+    redraftRosterId: `rr-${k}`,
+    engineRosterId: `R-${k}`,
+    recordedPoints,
+    playerPoints: [],
+    weekPlayerPoints: [3, 4].map((week) => {
+      const playerId = `${k}${week - 2}`
+      return { week, playerPoints: [{ playerId, points: pts[playerId]![1], isStarter: true }] }
+    }),
+  })
+  await recordGuillotineCorrectionBaseline({ seasonId: 's1', leagueId: 'L1', season: 2026, week: 4, capturedAt: CHOPPED_AT, teams: [team('a', 70), team('b', 60), team('c', 65)] })
+}
+
+describe('a stat correction after a two-week period is chopped', () => {
+  it("records one baseline keyed by the period's last week, with each week's players", async () => {
+    await arrangePeriod()
+    const b = state.cache.get(guillotineCorrectionKey('s1', 4))
+    expect(state.cache.has(guillotineCorrectionKey('s1', 3))).toBe(false)
+    expect(b.periodWeeks).toEqual([3, 4])
+    expect(b.teams[1]).toMatchObject({ engineRosterId: 'R-b', recordedPoints: 60, players: [] })
+    expect(b.teams[1].weeks.map((w: Row) => [w.week, w.players.map((p: Row) => `${p.playerId}:${p.points}`)])).toEqual([
+      [3, ['b1:10']],
+      [4, ['b2:50']],
+    ])
+  })
+
+  it('a FIRST-week correction re-scores both weeks and updates the period, and the chop stands', async () => {
+    await arrangePeriod()
+    correct('b1', 20) // B: 20 + 50 = 70, now above C's 65
+    const sync = vi.fn(async (_a: { week: number }) => undefined)
+    const finalizeWeek = vi.fn(async (_a: { week: number }) => ({ refusal: null }))
+    const scored: number[] = []
+    const r = await applyGuillotineStatCorrectionsForWeek(
+      { seasonId: 's1', week: 4 },
+      deps({
+        syncWeekStats: sync,
+        finalizeWeek,
+        scorePlayer: async ({ stats, week }: { stats: Record<string, number>; week: number }) => {
+          scored.push(week)
+          return stats.pts ?? 0
+        },
+      }),
+    )
+
+    expect(r.outcome).toBe('applied')
+    expect(sync.mock.calls.map(([a]) => a.week)).toEqual([3, 4])
+    expect(finalizeWeek.mock.calls.map(([a]) => a.week)).toEqual([3, 4])
+    expect([...new Set(scored)].sort()).toEqual([3, 4])
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-b', engineRosterId: 'R-b', before: 60, after: 70 }])
+    expect(period('R-b', 4)).toMatchObject({ periodPoints: 70, seasonPointsCumul: 160 })
+    expect(period('R-a', 4)).toMatchObject({ periodPoints: 70, seasonPointsCumul: 170 })
+    expect(state.survival.find((s) => s.rosterId === 'rr-b')?.totalScore).toBe(70)
+    // Never reversed; the commissioner is told the corrected period would have chopped C.
+    expect(state.forbidden).toEqual([])
+    expect(r).toMatchObject({ choppedRosterIds: ['R-b'], wouldHaveChoppedRosterIds: ['R-c'], chopDisputed: true })
+    expect(state.events).toHaveLength(1)
+    expect(state.events[0]?.metadata).toMatchObject({ week: 4, chopDisputed: true, chopStands: true })
+    expect(state.audit[0]).toMatchObject({ actionType: GUILLOTINE_STAT_CORRECTION_ACTION, entityId: 's1:4', metadata: { week: 4, chopDisputed: true } })
+  })
+
+  it('a SECOND-week correction moves the period too; one that leaves the line alone is undisputed', async () => {
+    await arrangePeriod()
+    correct('a2', 31)
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 4 }, deps())
+    expect(r.changes).toEqual([{ redraftRosterId: 'rr-a', engineRosterId: 'R-a', before: 70, after: 71 }])
+    expect(r.chopDisputed).toBe(false)
+  })
+
+  it("applies nothing while EITHER week's re-seal refuses", async () => {
+    await arrangePeriod()
+    correct('b2', 80)
+    const finalizeWeek = vi.fn(async ({ week }: { week: number }) => ({ refusal: week === 3 ? 'game_stats_missing' : null }))
+    const r = await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 4, force: true }, deps({ finalizeWeek }))
+    expect(r).toMatchObject({ outcome: 'waiting', week: 4, reason: 'game_stats_missing' })
+    expect(period('R-b', 4)?.periodPoints).toBe(60)
+    expect(state.events).toHaveLength(0)
+  })
+
+  it("the cron route's handler finds the period from its first week", async () => {
+    await arrangePeriod()
+    correct('b1', 20)
+    const r = await handleStatCorrection('g1', 3, ['b1'], deps())
+    expect(r.correction?.week).toBe(4)
+    expect(r.summary).toMatch(/^Weeks 3–4: 1 team score corrected\. The chop stands/)
+    expect(period('R-b', 4)?.periodPoints).toBe(70)
+  })
+
+  it('a one-week baseline is stored exactly as before: no period fields', async () => {
+    await arrange()
+    const b = state.cache.get(guillotineCorrectionKey('s1', 3))
+    expect(Object.keys(b)).toEqual(['v', 'seasonId', 'leagueId', 'season', 'week', 'capturedAt', 'teams'])
+    expect(Object.keys(b.teams[0])).toEqual(['redraftRosterId', 'engineRosterId', 'recordedPoints', 'players'])
+  })
+})
+
 describe('the correction as the commissioner reads it', () => {
   it('names who would have gone, says the chop stands, and is hidden from members', async () => {
     const { describeLogEntry, rosterIdsNamedBy } = await import('@/lib/league-log/leagueLog')

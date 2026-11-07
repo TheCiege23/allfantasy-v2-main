@@ -233,6 +233,8 @@ export async function runNativeGuillotineWeek(
     const benchPoints = new Map<string, number>()
     // Each counted player's points too: the baseline a later stat correction is measured against.
     const playerPoints = new Map<string, Array<{ playerId: string; points: number; isStarter: boolean }>>()
+    // A two-week period's baseline is kept per week: each week is re-scored and re-seated on its own.
+    const weekPlayerPoints = new Map<string, Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }>>()
     for (const r of active) {
       if (periodWeeks === 1) {
         const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
@@ -243,13 +245,16 @@ export async function runNativeGuillotineWeek(
       }
       let total = 0
       let bench: number | null = null
+      const perWeek: Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }> = []
       for (const w of periodWeekList) {
-        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week: w, seasonYear: season.season, includeBench: true })
+        const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week: w, seasonYear: season.season, includeBench: true, collectPlayerPoints: true })
         total += s.points
         if (typeof s.benchPoints === 'number') bench = (bench ?? 0) + s.benchPoints
+        perWeek.push({ week: w, playerPoints: s.playerPoints ?? [] })
       }
       points.set(r.id, Math.round(total * 100) / 100)
       if (bench !== null) benchPoints.set(r.id, Math.round(bench * 100) / 100)
+      weekPlayerPoints.set(r.id, perWeek)
     }
 
     // Into the engine's id space. A team that cannot be placed would silently escape the chop.
@@ -312,11 +317,11 @@ export async function runNativeGuillotineWeek(
      * without it that week is simply never corrected, and the chop must not wait on bookkeeping.
      */
     /*
-     * ⚠ NOT FOR A TWO-WEEK PERIOD. The correction handler re-scores ONE week's stats against the baseline,
-     * so a two-week baseline would be "corrected" down to its last week alone. Without a baseline the
-     * period is simply never corrected after the chop (`no_baseline`); the chop itself is unaffected.
+     * A two-week period is baselined PER WEEK (`weekPlayerPoints`), keyed by its last week like everything
+     * else: the handler re-scores and re-seats each week on its own and adds both deltas to the period
+     * score the chop used, so a correction to either week moves the period total.
      */
-    if (periodWeeks === 1) try {
+    try {
       await recordGuillotineCorrectionBaseline({
         seasonId: season.id,
         leagueId: season.leagueId,
@@ -328,6 +333,7 @@ export async function runNativeGuillotineWeek(
           engineRosterId: rosterForRedraft.get(r.id)!,
           recordedPoints: points.get(r.id) ?? 0,
           playerPoints: playerPoints.get(r.id) ?? [],
+          ...(periodWeeks > 1 ? { weekPlayerPoints: weekPlayerPoints.get(r.id) ?? [] } : {}),
         })),
       })
     } catch (error) {

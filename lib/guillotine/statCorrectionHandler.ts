@@ -32,6 +32,12 @@
  * fixed-baseline), never an increment, so a retry, a repeated check or a crash between writes lands the
  * same numbers; the event and the log row are deduped on a fingerprint of the corrected scores.
  *
+ * ── TWO-WEEK PERIODS (MLB, ./eliminationPeriods.ts) ─────────────────────────────────────────
+ * The baseline is keyed by the period's last week, like every other period row, and keeps each week's
+ * players separately (`periodWeeks`, `teams[].weeks`). Both weeks are refreshed and re-sealed, each is
+ * re-scored and re-seated on its own, and the corrected period score is the recorded period score plus
+ * BOTH weeks' deltas. A one-week baseline carries neither field and is read exactly as before.
+ *
  * ⚠ NEVER TREATS UNAVAILABLE DATA AS ZERO. A player whose row is gone keeps his baseline points; a
  * refresh that throws, or a re-seal the finalizer refuses (a missing box score, coverage below the
  * floor), applies nothing and waits for the next hourly check.
@@ -77,16 +83,28 @@ export type BaselineTeam = {
   redraftRosterId: string
   /** The `Roster.id` the engine and `GuillotinePeriodScore` use. */
   engineRosterId: string
-  /** The period points the chop was decided on. */
+  /** The period points the chop was decided on (a two-week period: both weeks added). */
   recordedPoints: number
+  /** A one-week period's players. Empty on a multi-week baseline, which keeps them per week in `weeks`. */
   players: BaselinePlayer[]
+  /**
+   * Multi-week periods only (MLB two-week periods, ./eliminationPeriods.ts): each week's counted players,
+   * oldest first. Each week is re-scored and re-seated on its own, exactly as the chop scored it.
+   */
+  weeks?: Array<{ week: number; players: BaselinePlayer[] }>
 }
 export type CorrectionBaseline = {
   v: 1
   seasonId: string
   leagueId: string
   season: number
+  /** The period's key: its last week (a one-week period: the week). */
   week: number
+  /**
+   * Multi-week periods only: every week the period scored, oldest first, ending at `week`. Absent on a
+   * one-week baseline, which is byte-for-byte what it was before periods existed.
+   */
+  periodWeeks?: number[]
   capturedAt: string
   teams: BaselineTeam[]
   lastCheckedAt?: string
@@ -130,10 +148,18 @@ export async function recordGuillotineCorrectionBaseline(args: {
     redraftRosterId: string
     engineRosterId: string
     recordedPoints: number
+    /** A one-week period's counted players. */
     playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }>
+    /**
+     * A multi-week period (MLB two-week periods): each week's counted players, oldest first, the last
+     * week being `week`. When given, `playerPoints` is ignored and the period is corrected week by week.
+     */
+    weekPlayerPoints?: Array<{ week: number; playerPoints: Array<{ playerId: string; points: number; isStarter: boolean }> }>
   }>
 }): Promise<void> {
-  const ids = [...new Set(args.teams.flatMap((t) => t.playerPoints.map((p) => p.playerId)))]
+  const multiWeek = args.teams.some((t) => (t.weekPlayerPoints?.length ?? 0) > 1)
+  const pointsOf = (t: (typeof args.teams)[number]) => (multiWeek ? (t.weekPlayerPoints ?? []).flatMap((w) => w.playerPoints) : t.playerPoints)
+  const ids = [...new Set(args.teams.flatMap((t) => pointsOf(t).map((p) => p.playerId)))]
   const rows = ids.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: args.teams.map((t) => t.redraftRosterId) }, playerId: { in: ids } },
@@ -141,26 +167,52 @@ export async function recordGuillotineCorrectionBaseline(args: {
       })
     : []
   const meta = new Map(rows.map((r) => [`${r.rosterId}|${r.playerId}`, r]))
+  const toBaseline = (redraftRosterId: string, list: Array<{ playerId: string; points: number; isStarter: boolean }>): BaselinePlayer[] =>
+    list.flatMap((p) => {
+      const m = meta.get(`${redraftRosterId}|${p.playerId}`)
+      // A player whose sport cannot be read cannot be re-read later; he keeps his points (delta 0).
+      return m ? [{ playerId: p.playerId, sport: m.sport, position: m.position ?? null, points: p.points, isStarter: p.isStarter }] : []
+    })
   const bestBallRules = await chopBestBallRules(args.leagueId)
+  // Every week the period scored, from any team that reports them (all teams score the same weeks).
+  const periodWeeks = multiWeek
+    ? [...new Set(args.teams.flatMap((t) => (t.weekPlayerPoints ?? []).map((w) => w.week)))].sort((a, b) => a - b)
+    : null
   await writeBaseline({
     v: 1,
     seasonId: args.seasonId,
     leagueId: args.leagueId,
     season: args.season,
     week: args.week,
+    ...(periodWeeks ? { periodWeeks } : {}),
     capturedAt: args.capturedAt.toISOString(),
     teams: args.teams.map((t) => ({
       redraftRosterId: t.redraftRosterId,
       engineRosterId: t.engineRosterId,
       recordedPoints: round2(t.recordedPoints),
-      players: t.playerPoints.flatMap((p) => {
-        const m = meta.get(`${t.redraftRosterId}|${p.playerId}`)
-        // A player whose sport cannot be read cannot be re-read later; he keeps his points (delta 0).
-        return m ? [{ playerId: p.playerId, sport: m.sport, position: m.position ?? null, points: p.points, isStarter: p.isStarter }] : []
-      }),
+      players: multiWeek ? [] : toBaseline(t.redraftRosterId, t.playerPoints),
+      ...(periodWeeks
+        ? {
+            weeks: periodWeeks.map((week) => ({
+              week,
+              players: toBaseline(t.redraftRosterId, t.weekPlayerPoints?.find((w) => w.week === week)?.playerPoints ?? []),
+            })),
+          }
+        : {}),
     })),
     ...(bestBallRules ? { bestBallRules } : {}),
   })
+}
+
+/** The weeks a baseline's period scored, oldest first: the week itself for a one-week period. */
+function baselineWeeks(b: CorrectionBaseline): number[] {
+  return Array.isArray(b.periodWeeks) && b.periodWeeks.length > 0 ? b.periodWeeks : [b.week]
+}
+
+/** A team's counted players for one week of its period. */
+function teamPlayersForWeek(b: CorrectionBaseline, team: BaselineTeam, week: number): BaselinePlayer[] {
+  if (Array.isArray(b.periodWeeks) && b.periodWeeks.length > 0) return team.weeks?.find((w) => w.week === week)?.players ?? []
+  return week === b.week ? team.players : []
 }
 
 /**
@@ -283,30 +335,29 @@ export async function applyGuillotineStatCorrectionsForWeek(
   const lock = await acquireAutomationLock(lockKey, { ttlMs: LOCK_TTL_MS, owner })
   if (!lock.ok) return { outcome: 'locked', week, reason: lock.reason }
   try {
-    if (deps.syncWeekStats) {
-      try {
-        await deps.syncWeekStats({ seasonId: input.seasonId, week })
-      } catch (error) {
+    /*
+     * Every week of the period: one for a one-week league, both for an MLB two-week period. Each is
+     * refreshed and re-sealed on its own; a failure or refusal on EITHER applies nothing, because half a
+     * period's correction would move the score on one week's evidence while the other is in doubt.
+     */
+    const weeks = baselineWeeks(baseline)
+    for (const w of weeks) {
+      if (deps.syncWeekStats) {
+        try {
+          await deps.syncWeekStats({ seasonId: input.seasonId, week: w })
+        } catch (error) {
+          await stamp()
+          return { outcome: 'provider_failed', week, reason: error instanceof Error ? error.message : String(error) }
+        }
+      }
+      // The refresh writes `isFinalized: false`; re-seal, and never apply over a refusal.
+      const resealed = await (deps.finalizeWeek ?? finalizeRedraftWeek)({ seasonId: input.seasonId, week: w })
+      if (resealed.refusal) {
         await stamp()
-        return { outcome: 'provider_failed', week, reason: error instanceof Error ? error.message : String(error) }
+        return { outcome: 'waiting', week, reason: resealed.refusal }
       }
     }
-    // The refresh writes `isFinalized: false`; re-seal, and never apply over a refusal.
-    const resealed = await (deps.finalizeWeek ?? finalizeRedraftWeek)({ seasonId: input.seasonId, week })
-    if (resealed.refusal) {
-      await stamp()
-      return { outcome: 'waiting', week, reason: resealed.refusal }
-    }
 
-    const all = baseline.teams.flatMap((t) => t.players)
-    const sports = [...new Set(all.map((p) => p.sport))]
-    const rows = all.length
-      ? await prisma.playerWeeklyScore.findMany({
-          where: { week, season: baseline.season, sport: { in: sports }, playerId: { in: [...new Set(all.map((p) => p.playerId))] } },
-          select: { playerId: true, sport: true, stats: true },
-        })
-      : []
-    const statsOf = new Map(rows.map((r) => [`${r.sport}::${r.playerId}`, r.stats as Record<string, number>]))
     const score =
       deps.scorePlayer ??
       ((a: { leagueId: string; playerId: string; week: number; stats: Record<string, number>; position: string | null }) =>
@@ -314,16 +365,39 @@ export async function applyGuillotineStatCorrectionsForWeek(
     // The chop's own slots when the baseline kept them; a baseline from before that reads today's.
     const slots = bestBall ? readStoredSlots(baseline.bestBallRules?.slots) ?? buildBestBallSlots(sport, league.settings) : null
 
+    // Each week's stat lines, read once for every team.
+    const statsByWeek = new Map<number, Map<string, Record<string, number>>>()
+    for (const w of weeks) {
+      const all = baseline.teams.flatMap((t) => teamPlayersForWeek(baseline, t, w))
+      const sports = [...new Set(all.map((p) => p.sport))]
+      const rows = all.length
+        ? await prisma.playerWeeklyScore.findMany({
+            where: { week: w, season: baseline.season, sport: { in: sports }, playerId: { in: [...new Set(all.map((p) => p.playerId))] } },
+            select: { playerId: true, sport: true, stats: true },
+          })
+        : []
+      statsByWeek.set(w, new Map(rows.map((r) => [`${r.sport}::${r.playerId}`, r.stats as Record<string, number>])))
+    }
+
+    /*
+     * A period's corrected score is the chop's period score plus each week's own lineup delta: each week
+     * is re-seated on its own (best ball plays its best lineup of EACH week), exactly as the chop scored it.
+     */
     const corrected: Array<{ team: BaselineTeam; points: number }> = []
     for (const team of baseline.teams) {
-      const current: BaselinePlayer[] = []
-      for (const p of team.players) {
-        const stats = statsOf.get(`${p.sport}::${p.playerId}`)
-        // No row now: keep what he was scored at the chop. Unavailable data is never a 0.
-        const points = stats ? await score({ leagueId: baseline.leagueId, playerId: p.playerId, week, stats, position: p.position }) : p.points
-        current.push({ ...p, points })
+      let delta = 0
+      for (const w of weeks) {
+        const recorded = teamPlayersForWeek(baseline, team, w)
+        const statsOf = statsByWeek.get(w)!
+        const current: BaselinePlayer[] = []
+        for (const p of recorded) {
+          const stats = statsOf.get(`${p.sport}::${p.playerId}`)
+          // No row now: keep what he was scored at the chop. Unavailable data is never a 0.
+          const points = stats ? await score({ leagueId: baseline.leagueId, playerId: p.playerId, week: w, stats, position: p.position }) : p.points
+          current.push({ ...p, points })
+        }
+        delta += lineupTotal(current, slots) - lineupTotal(recorded, slots)
       }
-      const delta = lineupTotal(current, slots) - lineupTotal(team.players, slots)
       corrected.push({ team, points: round2(team.recordedPoints + delta) })
     }
 
@@ -486,6 +560,23 @@ export async function checkGuillotineStatCorrectionsForSeason(
   return latest!
 }
 
+/**
+ * The period a week belongs to, read from the baselines themselves: the week's own baseline when there is
+ * one (every one-week league), else the multi-week baseline that scored it. No baseline: the week as given.
+ */
+async function correctionPeriodFor(seasonId: string, week: number): Promise<{ week: number; weeks: number[] }> {
+  const own = readBaseline((await prisma.sportsDataCache.findUnique({ where: { cacheKey: guillotineCorrectionKey(seasonId, week) } }))?.data)
+  if (own) return { week: own.week, weeks: baselineWeeks(own) }
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: guillotineCorrectionKeyPrefix(seasonId) } },
+    select: { data: true },
+  })
+  const containing = rows
+    .map((r) => readBaseline(r.data))
+    .find((b): b is CorrectionBaseline => b !== null && b.seasonId === seasonId && baselineWeeks(b).includes(week))
+  return containing ? { week: containing.week, weeks: baselineWeeks(containing) } : { week, weeks: [week] }
+}
+
 export type CorrectionResult = {
   /** Always false: the published policy never reverses a chop or a crowned champion. */
   reversed: false
@@ -510,13 +601,16 @@ export async function handleStatCorrection(
   const g = await prisma.guillotineSeason.findFirst({ where: { id: seasonId }, select: { redraftSeasonId: true } })
   if (!g) return { reversed: false, summary: 'Season not found' }
   if (!g.redraftSeasonId) return { reversed: false, summary: 'This Guilly season has no native season to re-score.' }
-  const correction = await applyGuillotineStatCorrectionsForWeek({ seasonId: g.redraftSeasonId, week: scoringPeriod, force: true }, deps)
+  // A two-week period is keyed by its last week; a caller naming its FIRST week means the same period.
+  const period = await correctionPeriodFor(g.redraftSeasonId, scoringPeriod)
+  const correction = await applyGuillotineStatCorrectionsForWeek({ seasonId: g.redraftSeasonId, week: period.week, force: true }, deps)
   const n = correction.changes?.length ?? 0
+  const label = period.weeks.length > 1 ? `Weeks ${period.weeks[0]}–${period.week}` : `Week ${scoringPeriod}`
   const summary =
     correction.outcome === 'applied'
-      ? `Week ${scoringPeriod}: ${n} team score${n === 1 ? '' : 's'} corrected. The chop stands` +
+      ? `${label}: ${n} team score${n === 1 ? '' : 's'} corrected. The chop stands` +
         (correction.chopDisputed ? '; the corrected scores would have chopped a different team, and the commissioner was told.' : '.')
-      : `Week ${scoringPeriod}: ${correction.outcome}${correction.reason ? ` (${correction.reason})` : ''}. Nothing was reversed.`
+      : `${label}: ${correction.outcome}${correction.reason ? ` (${correction.reason})` : ''}. Nothing was reversed.`
   const newEliminatedRosterId = correction.chopDisputed
     ? correction.wouldHaveChoppedRosterIds?.find((id) => !(correction.choppedRosterIds ?? []).includes(id))
     : undefined

@@ -213,7 +213,11 @@ function arrange(settings: Record<string, unknown>) {
   db.redraftRosterPlayer.updateMany.mockResolvedValue({ count: 20 })
   db.guillotineSeason.updateMany.mockResolvedValue({ count: 1 })
   m.finalizeRedraftWeek.mockResolvedValue({ refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } })
-  m.scoreRosterForWeek.mockImplementation(async ({ rosterId, week }: { rosterId: string; week: number }) => ({ points: POINTS[rosterId]?.[week] ?? 0, benchPoints: 1 }))
+  m.scoreRosterForWeek.mockImplementation(async ({ rosterId, week }: { rosterId: string; week: number }) => ({
+    points: POINTS[rosterId]?.[week] ?? 0,
+    benchPoints: 1,
+    playerPoints: [{ playerId: `${rosterId.slice(3)}-${week}`, points: POINTS[rosterId]?.[week] ?? 0, isStarter: true }],
+  }))
   m.acquire.mockResolvedValue({ ok: true })
   m.release.mockResolvedValue(undefined)
   m.savePeriodScores.mockResolvedValue(undefined)
@@ -254,8 +258,16 @@ describe('runNativeGuillotineWeek with two-week periods', () => {
     ])
     expect(m.runElimination).toHaveBeenCalledTimes(1)
     expect(m.runElimination.mock.calls[0]![0].weekOrPeriod).toBe(4)
-    // One week's correction handler cannot re-score a two-week period, so no baseline is written.
-    expect(m.recordBaseline).not.toHaveBeenCalled()
+    // The stat-correction baseline is keyed by week 4 and keeps each week's players separately.
+    expect(m.recordBaseline).toHaveBeenCalledTimes(1)
+    const baseline = m.recordBaseline.mock.calls[0]![0]
+    expect(baseline.week).toBe(4)
+    expect(baseline.teams.map((t: { recordedPoints: number }) => t.recordedPoints)).toEqual([70, 60])
+    expect(baseline.teams[0].weekPlayerPoints).toEqual([
+      { week: 3, playerPoints: [{ playerId: 'a-3', points: 40, isStarter: true }] },
+      { week: 4, playerPoints: [{ playerId: 'a-4', points: 30, isStarter: true }] },
+    ])
+    expect(m.scoreRosterForWeek.mock.calls.every(([a]) => a.collectPlayerPoints === true)).toBe(true)
   })
 
   it('a league without the setting is unchanged: week 3 is its own period', async () => {
@@ -266,5 +278,7 @@ describe('runNativeGuillotineWeek with two-week periods', () => {
     expect(m.scoreRosterForWeek.mock.calls.map(([a]) => a.week)).toEqual([3, 3])
     expect(m.savePeriodScores.mock.calls[0]![0].scores[0]).toMatchObject({ rosterId: 'R-a', periodPoints: 40, previousPeriodPoints: 70 })
     expect(m.recordBaseline).toHaveBeenCalledTimes(1)
+    // A one-week baseline is exactly what it was: no per-week block.
+    expect(m.recordBaseline.mock.calls[0]![0].teams[0]).not.toHaveProperty('weekPlayerPoints')
   })
 })
