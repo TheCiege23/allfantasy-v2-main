@@ -121,6 +121,24 @@ describe('the Lineup check card', () => {
     expect(container.querySelector('.af-mt-check')).toBeNull()
   })
 
+  it('offers no bench swap in a Best Ball league, but still does in a set-your-own lineup', () => {
+    const SWAP = [
+      slot('WR', player('a', { name: 'Starter A' }), {
+        benchCheck: { verdict: 'swap', benchName: 'Bench B', benchProjected: 15.8, starterName: 'Starter A', starterProjected: 11.2 },
+      }),
+    ]
+    // Control first: the strip and its Chimmy button render when the manager sets the lineup.
+    const manual = render(<MyTeam data={data(SWAP)} />).container
+    expect(manual.querySelector('.af-mt-bench-check')?.textContent).toContain('Bench B')
+    expect(manual.querySelector('.af-mt-bench-ask')).not.toBeNull()
+    // Best ball picks the strongest eligible lineup itself — "the stronger play" is not a move.
+    const bestBall = render(<MyTeam data={data(SWAP, { bestBall: true })} />).container
+    expect(bestBall.querySelector('.af-mt-bench-check')).toBeNull()
+    expect(bestBall.querySelector('.af-mt-bench-ask')).toBeNull()
+    // The starter row itself is still there.
+    expect(bestBall.textContent).toContain('Starter A')
+  })
+
   it('is one card with the lineup decision, not a second card under it', () => {
     const { container } = render(<MyTeam data={data(KBFL)} />)
     const checks = container.querySelectorAll('.af-mt-check')

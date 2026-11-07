@@ -876,6 +876,28 @@
   font-size: 12.5px;
   color: var(--text2);
 }
+/*
+ * ⚠ THE BASE LOOK, FOR EVERY LEAGUE. This link was styled only under `[data-format=redraft]`
+ * (af-core-redraft-myteam.css), so best ball, dynasty and every other format got a raw 18px
+ * white anchor with no arrow. Redraft still recolours it to its sport accent on top of this.
+ */
+.af-mt-mu-go {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-mt-mu-go::after {
+  content: '\2192';
+  margin-left: 6px;
+}
+.af-mt-mu-go:hover,
+.af-mt-mu-go:focus-visible {
+  text-decoration: underline;
+}
 
 @media (max-width: 560px) {
   /* Stacked, with the divider between — a three-column scoreboard at this
@@ -1489,6 +1511,10 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   color: var(--accent);
   padding: 8px 12px;
   text-align: left;
+  /* A <button> inherits My Team's 18px body size; the strip around it is 11.5px. */
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 .af-core .af-mt-bench-caveat { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .af-core .af-mt-bench-check { flex-wrap: wrap; }
