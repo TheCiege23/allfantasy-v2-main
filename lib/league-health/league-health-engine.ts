@@ -43,6 +43,13 @@ export const LeagueHealthInputSchema = z.object({
   // Commissioner metrics
   commissionerActionsThisSeason: z.number().default(0),
   unresolvedDisputes: z.number().default(0),
+  /**
+   * From the dispute desk (lib/disputes/disputeStore.ts `disputeHealthSignals`), never from chat:
+   * collusion complaints filed, and managers who said they might leave. Optional, so every caller
+   * that does not supply them scoring exactly as before (absent reads as 0).
+   */
+  collusionComplaints: z.number().optional(),
+  departureSignals: z.number().optional(),
   // Settings quality
   playoffTeams: z.number().default(6),
   waiverType: z.string().default('FAAB'),
@@ -172,6 +179,9 @@ function computeSustainability(input: LeagueHealthInput): number {
   if (input.lineupSubmissionRate >= 0.9) score += 15
   if (input.unresolvedDisputes === 0) score += 5
   else score -= input.unresolvedDisputes * 8
+  // A manager saying they might quit is the most direct churn signal a league ever gives.
+  score -= (input.departureSignals ?? 0) * 12
+  if ((input.collusionComplaints ?? 0) >= 2) score -= 8
   if (input.leagueType === 'dynasty' && input.totalTradesThisSeason >= input.numTeams) score += 10
   return clamp(Math.round(score), 0, 100)
 }
@@ -210,12 +220,16 @@ export function monitorLeagueHealth(input: LeagueHealthInput): LeagueHealthResul
   if (input.inactiveManagers >= 2) problems.push(`${input.inactiveManagers} inactive managers — engagement at risk`)
   if (input.abandonedTeams > 0) problems.push(`${input.abandonedTeams} abandoned teams — immediate action needed`)
   if (input.unresolvedDisputes > 0) problems.push(`${input.unresolvedDisputes} unresolved disputes eroding trust`)
+  const departures = input.departureSignals ?? 0
+  if (departures > 0) problems.push(`${departures} ${departures === 1 ? 'manager has' : 'managers have'} said they might leave the league`)
+  if ((input.collusionComplaints ?? 0) >= 2) problems.push(`${input.collusionComplaints} collusion complaints — managers are losing trust in trades`)
   if (engagement < 40) problems.push('Low engagement — league activity is below healthy levels')
   if (input.lineupSubmissionRate < 0.7) problems.push('Poor lineup submission rate — managers are checked out')
 
   const urgentAlerts: string[] = []
   if (input.abandonedTeams >= 2) urgentAlerts.push('CRITICAL: Multiple abandoned teams. Find replacements immediately.')
   if (input.unresolvedDisputes >= 2) urgentAlerts.push('URGENT: Unresolved disputes accumulating. Commissioner action required.')
+  if ((input.departureSignals ?? 0) >= 2) urgentAlerts.push('ALERT: Several managers have said they might leave. Talk to them before the season ends.')
   if (input.inactiveManagers >= Math.ceil(input.numTeams * 0.3)) urgentAlerts.push('ALERT: 30%+ of managers inactive. League may be dying.')
 
   const earlyWarnings: string[] = []
@@ -234,6 +248,8 @@ export function monitorLeagueHealth(input: LeagueHealthInput): LeagueHealthResul
   const interventions: string[] = []
   if (input.abandonedTeams > 0) interventions.push('Find replacement managers for abandoned teams')
   if (input.unresolvedDisputes > 0) interventions.push('Resolve all pending disputes this week')
+  if ((input.collusionComplaints ?? 0) >= 2) interventions.push('Post the trade history review for the teams named, so the league sees each trade’s value at the time')
+  if ((input.departureSignals ?? 0) > 0) interventions.push('Reach out to the managers who said they might leave')
   if (engagement < 50) interventions.push('Post weekly recaps, power rankings, or trash talk threads to boost engagement')
   if (input.totalTradesThisSeason < input.numTeams / 2 && input.currentWeek >= 4) interventions.push('Consider extending trade deadline or brokering deals to stimulate trade activity')
 
