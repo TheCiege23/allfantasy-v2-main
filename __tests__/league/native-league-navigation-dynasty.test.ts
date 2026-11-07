@@ -40,7 +40,7 @@ describe('native league navigation: Dynasty group', () => {
     expect(groups.map(group => group.id)).toEqual(['league', 'week', 'more'])
     expect(groups.map(group => group.title)).toEqual(['This league', 'This week', 'More tools'])
     expect(groups[0].items.map(item => item.label)).toEqual(['League home', 'My team', 'Matchup', 'Players & waivers', 'Trades', 'Draft HQ', 'Standings & playoffs', 'League chat'])
-    expect(groups[2].items).toEqual([{ id: 'legacy', label: 'Legacy', icon: 'more' }])
+    expect(groups[2].items).toEqual([{ id: 'legacy', label: 'Legacy', icon: 'legacy' }])
   })
 
   it('labels and titles go through i18n: Spanish', () => {
