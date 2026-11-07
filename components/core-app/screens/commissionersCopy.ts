@@ -127,6 +127,23 @@ export const COMMISSIONER_FEATURES: readonly CommissionerFeature[] = [
     image: '/images/commissioners/league-hub.png',
     imageAlt: 'The League Hub listing leagues imported from several platforms',
   },
+  {
+    /*
+     * Was a "coming soon" roadmap card until the tracker shipped in #3373. Tracking only: AllFantasy
+     * never holds league money, and nothing here may read as if it does.
+     */
+    id: 'dues-tracker',
+    eyebrow: '06 · Dues Tracker',
+    title: 'Know who has paid, without holding the money.',
+    body: "Set the amount and due date, add your league's payment links — Venmo, Cash App, PayPal, LeagueSafe or FanCred — and see who has paid at a glance. AllFantasy never holds or moves league money.",
+    points: [
+      'Members can mark "I paid"; only the commish confirms it',
+      'Reminders a week before, the day before and once overdue',
+      'Co-commissioners can help keep it up to date',
+    ],
+    image: '/images/commissioners/dues-tracker.png',
+    imageAlt: "The dues tracker showing each team's payment status and the league's payment links",
+  },
 ] as const
 
 export const COMMISSIONERS_ROADMAP = {
@@ -138,7 +155,6 @@ export const COMMISSIONERS_ROADMAP = {
     { title: 'Trade evals in league chat', body: 'Evaluations posted to league chat, where the league already talks.' },
     { title: 'Draft scheduler', body: 'Find a draft time that works for everyone in the league.' },
     { title: 'Rule-change voting', body: 'Propose a rule change and let the league vote on it.' },
-    { title: 'Dues tracker', body: 'Track who has paid. AllFantasy never holds or moves the money.' },
   ],
 } as const
 
