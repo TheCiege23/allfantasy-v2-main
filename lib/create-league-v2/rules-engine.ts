@@ -11,6 +11,7 @@ import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/typ
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
 import {
+  NFL_DYNASTY_TEAM_COUNTS,
   SURVIVOR_CREATE_CAST_SIZES,
   getTeamCountOptionsForSport,
 } from '@/lib/league-creation-wizard/sport-team-limits'
@@ -153,6 +154,8 @@ export function getTeamCountOptions(
   if (Array.isArray(seeded) && seeded.length > 0) {
     return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
+
+  if (leagueType === 'dynasty' && sport === 'NFL') return [...NFL_DYNASTY_TEAM_COUNTS]
 
   if (leagueType === 'tournament') {
     return [...TOURNAMENT_POOL_SIZES]

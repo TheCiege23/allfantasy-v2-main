@@ -290,7 +290,7 @@ function chooseFor(pool: PoolPlayer[], taken: Set<string>, roster: EnforcedRoste
   return [...open.filter((p) => (mustFill ? missing.includes(p.position) : (mine[p.position] ?? 0) < capFor(p.position))), ...open]
 }
 
-export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]): Promise<void> {
+export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPlayer[], pickLimit?: number): Promise<void> {
   if (!run.leagueId) return
   const leagueId = run.leagueId
   const { startDraftSession } = await import('@/lib/live-draft-engine/DraftSessionService')
@@ -301,14 +301,15 @@ export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPla
   }
   const session = rowsOf(env.db, 'DraftSession').find((s: any) => s.leagueId === leagueId) as any
   const slotOrder = (session.slotOrder ?? []) as Array<{ slot: number; rosterId: string; userId?: string | null }>
+  run.stats.startupSlots = slotOrder.length
   const roster = run.stats.enforcedRoster as EnforcedRoster
   const draftedBy = new Map<string, string>()
 
   if (run.draft === 'auction') await draftByAuction(env, run, pool, slotOrder, roster, draftedBy)
   else if (run.draft === 'auto') await draftByAutopick(env, run)
-  else await draftByPicks(env, run, pool, slotOrder, roster, draftedBy)
+  else await draftByPicks(env, run, pool, slotOrder, roster, draftedBy, pickLimit)
 
-  await checkFinalization(env, run, draftedBy)
+  if (pickLimit == null) await checkFinalization(env, run, draftedBy)
 }
 
 async function draftByPicks(
@@ -318,6 +319,7 @@ async function draftByPicks(
   slotOrder: Array<{ slot: number; rosterId: string; userId?: string | null }>,
   roster: EnforcedRoster,
   draftedBy: Map<string, string>,
+  pickLimit = run.rounds * run.teamCount,
 ): Promise<void> {
   const leagueId = run.leagueId!
   const { submitPick } = await import('@/lib/live-draft-engine/PickSubmissionService')
@@ -328,7 +330,7 @@ async function draftByPicks(
   const total = run.rounds * run.teamCount
   let made = 0
   let refusals = 0
-  for (let overall = 1; overall <= total; overall += 1) {
+  for (let overall = 1; overall <= Math.min(total, pickLimit); overall += 1) {
     const rosterId = expectedRosterForPick(slotOrder, overall, kind)
     const owner = slotOrder.find((s) => s.rosterId === rosterId)
     const mine = counts.get(rosterId) ?? {}
