@@ -73,6 +73,17 @@ describe('sport on every row, and the list grouped by sport', () => {
     expect(row.querySelector('[data-testid="scope-league-sport"]')).toBeNull()
   })
 
+  it('names college sports on the filter chips by their short names, as the headings do', () => {
+    open({ leagues: [...LEAGUES, { id: 'c1', name: 'Campus', sport: 'NCAAF', platform: 'sleeper' }, { id: 'c2', name: 'Hoops U', sport: 'NCAAB', platform: 'sleeper' }] })
+    const chips = Array.from(document.querySelectorAll('.af-scope-filters .af-scope-chip')).map((c) => c.textContent ?? '')
+    expect(chips.some((t) => /CFB\s*1/.test(t))).toBe(true)
+    expect(chips.some((t) => /CBB\s*1/.test(t))).toBe(true)
+    expect(chips.some((t) => /NCAA/.test(t))).toBe(false)
+    // …and the chip still filters by the real sport code.
+    fireEvent.click(chip(/CFB/))
+    expect(names()).toEqual(['Campus'])
+  })
+
   it('CONTROL: one sport draws no heading', () => {
     open({ leagues: LEAGUES.filter((l) => l.sport === 'NFL') })
     expect(headings()).toEqual([])

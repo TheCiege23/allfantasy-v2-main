@@ -601,7 +601,8 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         filter.sport === sport,
                         count,
                         () => setFilter((f) => ({ ...f, sport: f.sport === sport ? null : sport })),
-                        <>{icon ? <span aria-hidden>{icon}</span> : null}{o.label}</>,
+                        // The list headings' short names (CFB, CBB): "NCAAF" is what pushed a chip off a phone.
+                        <>{icon ? <span className="af-scope-chip-icon" aria-hidden>{icon}</span> : null}{leagueSportKey(sport) ? leagueSportLabel(leagueSportKey(sport), { short: true }) : o.label}</>,
                         { disabled: count === 0 },
                       )
                     })}
