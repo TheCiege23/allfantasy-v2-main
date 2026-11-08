@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     draftSession: { findFirst: vi.fn(async () => ({ id: 'ds', draftType: 'auction', status: 'in_progress', picks: [], rounds: 15, slotOrder: [{ slot: 1, rosterId: 'r1', displayName: 'A' }, { slot: 2, rosterId: 'r2', displayName: 'Chimmy team' }], timerEndAt: h.timerEndAt, league: { sport: 'NBA' }, sportType: 'NBA', playerPool: null, draftModeLabel: null })) },
     league: { findUnique: vi.fn(async () => ({ settings: h.settings })) },
     roster: { findFirst: vi.fn(async () => ({ platformUserId: h.owner })) },

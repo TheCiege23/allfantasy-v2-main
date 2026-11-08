@@ -1,4 +1,5 @@
 import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
 import { nextSeasonNominator } from '@/lib/tournament/seasonAuctionPolicy'
@@ -254,7 +255,12 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
     } else {
       const candidates = await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)
       const resolve = isRookieRestrictedPlayerPool(session.playerPool) ? await loadServerRookieStatusResolver(leagueId) : null
-      const available = session.draftModeLabel === 'rookie' ? await loadRookieAuctionAvailability(leagueId) : () => true
+      // Mirrors nominatePlayer's roster check, so an automatic nomination is never one it would refuse.
+      const isDispersal = session.draftModeLabel === 'dispersal' || (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
+      const rostered = session.draftModeLabel === 'rookie' || isDispersal ? null : await loadLeagueRosteredPlayers(leagueId)
+      const available = session.draftModeLabel === 'rookie'
+        ? await loadRookieAuctionAvailability(leagueId)
+        : (candidate: AuctionNomination) => !rostered || !rosteredHolder(rostered, candidate)
       first = candidates.find(candidate => available(candidate) && isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
     }
     if (!first) return { changed: false, actions }
