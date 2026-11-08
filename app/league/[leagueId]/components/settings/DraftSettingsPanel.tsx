@@ -12,6 +12,7 @@ import {
   startsAtScheduledTimeRegardlessOfAutostart,
   type ScheduledStartLeague,
 } from '@/lib/draft/redraftScheduledStart'
+import { DraftSchedulePoll } from '@/components/draft-schedule/DraftSchedulePoll'
 
 const DRAFT_TYPES: { value: string; label: string }[] = [
   { value: 'snake', label: 'Snake' },
@@ -64,10 +65,13 @@ export function DraftSettingsPanel({
   save,
   debouncedSave,
   league,
+  leagueId,
 }: {
   draftRow: Record<string, unknown> | null
   /** From `/api/league/settings`'s `league`; hides the Autostart toggle where it does nothing. */
   league?: ScheduledStartLeague | null
+  /** Enables "Find a draft time" (components/draft-schedule/DraftSchedulePoll.tsx). */
+  leagueId?: string
   canEdit: boolean
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
@@ -275,6 +279,11 @@ export function DraftSettingsPanel({
           }}
         />
         <SettingsHelper>Stored in UTC; shown in your browser local time.</SettingsHelper>
+        {leagueId ? (
+          <div className="mt-3">
+            <DraftSchedulePoll leagueId={leagueId} disabled={disabled} />
+          </div>
+        ) : null}
       </div>
 
       <div>

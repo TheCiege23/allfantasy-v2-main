@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Wallet } from 'lucide-react'
+import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import {
   MANUAL_PAYMENT_PRESETS,
   getManualPaymentPreset,
@@ -9,6 +10,8 @@ import {
 } from '@/lib/league-finance/manualPaymentPresets'
 
 type FinanceSummary = {
+  /** False while AllFantasy holds no league money (lib/monetization/leagueEntryFeeKillSwitch.ts). */
+  moneyHoldingEnabled?: boolean
   finance: {
     isPaidLeague: boolean
     entryFeeCents: number
@@ -262,6 +265,26 @@ export function FinanceTab({
 
   const { finance, myDues, payouts } = data
   const showPayCta = finance.isPaidLeague && finance.entryFeeCents > 0 && myDues?.status !== 'paid' && myDues?.status !== 'waived'
+
+
+  /*
+   * 🛑 AllFantasy DOES NOT HOLD LEAGUE MONEY. While the switch is off every payment, payout and treasury
+   * action below is refused by its route, so offering the buttons would only produce errors. The league
+   * collects dues itself; the tracker records who has paid.
+   */
+  if (data.moneyHoldingEnabled === false) {
+    return (
+      <div className="space-y-4" data-testid="finance-tracker-only">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/75">
+          <p className="font-semibold text-white">AllFantasy doesn&rsquo;t hold league money</p>
+          <p className="mt-1">
+            Pay dues straight to your league&rsquo;s collector — Venmo, Cash App, PayPal, LeagueSafe or FanCred. Your commissioner tracks who has paid here.
+          </p>
+        </div>
+        <LeagueDuesTrackerPanel leagueId={leagueId} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4 px-4 pb-8 pt-2" data-testid="finance-tab-root">

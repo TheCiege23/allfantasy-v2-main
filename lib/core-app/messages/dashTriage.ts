@@ -34,6 +34,8 @@ export const dashTriageMessages = defineMessages({
     depthSub: 'Best ball sets your lineup for you — these are the spots running out of healthy bodies.',
     findPosition: (position: string) => `Find a ${position}`,
     startersInDoubt: 'Starters in doubt',
+    /** The same card when nobody listed starts anywhere — every one is benched, on IR or in best ball. */
+    injuredHeld: 'Injured players you hold',
     rosterCheck: 'Roster check',
     mayNotPlay: 'may not play this week · most valuable first',
     proUpsell: 'AF Pro: the best free agent for every hole, plus Questionable game-time calls',
@@ -43,6 +45,8 @@ export const dashTriageMessages = defineMessages({
     gameTimeCall: "Game-time call: keep the pivot ready and swap before kickoff if he's ruled out.",
     benchedHandled: 'benched ✓',
     moreLeagues: (n: number) => `+${n} more`,
+    showMoreLeagues: (n: number) => (n === 1 ? 'Show 1 more league' : `Show ${n} more leagues`),
+    showFewerLeagues: 'Show fewer leagues',
     setLineup: (platform: string, league: string) => `Set lineup in ${platform} · ${league}`,
     /*
      * The per-league fix row (2026-11-01 home redesign) already names the league and its platform, so
@@ -52,6 +56,10 @@ export const dashTriageMessages = defineMessages({
     setLineupLead: 'Set lineup',
     setLineupWhere: (platform: string, league: string) => ` in ${platform} · ${league}`,
     alsoIn: 'Also in',
+    /** Phone only: the one line the "also in" chips fold behind (Dash3ATriageView). */
+    otherLeaguesSummary: (n: number, handled: number) =>
+      `Also in ${n} more ${n === 1 ? 'league' : 'leagues'}${handled > 0 ? ` · benched in ${handled}` : ''}`,
+    hideOtherLeagues: 'Hide the other leagues',
     openPlayerFinder: 'Open Player Finder',
     moreFlagged: (n: number) => `+${n} more starters flagged — full exposure audit`,
     valuesBasis: (format: string, qb: string) =>
@@ -82,6 +90,7 @@ export const dashTriageMessages = defineMessages({
     depthSub: 'Best ball arma tu alineación solo; esto marca posiciones donde casi no quedan sanos.',
     findPosition: (position) => `Buscar ${position}`,
     startersInDoubt: 'Titulares en duda',
+    injuredHeld: 'Jugadores lesionados en tu plantilla',
     rosterCheck: 'Revisa tu plantilla',
     mayNotPlay: 'puede que no jueguen esta semana · los más valiosos primero',
     proUpsell: 'AF Pro: el mejor agente libre para cada hueco y alertas de jugadores en duda',
@@ -91,10 +100,15 @@ export const dashTriageMessages = defineMessages({
     gameTimeCall: 'Decisión de último momento: ten el relevo listo y cámbialo antes del inicio si lo descartan.',
     benchedHandled: 'en la banca ✓',
     moreLeagues: (n) => `+${n} más`,
+    showMoreLeagues: (n) => (n === 1 ? 'Mostrar 1 liga más' : `Mostrar ${n} ligas más`),
+    showFewerLeagues: 'Mostrar menos ligas',
     setLineup: (platform, league) => `Corregir alineación en ${platform} · ${league}`,
     setLineupLead: 'Corregir alineación',
     setLineupWhere: (platform, league) => ` en ${platform} · ${league}`,
     alsoIn: 'También en',
+    otherLeaguesSummary: (n, handled) =>
+      `También en ${n} ${n === 1 ? 'liga más' : 'ligas más'}${handled > 0 ? ` · en la banca en ${handled}` : ''}`,
+    hideOtherLeagues: 'Ocultar las otras ligas',
     openPlayerFinder: `Abrir ${coreUiCopy('Player Finder', 'es')}`,
     moreFlagged: (n) => `+${n} titulares señalados más: auditoría completa de exposición`,
     valuesBasis: (format, qb) =>

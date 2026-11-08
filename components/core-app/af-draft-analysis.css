@@ -4,7 +4,7 @@
 :is(.af-draft-reference,.af-draft-analysis) :is(th,td){padding:.7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
 :is(.af-draft-reference,.af-draft-analysis) th{position:sticky;top:0;background:var(--surface2);z-index:1}
 .af-draft-reference label{display:grid;gap:.4rem;max-width:28rem;margin:.7rem 0}
-.af-draft-reference :is(input,button){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
+.af-draft-reference :is(input,button:not(.af-info-tip)){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
 .af-draft-reference nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin:1rem 0}
 .af-draft-reference summary{min-height:44px;cursor:pointer;padding:.5rem 0}
 :is(.af-draft-reference,.af-draft-analysis) :is(input,select,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -12,10 +12,9 @@
 @media(max-width:767px){.af-draft-reference,.af-draft-analysis{padding:.75rem}.af-draft-reference label{max-width:100%}}
 
 .af-phase4-tabs{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:1rem 0}
-.af-draft-phase4 :is(button,input,select,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.af-draft-phase4 :is(button:not(.af-info-tip),input,select,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
 .af-draft-phase4 button[aria-pressed=true]{border-color:var(--accent);background:var(--surface)}
 .af-draft-phase4 button:disabled{opacity:.5}
-.af-draft-phase4 .af-info-tip{width:44px;height:44px;min-width:44px;border-radius:50%;padding:0;box-sizing:border-box}
 .af-draft-phase4 label{display:grid;gap:.4rem;margin:.6rem 0;max-width:28rem}
 .af-draft-phase4 :is(input,select){max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
 .af-draft-phase4 small{display:block;margin-top:.3rem}
@@ -47,3 +46,15 @@
 .af-draft-analysis .af-analysis-rank{font-weight:700;font-variant-numeric:tabular-nums}
 .af-draft-analysis td{font-variant-numeric:tabular-nums}
 .af-draft-analysis details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
+
+/* Draft HQ lower half (2026-11-06). The "?" is the shared 14px ring with its own invisible tap area
+   (af-core.css); the two button rules above used to catch it and stretch it to 44px or an oval. */
+.af-draft-analysis .af-rank-compare table{min-width:0}
+.af-draft-analysis .af-rank-compare td:not(:first-child),.af-draft-analysis .af-rank-compare th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.af-draft-analysis .af-rank-compare td small{display:block;color:var(--text2);font-size:12px;white-space:normal}
+.af-briefing-actions{display:grid;gap:.6rem;margin:1rem 0 .25rem}
+.af-briefing-ask{display:flex;align-items:center;gap:.6rem}
+.af-draft-phase4 .af-briefing-ask>button{flex:1 1 auto;font-weight:700;background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.af-briefing-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:.5rem}
+.af-draft-phase4 .af-briefing-links a{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}
+.af-draft-reference p a{display:inline-block;padding:12px 0;margin:-12px 0}

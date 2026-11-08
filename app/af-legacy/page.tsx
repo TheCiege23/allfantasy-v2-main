@@ -18,6 +18,10 @@ import MiniPlayerImg from "@/components/MiniPlayerImg"
 import { headshotUrl, teamLogoUrl } from '@/lib/media-url'
 import { buildSleeperUser } from '@/lib/sleeper-user'
 import { gtagEvent } from '@/lib/gtag'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+
+/** Read once from the import config: while Yahoo is coming soon this page offers no way to start it. */
+const YAHOO_LIVE = isImportProviderAvailable('yahoo')
 import InsightsPanel from "@/components/InsightsPanel"
 import BadgeDisplay from "@/components/BadgeDisplay"
 import CommunityInsights from "@/components/CommunityInsights"
@@ -1545,7 +1549,11 @@ function AFLegacyContent() {
     const yahooErrorParam = urlParams.get('yahoo_error')
     
     if (yahooErrorParam) {
-      setYahooError(`Yahoo connection failed: ${yahooErrorParam}`)
+      setYahooError(
+        yahooErrorParam === 'coming_soon'
+          ? importComingSoonMessage('yahoo')
+          : `Yahoo connection failed: ${yahooErrorParam}`,
+      )
       setPlatform('yahoo')
     }
     
@@ -1555,7 +1563,7 @@ function AFLegacyContent() {
       setPlatform('yahoo')
       window.history.replaceState({}, '', window.location.pathname)
       fetchYahooLeagues()
-    } else {
+    } else if (YAHOO_LIVE) {
       fetch('/api/yahoo/leagues')
         .then(res => {
           if (res.ok) return res.json()
@@ -1622,6 +1630,7 @@ function AFLegacyContent() {
   }
 
   const connectYahoo = () => {
+    if (!YAHOO_LIVE) return
     window.location.href = '/api/auth/yahoo'
   }
 
@@ -4440,6 +4449,7 @@ function AFLegacyContent() {
                         }`}
                       >
                         <span className="mr-1">🏈</span> Yahoo
+                        {YAHOO_LIVE ? null : <span className="ml-1 text-[11px] uppercase tracking-wide text-purple-200/80">Soon</span>}
                       </button>
                       <button
                         type="button"
@@ -4578,7 +4588,13 @@ function AFLegacyContent() {
                       </form>
                     )}
 
-                    {platform === 'yahoo' && (
+                    {platform === 'yahoo' && !YAHOO_LIVE && (
+                      <div className="rounded-xl border border-purple-400/30 bg-purple-500/10 p-4 text-sm text-white/80" role="status">
+                        {importComingSoonMessage('yahoo')}
+                      </div>
+                    )}
+
+                    {platform === 'yahoo' && YAHOO_LIVE && (
                       <div className="space-y-4">
                         {showYahooHelp && (
                           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowYahooHelp(false)}>

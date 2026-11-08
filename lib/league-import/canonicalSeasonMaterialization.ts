@@ -17,6 +17,14 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, type DailySeasonSport } from '@/lib/sportConfig/dailySportSeasonShape'
+
+/** Sports whose imported leagues get a season on the canonical tables. */
+const MATERIALIZED_SPORTS = new Set<string>(['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB'])
+
+function isDailySeasonSport(sport: string): sport is DailySeasonSport {
+  return Object.prototype.hasOwnProperty.call(DAILY_SPORT_SEASON_SHAPE, sport)
+}
 
 export interface CanonicalSeasonMaterializationResult {
   seasonId: string | null
@@ -44,7 +52,14 @@ export async function materializeRedraftSeasonForImportedLeague(
   if (!league) return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'LEAGUE_NOT_FOUND' }
 
   const sport = normalizeToSupportedSport(league.sport)
-  if (sport !== 'NFL' && sport !== 'NCAAF' && sport !== 'NBA') {
+  /*
+   * ⚠ NHL AND MLB WERE LEFT OUT WHEN NBA JOINED (#2882), AND AN IMPORT WITHOUT A SEASON IS A LEAGUE WITH
+   * NOTHING TO PLAY. No `RedraftSeason` means no season rosters, so lineups, scoring, waivers and the
+   * standings Chimmy reads ("No standings are stored for this league") had nothing behind them — for
+   * every imported NHL and MLB league, from 32 to 256 teams (Fantrax-scale simulation, 2026-11-07).
+   * Native NHL and MLB leagues already play full seasons on these same tables.
+   */
+  if (!MATERIALIZED_SPORTS.has(sport)) {
     return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'UNSUPPORTED_SPORT' }
   }
   const seasonYear = league.season ?? new Date().getFullYear()
@@ -97,7 +112,10 @@ export async function materializeRedraftSeasonForImportedLeague(
   // as an active, in-progress season — an imported league is, by
   // definition, already past setup/pre_draft in the source platform.
   const seasonStatus = league.status === 'complete' ? 'complete' : 'in_season'
-  const playoffStartWeek = league.playoffStartWeek ?? 15
+  // The provider's playoff week when it states one. Otherwise football keeps its week 15, and a daily
+  // sport takes its own season shape (what a native league of that sport plays): week 15 would end an
+  // NBA, NHL or MLB season after 14 weeks, months before the real one does.
+  const playoffStartWeek = league.playoffStartWeek ?? (isDailySeasonSport(sport) ? playoffStartWeekFor(sport) : 15)
   const totalWeeks = Math.max(playoffStartWeek - 1, 1)
 
   const season = await prisma.redraftSeason.create({

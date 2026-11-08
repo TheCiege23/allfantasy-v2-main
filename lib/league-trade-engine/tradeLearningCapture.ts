@@ -218,7 +218,7 @@ export async function priceTradesAtCurrentMarket(
     const allItems = input.trades.flatMap((t) => t.items.map((i) => ({ ...i, itemReference: i.itemReference ?? null })))
     const [grader, nameForId] = await Promise.all([
       (deps.createGrader ?? ((a) => createLeagueTradeGrader(a)))({ leagueId: input.leagueId }).catch(() => null),
-      (deps.loadNames ?? loadNativePlayerNames)(allItems),
+      (deps.loadNames ?? loadNativePlayerNames)(allItems, input.leagueId),
     ])
     const currentYear = new Date().getUTCFullYear()
     const pricedAt = new Date().toISOString()
@@ -297,6 +297,12 @@ export async function captureLiveTradeOffer(input: {
   oneGradeLetter?: string | null
 }): Promise<string | null> {
   try {
+    /*
+     * The sample is priced on FantasyCalc's NFL chart alone (`resolveItemValue` below), so no other
+     * sport's offer can ever be captured — every asset comes back unpriced and the offer is dropped.
+     * Stop before the chart read instead of after it: an NBA, NHL or MLB proposal spent one per offer.
+     */
+    if (String(input.league.sport ?? 'NFL').trim().toUpperCase() !== 'NFL') return null
     const { isSuperFlex, isTEP, isDynasty, ppr, scoringType } = resolveLeagueScoringContext(input.league)
     const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
 

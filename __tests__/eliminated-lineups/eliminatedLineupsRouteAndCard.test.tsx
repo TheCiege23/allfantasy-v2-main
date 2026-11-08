@@ -87,7 +87,8 @@ describe('the Hub card', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
     const [, init] = fetchMock.mock.calls[1] as [string, { method: string; body: string }]
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toEqual({ rule: { enabled: true, standard: 'filled', autoFill: true } })
+    // The anti-tanking optimize option is off unless the commissioner ticks it.
+    expect(JSON.parse(init.body)).toEqual({ rule: { enabled: true, standard: 'filled', autoFill: true, optimize: false } })
   })
 
   it('without the plan: says so, and the switch is locked', async () => {

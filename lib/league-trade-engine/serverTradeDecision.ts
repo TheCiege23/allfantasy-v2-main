@@ -3,7 +3,7 @@ import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } fr
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradeInputsFromNativeItems, type NativeNameLookup } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import { loadNhlHistoricalLineups, type NhlHistoricalLineupCoverage } from './nhlHistoricalLineup'
 
@@ -85,13 +85,13 @@ export async function proposalOneGrade(input: {
   proposerRosterId: string
   proposedByUserId?: string | null
   assets: TradeAssetInput[]
-  /** Names the caller already loaded, so the same items are not queried twice. */
-  nameForId?: (id: string) => string | null
+  /** Names the caller already loaded (`loadNativePlayerNames`, with its `sleeperIdFor`), so the same items are not queried twice. */
+  nameForId?: NativeNameLookup
 }): Promise<TradeGradeView> {
   const items = nativeItems(input.assets)
   const [grader, nameForId, viewer] = await Promise.all([
     createLeagueTradeGrader({ leagueId: input.leagueId, userId: input.proposedByUserId ?? null }).catch(() => null),
-    input.nameForId ? Promise.resolve(input.nameForId) : loadNativePlayerNames(items),
+    input.nameForId ? Promise.resolve(input.nameForId) : loadNativePlayerNames(items, input.leagueId),
     input.proposedByUserId
       ? resolveViewerLeagueRoster(input.leagueId, input.proposedByUserId).catch(() => null)
       : Promise.resolve(null),
@@ -160,7 +160,7 @@ export async function evaluateServerTradeDecision(input: {
     }
   }
   const items = nativeItems(input.assets)
-  const nameForId = await loadNativePlayerNames(items).catch(() => (): string | null => null)
+  const nameForId = await loadNativePlayerNames(items, input.leagueId).catch(() => (): string | null => null)
   /*
    * 🛑 THE LETTER ON A RECEIPT IS THE ONE GRADE (2026-09-25). It was `projectedLetterFor` over the
    * canonical engine's values with the gap divided by what was GIVEN — a third rule beside the

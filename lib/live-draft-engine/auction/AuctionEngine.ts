@@ -31,6 +31,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
 import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
 import { recordAuctionBid } from '@/lib/live-draft-engine/auction/auctionBidLog'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -192,6 +193,11 @@ async function _nominatePlayerCore(
   if (session.draftModeLabel === 'rookie') {
     const available = await loadRookieAuctionAvailability(leagueId)
     if (!available(nomination)) return { success: false, error: 'This player is already on a league roster.' }
+  } else if (!season && session.draftModeLabel !== 'dispersal' && (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig == null) {
+    // Any other auction in a league whose season rosters already exist (see rosteredPlayerGuard.ts).
+    if (rosteredHolder(await loadLeagueRosteredPlayers(leagueId), nomination)) {
+      return { success: false, error: 'This player is already on a league roster.' }
+    }
   }
   if (isRookieRestrictedPlayerPool(session.playerPool)) {
     const rookie = await resolveServerRookieStatus({ leagueId, playerId: nomination.playerId, playerName: nomination.playerName })

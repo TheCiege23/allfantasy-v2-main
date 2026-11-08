@@ -70,6 +70,16 @@ export type AnalyticsEvent =
       first_connection: boolean
     }
   | { event: 'view_pricing' }
+  /**
+   * A CTA click on /commissioners. `cta` is what was clicked, `placement` where on the page, so
+   * "which block converts" is answerable without a second event. Not a conversion on its own —
+   * the conversion is still `sign_up` / `league_connected` downstream.
+   */
+  | {
+      event: 'commissioner_page_cta'
+      cta: 'import' | 'pricing'
+      placement: 'nav' | 'mobile_nav' | 'hero' | 'how_it_works' | 'bottom'
+    }
   | { event: 'begin_checkout'; plan: Plan }
   | {
       event: 'purchase'

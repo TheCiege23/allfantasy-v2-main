@@ -1174,6 +1174,11 @@ function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
+/** Whether LineupCheckCard draws its own "Fix in <platform>" button — the same rule it renders by. */
+export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: string | null | undefined): boolean {
+  return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
+}
+
 function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
@@ -1431,7 +1436,9 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
+      {/* ⚠ NOT ON AN AUTOMATIC LINEUP. Best ball scores the strongest eligible lineup by itself, so
+          "the stronger play" and "ask about this swap" advise a move nobody can make. */}
+      {slot.benchCheck && !automatic ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
@@ -2031,7 +2038,12 @@ export function MyTeam({ data }: MyTeamProps) {
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
-            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/*
+              One platform link per card (2026-11-06 phone pass). The embedded check already draws
+              "Fix in <platform>" whenever it names a certain problem, and the same href here made two
+              identical buttons a few lines apart. Kept only when the check does not draw its own.
+            */}
+            {data.league.sourceLink && !checkDrawsFix(lineupCheck, data.league.sourceLink.href) ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
           </div>
         </section>
       ) : null}
@@ -2243,7 +2255,7 @@ export function MyTeam({ data }: MyTeamProps) {
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section" {...offColumns(data.bench?.available ? data.bench.data : [])}>
+      <section className="af-frame af-mt-section af-mt-bench" {...offColumns(data.bench?.available ? data.bench.data : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
@@ -2264,7 +2276,7 @@ export function MyTeam({ data }: MyTeamProps) {
 
       {/* ── Injured reserve ─────────────────────────────────────────── */}
       {data.ir.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.ir.data)}>
+        <section className="af-frame af-mt-section af-mt-ir" {...offColumns(data.ir.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
@@ -2283,7 +2295,7 @@ export function MyTeam({ data }: MyTeamProps) {
         was labelled "IR", which says a healthy taxi rookie is injured.
       */}
       {data.taxi.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.taxi.data)}>
+        <section className="af-frame af-mt-section af-mt-taxi" {...offColumns(data.taxi.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">

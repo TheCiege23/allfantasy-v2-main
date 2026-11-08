@@ -404,7 +404,10 @@ export async function getPlayoffBracketView(input: {
         orderBy: [{ createdAt: "asc" }],
       })
     : []
-  const completion = getPlayoffCompletionSummary(challengeSeries, picks, {
+  const completionPicks = challenge.sport === "nba_cup" && !challenge.isTestMode
+    ? picks.map((pick: any) => ({ ...pick, pickTeamName: pick.draftTeamName ?? pick.pickTeamName }))
+    : picks
+  const completion = getPlayoffCompletionSummary(challengeSeries, completionPicks, {
     sport: challenge.sport,
     lockRule,
     isPoolOwner,
@@ -414,7 +417,7 @@ export async function getPlayoffBracketView(input: {
 
   const allEntryPicks = await (prisma as any).playoffBracketPick.findMany({
     where: { challengeId: challenge.id },
-    select: { entryId: true, seriesId: true, pickTeamName: true },
+    select: { entryId: true, seriesId: true, pickTeamName: true, confirmedAt: true },
   })
 
   const pickCountByEntryId = new Map<string, number>()
@@ -575,7 +578,13 @@ export async function getPlayoffBracketView(input: {
       id: pick.id,
       entryId: pick.entryId,
       seriesId: pick.seriesId,
-      pickTeamName: pick.pickTeamName,
+      pickTeamName: challenge.sport === "nba_cup" && !challenge.isTestMode &&
+        !nbaCupLockedReason(challengeSeries.find((s: any) => s.id === pick.seriesId) ?? {})
+        ? pick.draftTeamName ?? pick.pickTeamName
+        : pick.pickTeamName,
+      confirmedAt: toIso(pick.confirmedAt),
+      confirmedTeamName: pick.confirmedAt ? pick.pickTeamName : null,
+      draftTeamName: pick.draftTeamName ?? null,
       createdAt: toIso(pick.createdAt) ?? new Date().toISOString(),
       updatedAt: toIso(pick.updatedAt) ?? new Date().toISOString(),
     })),
@@ -702,6 +711,78 @@ export async function createPlayoffBracketEntry(input: {
   }
 }
 
+async function lockCupEntryAndGames(tx: any, challengeId: string, entryId: string) {
+  // Keep old app instances compatible during rollout without auto-confirming new drafts.
+  await tx.$queryRaw`SELECT set_config('allfantasy.cup_daily_mode', 'on', true)`
+  // A save, a day confirmation and provider result updates must not interleave.
+  await tx.$queryRaw`SELECT id FROM playoff_bracket_entries WHERE id = ${entryId} FOR UPDATE`
+  await tx.$queryRaw`SELECT id FROM playoff_bracket_series WHERE challenge_id = ${challengeId} ORDER BY id FOR UPDATE`
+}
+
+export async function finalizeNbaCupDay(input: {
+  challengeId: string
+  entryId: string
+  userId: string
+  day: string
+  timeZone: string
+}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day)) throw new Error("Invalid game date.")
+  let formatter: Intl.DateTimeFormat
+  try {
+    formatter = new Intl.DateTimeFormat("en-CA", { timeZone: input.timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+  } catch {
+    throw new Error("Invalid time zone.")
+  }
+  const dayOf = (start: Date | string) => {
+    const parts = formatter.formatToParts(new Date(start))
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ""
+    return `${value("year")}-${value("month")}-${value("day")}`
+  }
+  const owner = await (prisma as any).playoffBracketEntry.findUnique({
+    where: { id: input.entryId },
+    select: { userId: true, challengeId: true },
+  })
+  if (!owner || owner.userId !== input.userId || owner.challengeId !== input.challengeId) throw new Error("Entry not found.")
+  return prisma.$transaction(async (tx) => {
+    const db = tx as any
+    await lockCupEntryAndGames(tx, input.challengeId, input.entryId)
+    const entry = await db.playoffBracketEntry.findUnique({
+      where: { id: input.entryId },
+      select: { id: true, userId: true, challengeId: true, challenge: { select: { sport: true, isTestMode: true } } },
+    })
+    if (!entry || entry.userId !== input.userId || entry.challengeId !== input.challengeId ||
+      entry.challenge?.sport !== "nba_cup" || entry.challenge?.isTestMode) throw new Error("Entry not found.")
+    const games = await db.playoffBracketSeries.findMany({
+      where: { challengeId: input.challengeId },
+    })
+    const open = games.filter((game: any) => game.startsAt && dayOf(game.startsAt) === input.day &&
+      !nbaCupLockedReason({ ...game, startsAt: toIso(game.startsAt) }))
+    if (!open.length) throw new Error("No open games on this day.")
+    const picks = await db.playoffBracketPick.findMany({
+      where: { entryId: input.entryId, seriesId: { in: open.map((game: any) => game.id) } },
+    })
+    for (const game of open) {
+      const pick = picks.find((p: any) => p.seriesId === game.id)
+      if (!pick || ![game.homeTeamName, game.awayTeamName].includes(pick.draftTeamName ?? pick.pickTeamName)) {
+        throw new Error("Pick every open game on this day before finalizing.")
+      }
+    }
+    for (const game of open) {
+      const confirmedAt = new Date()
+      if (new Date(game.startsAt).getTime() <= confirmedAt.getTime()) throw new Error("A game just started. Refresh and try again.")
+      const pick = picks.find((p: any) => p.seriesId === game.id)
+      if (!pick.confirmedAt || pick.draftTeamName) {
+        await db.playoffBracketPick.update({
+          where: { id: pick.id },
+          data: { pickTeamName: pick.draftTeamName ?? pick.pickTeamName, draftTeamName: null, confirmedAt },
+        })
+      }
+    }
+    await db.playoffBracketEntry.updateMany({ where: { id: input.entryId, finalizedAt: null }, data: { finalizedAt: new Date() } })
+    return { challengeId: input.challengeId, entryId: input.entryId, confirmed: open.length }
+  }, { isolationLevel: "Serializable" })
+}
+
 export async function submitPlayoffBracketEntry(input: {
   challengeId: string
   entryId: string
@@ -742,7 +823,7 @@ export async function submitPlayoffBracketEntry(input: {
         challengeId: input.challengeId,
         entryId: input.entryId,
       },
-      select: { id: true, entryId: true, seriesId: true, pickTeamName: true, createdAt: true, updatedAt: true },
+      select: { id: true, entryId: true, seriesId: true, pickTeamName: true, draftTeamName: true, confirmedAt: true, createdAt: true, updatedAt: true },
     }),
   ])
 
@@ -752,7 +833,10 @@ export async function submitPlayoffBracketEntry(input: {
 
   // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
   const lockRule = sanitizePlayoffChallengeConfig(entry.challenge?.config ?? null).lockRule
-  const completion = getPlayoffCompletionSummary(series, picks, {
+  const completionPicks = entry.challenge?.sport === "nba_cup" && !entry.challenge?.isTestMode
+    ? picks.map((pick: any) => ({ ...pick, pickTeamName: pick.draftTeamName ?? pick.pickTeamName }))
+    : picks
+  const completion = getPlayoffCompletionSummary(series, completionPicks, {
     sport: entry.challenge?.sport,
     lockRule,
     isPoolOwner: entry.challenge?.ownerUserId === input.userId,
@@ -776,11 +860,27 @@ export async function submitPlayoffBracketEntry(input: {
     // Keep the first Cup submission timestamp: subsequent edits must not invalidate earlier earned picks.
     if (rollingCup) {
       await prisma.$transaction(async (tx) => {
+        await lockCupEntryAndGames(tx, input.challengeId, input.entryId)
+        const now = new Date()
+        const freshGames = await (tx as any).playoffBracketSeries.findMany({ where: { challengeId: input.challengeId } })
+        const freshPicks = await (tx as any).playoffBracketPick.findMany({ where: { entryId: input.entryId } })
+        for (const game of freshGames) {
+          if (nbaCupLockedReason({ ...game, startsAt: toIso(game.startsAt) })) continue
+          const pick = freshPicks.find((candidate: any) => candidate.seriesId === game.id)
+          const selected = pick?.draftTeamName ?? pick?.pickTeamName
+          if (!pick || ![game.homeTeamName, game.awayTeamName].includes(selected)) throw new Error("Pick every open game before finalizing the pool.")
+          if (!pick.confirmedAt || pick.draftTeamName) {
+            await (tx as any).playoffBracketPick.update({
+              where: { id: pick.id },
+              data: { pickTeamName: selected, draftTeamName: null, confirmedAt: now },
+            })
+          }
+        }
         await (tx as any).playoffBracketEntry.updateMany({ where: { id: entry.id, finalizedAt: null }, data: { finalizedAt: new Date() } })
         if (guess !== undefined) {
           await (tx as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { tiebreakerTotalScore: guess } })
         }
-      })
+      }, { isolationLevel: "Serializable" })
     } else {
       await (prisma as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { finalizedAt: new Date(), tiebreakerTotalScore: Number(guess) } })
     }
@@ -800,6 +900,7 @@ export async function savePlayoffBracketPick(input: {
   user?: SessionUser | null
   seriesId: string
   pickTeamName: string
+  confirmationMode?: "per_day"
 }) {
   const entry = await (prisma as any).playoffBracketEntry.findUnique({
     where: { id: input.entryId },
@@ -840,6 +941,7 @@ export async function savePlayoffBracketPick(input: {
   }
   const rollingCup = !series.challenge?.isTestMode && series.challenge?.sport === "nba_cup"
   if (rollingCup) {
+    if (input.confirmationMode !== "per_day") throw new Error("Refresh this page before saving NBA Cup picks; game-day finalization is now required.")
     const reason = nbaCupLockedReason({ ...series, startsAt: toIso(series.startsAt) })
     if (reason) throw new Error(reason)
   }
@@ -929,6 +1031,7 @@ export async function savePlayoffBracketPick(input: {
 
   const pick = await prisma.$transaction(async (tx) => {
     if (rollingCup) {
+      await lockCupEntryAndGames(tx, input.challengeId, input.entryId)
       const fresh = await (tx as any).playoffBracketSeries.findUnique({ where: { id: input.seriesId } })
       if (!fresh || fresh.challengeId !== input.challengeId) throw new Error("Game not found")
       const reason = nbaCupLockedReason({ ...fresh, startsAt: toIso(fresh.startsAt) })
@@ -946,6 +1049,19 @@ export async function savePlayoffBracketPick(input: {
 
     if (singleGameLivePool && !rollingCup) {
       await (tx as any).playoffBracketEntry.update({ where: { id: input.entryId }, data: { finalizedAt: null } })
+    }
+    if (rollingCup) {
+      const previous = await (tx as any).playoffBracketPick.findUnique({
+        where: { entryId_seriesId: { entryId: input.entryId, seriesId: input.seriesId } },
+      })
+      // Keep the last confirmed pick untouched until this day's draft is finalized.
+      return (tx as any).playoffBracketPick.upsert({
+        where: { entryId_seriesId: { entryId: input.entryId, seriesId: input.seriesId } },
+        create: { challengeId: input.challengeId, entryId: input.entryId, seriesId: input.seriesId, pickTeamName: input.pickTeamName },
+        update: previous?.confirmedAt
+          ? { draftTeamName: previous.pickTeamName === input.pickTeamName ? null : input.pickTeamName }
+          : { pickTeamName: input.pickTeamName, draftTeamName: null },
+      })
     }
     return (tx as any).playoffBracketPick.upsert({
       where: {

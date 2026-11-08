@@ -28,9 +28,14 @@ const EXACT: Record<string, string> = {
     'URGENTE: se acumulan disputas sin resolver. Se requiere la acción del comisionado.',
   'ALERT: 30%+ of managers inactive. League may be dying.':
     'ALERTA: más del 30 % de los mánagers están inactivos. La liga podría estar muriendo.',
+  'ALERT: Several managers have said they might leave. Talk to them before the season ends.':
+    'ALERTA: varios mánagers dijeron que podrían irse. Habla con ellos antes de que termine la temporada.',
   // league-health-engine: interventions
   'Find replacement managers for abandoned teams': 'Busca mánagers de reemplazo para los equipos abandonados',
   'Resolve all pending disputes this week': 'Resuelve todas las disputas pendientes esta semana',
+  'Post the trade history review for the teams named, so the league sees each trade’s value at the time':
+    'Publica la revisión del historial de intercambios de los equipos señalados, para que la liga vea el valor de cada intercambio en su momento',
+  'Reach out to the managers who said they might leave': 'Habla con los mánagers que dijeron que podrían irse',
   'Post weekly recaps, power rankings, or trash talk threads to boost engagement':
     'Publica resúmenes semanales, rankings de poder o hilos de pique para aumentar la participación',
   'Consider extending trade deadline or brokering deals to stimulate trade activity':
@@ -125,6 +130,8 @@ const RULES: Rule[] = [
   [/^(\d+) inactive managers — engagement at risk$/, (n) => `${n} mánagers inactivos: la participación está en riesgo`],
   [/^(\d+) abandoned teams — immediate action needed$/, (n) => `${n} equipos abandonados: hace falta actuar de inmediato`],
   [/^(\d+) unresolved disputes eroding trust$/, (n) => `${n} disputas sin resolver están minando la confianza`],
+  [/^(\d+) managers said they might leave the league$/, (n) => `${n} mánagers dijeron que podrían dejar la liga`],
+  [/^(\d+) collusion complaints — managers are losing trust in trades$/, (n) => `${n} denuncias de colusión: los mánagers pierden la confianza en los intercambios`],
   [/^Zero trades through week (\d+) — trade market may be stagnant$/, (w) => `Ningún intercambio hasta la semana ${w}: el mercado podría estar estancado`],
 
   // integrityRecommendations — the quoted issue is translated too

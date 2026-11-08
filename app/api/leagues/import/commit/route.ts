@@ -19,7 +19,7 @@ import {
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import {
   applyAttestedCommissioner,
   assertImportCommissioner,
@@ -129,7 +129,7 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
 
   if (!isImportProviderAvailable(provider)) {
     return NextResponse.json(
-      { error: `Import from ${provider} is not yet available.` },
+      { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }
     )
   }

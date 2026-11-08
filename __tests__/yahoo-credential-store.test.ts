@@ -27,6 +27,15 @@ const requireVerifiedUserMock = vi.hoisted(() => vi.fn())
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+/*
+ * These cases test the credential-store wiring of the LIVE Yahoo path. Yahoo is coming soon in
+ * provider-ui-config, so the route refuses before reaching the store; pin it live here. The
+ * coming-soon refusal itself is covered in __tests__/yahoo-coming-soon-gate.test.ts.
+ */
+vi.mock('@/lib/yahoo/yahooAvailability', async (importActual) => ({
+  ...(await importActual<typeof import('@/lib/yahoo/yahooAvailability')>()),
+  isYahooImportLive: () => true,
+}))
 vi.mock('@/lib/telemetry/usage', () => ({
   withApiUsage:
     () =>

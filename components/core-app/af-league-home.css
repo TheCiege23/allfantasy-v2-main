@@ -1544,6 +1544,12 @@
 .af-lh-week-summary-grid strong { line-height:1.3; }
 .af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
 .af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
+/* The other cells are whole-card links styled by `> a > span:last-child`; this cell is a div holding two
+   links, which nothing styled — so "Trades →" and "Waivers →" fell back to 18px plain text. Same look,
+   and a 44px target because each is its own small link. */
+.af-lh-week-summary-moves > span:last-child a { display:inline-flex; align-items:center; min-height:44px; color:var(--accent); font-size:12px; text-decoration:none; }
+.af-lh-week-summary-moves > span:last-child a:hover,
+.af-lh-week-summary-moves > span:last-child a:focus-visible { text-decoration:underline; }
 @media (max-width:800px) { .af-lh-week-summary-grid { grid-template-columns:1fr; } .af-lh-week-summary { padding:14px; } }
 
 
@@ -1642,3 +1648,24 @@
 .af-core .af-lh-foot-actions {
   justify-content: flex-start;
 }
+
+/*
+ * ⚠ THE IMPORTED-LEAGUE STRIP, INSIDE /core ONLY. ImportedLeagueQuickActions is shared with the
+ * always-dark LeagueShell, so its Tailwind colours are fixed dark: a #0b1328 band, white text and a
+ * rose-100 Remove label. On a light /core page that drew a 96px navy band across League Home (measured
+ * 2026-11-07). Inside the shell it takes the theme's tokens; LeagueShell is untouched.
+ */
+.af-core .af-imported-actions { background:var(--surface); border-color:var(--line); }
+.af-core .af-imported-actions-text { color:var(--text2); }
+.af-core .af-imported-actions-remove { color:var(--bad); background:var(--bad-soft); }
+.af-core .af-imported-actions-error { color:var(--bad); }
+
+/* Member status — the draft time and your dues (components/league-home/MemberStatusCard.tsx). */
+.af-core .af-lh-member-status { display:flex; flex-direction:column; gap:10px; padding:12px 14px; }
+.af-core .af-lh-ms-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; }
+.af-core .af-lh-ms-row + .af-lh-ms-row { padding-top:10px; border-top:1px solid var(--line); }
+.af-core .af-lh-ms-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.af-core .af-lh-ms-text strong { font-size:14px; color:var(--text); }
+.af-core .af-lh-ms-note { font-size:12px; color:var(--muted); }
+.af-core .af-lh-ms-links { display:flex; flex-wrap:wrap; gap:6px; }
+.af-core .af-lh-ms-btn { min-height:44px; display:inline-flex; align-items:center; text-decoration:none; }

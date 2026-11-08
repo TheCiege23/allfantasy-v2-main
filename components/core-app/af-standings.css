@@ -2030,3 +2030,23 @@
   .af-stb-raceodds .af-stb-oddsbar { display: none; }
 }
 
+
+/*
+ * ── Standings on a phone: the symbol key after the table (2026-11-07) ──
+ * Live at 375px the team cards began 1,400px down, under the stat tiles, "What is at stake", the view
+ * switches, the table note, the in-progress note and this key (★ Bye · ● Playoffs · ◐ Bubble · ✕ · ✓ ·
+ * MODEL, 119px). The key explains marks you only need once you are reading the table, so on a phone it
+ * follows the table; everything after the cards keeps its order behind it. `.af-stb` is a flex column,
+ * so this is visual order only and the DOM (and Tab order) is unchanged. Top level, appended.
+ */
+@media (max-width: 640px) {
+  /* Anchored on "How this table works", which follows the main view in every layout (cards, table,
+     playoff picture); the cards wrapper alone would leave the key at the very bottom in table view. */
+  .af-core .af-stb > .af-stb-how,
+  .af-core .af-stb > .af-stb-how ~ * {
+    order: 2;
+  }
+  .af-core .af-stb > .af-stb-legend {
+    order: 1;
+  }
+}

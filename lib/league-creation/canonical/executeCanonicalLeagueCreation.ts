@@ -18,6 +18,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { computeStartupDraftCapacity, formatCountsTaxiAndDevy } from '@/lib/draft/draftSettingsPolicy'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -203,12 +204,32 @@ async function finishCreatedLeague(
     console.warn(`${LOG_PREFIX} post_create_bootstrap_non_fatal`, e)
   }
 
+  // The tanking monitor starts on (lib/integrity/integrityDefaults.ts). Non-fatal: a league is never
+  // refused over its integrity settings, and the integrity page creates the same row on first visit.
+  try {
+    const { NEW_LEAGUE_INTEGRITY_DEFAULTS } = await import('@/lib/integrity/integrityDefaults')
+    await prisma.leagueIntegritySettings.upsert({
+      where: { leagueId: createdLeagueId },
+      create: { leagueId: createdLeagueId, ...NEW_LEAGUE_INTEGRITY_DEFAULTS },
+      update: {},
+    })
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} integrity_defaults_non_fatal`, e)
+  }
+
   // Post-create roster bootstrap can install a sport/format roster smaller than the generic
   // draft preset (NHL guillotine was 18 rounds for a 14-slot roster). Reconcile the actual
   // draft gate's template before returning a league whose first draft cannot finish.
   if (!args.sourceLeagueId) {
     try {
-      const capacity = (await getLeagueDraftTemplatePayload(createdLeagueId)).totalRosterSlots
+      const template = await getLeagueDraftTemplatePayload(createdLeagueId)
+      // Dynasty-family startups: only the spots a drafted player is placed in (starters + bench + devy).
+      // The total also holds IR and taxi, which finalization never fills — a board that size left every
+      // team over its active roster limit, and every trade was refused (computeStartupDraftCapacity).
+      const startupCapacity = formatCountsTaxiAndDevy([engine.leagueFormatId])
+        ? computeStartupDraftCapacity(template.template?.slots ?? [])
+        : 0
+      const capacity = startupCapacity > 0 ? Math.min(template.totalRosterSlots, startupCapacity) : template.totalRosterSlots
       if (capacity > 0) {
         const session = await prisma.draftSession.findFirst({
           where: { leagueId: createdLeagueId, status: 'pre_draft' },

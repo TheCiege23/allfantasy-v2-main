@@ -7,6 +7,8 @@ import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live
 import type { RailStanding } from '@/lib/core-app/railMatchups'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { liveScoresCopy as lsc } from '@/lib/core-app/liveScoresCopy'
+import { messagesFor } from '@/lib/i18n/messages'
+import { liveScoresMessages } from '@/lib/core-app/messages/liveScores'
 
 /**
  * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
@@ -157,51 +159,38 @@ export function LiveMatchupStrip({
   )
 }
 
-function ordinal(n: number): string {
-  const teens = n % 100
-  if (teens >= 11 && teens <= 13) return `${n}th`
-  const unit = n % 10
-  return `${n}${unit === 1 ? 'st' : unit === 2 ? 'nd' : unit === 3 ? 'rd' : 'th'}`
-}
-
 /**
  * Your place against the whole field, for a league with no head-to-head this week.
  *
  * Same wording rules as the rail's `RailStanding`: say what the rank is measured from (before most of
  * the field has played it is the projection, not points), and say "on the block" in words rather than
  * printing a zero margin.
+ *
+ * ⚠ EVERY WORD COMES FROM `liveScoresMessages`. This line was hard-coded English until 2026-11-07, so a
+ * Spanish reader got an English sentence in the middle of a translated screen.
  */
 function StandingStrip({ standing: s, leagueId }: { standing: RailStanding; leagueId: string }) {
+  const { language } = useOptionalLanguage()
+  const m = messagesFor(liveScoresMessages, language)
   const atCut = s.overCut == null || (s.elimination && s.placesAboveCut === 0)
   const lead = atCut ? 'trail' : s.elimination && s.placesAboveCut <= 2 ? 'tied' : 'lead'
-  const cutWord = s.elimination ? 'the cut' : 'last place'
   return (
-    <section className="af-live-matchup" aria-label="Your standing" data-state="standing" data-lead={lead}>
+    <section className="af-live-matchup" aria-label={m.standingAria} data-state="standing" data-lead={lead}>
       <div className="af-live-matchup-row">
         <span className="af-live-matchup-score af-num" data-side="you">
-          {ordinal(s.rank)}
+          {m.standingRank(s.rank)}
         </span>
-        <span className="af-live-matchup-team">of {s.outOf}</span>
+        <span className="af-live-matchup-team">{m.standingOf(s.outOf)}</span>
         <span className="af-live-matchup-team af-live-matchup-cut af-num">
-          {s.overCut == null
-            ? s.elimination
-              ? 'On the block'
-              : 'Last place'
-            : `+${s.overCut.toFixed(1)} over ${cutWord}`}
+          {s.overCut == null ? m.standingAtBottom(s.elimination) : m.standingOverCut(s.overCut.toFixed(1), s.elimination)}
         </span>
       </div>
       <p className="af-live-matchup-meta">
-        {s.placesAboveCut === 0
-          ? s.elimination
-            ? 'You are in the cut position'
-            : 'Bottom of the league this week'
-          : `${s.placesAboveCut} ${s.placesAboveCut === 1 ? 'place' : 'places'} clear of ${cutWord}`}
-        {` · cut line ${s.cutLine.toFixed(1)}`}
-        {s.basis === 'best_ball'
-          ? s.provisional ? ' · ranked on projected best-ball finals until the last game is final' : ' · ranked on final best-ball points'
-          : s.basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points'}
+        {s.placesAboveCut === 0 ? m.standingInCut(s.elimination) : m.standingPlacesClear(s.placesAboveCut, s.elimination)}
+        {m.standingCutLine(s.cutLine.toFixed(1))}
+        {m.standingBasis(s.basis, s.provisional === true)}
         {' · '}
-        <Link href={`/core/standings?league=${encodeURIComponent(leagueId)}`}>See the field</Link>
+        <Link className="af-live-matchup-field" href={`/core/standings?league=${encodeURIComponent(leagueId)}`}>{m.standingSeeField}</Link>
       </p>
     </section>
   )

@@ -5,7 +5,7 @@
  * and end times and active-OTC durations. Now the archive carries the Draft HQ title and a one-line
  * summary, and the provenance folds into a closed "Timing and source details" section.
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
@@ -86,7 +86,7 @@ describe('the archive as Draft HQ', () => {
 
   it('says each thing once: no repeated draft heading, no lone "Page 1", a singular record count', () => {
     render(<DraftArchive {...props} detail={detail()} asDraftHq />)
-    expect(document.querySelectorAll('h3')).toHaveLength(2) // Selections and ownership, Draft analysis — not the draft line again
+    expect(document.querySelectorAll('h3')).toHaveLength(3) // Selections and ownership, Draft analysis, Records from this draft — not the draft line again
     expect([...document.querySelectorAll('h3')].some(h => h.textContent?.startsWith('2026 · NFL'))).toBe(false)
     expect(screen.queryByRole('navigation', { name: 'Archive pages' })).toBeNull()
     expect(screen.getByText('1 draft record')).toBeTruthy()
@@ -141,6 +141,27 @@ describe('the archive as Draft HQ', () => {
     expect(cellsPerRow()).toEqual([9, 9])
     expect(heads()).toContain('Original slot / owner')
     expect(document.querySelector('.af-archive-cols-note')).toBeNull()
+  })
+
+  it('shows pick timing behind one switch for the whole table, not a drawer on every row', () => {
+    // Live /core 2026-11-06: 25 "Identity and owner time" drawers nearly doubled the table's height on a phone.
+    const d = detail()
+    Object.assign(d.picks[0], { playerId: '4034', identityBasis: 'Recorded at selection' })
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(picksTable().querySelectorAll('details')).toHaveLength(0)
+    expect(picksTable().textContent).not.toContain('Recorded at selection')
+    const toggle = screen.getByRole('button', { name: 'Show pick details' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Hide pick details' }).getAttribute('aria-pressed')).toBe('true')
+    expect(picksTable().textContent).toContain('4034 · Recorded at selection')
+  })
+
+  it('groups the history drawers in one records card, with no lone timeline page', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+    const card = screen.getByRole('region', { name: 'Records from this draft' })
+    expect(card.querySelectorAll('details').length).toBe(5)
+    expect(screen.queryByRole('navigation', { name: 'Timeline pages' })).toBeNull()
   })
 
   it('reads Spanish', () => {

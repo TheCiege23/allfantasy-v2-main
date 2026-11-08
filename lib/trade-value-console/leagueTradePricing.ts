@@ -968,7 +968,17 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless
+  /*
+   * 🛑 FANTASYCALC IS AN NFL CHART, AND ONLY THE NFL PATH READS IT (`effectiveSport === 'NFL'` in
+   * `resolveAssets`; picks too — `sportHasPickMarket`). An NBA, NHL or MLB league fetched it anyway, and
+   * because a cold profile rethrows when the vendor fails (`getFantasyCalcChartDbFirst`), an unreachable
+   * FantasyCalc failed the whole grader for a sport that never uses it: "This league's values could not
+   * be loaded just now" in place of the sport grader's own answer (Fantrax-scale simulation, 2026-11-07).
+   * A league of unknown sport — the console's global mode — still gets the chart.
+   */
+  const leagueSport = String(leagueRow?.sport ?? leagueSnapshot?.sport ?? '').trim().toUpperCase()
+  const readsNflChart = !leagueSport || leagueSport === 'NFL' || leagueSport === 'NCAAF'
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless || !readsNflChart
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
     : await getFantasyCalcChartDbFirst(
         fantasyCalcSettingsForChart({ chartIsDynasty, isSuperFlex, leagueSize, pprNfl }),
@@ -982,7 +992,15 @@ export async function resolveLeagueTradeChart(args: {
    * because the console works in INTERNAL League.id space and Sleeper's roster and
    * settings endpoints do not answer to that id.
    */
-  const leagueValues = leagueRow?.platformLeagueId && !args.marketless
+  /*
+   * Built from the SLEEPER league — its settings, rosters and player index, all read from Sleeper by
+   * `platformLeagueId`. A Fantrax, ESPN or native league's id is not a Sleeper league id, so every grade
+   * there spent a Sleeper call on a league that does not exist (Fantrax-scale simulation: 63 calls across
+   * four leagues). Skipped only when the platform is KNOWN not to be Sleeper.
+   */
+  const platform = String(leagueRow?.platform ?? '').trim().toLowerCase()
+  const sleeperBacked = !platform || platform === 'sleeper'
+  const leagueValues = leagueRow?.platformLeagueId && !args.marketless && sleeperBacked && readsNflChart
     ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueRow.platformLeagueId,

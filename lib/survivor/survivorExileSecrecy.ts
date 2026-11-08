@@ -83,3 +83,11 @@ export function exilePageVisibility(args: { membershipHidden: boolean; viewerIsE
   const count = visibleExileCount(args.players, canSee)
   return { showCount: count != null, count, showMembers: args.viewerIsExile || (canSee && args.nonPlayingCommissioner) }
 }
+
+/**
+ * The Exile headcount line. "1 players marooned" shipped because the count and the noun were never
+ * joined by a rule (2026-11-07 Survivor audit); one manager is the common case early in a season.
+ */
+export function exileHeadcountLine(count: number, weekLabel: string | number): string {
+  return `${count} ${count === 1 ? 'player' : 'players'} marooned · Week ${weekLabel}`
+}

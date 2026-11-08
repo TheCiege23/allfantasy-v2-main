@@ -1,5 +1,6 @@
 'use client'
 
+import { MemberStatusCard } from '@/components/league-home/MemberStatusCard'
 import Link from 'next/link'
 import { LeagueDisplayPreferences, LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import type { LeagueSectionId } from '@/lib/league/leagueSections'
@@ -641,6 +642,8 @@ export function LeagueHome({
 
         {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
+      {/* When the draft is and what you owe — renders nothing when neither applies (components/league-home). */}
+      <MemberStatusCard leagueId={league.id} />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
       {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}

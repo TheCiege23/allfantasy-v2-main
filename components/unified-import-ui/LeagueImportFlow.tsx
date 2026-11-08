@@ -18,6 +18,7 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import {
+  availableImportPlatformsPhrase,
   getImportProviderLabel,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
@@ -497,7 +498,7 @@ export function LeagueImportFlow({
             </span>
           </h1>
           <p className="relative mt-3 text-center text-white/55">
-            Connect your Sleeper, ESPN, Yahoo, Fantrax, or MFL league to
+            Connect your {availableImportPlatformsPhrase()} league to
             AllFantasy — a read-only view we analyze but never change on the
             source platform.
           </p>

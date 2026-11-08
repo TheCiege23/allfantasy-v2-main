@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { ExileBossBoard } from '@/components/survivor/late/ExileBossBoard'
-import { exilePageVisibility } from '@/lib/survivor/survivorExileSecrecy'
+import { exileHeadcountLine, exilePageVisibility } from '@/lib/survivor/survivorExileSecrecy'
 
 type ExileGet = {
   island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean; bossTokenResetOnWin?: boolean } | null
@@ -64,7 +64,7 @@ export default function SurvivorExilePage() {
         <p className="sv-kicker text-[12px] !text-violet-200">🏚 Exile Island</p>
         <h1 className="sv-h mt-1 text-2xl uppercase md:text-3xl">Isolation · Grind · Return</h1>
         <p className="mt-2 text-[13px] text-white/50" data-testid="survivor-exile-headcount">
-          {secrecy.showCount ? `${secrecy.count} players marooned · Week ${weekLabel}` : `Who is on Exile is secret · Week ${weekLabel}`}
+          {secrecy.showCount ? exileHeadcountLine(secrecy.count ?? 0, weekLabel) : `Who is on Exile is secret · Week ${weekLabel}`}
         </p>
       </header>
 

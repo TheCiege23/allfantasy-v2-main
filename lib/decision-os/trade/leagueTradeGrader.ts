@@ -29,7 +29,9 @@ import {
 } from '@/lib/trade-value/rosterSpotCharge'
 import { tradeValueAsOf, tradeValueSourceOf } from './valueSource'
 import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
-import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
+import { unpriceableReason, type GradeInputs, type NativeNameLookup } from './tradeGradeInputs'
+import { playerIdSpaceFor } from './tradePlayers'
+import { resolveProviderRosterPlayers, type ResolvedProviderPlayer } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
@@ -604,19 +606,43 @@ export async function gradeDeal(
  */
 export async function loadNativePlayerNames(
   items: ReadonlyArray<{ itemType: string | null | undefined; itemReference: string | null; metadata?: unknown }>,
-): Promise<(id: string) => string | null> {
+  /**
+   * The league the items belong to. Pass it: a Fantrax, ESPN, Fleaflicker or MFL league stores THAT
+   * platform's player ids, which no Sleeper lookup can name — so every trade in an imported Fantrax
+   * league fell back to Fantrax's "Last, First" metadata name, matched no value on any chart, and was
+   * never graded (Fantrax-scale simulation, 2026-11-07). Without it, ids are read as Sleeper ids.
+   */
+  leagueId?: string | null,
+): Promise<NativeNameLookup> {
+  const playerItems = items.filter((i) => {
+    const type = String(i.itemType ?? 'player').toLowerCase()
+    return !(type.includes('pick') || type.includes('faab'))
+  })
   const ids = [
-    ...new Set(
-      items
-        .filter((i) => {
-          const type = String(i.itemType ?? 'player').toLowerCase()
-          if (type.includes('pick') || type.includes('faab')) return false
-          return true
-        })
-        .map((i) => i.itemReference)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    ),
+    ...new Set(playerItems.map((i) => i.itemReference).filter((id): id is string => typeof id === 'string' && id.length > 0)),
   ]
+  const league = leagueId
+    ? await Promise.resolve()
+        .then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true } }))
+        .catch(() => null)
+    : null
+  const space = league ? playerIdSpaceFor({ platform: league.platform, sport: String(league.sport ?? 'NFL') }) : null
+  if (space && typeof space === 'object') {
+    const sport = String(league?.sport ?? 'NFL').toUpperCase()
+    const found = ids.length
+      ? await resolveProviderRosterPlayers(space.provider, ids, sport).catch(() => new Map<string, ResolvedProviderPlayer>())
+      : new Map<string, ResolvedProviderPlayer>()
+    // An id the identity map does not link yet keeps its stored name, in the order every chart uses.
+    const storedName = new Map<string, string>()
+    for (const i of playerItems) {
+      const meta = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? (i.metadata as Record<string, unknown>) : {}
+      const raw = typeof meta.playerName === 'string' ? meta.playerName : typeof meta.name === 'string' ? meta.name : null
+      if (i.itemReference && raw?.trim()) storedName.set(i.itemReference, providerNameInChartOrder(space.provider, raw))
+    }
+    const lookup: NativeNameLookup = (id: string) => found.get(id)?.name ?? storedName.get(id) ?? null
+    lookup.sleeperIdFor = (id: string) => found.get(id)?.sleeperId ?? null
+    return lookup
+  }
   const byId = new Map<string, string>()
   const store = (prisma as typeof prisma & { sportsPlayer?: typeof prisma.sportsPlayer }).sportsPlayer
   if (ids.length > 0 && store && typeof store.findMany === 'function') {
@@ -626,4 +652,16 @@ export async function loadNativePlayerNames(
     for (const r of rows) if (r.sleeperId && r.name && !byId.has(r.sleeperId)) byId.set(r.sleeperId, r.name)
   }
   return (id: string) => byId.get(id) ?? null
+}
+
+/**
+ * Fantrax names every player "Last, First" (`Judge, Aaron` in every committed capture); FantasyCalc,
+ * the projections and our registry say "Aaron Judge", and `playerNamesAgree` compares letters in
+ * order, so the two never match. Other providers already use first-name order.
+ */
+export function providerNameInChartOrder(provider: string, name: string): string {
+  const trimmed = name.trim()
+  if (provider.trim().toLowerCase() !== 'fantrax') return trimmed
+  const m = /^([^,]+),\s*([^,]+)$/.exec(trimmed)
+  return m ? `${m[2]!.trim()} ${m[1]!.trim()}` : trimmed
 }

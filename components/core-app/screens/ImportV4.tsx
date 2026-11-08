@@ -26,6 +26,7 @@ import '@/components/core-app/af-import.css'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
   getImportProviderLabel,
+  importComingSoonMessage,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
@@ -2091,7 +2092,13 @@ export function ImportV4({
         the query string and read by nothing, so a failed connect looked identical
         to never having tried.
       */}
-      {yahooError ? (
+      {yahooError === 'coming_soon' ? (
+        /* Not an error: the entry point refused because Yahoo is not live. No retry link — it
+           would only send them round the same refusal. */
+        <div className="af-im-note" role="status">
+          <p>{importComingSoonMessage('yahoo')}</p>
+        </div>
+      ) : yahooError ? (
         <div className="af-im-error" role="alert">
           <p className="af-im-error-text">{describeYahooError(yahooError, yahooErrorDesc)}</p>
           <a className="af-im-error-link" href={YAHOO_CONNECT_HREF}>
@@ -2389,7 +2396,7 @@ export function ImportV4({
                     else — the swap alone does not say so.
                   */}
                   <Hint label="Why this field changes">
-                    Sleeper connects by username. ESPN, Yahoo, MFL, Fantrax and Fleaflicker connect
+                    Sleeper connects by username. ESPN, MFL, Fantrax and Fleaflicker connect
                     by league ID — the field swaps when you pick a platform.
                   </Hint>
                 </span>

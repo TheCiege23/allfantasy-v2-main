@@ -4729,6 +4729,8 @@ model PlayoffBracketPick {
   entryId      String                  @map("entry_id")
   seriesId     String                  @map("series_id")
   pickTeamName String                  @map("pick_team_name")
+  confirmedAt  DateTime?               @map("confirmed_at")
+  draftTeamName String?                @map("draft_team_name")
   createdAt    DateTime                @default(now()) @map("created_at")
   updatedAt    DateTime                @updatedAt @map("updated_at")
   challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -7038,6 +7040,89 @@ model IntegrityFlag {
   @@index([leagueId, flagType])
   @@index([createdAt])
   @@map("integrity_flags")
+}
+
+/// What each manager could see when his lineup locked: one row per team per week (2026-11-07).
+///
+/// 🛑 NOTHING ELSE STORES A PROJECTION AS IT WAS AT KICKOFF. `fantasy_projections` is upserted daily
+/// and injury status is overwritten on every sync, so a week-close judgement of "did he start his best
+/// players" read TODAY's numbers — a player hurt on Monday night looked like a bad Sunday start. The
+/// hourly writer (lib/integrity/lineupLockSnapshots.ts) refreshes every player whose game has not
+/// started and FREEZES each one at his own kickoff, so the score is computed from what the manager saw.
+///
+/// `rosterId` is the RedraftRoster id — the id the tanking flags and the week's saved lineups use.
+/// Code ships ahead of migration 20261107120000_lineup_lock_snapshots: reads return nothing and the
+/// writer skips while the table is absent, so applying it only turns the score on.
+model LineupLockSnapshot {
+  id               String    @id @default(cuid())
+  leagueId         String    @map("league_id")
+  rosterId         String    @map("roster_id")
+  season           Int
+  week             Int
+  /// `{ [playerId]: { name, position, proj, status, bye, team, frozenAt } }` — see lineupLockSnapshots.ts.
+  players          Json
+  /// The league's starting seats when captured: `[{ slot, eligible[] }]`.
+  slots            Json
+  /// Filled when the week is scored (lib/integrity/lineupIntegrityScore.ts). Null until then.
+  startedProj      Float?    @map("started_proj")
+  optimalProj      Float?    @map("optimal_proj")
+  ratio            Float?
+  startedTopCount  Int?      @map("started_top_count")
+  starterCount     Int?      @map("starter_count")
+  excludedIds      String[]  @default([]) @map("excluded_ids")
+  /// Why a week was not scored (`thin_projections`, `no_lineup`, …). A skipped week neither counts nor breaks a run.
+  skipReason       String?   @map("skip_reason")
+  scoredAt         DateTime? @map("scored_at")
+  algorithmVersion String?   @map("algorithm_version")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([leagueId, rosterId, season, week])
+  @@index([leagueId, season, week])
+  @@map("lineup_lock_snapshots")
+}
+
+/// Every completed trade's value AS PRICED WHEN IT HAPPENED, one row per trade (2026-11-07).
+///
+/// 🛑 THE COLLUSION REVIEW RE-PRICED FINISHED TRADES ON TODAY'S VALUES. A deal that was fair in
+/// September could read as a 60% heist in November because one player broke out — hindsight, not
+/// collusion. The three trade engines each keep a partial record (frozen Sleeper originals, a native
+/// proposal snapshot, a redraft snapshot on another value scale), none covering every trade. This
+/// table is the one record the trade audit, the pair check and the review read.
+///
+/// WRITE-ONCE. `basis` says how a row was priced and every surface prints it:
+///   `at_completion` — graded when the trade settled (the post-trade integrity scan);
+///   `trade_date`    — an imported trade's frozen original priced on its own date;
+///   `first_audited` — no trade-time price existed; graded on the day it was first audited.
+///
+/// Sides are the trade review's sides: A is the side the grade is written from. `gapPct` is signed
+/// from side A (+ means A received more). Code ships ahead of migration
+/// 20261107130000_trade_value_audits: reads return nothing and writes skip while the table is absent.
+model TradeValueAudit {
+  id          String    @id @default(cuid())
+  leagueId    String    @map("league_id")
+  /// `af:<AfLeagueTrade.id>` | `redraft:<proposalId>` | `sleeper:<transaction id>`.
+  tradeKey    String    @map("trade_key")
+  source      String
+  sideATeamId String    @map("side_a_team_id")
+  sideBTeamId String    @map("side_b_team_id")
+  sideAName   String    @map("side_a_name")
+  sideBName   String    @map("side_b_name")
+  /// Asset labels each side SENT, for the review list ("Ja'Marr Chase", "2027 1st", "$40 FAAB").
+  sideAGave   Json      @map("side_a_gave")
+  sideBGave   Json      @map("side_b_gave")
+  /// League value of what each side SENT, as priced (see `basis`).
+  sideAValue  Float     @map("side_a_value")
+  sideBValue  Float     @map("side_b_value")
+  gapPct      Float     @map("gap_pct")
+  basis       String
+  completedAt DateTime? @map("completed_at")
+  pricedAt    DateTime  @map("priced_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([leagueId, tradeKey])
+  @@index([leagueId, completedAt])
+  @@map("trade_value_audits")
 }
 
 model LeagueIntegritySettings {

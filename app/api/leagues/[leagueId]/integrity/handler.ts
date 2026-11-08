@@ -8,6 +8,7 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { NEW_LEAGUE_INTEGRITY_DEFAULTS } from "@/lib/integrity/integrityDefaults"
 import { resolveFlagManagers } from "@/lib/integrity/flagManagers"
 import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
@@ -37,7 +38,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   const settings = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
-    create: { leagueId },
+    // A league with no row yet starts with the tanking monitor on (lib/integrity/integrityDefaults.ts).
+    create: { leagueId, ...NEW_LEAGUE_INTEGRITY_DEFAULTS },
     update: {},
   })
 
@@ -141,6 +143,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     where: { leagueId },
     create: {
       leagueId,
+      // Defaults first; anything the commissioner sent below overrides them.
+      ...NEW_LEAGUE_INTEGRITY_DEFAULTS,
       ...(typeof body.collusionSensitivity === "string" ? { collusionSensitivity: body.collusionSensitivity } : {}),
       ...(typeof body.tankingMonitorEnabled === "boolean" ? { tankingMonitorEnabled: body.tankingMonitorEnabled } : {}),
       ...(typeof body.tankingSensitivity === "string" ? { tankingSensitivity: body.tankingSensitivity } : {}),

@@ -57,6 +57,14 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
   return out
 }
 
+/**
+ * Names for a trade's stored player ids (`loadNativePlayerNames`). In a provider league it also says
+ * which Sleeper id each provider id links to, because there the stored id is never a Sleeper id.
+ */
+export type NativeNameLookup = ((id: string) => string | null) & {
+  sleeperIdFor?: (id: string) => string | null
+}
+
 type NativeItemLike = {
   itemType: string | null | undefined
   itemReference: string | null
@@ -87,8 +95,11 @@ const SELF_DESCRIBING_PICK = /^(?:fdp|pick):(\d{4}):(\d{1,2})(?::|$)/
  */
 export function gradeInputsFromNativeItems(
   items: ReadonlyArray<NativeItemLike>,
-  nameForId?: (id: string) => string | null | undefined,
+  nameForId?: NativeNameLookup | ((id: string) => string | null | undefined),
 ): GradeInputs {
+  // Present only for a provider league (Fantrax, ESPN, …): the stored id is that platform's, never a
+  // Sleeper id, so the Sleeper identity is whatever the player's identity row links to — or none.
+  const sleeperIdFor = (nameForId as NativeNameLookup | undefined)?.sleeperIdFor
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const item of items) {
     const meta = record(item.metadata)
@@ -112,9 +123,11 @@ export function gradeInputsFromNativeItems(
     const ref = str(item.itemReference)
     const verifiedName = ref ? str(nameForId?.(ref)) : null
     const name = verifiedName ?? str(meta.playerName ?? meta.name)
+    // A Sleeper-keyed lookup verified `ref` itself as a Sleeper id; a provider lookup names the linked one.
+    const sleeperId = ref && verifiedName ? (sleeperIdFor ? str(sleeperIdFor(ref)) : ref) : null
     if (name) out.assets.push({ kind: 'player', name,
       // The lookup is specifically by SportsPlayer.sleeperId. Metadata alone does not verify a namespace.
-      ...(ref && verifiedName ? { providerIdentity: { provider: 'sleeper' as const, id: ref,
+      ...(sleeperId ? { providerIdentity: { provider: 'sleeper' as const, id: sleeperId,
         ...(str(meta.position) ? { position: str(meta.position)! } : {}),
       } } : ref?.includes(':') ? { playerId: ref } : {}),
     })

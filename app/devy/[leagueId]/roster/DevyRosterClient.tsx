@@ -7,7 +7,7 @@ import { DevyPlayerCard } from '@/app/devy/components/DevyPlayerCard'
 import { DevyPlayerModal, type DevyPlayerModalPayload } from '@/app/devy/components/DevyPlayerModal'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 
-type PlayerState = {
+export type PlayerState = {
   playerId: string
   playerName: string
   position: string
@@ -21,7 +21,7 @@ type PlayerState = {
   taxiYearsUsed?: number
 }
 
-type TaxiSlot = {
+export type TaxiSlot = {
   playerId: string
   playerName: string
   position: string
@@ -29,7 +29,7 @@ type TaxiSlot = {
   taxiYearStart: number
 }
 
-type DevySlot = {
+export type DevySlot = {
   playerId: string
   playerName: string
   position: string
@@ -41,7 +41,7 @@ type DevySlot = {
   nflEntryYear?: number | null
 }
 
-type WeeklyEntry = {
+export type WeeklyEntry = {
   fantasyPts: number
   eligibility: string
   bucketState: string
@@ -260,7 +260,6 @@ export function DevyRosterClient({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080c14] px-4 py-2">
           <p className="text-[11px] text-white/50">
             Fantasy points · Week {scoreContext.week} · {scoreContext.season} season
-            <span className="ml-2 text-white/35">(player_weekly_scores)</span>
           </p>
           <div className="flex items-center gap-1">
             <button

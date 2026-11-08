@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import { ZombieHordeBar } from '@/app/zombie/components/ZombieHordeBar'
 
-type Row = {
+export type Row = {
   rosterId: string
   status: string
   wins: number

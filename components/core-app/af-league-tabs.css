@@ -639,3 +639,49 @@
 .af-core .af-lctx .af-lt-workspace-open:focus-visible { background: var(--accent); color: var(--accent-ink); }
 /* With the views and the pill elsewhere, an empty row takes no space; the "why a view is missing" notes still show. */
 .af-core.af-shell .af-lt:not(:has(.af-lt-absent, .af-lt-workspace-note, .af-lt-workspace-open)) { display: none; }
+
+/* ── Phone: the league card is one row (2026-11-06 phone pass) ───────────────────────────────────
+ *
+ * Measured live at 375px on My team, Matchup and Trades: the league was named three times before any
+ * content — the top switcher, the swipe strip's neighbours, and this card's crest + name — and the
+ * card alone was 108px of two rows. On a phone the switcher is the one place the league is named,
+ * so the card keeps only what it adds: the type chip, Open League and League details, on one row.
+ * The section's aria-label still names the league. Desktop is unchanged.
+ */
+@media (max-width: 720px) {
+  .af-core .af-lctx {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 6px 9px;
+  }
+  .af-core .af-lctx .af-lctx-crest,
+  .af-core .af-lctx .af-lctx-name {
+    display: none;
+  }
+  .af-core .af-lctx .af-lctx-identity {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .af-core .af-lctx .af-lctx-identity:not(:has(.af-lctx-typechip, .af-lctx-typestatus:not(:empty))) {
+    display: none;
+  }
+  .af-core .af-lctx .af-lt-workspace-open {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+  }
+  .af-core .af-lctx .af-lctx-details {
+    flex: 0 0 auto;
+    width: auto;
+    margin-left: auto;
+  }
+  .af-core .af-lctx .af-lctx-details[open] {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  .af-core .af-lctx .af-lctx-type,
+  .af-core .af-lctx .af-lctx-action {
+    flex-basis: 100%;
+  }
+}

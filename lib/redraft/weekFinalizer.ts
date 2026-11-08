@@ -211,6 +211,11 @@ export type WeekFinalizerDeps = {
    * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
    */
   notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
+  /**
+   * "Your rebuild plan is ready" to a manager newly out of the race in a dynasty or keeper league
+   * (lib/trade-intel/rebuildPlanNotice.ts), once a season. Loaded on first use.
+   */
+  notifyRebuildPlans?: (args: { prisma: PrismaClient; seasonId: string }) => Promise<unknown>
   /** Settles the league chat's prediction polls once the week is final. Loaded on first use. */
   resolvePredictions?: (args: { prisma: PrismaClient; leagueId: string }) => Promise<unknown>
   prisma?: PrismaClient
@@ -824,6 +829,22 @@ export async function finalizeRedraftWeek(
       await notify({ prisma, seasonId: season.id, week: params.week })
     } catch (error) {
       console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * The healthy alternative to tanking: a manager whose team is now mathematically out of the race
+     * hears once a season that a rebuild plan is waiting. Same all-final gate as the result push, so
+     * standings are settled before anyone is called out of it.
+     */
+    try {
+      const notify =
+        deps.notifyRebuildPlans ?? (await import('@/lib/trade-intel/rebuildPlanNotice')).notifyRebuildPlans
+      await notify({ prisma, seasonId: season.id })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send rebuild plan notices', {
         leagueId: season.leagueId,
         week: params.week,
         error: error instanceof Error ? error.message : String(error),
