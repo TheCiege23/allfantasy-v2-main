@@ -10,7 +10,6 @@ import Link from 'next/link'
 import { DevyPromotionPanel } from './DevyPromotionPanel'
 import { DevyCommissionerTools } from './DevyCommissionerTools'
 import { DevyDraftCenter } from './DevyDraftCenter'
-import { DevyLeagueHomeCards } from './DevyLeagueHomeCards'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { DevySpecialtyHome, type DevyHomeBlock } from '@/components/league/specialty/devy/DevySpecialtyHome'
 import { DevyPromotionMoment } from '@/components/league/specialty/devy/DevyPromotionMoment'
@@ -160,11 +159,11 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         bestBallEnabled={summary.config.bestBallEnabled}
       />
 
-      <DevyLeagueHomeCards
-        leagueId={leagueId}
-        promotionEligibleCount={summary.promotionEligibleCount ?? 0}
-      />
-
+      {/*
+        DevyLeagueHomeCards used to sit here: six cards (draft countdowns, promotion window, class strength, best
+        stashes, graduates) with no data source — five always read "Date TBD" / "No data" / "—", and the promotion
+        window always "Closed", contradicting the hero above (Devy audit item 2, 2026-11-07). Removed, not hidden.
+      */}
       <DevyPromotionPanel leagueId={leagueId} rosterId={rosterId} isCommissioner={isCommissioner} />
 
       {isCommissioner && <DevyCommissionerTools leagueId={leagueId} />}
