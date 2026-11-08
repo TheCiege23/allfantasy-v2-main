@@ -53,17 +53,20 @@ import { requestEspnLeagueTest } from '@/components/core-app/import/EspnLeagueCh
 type EspnAuthStatus = {
   connected: boolean
   updatedAt: string | null
+  /** ESPN refused the saved cookies on a recent read (`league_auths.connectionStatus`). */
+  needsReconnect: boolean
 }
 
 async function fetchEspnAuthStatus(): Promise<EspnAuthStatus> {
   const res = await fetch('/api/league/auth', { cache: 'no-store' })
-  if (!res.ok) return { connected: false, updatedAt: null }
+  if (!res.ok) return { connected: false, updatedAt: null, needsReconnect: false }
   const data = await res.json().catch(() => null)
   const auths = Array.isArray(data?.auths) ? data.auths : []
   const espn = auths.find((a: { platform?: string }) => a.platform === 'espn')
   return {
     connected: Boolean(espn?.hasEspnCookies),
     updatedAt: espn?.updatedAt ?? null,
+    needsReconnect: Boolean(espn?.needsReconnect),
   }
 }
 
@@ -164,6 +167,7 @@ export function EspnConnectPanel({ onConnectedChange, leagueInputForTest }: Espn
   const { t, tInterpolate } = useOptionalLanguage()
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [needsReconnect, setNeedsReconnect] = useState(false)
   const [editing, setEditing] = useState(false)
   const [swid, setSwid] = useState('')
   const [espnS2, setEspnS2] = useState('')
@@ -209,6 +213,7 @@ export function EspnConnectPanel({ onConnectedChange, leagueInputForTest }: Espn
     const s = await fetchEspnAuthStatus()
     setStatus(s.connected ? 'connected' : 'disconnected')
     setUpdatedAt(s.updatedAt)
+    setNeedsReconnect(s.connected && s.needsReconnect)
     onConnectedChange?.(s.connected)
   }, [onConnectedChange])
 
@@ -529,6 +534,18 @@ export function EspnConnectPanel({ onConnectedChange, leagueInputForTest }: Espn
 
   return (
     <div className="af-espn" data-connected={status === 'connected' ? 'true' : 'false'}>
+      {status === 'connected' && needsReconnect && !editing ? (
+        <p className="af-espn-warn" role="alert" data-testid="espn-needs-reconnect">
+          <span className="af-espn-warn-mark" aria-hidden>
+            !
+          </span>
+          <span>
+            <strong>ESPN stopped accepting your saved connection.</strong> This happens when you sign
+            out of ESPN in that browser. Your leagues are safe but won&rsquo;t update until you paste
+            fresh cookies with &ldquo;Update cookies&rdquo;.
+          </span>
+        </p>
+      ) : null}
       {status === 'connected' && !editing ? (
         <div className="af-espn-connected">
           <span className="af-espn-badge af-num">{t('import.espn.badge')}</span>

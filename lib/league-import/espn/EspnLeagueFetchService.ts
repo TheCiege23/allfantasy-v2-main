@@ -6,6 +6,8 @@ import {
   EspnUnavailableError,
   assertEspnLeagueObject,
   buildEspnCookieHeader as buildCookieHeaderFromCredentials,
+  espnCurrentFantasySeason,
+  espnDefaultSeasonCandidates,
   fetchEspnLeagueJson,
 } from './espnFantasyClient'
 import {
@@ -15,6 +17,7 @@ import {
   ESPN_POSITION_LABELS,
   ESPN_TEAM_ABBREVIATIONS,
 } from './espnLookups'
+import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -25,7 +28,6 @@ import type {
   EspnImportTransaction,
 } from '@/lib/league-import/adapters/espn/types'
 
-const CURRENT_IMPORT_SEASON = new Date().getFullYear()
 const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mScoreboard', 'mSettings']
 const ESPN_DISCOVERY_VIEWS = ['mTeam', 'mSettings']
 const ESPN_DRAFT_VIEWS = ['mDraftDetail']
@@ -61,6 +63,8 @@ const ESPN_IR_SLOT = 21
 type EspnAuthContext = {
   swid: string | null
   espnS2: string | null
+  /** Whose STORED cookies these are — set only by `getEspnAuthForUser`, so health is recorded only for them. */
+  userId?: string
 }
 
 type EspnMemberSummary = {
@@ -246,8 +250,7 @@ export function parseEspnSourceInput(sourceInput: string): { leagueId: string; s
  */
 export function espnSeasonCandidates(input: EspnLeagueInput, now: Date = new Date()): number[] {
   if (input.seasonExplicit) return [input.season]
-  const year = now.getFullYear()
-  return now.getMonth() === 0 ? [year - 1, year] : [year, year - 1]
+  return espnDefaultSeasonCandidates(now)
 }
 
 /**
@@ -277,6 +280,7 @@ async function getEspnAuthForUser(userId: string): Promise<EspnAuthContext> {
   return {
     swid: auth?.espnSwid ?? null,
     espnS2: auth?.espnS2 ?? null,
+    userId,
   }
 }
 
@@ -296,12 +300,23 @@ async function loadEspnLeagueRaw(args: {
 
   for (const attempt of attempts) {
     try {
-      return await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      const raw = await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      if (attempt && args.auth.userId) void recordEspnCookiesAccepted(args.auth.userId)
+      return raw
     } catch (error) {
       lastError = error
 
       if (!(error instanceof EspnApiResponseError)) {
         throw error
+      }
+
+      /*
+       * ESPN refused the STORED cookies. Recorded even when the cookieless retry below then reads
+       * a public league fine: the connection is still dead, every private league and the
+       * team-ownership check will fail, and the user should hear about it now rather than later.
+       */
+      if (attempt && args.auth.userId && (error.status === 401 || error.status === 403)) {
+        void recordEspnCookiesRejected(args.auth.userId)
       }
 
       if (error.status === 404) {
@@ -1210,7 +1225,12 @@ function inferEspnSeasonFinished(args: {
   currentWeek: number | null
   raw: any
 }): boolean {
-  if (args.season < CURRENT_IMPORT_SEASON) return true
+  /*
+   * Read at call time, not module load: a server that started in December otherwise keeps last
+   * year's value forever. And the FANTASY season, not the calendar year — in January the 2026
+   * playoffs may still be running, so 2026 must not read as finished just because it is 2027.
+   */
+  if (args.season < espnCurrentFantasySeason()) return true
 
   const finalScoringPeriod = parseNumber(args.raw?.status?.finalScoringPeriod, null)
   if (finalScoringPeriod != null && args.currentWeek != null) {

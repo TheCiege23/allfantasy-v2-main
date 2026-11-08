@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { isLeagueTombstoned } from '@/lib/league-delete/leagueTombstones'
-import { getLeagueInfo, getLeagueMatchups, getLeagueRosters } from '@/lib/sleeper-client'
+import { getLeagueInfo, getLeagueMatchups, getLeagueRosters, getLeagueTransactions } from '@/lib/sleeper-client'
 import { isCompletedSleeperEliminationCandidate, verifySleeperSurvival, type SleeperSurvivalEvidence } from './survivalEvidence'
 
 type OwnerSeason = {
@@ -26,7 +26,11 @@ export async function importSleeperSurvival(
   owner: OwnerSeason, league: unknown, rosters: unknown, sleeperUserId: string,
 ): Promise<void> {
   try {
-    const evidence = await verifySleeperSurvival(league, rosters, sleeperUserId, week => getLeagueMatchups(owner.platformLeagueId, week))
+    const evidence = await verifySleeperSurvival(
+      league, rosters, sleeperUserId,
+      week => getLeagueMatchups(owner.platformLeagueId, week),
+      week => getLeagueTransactions(owner.platformLeagueId, week, { strict: true }),
+    )
     if (evidence) await saveSleeperSurvivalEvidence(owner, evidence)
   } catch (err) {
     console.warn('[sleeper-survival] Could not import completed result', err)

@@ -373,6 +373,60 @@ export function fetchEspnLeagueJson(
 }
 
 /**
+ * Seasons to try, in order, when nobody told us which one. ESPN keys an NFL fantasy league on the
+ * year its season STARTS, and that season runs September to January:
+ *
+ *   January        → last year first (the playoffs may still be on), then this year.
+ *   rest of year   → this year first (a renewed league), then last year (not renewed yet).
+ *
+ * Guessing the calendar year alone 404s a league that has not been renewed for most of the
+ * offseason, and in January it reads the wrong season outright.
+ */
+export function espnDefaultSeasonCandidates(now: Date = new Date()): number[] {
+  const year = now.getFullYear()
+  return now.getMonth() === 0 ? [year - 1, year] : [year, year - 1]
+}
+
+/** The season an NFL fantasy league is "in" right now — the first of the default candidates. */
+export function espnCurrentFantasySeason(now: Date = new Date()): number {
+  return espnDefaultSeasonCandidates(now)[0]
+}
+
+/**
+ * `fetchEspnLeagueJson` across several seasons: a 404 moves on to the next one, anything else
+ * (401/403, unavailable, format change) is a real answer and is thrown as-is. When every season
+ * 404s the LAST 404 is thrown, so callers keep their existing "not found" handling.
+ */
+export async function fetchEspnLeagueJsonFirstSeason(
+  args: {
+    game?: EspnFantasyGame
+    seasons: readonly number[]
+    leagueId: string
+    views: readonly string[]
+  },
+  opts: EspnFetchJsonOptions = {},
+): Promise<{ season: number; raw: unknown }> {
+  if (args.seasons.length === 0) throw new Error('fetchEspnLeagueJsonFirstSeason needs at least one season.')
+  let lastNotFound: EspnApiResponseError | null = null
+  for (const season of args.seasons) {
+    try {
+      const raw = await fetchEspnLeagueJson(
+        { game: args.game, season, leagueId: args.leagueId, views: args.views },
+        opts,
+      )
+      return { season, raw }
+    } catch (error) {
+      if (error instanceof EspnApiResponseError && error.status === 404) {
+        lastNotFound = error
+        continue
+      }
+      throw error
+    }
+  }
+  throw lastNotFound!
+}
+
+/**
  * Minimal structural check on a league object: it must carry at least one of the keys every view
  * we request returns. Deliberately loose — the contract has no NFL capture yet (`GAPS.md`), so this
  * catches "ESPN sent something else entirely" without guessing at fields it may legitimately omit.

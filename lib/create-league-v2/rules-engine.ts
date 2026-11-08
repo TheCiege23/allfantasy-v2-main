@@ -194,7 +194,8 @@ export function getDefaultTeamCount(
 /**
  * Execution modes shown on the create-league wizard.
  * Best Ball exposes `offline` + `auto` because those modes are part of the
- * core Best Ball product surface. Other formats keep `offline` settings-tab-only.
+ * core Best Ball product surface. Redraft, keeper, devy, survivor and dynasty offer
+ * `offline` at creation too; other formats keep it settings-tab-only.
  */
 const EXECUTION_DRAFT_IDS = ['auto', 'offline'] as const
 const KEEPER_EXECUTION_DRAFT_IDS = ['auto', 'offline', 'team'] as const
@@ -288,6 +289,10 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
       label: 'Auto',
       hint: 'CPU drafts for everyone',
     })
+    // A dynasty startup is often drafted in person; the commissioner enters the picks afterwards.
+    if (leagueType === 'dynasty' && !result.some((option) => option.id === 'offline')) {
+      result.push({ id: 'offline', label: 'Offline', hint: 'Commissioner records picks manually' })
+    }
   }
 
   return result

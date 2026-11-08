@@ -13,6 +13,11 @@ import { commissionerGateFailureResponse } from "@/lib/league-import/commissione
 import { testEspnLeagueConnection } from "@/lib/league-import/espn/EspnConnectionTestService";
 import { buildEspnImportSummary } from "@/lib/league-import/espn/espnImportSummary";
 import {
+  espnHealthResetFields,
+  recordEspnCookiesAccepted,
+  recordEspnCookiesRejected,
+} from "@/lib/league-import/espn/espnConnectionHealth";
+import {
   EspnFormatChangedError,
   EspnUnavailableError,
   redactEspnSecrets,
@@ -136,6 +141,11 @@ export async function POST(req: Request) {
         pastedCredentials: pasted,
         savedCredentials: saved ? { swid: saved.espnSwid, espnS2: saved.espnS2 } : null,
       });
+      if (saved && !result.ok && result.reason === "cookies_rejected" && result.usedSavedCookies) {
+        void recordEspnCookiesRejected(userId);
+      } else if (saved && result.ok && result.usedSavedCookies && result.cookiesVerified) {
+        void recordEspnCookiesAccepted(userId);
+      }
       // 200 for every ANSWER (including "private" and "not found") — the UI branches on `reason`.
       return NextResponse.json(result, { status: result.ok || result.reason !== "unavailable" ? 200 : 503 });
     }
@@ -177,6 +187,7 @@ export async function POST(req: Request) {
         update: {
           espnSwid: encrypt(pasted.swid!),
           espnS2: encrypt(pasted.espnS2!),
+          ...espnHealthResetFields(),
           updatedAt: new Date(),
         },
         create: {
@@ -184,6 +195,7 @@ export async function POST(req: Request) {
           platform: "espn",
           espnSwid: encrypt(pasted.swid!),
           espnS2: encrypt(pasted.espnS2!),
+          ...espnHealthResetFields(),
         },
       });
     }

@@ -50,6 +50,12 @@ export interface ImportPreviewManager {
   teamAbbreviation: string | null
   teamLogo: string | null
   managerAvatar: string | null
+  /**
+   * The provider flags this team as the league's commissioner or co-commissioner. A team picked from
+   * a list without proof may not be one of these (see `espn/espnPublicMemberImport.ts`), so the
+   * picker shows it as needing a connected account. Absent = not flagged.
+   */
+  isCommissionerTeam?: boolean
   /** Backward-compatible avatar field; mirrors managerAvatar. */
   avatar: string | null
   wins: number
@@ -384,6 +390,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
       players: r.player_ids ?? [],
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],
+      ...(r.is_commissioner === true || r.is_co_commissioner === true ? { isCommissionerTeam: true } : {}),
     }
   })
 

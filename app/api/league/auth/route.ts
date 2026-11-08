@@ -6,6 +6,7 @@ import { encrypt, decrypt } from '@/lib/league-auth-crypto';
 import { isAllowedLeagueAuthRequestOrigin } from '@/lib/extension/allowedRequestOrigin';
 import { getPublicSiteOrigin } from '@/lib/site-public-origin';
 import { validateEspnCookieInput } from '@/lib/league-import/espn/espnFantasyClient';
+import { ESPN_NEEDS_RECONNECT, espnHealthResetFields } from '@/lib/league-import/espn/espnConnectionHealth';
 
 const SUPPORTED_PLATFORMS = ['mfl', 'yahoo', 'espn', 'fantrax'];
 
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
     if (espnCookies) {
       data.espnSwid = encrypt(espnCookies.swid);
       data.espnS2 = encrypt(espnCookies.espnS2);
+      Object.assign(data, espnHealthResetFields());
     }
 
     await (prisma as any).leagueAuth.upsert({
@@ -114,6 +116,8 @@ export async function GET() {
         oauthToken: true,
         espnSwid: true,
         espnS2: true,
+        connectionStatus: true,
+        lastFailureAt: true,
       },
     });
 
@@ -122,6 +126,9 @@ export async function GET() {
       hasApiKey: !!a.apiKey,
       hasOauthToken: !!a.oauthToken,
       hasEspnCookies: !!(a.espnSwid && a.espnS2),
+      /* ESPN refused the saved cookies on a recent read; the panel asks for fresh ones. */
+      needsReconnect: a.platform === 'espn' && a.connectionStatus === ESPN_NEEDS_RECONNECT,
+      lastFailureAt: a.platform === 'espn' ? a.lastFailureAt ?? null : null,
       connectedAt: a.createdAt,
       updatedAt: a.updatedAt,
     }));

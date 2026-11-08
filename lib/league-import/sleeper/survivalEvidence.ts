@@ -1,8 +1,9 @@
 const MAX_SCORING_WEEK = 30
+const COMMISSIONER_DROP_WINDOW_MS = 60 * 60 * 1000
 
 export type SleeperSurvivalEvidence = {
   version: 1
-  method: 'sleeper_chopped' | 'verified_weekly_chops'
+  method: 'sleeper_chopped' | 'verified_weekly_chops' | 'verified_commissioner_drops'
   rosterId: number
   firstWeek: number
   finalWeek: number
@@ -23,7 +24,8 @@ function rosterId(value: unknown): value is number {
 
 export function readSleeperSurvivalEvidence(value: unknown): SleeperSurvivalEvidence | null {
   const v = record(value)
-  if (v.version !== 1 || (v.method !== 'sleeper_chopped' && v.method !== 'verified_weekly_chops')) return null
+  if (v.version !== 1 || (v.method !== 'sleeper_chopped' && v.method !== 'verified_weekly_chops' &&
+      v.method !== 'verified_commissioner_drops')) return null
   if (!rosterId(v.rosterId) || !week(v.firstWeek) || !week(v.finalWeek) || v.firstWeek > v.finalWeek) return null
   if (v.eliminatedWeek === null) {
     if (v.method !== 'sleeper_chopped') return null
@@ -39,7 +41,7 @@ export function sleeperSurvivalPeriods(evidence: SleeperSurvivalEvidence) {
   return { totalPeriods, periods: evidence.eliminatedWeek === null ? totalPeriods : evidence.eliminatedWeek - evidence.firstWeek }
 }
 
-type WeeklyScore = { id: number; points: number }
+type WeeklyScore = { id: number; points: number; players: unknown[] }
 
 function weeklyScores(input: unknown, expectedRosters: Set<number>): WeeklyScore[] | null {
   if (!Array.isArray(input) || input.length !== expectedRosters.size) return null
@@ -53,7 +55,7 @@ function weeklyScores(input: unknown, expectedRosters: Set<number>): WeeklyScore
     seen.add(id)
     const hasPlayers = Array.isArray(row.players) && row.players.length > 0
     const hasStarter = Array.isArray(row.starters) && row.starters.some(id => typeof id === 'string' && id !== '' && id !== '0')
-    if (hasPlayers && hasStarter) active.push({ id, points })
+    if (hasPlayers && hasStarter) active.push({ id, points, players: row.players as unknown[] })
     // Older completed seasons can retain starter IDs after the roster was cleared.
     // An empty roster must also have zero points and pass the full elimination replay.
     else if (hasPlayers || points !== 0) return null
@@ -62,15 +64,13 @@ function weeklyScores(input: unknown, expectedRosters: Set<number>): WeeklyScore
 }
 
 function verifiedWeeklyExit(
-  weeks: unknown[], expectedRosters: Set<number>, ownerRoster: number,
+  scores: WeeklyScore[][], expectedRosters: Set<number>, ownerRoster: number,
 ): number | null {
-  const scores = weeks.map(value => weeklyScores(value, expectedRosters))
   let prior = scores[0]
   if (!prior || prior.length !== expectedRosters.size || scores.at(-1)?.length !== 2) return null
   let exit: number | null = null
   for (let i = 1; i < scores.length; i++) {
     const current = scores[i]
-    if (!current) return null
     const priorIds = new Set(prior.map(r => r.id))
     if (current.some(r => !priorIds.has(r.id))) return null
     const currentIds = new Set(current.map(r => r.id))
@@ -86,6 +86,44 @@ function verifiedWeeklyExit(
   return exit
 }
 
+async function verifiedCommissionerExit(
+  scores: WeeklyScore[][], ownerRoster: number, firstWeek: number,
+  getTransactions: (week: number) => Promise<unknown>,
+): Promise<number | null> {
+  // The owner must have a scored roster up to the cut and stay inactive afterward.
+  const firstMissing = scores.findIndex(active => active.every(row => row.id !== ownerRoster))
+  if (firstMissing <= 0 || scores.slice(firstMissing).some(active => active.some(row => row.id === ownerRoster))) return null
+  const cutIndex = firstMissing - 1
+  const active = scores[cutIndex]
+  const owner = active.find(row => row.id === ownerRoster)
+  if (!owner || active.length < 2 || active.some(row => row.id !== ownerRoster && row.points <= owner.points)) return null
+
+  const expectedPlayers = new Set(owner.players.filter((id): id is string => typeof id === 'string' && id !== '' && id !== '0'))
+  if (expectedPlayers.size !== owner.players.length) return null
+  const eliminatedWeek = firstWeek + cutIndex
+  const transactions = await getTransactions(eliminatedWeek)
+  if (!Array.isArray(transactions)) return null
+  const dropped = new Set<string>()
+  const commissioners = new Set<string>()
+  const timestamps: number[] = []
+  for (const raw of transactions) {
+    const tx = record(raw)
+    if (tx.type !== 'commissioner' || tx.status !== 'complete' || tx.leg !== eliminatedWeek) continue
+    const relevantDrops = Object.entries(record(tx.drops)).filter(([id, team]) => team === ownerRoster && expectedPlayers.has(id))
+    if (relevantDrops.length === 0) continue
+    if (typeof tx.creator !== 'string' || !tx.creator || typeof tx.status_updated !== 'number' ||
+        !Number.isSafeInteger(tx.status_updated) || tx.status_updated <= 0 ||
+        Object.values(record(tx.adds)).includes(ownerRoster)) return null
+    for (const [id] of relevantDrops) dropped.add(id)
+    commissioners.add(tx.creator)
+    timestamps.push(tx.status_updated)
+  }
+  // Require a single, time-bounded commissioner action covering the exact roster.
+  if (dropped.size !== expectedPlayers.size || commissioners.size !== 1 ||
+      Math.max(...timestamps) - Math.min(...timestamps) > COMMISSIONER_DROP_WINDOW_MS) return null
+  return eliminatedWeek
+}
+
 export function isCompletedSleeperEliminationCandidate(value: unknown): boolean {
   const league = record(value)
   const settings = record(league.settings)
@@ -96,14 +134,15 @@ export function isCompletedSleeperEliminationCandidate(value: unknown): boolean 
 
 /**
  * Native Chopped seasons record exact cut weeks. For a custom Guillotine league,
- * every pre-final cut must be independently corroborated by the roster disappearing
- * after its unique lowest score. A finalist's result needs an explicit outcome.
+ * verify the full weekly elimination pattern or corroborate the owner's exit
+ * with a completed commissioner drop for every player on the cut-week roster.
  */
 export async function verifySleeperSurvival(
   leagueValue: unknown,
   rosterValues: unknown,
   sleeperUserId: string,
   getWeek: (week: number) => Promise<unknown>,
+  getTransactions?: (week: number) => Promise<unknown>,
 ): Promise<SleeperSurvivalEvidence | null> {
   const league = record(leagueValue)
   const settings = record(league.settings)
@@ -138,9 +177,15 @@ export async function verifySleeperSurvival(
     const batch = Array.from({ length: Math.min(4, finalWeek - start + 1) }, (_, i) => getWeek(start + i))
     weeks.push(...await Promise.all(batch))
   }
-  const exit = verifiedWeeklyExit(weeks, expectedRosters, ownerRoster)
-  return exit === null ? null : {
+  const scores = weeks.map(value => weeklyScores(value, expectedRosters))
+  if (!scores.every((active): active is WeeklyScore[] => active !== null)) return null
+  const exit = verifiedWeeklyExit(scores, expectedRosters, ownerRoster)
+  if (exit !== null) return {
     version: 1, method: 'verified_weekly_chops', rosterId: ownerRoster, firstWeek, finalWeek,
     eliminatedWeek: firstWeek + exit,
+  }
+  const eliminatedWeek = getTransactions ? await verifiedCommissionerExit(scores, ownerRoster, firstWeek, getTransactions) : null
+  return eliminatedWeek === null ? null : {
+    version: 1, method: 'verified_commissioner_drops', rosterId: ownerRoster, firstWeek, finalWeek, eliminatedWeek,
   }
 }

@@ -225,6 +225,12 @@ type Phase =
        */
       teams: PreviewTeam[] | null
       claimTeamId: string | null
+      /*
+       * A PUBLIC ESPN league previewed without proof (`importBlockedReason` set): the answer to
+       * "Who's the commissioner?". `espn` / `member` unlock the team picker and a no-cookie import;
+       * `me` points at Connect ESPN. Null until answered, and always null for other providers.
+       */
+      espnRunBy: EspnRunBy | null
       /* `dataQuality.coverageSummary` — every bucket, for the compact "what comes across" list. */
       coverageRows: PreviewCoverageRow[]
       /*
@@ -268,7 +274,30 @@ interface PreviewTeam {
   teamId: string
   teamName: string
   ownerName: string
+  /** The provider flags it as a commissioner's team: claimable only with a connected account. */
+  commissionerTeam?: boolean
 }
+
+/** "Who's the commissioner of this league on ESPN?" — see `espnPublicMemberImport.ts`. */
+type EspnRunBy = 'espn' | 'member' | 'me'
+
+const ESPN_RUN_BY_OPTIONS: ReadonlyArray<{ value: EspnRunBy; label: string; help: string }> = [
+  {
+    value: 'espn',
+    label: 'ESPN runs it',
+    help: 'A public league you joined on ESPN. Pick your team — no ESPN sign-in needed.',
+  },
+  {
+    value: 'member',
+    label: 'Someone else in the league',
+    help: 'Pick your team — no ESPN sign-in needed. Your commissioner can connect later.',
+  },
+  {
+    value: 'me',
+    label: "I'm the commissioner",
+    help: 'Connect ESPN once so we can confirm it. That unlocks invites and assigning teams.',
+  },
+]
 
 /**
  * Providers whose preview must ask "which team is yours?" before importing.
@@ -278,6 +307,44 @@ interface PreviewTeam {
  * account at all, so nothing else can ever say which team is the importer's.
  */
 const PICKS_TEAM_ON_PREVIEW: readonly ImportProvider[] = ['fleaflicker']
+
+/**
+ * What the preview card shows for the team choice and the Import button. One function, so the
+ * picker, the blocked message and the button cannot disagree about which state they are in.
+ *
+ *   espnAsk     a PUBLIC ESPN league previewed without proof — ask "Who's the commissioner?"
+ *   espnMember  …answered "ESPN runs it" / "someone else": pick a team, import with no cookies
+ *   showPicker  the team list is on screen
+ *   blocked     Import stays off for a reason other than "pick a team"
+ */
+function previewImportState(
+  provider: ImportProvider,
+  phase: {
+    importBlockedReason: string | null
+    teams: PreviewTeam[] | null
+    espnRunBy: EspnRunBy | null
+    claimTeamId: string | null
+  },
+) {
+  const espnAsk = provider === 'espn' && phase.importBlockedReason !== null && phase.teams !== null
+  const espnMember = espnAsk && (phase.espnRunBy === 'espn' || phase.espnRunBy === 'member')
+  const showPicker = phase.teams !== null && (phase.importBlockedReason === null || espnMember)
+  const blocked = phase.importBlockedReason !== null && !espnMember
+  const needsPick = showPicker && !phase.claimTeamId
+  return { espnAsk, espnMember, showPicker, blocked, needsPick }
+}
+
+/** The Import button names what is still missing, so a disabled button never just sits there. */
+function importButtonLabel(
+  provider: ImportProvider,
+  phase: Parameters<typeof previewImportState>[1],
+): string {
+  const st = previewImportState(provider, phase)
+  if (st.espnAsk && phase.espnRunBy === null) return 'Answer the question first'
+  if (st.espnAsk && phase.espnRunBy === 'me') return 'Connect ESPN first'
+  if (st.needsPick) return 'Pick your team first'
+  return 'Import this league'
+}
 
 /** Read `managers` off a preview defensively — it crossed a network. */
 function readPreviewTeams(raw: unknown): PreviewTeam[] {
@@ -293,7 +360,7 @@ function readPreviewTeams(raw: unknown): PreviewTeam[] {
       typeof r.displayName === 'string' && r.displayName.trim() && r.displayName.trim() !== teamName
         ? r.displayName.trim()
         : ''
-    out.push({ teamId, teamName, ownerName })
+    out.push({ teamId, teamName, ownerName, ...(r.isCommissionerTeam === true ? { commissionerTeam: true } : {}) })
   }
   return out
 }
@@ -881,7 +948,14 @@ export type ImportV4Props = {
 type VerifyResume =
   | { k: 'discover'; identifier: string }
   | { k: 'preview'; sourceId: string; attest: boolean }
-  | { k: 'commit'; sourceId: string; attested: boolean; force: boolean; claimTeamId: string | null }
+  | {
+      k: 'commit'
+      sourceId: string
+      attested: boolean
+      force: boolean
+      claimTeamId: string | null
+      espnRunBy?: EspnRunBy | null
+    }
   | { k: 'bulk' }
   | { k: 'row'; sourceId: string }
 
@@ -1246,7 +1320,11 @@ export function ImportV4({
         reasonCode: payload?.importable === false ? 'PREVIEW_ONLY' : null,
         espnConnected,
       })
-      const teams = PICKS_TEAM_ON_PREVIEW.includes(provider) ? readPreviewTeams(payload?.managers) : []
+      /* A public ESPN league with no proof of membership can still be joined by picking a team —
+         after the user says they are not its commissioner. See `ESPN_RUN_BY_OPTIONS`. */
+      const espnPickable = provider === 'espn' && payload?.importable === false
+      const teams =
+        PICKS_TEAM_ON_PREVIEW.includes(provider) || espnPickable ? readPreviewTeams(payload?.managers) : []
       setPhase({
         k: 'preview',
         sourceId,
@@ -1254,6 +1332,7 @@ export function ImportV4({
         attested: attest,
         teams: teams.length > 0 ? teams : null,
         claimTeamId: null,
+        espnRunBy: null,
         coverageRows: readPreviewCoverageRows(payload?.dataQuality?.coverageSummary),
         canConfirmCommissioner: payload?.commissionerConfirmable === true,
         // Only an explicit `false` blocks. A missing field is an ordinary, importable preview.
@@ -1282,7 +1361,13 @@ export function ImportV4({
   }, [initialLeagueSourceId, provider, runPreview])
 
   const runCommit = useCallback(
-    async (sourceId: string, attested: boolean, force = false, claimTeamId: string | null = null) => {
+    async (
+      sourceId: string,
+      attested: boolean,
+      force = false,
+      claimTeamId: string | null = null,
+      espnRunBy: EspnRunBy | null = null,
+    ) => {
       setError(null)
       setPhase({ k: 'committing', sourceId })
       /* Same reasoning as `importOneLeague`: a previously-deleted row is only
@@ -1296,16 +1381,17 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId
+        force || confirmReimportOfDeleted || claimTeamId || espnRunBy
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
+              ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
             }
           : undefined
       )
       if (!res.ok && res.verificationRequired) {
-        setVerifyGate({ k: 'commit', sourceId, attested, force, claimTeamId })
+        setVerifyGate({ k: 'commit', sourceId, attested, force, claimTeamId, espnRunBy })
         setPhase({ k: 'idle' })
         return
       }
@@ -1715,7 +1801,7 @@ export function ImportV4({
     try {
       if (gate.k === 'discover') await runDiscover(gate.identifier)
       else if (gate.k === 'preview') await runPreview(gate.sourceId, gate.attest)
-      else if (gate.k === 'commit') await runCommit(gate.sourceId, gate.attested, gate.force, gate.claimTeamId)
+      else if (gate.k === 'commit') await runCommit(gate.sourceId, gate.attested, gate.force, gate.claimTeamId, gate.espnRunBy ?? null)
       else if (gate.k === 'bulk') await runBulkImport()
       else await retryLeague(gate.sourceId)
     } finally {
@@ -2895,18 +2981,20 @@ export function ImportV4({
                         : espnCheck.k === 'cookies_rejected'
                           ? 'Step 2 · Reconnect ESPN'
                           : espnCheck.k === 'ok'
-                            ? 'Step 2 · Confirm which team is yours'
-                            : 'Step 2 · Connect ESPN'}
+                            ? 'Optional · Commissioners, connect ESPN'
+                            : 'Step 2 · Connect ESPN (private leagues and commissioners)'}
                     </span>
                     {/*
-                      ⚠ SAYS "PUBLIC ONES INCLUDED" ON PURPOSE. Earlier copy implied public ESPN
-                      leagues imported directly. They do not, and that sentence cost a real user
-                      a long detour.
+                      Owner decision 2026-11-08: a PUBLIC league imports without cookies — the member
+                      picks their team (`espnPublicMemberImport.ts`). This used to say every league
+                      needs cookies "public ones included", which was true until that change and is
+                      now the thing most likely to send someone on a detour they do not need.
                     */}
                     <span>
-                      ESPN has no sign-in for other apps, so we read your league as you using two
-                      browser cookies — that is also how we confirm which team is yours, so every
-                      ESPN league needs it, public ones included. They are stored encrypted, only
+                      Public league and you are not the commissioner? Skip this &mdash; press Connect
+                      above and pick your team. Private leagues, and commissioners who want invites
+                      and team assignments, connect ESPN with two browser cookies: ESPN has no sign-in
+                      for other apps, so we read the league as you. They are stored encrypted, only
                       used to read, and you can disconnect ESPN at any time.
                     </span>
                   </p>
@@ -3140,7 +3228,7 @@ export function ImportV4({
               {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
             </span>
             <h2 className="af-label">
-              {phase.importBlockedReason ? 'Preview only' : 'Ready to import'}
+              {previewImportState(provider, phase).blocked ? 'Preview only' : 'Ready to import'}
             </h2>
           </header>
           <p className="af-im-league-name af-im-preview-name">{phase.leagueName}</p>
@@ -3220,16 +3308,61 @@ export function ImportV4({
             choice is sent with the commit, validated server-side against this league's rosters,
             and used ONLY to claim that one team in the league this import creates.
           */}
-          {phase.teams && !phase.importBlockedReason ? (
+          {/*
+            ── ESPN: who runs this league? ─────────────────────────────────────────
+            Only for a public league we could read but not prove membership in. "ESPN runs it" and
+            "someone else" import with no cookies as a member; "I'm the commissioner" needs proof.
+          */}
+          {previewImportState(provider, phase).espnAsk ? (
+            <fieldset className="af-im-runby" data-testid="import-espn-run-by">
+              <legend className="af-label">Who&rsquo;s the commissioner of this league on ESPN?</legend>
+              {ESPN_RUN_BY_OPTIONS.map((o) => (
+                <label
+                  key={o.value}
+                  className="af-im-runby-option"
+                  data-selected={phase.espnRunBy === o.value ? 'true' : undefined}
+                >
+                  <input
+                    type="radio"
+                    name="espn-run-by"
+                    value={o.value}
+                    checked={phase.espnRunBy === o.value}
+                    data-testid={`import-espn-run-by-${o.value}`}
+                    onChange={() =>
+                      setPhase((prev) =>
+                        prev.k === 'preview' ? { ...prev, espnRunBy: o.value, claimTeamId: null } : prev,
+                      )
+                    }
+                  />
+                  <span className="af-im-runby-text">
+                    <strong>{o.label}</strong>
+                    <span className="af-im-field-help">{o.help}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          {phase.teams && previewImportState(provider, phase).showPicker ? (
             <div data-testid="import-preview-team-pick">
               <h3 className="af-label">Which team is yours?</h3>
               <p className="af-im-field-help">
-                {providerLabel} doesn&rsquo;t tell us which team you manage. Pick yours so this league
-                shows up as yours on AllFantasy.
+                {previewImportState(provider, phase).espnMember ? (
+                  <>
+                    Pick yours and it shows up as yours on AllFantasy. If someone already claimed it,
+                    connecting ESPN proves it&rsquo;s yours and moves it to you.
+                  </>
+                ) : (
+                  <>
+                    {providerLabel} doesn&rsquo;t tell us which team you manage. Pick yours so this
+                    league shows up as yours on AllFantasy.
+                  </>
+                )}
               </p>
               <ul className="af-im-league-list">
                 {phase.teams.map((t) => {
                   const picked = phase.claimTeamId === t.teamId
+                  /* A commissioner's team is claimable only with proof — the server refuses it too. */
+                  const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
                   return (
                     <li key={t.teamId} className="af-im-league" data-picked={picked ? 'true' : undefined}>
                       <span className="af-im-league-main">
@@ -3240,6 +3373,8 @@ export function ImportV4({
                         type="button"
                         className="af-btn af-btn--ghost af-im-league-btn"
                         aria-pressed={picked}
+                        disabled={locked}
+                        title={locked ? 'Commissioner team: connect ESPN to claim it' : undefined}
                         data-testid={`import-preview-team-${t.teamId}`}
                         onClick={() =>
                           setPhase((prev) =>
@@ -3247,7 +3382,7 @@ export function ImportV4({
                           )
                         }
                       >
-                        {picked ? 'Your team' : 'This is my team'}
+                        {locked ? 'Commissioner — connect ESPN' : picked ? 'Your team' : 'This is my team'}
                       </button>
                     </li>
                   )
@@ -3255,9 +3390,16 @@ export function ImportV4({
               </ul>
             </div>
           ) : null}
-          {phase.importBlockedReason ? (
+          {phase.importBlockedReason && !previewImportState(provider, phase).espnAsk ? (
             <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
               {phase.importBlockedReason}
+            </p>
+          ) : null}
+          {previewImportState(provider, phase).espnAsk && phase.espnRunBy === 'me' ? (
+            <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
+              Connect ESPN above so we can confirm you run this league &mdash; it takes about two
+              minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
+              the commissioner tools.
             </p>
           ) : null}
           {/*
@@ -3283,13 +3425,21 @@ export function ImportV4({
             <button
               type="button"
               className="af-btn af-im-submit"
-              disabled={phase.importBlockedReason !== null || (phase.teams !== null && !phase.claimTeamId)}
+              disabled={previewImportState(provider, phase).blocked || previewImportState(provider, phase).needsPick}
               // The second half of the contract described on the row button above:
               // `import-commit` is the step the canonical import spec proves.
               data-testid="import-commit"
-              onClick={() => void runCommit(phase.sourceId, phase.attested, false, phase.claimTeamId)}
+              onClick={() =>
+                void runCommit(
+                  phase.sourceId,
+                  phase.attested,
+                  false,
+                  phase.claimTeamId,
+                  previewImportState(provider, phase).espnMember ? phase.espnRunBy : null,
+                )
+              }
             >
-              {phase.teams !== null && !phase.claimTeamId ? 'Pick your team first' : 'Import this league'}
+              {importButtonLabel(provider, phase)}
             </button>
             <button
               type="button"

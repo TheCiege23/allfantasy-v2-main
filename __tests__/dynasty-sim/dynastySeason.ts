@@ -16,6 +16,7 @@
 import type { InMemoryPrisma } from '../redraft-season-simulation/inMemoryPrisma'
 import { rowsOf } from '../redraft-season-simulation/inMemoryPrisma'
 import { dailyBoxLine, dailyNormalizer, easternDayKey, nflWeekStats, rngFor } from '../helpers/redraftFullSeasonHarness'
+import { aggregateWeeklyStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import type { Finding, LeagueRun, SimEnv } from './dynastyHarness'
 
 const DAY_MS = 86_400_000
@@ -51,6 +52,9 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   const { updateStandings } = await import('@/lib/redraft/standingsEngine')
   const { resolveDailySportWeekWindow } = await import('@/lib/season-week/dailySportSeasonStarts')
   const scorer = buildLeagueStatScorer({ sport, settings: league.settings })
+  // A daily sport scores by DAILY lineup only when the league turns that on; otherwise from the weekly line.
+  const dailyLineups = daily && (await import('@/lib/redraft/dailyLineups')).isDailyLineupScoringEnabled(league.settings, sport)
+  run.stats.dailyLineupScoring = dailyLineups
   if (!scorer) {
     add({ code: 'NO_SCORER', stage: 'season', message: `No stat scorer resolves for this ${sport} dynasty league.` })
     return
@@ -78,19 +82,25 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
         continue
       }
       const normalize = dailyNormalizer(sport as never)
+      const lines: unknown[] = []
       for (let d = 0; d < 7; d += 1) {
         const line = dailyBoxLine(sport as never, p.position, rng, s, d)
         if (!line) continue
+        lines.push(line)
         await db.playerDailyScore.create({
-          data: { playerId: p.playerId, sport, season: seasonYear, week, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, isFinalized: true },
+          data: { playerId: p.playerId, sport, season: seasonYear, week, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, gamesPlayed: 1, isFinalized: true },
         })
       }
+      // The ingest also rolls the days into a weekly line; a league scored by weekly lineup reads that.
+      await db.playerWeeklyScore.create({
+        data: { playerId: p.playerId, week, season: seasonYear, sport, stats: aggregateWeeklyStats(lines, normalize).stats, isFinalized: true },
+      })
     }
     return true
   }
   const clearStats = () => {
-    // Scenarios keep the NFL weeks: Max PF (the rookie order) is computed from every week's lines.
-    if (SCENARIOS && !daily) return
+    // Scenarios keep every week's lines: Max PF (the rookie order) is computed from all of them.
+    if (SCENARIOS) return
     db.$tables.set('PlayerWeeklyScore', [])
     db.$tables.set('PlayerDailyScore', [])
   }
@@ -99,15 +109,23 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   const expectedScore = (rosterId: string, week: number): number => {
     let total = 0
     const starters = playerRows().filter((p) => p.rosterId === rosterId && isScoringStarterSlot(p.slotType))
-    if (!daily) {
+    if (!daily || !dailyLineups) {
       for (const p of starters) {
         const row = (rowsOf(db, 'PlayerWeeklyScore') as any[]).find((r) => r.playerId === p.playerId && r.week === week)
         if (row) total += scorer(row.stats, p.position)
       }
       return round2(total)
     }
+    // Only this week's days: with the scenarios on, earlier weeks' lines are kept.
+    const window = resolveDailySportWeekWindow(sport as never, seasonYear, week)
+    const inWeek = (day: unknown) => {
+      const t = new Date(day as string | Date).getTime()
+      return !window || (t >= window.start.getTime() && t < window.end.getTime())
+    }
+    const byPlayer = new Set(starters.map((p) => p.playerId))
+    const rows = (rowsOf(db, 'PlayerDailyScore') as any[]).filter((r) => byPlayer.has(r.playerId) && inWeek(r.scoringDay))
     for (const p of starters) {
-      for (const row of (rowsOf(db, 'PlayerDailyScore') as any[]).filter((r) => r.playerId === p.playerId)) total += scorer(row.stats, p.position)
+      for (const row of rows.filter((r) => r.playerId === p.playerId)) total += scorer(row.stats, p.position)
     }
     return round2(total)
   }

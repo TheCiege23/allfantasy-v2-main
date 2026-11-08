@@ -54,6 +54,8 @@ const userFor = (i: number) => {
 type EnforcedRoster = {
   templateId: string
   totalSlots: number
+  /** Starters + bench + devy: what a startup pick fills. */
+  activeSlots: number
   draftable: string[]
   /** Fixed single-position starter needs, e.g. { QB: 1, RB: 2 }. */
   need: Record<string, number>
@@ -66,7 +68,10 @@ async function enforcedRoster(leagueId: string): Promise<EnforcedRoster> {
   const draftable = [...new Set(slots.flatMap((s) => (s.starterCount > 0 ? s.allowedPositions : [])))]
   const need: Record<string, number> = {}
   for (const s of slots) if (s.starterCount > 0 && s.allowedPositions.length === 1) need[s.allowedPositions[0]!] = (need[s.allowedPositions[0]!] ?? 0) + s.starterCount
-  return { templateId: String(payload.template?.templateId ?? ''), totalSlots: Number(payload.totalRosterSlots ?? 0), draftable, need }
+  // The spots a startup pick is placed in: starters, bench and devy — never IR or taxi.
+  const { computeStartupDraftCapacity } = await import('@/lib/draft/draftSettingsPolicy')
+  const activeSlots = computeStartupDraftCapacity(slots as never)
+  return { templateId: String(payload.template?.templateId ?? ''), totalSlots: Number(payload.totalRosterSlots ?? 0), activeSlots, draftable, need }
 }
 
 /**
@@ -139,6 +144,10 @@ export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySp
   run.stats.enforcedRoster = roster
   if (run.rounds > roster.totalSlots) {
     run.findings.push({ code: 'DRAFT_LONGER_THAN_ROSTER', stage: 'create', message: `${run.rounds} startup rounds for ${roster.totalSlots} roster slots — the draft cannot finish.` })
+  }
+  // A startup shorter than the active roster leaves every team with empty spots after the draft.
+  if (roster.activeSlots > 0 && run.rounds > 0 && run.rounds < roster.activeSlots && !(session?.devyConfig as any)?.enabled) {
+    run.findings.push({ code: 'STARTUP_DRAFT_SHORT_OF_ROSTER', stage: 'create', message: `${run.rounds} startup rounds for ${roster.activeSlots} active roster spots (starters + bench) — every team ends the draft with ${roster.activeSlots - run.rounds} empty.` })
   }
   const expectedDraftType = input.draft === 'snake_3rr' ? 'snake' : input.draft === 'offline' || input.draft === 'auto' ? null : input.draft
   if (session && expectedDraftType && session.draftType !== expectedDraftType) {
