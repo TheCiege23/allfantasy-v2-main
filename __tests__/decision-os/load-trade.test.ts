@@ -58,7 +58,10 @@ describe('loadTrade — AfLeagueTrade', () => {
       trade: {
         id: 'T1', leagueId: 'L1', sport: 'NFL', status: 'proposed',
         origin: { source: 'af', platform: 'native', externalLeagueId: null, externalTradeId: null, deepLink: null, rostersSyncedAt: NOW.toISOString(), rawStatus: 'pending' },
-        sideA: { teamId: 'r1', rosterId: 'r1', gives: [{ kind: 'player', playerId: '4984', name: 'Josh Allen', position: null }] },
+        sideA: { teamId: 'r1', rosterId: 'r1', gives: [{
+          kind: 'player', playerId: '4984', name: 'Josh Allen', position: null,
+          idSpace: 'sleeper', identity: { ok: true, name: 'Josh Allen', position: null },
+        }] },
         sideB: { teamId: 'r2', rosterId: 'r2', gives: [{ kind: 'pick', season: 2027, round: 1, originalTeamId: 'r2', label: '2027 1st' }] },
         proposedAt: '2026-09-26T10:00:00.000Z',
         completedAt: null,
