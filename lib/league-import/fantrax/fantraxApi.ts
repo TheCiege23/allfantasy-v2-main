@@ -26,6 +26,8 @@
  * `V2KZEDYPMM8JP61B` is a 400. Never normalise the case of one.
  */
 
+import { fantraxDisplayName } from './fantraxPlayerName'
+
 export const FANTRAX_FXEA_BASE = 'https://www.fantrax.com/fxea/general'
 
 /**
@@ -646,7 +648,8 @@ export function resolveRosters(
       const hit = playerMap[item.id]
       return {
         fantraxId: item.id,
-        name: hit?.name ?? null,
+        // "First Last" whatever order the directory was in: a refresh carries earlier snapshot names forward.
+        name: hit?.name ? fantraxDisplayName(hit.name) : null,
         team: hit?.team ?? null,
         position: item.position,
         primaryPosition: hit?.position ?? null,
