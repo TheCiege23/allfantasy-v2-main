@@ -117,7 +117,12 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
 
   return (
     <SpecialtyShell format="devy" testId="devy-specialty">
-    <div className="space-y-4">
+    {/*
+      The specialty shell is dark in every mode, so the Tailwind panels under the hero (pool line, Draft Center,
+      promotion panel, commissioner tools) opt out of the light-mode readability clamp, which otherwise turned their
+      text-white dark on this dark panel (Devy audit item 4, 2026-11-08).
+    */}
+    <div className="af-draft-dark space-y-4" data-devy-home-body>
       <DevySpecialtyHome
         leagueId={leagueId}
         sport={sport}
