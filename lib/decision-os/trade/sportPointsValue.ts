@@ -62,6 +62,7 @@ export type BoardPlayer = {
   sampleGames: number | null
   /** Every other id this player is known by (Rolling Insights, Sleeper), for resolving a surface's id. */
   aliases: readonly string[]
+  rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
   /**
@@ -98,6 +99,7 @@ export type SportSeasonWindow = {
 export type SportPointsContext = {
   sport: PointsGradedSport
   board: readonly BoardPlayer[]
+  rosterIndex?: ReadonlyMap<string, BoardPlayer>
   /** Best free agent per position (upper-cased), already computed against this league. */
   replacementByPosition: ReadonlyMap<string, { name: string; perGame: number }>
   window: SportSeasonWindow
@@ -277,12 +279,19 @@ function meetsGamesBar(p: Pick<BoardPlayer, 'sampleGames'>): boolean {
  * alias, with a sport prefix (`NBA:114`) stripped; a name must be carried by exactly one board player.
  */
 export function resolveBoardPlayer(
-  asset: { playerId?: string | null; name?: string | null },
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
   board: readonly BoardPlayer[],
   index?: ReadonlyMap<string, BoardPlayer>,
-): { ok: true; player: BoardPlayer } | { ok: false; reason: string } {
+  rosterIndex?: ReadonlyMap<string, BoardPlayer>,
+): { ok: true; player: BoardPlayer } | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const label = String(asset.name ?? '').trim() || String(asset.playerId ?? '').trim() || 'A player'
   const raw = String(asset.playerId ?? '').trim()
+  const rosterId = asset.rosterPlayerId?.trim()
+  if (rosterId && rosterIndex) {
+    const hit = rosterIndex.get(rosterId) ?? (raw ? rosterIndex.get(raw) : undefined)
+    return hit ? { ok: true, player: hit }
+      : { ok: false, reason: `${label} has no projection linked to this league’s player ID.`, valuationGap: 'unresolved_player' }
+  }
   if (raw) {
     const byId = index ?? indexBoard(board)
     const bare = raw.includes(':') ? raw.slice(raw.indexOf(':') + 1) : raw
@@ -293,16 +302,16 @@ export function resolveBoardPlayer(
   if (!name) return { ok: false, reason: `${label} has no projection on file.` }
   const matches = board.filter((p) => playerNamesAgree(p.name, name))
   if (matches.length === 1) return { ok: true, player: matches[0]! }
-  if (matches.length === 0) return { ok: false, reason: `${name} has no projection on file for this season.` }
-  return { ok: false, reason: `${name} matches ${matches.length} players with projections, so it is not clear who is being traded.` }
+  if (matches.length === 0) return { ok: false, reason: `${name} has no projection on file for this season.`, valuationGap: 'missing_projections' }
+  return { ok: false, reason: `${name} matches ${matches.length} players with projections, so it is not clear who is being traded.`, valuationGap: 'unresolved_player' }
 }
 
 /** Every id a board player answers to, mapped to him. An id two players share answers to neither. */
-export function indexBoard(board: readonly BoardPlayer[]): Map<string, BoardPlayer> {
+export function indexBoard(board: readonly BoardPlayer[], leagueRoster = false): Map<string, BoardPlayer> {
   const out = new Map<string, BoardPlayer>()
   const clashed = new Set<string>()
   for (const p of board) {
-    for (const id of [p.id, ...p.aliases]) {
+    for (const id of leagueRoster ? [p.id, p.rosterAlias] : [p.id, ...p.aliases]) {
       if (!id || clashed.has(id)) continue
       const prior = out.get(id)
       if (prior && prior !== p) {
@@ -377,13 +386,13 @@ function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: SportPointsContext,
   index: ReadonlyMap<string, BoardPlayer>,
-): { priced: Priced[] } | { withheld: string } {
+): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const priced: Priced[] = []
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex)
+    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
     const { player } = found
     if (!meetsSampleBar(player)) {
       const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
@@ -420,15 +429,16 @@ export function gradeSportPointsDeal(args: {
   }
   const index = indexBoard(ctx.board)
   const give = priceSide(args.give, ctx, index)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get, ctx, index)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position — every player in it could be replaced from the wire.',
       basis,
     }

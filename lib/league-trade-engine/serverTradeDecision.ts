@@ -151,7 +151,7 @@ export async function evaluateServerTradeDecision(input: {
   }
   const blockedHistoryRead = historical?.some((row) => row.reason === 'Stored NHL history is temporarily unavailable.' ||
     row.reason === 'Stored roster contains malformed player references.')
-  if (historical && (input.participantRosterIds.length !== 2 || blockedHistoryRead)) return historicalResult()
+  if (historical && input.participantRosterIds.length !== 2) return historicalResult()
   if (input.participantRosterIds.length !== 2) {
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: false,
@@ -202,45 +202,37 @@ export async function evaluateServerTradeDecision(input: {
         }).catch((): TradeGradeView => ({ graded: false, reason: 'The grade could not be computed when this offer was sent.', basis: null })),
     },
   )
-  if (!receipt.canonical) {
-    if (historical) return historicalResult(receipt)
-    return {
-      modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: true,
-      reason: receipt.canonicalError ?? 'Server trade evaluation unavailable.',
-      participants: [],
-      evaluationReceipt: receipt,
-    }
-  }
+  if (historical && (!receipt.canonical || blockedHistoryRead)) return historicalResult(receipt)
   return {
-    modelVersion: receipt.canonical.participants[0]?.memoVersion ?? 'canonical-trade-market-v1',
+    modelVersion: receipt.canonical?.participants[0]?.memoVersion ?? 'canonical-trade-market-v1',
     capturedAt,
     scope: 'market',
     evaluatorSupported: true,
     reason: null,
     evaluationReceipt: receipt,
     ...(historical ? { lineupBasis: 'historical_points_per_game' as const, lineupCoverage: historical } : {}),
-    participants: receipt.canonical.participants.map((evaluation) => {
-      const rosterId = evaluation.rosterId
+    participants: input.participantRosterIds.map((rosterId) => {
+      const evaluation = receipt.canonical?.participants.find((participant) => participant.rosterId === rosterId)
       const history = historical?.find((row) => row.rosterId === rosterId)
       // The receiver's letter is the proposer's grade seen from the other side — the exact mirror.
       const g = rosterId === input.proposerRosterId ? receipt.grade : receipt.partnerGrade
       return {
         rosterId,
         grade: g.graded ? g.letter : null,
-        action: g.graded ? g.action : evaluation.action,
-        recommendation: g.graded ? g.recommendation : evaluation.recommendation,
+        action: g.graded ? g.action : evaluation?.action ?? 'review',
+        recommendation: g.graded ? g.recommendation : evaluation?.recommendation ?? g.reason,
         valueGiven: g.graded ? g.giveValue : null,
         valueReceived: g.graded ? g.getValue : null,
         valueDelta: g.graded ? g.getValue - g.giveValue : null,
-        fairnessScore: evaluation.fairnessScore,
-        confidenceScore: evaluation.confidenceScore,
-        coverageStatus: g.graded ? ('complete' as const) : evaluation.coverageStatus === 'complete' ? ('partial' as const) : evaluation.coverageStatus,
-        coveragePct: g.graded ? 100 : evaluation.coveragePct,
+        fairnessScore: evaluation?.fairnessScore ?? null,
+        confidenceScore: evaluation?.confidenceScore ?? 0,
+        coverageStatus: g.graded ? ('complete' as const) : evaluation?.coverageStatus === 'complete' ? ('partial' as const) : evaluation?.coverageStatus ?? 'blocked',
+        coveragePct: g.graded ? 100 : evaluation?.coveragePct ?? 0,
         gradeLabel: g.graded ? g.label : null,
         gradeWithheld: g.graded ? null : g.reason,
-        lineupPointsBefore: historical ? history?.before ?? null : evaluation.rosterImpact?.startingPointsBefore ?? null,
-        lineupPointsAfter: historical ? history?.after ?? null : evaluation.rosterImpact?.startingPointsAfter ?? null,
-        lineupPointsDelta: historical ? history?.delta ?? null : evaluation.rosterImpact?.startingPointsDelta ?? null,
+        lineupPointsBefore: historical ? history?.before ?? null : evaluation?.rosterImpact?.startingPointsBefore ?? null,
+        lineupPointsAfter: historical ? history?.after ?? null : evaluation?.rosterImpact?.startingPointsAfter ?? null,
+        lineupPointsDelta: historical ? history?.delta ?? null : evaluation?.rosterImpact?.startingPointsDelta ?? null,
       }
     }),
   }

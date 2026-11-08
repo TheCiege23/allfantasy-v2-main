@@ -480,7 +480,7 @@ export async function reviewStoredTrade(
     trade.status === 'completed' || trade.status === 'accepted'
       ? await d.auditedGap({ leagueId: args.leagueId, ref: args.ref, sideATeamId: sideA.rosterId ?? sideA.teamId }).catch(() => null)
       : null
-  const gapPct: Known<number> = audited ? { ok: true, value: audited.gapPct } : g.graded ? { ok: true, value: g.percentDiff } : { ok: false, reason: g.reason }
+  const gapPct: Known<number> = audited ? { ok: true, value: audited.gapPct } : g.graded ? { ok: true, value: g.market?.percentDiff ?? g.percentDiff } : { ok: false, reason: g.reason }
 
   // Lineup — this week, while the trade is still pending.
   const lineup: TradeReviewFacts['lineup'] =

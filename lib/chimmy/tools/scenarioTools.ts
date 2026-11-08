@@ -7,6 +7,7 @@ import {
   renderWaiverScenarioBlock,
 } from '@/lib/chimmy/lineupScenarioGrounding'
 import { buildTradeScenario, renderTradeScenarioBlock } from '@/lib/chimmy/tradeScenarioGrounding'
+import { providerNameInChartOrder } from '@/lib/decision-os/trade/tradePlayers'
 import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
@@ -62,13 +63,13 @@ export async function runTradeScenarioTool(args: {
   /** Told the letters the one trade engine gave, so the route can hold the answer to them. */
   onGrade?: (grade: ChimmyTradeGrade) => void
 }): Promise<string> {
-  const give = names(args.give)
-  const get = names(args.get)
+  const give = names(args.give).map((name) => providerNameInChartOrder('fantrax', name))
+  const get = names(args.get).map((name) => providerNameInChartOrder('fantrax', name))
   if (give.length === 0 || get.length === 0) {
     return 'Both sides of the trade are needed: pass what the user GIVES and what they GET, each as full player names (or picks like "2027 1st"). Ask the user if either side is missing.'
   }
   const message = `${joinSide(give)} for ${joinSide(get)}`
-  const scenario = await buildTradeScenario({ message, leagueId: args.leagueId, userId: args.userId })
+  const scenario = await buildTradeScenario({ message, leagueId: args.leagueId, userId: args.userId, playerSides: { give, get } })
   if (!scenario) {
     return `"${message}" could not be read as a trade between two rosters in this league. Ask for full player names on both sides; do not grade it.`
   }

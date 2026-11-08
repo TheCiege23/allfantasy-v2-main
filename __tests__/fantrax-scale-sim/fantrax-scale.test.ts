@@ -10,6 +10,8 @@
  *   SIM_FX_MATRIX=smoke (default) NBA 32
  *   SIM_FX_MATRIX=size:128          every sport at one size
  *   SIM_FX_MATRIX=full  NFL/NBA/NHL/MLB × 32/128/256
+ *   SIM_FX_MATRIX=audit  all seven sports at 8 teams, including Soccer's import refusal
+ *   SIM_AUDIT_VALUES=1  seed NHL, MLB, NCAAF and NCAAB stored values in the audit matrix
  *   SIM_FX_MATRIX=only:NHL,128
  *   SIM_OUT=<path>      where the JSON report goes (default: fantrax-scale-report.json in the OS temp dir)
  *   SIM_FC=empty|sim|sim-raw  FantasyCalc answers empty / with a chart of the fabricated NFL players named
@@ -64,7 +66,7 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (load) => {
     getFantraxLeagueInfo: vi.fn(async () => ({ ok: true, data: fx().info })),
     getFantraxLeagueTeams: vi.fn(async () => ({ ok: true, data: Object.values(fx().info.teamInfo) })),
     getFantraxTeamRosters: vi.fn(async () => ({ ok: true, data: fx().rosters })),
-    getFantraxPlayerIds: vi.fn(async (code: string) => ({ ok: true, data: code === fx().sport ? fx().playerMap : unrelated })),
+    getFantraxPlayerIds: vi.fn(async (code: string) => ({ ok: true, data: (code === fx().sport || (code === 'CFB' && fx().sport === 'NCAAF')) ? fx().playerMap : unrelated })),
     getFantraxStandings: vi.fn(async () => ({ ok: true, data: fx().standings })),
     fetchFantraxScheduleWithScores: vi.fn(async () => ({ rows: [], position: null, periodsRead: 0, periodsFailed: 0 })),
     getFantraxDraftResults: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no draft (sim)' } })),
@@ -92,6 +94,7 @@ const SIZES = [32, 128, 256]
 
 function cases(): Array<{ sport: ScaleSport; teamCount: number }> {
   const mode = process.env.SIM_FX_MATRIX ?? 'smoke'
+  if (mode === 'audit') return (['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const).map((sport) => ({ sport, teamCount: 8 }))
   if (mode === 'full') return SPORTS.flatMap((sport) => SIZES.map((teamCount) => ({ sport, teamCount })))
   if (mode.startsWith('size:')) return SPORTS.map((sport) => ({ sport, teamCount: Number(mode.slice(5)) }))
   if (mode.startsWith('only:')) {
@@ -184,11 +187,12 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
         }
       }
       await step('import', () => sim.importLeague(env, run))
-      await step('seed-values', () => sim.seedNbaValues(env, run))
+      await step('seed-values', () => sim.seedTradeValues(env, run))
       await step('join', () => sim.joinAndClaim(env, run))
       await step('trades', () => sim.runTrades(env, run))
       await step('rank+chimmy', () => sim.runRankAndChimmy(env, run))
-      expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
+      if (c.sport === 'SOCCER') expect(run.leagueId).toBeNull()
+      else expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
     })
   }
 })

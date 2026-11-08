@@ -1,14 +1,15 @@
 import 'server-only'
 
+import type { TradeValuationGap } from './tradeGrade'
+
 import { prisma } from '@/lib/prisma'
-import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { latestNcaafProjectionSeason, lookupNcaafProjections } from '@/lib/core-app/ncaafProjections'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { MAX_PLAUSIBLE_SPORT_WEEK } from '@/lib/season-week/sportWeekSignal'
 import { scoringRulesFrom } from './scoringContextFromWorld'
-import { playerIdSpaceFor, resolveTradePlayers, type PlayerIdSpace } from './tradePlayers'
+import { playerIdSpaceFor, resolveTradePlayers, rosteredIdsOf, type PlayerIdSpace } from './tradePlayers'
 import {
   ncaafSeasonWindow,
   type NcaafPerGame,
@@ -37,7 +38,7 @@ export type NcaafRedraftBase = {
   replacementFor(positions: readonly string[]): Promise<Map<string, NcaafReplacement>>
 }
 
-export type NcaafRedraftBaseResult = { ok: true; base: NcaafRedraftBase } | { ok: false; reason: string }
+export type NcaafRedraftBaseResult = { ok: true; base: NcaafRedraftBase } | { ok: false; reason: string; valuationGap?: TradeValuationGap }
 
 /**
  * How many of a position's projected players are read to find its best free agent. Ordered by the
@@ -46,21 +47,7 @@ export type NcaafRedraftBaseResult = { ok: true; base: NcaafRedraftBase } | { ok
  */
 const REPLACEMENT_SCAN = 250
 
-/** Every id a stored roster holds: the player list and each lineup section. */
-export function rosteredIdsOf(playerData: unknown): string[] {
-  const ids = new Set(getRosterPlayerIds(playerData).map(String))
-  const pd = (playerData ?? {}) as Record<string, unknown>
-  for (const key of ['starters', 'reserve', 'taxi', 'bench', 'ir']) {
-    const v = pd[key]
-    if (!Array.isArray(v)) continue
-    for (const raw of v) {
-      const row = raw && typeof raw === 'object' ? (raw as { id?: unknown; player_id?: unknown }) : null
-      const id = typeof raw === 'string' ? raw : row ? String(row.id ?? row.player_id ?? '') : ''
-      if (id) ids.add(id)
-    }
-  }
-  return [...ids]
-}
+export { rosteredIdsOf } from './tradePlayers'
 
 function perGameFrom(componentStats: Record<string, unknown> | null | undefined, rules: Record<string, unknown>): number | null {
   const scored = computeLeagueProjectedPoints(componentStats, rules)
@@ -87,9 +74,10 @@ async function lastRegularWeek(season: number): Promise<number | null> {
 }
 
 /** A free agent must carry an id in the space this league rosters in, or nobody here can add him. */
-function addableIn(space: PlayerIdSpace, row: { rollingInsightsId: string | null; espnId: string | null }): boolean {
+function addableIn(space: PlayerIdSpace, row: { rollingInsightsId: string | null; espnId: string | null; fantraxId: string | null }): boolean {
   if (space === 'rolling_insights') return Boolean(row.rollingInsightsId)
   if (typeof space === 'object' && space.provider === 'espn') return Boolean(row.espnId)
+  if (typeof space === 'object' && space.provider === 'fantrax') return Boolean(row.fantraxId)
   return Boolean(row.rollingInsightsId || row.espnId)
 }
 
@@ -103,7 +91,7 @@ export async function loadNcaafRedraftBase(league: {
 
   const projected = await latestNcaafProjectionSeason()
   const season = projected ? Number.parseInt(projected.season, 10) : NaN
-  if (!Number.isFinite(season)) return { ok: false, reason: 'No college projections are on file, so this league’s trades cannot be graded yet.' }
+  if (!Number.isFinite(season)) return { ok: false, reason: 'No college projections are on file, so this league’s trades cannot be graded yet.', valuationGap: 'missing_projections' }
 
   const [sportWeek, lastWeek, rosterRows] = await Promise.all([
     resolveSportWeek('NCAAF', season).catch(() => null),
@@ -118,7 +106,7 @@ export async function loadNcaafRedraftBase(league: {
         : null,
     lastRegularWeek: lastWeek,
   })
-  if (!window) return { ok: false, reason: `The ${season} college schedule has no week on file, so the weeks left to play cannot be counted.` }
+  if (!window) return { ok: false, reason: `The ${season} college schedule has no week on file, so the weeks left to play cannot be counted.`, valuationGap: 'missing_schedule' }
   if (!rosterRows) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
 
   const rosteredIds = [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
@@ -127,7 +115,9 @@ export async function loadNcaafRedraftBase(league: {
 
   const [identities, projections] = await Promise.all([
     resolveTradePlayers(rosteredIds, { space, sport: 'NCAAF' }),
-    lookupNcaafProjections(rosteredIds, { season: String(season) }),
+    typeof space === 'object' && space.provider === 'fantrax'
+      ? lookupNcaafProjections(rosteredIds, { season: String(season) }, 'fantrax')
+      : lookupNcaafProjections(rosteredIds, { season: String(season) }),
   ])
 
   // An id that names nobody, or two people, is left out: a deal naming him is refused, never guessed.
@@ -155,7 +145,7 @@ export async function loadNcaafRedraftBase(league: {
     const links = await prisma.playerIdentityMap
       .findMany({
         where: { sport: 'NCAAF', cfbdId: { in: rows.map((r) => r.playerId) } },
-        select: { cfbdId: true, rollingInsightsId: true, espnId: true },
+        select: { cfbdId: true, rollingInsightsId: true, espnId: true, fantraxId: true },
       })
       .catch(() => [])
     const linksByCfbd = new Map<string, typeof links>()
@@ -170,9 +160,10 @@ export async function loadNcaafRedraftBase(league: {
        * only the one this league rosters in: a rostered player whose id does not hop to CFBD would
        * otherwise read as a free agent and raise the replacement level for his whole position.
        */
-      const rosteredHere =
-        rosteredSet.has(row.playerId) ||
-        ids.some((l) => (l.rollingInsightsId && rosteredSet.has(l.rollingInsightsId)) || (l.espnId && rosteredSet.has(l.espnId)))
+      const rosteredHere = typeof space === 'object' && space.provider === 'fantrax'
+        ? ids.some((link) => link.fantraxId != null && rosteredSet.has(link.fantraxId))
+        : rosteredSet.has(row.playerId) ||
+        ids.some((l) => [l.rollingInsightsId, l.espnId, l.fantraxId].some((id) => id != null && rosteredSet.has(id)))
       if (rosteredHere) continue
       const perGame = perGameFrom(readComponentStats(row.adjustmentFactors), rules)
       if (perGame == null) continue

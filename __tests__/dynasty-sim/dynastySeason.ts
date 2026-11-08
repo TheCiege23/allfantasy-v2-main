@@ -45,7 +45,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   const seasonId = season.id as string
   const seasonYear = Number(season.season)
   const sport = run.sport
-  const daily = sport !== 'NFL'
+  const daily = sport !== 'NFL' && sport !== 'NCAAF'
 
   const { buildLeagueStatScorer, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } = await import('@/lib/redraft/scoringEngine')
   const { updateStandings } = await import('@/lib/redraft/standingsEngine')
@@ -82,7 +82,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
         const line = dailyBoxLine(sport as never, p.position, rng, s, d)
         if (!line) continue
         await db.playerDailyScore.create({
-          data: { playerId: p.playerId, sport, season: seasonYear, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, isFinalized: true },
+          data: { playerId: p.playerId, sport, season: seasonYear, week, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, isFinalized: true },
         })
       }
     }

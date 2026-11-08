@@ -6,7 +6,7 @@
  * grade becomes `null`, never a "Fair" and never a balance built from placeholder values. That is
  * the whole difference from `calculateTradeBalance`, which priced an unknown player at a flat 200.
  */
-import type { TradeGradeLine, TradeGradeView } from './tradeGrade'
+import type { TradeGradeLine, TradeGradeView, TradeValuationGap } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 
 type ReceiptLike = {
@@ -79,6 +79,7 @@ export function receiptGradeFields(receipt: ReceiptLike): {
   partnerGrade: string | null
   gradeLabel: string | null
   gradeWithheld: string | null
+  valuationGap?: TradeValuationGap
   percentDiff: number | null
   /** League value the graded side sends / receives — the totals the letter was taken on. */
   giveValue: number | null
@@ -93,6 +94,7 @@ export function receiptGradeFields(receipt: ReceiptLike): {
     partnerGrade: g.graded ? g.partnerLetter : null,
     gradeLabel: g.graded ? g.label : null,
     gradeWithheld: g.graded ? null : g.reason,
+    ...(!g.graded && g.valuationGap ? { valuationGap: g.valuationGap } : {}),
     percentDiff: g.graded ? g.percentDiff : null,
     giveValue: g.graded ? g.giveValue : null,
     getValue: g.graded ? g.getValue : null,

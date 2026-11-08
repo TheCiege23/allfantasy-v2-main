@@ -8,6 +8,7 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { readCollusionValuation } from "@/lib/integrity/collusionValuationCoverage"
 import { NEW_LEAGUE_INTEGRITY_DEFAULTS } from "@/lib/integrity/integrityDefaults"
 import { resolveFlagManagers } from "@/lib/integrity/flagManagers"
 import { resolveWriteAuthority } from "@/lib/league/write-authority"
@@ -43,7 +44,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     update: {},
   })
 
-  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking, nativeSeason] = await Promise.all([
+  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking, nativeSeason, collusionValuation] = await Promise.all([
     prisma.integrityFlag.findMany({
       where: { leagueId, status: "open" },
       orderBy: { createdAt: "desc" },
@@ -57,6 +58,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "collusion" } }),
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "tanking" } }),
     prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } }),
+    readCollusionValuation(leagueId),
   ])
 
   const coverage = buildIntegrityCoverage({
@@ -88,6 +90,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     recentDismissed: recentDismissed.map(withManagers),
     canReview: league.userId === userId,
     coverage,
+    collusionValuation,
     stats: {
       totalFlagsAllTime: totalFlags,
       openCollusion,

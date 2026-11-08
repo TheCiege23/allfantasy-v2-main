@@ -48,14 +48,14 @@ beforeEach(() => {
 })
 
 describe('the FantasyCalc chart is read only where the NFL path reads it', () => {
-  it.each(['NBA', 'NHL', 'MLB'])('%s: not fetched, so a FantasyCalc outage cannot fail the grade', async (sport) => {
+  it.each(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('%s: not fetched, so a FantasyCalc outage cannot fail the grade', async (sport) => {
     h.chart.mockRejectedValueOnce(new Error('FantasyCalc API error: 503'))
     const chart = await chartFor(sport, 'fantrax')
     expect(h.chart).not.toHaveBeenCalled()
     expect(chart.fcPlayers).toEqual([])
   })
 
-  it.each([['NFL', 'sleeper'], ['NFL', 'fantrax'], ['NCAAF', 'fantrax']])('%s (%s): fetched as before', async (sport, platform) => {
+  it.each([['NFL', 'sleeper'], ['NFL', 'fantrax']])('%s (%s): fetched as before', async (sport, platform) => {
     await chartFor(sport, platform)
     expect(h.chart).toHaveBeenCalledTimes(1)
   })
