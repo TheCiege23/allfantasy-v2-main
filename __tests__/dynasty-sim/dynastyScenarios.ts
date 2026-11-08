@@ -72,7 +72,7 @@ async function probeScoring(env: SimEnv, run: LeagueRun) {
 }
 
 export async function preDraftSettings(env: SimEnv, run: LeagueRun): Promise<void> {
-  if (!run.leagueId || run.sport !== 'NFL') return
+  if (!run.leagueId) return
   const out: Record<string, unknown> = {}
   const leagueId = run.leagueId
   signInAs(env, run.commissionerId)
@@ -100,7 +100,11 @@ export async function preDraftSettings(env: SimEnv, run: LeagueRun): Promise<voi
     add('ROSTER_SETTINGS_UNREADABLE', `Roster settings GET ${before.status} returned no slot counts: ${JSON.stringify(before.body).slice(0, 200)}`)
   }
 
-  // Scoring: the NFL scoring panel's TE premium, then the sport-config toggle.
+  // Scoring: the NFL scoring panel's TE premium, then the sport-config toggle. A TE premium is NFL only.
+  if (run.sport !== 'NFL') {
+    run.stats.preDraftSettings = out
+    return
+  }
   out.scoringBaseline = await probeScoring(env, run)
   const nfl = await import('@/app/api/commissioner/leagues/[leagueId]/nfl-scoring/route')
   const panel = await call(nfl.PUT, `/api/commissioner/leagues/${leagueId}/nfl-scoring`, { method: 'PUT', body: { presetKey: 'custom', rules: { te_premium: 0.5, passing_td: 6 } } }, { leagueId })
