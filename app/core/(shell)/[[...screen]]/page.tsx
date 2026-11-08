@@ -5574,6 +5574,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             teams={teamCompare}
             players={playerPick}
             filterPairs={rankingFilterPairs}
+            lookupPlatform={typeof sp.lookup === 'string' ? sp.lookup : undefined}
+            compareScope={typeof sp.compareScope === 'string' ? sp.compareScope : undefined}
           />
         ) : rankings ? (
           rankingsView === 'faq' ? (

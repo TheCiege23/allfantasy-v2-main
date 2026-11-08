@@ -52,27 +52,12 @@ export function classifyStatus(status: string | null | undefined): LeagueLifecyc
 
 /* ───────────────────────────────── rows ───────────────────────────────── */
 
-/**
- * One league-season of yours, from whichever source recorded it.
- *
- *   import   — `leagues.import_*`, one row per league, the only multi-platform
- *              source that says which platform a season came from.
- *   standing — `SeasonStandingFact` through your claimed team. A record and
- *              points, never a title or a berth (rank 1 is the regular-season
- *              leader, not the champion).
- *   legacy   — `legacy_leagues` + your `legacy_rosters` row. Sleeper-only, and
- *              the richest: size, cut, scoring, seed, champion flag.
- *
- * ⚠ ROWS ARE ALREADY DEDUPLICATED when they reach here, in precedence order
- * import → standing → legacy, on `platform|season|name`. Filtering after the
- * dedup is equivalent to filtering before it for every filter this screen has,
- * because the key carries the platform and the season and the name.
- */
+/** One league-season from the shared career ledger. */
 export type CareerRow = {
   source: 'import' | 'standing' | 'legacy'
-  /** `platform|season|lower(name)` — the cross-source dedup key. */
+  /** Provider league-season key from the career ledger. */
   key: string
-  /** Lower-cased league name — the identity of a league across seasons. */
+  /** League filter key. Provider ID disambiguates distinct same-name league-seasons. */
   leagueKey: string
   leagueName: string
   platform: CareerPlatform
@@ -86,6 +71,7 @@ export type CareerRow = {
   /** Null when the source recorded no points (a stored 0 on an unplayed season is not a score). */
   pointsFor: number | null
   pointsAgainst: number | null
+  survival?: { periods: number; totalPeriods: number }
   madePlayoffs: boolean
   /** False for sources that cannot say anything about the playoffs at all. */
   playoffKnown: boolean
@@ -230,7 +216,7 @@ export function careerHref(f: CareerFilter, extra: Record<string, string | null>
 export function matchesCareerFilter(r: CareerRow, f: CareerFilter): boolean {
   if (f.platform && r.platform !== f.platform) return false
   if (f.sport && r.sport !== f.sport) return false
-  if (f.league && r.leagueKey !== f.league) return false
+  if (f.league && r.leagueKey !== f.league && r.leagueName.toLowerCase() !== f.league) return false
   if (f.fromSeason != null && r.season < f.fromSeason) return false
   if (f.toSeason != null && r.season > f.toSeason) return false
   return true

@@ -246,8 +246,6 @@ export function FindLeagueClient() {
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [viewerTier, setViewerTier] = useState<number | null>(null)
-  const [viewerTierName, setViewerTierName] = useState<string | null>(null)
   const [hiddenByTierPolicy, setHiddenByTierPolicy] = useState(0)
   const [paidHiddenMessage, setPaidHiddenMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -318,8 +316,6 @@ export function FindLeagueClient() {
         setLeagues(d.leagues ?? [])
         setTotal(d.total ?? 0)
         setTotalPages(d.totalPages ?? 1)
-        setViewerTier(typeof d.viewerTier === "number" ? d.viewerTier : null)
-        setViewerTierName(typeof d.viewerTierName === "string" ? d.viewerTierName : null)
         setHiddenByTierPolicy(typeof d.hiddenByTierPolicy === "number" ? d.hiddenByTierPolicy : 0)
         setPaidHiddenMessage(typeof d.paidLeaguesHidden?.message === "string" ? d.paidLeaguesHidden.message : null)
         setLoading(false)
@@ -330,8 +326,6 @@ export function FindLeagueClient() {
         setLeagues([])
         setTotal(0)
         setTotalPages(0)
-        setViewerTier(null)
-        setViewerTierName(null)
         setHiddenByTierPolicy(0)
         setLoading(false)
       })
@@ -404,15 +398,13 @@ export function FindLeagueClient() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-3xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>
-              Rankings effect enabled
+              Find leagues at your Career Level
             </p>
             <p className="mt-1 text-sm" style={{ color: "var(--text)" }}>
-              Discovery prioritizes leagues closest to your current tier so recommendations stay competitive and relevant.
+              Join a fantasy league within three Career Levels. For a bigger gap, you can request commissioner approval.
             </p>
             <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-              {viewerTierName
-                ? `Current tier: ${viewerTier ?? "—"} (${viewerTierName}).`
-                : "Sign in to personalize tier matching even more."}
+              Class Division helps sort NFL matches by competitive fit.
             </p>
           </div>
           {hiddenByTierPolicy > 0 ? (
