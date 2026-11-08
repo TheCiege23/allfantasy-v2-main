@@ -299,7 +299,7 @@ async function buildNativeActiveTrades(
    * the one grader prices players by name — so the ids are resolved here, once for the whole panel.
    * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
    */
-  const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items))
+  const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items), leagueId)
   const idolPlayers = await idolRidesAlongPlayers(leagueId, userId, active.flatMap((t) => t.items))
   /* An asset as the panel draws it, marked when a player-bound Survivor idol rides along with it. */
   const nativeAsset = (item: (typeof active)[number]['items'][number]) => {

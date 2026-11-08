@@ -108,7 +108,7 @@ async function defaultPairHistory(args: PairHistoryArgs): Promise<Known<Array<nu
       ? await prisma.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((r) => r.id) } }, select: PUBLIC_RECEIPT_SELECT })
       : []
     const byTrade = new Map(stored.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
-    const nameFor = rows.length ? await loadNativePlayerNames(rows.flatMap((r) => r.items)) : () => null
+    const nameFor = rows.length ? await loadNativePlayerNames(rows.flatMap((r) => r.items), league.id) : () => null
     return {
       ok: true,
       value: await Promise.all(
