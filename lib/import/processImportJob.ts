@@ -80,6 +80,18 @@ export async function importLegacySeasonAtIndex(
   })
 
   try {
+    // Tag older ranking-only rows before filling in their provider status.
+    await prisma.league.updateMany({
+      where: {
+        userId,
+        season,
+        platform: 'sleeper',
+        leagueVariant: null,
+        OR: [{ status: null }, { status: 'ranking_only' }],
+      },
+      data: { leagueVariant: 'legacy_summary' },
+    })
+
     let sw = 0
     let sl = 0
     let sc = 0
@@ -102,7 +114,9 @@ export async function importLegacySeasonAtIndex(
         league_id?: string
         name?: string
         total_rosters?: number
-        settings?: { playoff_teams?: number; num_teams?: number }
+        status?: string
+        scoring_settings?: { rec?: number }
+        settings?: { playoff_teams?: number; num_teams?: number; type?: number }
       }>) {
         try {
           const rosters: unknown = await runSleeperImportRequest(() =>
@@ -125,7 +139,16 @@ export async function importLegacySeasonAtIndex(
           const playoffTeams =
             typeof league.settings?.playoff_teams === 'number' && league.settings.playoff_teams >= 1
               ? league.settings.playoff_teams
-              : Math.max(1, Math.ceil(totalTeams / 3))
+              : null
+          const receptions = league.scoring_settings?.rec
+          const providerFields = {
+            status: league.status?.trim() || undefined,
+            scoring: league.scoring_settings
+              ? receptions === 1 ? 'ppr' : receptions === 0.5 ? 'half-ppr' : 'standard'
+              : undefined,
+            isDynasty: league.settings?.type == null ? undefined : league.settings.type === 2,
+            playoffTeams: playoffTeams ?? undefined,
+          }
 
           const settings = (mine?.settings ?? {}) as Record<string, unknown>
           const finalStandingRaw = settings.final_standing ?? settings.rank
@@ -139,7 +162,9 @@ export async function importLegacySeasonAtIndex(
           const losses = typeof settings.losses === 'number' ? settings.losses : Number(settings.losses ?? 0) || 0
           const ties = typeof settings.ties === 'number' ? settings.ties : Number(settings.ties ?? 0) || 0
           const madePlayoffs =
-            finalStanding != null && Number.isFinite(finalStanding) ? finalStanding <= playoffTeams : false
+            finalStanding != null && Number.isFinite(finalStanding) && playoffTeams != null
+              ? finalStanding <= playoffTeams
+              : null
           const wonChampionship = finalStanding === 1
 
           const platformLeagueId = String(league.league_id ?? '')
@@ -176,6 +201,7 @@ export async function importLegacySeasonAtIndex(
               name: league.name ?? 'Unnamed League',
               leagueSize: totalTeams,
               sport: leagueSportEnum,
+              ...providerFields,
               importWins: wins,
               importLosses: losses,
               importTies: ties,
@@ -183,8 +209,6 @@ export async function importLegacySeasonAtIndex(
               importWonChampionship: wonChampionship,
               importFinalStanding: finalStanding,
               importPointsFor: fpts,
-              // Only tag as legacy_summary if this league has no real-import status
-              // (real active-league imports always set status from the Sleeper API)
             },
             create: {
               userId,
@@ -194,6 +218,7 @@ export async function importLegacySeasonAtIndex(
               season,
               leagueSize: totalTeams,
               sport: leagueSportEnum,
+              ...providerFields,
               // Tag new ranking-import leagues so they are excluded from My Leagues
               leagueVariant: 'legacy_summary',
               importWins: wins,

@@ -1,3 +1,4 @@
+import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
@@ -279,7 +280,7 @@ export async function createCanonicalLeagueInTransaction(
   const [userProfile, appUser] = await Promise.all([
     tx.userProfile.findUnique({
       where: { userId: appUserId },
-      select: { displayName: true, xpLevel: true, legacyCareerLevel: true },
+      select: { displayName: true, xpLevel: true, xpTotal: true },
     }),
     tx.appUser.findUnique({
       where: { id: appUserId },
@@ -292,10 +293,8 @@ export async function createCanonicalLeagueInTransaction(
     displayName: userProfile?.displayName,
     email: appUser?.email,
   })
-  const creatorRankLevelRaw = Number(userProfile?.xpLevel ?? userProfile?.legacyCareerLevel ?? 1)
-  const creatorRankLevel = Number.isFinite(creatorRankLevelRaw) ? Math.max(1, Math.floor(creatorRankLevelRaw)) : 1
-  const minRankLevel = Math.max(1, creatorRankLevel - 3)
-  const maxRankLevel = creatorRankLevel + 3
+  const creatorRankLevel = careerXpLevel(userProfile)
+  const { band: [minRankLevel, maxRankLevel] } = decideCareerJoin(creatorRankLevel, creatorRankLevel)
 
   /*
    * 🛑 NCAAF PLAYOFFS END ON WEEK 13 — see lib/league-defaults/ncaafPlayoffWindow.ts. Every NCAAF

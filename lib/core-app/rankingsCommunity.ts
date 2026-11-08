@@ -52,13 +52,7 @@ export type CommunityBase = {
   computedAt: string
 }
 
-/**
- * Every profile that has ever been ranked — the community population.
- *
- * ⚠ `rank_calculated_at IS NOT NULL` IS THE ELIGIBILITY TEST. A manager who was
- * scored and came out at zero belongs in the population; one who was never
- * scored does not.
- */
+/** Previously ranked profiles and managers with recorded native season results. */
 async function loadRankedProfiles(): Promise<ProfileRow[]> {
   const rows = await prisma.$queryRaw<
     Array<{
@@ -70,15 +64,32 @@ async function loadRankedProfiles(): Promise<ProfileRow[]> {
       rank_calculated_at: Date | null
     }>
   >`
-    SELECT p."userId",
+    WITH eligible AS (
+      SELECT "userId" FROM user_profiles WHERE rank_calculated_at IS NOT NULL
+      UNION
+      SELECT f."userId" FROM franchise_seasons f JOIN leagues l ON l.id = f."leagueId"
+        WHERE f."userId" IS NOT NULL AND l.platform IN ('allfantasy', 'af', 'manual', 'native')
+      UNION
+      SELECT r."ownerId" FROM guillotine_survival_logs g
+        JOIN redraft_rosters r ON r.id = g."rosterId"
+        JOIN guillotine_seasons s ON s.id = g."seasonId"
+        JOIN leagues l ON l.id = s."leagueId"
+        WHERE s.status IN ('complete', 'completed') AND l.platform IN ('allfantasy', 'af', 'manual', 'native')
+      UNION
+      SELECT p."userId" FROM survivor_players p
+        JOIN survivor_season_snapshots s ON s."leagueId" = p."leagueId"
+        JOIN leagues l ON l.id = s."leagueId"
+        WHERE l.platform IN ('allfantasy', 'af', 'manual', 'native')
+    )
+    SELECT u.id AS "userId",
            u.username,
            u."displayName",
            u."avatarUrl",
            p.xp_total,
            p.rank_calculated_at
-      FROM user_profiles p
-      JOIN app_users u ON u.id = p."userId"
-     WHERE p.rank_calculated_at IS NOT NULL
+      FROM eligible e
+      JOIN app_users u ON u.id = e."userId"
+      LEFT JOIN user_profiles p ON u.id = p."userId"
   `
   return rows.map((r) => ({
     userId: r.userId,

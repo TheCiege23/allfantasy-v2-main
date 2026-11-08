@@ -53,6 +53,7 @@ export default function JoinByCodePage() {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
+        setClassBlocked(isClassGateBlocked(data.careerBlocked) ? data.careerBlocked : null)
         if (data.leagueId && data.sport !== undefined) {
           setPreview({
             leagueId: data.leagueId,
@@ -184,12 +185,30 @@ export default function JoinByCodePage() {
 
   /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
   useEffect(() => {
-    if (autoJoined.current || !joinOnArrival || !codeFromUrl) return
+    if (autoJoined.current || !joinOnArrival || !codeFromUrl || classBlocked) return
     if (authStatus !== 'authenticated' || !preview || preview.requiresPassword || previewError) return
     if (status !== 'idle') return
     autoJoined.current = true
     join(codeFromUrl, '')
-  }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+  }, [authStatus, classBlocked, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (classBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full">
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
+            Request to join
+          </h1>
+          {preview?.name && (
+            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+              {preview.name} · {preview.sport}
+            </p>
+          )}
+          <ClassGateNotice blocked={classBlocked} code={effectiveCode} tone="theme" />
+        </div>
+      </div>
+    )
+  }
 
   if (codeFromUrl && preview?.zombie && !previewError) {
     return <ZombieJoin
@@ -426,24 +445,6 @@ export default function JoinByCodePage() {
               Browse creators
             </Link>
           </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (classBlocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
-        <div className="max-w-md mx-auto px-4 w-full">
-          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
-            Join league
-          </h1>
-          {preview?.name && (
-            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-              {preview.name} · {preview.sport}
-            </p>
-          )}
-          <ClassGateNotice blocked={classBlocked} code={effectiveCode} tone="theme" />
         </div>
       </div>
     )

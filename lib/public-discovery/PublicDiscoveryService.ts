@@ -6,7 +6,9 @@
 import { isLeagueVibe, type LeagueVibeFilter } from "./vibes"
 import { prisma } from "@/lib/prisma"
 import { getCareerTierName, clampCareerTier, isLeagueVisibleForCareerTier } from "@/lib/ranking/tier-visibility"
-import { decideDivisionGate, getLeagueDivisions } from "@/lib/class-rating/divisionGate"
+import { getLeagueDivisions } from "@/lib/class-rating/divisionGate"
+import { decideCareerJoin, leagueCareerLevel, loadCareerXpLevels, savedLeagueCareerLevel } from "@/lib/league-join/careerJoinGate"
+import { hasClassException } from "@/lib/class-rating/exceptions"
 import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
@@ -430,21 +432,6 @@ async function getOwnedLeagueSets(viewerUserId: string | null) {
 }
 
 /**
- * Is this card inside the viewer's range? A fantasy card is in range exactly when an OPEN join to
- * it would pass the division gate; any other card keeps the career-tier window. Pure.
- */
-export function isCardInViewerRange(
-  card: Pick<DiscoveryCard, "source" | "id">,
-  ctx: { viewerTier: number; leagueTier: number; viewerClass: ManagerClass; fantasyDivisions: Map<string, number | null> }
-): boolean {
-  if (card.source === "fantasy") {
-    const leagueDivision = ctx.fantasyDivisions.get(card.id) ?? null
-    return decideDivisionGate({ user: ctx.viewerClass, leagueDivision, path: "open" }).outcome !== "deny"
-  }
-  return isLeagueVisibleForCareerTier(ctx.viewerTier, ctx.leagueTier, 1)
-}
-
-/**
  * Step up / your level / chill, for FANTASY cards only, and only when both sides have a
  * Class division: the viewer is established and the league has rated members.
  *
@@ -471,24 +458,55 @@ async function applyTierPolicy(
   const viewerUserId = viewerContext?.viewerUserId ?? null
   const owned = await getOwnedLeagueSets(viewerUserId)
 
-  /*
-   * ⚠ FANTASY LEAGUES ARE PLACED BY CLASS DIVISION, NOT CAREER XP (ADR F2.10a, 2026-10-01). A fantasy
-   * card is shown exactly when an open join to it would pass the division gate — the same decision
-   * POST /api/leagues/join makes, so discovery never offers a league the join then refuses. Bracket and
-   * creator cards keep the career-tier window: Class rates NFL fantasy managers and nothing else.
-   */
-  const viewerClass: ManagerClass = viewerUserId ? await getManagerClass(viewerUserId) : { status: 'unrated' }
   const fantasyIds = cards.filter((c) => c.source === 'fantasy').map((c) => c.id)
-  const fantasyDivisions =
-    viewerClass.status === 'established' && fantasyIds.length > 0 ? await getLeagueDivisions(fantasyIds) : new Map<string, number | null>()
+  const [viewerClass, fantasy] = await Promise.all([
+    viewerUserId ? getManagerClass(viewerUserId) : Promise.resolve({ status: 'unrated' } as const),
+    fantasyIds.length ? prisma.league.findMany({
+      where: { id: { in: fantasyIds } }, select: { id: true, userId: true, settings: true },
+    }) : [],
+  ])
+  const [fantasyDivisions, levels] = await Promise.all([
+    viewerClass.status === 'established' && fantasyIds.length > 0 ? getLeagueDivisions(fantasyIds) : new Map<string, number | null>(),
+    loadCareerXpLevels([
+      ...(viewerUserId ? [viewerUserId] : []),
+      ...fantasy.filter((league) => savedLeagueCareerLevel(league.settings) == null).map((league) => league.userId),
+    ]),
+  ])
+  const leagueById = new Map(fantasy.map((league) => [league.id, league]))
+  const viewerLevel = viewerUserId ? levels.get(viewerUserId) ?? 1 : null
 
   const resolved: DiscoveryCard[] = []
   let hiddenCount = 0
 
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
-    const inRange = isCardInViewerRange(card, { viewerTier, leagueTier, viewerClass, fantasyDivisions })
     const rankBand = rankBandForCard(card, viewerClass, fantasyDivisions)
+    if (card.source === 'fantasy') {
+      const league = leagueById.get(card.id)
+      if (!league) continue
+      const level = leagueCareerLevel(league, levels)
+      const approved = viewerUserId != null && (league.userId === viewerUserId || hasClassException(league.settings, viewerUserId))
+      const gate = viewerLevel == null ? null : decideCareerJoin(viewerLevel, level, approved)
+      const canJoin = gate?.canJoin ?? true
+      const delta = gate ? Math.abs(gate.userLevel - gate.leagueLevel) : 0
+      const division = fantasyDivisions.get(card.id)
+      const classFit = viewerClass.status === 'established' && division != null
+        ? Math.max(0, 8 - 4 * Math.abs(viewerClass.division - division))
+        : 0
+      resolved.push({
+        ...card,
+        leagueTier,
+        leagueCareerLevel: level,
+        requiresCareerApproval: !canJoin,
+        inviteOnlyByTier: false,
+        canJoinByRanking: canJoin,
+        rankingTierDelta: delta,
+        rankingEffectScore: (canJoin ? 30 : 0) + Math.max(0, 18 - delta * 3) + classFit,
+        rankBand,
+      })
+      continue
+    }
+    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
 
     if (inRange) {
       const rankingTierDelta = Math.abs(leagueTier - viewerTier)
@@ -509,7 +527,6 @@ async function applyTierPolicy(
     }
 
     const ownerBypass =
-      (card.source === "fantasy" && owned.fantasyIds.has(card.id)) ||
       (card.source === "bracket" && owned.bracketIds.has(card.id)) ||
       (card.source === "creator" && owned.creatorIds.has(card.id))
 

@@ -36,7 +36,7 @@ export function RankingsFilterBar({
   resetHref: string
   unit?: string
 }) {
-  const active = [filters.platform, filters.sport, filters.type, filters.format, filters.season].filter((v) => v != null).length
+  const active = [filters.platform, filters.sport, filters.type, filters.format, filters.season, filters.league].filter((v) => v != null).length
   const changed = active + (filters.minSample !== DEFAULT_MIN_SAMPLE ? 1 : 0)
   const form = (className: string) => (
     <form className={className} action="/core/rankings" method="get" aria-label="Ranking filters">
@@ -54,6 +54,9 @@ export function RankingsFilterBar({
         options={options.seasons.map((s) => ({ value: String(s.value), label: s.label, count: s.count }))}
         unit={unit}
       />
+      {options.leagues?.length ? (
+        <Select name="careerLeague" label="League" value={filters.league ?? ''} options={options.leagues} unit={unit} />
+      ) : null}
       <label className="af-rk-field">
         <span>Min. sample</span>
         <select name="min" defaultValue={String(filters.minSample)}>
