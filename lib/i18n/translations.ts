@@ -2902,6 +2902,7 @@ export const translations: Record<string, Record<string, string>> = {
     "league.nav.dynasty": "Dynasty hub",
     "league.nav.dynastyTaxi": "Taxi squad",
     "league.nav.dynastyPicks": "Draft picks",
+    "league.nav.devyPipeline": "Devy pipeline",
     "league.nav.warRoom": "War Room",
     "league.nav.liveScores": "Live scores",
     "league.nav.decisionOs": "Decision OS",
