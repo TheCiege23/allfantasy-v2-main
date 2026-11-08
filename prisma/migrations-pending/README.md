@@ -897,5 +897,8 @@ next `migrate deploy` on a database without it RUNS it.**
   34 `team_co_owners` lines from the history-vs-schema diff and added none; re-running it with the
   table already present succeeded.
 - **Staging** (`ep-winter-salad`): no table and no ledger row before this change.
-- **Production: NOT checked.** Applying it there is the owner's decision. The read-only check was
-  blocked by a permission rule.
+- **Production** (`ep-curly-block`, read-only, 2026-11-08): the table already exists with exactly
+  this shape (10 columns, pkey, three foreign keys, three indexes), 0 rows, and **no** ledger row,
+  so it was created outside migrate. The next `migrate deploy` there records this migration and
+  changes nothing, because every statement is `IF NOT EXISTS`. The original SQL would have FAILED
+  there and blocked every later deploy.
