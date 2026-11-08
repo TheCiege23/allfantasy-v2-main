@@ -561,6 +561,40 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     }
   })
 
+  /*
+   * An OFFLINE draft (the commissioner enters every pick) ran a 90-second clock and auto-drafted a real
+   * manager when it expired — found on staging. Every automatic picker submits with source 'auto'.
+   */
+  describe('offline draft', () => {
+    const offline = async () => {
+      const { getDraftUISettingsForLeague } = await import('@/lib/draft-defaults/DraftUISettingsResolver')
+      vi.mocked(getDraftUISettingsForLeague).mockResolvedValueOnce({ tradedPickOwnerNameRedEnabled: false, tradedPickColorModeEnabled: false, executionMode: 'offline' } as never)
+    }
+
+    it('refuses an automatic pick and writes nothing', async () => {
+      await offline()
+      const timerBefore = ctx.store.session.timerEndAt
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r).toMatchObject({ success: false, code: 'DRAFT_PICK_OFFLINE_DRAFT' })
+      expect(ctx.store.picks).toHaveLength(0)
+      expect(ctx.store.session.timerEndAt).toBe(timerBefore)
+    })
+
+    it("takes the commissioner pick and starts no clock for the next team", async () => {
+      await offline()
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'commissioner', commissionerOverride: true, expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.picks).toHaveLength(1)
+      expect(ctx.store.session.timerEndAt).toBeNull()
+    })
+
+    it('CONTROL: a live draft still auto-picks and starts the next clock', async () => {
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.session.timerEndAt).toBeInstanceOf(Date)
+    })
+  })
+
   it('traded pick: on-clock owner is new roster; wrong roster rejected', async () => {
     ctx.store.session.tradedPicks = [
       {
