@@ -38,6 +38,7 @@ import { useClientTime } from "./cup/useClientTime"
 import { dayHeading, localDayKey } from "./cup/cupFormat"
 import BracketCoachPanel from "./BracketCoachPanel"
 import CfpBowlSchedule from "./CfpBowlSchedule"
+import CfpProjectionPreview from "./CfpProjectionPreview"
 import { getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
 
 /**
@@ -567,6 +568,7 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {sport === "ncaaf" && view.challenge.seasonYear === 2026 && !view.challenge.isTestMode && waitingForField ? <CfpProjectionPreview /> : null}
           {sport === "ncaaf" && !view.challenge.isTestMode ? <CfpBowlSchedule season={view.challenge.seasonYear} series={view.series} /> : null}
           {!rollingCup ? <BracketCoachPanel view={view} /> : null}
           {rollingCup ? <details className="af-pb-card af-cup-disclosure" aria-label="NBA Cup scoring">
@@ -783,4 +785,3 @@ export default function MlbBracketBoard({
     </div>
   )
 }
-
