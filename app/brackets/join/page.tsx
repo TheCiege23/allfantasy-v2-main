@@ -98,7 +98,7 @@ function JoinLeagueForm() {
         setError(data.error ?? "Failed to join pool")
         return
       }
-      router.push(`/brackets/leagues/${data.leagueId}`)
+      router.push(`/brackets/leagues/${encodeURIComponent(data.leagueId)}${data.cfpInvite ? `?code=${encodeURIComponent(normalizedCode)}` : ""}`)
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {
@@ -149,7 +149,7 @@ function JoinLeagueForm() {
             placeholder="ABCD1234"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            maxLength={12}
+            maxLength={100}
             disabled={loading}
             autoFocus
           />

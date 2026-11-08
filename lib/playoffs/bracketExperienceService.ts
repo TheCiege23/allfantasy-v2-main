@@ -129,7 +129,7 @@ export async function sweepBracketExperience(sport: PlayoffSport, season: number
     const entries = await prisma.playoffBracketEntry.findMany({ where: { challengeId: pool.id, ...(pool.id === cursor.pool && cursor.entry ? { id: { gt: cursor.entry } } : {}) }, orderBy: { id: "asc" }, take: 101 - processed, select: { id: true, userId: true } })
     const batch = entries.slice(0,100 - processed)
     // One canonical pool read per batch rather than rebuilding the complete pool per participant.
-    const base = batch.length ? await getPlayoffBracketView({ challengeId: pool.id, user: null }) : null
+    const base = batch.length ? await getPlayoffBracketView({ challengeId: pool.id, user: null, trustedInternal: true }) : null
     const picks = base ? await prisma.playoffBracketPick.findMany({ where: { challengeId: pool.id, entryId: { in: batch.map(e => e.id) } } }) : []
     for (const entry of batch) {
       try {

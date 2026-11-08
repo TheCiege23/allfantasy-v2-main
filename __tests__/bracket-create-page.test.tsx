@@ -99,8 +99,8 @@ describe("/brackets/leagues/new create page", () => {
     render(<NewBracketLeaguePage />)
     fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
     expect(screen.getByText("CFP Commissioner Options")).toBeInTheDocument()
-    expect(screen.getByText(/anyone with the pool link can join/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText("Public pool label"))
+    expect(screen.getByText(/private pools require a commissioner’s invite/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText("Public pool · open to join"))
     fireEvent.change(screen.getByTestId("bracket-create-name-input"), { target: { value: "CFP Friends" } })
     fireEvent.click(screen.getByTestId("bracket-create-submit-button"))
     await waitFor(() => expect(createPlayoffMock).toHaveBeenCalledWith(expect.objectContaining({

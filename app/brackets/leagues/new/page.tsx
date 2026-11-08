@@ -442,7 +442,7 @@ export default function NewBracketLeaguePage() {
                 </div>
               </button>
             </div>
-            {sport === "NCAAF" ? <p className="mt-2 text-xs mode-muted">Access restrictions are not enforced yet: anyone with the pool link can join.</p> : null}
+            {sport === "NCAAF" ? <p className="mt-2 text-xs mode-muted">Private pools require a commissioner’s invite to join. Finalized brackets also appear on the universal standings.</p> : null}
           </div>
 
           <div className="mode-panel-soft rounded-xl p-3.5">
@@ -511,8 +511,8 @@ export default function NewBracketLeaguePage() {
             {sport === "NCAAF" ? (
               <div className="mt-3 grid gap-2 text-xs mode-muted">
                 <p>The pool invite code and link are available after creation. These visibility settings are available to all commissioners.</p>
-                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={!isPublic} onChange={() => setIsPublic(false)} disabled={loading} />Private pool label</label>
-                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={isPublic} onChange={() => setIsPublic(true)} disabled={loading} />Public pool label</label>
+                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={!isPublic} onChange={() => setIsPublic(false)} disabled={loading} />Private pool · invite required</label>
+                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={isPublic} onChange={() => setIsPublic(true)} disabled={loading} />Public pool · open to join</label>
                 <p>Approval-required and password-protected entry are unavailable. CFP uses fixed round points and a championship score tiebreaker.</p>
               </div>
             ) : <div className="mt-3 grid gap-2 text-xs mode-muted">
