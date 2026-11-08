@@ -26,7 +26,17 @@ interface DevyDraftCenterProps {
   devySlotCount: number
   bestBallEnabled: boolean
   classDepthByYear?: Record<number, NflClassDepth | NbaClassDepth>
+  /**
+   * The league's current draft phase (the devy summary's draftPhaseInfo). The Devy home used to show it in a separate
+   * "Draft" card with its own "Go to Draft" above this one (Devy audit item 3); it now heads this section, which opens
+   * on that draft's tab.
+   */
+  current?: { phase: string; status: string } | null
 }
+
+const PHASE_TO_TAB: Record<string, DevyDraftTab> = { startup_vet: 'startup', startup: 'startup', rookie: 'rookie', devy: 'devy' }
+const PHASE_LABEL: Record<DevyDraftTab, string> = { startup: 'Startup vet draft', rookie: 'Rookie draft', devy: 'Devy draft' }
+const STATUS_LABEL: Record<string, string> = { not_started: 'not started', in_progress: 'in progress', paused: 'paused', completed: 'completed' }
 
 export function DevyDraftCenter({
   leagueId,
@@ -41,8 +51,10 @@ export function DevyDraftCenter({
   devySlotCount,
   bestBallEnabled,
   classDepthByYear = {},
+  current = null,
 }: DevyDraftCenterProps) {
-  const [tab, setTab] = useState<DevyDraftTab>('startup')
+  const currentTab = current ? PHASE_TO_TAB[current.phase] ?? null : null
+  const [tab, setTab] = useState<DevyDraftTab>(currentTab ?? 'startup')
 
   const tabs: { id: DevyDraftTab; label: string; rounds: number; type: string }[] = [
     { id: 'startup', label: 'Startup Vet Draft', rounds: startupRounds ?? 0, type: startupType },
@@ -56,15 +68,21 @@ export function DevyDraftCenter({
     .slice(0, 5)
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 lg:flex-row">
+    <div data-devy-draft-center className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 lg:flex-row">
       <div className="flex-1 space-y-3">
         <h3 className="text-base font-semibold text-white">Draft Center</h3>
+        {current && currentTab ? (
+          <p className="text-xs text-white/60">
+            Now: {PHASE_LABEL[currentTab]} · {STATUS_LABEL[current.status] ?? current.status.replace(/_/g, ' ')}
+          </p>
+        ) : null}
         <div className="flex gap-2">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
+              aria-pressed={tab === t.id}
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
                 tab === t.id ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10'
               }`}

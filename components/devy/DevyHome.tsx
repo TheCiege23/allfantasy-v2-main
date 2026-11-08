@@ -6,7 +6,6 @@
  */
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { DevyPromotionPanel } from './DevyPromotionPanel'
 import { DevyCommissionerTools } from './DevyCommissionerTools'
 import { DevyDraftCenter } from './DevyDraftCenter'
@@ -132,20 +131,6 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         {config.bestBallEnabled ? ' · Best ball on: your highest-scoring legal lineup counts each week.' : ''}
       </p>
 
-      {draftPhaseInfo && (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <h3 className="text-sm font-medium text-white">Draft</h3>
-          <p className="mt-1 text-sm text-white/70">{draftPhaseInfo.description}</p>
-          <p className="mt-1 text-xs text-white/50">Status: {draftPhaseInfo.status}</p>
-          <Link
-            href={`/league/${leagueId}?tab=Draft`}
-            className="mt-3 inline-block rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15"
-          >
-            Go to Draft
-          </Link>
-        </div>
-      )}
-
       <DevyDraftCenter
         leagueId={leagueId}
         startupRounds={summary.config.startupVetRounds ?? undefined}
@@ -157,6 +142,7 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         devySlotsUsed={devySlots.used}
         devySlotCount={summary.config.devySlotCount}
         bestBallEnabled={summary.config.bestBallEnabled}
+        current={draftPhaseInfo ? { phase: draftPhaseInfo.phase, status: draftPhaseInfo.status } : null}
       />
 
       {/*
@@ -164,16 +150,13 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         stashes, graduates) with no data source — five always read "Date TBD" / "No data" / "—", and the promotion
         window always "Closed", contradicting the hero above (Devy audit item 2, 2026-11-07). Removed, not hidden.
       */}
-      <DevyPromotionPanel leagueId={leagueId} rosterId={rosterId} isCommissioner={isCommissioner} />
+      {/* Only when someone can be promoted: otherwise it only said "none right now" (the hero covers declared players). */}
+      {(summary.promotionEligibleCount ?? 0) > 0 ? (
+        <DevyPromotionPanel leagueId={leagueId} rosterId={rosterId} isCommissioner={isCommissioner} />
+      ) : null}
 
       {isCommissioner && <DevyCommissionerTools leagueId={leagueId} />}
 
-      <Link
-        href={`/league/${leagueId}?tab=Settings`}
-        className="block rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 hover:bg-white/10"
-      >
-        League settings
-      </Link>
     </div>
     </SpecialtyShell>
   )
