@@ -52,6 +52,41 @@ describe('Sleeper survival evidence', () => {
     expect(await verifySleeperSurvival({ ...custom, name: 'Survivor' }, rosters, owner, async week => weeks[week - 1])).toBeNull()
   })
 
+  it('verifies a Week 2 commissioner cut even when a different roster returns later', async () => {
+    const custom = { ...league, settings: { type: 0, start_week: 1, last_scored_leg: 4, playoff_week_start: 0 } }
+    const rosters = [roster(1), roster(2), roster(3), roster(4)]
+    const ownerCutWeek = { ...matchup(1, 1), players: ['first-player', 'second-player'] }
+    const weeks = [
+      [matchup(1, 5), matchup(2, 3), matchup(3, 10), matchup(4, 11)],
+      [ownerCutWeek, matchup(2, 0, false), matchup(3, 10), matchup(4, 11)],
+      [matchup(1, 0, false), matchup(2, 0, false), matchup(3, 12), matchup(4, 11)],
+      [matchup(1, 0, false), matchup(2, 9), matchup(3, 11), matchup(4, 10)],
+    ]
+    const drop = (player: string, status_updated: number) => ({
+      type: 'commissioner', status: 'complete', creator: 'commissioner', leg: 2, status_updated, drops: { [player]: 1 },
+    })
+    const drops = [drop('first-player', 1_000), drop('second-player', 2_000)]
+    const getWeek = async (week: number) => weeks[week - 1]
+    const getTransactions = vi.fn(async () => drops)
+    expect(await verifySleeperSurvival(custom, rosters, owner, getWeek)).toBeNull()
+    const result = await verifySleeperSurvival(custom, rosters, owner, getWeek, getTransactions)
+    expect(result).toMatchObject({ method: 'verified_commissioner_drops', eliminatedWeek: 2 })
+    expect(sleeperSurvivalPeriods(result!)).toEqual({ periods: 1, totalPeriods: 4 })
+    expect(readSleeperSurvivalEvidence(result)).toEqual(result)
+    expect(getTransactions).toHaveBeenCalledExactlyOnceWith(2)
+
+    expect(await verifySleeperSurvival(custom, rosters, owner, getWeek, async () => drops.slice(0, 1))).toBeNull()
+    expect(await verifySleeperSurvival(custom, rosters, owner, getWeek, async () => [
+      drops[0], { ...drops[1], type: 'waiver' },
+    ])).toBeNull()
+    expect(await verifySleeperSurvival(custom, rosters, owner, getWeek, async () => [
+      drops[0], { ...drops[1], status_updated: 3_700_000 },
+    ])).toBeNull()
+    expect(await verifySleeperSurvival(custom, rosters, owner, async week =>
+      week === 4 ? [matchup(1, 8), ...weeks[3].slice(1)] : weeks[week - 1], getTransactions,
+    )).toBeNull()
+  })
+
   it('keeps Career display scores identical to single-season Rankings scores', () => {
     for (const periods of [0, 2, 10, 17]) {
       const survival = { periods, totalPeriods: 17 }
