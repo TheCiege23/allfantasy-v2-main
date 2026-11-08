@@ -32,6 +32,7 @@ import {
   leagueSupportsTaxiDevy,
   isTaxiDevySlot,
 } from '@/lib/league-creation/prospectStashPolicy'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +119,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
 
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   const locked = await settingsLockedResponse(leagueId, 'rosters')
   if (locked) return locked
 

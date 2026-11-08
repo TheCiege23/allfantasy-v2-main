@@ -32,6 +32,7 @@ import {
   withdrawAmendment,
 } from '@/lib/constitution/constitutionService'
 import { prisma } from '@/lib/prisma'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   switch (body.action) {
     case 'draft': {
       const league = await prisma.league.findUnique({ where: { id: g.leagueId }, select: { userId: true } })
-      if (!(await constitutionEntitled(league?.userId ?? null))) {
+      if (!(await constitutionEntitled(await leagueCommissionerAccountId(g.leagueId, league?.userId)))) {
         return NextResponse.json({ error: 'not_entitled', upgradeUrl: '/commissioner-upgrade' }, { status: 402 })
       }
       const sections = await draftFromSettings(g.leagueId, body.answers)

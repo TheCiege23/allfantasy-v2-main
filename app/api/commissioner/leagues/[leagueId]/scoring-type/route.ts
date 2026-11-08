@@ -21,6 +21,7 @@ import {
 } from '@/lib/category-scoring/leagueScoringType'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 import { switchLeagueScoringType } from '@/lib/league/scoringTypeSwitch'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ ...describe(league.settings, String(league.sport)), isCommissioner: league.userId === session.user.id })
+  return NextResponse.json({ ...describe(league.settings, String(league.sport)), isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id) })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
@@ -57,7 +58,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const input = { mode: body.mode, presetId: body.presetId, categoryIds: body.categoryIds, recordMode: body.recordMode }
