@@ -1,3 +1,4 @@
+import { createRng, seedFromString } from '@/lib/core-app/outlookSim'
 import type { PeriodScoreRow, TiebreakStep } from './types'
 
 export type DraftSlotByRoster = Map<string, number>
@@ -10,6 +11,11 @@ export function resolveTiebreak(args: {
   weekOrPeriod: number
   draftSlotByRoster: DraftSlotByRoster
   commissionerChoppedRosterIds?: string[]
+  /**
+   * Source for the `random` step, in [0, 1). Omitted → a draw seeded by the week and the tied teams
+   * (see `drawFor`). Tests and the season simulator pass their own seeded source.
+   */
+  random?: () => number
 }): { choppedRosterIds: string[]; stepUsed: TiebreakStep | null; reason: string } {
   const { candidates, tiebreakerOrder, weekOrPeriod, draftSlotByRoster } = args
   const count = Math.max(0, Math.min(Math.floor(args.teamsPerChop), candidates.length))
@@ -44,7 +50,7 @@ export function resolveTiebreak(args: {
     }
     if (step === 'random') {
       stepUsed = step
-      return shuffleAndTake(rows, needed)
+      return shuffleAndTake(rows, needed, args.random ?? drawFor(weekOrPeriod, rows))
     }
     if (step === 'draft_slot' && weekOrPeriod > 1) return breakTie(rows, needed, index + 1)
     const key = (row: PeriodScoreRow) => {
@@ -70,10 +76,27 @@ function groupByKey<T>(sorted: T[], key: (row: T) => number): T[][] {
   return groups
 }
 
-function shuffleAndTake<T>(rows: T[], count: number): T[] {
-  const result = [...rows]
+/**
+ * The default draw for the `random` step: seeded by the week and the SORTED ids of the teams tied on
+ * the line, so the same tie always draws the same team.
+ *
+ * ⚠ IT WAS `Math.random()`, AND THAT MADE THE PREVIEW AND THE CHOP DISAGREE. The commissioner's chop
+ * preview (./chopPreview.ts) and the real chop (./GuillotineEliminationEngine.ts) both call this
+ * resolver, each drew its own coin, and the preview had to warn that "the real chop may pick the other
+ * team". A rerun of the same week could also chop a different team. Seeding by the tie itself keeps
+ * it a fair draw — nobody chooses the seed — while making it the same draw everywhere it is computed.
+ * Sorting the ids makes it independent of the order each caller lists the candidates in.
+ */
+function drawFor(weekOrPeriod: number, tied: PeriodScoreRow[]): () => number {
+  const ids = tied.map((row) => row.rosterId).sort()
+  return createRng(seedFromString(`guillotine-tiebreak|${weekOrPeriod}|${ids.join(',')}`))
+}
+
+function shuffleAndTake(rows: PeriodScoreRow[], count: number, random: () => number): PeriodScoreRow[] {
+  // Start from a canonical order, so the result depends only on the draw, never on input order.
+  const result = [...rows].sort((a, b) => (a.rosterId < b.rosterId ? -1 : a.rosterId > b.rosterId ? 1 : 0))
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = Math.floor(random() * (i + 1))
     ;[result[i], result[j]] = [result[j]!, result[i]!]
   }
   return result.slice(0, count)

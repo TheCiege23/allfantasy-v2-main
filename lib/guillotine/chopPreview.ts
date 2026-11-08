@@ -182,7 +182,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     notes.push(`${immunity.protectedIds.map((id) => byId.get(id)!.name).join(' and ')} ${immunity.protectedIds.length === 1 ? 'is' : 'are'} immune as last week's top scorer.`)
   }
   const tieLabel = stepUsed ? (TIEBREAK_OPTIONS.find((o) => o.value === stepUsed)?.label ?? stepUsed) : null
-  if (stepUsed === 'random') notes.push('A tie on the chop line would be settled by a random draw, so the real chop may pick the other team.')
+  if (stepUsed === 'random') notes.push('A tie on the chop line is settled by a random draw. The draw is fixed for this week and these teams, so the chop picks the same team as long as the tie stays the same.')
   if (stepUsed === 'commissioner') notes.push('A tie on the chop line is set to be settled by you. The chop will wait for your pick.')
 
   const names = choppedRosterIds.map((id) => byId.get(id)!.name)
