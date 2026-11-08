@@ -22,7 +22,8 @@ export function StartupAuctionView({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const config = summary.config
   const isSnake = config.startupDraftType === 'snake'
@@ -30,13 +31,15 @@ export function StartupAuctionView({
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
       {/* Draft summary header */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

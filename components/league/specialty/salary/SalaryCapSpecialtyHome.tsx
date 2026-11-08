@@ -12,6 +12,7 @@ import {
 } from '@/components/league/specialty/SpecialtyShell'
 import type { SalaryCapSummary } from '@/components/salary-cap/types'
 import { OFFSEASON_STEPS, capBarSegments, contractTags } from '@/lib/salary-cap/capHomeView'
+import { formatCapMoney, isOverCap } from '@/lib/salary-cap/capMoney'
 import s from './salary-specialty.module.css'
 
 /*
@@ -20,8 +21,7 @@ import s from './salary-specialty.module.css'
  * with the offseason calendar, the cap rules and the latest moves. Every figure is the summary route's.
  */
 
-const money = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n) ? '—' : `$${(Math.round(n * 10) / 10).toFixed(1)}`
+const money = formatCapMoney
 
 const humanEvent = (t: string) => {
   if (t === 'contract_cut') return 'A contract was cut'
@@ -92,6 +92,12 @@ export function SalaryCapSpecialtyHome({
               of {money(ceiling)}
               {ledger && ledger.deadMoneyHit > 0 ? ` · after ${money(ledger.deadMoneyHit)} dead money` : ''}
             </span>
+            {/* The Cap space screen warned; Cap home only showed a negative number (Salary Cap audit item 5). */}
+            {ledger && isOverCap(ledger.capSpace) ? (
+              <span className={s.overNote} role="status" data-testid="salary-over-cap">
+                Over the cap by {money(-ledger.capSpace)}
+              </span>
+            ) : null}
           </div>
         }
       />
