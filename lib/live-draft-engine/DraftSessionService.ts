@@ -1,3 +1,4 @@
+import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
@@ -771,8 +772,9 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
   }
 
   const timerSeconds = computeEffectivePickTimerSeconds(ls, config, uiSettings)
+  // An offline draft runs no pick clock: the commissioner enters every pick (see PickSubmissionService).
   const timerEndAt =
-    timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
+    uiSettings.executionMode !== 'offline' && timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
   if (!(await startClaimedSession(session, {
     status: 'in_progress', timerSeconds, timerEndAt, pausedRemainingSeconds: null,
     overnightFrozenPickSeconds: null, startedAt: startedAtNow, completedAt: null,
@@ -852,8 +854,9 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
     const hasUsableRemaining =
       typeof session.pausedRemainingSeconds === 'number' && session.pausedRemainingSeconds > 0
     const sec = hasUsableRemaining ? Number(session.pausedRemainingSeconds) : (effectiveStored ?? 0)
+    // An offline draft resumes with no pick clock, as it started (the commissioner enters every pick).
     const timerEndAt =
-      effectiveStored != null && effectiveStored > 0
+      uiSettings.executionMode !== 'offline' && effectiveStored != null && effectiveStored > 0
         ? new Date(Date.now() + sec * 1000)
         : null
     const auctionState =
@@ -1023,7 +1026,7 @@ export async function undoLastPick(
   // Compute fresh timer before entering the transaction so the timestamp is stable.
   // Only reset when in_progress — if paused, leave pausedRemainingSeconds so resume still works.
   const freshTimerEndAt =
-    session.status === 'in_progress' && session.timerSeconds != null && session.timerSeconds > 0
+    session.status === 'in_progress' && session.timerSeconds != null && session.timerSeconds > 0 && !(await isOfflineDraft(leagueId))
       ? new Date(Date.now() + session.timerSeconds * 1000)
       : null
 
