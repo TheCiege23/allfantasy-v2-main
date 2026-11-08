@@ -1,6 +1,7 @@
 import { summarizeFinals, type FinalResult } from '@/lib/core-app/careerFinals'
 import { computePrestige, winRateOf, type PrestigeComponent } from '@/lib/core-app/prestige'
 import { getLevelFromXp } from '@/lib/rank/levels'
+import { survivalSeasonScore } from '@/lib/core-app/rankingsEngine'
 
 /**
  * Career — the pure half. Rows in, a trophy room out.
@@ -72,6 +73,7 @@ export type CareerRow = {
   pointsFor: number | null
   pointsAgainst: number | null
   survival?: { periods: number; totalPeriods: number }
+  survivalFormat?: 'guillotine' | 'survivor'
   madePlayoffs: boolean
   /** False for sources that cannot say anything about the playoffs at all. */
   playoffKnown: boolean
@@ -463,6 +465,14 @@ export type CareerData = {
    *  answer, so the UI can say so instead of showing a silent zero. */
   legacy: { total: number; dimensions: LegacyDimension[]; unavailable: string[] } | null
 
+  survivalResults?: Array<{
+    key: string
+    season: number
+    leagueName: string
+    format: 'guillotine' | 'survivor'
+    survival: CareerRow['survival']
+    score: number | null
+  }>
   accomplishments: CareerAccomplishments
   coverage: CareerCoverage
   titles: CareerTitle[]
@@ -1006,6 +1016,14 @@ export function buildCareerData(source: CareerSource, filter: CareerFilter = NO_
     platform: filter.platform,
     filter,
     filterOptions: careerFilterOptions(source.rows, source.platforms),
+    survivalResults: rows.flatMap(row => row.counted && row.survivalFormat ? [{
+      key: row.key,
+      season: row.season,
+      leagueName: row.leagueName,
+      survival: row.survival,
+      format: row.survivalFormat,
+      score: row.survival && row.survival.totalPeriods > 0 ? survivalSeasonScore(row.survival) : null,
+    }] : []).sort((a, b) => b.season - a.season || a.leagueName.localeCompare(b.leagueName)),
     seasonsPlayed,
     leaguesPlayed,
     /*

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
+import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSurvival'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
@@ -834,6 +835,9 @@ export async function persistImportedLeagueFromNormalization(
       sourceManagerId: options.importerSourceManagerId,
     })
     if (joined) {
+      if (provider === 'sleeper' && normalized.league.status === 'complete') {
+        await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
+      }
       /*
        * ⚠ THE JOIN RETURNS BEFORE THE ORDINARY PATH'S `calculateAndSaveRank` BELOW, so
        * without this a joiner is never ranked (measured: `rank_calculated_at` stayed null
@@ -1300,6 +1304,9 @@ export async function persistImportedLeagueFromNormalization(
     })
   } catch {
     /* non-fatal settings stamp */
+  }
+  if (provider === 'sleeper' && normalized.league.status === 'complete' && options.importerSourceManagerId) {
+    await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
   }
   try {
     await calculateAndSaveRank(userId)

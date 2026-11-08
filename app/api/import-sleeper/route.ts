@@ -275,7 +275,7 @@ export async function POST(req: Request) {
                 } satisfies MatchupCommentaryTelemetry,
               };
             }
-            const processed = await processLeague(leagueData, afUserId, season, sportLabel);
+            const processed = await processLeague(leagueData, afUserId, season, sportLabel, sleeperUserId);
             if (!processed) {
               return {
                 status: "failed",

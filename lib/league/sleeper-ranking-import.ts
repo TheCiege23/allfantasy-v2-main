@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { LeagueSport, type Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters } from '@/lib/sleeper-client'
@@ -161,6 +162,8 @@ export async function upsertSleeperRankingImportLeague(
       settings: { ...baseSettings, ...rankMeta },
     },
   })
+
+  await importSleeperSurvival({ userId, platformLeagueId, season }, leagueData, rosters, sleeperUserId)
 
   return { leagueId: league.id }
 }

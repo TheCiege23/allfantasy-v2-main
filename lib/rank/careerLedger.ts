@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { loadCareerSurvival } from './careerSurvival'
+import { readSleeperSurvivalEvidence, sleeperSurvivalPeriods } from '@/lib/league-import/sleeper/survivalEvidence'
 
 /** One verified record per manager and league-season, shared by XP, Rankings and Your Career. */
 
@@ -711,10 +712,34 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
     ]
   })
 
-  const [team, survival] = await Promise.all([loadClaimedTeamRows(ids), loadCareerSurvival(ids)])
+  const [team, survival, sleeperSurvival] = await Promise.all([
+    loadClaimedTeamRows(ids),
+    loadCareerSurvival(ids),
+    Promise.resolve().then(() => prisma.sleeperCareerSurvival.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true, platformLeagueId: true, season: true, evidence: true, updatedAt: true },
+    })).catch(() => []),
+  ])
   const rows = mergeLedgerSources(refreshImportFromTeams(imported, team), refreshImportFromTeams(legacy, team), team, native)
   const survivalByKey = new Map(survival.map((row) => [`${row.userId}|${row.key}`, row]))
+  const importedSurvivalByKey = new Map(sleeperSurvival.map(result => [
+    [result.userId, 'sleeper:' + result.platformLeagueId + ':' + result.season].join('|'),
+    result,
+  ]))
   return mergeLedgerSources(rows.map((row) => {
+    const importedResult = importedSurvivalByKey.get([row.userId, row.key].join('|'))
+    const evidence = readSleeperSurvivalEvidence(importedResult?.evidence)
+    if (importedResult && evidence) return {
+      ...row,
+      specialty: 'guillotine' as const,
+      survival: sleeperSurvivalPeriods(evidence),
+      wonChampionship: evidence.eliminatedWeek === null,
+      madePlayoffs: false,
+      playoffTeams: null,
+      playoffKnown: false,
+      completed: true,
+      updatedAt: iso(newer(new Date(row.updatedAt ?? 0), importedResult.updatedAt)),
+    }
     const measured = survivalByKey.get(`${row.userId}|${row.key}`)
     if (!measured) return row
     return {

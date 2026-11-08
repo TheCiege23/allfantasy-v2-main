@@ -3976,6 +3976,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  sleeperCareerSurvival                    SleeperCareerSurvival[]
   fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
@@ -20357,4 +20358,16 @@ model CommunityReport {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("community_reports")
+}
+
+model SleeperCareerSurvival {
+  userId           String   @map("user_id")
+  platformLeagueId String   @map("platform_league_id")
+  season           Int
+  evidence         Json
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, platformLeagueId, season])
+  @@map("sleeper_career_survival")
 }
