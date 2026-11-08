@@ -503,11 +503,11 @@ export default function NewBracketLeaguePage() {
             data-testid="af-commissioner-options"
           >
             <summary className="cursor-pointer text-sm font-bold mode-text">
-              AF Commissioner Options {isAfCommissioner ? "" : "(Locked Preview)"}
+              {sport === "NCAAF" ? "CFP Commissioner Options" : `AF Commissioner Options ${isAfCommissioner ? "" : "(Locked Preview)"}`}
             </summary>
-            <p className="mt-2 text-xs mode-muted">
+            {sport !== "NCAAF" ? <p className="mt-2 text-xs mode-muted">
               Premium controls are prepared for pool setup. AI tools flag issues for commissioner review only; they do not accuse, punish, remove, or ban users.
-            </p>
+            </p> : null}
             {sport === "NCAAF" ? (
               <div className="mt-3 grid gap-2 text-xs mode-muted">
                 <p>The pool invite code and link are available after creation. These visibility settings are available to all commissioners.</p>
@@ -547,7 +547,7 @@ export default function NewBracketLeaguePage() {
                 </label>
               ))}
             </div>}
-            {!isAfCommissioner ? (
+            {!isAfCommissioner && sport !== "NCAAF" ? (
               <a
                 href="/pricing"
                 className="mt-3 inline-flex rounded-lg border px-3 py-2 text-xs font-semibold"

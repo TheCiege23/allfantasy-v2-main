@@ -98,6 +98,7 @@ describe("/brackets/leagues/new create page", () => {
   it("saves the CFP visibility selection and explains current invite limitations", async () => {
     render(<NewBracketLeaguePage />)
     fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
+    expect(screen.getByText("CFP Commissioner Options")).toBeInTheDocument()
     expect(screen.getByText(/anyone with the pool link can join/i)).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText("Public pool label"))
     fireEvent.change(screen.getByTestId("bracket-create-name-input"), { target: { value: "CFP Friends" } })
