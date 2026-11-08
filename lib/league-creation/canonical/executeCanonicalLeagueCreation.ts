@@ -234,9 +234,18 @@ async function finishCreatedLeague(
         const session = await prisma.draftSession.findFirst({
           where: { leagueId: createdLeagueId, status: 'pre_draft' },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, rounds: true },
+          select: { id: true, rounds: true, devyConfig: true },
         })
-        if (session && session.rounds > capacity) {
+        /*
+         * A plain dynasty startup also GROWS to its active roster. The sport presets' startup depth is
+         * not chosen in the form and lagged the default rosters — NHL 26 rounds for 27 active spots,
+         * MLB 34 for 41 — so every team finished the startup with empty spots, while the first roster
+         * edit resized the draft to the full roster (syncDraftRoundsToRoster). Not when college rounds
+         * sit at the end of the draft (devyConfig): they are numbered from the last round.
+         */
+        const devyRounds = (session?.devyConfig as { enabled?: unknown } | null)?.enabled === true
+        const grow = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
+        if (session && (session.rounds > capacity || (grow && session.rounds < capacity))) {
           await prisma.$transaction(async (tx) => {
             const league = await tx.league.findUniqueOrThrow({ where: { id: createdLeagueId }, select: { settings: true } })
             const settings = (league.settings ?? {}) as Record<string, unknown>
