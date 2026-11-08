@@ -297,6 +297,12 @@ export async function captureLiveTradeOffer(input: {
   oneGradeLetter?: string | null
 }): Promise<string | null> {
   try {
+    /*
+     * The sample is priced on FantasyCalc's NFL chart alone (`resolveItemValue` below), so no other
+     * sport's offer can ever be captured — every asset comes back unpriced and the offer is dropped.
+     * Stop before the chart read instead of after it: an NBA, NHL or MLB proposal spent one per offer.
+     */
+    if (String(input.league.sport ?? 'NFL').trim().toUpperCase() !== 'NFL') return null
     const { isSuperFlex, isTEP, isDynasty, ppr, scoringType } = resolveLeagueScoringContext(input.league)
     const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
 
