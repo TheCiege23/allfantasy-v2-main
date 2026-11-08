@@ -10,14 +10,14 @@
  *   SIM_FX_MATRIX=smoke (default) NBA 32
  *   SIM_FX_MATRIX=size:128          every sport at one size
  *   SIM_FX_MATRIX=full  NFL/NBA/NHL/MLB × 32/128/256
- *   SIM_FX_MATRIX=audit  all seven sports at 8 teams, including Soccer's import refusal
+ *   SIM_FX_MATRIX=audit  all seven sports at 8 teams
  *   SIM_AUDIT_VALUES=1  seed NHL, MLB, NCAAF and NCAAB stored values in the audit matrix
  *   SIM_FX_MATRIX=only:NHL,128
  *   SIM_OUT=<path>      where the JSON report goes (default: fantrax-scale-report.json in the OS temp dir)
  *   SIM_FC=empty|sim|sim-raw  FantasyCalc answers empty / with a chart of the fabricated NFL players named
  *                       "First Last" / the same chart in Fantrax's "Last, First" order (a control).
  *                       Unset, FantasyCalc is unreachable like every other host.
- *   SIM_SEED_VALUES=0   skip seeding identity rows and NBA projections
+ *   SIM_SEED_VALUES=0   skip seeding identity rows and trade values
  *
  * No network: Fantrax's HTTP functions are fabricated; every other fetch throws and is recorded.
  * No notifications, no Meta CAPI conversions, no model calls.
@@ -110,6 +110,7 @@ const report: ScaleRun[] = []
 const integrityLog: string[] = []
 
 beforeEach(async () => {
+  vi.stubEnv('AI_FEATURES_ENABLED', 'false')
   sim ??= await loadSim()
   holder.db = sim.createInMemoryPrisma()
   holder.session = null
@@ -156,6 +157,7 @@ beforeEach(async () => {
 afterEach(() => {
   globalThis.fetch = realFetch
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
 afterAll(() => {
   if (report.length === 0) return
@@ -186,13 +188,29 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
           run.findings.push({ code: 'STEP_THREW', stage: name, message: `${(e as Error).message}`, detail: String((e as Error).stack).split('\n').slice(0, 6).join(' | ') })
         }
       }
+      if (c.sport === 'SOCCER') await step('seed-identities', () => sim.seedSoccerIdentities(env))
       await step('import', () => sim.importLeague(env, run))
       await step('seed-values', () => sim.seedTradeValues(env, run))
       await step('join', () => sim.joinAndClaim(env, run))
       await step('trades', () => sim.runTrades(env, run))
       await step('rank+chimmy', () => sim.runRankAndChimmy(env, run))
-      if (c.sport === 'SOCCER') expect(run.leagueId).toBeNull()
-      else expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
+      expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
+      if (c.sport === 'SOCCER') {
+        expect(run.stats.importStatus).toBe(200)
+        expect(run.stats.imported).toMatchObject({ sport: 'SOCCER', rosters: c.teamCount, rosteredPlayers: 11 * c.teamCount })
+        expect(run.stats.seatsHeld).toBe(c.teamCount)
+        if (c.teamCount < 6) return
+        const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null; basis: string | null; withheld: string | null }>
+        expect(grades).toHaveLength(5)
+        if (process.env.SIM_SEED_VALUES === '0') {
+          expect(grades.every((g) => !g.grade && g.withheld)).toBe(true)
+        } else {
+          expect(grades.find((g) => g.label === 'fair'), JSON.stringify(grades)).toMatchObject({ grade: 'C' })
+          expect(grades.find((g) => g.label === 'collusion-1')?.grade).toMatch(/^[DF]$/)
+          expect(grades.every((g) => g.grade)).toBe(true)
+          expect(grades[0]?.basis).toContain('AllFantasy’s default soccer points')
+        }
+      }
     })
   }
 })

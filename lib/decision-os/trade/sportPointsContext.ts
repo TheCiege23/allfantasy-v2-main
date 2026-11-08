@@ -6,6 +6,7 @@ import { playerIdSpaceFor } from './tradePlayers'
 
 import { prisma } from '@/lib/prisma'
 import { buildLeagueStatScorer, type LeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
@@ -487,6 +488,15 @@ async function finishBoard(args: {
   const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
   const teams = hasSavedTeamCount ? savedTeamCount : DEFAULT_TEAMS
   const lineup = lineupSlotsFor(sport, league?.settings ?? null)
+  // Fantrax's Soccer categories are retained as raw settings. Until a league
+  // supplies supported overrides, the scorer uses AllFantasy points.
+  let fantraxSoccerDefaults = false
+  if (sport === 'SOCCER' && league?.platform?.toLowerCase() === 'fantrax' && valuation.kind === 'points') {
+    const leagueWeights = Object.entries(resolveLeagueScoringRules({ sport, settings: league.settings })?.overrides ?? {})
+    const defaultWeights = resolveLeagueScoringRules({ sport, settings: null })?.overrides ?? {}
+    fantraxSoccerDefaults = leagueWeights.length === Object.keys(defaultWeights).length &&
+      leagueWeights.every(([key, weight]) => weight === defaultWeights[key])
+  }
 
   // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
   const valued: Array<(typeof lines)[number] & { hitter?: boolean; pitcher?: boolean }> =
@@ -564,7 +574,7 @@ async function finishBoard(args: {
         baselineSeasonLabel: baseline != null ? seasonLabelFor(baseline, sport) : null,
         ...(games.scheduleKnown ? {} : { scheduleKnown: false }),
       },
-      scoringBasis: league ? 'league' : 'default',
+      scoringBasis: fantraxSoccerDefaults ? 'default_in_league' : league ? 'league' : 'default',
       teams,
       ...(league && !hasSavedTeamCount ? { teamCountAssumed: true } : {}),
       valueKind: valuation.kind,
