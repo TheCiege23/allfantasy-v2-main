@@ -5,6 +5,7 @@ import { syncNbaCupTournament } from "@/lib/playoffs/syncNbaCupTournament"
 import { syncNflPlayoffs } from "@/lib/playoffs/syncNflPlayoffs"
 import { sweepBracketExperience } from "@/lib/playoffs/bracketExperienceService"
 import { syncCfpOfficialField } from "@/lib/playoffs/syncCfpOfficialField"
+import { syncCfpPreview } from "@/lib/playoffs/syncCfpPreview"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -35,8 +36,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: result.failures.length === 0 && !experience?.failures, ...result, experience }, { status: result.failures.length || experience?.failures ? 502 : 200 })
   }
   const apply = process.env.BRACKET_AUTO_RESULT_SYNC_ENABLED === "true" && body.apply === true
+  const preview = await syncCfpPreview({ season, apply: body.apply === true }).catch(() => ({ status: "unavailable" }))
   const officialField = await syncCfpOfficialField({ season, apply: body.apply === true })
   const result = await syncSeasonBracketResults({ sport, season, apply })
   const experience = apply ? await sweepBracketExperience(sport, season).catch(() => ({ failures: 1, processed: 0, alerts: 0 })) : null
-  return NextResponse.json({ ok: officialField.ok && !experience?.failures, ...result, officialField, experience }, { status: !officialField.ok || experience?.failures ? 502 : 200 })
+  return NextResponse.json({ ok: officialField.ok && !experience?.failures, ...result, officialField, preview, experience }, { status: !officialField.ok || experience?.failures ? 502 : 200 })
 }
