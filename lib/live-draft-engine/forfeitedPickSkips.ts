@@ -77,7 +77,11 @@ export async function skipForfeitedPicksOnClock(
       expectedOverall: current.overall,
       pickMetadata: { forfeited: true, reason: 'Forfeited as a league penalty', round: current.round, originalRosterId: current.rosterId },
     })
-    if (!result.success) break
+    if (!result.success) {
+      // Never silent: an unskipped forfeit hands the penalized team its pick back.
+      console.warn('[draft] forfeited pick could not be skipped', { leagueId, overall: current.overall, round: current.round, originalRosterId: current.rosterId, error: (result as { error?: string }).error ?? null })
+      break
+    }
     skipped += 1
   }
   return skipped
