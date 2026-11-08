@@ -58,6 +58,27 @@ vi.mock('@/lib/rookie-order/liveRookieOrderService', async (load) => ({
   ...(await load<typeof import('@/lib/rookie-order/liveRookieOrderService')>()),
   isLeagueEntitledToLiveRookieOrder: vi.fn(async () => true),
 }))
+// With the scenarios on, the commissioner is a paying AF Commissioner: premium commissioner screens are open.
+vi.mock('@/lib/subscription/FeatureGateService', async (load) => {
+  const real = await load<typeof import('@/lib/subscription/FeatureGateService')>()
+  class SimFeatureGateService extends (real.FeatureGateService as any) {
+    async evaluateUserFeatureAccess(...args: unknown[]) {
+      if (process.env.SIM_SCENARIOS === '1') return { allowed: true, reason: 'simulation: AF Commissioner' }
+      return (super.evaluateUserFeatureAccess as any)(...args)
+    }
+  }
+  return { ...real, FeatureGateService: SimFeatureGateService }
+})
+vi.mock('@/lib/subscription/EntitlementResolver', async (load) => {
+  const real = await load<typeof import('@/lib/subscription/EntitlementResolver')>()
+  class SimEntitlementResolver extends (real.EntitlementResolver as any) {
+    async resolveForUser(...args: unknown[]) {
+      if (process.env.SIM_SCENARIOS === '1') return { hasAccess: true, message: 'simulation: AF Commissioner' }
+      return (super.resolveForUser as any)(...args)
+    }
+  }
+  return { ...real, EntitlementResolver: SimEntitlementResolver }
+})
 vi.mock('@/lib/analytics/recordAnalyticsEvent', () => ({ recordEngineTelemetrySample: vi.fn(), recordProductEvent: vi.fn() }))
 vi.mock('@/lib/events', async (load) => ({
   ...(await load<typeof import('@/lib/events')>()),
@@ -73,13 +94,13 @@ import type { DynastySport, LeagueRun, SimEnv, StartupDraftKind } from './dynast
  */
 let sim: Awaited<ReturnType<typeof loadSim>>
 const loadSim = async () => {
-  const [{ createInMemoryPrisma }, { postCreateLeague }, harness, { runDynastySeason }] = await Promise.all([
+  const [{ createInMemoryPrisma, rowsOf }, { postCreateLeague }, harness, { runDynastySeason }] = await Promise.all([
     import('../redraft-season-simulation/inMemoryPrisma'),
     import('@/lib/league-creation/canonical/createLeagueHandler'),
     import('./dynastyHarness'),
     import('./dynastySeason'),
   ])
-  return { createInMemoryPrisma, postCreateLeague, runDynastySeason, ...harness }
+  return { createInMemoryPrisma, rowsOf, postCreateLeague, runDynastySeason, ...harness }
 }
 
 const KINDS: StartupDraftKind[] = ['snake', 'snake_3rr', 'linear', 'auction', 'auto', 'offline']
@@ -128,6 +149,26 @@ beforeEach(async () => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const path = url.replace(/^https?:\/\/[^/]+/, '')
     if (path === '/api/leagues' && init?.method === 'POST') return sim.postCreateLeague(new Request('http://sim.allfantasy.test/api/leagues', init))
+    /*
+     * FantasyCalc's chart for the seeded NFL pool, valued in the pool's own rank order (`sim-nfl-rb-3` is
+     * the third RB), keyed by the pool ids as Sleeper ids — the id space a native NFL league stores. Without
+     * it every trade is ungraded and the collusion scan has nothing to measure. SIM_FC=off: unreachable.
+     */
+    if (/api\.fantasycalc\.com/.test(url) && process.env.SIM_FC !== 'off') {
+      const chart = (sim.rowsOf(holder.db, 'SportsPlayer') as any[])
+        .filter((p) => p.sport === 'NFL' && /^sim-nfl-/.test(String(p.id)))
+        .map((p, i) => {
+          const rank = Number(/-(\d+)$/.exec(String(p.id))?.[1] ?? 99)
+          const value = Math.max(100, 9000 - (rank - 1) * 320)
+          return {
+            player: { id: i + 1, name: p.name, mflId: '', sleeperId: String(p.id), position: p.position, maybeBirthday: null, maybeHeight: null, maybeWeight: null, maybeCollege: null, maybeTeam: p.team, maybeAge: 26, maybeYoe: 4, espnId: null, fleaflickerId: null },
+            value, overallRank: i + 1, positionRank: rank, trend30Day: 0, redraftDynastyValueDifference: 0, redraftDynastyValuePercDifference: 0, redraftValue: value, combinedValue: value,
+            maybeMovingStandardDeviation: null, maybeMovingStandardDeviationPerc: null, maybeMovingStandardDeviationAdjusted: null, displayTrend: false, maybeOwner: null, starter: rank <= 24, maybeTier: null, maybeAdp: null,
+          }
+        })
+      network.push({ host: `api.fantasycalc.com (served sim chart: ${chart.length})` })
+      return new Response(JSON.stringify(chart), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     network.push({ host: url.replace(/^https?:\/\//, '').split('/')[0] })
     throw new Error(`dynasty sim: unexpected network call to ${url}`)
   }) as typeof fetch
@@ -149,6 +190,7 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
       const env: SimEnv = { db: holder.db, signIn: (user) => (holder.session = user ? { user } : null) }
       const run = await sim.createDynastyLeague(env, c)
       await sim.joinManagers(env, run)
+      if (process.env.SIM_SCENARIOS === '1') await (await import('./dynastyScenarios')).preDraftSettings(env, run)
       const pool = await sim.seedPlayerPool(env, run)
       await sim.runStartupDraft(env, run, pool)
       if (process.env.SIM_SEASON === '1') await sim.runDynastySeason(env, run)

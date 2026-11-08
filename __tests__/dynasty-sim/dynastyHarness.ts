@@ -202,7 +202,8 @@ export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolP
   const fresh = pool.filter((p) => !existing.has(p.id))
   if (fresh.length) {
     await env.db.sportsPlayer.createMany({
-      data: fresh.map((p) => ({ id: p.id, sport: run.sport, externalId: p.id, name: p.name, position: p.position, team: p.team, source: 'simulation', expiresAt: new Date('2030-01-01T00:00:00Z') })),
+      // A native NFL league stores Sleeper ids, and SportsPlayer carries them: the pool ids stand in for both.
+      data: fresh.map((p) => ({ id: p.id, sport: run.sport, externalId: p.id, ...(run.sport === 'NFL' ? { sleeperId: p.id } : {}), name: p.name, position: p.position, team: p.team, source: 'simulation', expiresAt: new Date('2030-01-01T00:00:00Z') })),
     })
   }
   run.stats.poolSize = pool.length

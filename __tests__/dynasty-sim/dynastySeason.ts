@@ -31,6 +31,8 @@ function hashSkill(id: string): number {
   return 2 + (h % 9)
 }
 
+const SCENARIOS = process.env.SIM_SCENARIOS === '1'
+
 export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<void> {
   const findings = run.findings as unknown as SeasonFinding[]
   const add = (f: SeasonFinding) => findings.push(f)
@@ -87,6 +89,8 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
     return true
   }
   const clearStats = () => {
+    // Scenarios keep the NFL weeks: Max PF (the rookie order) is computed from every week's lines.
+    if (SCENARIOS && !daily) return
     db.$tables.set('PlayerWeeklyScore', [])
     db.$tables.set('PlayerDailyScore', [])
   }
@@ -153,12 +157,24 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       }
     }
     clearStats()
+    const scenarioCtx = { seasonId, week, regularWeeks, add: add as never }
+    if (SCENARIOS) {
+      const sc = await import('./dynastyScenarios')
+      await sc.beforeWeekScoring(env, run, scenarioCtx)
+      await sc.weeklyScenarios(env, run, scenarioCtx)
+    }
     // Mid-season trading window, well before the deadline.
     if (process.env.SIM_TRADES !== '0' && week === Math.min(6, Math.max(1, regularWeeks - 2))) {
       const { runDynastyTrades } = await import('./dynastyTrades')
       await runDynastyTrades(env, run, { seasonId, week }, add as never)
+      if (SCENARIOS) {
+        const sc = await import('./dynastyScenarios')
+        await sc.collusionConsequences(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `collusion: ${e.message}` }))
+        await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
+      }
     }
   }
+  if (SCENARIOS) (await import('./dynastyScenarios')).checkTankingConsequences(env, run, add as never)
   run.stats.scoreMismatches = scoreMismatches
   run.stats.standingsMismatches = standingsMismatches
 
@@ -257,6 +273,11 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   if (lost || gained) add({ code: 'DYNASTY_ROSTER_NOT_CARRIED', stage: 'offseason', message: `Year 2 rosters differ from year 1's: ${lost} player(s) lost, ${gained} appeared.` })
 
   await runRankings(env, run, championId, add)
+  if (SCENARIOS) {
+    const sc = await import('./dynastyScenarios')
+    await sc.takeover(env, run, { add: add as never, seasonId, week: 0 }, (run.stats.scenarios ??= {}) as Record<string, any>, 'offseason').catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'offseason', message: `offseason takeover: ${e.message}` }))
+  }
+  run.stats.playoffStart = playoffStart
   await runRookieDraft(env, run, { ledger, championId, runnerUpId: (closed?.runnerUpRosterId ?? null) as string | null, year1RosterIds: rosterIds, year1, nextSeasonId: next[0].id }, add)
 }
 
@@ -305,7 +326,13 @@ async function runRookieDraft(
   // 2026-10-29: OFF by default, AF Commissioner only). The test mocks the entitlement check to true.
   // Without this the rookie draft takes the league's own order, by design, and standings are never read.
   const leagueRow = rowsOf(db, 'League').find((l: any) => l.id === leagueId) as any
-  await db.league.update({ where: { id: leagueId }, data: { settings: { ...(leagueRow.settings ?? {}), rookie_draft_order: { enabled: true, mode: 'reverse_max_pf' } } } })
+  // With the scenarios on, the commissioner already chose the order on the rookie-order screen; leave it.
+  if (!SCENARIOS) await db.league.update({ where: { id: leagueId }, data: { settings: { ...(leagueRow.settings ?? {}), rookie_draft_order: { enabled: true, mode: 'reverse_max_pf' } } } })
+  // Picks as they stand before the draft is created: traded owners, forfeits.
+  const picksBefore = (rowsOf(db, 'FutureDraftPick') as any[]).filter((p) => p.leagueId === leagueId).map((p) => ({ season: p.pickSeason, round: p.round, original: p.originalRosterId, owner: p.currentOwnerId, status: p.status }))
+  run.stats.picksBeforeRookieDraft = picksBefore
+  if (SCENARIOS) run.stats.liveRookieView = await (await import('./dynastyScenarios')).readLiveRookieView(env, run).catch((e: Error) => ({ threw: e.message }))
+  const orderFacts = SCENARIOS ? await (await import('@/lib/rookie-order/loadRookieOrderInput')).loadRookieOrderInput(leagueId).catch((e: Error) => ({ threw: e.message })) : null
   const created = (await createNextLeagueDraft(leagueId, run.commissionerId)) as any
   run.stats.rookieDraft = created.ok ? { kind: created.kind, rounds: created.rounds, orderSource: created.orderSource } : { code: created.code, message: created.message }
   if (!created.ok) {
@@ -322,6 +349,21 @@ async function runRookieDraft(
   const ownerOfSeason = new Map((rowsOf(db, 'RedraftRoster') as any[]).map((r) => [r.id, r.ownerId]))
   const draftRosterOfOwner = new Map((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => [String(r.platformUserId), String(r.id)]))
   const finalists = new Set([ctx.championId, ctx.runnerUpId].filter(Boolean) as string[])
+  if (SCENARIOS) {
+    // The commissioner's live rule: non-playoff teams by max PF, playoff teams by finish, runner-up then champion.
+    const sc = await import('./dynastyScenarios')
+    const exp = sc.expectedOrderFromFacts(orderFacts)
+    // Facts are keyed by league roster or season roster; the board by league roster.
+    const generic = new Set((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => String(r.id)))
+    const toGeneric = (id: string) => (generic.has(id) ? id : draftRosterOfOwner.get(String(ownerOfSeason.get(id))) ?? `?${id}`)
+    const expected = exp.order.map(toGeneric)
+    if (exp.detail.champion && ctx.championId && toGeneric(String(exp.detail.champion)) !== toGeneric(ctx.championId)) add({ code: 'ROOKIE_FACTS_WRONG_CHAMPION', stage: 'offseason', message: `The rookie order's facts name ${exp.detail.champion} champion; the season closed with ${ctx.championId}.` })
+    const actual = slotOrder.map((s) => s.rosterId)
+    run.stats.liveRookieOrderCheck = { orderSource: created.orderSource, matches: JSON.stringify(expected) === JSON.stringify(actual), expected, actual, detail: exp.detail }
+    if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+      add({ code: 'ROOKIE_ORDER_NOT_THE_COMMISSIONERS_RULE', stage: 'offseason', message: `Order source ${created.orderSource}; the order does not follow "non-playoff by reverse max PF, playoff by finish, runner-up 2nd-last, champion last".`, detail: { expected, actual, ...exp.detail } })
+    }
+  }
   const pct = (r: { wins: number; losses: number; ties: number }) => (r.wins + r.losses + r.ties ? (r.wins + r.ties / 2) / (r.wins + r.losses + r.ties) : 0)
   const field = ctx.year1RosterIds
     .filter((id) => !finalists.has(id))
@@ -363,8 +405,26 @@ async function runRookieDraft(
   const total = created.rounds * run.teamCount
   let made = 0
   const rookieIds = rookies.map((r) => r.id)
+  const { buildSessionSnapshot } = await import('@/lib/live-draft-engine/DraftSessionService')
+  run.stats.rookieClock = [] as Array<{ overall: number; slotOwner: string; onClock: string }>
   for (let overall = 1; overall <= total; overall += 1) {
-    const rosterId = expectedRosterForPick(slotOrder, overall, kind)
+    if (SCENARIOS) {
+      // What the engine's own forfeit skip submits, and what pick validation answers it.
+      const { skipForfeitedPicksOnClock } = await import('@/lib/live-draft-engine/forfeitedPickSkips')
+      await skipForfeitedPicksOnClock(leagueId, async (input) => {
+        const r = (await submitPick(input as never)) as any
+        ;((run.stats.forfeitSkips ??= []) as any[]).push({ overall: input.expectedOverall, ok: r.success, code: r.code ?? null, error: r.error ?? null })
+        return r
+      }).catch((e: Error) => ((run.stats.forfeitSkips ??= []) as any[]).push({ threw: e.message }))
+    }
+    // Whoever the ENGINE puts on the clock — a traded pick belongs to its new owner, not the slot's.
+    const snap = (await buildSessionSnapshot(leagueId, new Date(), null, { skipRepair: true }).catch(() => null)) as any
+    // The engine fills a forfeited pick itself (a "(Forfeited)" skip); follow its board, not our count.
+    if (snap && !snap.currentPick) break
+    if (snap?.currentPick?.overall && snap.currentPick.overall > overall) overall = Number(snap.currentPick.overall)
+    const slotOwner = expectedRosterForPick(slotOrder, overall, kind)
+    const rosterId: string = snap?.currentPick?.rosterId ?? slotOwner
+    if (rosterId !== slotOwner) (run.stats.rookieClock as any[]).push({ overall, slotOwner, onClock: rosterId })
     const owner = slotOrder.find((s) => s.rosterId === rosterId)
     // Positive control once: a veteran in a rookies-only draft.
     if (overall === 1) {
@@ -402,7 +462,25 @@ async function runRookieDraft(
     if (thatPick && thatPick.rosterId !== traded.to) add({ code: 'TRADED_PICK_USED_BY_ORIGINAL_OWNER', stage: 'offseason', message: `${traded.pickId} was traded to ${traded.to}, but ${thatPick.rosterId} made that pick.` })
   }
 
-  const rookieSession = rowsOf(db, 'DraftSession').find((s: any) => s.id === created.sessionId) as any
+ const rookieSession = rowsOf(db, 'DraftSession').find((s: any) => s.id === created.sessionId) as any
+  if (SCENARIOS) {
+    // The board: every pick made by the team that owns it — traded picks by their new owner, and a pick
+    // forfeited for tanking not made by the team that lost it.
+    const draftYear = Number((rowsOf(db, 'RedraftSeason') as any[]).find((x) => x.id === ctx.nextSeasonId)?.season ?? 0)
+    const board = (rowsOf(db, 'DraftPick') as any[]).filter((p) => p.sessionId === created.sessionId).sort((a, b) => a.overall - b.overall)
+    const checks: any[] = []
+    for (const p of board) {
+      const slotOwner = expectedRosterForPick(slotOrder, p.overall, kind)
+      const fdp = picksBefore.find((x) => x.season === draftYear && x.round === p.round && x.original === slotOwner)
+      if (!fdp || (fdp.owner === slotOwner && fdp.status !== 'forfeited')) continue
+      checks.push({ overall: p.overall, round: p.round, slotOwner, fdpOwner: fdp.owner, fdpStatus: fdp.status, madeBy: p.rosterId })
+      const skipped = String(p.position ?? '').toUpperCase() === 'SKIP' || (p.pickMetadata as any)?.forfeited === true
+      checks[checks.length - 1].skipped = skipped
+      if (fdp.status === 'forfeited' && !skipped) add({ code: 'FORFEITED_PICK_STILL_USED', stage: 'offseason', message: `${draftYear} round ${p.round} of ${slotOwner} was forfeited for tanking; ${slotOwner} made that pick (#${p.overall}).` })
+      if (fdp.status !== 'forfeited' && fdp.owner !== slotOwner && p.rosterId !== fdp.owner) add({ code: 'TRADED_PICK_ON_WRONG_TEAM', stage: 'offseason', message: `${draftYear} round ${p.round} of ${slotOwner} belongs to ${fdp.owner}; ${p.rosterId} made it (#${p.overall}).` })
+    }
+    run.stats.boardPickOwnership = { checks, picksMade: board.length }
+  }
   const year2 = rowsOf(db, 'RedraftSeason').find((s: any) => s.id === ctx.nextSeasonId) as any
   run.stats.year2 = { rookieDraft: rookieSession?.status, seasonStatus: year2?.status }
   if (rookieSession?.status !== 'completed') add({ code: 'ROOKIE_DRAFT_NOT_COMPLETED', stage: 'offseason', message: `Rookie draft is ${rookieSession?.status} after ${made}/${total} picks.` })

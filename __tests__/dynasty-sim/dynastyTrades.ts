@@ -171,7 +171,7 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     const decision = t?.decision ?? t?.serverDecision ?? snap?.decision ?? snap ?? null
     return { label: r.label, status: r.status, decision: decision ? JSON.stringify(decision).slice(0, 400) : null }
   })
-  run.stats.trades = results.map((r) => ({ label: r.label, ok: r.ok, status: r.status, acceptStatus: r.acceptStatus, stage: r.stage, error: r.error }))
+  run.stats.trades = results.map((r) => ({ label: r.label, ok: r.ok, tradeId: r.tradeId ?? null, status: r.status, acceptStatus: r.acceptStatus, stage: r.stage, error: r.error }))
 
   // ── deadline: an offer after the deadline week is refused ──
   run.stats.tradeDeadlineProbe = 'skipped'
