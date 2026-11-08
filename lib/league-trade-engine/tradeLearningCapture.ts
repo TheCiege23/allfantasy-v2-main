@@ -218,7 +218,7 @@ export async function priceTradesAtCurrentMarket(
     const allItems = input.trades.flatMap((t) => t.items.map((i) => ({ ...i, itemReference: i.itemReference ?? null })))
     const [grader, nameForId] = await Promise.all([
       (deps.createGrader ?? ((a) => createLeagueTradeGrader(a)))({ leagueId: input.leagueId }).catch(() => null),
-      (deps.loadNames ?? loadNativePlayerNames)(allItems),
+      (deps.loadNames ?? loadNativePlayerNames)(allItems, input.leagueId),
     ])
     const currentYear = new Date().getUTCFullYear()
     const pricedAt = new Date().toISOString()

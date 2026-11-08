@@ -37,6 +37,8 @@ export type ResolvedProviderPlayer = {
   team: string | null
   imageUrl: string | null
   sport: string
+  /** The Sleeper id this identity links to, when it has one — what NFL pricing keys on. */
+  sleeperId?: string | null
 }
 
 const IDENTITY_COLUMNS = ['espnId', 'fantraxId', 'fleaflickerId', 'mflId'] as const
@@ -115,6 +117,7 @@ export async function resolveProviderRosterPlayers(
       team: row.currentTeam ?? portrait?.team ?? null,
       imageUrl: toImageUrl(portrait?.imageUrl),
       sport: row.sport,
+      sleeperId: row.sleeperId ?? null,
     })
   }
   for (const [key, count] of matches) if (count > 1) out.delete(key)
