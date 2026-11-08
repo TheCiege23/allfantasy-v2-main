@@ -880,3 +880,22 @@ the checkout, not of the migration, and Linux CI reads the LF blob.
   exactly the drift that left the M19 test database unable to round-trip `WeeklyMatchup`. A
   non-production database still on the integer column is now cured by an ordinary
   `migrate deploy`.
+
+## `20261030140000_team_co_owners` — moved to `prisma/migrations/` as `20261108200000_team_co_owners` (2026-11-08)
+
+`TeamCoOwner` is modelled in `schema.prisma` and read by the co-owner code, but its migration sat
+here, so no database built from migrations had `team_co_owners`. Found on staging, where the app
+logged missing-table errors. **Unlike the moves above, it has no `_prisma_migrations` row, so the
+next `migrate deploy` on a database without it RUNS it.**
+
+- **Renamed** to sort after every migration already on `main`, and every statement made
+  `IF NOT EXISTS`. A database that already has the table (for example from `db push`) records the
+  migration and changes nothing. Control: the original SQL, run against a database that already
+  had the table, failed with `relation "team_co_owners" already exists`, which would have left a
+  failed ledger row and blocked every later deploy (P3009).
+- **Measured on an empty local Postgres 18** replay of `main`'s history: applying it removed all
+  34 `team_co_owners` lines from the history-vs-schema diff and added none; re-running it with the
+  table already present succeeded.
+- **Staging** (`ep-winter-salad`): no table and no ledger row before this change.
+- **Production: NOT checked.** Applying it there is the owner's decision. The read-only check was
+  blocked by a permission rule.
