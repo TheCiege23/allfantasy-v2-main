@@ -3,7 +3,7 @@ const COMMISSIONER_DROP_WINDOW_MS = 60 * 60 * 1000
 
 export type SleeperSurvivalEvidence = {
   version: 1
-  method: 'sleeper_chopped' | 'verified_weekly_chops' | 'verified_commissioner_drops'
+  method: 'sleeper_chopped' | 'verified_weekly_chops' | 'verified_commissioner_drops' | 'verified_commissioner_runner_up'
   rosterId: number
   firstWeek: number
   finalWeek: number
@@ -25,9 +25,13 @@ function rosterId(value: unknown): value is number {
 export function readSleeperSurvivalEvidence(value: unknown): SleeperSurvivalEvidence | null {
   const v = record(value)
   if (v.version !== 1 || (v.method !== 'sleeper_chopped' && v.method !== 'verified_weekly_chops' &&
-      v.method !== 'verified_commissioner_drops')) return null
+      v.method !== 'verified_commissioner_drops' && v.method !== 'verified_commissioner_runner_up')) return null
   if (!rosterId(v.rosterId) || !week(v.firstWeek) || !week(v.finalWeek) || v.firstWeek > v.finalWeek) return null
-  if (v.eliminatedWeek === null) {
+  if (v.method === 'verified_commissioner_runner_up') {
+    // The commissioner confirmed that the final decided the league. A finalist
+    // who played through that week receives full survival credit without a title.
+    if (v.eliminatedWeek !== null) return null
+  } else if (v.eliminatedWeek === null) {
     if (v.method !== 'sleeper_chopped') return null
   } else if (!week(v.eliminatedWeek) || v.eliminatedWeek < v.firstWeek || v.eliminatedWeek > v.finalWeek) return null
   return {
