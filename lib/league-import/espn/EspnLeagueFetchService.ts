@@ -17,6 +17,7 @@ import {
   ESPN_POSITION_LABELS,
   ESPN_TEAM_ABBREVIATIONS,
 } from './espnLookups'
+import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -62,6 +63,8 @@ const ESPN_IR_SLOT = 21
 type EspnAuthContext = {
   swid: string | null
   espnS2: string | null
+  /** Whose STORED cookies these are — set only by `getEspnAuthForUser`, so health is recorded only for them. */
+  userId?: string
 }
 
 type EspnMemberSummary = {
@@ -277,6 +280,7 @@ async function getEspnAuthForUser(userId: string): Promise<EspnAuthContext> {
   return {
     swid: auth?.espnSwid ?? null,
     espnS2: auth?.espnS2 ?? null,
+    userId,
   }
 }
 
@@ -296,12 +300,23 @@ async function loadEspnLeagueRaw(args: {
 
   for (const attempt of attempts) {
     try {
-      return await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      const raw = await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      if (attempt && args.auth.userId) void recordEspnCookiesAccepted(args.auth.userId)
+      return raw
     } catch (error) {
       lastError = error
 
       if (!(error instanceof EspnApiResponseError)) {
         throw error
+      }
+
+      /*
+       * ESPN refused the STORED cookies. Recorded even when the cookieless retry below then reads
+       * a public league fine: the connection is still dead, every private league and the
+       * team-ownership check will fail, and the user should hear about it now rather than later.
+       */
+      if (attempt && args.auth.userId && (error.status === 401 || error.status === 403)) {
+        void recordEspnCookiesRejected(args.auth.userId)
       }
 
       if (error.status === 404) {
