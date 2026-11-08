@@ -304,6 +304,29 @@ button.af-scope-chip { cursor: pointer; }
 .af-scope-edit-btn:hover:not(:disabled) { background: var(--chip); color: var(--text); }
 .af-scope-edit-btn:disabled { opacity: 0.3; cursor: default; }
 .af-scope-edit-btn[aria-pressed='true'] { color: var(--warn); }
+
+/*
+ * The drag grip (useRailDrag's handle). ⚠ `touch-action: none` HERE AND ONLY HERE: the grip takes the
+ * finger so a drag does not scroll the sheet, and every other part of the row still scrolls it.
+ */
+.af-scope-grip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.af-scope-grip:hover { color: var(--text); }
+.af-scope-grip[data-disabled='true'] { opacity: 0.3; cursor: default; }
+.af-scope-row[data-dragging='true'] .af-scope-grip { cursor: grabbing; color: var(--accent); }
 .af-scope-empty { padding: 14px 4px; color: var(--muted); font-size: 13px; }
 .af-scope-note { margin: 0; color: var(--muted); font-size: 12px; }
 
@@ -401,6 +424,12 @@ button.af-scope-chip { cursor: pointer; }
 .af-core .af-scope-league-plat[data-platform='native'] { background: #2563eb; color: #ffffff; }
 .af-core .af-scope-chip-dot[data-platform='native'] { background: #2563eb; color: #8fb4ff; }
 .af-core .af-scope-league { padding-left: 2px; }
+/*
+ * The drop line (af-core-shell.css draws it for every `[data-rail-id]` row) drawn WITH the platform
+ * edge rather than over it — one `box-shadow` holds both, so the shared rule alone would erase the edge.
+ */
+.af-core .af-scope-list .af-scope-row[data-drop='before'] { box-shadow: inset 4px 0 0 var(--af-scope-plat, transparent), inset 0 3px 0 var(--accent); }
+.af-core .af-scope-list .af-scope-row[data-drop='after'] { box-shadow: inset 4px 0 0 var(--af-scope-plat, transparent), inset 0 -3px 0 var(--accent); }
 @media (max-width: 720px) {
   .af-core .af-scope-btn { max-width: min(64vw, 260px); }
   /*
@@ -430,6 +459,8 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-panel[data-editing='true'] .af-scope-league { grid-template-columns: minmax(0, 1fr); }
   .af-core .af-scope-panel[data-editing='true'] .af-scope-league-art { display: none; }
   .af-core .af-scope-panel[data-editing='true'] .af-scope-league-meta { grid-column: 1; }
+  /* …and the star gives its place to the grip. Starring is one tap away the moment Customize closes. */
+  .af-core .af-scope-panel[data-editing='true'] .af-scope-star { display: none; }
   .af-core .af-scope-panel { inset: auto 8px calc(76px + env(safe-area-inset-bottom, 0px)); padding: 14px; width: auto; max-height: 76dvh; }
   .af-core .af-scope-search input { font-size: 16px; }
 }
