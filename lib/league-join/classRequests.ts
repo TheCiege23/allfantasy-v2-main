@@ -4,7 +4,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { isAdminEmailAllowed, isAdminRole } from '@/lib/adminAuth'
-import { divisionBand, getLeagueDivision } from '@/lib/class-rating/divisionGate'
+import { loadCareerLedger, type CareerLedgerRow } from '@/lib/rank/careerLedger'
+import { careerXp } from '@/lib/rank/careerXp'
 import {
   hasClassException,
   readClassExceptions,
@@ -14,26 +15,9 @@ import {
   withoutClassException,
   withoutClassJoinRequest,
 } from '@/lib/class-rating/exceptions'
-import { getManagerClass, type ManagerClass } from '@/lib/class-rating/reads'
-import { evaluateJoinDivisionGate, isOpenLeague } from '@/lib/league-join/joinDivisionGate'
+import { decideCareerJoin, evaluateCareerJoinGate, leagueCareerLevel, loadCareerXpLevels } from './careerJoinGate'
 
-/**
- * "Ask the commissioner" — the request and decision flow around the division gate (ADR F2.10a rule 6).
- * Ported from PR #1753's `classExceptions.ts` onto the division gate (owner ruling, 2026-10-01).
- *
- *   manager   refused an OPEN join → asks → commissioners are notified
- *   commish   approves (or names a manager directly) → that ONE manager is excepted
- *   manager   joins again → the gate treats them as invited: allowed and flagged
- *
- * ⚠ EVERY WRITE TAKES THE LEAGUE ROW LOCK. Settings is one JSON column that many routes
- * read-modify-write; two concurrent requests would otherwise each read the list, append, and the
- * second write would drop the first.
- *
- * ⚠ A REQUEST IS RECORDED ONLY WHEN THE GATE WOULD REFUSE. A manager inside the band, unrated or
- * provisional, or already excepted just joins — queuing them would hand the commissioner a decision
- * that is not theirs to make.
- */
-
+/** Commissioner review for an out-of-band Career Level join. Existing grants remain scoped to one manager. */
 export type SessionUserLike = { id?: string | null; role?: string | null; email?: string | null }
 
 /** Head commissioner, co-commissioner, or a platform admin. Members may not grant exceptions. */
@@ -53,7 +37,7 @@ async function updateSettingsLocked(
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
     if (!league) return false
     const next = mutate(league.settings)
-    if (!next) return true
+    if (!next) return false
     await tx.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
     return true
   })
@@ -111,7 +95,6 @@ async function displayNames(userIds: string[]): Promise<Map<string, { username: 
   return new Map(users.map((u) => [u.id, { username: u.username ?? null, displayName: u.displayName ?? null }]))
 }
 
-const divisionOf = (c: ManagerClass) => (c.status === 'established' ? c.division : null)
 const handleOf = (n: { username: string | null; displayName: string | null } | undefined) =>
   n?.username ? `@${n.username}` : n?.displayName ?? 'A manager'
 
@@ -123,26 +106,36 @@ export type RequestExceptionResult =
 
 /** A manager the gate refused asks the commissioner to let them in. */
 export async function requestClassException(input: { leagueId: string; userId: string }): Promise<RequestExceptionResult> {
-  const league = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { id: true, name: true, settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { id: true, name: true, userId: true, settings: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (hasClassException(league.settings, input.userId)) return { ok: true, status: 'already_granted' }
 
-  const gate = await evaluateJoinDivisionGate({ userId: input.userId, leagueId: input.leagueId, credential: { kind: 'league_code' } })
-  if (gate.outcome !== 'deny') return { ok: true, status: 'not_needed' }
+  const gate = await evaluateCareerJoinGate(input.userId, input.leagueId, league)
+  if (!gate || gate.canJoin) return { ok: true, status: 'not_needed' }
   if (readClassJoinRequests(league.settings).some((r) => r.userId === input.userId)) return { ok: true, status: 'already_requested' }
 
-  await updateSettingsLocked(input.leagueId, (settings) =>
-    withClassJoinRequest(settings, { userId: input.userId, divisionAtRequest: gate.userDivision }),
-  )
+  let alreadyGranted = false
+  const saved = await updateSettingsLocked(input.leagueId, (settings) => {
+    alreadyGranted = hasClassException(settings, input.userId)
+    if (alreadyGranted || readClassJoinRequests(settings).some((r) => r.userId === input.userId)) return null
+    return withClassJoinRequest(settings, { userId: input.userId, divisionAtRequest: null })
+  })
+  if (!saved) return { ok: true, status: alreadyGranted ? 'already_granted' : 'already_requested' }
 
-  const handle = handleOf((await displayNames([input.userId])).get(input.userId))
+  const [names, history, recipients] = await Promise.all([
+    displayNames([input.userId]).catch(() => new Map()),
+    loadCareerLedger([input.userId]).catch(() => []),
+    commissionerIds(input.leagueId).catch(() => []),
+  ])
+  const handle = handleOf(names.get(input.userId))
+  const summary = summarizeHistory(history)
   const [lo, hi] = gate.band
   await notify({
-    userIds: await commissionerIds(input.leagueId),
+    userIds: recipients,
     leagueId: input.leagueId,
     type: 'class_join_request',
     title: `${handle} asked to join ${league.name ?? 'your league'}`,
-    body: `${handle} is in Division ${gate.userDivision}; your league plays in Division ${gate.leagueDivision}, so open joins are for Divisions ${lo}–${hi}. Approve or decline in league settings.`,
+    body: `${handle} is Career Level ${gate.userLevel}. This league allows direct joins from levels ${lo}–${hi}. ${summary} Review the request in league settings.`,
     actionHref: `/league/${input.leagueId}/settings`,
     actionLabel: 'Review request',
   })
@@ -151,63 +144,59 @@ export async function requestClassException(input: { leagueId: string; userId: s
 
 /* ───────────────────────────── commissioner side ──────────────────────────── */
 
+function summarizeHistory(rows: CareerLedgerRow[]): string {
+  const results = rows.filter((r) => r.gamesPlayed > 0 || r.survival != null || r.wonChampionship)
+  if (!results.length) return 'No verified results on file.'
+  const xp = careerXp(results)
+  const ties = results.reduce((sum, row) => sum + row.ties, 0)
+  return `${xp.distinctSeasons} season ${xp.distinctSeasons === 1 ? 'year' : 'years'} · ${xp.leagueSeasons} league-${xp.leagueSeasons === 1 ? 'season' : 'seasons'} · ${xp.wins}–${xp.losses}–${ties} (W–L–T) · ${xp.championships} ${xp.championships === 1 ? 'title' : 'titles'}`
+}
+
 type Person = {
   userId: string
   username: string | null
   displayName: string | null
-  /** Current Class standing; the division is null while unrated or provisional. */
-  classLevel: number | null
-  division: number | null
-  provisional: boolean
+  careerLevel: number
+  history: string
 }
 
 export type ClassGateSummary = {
-  /** The league's division (median of its established members); null while it has none. */
-  division: number | null
-  /** Divisions an open join is allowed from. Null while the league is unrated. */
-  band: [number, number] | null
-  /**
-   * Whether the gate applies at all: only a league that publishes its join code (public, public
-   * dashboard, orphan-seeking) refuses anyone. In a private league every join is an invitation.
-   */
-  open: boolean
-  exceptions: Array<Person & { grantedAt: string; via: 'direct' | 'request'; divisionAtGrant: number | null }>
-  requests: Array<Person & { requestedAt: string; divisionAtRequest: number | null }>
-}
-
-async function people(ids: string[]): Promise<Map<string, Person>> {
-  const [names, classes] = await Promise.all([displayNames(ids), Promise.all(ids.map((id) => getManagerClass(id)))])
-  return new Map(
-    ids.map((id, i) => {
-      const c = classes[i]
-      return [
-        id,
-        {
-          userId: id,
-          username: names.get(id)?.username ?? null,
-          displayName: names.get(id)?.displayName ?? null,
-          classLevel: c.status === 'established' ? c.classLevel : null,
-          division: divisionOf(c),
-          provisional: c.status === 'provisional',
-        },
-      ]
-    }),
-  )
+  leagueLevel: number
+  band: [number, number]
+  exceptions: Array<Person & { grantedAt: string; via: 'direct' | 'request' }>
+  requests: Array<Person & { requestedAt: string }>
 }
 
 export async function getClassGateSummary(leagueId: string): Promise<ClassGateSummary | null> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, settings: true } })
   if (!league) return null
-  const division = await getLeagueDivision(leagueId)
   const exceptions = readClassExceptions(league.settings)
   const requests = readClassJoinRequests(league.settings)
-  const byId = await people([...new Set([...exceptions.map((e) => e.userId), ...requests.map((r) => r.userId)])])
+  const ids = [...new Set([...exceptions.map((e) => e.userId), ...requests.map((r) => r.userId)])]
+  const [names, levels, rows] = await Promise.all([
+    displayNames(ids),
+    loadCareerXpLevels([league.userId, ...ids]),
+    loadCareerLedger(requests.map((r) => r.userId)).catch(() => []),
+  ])
+  const byUser = new Map<string, CareerLedgerRow[]>()
+  for (const row of rows) {
+    const history = byUser.get(row.userId) ?? []
+    history.push(row)
+    byUser.set(row.userId, history)
+  }
+  const person = (userId: string): Person => ({
+    userId,
+    username: names.get(userId)?.username ?? null,
+    displayName: names.get(userId)?.displayName ?? null,
+    careerLevel: levels.get(userId) ?? 1,
+    history: summarizeHistory(byUser.get(userId) ?? []),
+  })
+  const leagueLevel = leagueCareerLevel(league, levels)
   return {
-    division,
-    band: division == null ? null : divisionBand(division),
-    open: isOpenLeague(league.settings),
-    exceptions: exceptions.map((e) => ({ ...byId.get(e.userId)!, grantedAt: e.grantedAt, via: e.via, divisionAtGrant: e.divisionAtGrant })),
-    requests: requests.map((r) => ({ ...byId.get(r.userId)!, requestedAt: r.requestedAt, divisionAtRequest: r.divisionAtRequest })),
+    leagueLevel,
+    band: decideCareerJoin(leagueLevel, leagueLevel).band,
+    exceptions: exceptions.map((e) => ({ ...person(e.userId), grantedAt: e.grantedAt, via: e.via })),
+    requests: requests.map((r) => ({ ...person(r.userId), requestedAt: r.requestedAt })),
   }
 }
 
@@ -249,14 +238,14 @@ export async function decideClassException(input: {
     return { ok: false, status: 404, error: 'That manager has no pending request.' }
   }
 
-  const division = divisionOf(await getManagerClass(targetId))
   const target = targetId
-  await updateSettingsLocked(input.leagueId, (settings) => {
+  const changed = await updateSettingsLocked(input.leagueId, (settings) => {
+    if ((input.action === 'approve' || input.action === 'decline') && !readClassJoinRequests(settings).some((r) => r.userId === target)) return null
     switch (input.action) {
       case 'grant':
-        return withClassException(settings, { userId: target, grantedBy: input.decidedBy, via: 'direct', divisionAtGrant: division })
+        return withClassException(settings, { userId: target, grantedBy: input.decidedBy, via: 'direct', divisionAtGrant: null })
       case 'approve':
-        return withClassException(settings, { userId: target, grantedBy: input.decidedBy, via: 'request', divisionAtGrant: division })
+        return withClassException(settings, { userId: target, grantedBy: input.decidedBy, via: 'request', divisionAtGrant: null })
       case 'decline':
         return withoutClassJoinRequest(settings, target)
       case 'revoke':
@@ -264,19 +253,22 @@ export async function decideClassException(input: {
     }
   })
 
+  if (!changed) return { ok: false, status: 404, error: 'That manager has no pending request.' }
+
   if (input.action !== 'revoke') {
     const name = league.name ?? 'the league'
     const approved = input.action !== 'decline'
+    const code = (league.settings as { inviteCode?: string } | null)?.inviteCode
     await notify({
       userIds: [target],
       leagueId: input.leagueId,
       type: approved ? 'class_join_approved' : 'class_join_declined',
       title: approved ? `You can join ${name}` : `The commissioner of ${name} declined your request`,
       body: approved
-        ? 'The commissioner let you in from outside the league’s division. Use your invite link to take your seat.'
-        : 'This league stays with its division. Find a league in your division in League finder.',
-      actionHref: approved ? `/league/${input.leagueId}` : '/find-league',
-      actionLabel: approved ? 'Open league' : 'Find a league',
+        ? 'The commissioner approved your Career Level exception. Use your invite to join.'
+        : 'You can look for another league with an opening in Find a League.',
+      actionHref: approved && code ? `/join?code=${encodeURIComponent(code)}` : '/find-league',
+      actionLabel: approved && code ? 'Join league' : 'Find a league',
     })
   }
 

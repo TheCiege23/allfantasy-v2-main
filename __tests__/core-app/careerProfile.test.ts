@@ -7,13 +7,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const db = vi.hoisted(() => ({
-  appUser: { findUnique: vi.fn() },
+  appUser: { findUnique: vi.fn(), findMany: vi.fn() },
   legacyUser: { findUnique: vi.fn() },
   leagueTeam: { findMany: vi.fn(), },
-  league: { aggregate: vi.fn() },
+  league: { aggregate: vi.fn(), findMany: vi.fn() },
   seasonStandingFact: { aggregate: vi.fn(), findMany: vi.fn() },
   legacyLeague: { aggregate: vi.fn(), findMany: vi.fn() },
   legacyRoster: { aggregate: vi.fn() },
+  franchiseSeason: { aggregate: vi.fn(), findMany: vi.fn() },
+  guillotineSurvivalLog: { findMany: vi.fn() },
+  survivorSeasonSnapshot: { aggregate: vi.fn(), findMany: vi.fn() },
   leagueTrade: { aggregate: vi.fn(), findMany: vi.fn() },
   sportsDataCache: { findUnique: vi.fn(), upsert: vi.fn() },
   $queryRaw: vi.fn(),
@@ -31,7 +34,12 @@ function stubSources({ legacyLeagueCount = 2 } = {}) {
   db.appUser.findUnique.mockResolvedValue({ username: 'guap', displayName: null, avatarUrl: null, legacyUserId: 'LU1' })
   db.$queryRaw.mockResolvedValue([{ xp_total: 1200 }])
   db.legacyUser.findUnique.mockResolvedValue({ sleeperUserId: '591', sleeperUsername: 'guap' })
+  db.appUser.findMany.mockResolvedValue([{ id: 'u1', legacyUserId: 'LU1' }])
   db.leagueTeam.findMany.mockResolvedValue([])
+  db.league.findMany.mockResolvedValue([])
+  db.franchiseSeason.findMany.mockResolvedValue([])
+  db.guillotineSurvivalLog.findMany.mockResolvedValue([])
+  db.survivorSeasonSnapshot.findMany.mockResolvedValue([])
   db.league.aggregate.mockResolvedValue({ _count: { _all: 0 }, _max: { updatedAt: null } })
   db.legacyLeague.aggregate.mockResolvedValue({ _count: { _all: legacyLeagueCount }, _max: { updatedAt: updated } })
   db.legacyRoster.aggregate.mockResolvedValue({ _count: { _all: legacyLeagueCount }, _max: { updatedAt: updated } })
@@ -41,6 +49,7 @@ function stubSources({ legacyLeagueCount = 2 } = {}) {
   db.legacyLeague.findMany.mockResolvedValue([
     {
       id: 'LL1',
+      userId: 'LU1',
       sleeperLeagueId: 'S1',
       name: 'Dynasty Dragons',
       season: 2023,
@@ -153,6 +162,7 @@ describe('careerProfile', () => {
     db.legacyLeague.findMany.mockResolvedValue([
       {
         id: 'LL1',
+        userId: 'LU1',
         sleeperLeagueId: 'S1',
         name: 'Dynasty Dragons',
         season: 2023,

@@ -69,7 +69,7 @@ export const MIN_SAMPLE_OPTIONS = [1, 3, 5, 10, 25] as const
 
 /* ───────────────────────────────── filters ──────────────────────────────── */
 
-export const LEAGUE_TYPE_FILTERS = ['redraft', 'keeper', 'dynasty', 'bestball', 'guillotine'] as const
+export const LEAGUE_TYPE_FILTERS = ['redraft', 'keeper', 'dynasty', 'bestball', 'guillotine', 'survivor'] as const
 export const FORMAT_FILTERS = ['ppr', 'half', 'standard', 'superflex', 'te_premium'] as const
 
 export type LeagueTypeFilter = (typeof LEAGUE_TYPE_FILTERS)[number]
@@ -81,6 +81,7 @@ export type RankingFilters = {
   type: LeagueTypeFilter | null
   format: FormatFilter | null
   season: number | null
+  league?: string | null
   minSample: number
 }
 
@@ -114,12 +115,14 @@ export function parseRankingFilters(sp: Params): RankingFilters {
   const format = one(sp, 'format')?.toLowerCase() ?? null
   const season = Number(one(sp, 'season'))
   const min = Number(one(sp, 'min'))
+  const league = one(sp, 'careerLeague')?.slice(0, 180)
   return {
     platform: platform && SLUG.test(platform) ? platform : null,
     sport: sport && SLUG.test(sport.toLowerCase()) ? sport : null,
     type: (LEAGUE_TYPE_FILTERS as readonly string[]).includes(type ?? '') ? (type as LeagueTypeFilter) : null,
     format: (FORMAT_FILTERS as readonly string[]).includes(format ?? '') ? (format as FormatFilter) : null,
     season: Number.isInteger(season) && season >= 1990 && season <= 2100 ? season : null,
+    ...(league ? { league } : {}),
     minSample: (MIN_SAMPLE_OPTIONS as readonly number[]).includes(min) ? min : DEFAULT_MIN_SAMPLE,
   }
 }
@@ -132,6 +135,7 @@ export function filterParams(f: RankingFilters): Array<[string, string]> {
   if (f.type) out.push(['type', f.type])
   if (f.format) out.push(['format', f.format])
   if (f.season != null) out.push(['season', String(f.season)])
+  if (f.league) out.push(['careerLeague', f.league])
   if (f.minSample !== DEFAULT_MIN_SAMPLE) out.push(['min', String(f.minSample)])
   return out
 }
@@ -140,12 +144,17 @@ export function isDefaultFilters(f: RankingFilters): boolean {
   return filterParams(f).length === 0
 }
 
+export function rankingLeagueKey(row: CareerLedgerRow): string {
+  return `${row.platform}:${row.providerLeagueId ?? row.refId}`
+}
+
 export function matchesFilters(r: CareerLedgerRow, f: RankingFilters): boolean {
+  if (f.league && rankingLeagueKey(r) !== f.league) return false
   if (f.platform && r.platform !== f.platform) return false
   if (f.sport && r.sport !== f.sport) return false
   if (f.season != null && r.season !== f.season) return false
   if (f.type) {
-    if (f.type === 'bestball' || f.type === 'guillotine') {
+    if (f.type === 'bestball' || f.type === 'guillotine' || f.type === 'survivor') {
       if (r.specialty !== f.type) return false
     } else if (r.leagueType !== f.type) return false
   }
@@ -164,7 +173,8 @@ export const TYPE_LABEL: Record<LeagueTypeFilter, string> = {
   keeper: 'Keeper',
   dynasty: 'Dynasty',
   bestball: 'Best ball',
-  guillotine: 'Guilly',
+  guillotine: 'Guillotine',
+  survivor: 'Survivor',
 }
 
 export const FORMAT_LABEL: Record<FormatFilter, string> = {
@@ -203,6 +213,7 @@ export function describeFilters(f: RankingFilters): string {
 export type FilterOption<T extends string | number> = { value: T; label: string; count: number }
 
 export type FilterOptions = {
+  leagues?: Array<{ value: string; label: string; count: number }>
   platforms: FilterOption<string>[]
   sports: FilterOption<string>[]
   types: FilterOption<LeagueTypeFilter>[]
@@ -252,6 +263,7 @@ export function filterOptions(rows: CareerLedgerRow[]): FilterOptions {
  * and a season that has not kicked off has a record of 0-0 that is not a record.
  */
 export function isResultRow(r: CareerLedgerRow): boolean {
+  if (r.specialty === 'guillotine' || r.specialty === 'survivor') return (r.survival?.totalPeriods ?? 0) > 0
   return r.gamesPlayed > 0 && r.specialty !== 'draft_only'
 }
 
@@ -273,7 +285,7 @@ export function cohortKey(r: CareerLedgerRow): string {
 export function buildScoringCohorts(rows: CareerLedgerRow[]): ScoringCohorts {
   const acc = new Map<string, { sum: number; n: number }>()
   for (const r of rows) {
-    if (!isResultRow(r) || r.pointsFor == null) continue
+    if (!isResultRow(r) || r.gamesPlayed <= 0 || r.survival || r.pointsFor == null) continue
     const k = cohortKey(r)
     const a = acc.get(k) ?? { sum: 0, n: 0 }
     a.sum += r.pointsFor / r.gamesPlayed
@@ -285,7 +297,7 @@ export function buildScoringCohorts(rows: CareerLedgerRow[]): ScoringCohorts {
   return out
 }
 
-export type ComponentKey = keyof typeof SCORE_WEIGHTS
+export type ComponentKey = keyof typeof SCORE_WEIGHTS | 'survival'
 
 export type ScoreComponent = {
   key: ComponentKey
@@ -356,8 +368,14 @@ function logCredit(ratio: number, span: number): number {
 }
 
 export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): ManagerScore {
-  const results = rows.filter(isResultRow)
+  const allResults = rows.filter(isResultRow)
+  const results = allResults.filter((r) => !r.survival)
+  const survival = allResults.flatMap((r) => r.survival ? [r.survival] : [])
+  const survivalCredit = survival.length
+    ? survival.reduce((total, r) => total + clamp01(r.periods / r.totalPeriods), 0) / survival.length
+    : null
   const completed = results.filter((r) => r.completed)
+  const titleRows = completed.filter((r) => r.leagueSizeKnown && r.titleKnown !== false)
 
   let wins = 0
   let losses = 0
@@ -384,11 +402,11 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
   const scoringIndex =
     pricedGames > 0 ? (idxWeighted + 100 * SCORING_PRIOR_GAMES) / (pricedGames + SCORING_PRIOR_GAMES) : null
 
-  const titles = completed.filter((r) => r.wonChampionship).length
-  const expectedTitles = completed.reduce((s, r) => s + 1 / Math.max(2, r.leagueSize), 0)
-  const titleRatio = completed.length > 0 ? (titles + TITLE_PRIOR) / (expectedTitles + TITLE_PRIOR) : null
+  const titles = titleRows.filter((r) => r.wonChampionship).length
+  const expectedTitles = titleRows.reduce((s, r) => s + 1 / Math.max(2, r.leagueSize), 0)
+  const titleRatio = titleRows.length > 0 ? (titles + TITLE_PRIOR) / (expectedTitles + TITLE_PRIOR) : null
 
-  const cutRows = completed.filter((r) => r.playoffTeams != null && r.playoffTeams > 0 && r.leagueSizeKnown)
+  const cutRows = completed.filter((r) => r.playoffKnown !== false && r.playoffTeams != null && r.playoffTeams > 0 && r.leagueSizeKnown)
   const playoffs = cutRows.filter((r) => r.madePlayoffs).length
   const expectedPlayoffs = cutRows.reduce(
     (s, r) => s + Math.min(1, (r.playoffTeams as number) / Math.max(2, r.leagueSize)),
@@ -407,7 +425,7 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
       value: winRate == null ? '—' : `${pct1(winRate)} (adjusted ${pct1(adjWinRate as number)})`,
       short: adjWinRate == null ? '—' : `${pct1(adjWinRate)} adjusted`,
       basis: `${games.toLocaleString()} games in ${results.length} league-seasons`,
-      explain: `Counted per game, then blended with ${WIN_RATE_PRIOR_GAMES} games at .500 so a short record cannot outrank a long one. ${pct1(WIN_RATE_FLOOR)} earns nothing and ${pct1(WIN_RATE_CEILING)} earns full credit.`,
+      explain: `Counted per game, then blended with ${WIN_RATE_PRIOR_GAMES} games at .500 to limit the influence of a short record. ${pct1(WIN_RATE_FLOOR)} earns nothing and ${pct1(WIN_RATE_CEILING)} earns full credit.`,
       available: adjWinRate != null,
     },
     {
@@ -457,13 +475,31 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
     },
   ]
 
-  const weightSum = components.reduce((s, c) => s + (c.available ? c.weight : 0), 0)
+  if (survivalCredit != null) {
+    components.push({
+      key: 'survival',
+      label: 'Survival',
+      weight: survival.length / allResults.length,
+      appliedWeight: 0,
+      credit: survivalCredit,
+      points: 0,
+      value: `${pct1(survivalCredit)} of scoring periods survived`,
+      short: pct1(survivalCredit),
+      basis: `${survival.length} elimination league-seasons`,
+      explain: 'Each completed Guillotine or Survivor season is scored by the share of its verified scoring periods you survived.',
+      available: true,
+    })
+  }
+  const survivalWeight = components.find((c) => c.key === 'survival')?.weight ?? 0
+  const weightSum = components.reduce((s, c) => s + (c.available && c.key !== 'survival' ? c.weight : 0), 0)
   let score: number | null = null
-  if (weightSum > 0) {
+  if (weightSum > 0 || survivalWeight > 0) {
     let total = 0
     for (const c of components) {
       if (!c.available || c.credit == null) continue
-      c.appliedWeight = c.weight / weightSum
+      c.appliedWeight = c.key === 'survival'
+        ? weightSum > 0 ? survivalWeight : 1
+        : (1 - survivalWeight) * c.weight / weightSum
       c.points = round1(c.appliedWeight * c.credit * 100)
       total += c.appliedWeight * c.credit * 100
     }
@@ -472,17 +508,17 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
 
   const sizes = results.filter((r) => r.leagueSizeKnown).map((r) => r.leagueSize)
   const shares = cutRows.map((r) => Math.min(1, (r.playoffTeams as number) / Math.max(2, r.leagueSize)))
-  const years = new Set(results.map((r) => r.season)).size
+  const years = new Set(allResults.map((r) => r.season)).size
   const stamps = rows.map((r) => r.updatedAt).filter((s): s is string => !!s).sort()
 
   const confidence: ManagerScore['confidence'] =
-    games < 40 || results.length < 5 ? 'low' : results.length < 15 ? 'medium' : 'high'
+    (survival.length === 0 && games < 40) || allResults.length < 5 ? 'low' : allResults.length < 15 ? 'medium' : 'high'
 
   const prestige = computePrestige({
-    championships: results.filter((r) => r.wonChampionship).length,
+    championships: allResults.filter((r) => r.wonChampionship).length,
     winRate: winRateOf(wins, losses, ties),
     seasonsPlayed: years,
-    leaguesPlayed: results.length,
+    leaguesPlayed: allResults.length,
     playoffAppearances: results.filter((r) => r.madePlayoffs).length,
   }).total
 
@@ -491,8 +527,8 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
     components,
     sample: {
       leagueSeasons: rows.length,
-      resultSeasons: results.length,
-      completedSeasons: completed.length,
+      resultSeasons: allResults.length,
+      completedSeasons: completed.length + survival.length,
       games,
       seasons: years,
     },
@@ -576,7 +612,7 @@ export function boardMetric(board: BoardKey, s: ManagerScore): number | null {
     case 'overall':
       return s.score
     case 'titles':
-      return s.sample.completedSeasons > 0 ? s.totals.titles - s.totals.expectedTitles : null
+      return s.totals.titleRatio != null ? s.totals.titles - s.totals.expectedTitles : null
     case 'winRate':
       return s.totals.adjWinRate
     case 'scoring':
