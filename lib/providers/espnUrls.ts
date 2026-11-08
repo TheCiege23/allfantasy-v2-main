@@ -52,3 +52,43 @@ export function espnSiteApiUrl(pathSegment: string, query?: Record<string, strin
   for (const [k, v] of Object.entries(query ?? {})) url.searchParams.set(k, String(v))
   return url.toString()
 }
+
+/**
+ * ESPN's FANTASY league API (unofficial v3) — a different host from the site API above, and the
+ * one every ESPN league import reads. `ffl` is football, `flb` is baseball.
+ *
+ * ⚠ HOISTED HERE SO THE DB-FIRST GUARD KEEPS SEEING EVERY CALLER. Before this, four files each held
+ * their own `https://lm-api-reads…` literal. Both names below are in `DATA_API_IDENTIFIERS` in
+ * `scripts/check-db-first-api-boundary.mjs`, added in the same commit, so moving the literal here
+ * did not retire the check for any of them.
+ *
+ * ⚠ NO CREDENTIAL EVER GOES IN THIS URL. Private leagues authenticate with the `SWID` and
+ * `espn_s2` COOKIES, sent as a header by `lib/league-import/espn/espnFantasyClient.ts`. Putting
+ * them in a query string would leak a live ESPN session into every log line that prints a URL.
+ */
+export const ESPN_FANTASY_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games'
+
+export type EspnFantasyGame = 'ffl' | 'flb'
+
+/**
+ * `…/games/{game}/seasons/{season}/segments/0/leagues/{leagueId}[/{subPath}]?view=a&view=b`.
+ * Views are repeated `view=` params — ESPN combines them into one response.
+ */
+export function espnFantasyLeagueUrl(args: {
+  game: EspnFantasyGame
+  season: number
+  leagueId: string
+  views?: readonly string[]
+  /** e.g. `communication/` for the activity feed. */
+  subPath?: string
+  query?: Record<string, string | number>
+}): string {
+  const leagueId = String(args.leagueId).replace(/\D/g, '')
+  const tail = args.subPath ? `/${args.subPath.replace(/^\/+/, '')}` : ''
+  const url = new URL(
+    `${ESPN_FANTASY_API_BASE}/${args.game}/seasons/${Math.trunc(args.season)}/segments/0/leagues/${leagueId}${tail}`,
+  )
+  for (const view of args.views ?? []) url.searchParams.append('view', view)
+  for (const [k, v] of Object.entries(args.query ?? {})) url.searchParams.set(k, String(v))
+  return url.toString()
+}

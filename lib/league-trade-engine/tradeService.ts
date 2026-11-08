@@ -51,6 +51,7 @@ import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -1187,6 +1188,10 @@ export async function finalizeAfLeagueTradeProcessing(input: {
     faabAmount: i.faabAmount,
     metadata: (i.metadata as Record<string, unknown>) ?? {},
   }))
+
+  // An unlinked team (a league drafted before draft finalization linked every team) would skip the
+  // season-roster move inside the transaction below — the traded player kept scoring for his old team.
+  await ensureSeasonRosterLinksBeforeMove(trade.leagueId)
 
   await prisma.$transaction(async (tx) => {
     // 🛑 CLAIM FIRST, AND CONDITIONALLY. This was a bare `update({ where: { id } })` sitting

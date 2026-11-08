@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server"
 import { hydrateRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import MlbBracketBoard from "@/components/brackets/playoffs/MlbBracketBoard"
+import CupGroupPlaySection from "@/components/brackets/playoffs/cup/CupGroupPlaySection"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 
@@ -48,11 +49,26 @@ describe("NBA Cup remaining-game board", () => {
     const v = view()
     const { rerender } = render(<MlbBracketBoard view={v} onViewChange={() => {}} />)
     expect(screen.getByTestId("cup-entry-draft-status")).toHaveTextContent("Picks saved — bracket not finalized")
-    expect(screen.getByTestId("cup-entry-draft-status")).toHaveTextContent("Finalize picks to join the standings")
+    expect(screen.getByTestId("cup-entry-draft-status")).toHaveTextContent("Finalize a complete game day to join the standings")
     const finalized = { ...v, activeEntry: { ...v.activeEntry!, finalizedAt: "2026-10-30T00:00:00Z" } }
     rerender(<MlbBracketBoard view={finalized} onViewChange={() => {}} />)
     expect(screen.queryByTestId("cup-entry-draft-status")).not.toBeInTheDocument()
-    expect(screen.getByText(/Picks finalized/)).toBeInTheDocument()
+    expect(screen.getByText(/Bracket active. Finalize each game day/)).toBeInTheDocument()
+  })
+  it("requires all open picks and confirms only the displayed game day", () => {
+    const first = view().series.find((game) => game.id === "group")!
+    const second = { ...first, id: "second", seriesNumber: 1004 }
+    const finalize = vi.fn()
+    const props = { games: [first, second], groups: [], sport: "nba_cup", teamLogos: {}, savingId: null,
+      lockedReasonFor: () => null, onPick: vi.fn(), onOpen: vi.fn(), canFinalize: true, finalizingDay: null, onFinalizeDay: finalize }
+    const { rerender } = render(<CupGroupPlaySection {...props} picks={new Map([["group", "Boston Celtics"]])} pendingIds={new Set(["group"])} />)
+    expect(screen.getByRole("button", { name: "Finalize this day" })).toBeDisabled()
+    expect(screen.getByText("Picks missing")).toBeInTheDocument()
+    rerender(<CupGroupPlaySection {...props} picks={new Map([["group", "Boston Celtics"], ["second", "Boston Celtics"]])} pendingIds={new Set(["group", "second"])} />)
+    expect(screen.getByText("Saved — not finalized")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Finalize this day" }))
+    expect(finalize).toHaveBeenCalledOnce()
+    expect(finalize.mock.calls[0][0]).toMatch(/^2099-11-0[56]$/)
   })
   it("filters group games by date and restores all dates", () => {
     const v = view()

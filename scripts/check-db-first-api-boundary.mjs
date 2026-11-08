@@ -318,6 +318,12 @@ const DATA_API_IDENTIFIERS = [
   // the check for every one of them — the exact failure this list exists to
   // prevent, described in the block comment above.
   'CFBD_BASE_URL',
+  // ESPN's FANTASY league host (`lm-api-reads.fantasy.espn.com`), hoisted into
+  // `lib/providers/espnUrls.ts` for the ESPN import adapter. Same reason as both
+  // ESPN entries above: four files held that literal, and without these names the
+  // move would have silenced the check for all four at once.
+  'ESPN_FANTASY_API_BASE',
+  'espnFantasyLeagueUrl',
 ];
 
 /**

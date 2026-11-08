@@ -44,6 +44,7 @@ import {
   resolveRenewDraftOrderMode,
   type RenewRedraftLeagueResult,
 } from '@/lib/redraft/offseason/renewRedraftLeague'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -166,7 +167,7 @@ export async function GET(
   } catch { /* table may not exist */ }
 
   return NextResponse.json({
-    isCommissioner: league.userId === session.user.id,
+    isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id),
     currentSeason,
     nextSeason,
     leagueType,
@@ -244,7 +245,7 @@ export async function POST(
     },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
   if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
     error: 'zombie_season_renewal_required',

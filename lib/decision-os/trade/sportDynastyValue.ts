@@ -213,7 +213,7 @@ export function gradeSportDynastyDeal(args: {
   const assumedAge: string[] = []
   const deepPicks: string[] = []
 
-  const priceSide = (assets: readonly TradeAssetInput[]): { priced: Priced[] } | { withheld: string } => {
+  const priceSide = (assets: readonly TradeAssetInput[]): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } => {
     const priced: Priced[] = []
     for (const asset of assets) {
       if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
@@ -225,8 +225,8 @@ export function gradeSportDynastyDeal(args: {
         priced.push({ name: pickLabel(asset), value: p.value, kind: 'pick' })
         continue
       }
-      const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
-      if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+      const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex)
+      if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
       const { player } = found
       if (!meetsSampleBar(player)) {
         const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
@@ -253,15 +253,16 @@ export function gradeSportDynastyDeal(args: {
   }
 
   const give = priceSide(args.give)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position, this season or the next four.',
       basis,
     }

@@ -26,7 +26,7 @@ export async function loadBracketCoach(input: { challengeId: string; entryId?: s
   if (selected && view.activeEntry) {
     const lockedIds = view.series.filter((game) => gameHasLocked(game, now)).map((game) => game.id)
     const picks = lockedIds.length ? await prisma.playoffBracketPick.findMany({
-      where: { challengeId: input.challengeId, entryId: selected.id, seriesId: { in: lockedIds } }, select: { seriesId: true, pickTeamName: true },
+      where: { challengeId: input.challengeId, entryId: selected.id, seriesId: { in: lockedIds } }, select: { seriesId: true, pickTeamName: true, confirmedAt: true },
     }) : []
     rival = { id: selected.id, name: selected.name, totalScore: selected.totalScore ?? 0, finalizedAt: selected.finalizedAt, picks }
   }

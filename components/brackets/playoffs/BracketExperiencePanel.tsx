@@ -12,7 +12,8 @@ export function BracketEntryChecklist({ experience: data, challengeId, entryId }
   return (<section aria-label={c.checklist} className="af-coach-checklist">
       <h3>{c.checklist}</h3>
       {!checklist.hasEntry ? <Link href={href}>{c.create} →</Link> : <>
-        <ol className="af-coach-steps"><li>✓ {c.create}</li><li>{checklist.missing ? "○" : "✓"} {c.savedCount(checklist.saved,checklist.available)}</li><li>{checklist.finalizedAt ? "✓" : "○"} {checklist.finalizedAt ? `${c.finalized}: ${fmt(checklist.finalizedAt)}` : c.submit}</li></ol>
+        <ol className="af-coach-steps"><li>✓ {c.create}</li><li>{checklist.missing ? "○" : "✓"} {c.savedCount(checklist.saved,checklist.available)}</li><li>{checklist.finalizedAt && !checklist.pendingConfirmation ? "✓" : "○"} {checklist.pendingConfirmation ? c.pendingDayConfirmation(checklist.pendingConfirmation) : checklist.finalizedAt ? `${c.finalized}: ${fmt(checklist.finalizedAt)}` : c.submit}</li></ol>
+        {checklist.pendingConfirmation ? <Link href={href}>{c.finalize} →</Link> : null}
         {checklist.nextDeadline ? <p>{c.deadline}: <time dateTime={checklist.nextDeadline}>{fmt(checklist.nextDeadline)}</time></p> : <p>{c.noDeadline}</p>}
         {checklist.firstMissingId && <Link href={`${href}#playoff-series-${checklist.firstMissingId}`}>{c.reviewMissing} →</Link>}
         {checklist.readyToFinalize && <p><Link href={`${href}#bracket-finalize`}>{c.finalize} →</Link> · {c.ready}</p>}

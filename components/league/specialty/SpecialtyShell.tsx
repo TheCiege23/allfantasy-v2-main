@@ -189,11 +189,12 @@ export function SpecialtyCountdown({
   )
 }
 
-export function SpecialtyGrid({ main, rail }: { main: ReactNode; rail?: ReactNode }) {
+/** `railClassName` lets one format change its rail without moving every other format's (see Devy's `.railWide`). */
+export function SpecialtyGrid({ main, rail, railClassName }: { main: ReactNode; rail?: ReactNode; railClassName?: string }) {
   return (
     <div className={styles.grid}>
       <div className={styles.main}>{main}</div>
-      {rail ? <aside className={styles.rail}>{rail}</aside> : null}
+      {rail ? <aside className={railClassName ? `${styles.rail} ${railClassName}` : styles.rail}>{rail}</aside> : null}
     </div>
   )
 }

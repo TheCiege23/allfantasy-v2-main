@@ -165,10 +165,22 @@ export async function claimPlaceholderRoster(args: {
       return [metaName, metaOwner, metaTeam, teamOwner, teamName].some((v) => v.length > 0 && v === key)
     })
     if (match) {
-      await tx.roster.update({
-        where: { id: match.id },
-        data: { platformUserId: candidate.appUserId },
+      /*
+       * 🛑 THE SEAT WRITER, NOT A BARE ROSTER UPDATE. This set only `Roster.platformUserId`, so a manager
+       * whose name matched an open team — most often a manager who was REMOVED and came back, since the
+       * release keeps the team's old owner name — got the league roster and nothing else: the team stayed
+       * orphaned and unclaimed, the season roster stayed "Open team", and the season's results skipped
+       * that team as an unmapped owner (dynasty simulation, 2026-11-08). `assignLeagueSeat` writes the
+       * roster, team, entry slot, membership and every season roster together, and keeps an existing
+       * team name.
+       */
+      const seat = await assignLeagueSeat(tx, {
+        leagueId,
+        rosterId: match.id,
+        userId: candidate.appUserId,
+        displayName: claimDisplayName(candidate),
       })
+      if (!seat.ok) return { claimed: false }
       await applyCommissionerRoleFromSource(tx, leagueId, match.id, rosterImportMeta(match))
       const matchedBy: PlaceholderClaimResult['matchedBy'] =
         label === 'displayName' ? 'display_name' : label === 'sleeperUsername' ? 'sleeper_username' : 'email_local'

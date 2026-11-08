@@ -29,7 +29,9 @@ import {
 } from '@/lib/trade-value/rosterSpotCharge'
 import { tradeValueAsOf, tradeValueSourceOf } from './valueSource'
 import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
-import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
+import { unpriceableReason, type GradeInputs, type NativeNameLookup } from './tradeGradeInputs'
+import { playerIdSpaceFor, providerNameInChartOrder, resolveTradePlayers } from './tradePlayers'
+export { providerNameInChartOrder } from './tradePlayers'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
@@ -412,6 +414,7 @@ export async function createLeagueTradeGrader(args: {
     sport,
     league: {
       id: args.leagueId,
+      platform: leagueRow.platform,
       settings: leagueRow.settings,
       leagueType: leagueType.type,
       leagueSize: leagueRow.leagueSize ?? null,
@@ -502,6 +505,7 @@ export async function createLeagueTradeGrader(args: {
       if (unresolved.length > 0) {
         return {
           graded: false,
+          valuationGap: 'unresolved_player',
           reason: `${unresolved.slice(0, 4).join(', ')} could not be found in the ${sport} player database, so this deal is not graded.`,
           basis: null,
         }
@@ -593,7 +597,10 @@ export async function gradeDeal(
 ): Promise<TradeGradeView> {
   if (!grader) return { graded: false, reason: 'This league’s values could not be loaded just now.', basis: null }
   const why = unpriceableReason(args.give, args.get)
-  if (why) return { graded: false, reason: why, basis: null }
+  if (why) {
+    const valuationGap = args.give.valuationGap ?? args.get.valuationGap
+    return { graded: false, reason: why, basis: null, ...(valuationGap ? { valuationGap } : {}) }
+  }
   return grader.grade({ give: args.give.assets, get: args.get.assets, viewerSide: args.viewerSide })
 }
 
@@ -604,26 +611,49 @@ export async function gradeDeal(
  */
 export async function loadNativePlayerNames(
   items: ReadonlyArray<{ itemType: string | null | undefined; itemReference: string | null; metadata?: unknown }>,
-): Promise<(id: string) => string | null> {
+  /**
+   * The league the items belong to. Pass it: a Fantrax, ESPN, Fleaflicker or MFL league stores THAT
+   * platform's player ids, which no Sleeper lookup can name — so every trade in an imported Fantrax
+   * league fell back to Fantrax's "Last, First" metadata name, matched no value on any chart, and was
+   * never graded (Fantrax-scale simulation, 2026-11-07). Without it, ids are read as Sleeper ids.
+   */
+  leagueId?: string | null,
+): Promise<NativeNameLookup> {
+  const playerItems = items.filter((i) => {
+    const type = String(i.itemType ?? 'player').toLowerCase()
+    return !(type.includes('pick') || type.includes('faab'))
+  })
   const ids = [
-    ...new Set(
-      items
-        .filter((i) => {
-          const type = String(i.itemType ?? 'player').toLowerCase()
-          if (type.includes('pick') || type.includes('faab')) return false
-          return true
-        })
-        .map((i) => i.itemReference)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    ),
+    ...new Set(playerItems.map((i) => i.itemReference).filter((id): id is string => typeof id === 'string' && id.length > 0)),
   ]
-  const byId = new Map<string, string>()
-  const store = (prisma as typeof prisma & { sportsPlayer?: typeof prisma.sportsPlayer }).sportsPlayer
-  if (ids.length > 0 && store && typeof store.findMany === 'function') {
-    const rows = await store
-      .findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true } })
-      .catch(() => [] as Array<{ sleeperId: string | null; name: string }>)
-    for (const r of rows) if (r.sleeperId && r.name && !byId.has(r.sleeperId)) byId.set(r.sleeperId, r.name)
+  const league = leagueId
+    ? await Promise.resolve()
+        .then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true } }))
+        .catch(() => null)
+    : null
+  const sport = String(league?.sport ?? 'NFL').toUpperCase()
+  const space = playerIdSpaceFor({ platform: league?.platform ?? null, sport })
+  const found = await resolveTradePlayers(ids, { space, sport })
+  const storedName = new Map<string, string>()
+  if (typeof space === 'object') {
+    for (const item of playerItems) {
+      const meta = item.metadata as { playerName?: unknown; name?: unknown } | null
+      const raw = typeof meta?.playerName === 'string' ? meta.playerName : meta?.name
+      if (item.itemReference && typeof raw === 'string') {
+        storedName.set(item.itemReference, providerNameInChartOrder(space.provider, raw))
+      }
+    }
   }
-  return (id: string) => byId.get(id) ?? null
+  const lookup: NativeNameLookup = (id) => {
+    const identity = found.get(id)
+    return identity?.ok ? identity.name : storedName.get(id) ?? null
+  }
+  lookup.space = space
+  lookup.sport = sport
+  lookup.identityFor = (id) => found.get(id)
+  lookup.sleeperIdFor = (id) => {
+    const identity = found.get(id)
+    return identity?.ok ? identity.sleeperId ?? (space === 'sleeper' ? id : null) : null
+  }
+  return lookup
 }

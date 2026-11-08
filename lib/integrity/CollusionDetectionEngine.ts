@@ -15,6 +15,7 @@ import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity"
 import { auditRowFromReview, recordTradeValueAudit } from "./tradeValueAudit"
 import { checkRepeatTradingPairs } from "./pairFrequencyCheck"
+import { recordCollusionValuation, type CollusionValuation } from "./collusionValuationCoverage"
 
 /**
  * The post-trade collusion scan — commissioner review mode, run by the integrity worker once a trade
@@ -42,7 +43,7 @@ export type ScanTradeRef =
   /** A completed trade in an imported Sleeper league, from the stored trade ledger (`ProviderTradeOffer`). */
   | { kind: "provider"; provider: "sleeper"; providerTradeId: string }
 
-type TradeAsset = { name: string; position: string; estimatedValue: number }
+type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
 export type CollusionEvidence = {
   tradeTransactionId: string
@@ -50,10 +51,11 @@ export type CollusionEvidence = {
   team2: { rosterId: string; teamName: string; managerName?: string }
   assetsTeam1Gave: TradeAsset[]
   assetsTeam2Gave: TradeAsset[]
-  team1TotalValue: number
-  team2TotalValue: number
-  valueDifferential: number
-  valueDifferentialPct: number
+  team1TotalValue: number | null
+  team2TotalValue: number | null
+  valueDifferential: number | null
+  valueDifferentialPct: number | null
+  valuation: CollusionValuation
   /** Earlier trades between the pair this season; absent when history could not be read. */
   priorTradesBetweenPair?: number
   /** Only when a current season forecast exists: false means eliminated. */
@@ -76,6 +78,8 @@ export type CollusionScanResult = {
     evidence: CollusionEvidence
   }[]
   scannedAt: string
+  valuation?: CollusionValuation
+  valuationCoverage?: { priced: number; unavailable: number }
 }
 
 export type CollusionScanDeps = {
@@ -104,6 +108,14 @@ function topSeverity(checks: readonly Pick<ReviewCheck, "severity">[]): ReviewSe
   return checks.reduce<ReviewSeverity>((top, c) => (SEVERITY_RANK[c.severity] > SEVERITY_RANK[top] ? c.severity : top), "low")
 }
 
+function valuationOf(r: StoredTradeReview): CollusionValuation {
+  if (!r.ok) return { status: 'unavailable', reason: r.refusal.reason, ...(r.refusal.code === 'unresolved_player' ? { gap: 'unresolved_player' } : {}) }
+  const g = r.receipt.grade
+  if (r.facts.gapPct?.ok) return { status: 'priced', percentDiff: r.facts.gapPct.value }
+  return g.graded ? { status: 'priced', percentDiff: g.market?.percentDiff ?? g.percentDiff }
+    : { status: 'unavailable', reason: g.reason, ...(g.valuationGap ? { gap: g.valuationGap } : {}) }
+}
+
 /** The evidence the integrity flag card renders, taken from the review and its receipt — nothing estimated. */
 export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredTradeReview, { ok: true }>): CollusionEvidence {
   const { receipt, review, sides, sideNames, sideManagers, facts } = r
@@ -118,11 +130,12 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
       .map((l) => ({
         name: l.name,
         position: l.kind === "player" ? positionOf(l.name) : l.kind.toUpperCase(),
-        estimatedValue: l.leagueValue ?? 0,
+        estimatedValue: l.leagueValue,
       }))
   const g = receipt.grade
-  const give = g.graded ? g.giveValue : 0
-  const get = g.graded ? g.getValue : 0
+  const give = g.graded ? g.giveValue : null
+  const get = g.graded ? g.getValue : null
+  const valuation = valuationOf(r)
   const eliminated = (pct: number) => pct < ELIMINATED_PLAYOFF_PCT
   return {
     tradeTransactionId,
@@ -133,9 +146,10 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
     assetsTeam2Gave: lines("get"),
     team1TotalValue: give,
     team2TotalValue: get,
-    valueDifferential: Math.abs(give - get),
+    valueDifferential: give == null || get == null ? null : Math.abs(give - get),
     // The review's gap: priced when the trade happened where that is on record (lib/integrity/tradeValueAudit.ts).
-    valueDifferentialPct: facts.gapPct?.ok ? Math.abs(facts.gapPct.value) : g.graded ? Math.abs(g.percentDiff) : 0,
+    valueDifferentialPct: valuation.status === 'priced' ? Math.abs(valuation.percentDiff) : null,
+    valuation,
     ...(facts.history.ok ? { priorTradesBetweenPair: Math.max(0, facts.history.value.length - 1) } : {}),
     ...(facts.playoffPct.ok
       ? { isPlayoffContender: { team1: !eliminated(facts.playoffPct.value[0]), team2: !eliminated(facts.playoffPct.value[1]) } }
@@ -224,13 +238,15 @@ export async function scanTradeForCollusion(
   await d.pairCheck(leagueId).catch((e) => console.warn("[integrity] repeat-pair check failed", { leagueId, error: String(e) }))
 
   const at = d.now()
+  const valuation = valuationOf(r)
+  await recordCollusionValuation(leagueId, valuation, at).catch(() => undefined)
   await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
     create: { leagueId, lastCollusionScanAt: at },
     update: { lastCollusionScanAt: at },
   })
 
-  return { leagueId, flags, scannedAt }
+  return { leagueId, flags, scannedAt, valuation }
 }
 
 /** Every trade settled in the league in the last 30 days that has not been flagged already. */
@@ -257,12 +273,14 @@ export async function fullLeagueCollusionScan(leagueId: string, deps: Partial<Co
 
   const flags: CollusionScanResult["flags"] = []
   let scannedAt = d.now().toISOString()
+  const valuationCoverage = { priced: 0, unavailable: 0 }
   for (const { id, ref } of refs) {
     const dup = await prisma.integrityFlag.findFirst({ where: { leagueId, tradeTransactionId: id } })
     if (dup) continue
     const r = await scanTradeForCollusion(leagueId, id, ref, deps)
     scannedAt = r.scannedAt
     flags.push(...r.flags)
+    if (r.valuation) valuationCoverage[r.valuation.status]++
   }
-  return { leagueId, flags, scannedAt }
+  return { leagueId, flags, scannedAt, valuationCoverage }
 }

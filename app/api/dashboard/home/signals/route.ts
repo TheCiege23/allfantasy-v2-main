@@ -44,10 +44,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ upcomingDrafts: [], liveMatchups: [] })
   }
 
+  /*
+   * Leagues the caller owns OR holds a claimed team in. A member of a league someone else imported —
+   * and every member of a public ESPN league joined by picking a team, which the system account owns —
+   * has no row of their own, so owner-only matching showed them no drafts and no live matchups.
+   * Same rule as `/core`'s list (`lib/dashboard/get-dashboard-league-list.ts`).
+   */
   const ownedLeagues = await (prisma as any).league.findMany({
     where: {
-      userId,
       id: { in: requestedLeagueIds },
+      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
     },
     select: { id: true },
   })

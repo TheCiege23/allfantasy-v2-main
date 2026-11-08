@@ -15,6 +15,7 @@ import {
   type AutopilotSettings,
   type LeagueDeadline,
 } from './autopilot'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 /**
  * Deadline autopilot — reads, sends, records. Rules live in ./autopilot.
@@ -166,7 +167,8 @@ export async function runDeadlineAutopilot(opts: { dryRun: boolean; budgetMs: nu
       break
     }
     try {
-      if (!league.userId || !(await autopilotEntitled(league.userId))) {
+      const commissionerAccount = await leagueCommissionerAccountId(league.id, league.userId)
+      if (!commissionerAccount || !(await autopilotEntitled(commissionerAccount))) {
         run.notEntitled++
         continue
       }
@@ -207,7 +209,7 @@ export async function readAutopilotView(leagueId: string, now = new Date()): Pro
   const settings = readAutopilotSettings(league.settings)
   const [deadlines, entitled] = await Promise.all([
     readLeagueDeadlines(league, now),
-    league.userId ? autopilotEntitled(league.userId) : Promise.resolve(false),
+    leagueCommissionerAccountId(league.id, league.userId).then((id) => (id ? autopilotEntitled(id) : false)),
   ])
   return {
     enabled: settings.enabled,
@@ -247,7 +249,8 @@ export async function saveAutopilotSettings(
   if (enable === true) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
     if (!league) return { ok: false, error: 'not_found' }
-    if (!league.userId || !(await autopilotEntitled(league.userId))) return { ok: false, error: 'not_entitled' }
+    const commissionerAccount = await leagueCommissionerAccountId(leagueId, league.userId)
+    if (!commissionerAccount || !(await autopilotEntitled(commissionerAccount))) return { ok: false, error: 'not_entitled' }
   }
   const saved = await updateLocked(leagueId, (cur) => ({ ...cur, enabled: enable ?? cur.enabled, custom: custom ?? cur.custom }))
   return saved ? { ok: true } : { ok: false, error: 'not_found' }

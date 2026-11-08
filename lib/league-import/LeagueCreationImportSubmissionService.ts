@@ -2,7 +2,7 @@
  * Client-side service for league creation import: preview fetch and create-from-import submit.
  */
 
-import { isImportProviderAvailable } from './provider-ui-config';
+import { importComingSoonMessage, isImportProviderAvailable } from './provider-ui-config';
 import { parseFantraxLeagueId } from './fantrax/fantraxApi';
 import type { ImportProvider } from './types';
 
@@ -246,7 +246,7 @@ export async function fetchImportPreview(
   options?: { allowPreviewOnly?: boolean }
 ): Promise<FetchPreviewResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
   if (!trimmed) {
@@ -308,10 +308,15 @@ export async function submitImportCreation(
      * The server validates it against the league's rosters and uses it ONLY to claim that team.
      */
     claimSourceTeamId?: string
+    /**
+     * ESPN: who runs the league on ESPN. With `espn` or `member` plus a picked team, a public league
+     * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
+     */
+    espnLeagueRunBy?: 'espn' | 'member' | 'me'
   }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
   if (!trimmed) {
@@ -329,6 +334,7 @@ export async function submitImportCreation(
         ...(options?.force ? { force: true } : {}),
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
+        ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
       }),
     });
     const data = await readImportResponseBody(res);
@@ -366,7 +372,7 @@ export async function discoverProviderLeagues(
   options?: { season?: string; sport?: string }
 ): Promise<DiscoverProviderLeaguesResult> {
   if (!isImportProviderAvailable(provider)) {
-    return { ok: false, error: `Import from ${provider} is not yet available.` };
+    return { ok: false, error: importComingSoonMessage(provider) };
   }
 
   const trimmed = accountIdentifier?.trim();

@@ -154,6 +154,8 @@ const ctx = vi.hoisted(() => {
   }
 
   const prisma = {
+    // No season rosters yet, so the rostered-player guard (rosteredPlayerGuard.ts) has nothing to refuse.
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     draftSession: {
       // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
       findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },

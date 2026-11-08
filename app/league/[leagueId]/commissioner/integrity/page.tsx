@@ -32,12 +32,14 @@ import IntegrityFlagCard, { type IntegrityFlagRow } from '@/components/commish/I
 import IntegritySettings, { type IntegritySettingsValue } from '@/components/commish/IntegritySettings'
 import TradeHistoryReview from '@/components/commish/TradeHistoryReview'
 import type { IntegrityCoverage, IntegrityScanStatus } from '@/lib/integrity/coverage'
+import type { CollusionValuation } from '@/lib/integrity/collusionValuationCoverage'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-commish.css'
 
 type IntegrityPayload = {
   canReview?: boolean
   coverage?: IntegrityCoverage
+  collusionValuation?: CollusionValuation | null
   settings?: IntegritySettingsValue
   openFlags?: IntegrityFlagRow[]
   recentDismissed?: IntegrityFlagRow[]
@@ -326,6 +328,9 @@ export default function CommissionerIntegrityPage() {
                 </button>
                 <div className="af-cm-coverage-body" data-open={coverageOpen ? 'true' : 'false'}>
                   <p>Collusion: {coverageText('collusion', payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
+                  {payload.collusionValuation?.status === 'unavailable' && (
+                    <p>Latest trade valuation unavailable. {payload.collusionValuation.reason}</p>
+                  )}
                   <p>Tanking: {coverageText('tanking', payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
                   {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
                 </div>

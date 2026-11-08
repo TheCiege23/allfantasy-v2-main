@@ -1,0 +1,436 @@
+/*
+ * /commissioners — rules this page needs beyond af-landing.css.
+ *
+ * Everything reads the af-core tokens (--surface, --line, --accent …), so dark, light and AF modes
+ * follow the rest of the product with no extra work. The one new colour is the violet used for
+ * Commissioner OS and "coming soon": it is defined once here as --cx-violet* and redefined for
+ * light mode, where #a78bfa on white fails contrast.
+ *
+ * Breakpoints match af-landing.css: 1100px (nav collapses there) and 720px (phone).
+ */
+
+.af-cx {
+  --cx-violet: #a78bfa;
+  --cx-violet-ink: #c4b5fd;
+  --cx-violet-soft: rgba(167, 139, 250, 0.14);
+  --cx-violet-line: rgba(167, 139, 250, 0.34);
+}
+html[data-mode='light'] .af-cx {
+  --cx-violet: #6d28d9;
+  --cx-violet-ink: #5b21b6;
+  --cx-violet-soft: rgba(109, 40, 217, 0.08);
+  --cx-violet-line: rgba(109, 40, 217, 0.28);
+}
+
+.af-cx-nav-current {
+  color: var(--text) !important;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+.af-cx-hero {
+  background-image:
+    radial-gradient(760px 420px at 12% 8%, var(--accent-soft), transparent 68%),
+    radial-gradient(620px 400px at 92% 28%, var(--cx-violet-soft), transparent 70%);
+}
+.af-cx-founder {
+  margin: 18px 0 0;
+  max-width: 520px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--chip);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-cx-health {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.af-cx-health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.af-cx-health-title {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text);
+}
+.af-cx-health-week {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-cx-health-score {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.af-cx-health-num {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 900;
+  color: var(--warn);
+}
+.af-cx-health-verdict {
+  padding-bottom: 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text2);
+}
+.af-cx-meter {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-cx-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--bad), var(--warn));
+}
+.af-cx-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-cx-health-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.af-cx-health-text {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.af-cx-tag {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-cx-tag[data-tone='bad'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-cx-tag[data-tone='warn'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* ── Platforms: af-lp-connect chips, rendered as a real list ─────────────── */
+.af-cx-connect-row {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── Features ─────────────────────────────────────────────────────────── */
+.af-cx-features {
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+  padding: 64px 40px 24px;
+}
+.af-cx-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 48px;
+  align-items: center;
+  scroll-margin-top: 24px;
+}
+.af-cx-feature[data-flip='true'] .af-cx-feature-copy {
+  order: 2;
+}
+.af-cx-feature-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.af-cx-feature-eyebrow {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.af-cx-feature-h2 {
+  margin: 0;
+}
+.af-cx-feature-body {
+  margin: 0;
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-cx-points {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-cx-points li {
+  display: flex;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-cx-points svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--good);
+}
+
+/* Screenshot, or the placeholder until public/images/commissioners/<name>.png exists. */
+.af-cx-shot {
+  margin: 0;
+  min-width: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af-cx-shot-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.af-cx-shot--placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  aspect-ratio: 16 / 10;
+  padding: 24px;
+  border-style: dashed;
+  border-color: var(--cx-violet-line);
+  background: var(--chimmy);
+  color: var(--cx-violet);
+  text-align: center;
+}
+.af-cx-shot-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 34ch;
+}
+.af-cx-shot-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cx-violet-ink);
+}
+.af-cx-shot-alt {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ── Roadmap ──────────────────────────────────────────────────────────── */
+.af-cx-roadmap,
+.af-cx-how,
+.af-cx-bottom {
+  padding: 56px 40px;
+}
+.af-cx-roadmap-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-cx-roadmap-head .af-lp-h2 {
+  margin: 0;
+}
+.af-cx-roadmap-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.af-cx-soon-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--cx-violet-line);
+  background: var(--cx-violet-soft);
+  color: var(--cx-violet-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.af-cx-roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-cx-roadmap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px dashed var(--line2);
+  border-radius: 14px;
+  background: var(--surface2);
+}
+.af-cx-roadmap-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--text);
+}
+.af-cx-roadmap-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── How it works ─────────────────────────────────────────────────────── */
+.af-cx-how {
+  scroll-margin-top: 24px;
+}
+.af-cx-how .af-lp-h2 {
+  margin: 0;
+}
+.af-cx-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-cx-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-cx-step-n {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.af-cx-step-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-cx-step-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+/* ── Bottom CTA ───────────────────────────────────────────────────────── */
+.af-cx-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 40px 56px;
+  border: 1px solid var(--cx-violet-line);
+  border-radius: 22px;
+  background:
+    radial-gradient(600px 280px at 50% 0%, var(--cx-violet-soft), transparent 70%),
+    var(--surface);
+  text-align: center;
+}
+.af-cx-bottom-h2 {
+  margin: 0;
+}
+.af-cx-bottom-body {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text2);
+}
+.af-cx-bottom-ctas {
+  justify-content: center;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .af-cx-roadmap-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .af-cx-feature {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  /* Copy first on a phone, whichever side it sat on at desktop width. */
+  .af-cx-feature[data-flip='true'] .af-cx-feature-copy {
+    order: 0;
+  }
+  .af-cx-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-cx-features {
+    padding: 40px 16px 8px;
+    gap: 48px;
+  }
+  .af-cx-roadmap,
+  .af-cx-how {
+    padding: 36px 16px;
+  }
+  .af-cx-bottom {
+    margin: 8px 16px 40px;
+    padding: 36px 20px;
+  }
+  .af-cx-roadmap-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-cx-health-num {
+    font-size: 46px;
+  }
+  /* Full-width CTAs on a phone: two 46px buttons side by side do not fit at 375px. */
+  .af-cx .af-lp-hero-ctas > a {
+    flex: 1 1 100%;
+  }
+}

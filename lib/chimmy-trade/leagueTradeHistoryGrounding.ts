@@ -313,6 +313,17 @@ export async function buildLeagueTradeHistoryOutcome(
     return { kind: 'league-lookup-failed' }
   }
   if (!league) return { kind: 'league-not-found' }
+  /*
+   * A league that is not on Sleeper has no synced history — but its trades made in AllFantasy are on
+   * file (`AfLeagueTrade`): real ones in a native league, shadow ones in an imported league, each
+   * labelled as what it is (`./afTradeHistoryGrounding.ts`). Read before the refusals below, which
+   * used to answer for every native and Fantrax league that it could see no trades at all.
+   */
+  if (league.platform.toLowerCase() !== 'sleeper') {
+    const { buildAfTradeHistoryOutcome } = await import('./afTradeHistoryGrounding')
+    const af = await buildAfTradeHistoryOutcome(leagueId, league, { season: seasonFilter, manager: managerFilter, player: query.player ?? null, maxShown })
+    if (af.kind === 'ok') return { kind: 'ok', text: af.text, uniqueTrades: af.uniqueTrades, shown: af.shown, unresolvedPlayers: af.unresolvedPlayers }
+  }
   if (!league.platformLeagueId) return { kind: 'no-platform-league-id' }
   // Ingestion is Sleeper-only; another platform's league has no rows here and a
   // silent empty block would read as "this league has never traded".

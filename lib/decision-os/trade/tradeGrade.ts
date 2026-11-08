@@ -106,6 +106,8 @@ export type TradeMarketGrade = {
   getValue: number
 }
 
+export type TradeValuationGap = 'missing_projections' | 'missing_schedule' | 'projection_coverage' | 'unresolved_player' | 'at_replacement'
+
 export type TradeGradeView =
   | {
       graded: true
@@ -186,6 +188,7 @@ export type TradeGradeView =
     }
   | {
       graded: false
+      valuationGap?: TradeValuationGap
       /** Why there is no letter, in words a manager can act on. */
       reason: string
       basis: string | null

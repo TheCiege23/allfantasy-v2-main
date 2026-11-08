@@ -4,6 +4,7 @@ import pLimit from 'p-limit'
 
 import { prisma } from '@/lib/prisma'
 import { syncLeague } from '@/lib/league-sync-core'
+import { SYSTEM_LEAGUE_OWNER_ID } from '@/lib/league-import/systemLeagueOwner'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 
 export interface ImportMaximizerLeagueResult {
@@ -62,6 +63,13 @@ export async function runImportMaximizer(args?: {
 
   const leagues = await prisma.league.findMany({
     take: maxLeagues,
+    /*
+     * Not the AllFantasy system account's leagues. It owns public ESPN leagues people joined by
+     * picking a team; the legacy `syncLeague` below needs the OWNER's cookies (it has none), so every
+     * run failed them and sent "out of date" notices to an account nobody reads. The import collector
+     * refreshes them instead — see `connectionReadableWithoutCredential`.
+     */
+    where: { userId: { not: SYSTEM_LEAGUE_OWNER_ID } },
     orderBy: [{ lastSyncedAt: 'asc' }, { updatedAt: 'asc' }],
     select: {
       id: true,

@@ -128,6 +128,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('league.nav.dynasty', 'Dynasty hub', 'dynasty', 'dynasty'),
     ...item('league.nav.dynastyTaxi', 'Taxi squad', 'taxi', 'dynasty_taxi'),
     ...item('league.nav.dynastyPicks', 'Draft picks', 'picks', 'dynasty_picks'),
+    // Devy leagues only (lib/devy/workspaceTab.ts): the Devy home — pipeline, promotions, devy draft center.
+    ...item('league.nav.devyPipeline', 'Devy pipeline', 'devy', 'devy'),
   ]
   const survivor = tabs.filter(tab => tab.id.startsWith('survivor')).map(tab => {
     used.add(tab.id)

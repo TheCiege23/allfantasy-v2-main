@@ -53,6 +53,7 @@ import {
   SyncScopeMismatchError,
 } from '@/lib/league-import/sourceRef'
 import { prisma } from '@/lib/prisma'
+import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { resolveTransactionWeekWindow, resolveMatchupWeekCap } from '@/lib/import-os/season'
 /*
  * BOTH questions are asked in this file, deliberately: `providerNeedsUser` decides whether to
@@ -141,10 +142,10 @@ export async function resolveCredentialCandidates(
         platformLeagueId: connection.externalLeagueId,
         season: connection.season,
       },
-      select: { userId: true },
+      select: { id: true, userId: true },
       orderBy: { createdAt: 'asc' },
     })
-    .catch(() => [] as { userId: string }[])
+    .catch(() => [] as { id: string; userId: string }[])
 
   const seen = new Set<string>()
   const out: string[] = []
@@ -154,7 +155,43 @@ export async function resolveCredentialCandidates(
     seen.add(userId)
     out.push(userId)
   }
+
+  /*
+   * MEMBERS AFTER OWNERS. A league owned by the AllFantasy system account (a public ESPN league
+   * joined by picking a team — `espnPublicMemberImport.ts`) has no owner credential at all, and a
+   * member who later connects ESPN, or a proven commissioner who joined it, holds the only cookies
+   * there are. Reading with a member's cookies only READS; ownership is decided elsewhere.
+   */
+  if (rows.length > 0) {
+    // Through `.then` so a missing delegate (a narrow test double) degrades to "no members" too.
+    const claimed = await Promise.resolve()
+      .then(() =>
+        prisma.leagueTeam.findMany({
+          where: { leagueId: { in: rows.map((r) => r.id) }, claimedByUserId: { not: null } },
+          select: { claimedByUserId: true },
+        }),
+      )
+      .catch(() => [] as Array<{ claimedByUserId: string | null }>)
+    for (const team of claimed) {
+      const userId = String(team.claimedByUserId ?? '').trim()
+      if (!userId || seen.has(userId)) continue
+      seen.add(userId)
+      out.push(userId)
+    }
+  }
   return out
+}
+
+/**
+ * True when this connection can be read with NO stored credential: an ESPN league owned by the
+ * AllFantasy system account, which only ever owns PUBLIC leagues (it is created by the no-cookie
+ * member import, which runs only after the gate read the league without cookies). The pipeline run
+ * as the system account falls back to an uncredentialed read, so the preflight must not skip it.
+ */
+export async function connectionReadableWithoutCredential(connection: LeagueSyncConnection): Promise<boolean> {
+  if (connection.provider !== 'espn') return false
+  const candidates = await resolveCredentialCandidates(connection)
+  return candidates.some((userId) => isSystemLeagueOwner(userId))
 }
 
 /**

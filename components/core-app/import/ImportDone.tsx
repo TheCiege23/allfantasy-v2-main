@@ -214,6 +214,8 @@ export function ImportDone({
           </a>
         ) : null}
         {extraActions}
+        <Link href="/core/career" className="af-btn af-done-alt">Your Career</Link>
+        <Link href="/core/rankings?scope=portfolio" className="af-btn af-done-alt">View rankings</Link>
       </div>
     </div>
   )

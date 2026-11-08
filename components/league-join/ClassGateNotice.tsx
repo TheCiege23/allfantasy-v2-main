@@ -3,25 +3,21 @@
 import Link from 'next/link'
 import { useCallback, useState } from 'react'
 
-/**
- * What a manager sees when the division gate refuses an open join (ADR F2.10a), with the one way
- * forward: asking the commissioner. Shared by every join page so the message and the request flow are
- * the same wherever the invite was opened. Ported from PR #1753 onto the division gate.
- */
+/** Shared request panel for a manager outside the league’s Career Level band. */
 
 export type ClassGateBlocked = {
   code?: string
   error?: string
   leagueId?: string
-  userDivision?: number
-  leagueDivision?: number
+  userLevel?: number
+  leagueLevel?: number
   band?: [number, number]
   canRequest?: boolean
 }
 
 export function isClassGateBlocked(payload: unknown): payload is ClassGateBlocked {
   if (!payload || typeof payload !== 'object') return false
-  return (payload as ClassGateBlocked).code === 'DIVISION_GATE_BLOCKED'
+  return (payload as ClassGateBlocked).code === 'CAREER_LEVEL_GATE_BLOCKED'
 }
 
 type RequestState = 'idle' | 'sending' | 'requested' | 'already_requested' | 'already_granted' | 'not_needed' | 'error'
@@ -76,7 +72,7 @@ export function ClassGateNotice({
   }, [code, token])
 
   const band = blocked.band
-  const range = band ? (band[0] === band[1] ? `Division ${band[0]}` : `Divisions ${band[0]}–${band[1]}`) : null
+  const range = band ? (`levels ${band[0]}–${band[1]}`) : null
   const muted = tone === 'dark' ? 'text-slate-300' : ''
   const mutedStyle = tone === 'theme' ? { color: 'var(--muted)' } : undefined
   const textStyle = tone === 'theme' ? { color: 'var(--text)' } : undefined
@@ -88,15 +84,14 @@ export function ClassGateNotice({
       data-testid="class-gate-notice"
       aria-live="polite"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Outside your division</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Commissioner approval required</p>
       <p className={`mt-2 text-sm font-semibold ${tone === 'dark' ? 'text-white' : ''}`} style={textStyle}>
-        {blocked.leagueDivision != null && blocked.userDivision != null && range
-          ? `This league plays in Division ${blocked.leagueDivision}, so open joins are for ${range}. You are in Division ${blocked.userDivision}.`
-          : blocked.error ?? 'This league is outside your division.'}
+        {blocked.userLevel != null && range
+          ? `You are Career Level ${blocked.userLevel}. This league is open to direct joins from ${range}.`
+          : blocked.error ?? 'This league is outside your Career Level range.'}
       </p>
       <p className={`mt-1 text-sm ${muted}`} style={mutedStyle}>
-        AllFantasy matches managers by Class — how well they have played, week by week — so nobody plays far above or
-        below their weight. The commissioner can let you in.
+        Your request shares your handle, Career Level and a summary of your verified league history with the commissioner.
       </p>
 
       {done ? (
@@ -113,7 +108,7 @@ export function ClassGateNotice({
               data-testid="class-gate-request-button"
               className="min-h-[44px] rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:opacity-60"
             >
-              {state === 'sending' ? 'Sending…' : 'Ask the commissioner to let me in'}
+              {state === 'sending' ? 'Sending…' : 'Request to join'}
             </button>
           ) : null}
           <Link
@@ -121,7 +116,7 @@ export function ClassGateNotice({
             className={`inline-flex min-h-[44px] items-center justify-center rounded-lg border border-white/15 px-4 py-2 text-sm ${muted}`}
             style={mutedStyle}
           >
-            Find a league in my division
+            Find a league at my level
           </Link>
         </div>
       )}

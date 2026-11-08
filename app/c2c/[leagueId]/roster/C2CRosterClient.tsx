@@ -12,7 +12,7 @@ import { NBA_CBB_DEFAULTS, NFL_CFB_DEFAULTS } from '@/lib/c2c/sportDefaults'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import type { RosterBalanceReport } from '@/lib/c2c/ai/c2cChimmy'
 
-type RosterBuckets = {
+export type RosterBuckets = {
   campusStarters: C2CPlayerRow[]
   cantonStarters: C2CPlayerRow[]
   bench: C2CPlayerRow[]

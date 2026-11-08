@@ -90,7 +90,8 @@ const DRAFT_UI_DEFAULTS: DraftUISettings = {
   allowPicksDuringOvernightPause: false,
   draftOrderRandomizationEnabled: false,
   pickTradeEnabled: true,
-  auctionAutoNominationEnabled: false,
+  // A nominator whose clock runs out has a player nominated for them (their queue, then the pool).
+  auctionAutoNominationEnabled: true,
   importEnabled: true,
   executionMode: 'live',
   roundOnePickAnnouncementEnabled: true,

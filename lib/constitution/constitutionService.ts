@@ -34,6 +34,7 @@ import {
   type LeagueFacts,
   type RuleLogEntry,
 } from './constitutionBuilder'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 /**
  * Constitution builder — storage, votes and applying amendments. Rules live in ./constitutionBuilder.
@@ -237,8 +238,10 @@ export async function resolveAmendments(leagueId: string, now = new Date()): Pro
   // Passed + effective now, on the Commissioner plan: applied on behalf of the league owner, who
   // runs the settings patch. Without the plan it stays `passed` for the commissioner to apply.
   const autoApply = readyToApply(merged, 'now').filter((a) => resolved.has(a.id))
-  if (autoApply.length > 0 && league.userId && (await constitutionEntitled(league.userId))) {
-    for (const a of autoApply) await applyAmendment(leagueId, a.id, league.userId)
+  // The owner — or, for a system-owned league, its PROVEN commissioner (null: none, so no plan).
+  const commissionerAccount = autoApply.length > 0 ? await leagueCommissionerAccountId(leagueId, league.userId) : null
+  if (autoApply.length > 0 && commissionerAccount && (await constitutionEntitled(commissionerAccount))) {
+    for (const a of autoApply) await applyAmendment(leagueId, a.id, commissionerAccount)
   }
   return readAmendments(asRecord((await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings)[AMENDMENTS_KEY])
 }
@@ -455,7 +458,10 @@ export async function applyAmendment(leagueId: string, amendmentId: string, acto
 
   const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
   // The patch re-checks the commissioner role on the userId it is given; the owner always holds it.
-  const res = await executeLeagueSettingsPatch(league.userId ?? actorUserId, { leagueId, [a.change.key]: a.change.value }, { actingUserId: actorUserId })
+  // ⚠ Not the SYSTEM account of a joined-by-pick league: that would apply amendments acting as an
+  // account nobody runs. Its proven commissioner instead, or the actor when there is none.
+  const patchAs = (await leagueCommissionerAccountId(leagueId, league.userId)) ?? actorUserId
+  const res = await executeLeagueSettingsPatch(patchAs, { leagueId, [a.change.key]: a.change.value }, { actingUserId: actorUserId })
   const ok = res.status >= 200 && res.status < 300
   const reason = ok ? null : (((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `HTTP ${res.status}`)
   const at = new Date().toISOString()
@@ -477,12 +483,13 @@ export async function applyAmendment(leagueId: string, amendmentId: string, acto
 export async function applyAmendmentsAtSeasonRollover(leagueId: string): Promise<{ applied: number; failed: number; skipped: 'no_plan' | null }> {
   try {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-    if (!league?.userId || !(await constitutionEntitled(league.userId))) return { applied: 0, failed: 0, skipped: 'no_plan' }
+    const commissionerAccount = await leagueCommissionerAccountId(leagueId, league?.userId)
+    if (!commissionerAccount || !(await constitutionEntitled(commissionerAccount))) return { applied: 0, failed: 0, skipped: 'no_plan' }
     const amendments = await resolveAmendments(leagueId)
     let applied = 0
     let failed = 0
     for (const a of readyToApply(amendments, 'season_rollover')) {
-      const r = await applyAmendment(leagueId, a.id, league.userId)
+      const r = await applyAmendment(leagueId, a.id, commissionerAccount)
       if (r.ok) applied++
       else failed++
     }
@@ -594,7 +601,9 @@ export async function readConstitutionView(leagueId: string, viewer: { userId: s
   const [versions, amendments, entitled] = await Promise.all([
     readVersions(leagueId),
     resolveAmendments(leagueId),
-    viewer.isCommissioner ? constitutionEntitled(league.userId) : Promise.resolve(false),
+    viewer.isCommissioner
+      ? leagueCommissionerAccountId(leagueId, league.userId).then((id) => constitutionEntitled(id))
+      : Promise.resolve(false),
   ])
   const log = await readRuleLog(leagueId, amendments)
   return {

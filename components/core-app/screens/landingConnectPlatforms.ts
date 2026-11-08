@@ -12,7 +12,7 @@
  * never decided here.
  */
 
-import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
+import { IMPORT_PROVIDER_UI_OPTIONS, getImportPlatforms } from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
@@ -22,14 +22,14 @@ export type LandingConnectPlatform = {
   state: 'live' | 'soon'
 }
 
-const STRIP_NAMES: Partial<Record<ImportProvider, string>> = {
-  sleeper: 'Sleeper',
-  espn: 'ESPN',
-  yahoo: 'Yahoo',
-  fantrax: 'Fantrax',
-  mfl: 'MFL',
-  fleaflicker: 'Fleaflicker',
-}
+/*
+ * Short names come from provider-ui-config (`getImportPlatforms().name`), the same names the
+ * /commissioners page and every platform sentence use. The `o.label` fallback below only matters for
+ * the test seam, which can pass synthetic options.
+ */
+const STRIP_NAMES: Partial<Record<ImportProvider, string>> = Object.fromEntries(
+  getImportPlatforms().map((p) => [p.provider, p.name]),
+)
 
 export function getLandingConnectPlatforms(
   options: ReadonlyArray<Pick<(typeof IMPORT_PROVIDER_UI_OPTIONS)[number], 'provider' | 'label' | 'available'>> =

@@ -9,7 +9,7 @@ import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
-import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
+import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 
 const claimSchema = z.object({
   token: z.string().min(1),
@@ -89,24 +89,11 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  /*
-   * The division gate (ADR F2.10a). A 'matched' claim is the player's OWN team — their linked
-   * platform account already manages it — so they already play in this league and are exempt.
-   * An 'open' seat is gated: for canonical and commissioner-minted leagues this token IS the
-   * league's public join code, so it is only an invitation when the league is private.
-   */
+  // A verified manager claiming their existing external team already plays in this league.
   if (eligibility === 'open') {
-    const divisionGate = await evaluateJoinDivisionGate({
-      userId,
-      leagueId: invite.leagueId,
-      credential: { kind: 'invite_token', token },
-    })
-    if (divisionGate.outcome === 'deny') {
-      return NextResponse.json(
-        divisionGateRefusal(divisionGate, invite.leagueId),
-        { status: 403 },
-      )
-    }
+    const careerGate = await evaluateCareerJoinGate(userId, invite.leagueId)
+    if (!careerGate) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+    if (!careerGate.canJoin) return NextResponse.json(careerJoinRefusal(careerGate, invite.leagueId), { status: 403 })
   }
 
   const existingClaim = await prisma.leagueManagerClaim.findFirst({

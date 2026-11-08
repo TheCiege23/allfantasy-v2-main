@@ -18,6 +18,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { computeStartupDraftCapacity, formatCountsTaxiAndDevy } from '@/lib/draft/draftSettingsPolicy'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -221,14 +222,30 @@ async function finishCreatedLeague(
   // draft gate's template before returning a league whose first draft cannot finish.
   if (!args.sourceLeagueId) {
     try {
-      const capacity = (await getLeagueDraftTemplatePayload(createdLeagueId)).totalRosterSlots
+      const template = await getLeagueDraftTemplatePayload(createdLeagueId)
+      // Dynasty-family startups: only the spots a drafted player is placed in (starters + bench + devy).
+      // The total also holds IR and taxi, which finalization never fills — a board that size left every
+      // team over its active roster limit, and every trade was refused (computeStartupDraftCapacity).
+      const startupCapacity = formatCountsTaxiAndDevy([engine.leagueFormatId])
+        ? computeStartupDraftCapacity(template.template?.slots ?? [])
+        : 0
+      const capacity = startupCapacity > 0 ? Math.min(template.totalRosterSlots, startupCapacity) : template.totalRosterSlots
       if (capacity > 0) {
         const session = await prisma.draftSession.findFirst({
           where: { leagueId: createdLeagueId, status: 'pre_draft' },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, rounds: true },
+          select: { id: true, rounds: true, devyConfig: true },
         })
-        if (session && session.rounds > capacity) {
+        /*
+         * A plain dynasty startup also GROWS to its active roster. The sport presets' startup depth is
+         * not chosen in the form and lagged the default rosters — NHL 26 rounds for 27 active spots,
+         * MLB 34 for 41 — so every team finished the startup with empty spots, while the first roster
+         * edit resized the draft to the full roster (syncDraftRoundsToRoster). Not when college rounds
+         * sit at the end of the draft (devyConfig): they are numbered from the last round.
+         */
+        const devyRounds = (session?.devyConfig as { enabled?: unknown } | null)?.enabled === true
+        const grow = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
+        if (session && (session.rounds > capacity || (grow && session.rounds < capacity))) {
           await prisma.$transaction(async (tx) => {
             const league = await tx.league.findUniqueOrThrow({ where: { id: createdLeagueId }, select: { settings: true } })
             const settings = (league.settings ?? {}) as Record<string, unknown>

@@ -128,7 +128,7 @@ const PLAN_FAMILY_LABELS: Record<PlanFamily, string> = {
 const PRICING_CONVERSION_BULLETS: readonly string[] = [
   "Chimmy for waivers, trades, and matchup breakdowns",
   "Commissioner-grade controls and league automation",
-  "Stripe checkout for subscriptions — league dues & payouts on FanCred",
+  "Stripe checkout for subscriptions — AllFantasy never holds league dues",
 ];
 
 function formatUsd(amount: number): string {

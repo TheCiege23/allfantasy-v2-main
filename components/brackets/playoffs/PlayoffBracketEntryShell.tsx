@@ -88,7 +88,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
   const pastDeadline = isLiveSingleGame && !rollingCup && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
-    if (!activeEntry) return
+    if (!activeEntry || !view.challenge.inviteCode) return
     try {
       await navigator.clipboard.writeText(bracketInviteUrl(window.location.origin, view.challenge.id, view.challenge.inviteCode))
       toast.success("League invitation copied.")
@@ -130,11 +130,15 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const cupFinal = series.find((game) => game.round === "cup_championship")
   const showTiebreaker = isLiveSingleGame && (!rollingCup || Boolean(cupFinal && !nbaCupLockedReason(cupFinal)))
   const needsGuess = isLiveSingleGame && (!rollingCup || (showTiebreaker && Boolean(tiebreakerGuess.trim())))
+  const cupHasDrafts = rollingCup && picks.some((pick) => {
+    const game = series.find((item) => item.id === pick.seriesId)
+    return game && !nbaCupLockedReason(game) && (!pick.confirmedAt || Boolean(pick.draftTeamName))
+  })
   const canSubmit = Boolean(activeEntry) && Boolean(completion?.isSubmittable ?? (totalSeries > 0 && pickCount >= totalSeries)) &&
     (!isLiveSingleGame || ((!needsGuess || validGuess) && !pastDeadline && (rollingCup || Boolean(firstGameStartsAt)))) &&
-    (!rollingCup || !activeEntry?.finalizedAt || (showTiebreaker && validGuess && Number(tiebreakerGuess) !== activeEntry.tiebreakerTotalScore))
+    (!rollingCup || !activeEntry?.finalizedAt || cupHasDrafts || (showTiebreaker && validGuess && Number(tiebreakerGuess) !== activeEntry.tiebreakerTotalScore))
   const submitBlockedMessage = completion?.message ?? "Complete every series before submitting this bracket."
-  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? rollingCup ? "Update tiebreaker" : "Update finalized picks" : "Finalize picks" :
+  const submitButtonLabel = isLiveSingleGame ? view.activeEntry?.finalizedAt ? rollingCup ? cupHasDrafts ? "Finalize all open picks" : "Update tiebreaker" : "Update finalized picks" : "Finalize picks" :
     completionMode === "available_picks_only" ? "Submit Available Picks" : "Submit Bracket"
   const reviewBadge = activeEntry?.isComplete
     ? completionMode === "available_picks_only"
@@ -169,6 +173,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           entryId,
           seriesId,
           pickTeamName: teamName,
+          confirmationMode: rollingCup ? "per_day" : undefined,
         })
         setView(next)
         setDirtySinceSubmit((current) => current || wasSubmitted)
@@ -282,19 +287,19 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
               {rollingCup ? (
                 <div className="af-pb-next-step" role="status">
                   {activeEntry.finalizedAt ? (
-                    <><strong>Finalized</strong><span>Your changes to upcoming games save automatically. Each pick locks at tipoff.</span></>
+                    <><strong>Bracket active</strong><span>Finalize each game day after saving picks. Unfinalized edits do not replace your last finalized pick.</span></>
                   ) : completion?.isSubmittable ? (
-                    <><strong>{completion.savedRequiredPickCount} of {completion.requiredPickCount} available picks saved · Ready to finalize</strong><span>Finalize before your first selected game starts.</span></>
+                    <><strong>{completion.savedRequiredPickCount} of {completion.requiredPickCount} available picks saved</strong><span>Finalize each day below, or finalize all open picks here.</span></>
                   ) : (
-                    <><strong>{completion?.savedRequiredPickCount ?? 0} of {completion?.requiredPickCount ?? 0} available picks saved</strong><span>{completion?.missingRequiredSeriesIds.length ? `${completion.missingRequiredSeriesIds.length} picks still needed before finalizing.` : "Confirmed games will appear when available."}</span>
+                    <><strong>{completion?.savedRequiredPickCount ?? 0} of {completion?.requiredPickCount ?? 0} available picks saved</strong><span>{completion?.missingRequiredSeriesIds.length ? `${completion.missingRequiredSeriesIds.length} picks still needed to finalize the whole pool. You can finalize a complete day below.` : "Confirmed games will appear when available."}</span>
                       {completion?.missingRequiredSeriesIds.length && nextActionableSeries ? <button type="button" className="af-pb-btn" onClick={continuePicking}>Go to next missing pick</button> : null}
                     </>
                   )}
                 </div>
               ) : null}
               {showTiebreaker ? <label className="af-pb-tiebreaker">{rollingCup ? "Optional championship tiebreaker" : "Final game combined score"} <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
-              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Invite friends</button> : null}
-              {!rollingCup || !activeEntry.finalizedAt || showTiebreaker ? <button
+              {canShareEntry && view.challenge.inviteCode ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Invite friends</button> : null}
+              {!rollingCup || !activeEntry.finalizedAt || cupHasDrafts || showTiebreaker ? <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"
                 onClick={handleSubmit}
@@ -364,7 +369,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickCount}/{totalSeries} picks</span>
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">Autosave on</span>
-            {canShareEntry ? <button type="button" onClick={copyShareLink} className="rounded-full border border-teal-500 px-3 py-1 text-teal-900">Invite friends</button> : null}
+            {canShareEntry && view.challenge.inviteCode ? <button type="button" onClick={copyShareLink} className="rounded-full border border-teal-500 px-3 py-1 text-teal-900">Invite friends</button> : null}
             {saving ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-amber-900">
                 <Loader2 className="h-4 w-4 animate-spin" />

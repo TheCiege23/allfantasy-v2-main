@@ -10,6 +10,7 @@ import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRos
 import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
+import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -502,6 +503,21 @@ export async function bootstrapLeagueFromNormalizedImport(
    */
   const performances = await writeTeamPerformances({ season, rows: performanceRows })
   teamPerformancesCreated = performances.processed
+
+  /*
+   * 🛑 A TEAM SOMEONE PICKED WITHOUT PROOF NEVER CARRIES THE COMMISSIONER FLAG. The upserts above copy
+   * `is_commissioner` from the provider on every sync, and ~20 places grant commissioner rights from
+   * that column. Claiming a flagged team without proof is refused up front; this covers the flag
+   * MOVING onto such a team later. See `espnPublicMemberImport.ts`.
+   */
+  try {
+    await stripCommissionerFlagsFromUnprovenClaims(leagueId)
+  } catch (err) {
+    console.error(
+      '[bootstrapLeagueFromNormalizedImport] could not clear commissioner flags from unproven claims',
+      { leagueId, error: err instanceof Error ? err.name : 'unknown' },
+    )
+  }
 
   return {
     leagueTeamsCreated,

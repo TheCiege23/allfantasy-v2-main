@@ -1,6 +1,23 @@
 import { isEspnMlbSource } from './EspnMlbSource'
-import { ESPN_TEAM_ABBREVIATIONS } from './espnTeamDefenseIds'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
+import {
+  EspnApiResponseError,
+  EspnFormatChangedError,
+  EspnUnavailableError,
+  assertEspnLeagueObject,
+  buildEspnCookieHeader as buildCookieHeaderFromCredentials,
+  espnCurrentFantasySeason,
+  espnDefaultSeasonCandidates,
+  fetchEspnLeagueJson,
+} from './espnFantasyClient'
+import {
+  ESPN_ACTIVITY_MESSAGE_TYPE_IDS,
+  ESPN_ACTIVITY_TYPE_MAP,
+  ESPN_LINEUP_SLOT_LABELS as ESPN_SLOT_LABELS,
+  ESPN_POSITION_LABELS,
+  ESPN_TEAM_ABBREVIATIONS,
+} from './espnLookups'
+import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -11,76 +28,17 @@ import type {
   EspnImportTransaction,
 } from '@/lib/league-import/adapters/espn/types'
 
-const ESPN_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl'
-const CURRENT_IMPORT_SEASON = new Date().getFullYear()
 const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mScoreboard', 'mSettings']
 const ESPN_DISCOVERY_VIEWS = ['mTeam', 'mSettings']
 const ESPN_DRAFT_VIEWS = ['mDraftDetail']
-const ESPN_ACTIVITY_MESSAGE_TYPE_IDS = [178, 180, 179, 239, 181, 244] as const
 const ESPN_TRANSACTIONS_MIN_SEASON = 2019
-const ESPN_HEADERS = {
-  Accept: 'application/json',
-  'User-Agent': 'Mozilla/5.0 (compatible; AllFantasy/1.0)',
-}
-
-const ESPN_ACTIVITY_TYPE_MAP: Record<
-  number,
-  { type: 'free_agent' | 'waiver' | 'drop' | 'trade'; description: string }
-> = {
-  178: { type: 'free_agent', description: 'added' },
-  179: { type: 'drop', description: 'dropped' },
-  180: { type: 'waiver', description: 'added' },
-  181: { type: 'waiver', description: 'dropped' },
-  239: { type: 'drop', description: 'dropped' },
-  244: { type: 'trade', description: 'traded_away' },
-}
-
-const ESPN_SLOT_LABELS: Record<number, string> = {
-  0: 'QB',
-  1: 'TQB',
-  2: 'RB',
-  3: 'RB/WR',
-  4: 'WR',
-  5: 'WR/TE',
-  6: 'TE',
-  7: 'SUPER_FLEX',
-  8: 'DT',
-  9: 'DE',
-  10: 'LB',
-  11: 'DL',
-  12: 'CB',
-  13: 'S',
-  14: 'DB',
-  15: 'DP',
-  16: 'D/ST',
-  17: 'K',
-  18: 'P',
-  19: 'HC',
-  20: 'BE',
-  21: 'IR',
-  23: 'FLEX',
-  24: 'EDR',
-}
 
 /**
- * Exported so the athlete adapter maps `defaultPositionId` through the SAME table.
- * Restating this mapping elsewhere is how two parts of one codebase come to
- * disagree about what position 16 is.
+ * The id tables moved to `./espnLookups` (one copy for the whole repo). Re-exported here because
+ * the athlete adapter, the roster crosswalk and several tests import them from this module.
  */
-export const ESPN_POSITION_LABELS: Record<number, string> = {
-  1: 'QB',
-  2: 'RB',
-  3: 'WR',
-  4: 'TE',
-  5: 'K',
-  16: 'D/ST',
-}
-
-/**
- * Exported for `buildEspnDefenceIdentities`. The table lives in the pure `espnTeamDefenseIds.ts`
- * so the roster crosswalk can name an ESPN D/ST without importing this fetch service.
- */
-export { ESPN_TEAM_ABBREVIATIONS }
+export { ESPN_POSITION_LABELS, ESPN_TEAM_ABBREVIATIONS }
+export { EspnApiResponseError, EspnFormatChangedError, EspnUnavailableError }
 
 /**
  * ESPN's `lineupSlotId` for the bench and for injured reserve.
@@ -105,6 +63,8 @@ const ESPN_IR_SLOT = 21
 type EspnAuthContext = {
   swid: string | null
   espnS2: string | null
+  /** Whose STORED cookies these are — set only by `getEspnAuthForUser`, so health is recorded only for them. */
+  userId?: string
 }
 
 type EspnMemberSummary = {
@@ -117,15 +77,6 @@ type EspnPlayerSummary = {
   name: string | null
   position: string | null
   team: string | null
-}
-
-class EspnApiResponseError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
 }
 
 export class EspnImportConnectionError extends Error {}
@@ -181,15 +132,6 @@ function toSlotId(value: unknown, fallback: number): number {
   return parsed != null && parsed >= 0 ? Math.floor(parsed) : fallback
 }
 
-function buildEspnLeagueUrl(leagueId: string, season: number, views: string[] = ESPN_IMPORT_VIEWS): string {
-  const query = views.map((view) => `view=${encodeURIComponent(view)}`).join('&')
-  return `${ESPN_API_BASE}/seasons/${season}/segments/0/leagues/${leagueId}?${query}`
-}
-
-function buildEspnCommunicationUrl(leagueId: string, season: number): string {
-  return `${ESPN_API_BASE}/seasons/${season}/segments/0/leagues/${leagueId}/communication/?view=kona_league_communication`
-}
-
 function buildEspnActivityFilter(limit = 1000): string {
   return JSON.stringify({
     topics: {
@@ -205,23 +147,56 @@ function buildEspnActivityFilter(limit = 1000): string {
   })
 }
 
-export function parseEspnSourceInput(sourceInput: string): { leagueId: string; season: number } {
-  const trimmed = sourceInput.trim()
+/**
+ * Sports ESPN fantasy runs that this importer does NOT read. Their URLs carry a `leagueId` too, so
+ * without this a basketball league URL was silently requested as a FOOTBALL league and came back
+ * "not found" — the one error that sends people to re-check an id that was right all along.
+ */
+const ESPN_UNSUPPORTED_URL_SPORTS: Record<string, string> = {
+  basketball: 'basketball',
+  'womens-basketball': "women's basketball",
+  hockey: 'hockey',
+}
+
+export type EspnLeagueInput = {
+  leagueId: string
+  season: number
+  /** False when the user gave only an id: the season was defaulted and may be the wrong one. */
+  seasonExplicit: boolean
+}
+
+const MAX_ESPN_LEAGUE_ID_DIGITS = 15
+
+/**
+ * Pull the league id (and season, when present) out of whatever the user pasted: a bare id, any
+ * fantasy.espn.com football URL (league, team, matchup, standings pages all carry `leagueId=`), a
+ * bare query string, or the `2025:123` / `123@2025` shorthands.
+ */
+export function parseEspnLeagueInput(sourceInput: string, now: Date = new Date()): EspnLeagueInput {
+  const trimmed = String(sourceInput ?? '').trim()
   if (!trimmed) {
     throw new EspnImportLeagueNotFoundError('ESPN league ID is required.')
   }
 
   let leagueId = ''
-  let season = CURRENT_IMPORT_SEASON
+  let season: number | null = null
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  const looksLikeUrl = /^https?:\/\//i.test(trimmed) || /^(www\.)?fantasy\.espn\.com\//i.test(trimmed)
+  if (looksLikeUrl) {
     try {
-      const url = new URL(trimmed)
+      const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
+      const sport = url.pathname.split('/').filter(Boolean)[0]?.toLowerCase() ?? ''
+      if (/(^|\.)espn\.com$/i.test(url.hostname) && ESPN_UNSUPPORTED_URL_SPORTS[sport]) {
+        throw new EspnImportLeagueNotFoundError(
+          `That link is an ESPN ${ESPN_UNSUPPORTED_URL_SPORTS[sport]} league. AllFantasy imports ESPN football and baseball leagues.`,
+        )
+      }
       const leagueIdParam = url.searchParams.get('leagueId')
       const seasonIdParam = url.searchParams.get('seasonId')
       if (leagueIdParam) leagueId = leagueIdParam.replace(/\D/g, '')
-      if (seasonIdParam) season = toPositiveInt(seasonIdParam, season)
-    } catch {
+      if (seasonIdParam) season = toPositiveInt(seasonIdParam, 0) || null
+    } catch (error) {
+      if (error instanceof EspnImportLeagueNotFoundError) throw error
       // Fall through to shorthand parsing.
     }
   }
@@ -233,14 +208,14 @@ export function parseEspnSourceInput(sourceInput: string): { leagueId: string; s
     const seasonIdMatch = trimmed.match(/seasonId=(\d{4})/i)
 
     if (seasonFirst) {
-      season = toPositiveInt(seasonFirst[1], season)
+      season = toPositiveInt(seasonFirst[1], 0) || null
       leagueId = seasonFirst[2]
     } else if (leagueFirst) {
       leagueId = leagueFirst[1]
-      season = toPositiveInt(leagueFirst[2], season)
+      season = toPositiveInt(leagueFirst[2], 0) || null
     } else if (leagueIdMatch) {
       leagueId = leagueIdMatch[1]
-      if (seasonIdMatch) season = toPositiveInt(seasonIdMatch[1], season)
+      if (seasonIdMatch) season = toPositiveInt(seasonIdMatch[1], 0) || null
     } else if (/^\d+$/.test(trimmed)) {
       leagueId = trimmed
     }
@@ -251,89 +226,53 @@ export function parseEspnSourceInput(sourceInput: string): { leagueId: string; s
       'Enter an ESPN league ID, a full ESPN league URL, or a season-prefixed value like 2025:12345678.'
     )
   }
+  if (leagueId.length > MAX_ESPN_LEAGUE_ID_DIGITS) {
+    throw new EspnImportLeagueNotFoundError(
+      "That number is too long to be an ESPN league ID. It's the leagueId= number in your league's URL."
+    )
+  }
 
+  const seasonExplicit = season != null
+  return { leagueId, season: season ?? now.getFullYear(), seasonExplicit }
+}
+
+export function parseEspnSourceInput(sourceInput: string): { leagueId: string; season: number } {
+  const { leagueId, season } = parseEspnLeagueInput(sourceInput)
   return { leagueId, season }
 }
 
-const ESPN_FETCH_RETRIES = 3
-const ESPN_FETCH_TIMEOUT_MS = 12000
-
-const espnFetchDelay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
 /**
- * Resilient ESPN GET: per-request timeout plus bounded retries with exponential
- * backoff on TRANSIENT failures only (network error / timeout / 5xx / 429).
- * Definitive statuses (401/403/404/other 4xx) throw EspnApiResponseError
- * immediately so the cookie-fallback and private-league messaging in
- * loadEspnLeagueRaw keep their exact semantics. Exhausted retries throw a
- * plain Error with an honest attempt count — never a silent null.
+ * Seasons to try for a bare league id, in order. ESPN keys every read on a season, and the
+ * calendar year is wrong for part of the year: in January the NFL fantasy season that just ended is
+ * last year's, and through the summer a league that has not been renewed yet only exists under last
+ * year. So a 404 on the first guess retries the other one — one extra request, only on a miss,
+ * instead of telling someone with a correct id that their league does not exist.
  */
-async function fetchEspnJsonByUrl(
-  url: string,
-  cookieHeader?: string | null,
-  extraHeaders?: Record<string, string>
-): Promise<any> {
-  const headers = cookieHeader
-    ? {
-        ...ESPN_HEADERS,
-        ...extraHeaders,
-        Cookie: cookieHeader,
-      }
-    : {
-        ...ESPN_HEADERS,
-        ...extraHeaders,
-      }
-
-  let lastError: unknown = null
-  for (let attempt = 0; attempt < ESPN_FETCH_RETRIES; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), ESPN_FETCH_TIMEOUT_MS)
-    let response: Response
-    try {
-      response = await fetch(url, {
-        headers,
-        cache: 'no-store',
-        signal: controller.signal,
-      })
-    } catch (err) {
-      clearTimeout(timer)
-      lastError = err
-      if (attempt < ESPN_FETCH_RETRIES - 1) {
-        await espnFetchDelay(300 * 2 ** attempt)
-        continue
-      }
-      break
-    }
-    clearTimeout(timer)
-
-    if (response.ok) {
-      return response.json()
-    }
-
-    if ((response.status >= 500 || response.status === 429) && attempt < ESPN_FETCH_RETRIES - 1) {
-      await espnFetchDelay(300 * 2 ** attempt)
-      continue
-    }
-
-    const body = await response.text()
-    throw new EspnApiResponseError(response.status, body || response.statusText)
-  }
-
-  throw new Error(
-    `ESPN request failed after ${ESPN_FETCH_RETRIES} attempts (${
-      lastError instanceof Error ? lastError.message : 'network error'
-    }).`,
-  )
+export function espnSeasonCandidates(input: EspnLeagueInput, now: Date = new Date()): number[] {
+  if (input.seasonExplicit) return [input.season]
+  return espnDefaultSeasonCandidates(now)
 }
 
+/**
+ * All HTTP goes through `./espnFantasyClient` (timeout, retries with backoff, short cache, format
+ * check, secret-safe errors). Definitive statuses still throw `EspnApiResponseError` so the
+ * cookie-fallback and private-league messaging below keep their exact semantics; exhausted retries
+ * throw `EspnUnavailableError`, whose message is the user-facing "temporarily unavailable" text.
+ */
 async function fetchEspnJson(
   leagueId: string,
   season: number,
   cookieHeader?: string | null,
   views: string[] = ESPN_IMPORT_VIEWS,
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  subPath?: 'communication/',
 ): Promise<any> {
-  return fetchEspnJsonByUrl(buildEspnLeagueUrl(leagueId, season, views), cookieHeader, extraHeaders)
+  const raw = await fetchEspnLeagueJson(
+    { game: 'ffl', season, leagueId, views, subPath },
+    { cookieHeader: cookieHeader ?? null, extraHeaders },
+  )
+  if (!subPath) assertEspnLeagueObject(raw)
+  return raw
 }
 
 async function getEspnAuthForUser(userId: string): Promise<EspnAuthContext> {
@@ -341,12 +280,12 @@ async function getEspnAuthForUser(userId: string): Promise<EspnAuthContext> {
   return {
     swid: auth?.espnSwid ?? null,
     espnS2: auth?.espnS2 ?? null,
+    userId,
   }
 }
 
 function buildEspnCookieHeader(context: EspnAuthContext): string | null {
-  if (!context.swid || !context.espnS2) return null
-  return `SWID=${context.swid}; espn_s2=${context.espnS2}`
+  return buildCookieHeaderFromCredentials(context)
 }
 
 async function loadEspnLeagueRaw(args: {
@@ -361,12 +300,23 @@ async function loadEspnLeagueRaw(args: {
 
   for (const attempt of attempts) {
     try {
-      return await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      const raw = await fetchEspnJson(args.leagueId, args.season, attempt, args.views ?? ESPN_IMPORT_VIEWS)
+      if (attempt && args.auth.userId) void recordEspnCookiesAccepted(args.auth.userId)
+      return raw
     } catch (error) {
       lastError = error
 
       if (!(error instanceof EspnApiResponseError)) {
         throw error
+      }
+
+      /*
+       * ESPN refused the STORED cookies. Recorded even when the cookieless retry below then reads
+       * a public league fine: the connection is still dead, every private league and the
+       * team-ownership check will fail, and the user should hear about it now rather than later.
+       */
+      if (attempt && args.auth.userId && (error.status === 401 || error.status === 403)) {
+        void recordEspnCookiesRejected(args.auth.userId)
       }
 
       if (error.status === 404) {
@@ -410,8 +360,41 @@ async function loadEspnLeagueRaw(args: {
   throw lastError instanceof Error ? lastError : new Error('Failed to load ESPN league data.')
 }
 
+/**
+ * `loadEspnLeagueRaw` across `espnSeasonCandidates`: a bare id that 404s for the defaulted season
+ * is retried for the adjacent one before anyone is told the league does not exist. An explicit
+ * season (from a URL or `2025:123`) is never second-guessed.
+ */
+export async function loadEspnLeagueRawForInput(args: {
+  input: EspnLeagueInput
+  auth: EspnAuthContext
+  views: string[]
+}): Promise<{ raw: any; season: number }> {
+  const candidates = espnSeasonCandidates(args.input)
+  let notFound: EspnImportLeagueNotFoundError | null = null
+  for (const season of candidates) {
+    try {
+      const raw = await loadEspnLeagueRaw({ leagueId: args.input.leagueId, season, auth: args.auth, views: args.views })
+      return { raw, season }
+    } catch (error) {
+      if (!(error instanceof EspnImportLeagueNotFoundError)) throw error
+      notFound = error
+    }
+  }
+  if (candidates.length > 1) {
+    throw new EspnImportLeagueNotFoundError(
+      `We couldn't find ESPN league ${args.input.leagueId} for ${candidates.join(' or ')}. ` +
+        'Check the leagueId= number in your league URL, or paste the full URL so we use its season.',
+    )
+  }
+  throw notFound ?? new EspnImportLeagueNotFoundError(`ESPN league "${args.input.leagueId}" was not found.`)
+}
+
 async function loadOptionalEspnUrlRaw(args: {
-  url: string
+  leagueId: string
+  season: number
+  views: string[]
+  subPath?: 'communication/'
   auth: EspnAuthContext
   extraHeaders?: Record<string, string>
 }): Promise<any | null> {
@@ -420,7 +403,7 @@ async function loadOptionalEspnUrlRaw(args: {
 
   for (const attempt of attempts) {
     try {
-      return await fetchEspnJsonByUrl(args.url, attempt, args.extraHeaders)
+      return await fetchEspnJson(args.leagueId, args.season, attempt, args.views, args.extraHeaders, args.subPath)
     } catch (error) {
       if (!(error instanceof EspnApiResponseError)) {
         throw error
@@ -444,7 +427,9 @@ async function loadOptionalEspnLeagueRaw(args: {
   views: string[]
 }): Promise<any | null> {
   return loadOptionalEspnUrlRaw({
-    url: buildEspnLeagueUrl(args.leagueId, args.season, args.views),
+    leagueId: args.leagueId,
+    season: args.season,
+    views: args.views,
     auth: args.auth,
   })
 }
@@ -460,7 +445,10 @@ async function loadOptionalEspnTransactionsRaw(args: {
   }
 
   return loadOptionalEspnUrlRaw({
-    url: buildEspnCommunicationUrl(args.leagueId, args.season),
+    leagueId: args.leagueId,
+    season: args.season,
+    views: ['kona_league_communication'],
+    subPath: 'communication/',
     auth: args.auth,
     extraHeaders: {
       'x-fantasy-filter': buildEspnActivityFilter(args.limit ?? 1000),
@@ -1237,7 +1225,12 @@ function inferEspnSeasonFinished(args: {
   currentWeek: number | null
   raw: any
 }): boolean {
-  if (args.season < CURRENT_IMPORT_SEASON) return true
+  /*
+   * Read at call time, not module load: a server that started in December otherwise keeps last
+   * year's value forever. And the FANTASY season, not the calendar year — in January the 2026
+   * playoffs may still be running, so 2026 must not read as finished just because it is 2027.
+   */
+  if (args.season < espnCurrentFantasySeason()) return true
 
   const finalScoringPeriod = parseNumber(args.raw?.status?.finalScoringPeriod, null)
   if (finalScoringPeriod != null && args.currentWeek != null) {
@@ -1328,14 +1321,10 @@ export async function fetchEspnLeagueForImport(
     return fetchEspnMlbLeagueForImport(userId, sourceInput, options)
   }
   const opts = { ...DEFAULT_FETCH_OPTIONS, ...options }
-  const { leagueId, season } = parseEspnSourceInput(sourceInput)
+  const input = parseEspnLeagueInput(sourceInput)
+  const { leagueId } = input
   const auth = await getEspnAuthForUser(userId)
-  const raw = await loadEspnLeagueRaw({
-    leagueId,
-    season,
-    auth,
-    views: ESPN_IMPORT_VIEWS,
-  })
+  const { raw, season } = await loadEspnLeagueRawForInput({ input, auth, views: ESPN_IMPORT_VIEWS })
   const [draftRaw, transactionsRaw] = await Promise.all([
     loadOptionalEspnLeagueRaw({
       leagueId,

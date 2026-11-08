@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
 import { addPlayerToRosterData, removePlayerFromRosterData, getRosterPlayerIds } from './roster-utils'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 /**
  * Immediate free-agent add/drop (Step 3B).
@@ -55,6 +56,9 @@ export async function executeImmediateAddDrop(
   })
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+  // Outside the transaction (it writes the Roster rows this one locks): an unlinked team's add/drop
+  // would never reach the season roster lineups and scoring read.
+  await ensureSeasonRosterLinksBeforeMove(leagueId)
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const roster = await tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, playerData: true } })

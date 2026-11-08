@@ -38,6 +38,15 @@ export function firstGameDeadline(
   return times.every(Number.isFinite) ? Math.min(...times) : null
 }
 
+/**
+ * The official 2026 first round starts December 18. Stop this entry-only
+ * exception conservatively on December 17 UTC; picks still require a schedule.
+ * https://collegefootballplayoff.com/sports/2018/8/31/cfp-games-schedule
+ */
+export function canCreateCfp2026EntryBeforeSchedule(season: number, series: Array<{ startsAt: Date | string | null }>, now = Date.now()): boolean {
+  return season === 2026 && now < Date.UTC(2026, 11, 17) && series.length === 11 && series.every(game => game.startsAt == null)
+}
+
 export function assertBracketOpen(
   series: Array<Pick<PlayoffSeriesView, "startsAt"> & { round?: string | null }>,
   now = Date.now(),

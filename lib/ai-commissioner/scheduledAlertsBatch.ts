@@ -14,6 +14,7 @@
 import { prisma } from '@/lib/prisma'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { runAICommissionerCycle } from './AICommissionerService'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 /** Phases where there is a league to govern. Setup, the offseason and archived leagues are skipped. */
 const ACTIVE_STATES = ['pre_draft', 'drafting', 'post_draft', 'in_season', 'playoffs'] as const
@@ -35,15 +36,17 @@ export async function runScheduledAiCommissionerAlerts(opts: { leagueId?: string
   const result: ScheduledAiAlertsResult = { discovered: leagues.length, ran: 0, skippedNoPlan: 0, failed: 0, created: 0 }
   const ownerPlan = new Map<string, boolean>()
   for (const league of leagues) {
-    if (!league.userId) {
+    // The owner, or — for a system-owned league — its PROVEN commissioner (null: none yet).
+    const accountId = await leagueCommissionerAccountId(league.id, league.userId)
+    if (!accountId) {
       result.skippedNoPlan += 1
       continue
     }
-    if (!ownerPlan.has(league.userId)) {
-      const owner = await prisma.appUser.findUnique({ where: { id: league.userId }, select: { email: true, username: true } }).catch(() => null)
-      ownerPlan.set(league.userId, await hasAfCommissionerPlan({ id: league.userId, email: owner?.email ?? null, username: owner?.username ?? null }))
+    if (!ownerPlan.has(accountId)) {
+      const owner = await prisma.appUser.findUnique({ where: { id: accountId }, select: { email: true, username: true } }).catch(() => null)
+      ownerPlan.set(accountId, await hasAfCommissionerPlan({ id: accountId, email: owner?.email ?? null, username: owner?.username ?? null }))
     }
-    if (!ownerPlan.get(league.userId)) {
+    if (!ownerPlan.get(accountId)) {
       result.skippedNoPlan += 1
       continue
     }

@@ -31,11 +31,13 @@ import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { assignRookieContract } from '@/lib/salary-cap/RookieContractService'
 import { isDraftBoardFull, isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import {
+  DRAFT_PICK_DUPLICATE_PLAYER,
   DRAFT_PICK_NOT_LIVE,
   DRAFT_PICK_RACE_RETRY,
   DRAFT_PICK_STALE_OVERALL,
   type PickAuthorityCode,
 } from './pickAuthorityCodes'
+import { loadLeagueRosteredPlayers, rosteredHolder } from './rosteredPlayerGuard'
 import { logStructured } from '@/lib/logging/structured'
 import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEvent'
 import { ENGINE } from '@/lib/analytics/eventNames'
@@ -224,6 +226,25 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       if (lock.playerName.trim().toLowerCase() !== input.playerName.trim().toLowerCase()) {
         return { success: false, error: 'Keeper lock mismatch for this slot.' }
       }
+    }
+  }
+
+  /*
+   * A player already live on a league roster cannot be drafted again (./rosteredPlayerGuard.ts). The
+   * duplicate check above only sees THIS draft's board, so a dynasty rookie draft — rosters carried onto
+   * the new season before it opens — took a rostered player, and finalization put him on a second team.
+   * Exempt by design: keepers and promoted devy players are the team's own rostered players; a dispersal
+   * draft redistributes rostered players; the tournament season flow has its own frozen validation; a
+   * SKIP and a non-player asset name no player.
+   */
+  const isDispersalDraft =
+    String((session as { draftModeLabel?: string | null }).draftModeLabel ?? '').toLowerCase() === 'dispersal' ||
+    (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
+  const namesAPlayer = (input.position || '').toUpperCase() !== 'SKIP' && (!input.assetType || input.assetType === 'player')
+  if (!seasonContext && !isDispersalDraft && namesAPlayer && input.source !== 'keeper' && input.source !== 'promoted_devy') {
+    const holder = rosteredHolder(await loadLeagueRosteredPlayers(input.leagueId), input)
+    if (holder) {
+      return { success: false, error: `${input.playerName} is already on a roster in this league.`, code: DRAFT_PICK_DUPLICATE_PLAYER }
     }
   }
 

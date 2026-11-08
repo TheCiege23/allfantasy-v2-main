@@ -167,3 +167,23 @@ describe('League Health reads the dispute desk', () => {
     expect(leaving.interventionRecommendations.join(' ')).toMatch(/trade history review/)
   })
 })
+
+describe('a late-audited Sleeper trade takes its trade-date price when one was saved', () => {
+  it('uses the saved trade-date original, oriented by asset names either way round', async () => {
+    const { tradeDateValuesFrom } = await import('@/lib/integrity/tradeValueAudit')
+    const frozen = {
+      v: 2, basis: 'trade_date', pricedAsOf: '2026-09-02',
+      grade: { giveValue: 5000, getValue: 3000, percentDiff: -40, lines: [{ side: 'give' as const, name: 'Star Runner' }, { side: 'get' as const, name: 'Bench Guy' }, { side: 'get' as const, name: '2027 2nd' }] },
+    }
+    expect(tradeDateValuesFrom(frozen, { sideAGave: ['Star Runner'], sideBGave: ['Bench Guy', '2027 2nd'] })).toEqual({ sideAValue: 5000, sideBValue: 3000, gapPct: -40, pricedAt: '2026-09-02T00:00:00.000Z' })
+    expect(tradeDateValuesFrom(frozen, { sideAGave: ['bench guy', '2027 2nd'], sideBGave: ['Star Runner'] })).toEqual({ sideAValue: 3000, sideBValue: 5000, gapPct: 40, pricedAt: '2026-09-02T00:00:00.000Z' })
+  })
+
+  it('never borrows a price: a first-graded original, or a different deal, gives nothing', async () => {
+    const { tradeDateValuesFrom } = await import('@/lib/integrity/tradeValueAudit')
+    const grade = { giveValue: 1, getValue: 2, percentDiff: 10, lines: [{ side: 'give' as const, name: 'A' }, { side: 'get' as const, name: 'B' }] }
+    expect(tradeDateValuesFrom({ v: 2, basis: 'first_graded', grade }, { sideAGave: ['A'], sideBGave: ['B'] })).toBeNull()
+    expect(tradeDateValuesFrom({ v: 1, grade }, { sideAGave: ['A'], sideBGave: ['B'] })).toBeNull()
+    expect(tradeDateValuesFrom({ v: 2, basis: 'trade_date', grade }, { sideAGave: ['A'], sideBGave: ['C'] })).toBeNull()
+  })
+})

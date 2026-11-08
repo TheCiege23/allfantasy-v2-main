@@ -2903,6 +2903,7 @@ export const translations: Record<string, Record<string, string>> = {
     "league.nav.dynasty": "Dynasty hub",
     "league.nav.dynastyTaxi": "Taxi squad",
     "league.nav.dynastyPicks": "Draft picks",
+    "league.nav.devyPipeline": "Devy pipeline",
     "league.nav.warRoom": "War Room",
     "league.nav.liveScores": "Live scores",
     "league.nav.decisionOs": "Decision OS",
@@ -3500,7 +3501,7 @@ export const translations: Record<string, Record<string, string>> = {
     "dashboard.onboarding.step1.cta": "Choose",
     "dashboard.onboarding.step2.label": "Connect a platform",
     "dashboard.onboarding.step2.desc":
-      "Sleeper, Discord, Yahoo, ESPN, Fantrax, MFL, Fleaflicker — import or link accounts.",
+      "Sleeper, Discord, ESPN, Fantrax, MFL, Fleaflicker — import or link accounts. Yahoo is coming soon.",
     "dashboard.onboarding.step2.cta": "Connect",
     "dashboard.onboarding.step3.label": "Join or create a league",
     "dashboard.onboarding.step3.desc": "Get into a league so the shell can open league mode.",
@@ -4665,7 +4666,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.connected.connectedLabel": "Connected",
     "settings.connected.fantasyPlatformsTitle": "Fantasy platforms & import",
     "settings.connected.fantasyPlatformsBody":
-      "Link Sleeper for rankings and imports. Use Import for Yahoo, ESPN, MFL, Fleaflicker, and Fantrax leagues.",
+      "Link Sleeper for rankings and imports. Use Import for ESPN, MFL, Fleaflicker, and Fantrax leagues. Yahoo is coming soon.",
     "settings.connected.sleeper": "Sleeper",
     "settings.connected.linkedAs": "Linked as @{{username}}",
     "settings.connected.notLinked": "Not linked",
@@ -5002,7 +5003,7 @@ export const translations: Record<string, Record<string, string>> = {
     // Import league (wired)
     "import.title": "Import Your League",
     "import.subtitle":
-      "Sleeper has the broadest automated import (all seasons we find). ESPN currently imports teams and weekly scores; Yahoo, Fantrax, MFL, and Fleaflicker use preview + League Sync flows.",
+      "Sleeper has the broadest automated import (all seasons we find). ESPN currently imports teams and weekly scores; Fantrax, MFL, and Fleaflicker use preview + League Sync flows. Yahoo is coming soon.",
     "import.settingsLink": "Connect external accounts in",
     "import.settingsWord": "Settings",
     "import.providerStatus": "Provider status",
@@ -8596,7 +8597,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.referral.tryRefresh": "o actualiza la página.",
     "settings.connected.fantasyPlatformsTitle": "Plataformas fantasy e importación",
     "settings.connected.fantasyPlatformsBody":
-      "Vincula Sleeper para rankings e importaciones. Usa Importación para ligas de Yahoo, ESPN, MFL, Fleaflicker y Fantrax.",
+      "Vincula Sleeper para rankings e importaciones. Usa Importación para ligas de ESPN, MFL, Fleaflicker y Fantrax. Yahoo llega pronto.",
     "settings.connected.sleeper": "Sleeper",
     "settings.connected.linkedAs": "Vinculado como @{{username}}",
     "settings.connected.notLinked": "Sin vincular",
@@ -8648,7 +8649,7 @@ export const translations: Record<string, Record<string, string>> = {
     // Import league (wired)
     "import.title": "Importa tu liga",
     "import.subtitle":
-      "Sleeper ofrece la importación automática más amplia (todas las temporadas que encontremos). ESPN importa equipos y puntajes semanales; Yahoo, Fantrax, MFL y Fleaflicker usan vista previa y flujos de League Sync.",
+      "Sleeper ofrece la importación automática más amplia (todas las temporadas que encontremos). ESPN importa equipos y puntajes semanales; Fantrax, MFL y Fleaflicker usan vista previa y flujos de League Sync. Yahoo llega pronto.",
     "import.settingsLink": "Conecta cuentas externas en",
     "import.settingsWord": "Ajustes",
     "import.providerStatus": "Estado del proveedor",

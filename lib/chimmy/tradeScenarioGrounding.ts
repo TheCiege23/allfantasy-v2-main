@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { loadTradeRosterIds, playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
@@ -10,10 +10,9 @@ import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
-import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradePlayerFromRoster, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   allRosteredIds,
   findRosteredByName,
@@ -70,7 +69,8 @@ export type {
 
 export interface TradeScenarioDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
-  loadPlayerNames: (sport: string, ids: string[]) => Promise<Map<string, { name: string | null; position: string | null }>>
+  loadPlayerNames: (sport: string, ids: string[], platform?: string | null) => Promise<Map<string, { name: string | null; position: string | null; sleeperId?: string; externalId?: string }>>
+  loadForeignRosterIds?: (leagueId: string) => Promise<Map<string, string[]>>
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
   /** THE grade for the deal, from the viewer's side. */
   grade: (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
@@ -80,7 +80,12 @@ export interface TradeScenarioDeps {
 
 const defaultDeps: TradeScenarioDeps = {
   resolveWorld: resolveCanonicalWorld,
-  loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
+  async loadPlayerNames(sport, ids, platform) {
+    const space = playerIdSpaceFor({ platform: platform ?? null, sport })
+    const found = await resolveTradePlayers(ids.slice(0, MAX_LEAGUE_PLAYER_IDS), { sport, space })
+    return new Map([...found].flatMap(([id, player]) => player.ok ? [[id, player] as const] : []))
+  },
+  loadForeignRosterIds: loadTradeRosterIds,
   evaluate: evaluateCanonicalTrade,
   grade: async ({ leagueId, userId, give, get }) =>
     gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), { give, get, viewerSide: true }),
@@ -124,12 +129,14 @@ export function looksLikeDescribedTrade(message: string): boolean {
  * Returns null when the message is not a described trade at all.
  */
 export async function buildTradeScenario(
-  args: { message: string; leagueId: string; userId: string },
+  args: { message: string; leagueId: string; userId: string; playerSides?: { give: string[]; get: string[] } },
   deps: TradeScenarioDeps = defaultDeps,
 ): Promise<TradeScenario | null> {
   const sides = splitSides(args.message)
   if (!sides) return null
-  const candidates = extractPlayerNameCandidates(args.message)
+  const candidates = args.playerSides
+    ? [...args.playerSides.give, ...args.playerSides.get].filter((name) => extractPickMentions(name).picks.length === 0)
+    : extractPlayerNameCandidates(args.message)
   /*
    * Picks per SIDE, because a pick belongs to whoever's side of "for" it is written on. A pick counts
    * toward "is this a trade at all", so "my 2027 1st for Puka Nacua" (one name) still qualifies.
@@ -169,29 +176,32 @@ export async function buildTradeScenario(
       detail: 'Your team in this league is not claimed or has no synced roster, so there is no "before" to compare.',
     }
   }
-  /*
-   * The port strips a foreign league's roster ids (`loadRosters`), so every roster here is empty and
-   * the name match below would refuse with "not every player named is on a roster in this league" —
-   * a false claim about the league. `provenance.provider` decides only this refusal.
-   */
-  if (isForeignIdSpace(world.provenance?.provider)) {
+  const platform = world.provenance?.provider ?? null
+  const space = playerIdSpaceFor({ platform, sport: world.league.sport })
+  const foreign = isForeignIdSpace(platform)
+  // The lineup port's ID contract is different. Load provider IDs for trade grounding only.
+  const foreignRosterIds = foreign ? await deps.loadForeignRosterIds?.(args.leagueId).catch(() => null) : null
+  if (foreign && !foreignRosterIds?.get(viewerRoster.rosterId)?.length) {
     return {
       status: 'unresolved',
       reason: 'roster_ids_unreadable',
       detail: `${FOREIGN_IDS_UNREADABLE}, so no roster in this league can be read to compare this trade.`,
     }
   }
-
-  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(world)).catch(() => new Map())
-  const byName = indexRosterNames(world, names)
+  const rosterWorld = foreignRosterIds ? {
+    ...world,
+    rosters: world.rosters.map((roster) => ({ ...roster, playerIds: foreignRosterIds.get(roster.rosterId) ?? [] })),
+  } : world
+  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(rosterWorld), platform).catch(() => new Map())
+  const byName = indexRosterNames(rosterWorld, names)
 
   const left: Located[][] = []
   const right: Located[][] = []
   const notRostered: string[] = []
   for (const raw of candidates) {
     const { candidate, hits } = findRosteredByName(byName, raw)
-    const inLeft = sides.left.includes(candidate)
-    const inRight = sides.right.includes(candidate)
+    const inLeft = args.playerSides ? args.playerSides.give.includes(raw) : sides.left.includes(candidate)
+    const inRight = args.playerSides ? args.playerSides.get.includes(raw) : sides.right.includes(candidate)
     if (hits.length === 0) {
       /*
        * Over-generated candidates ("Should I", a team name) match nothing and are not players.
@@ -204,6 +214,10 @@ export async function buildTradeScenario(
     }
     if (inLeft) left.push(hits)
     if (inRight) right.push(hits)
+  }
+
+  if (args.playerSides && notRostered.length) {
+    return { status: 'unresolved', reason: 'players_not_rostered', detail: describeUnresolved('players_not_rostered', notRostered) }
   }
 
   /*
@@ -301,7 +315,12 @@ export async function buildTradeScenario(
   /* Players by name and picks by season/round — what the one grader prices (see `tradeGradeInputs`). */
   const gradeSide = (players: Located[], picks: PickMention[]): GradeInputs => ({
     assets: [
-      ...players.map((p) => ({ kind: 'player' as const, name: p.name })),
+      ...players.map((p) => {
+        const identity = names.get(p.playerId)
+        return gradePlayerFromRoster({ id: p.playerId, name: p.name, position: p.position, space,
+          identity: { ok: true, name: p.name, position: p.position, sleeperId: identity?.sleeperId, externalId: identity?.externalId },
+        })
+      }),
       ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round })),
     ],
     unpriceable: [],
@@ -324,7 +343,7 @@ export async function buildTradeScenario(
       give: gradeSide(chosen.give, chosen.givePicks),
       get: gradeSide(chosen.get, chosen.getPicks),
       viewerSide: true,
-      canonical: {
+      canonical: foreign ? null : {
         proposerRosterId: viewerRoster.rosterId,
         receiverRosterId: chosen.partnerRosterId,
         participantRosterIds: [viewerRoster.rosterId, chosen.partnerRosterId],

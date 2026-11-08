@@ -5,6 +5,8 @@ import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import { DEVY_TAB, DEVY_TAB_ALIASES, isDevyWorkspaceLeague } from '@/lib/devy/workspaceTab'
+import { DevyHome } from '@/components/devy/DevyHome'
 import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
 import { dynastySeasonClock as leagueSeasonClock } from '@/lib/league-media/dynastySeasonClock'
 
@@ -623,6 +625,8 @@ export function LeagueShell({
         { id: 'dynasty', label: 'Dynasty' },
         { id: 'dynasty_taxi', label: 'Taxi' },
         { id: 'dynasty_picks', label: 'Picks' },
+        // The Devy home had no tab (lib/devy/workspaceTab.ts says why): a Devy league's pipeline sits with its dynasty tabs.
+        ...(isDevyWorkspaceLeague(league) ? [{ ...DEVY_TAB }] : []),
       ]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...dynastyTabs, ...base.slice(idx + 1)] : [...dynastyTabs, ...base]
     }
@@ -925,6 +929,7 @@ export function LeagueShell({
       bb_command: 'bb_command',
       bb_commissioner: 'bb_command',
       ...SALARY_CAP_TAB_ALIASES,
+      ...DEVY_TAB_ALIASES,
     }
     let target = map[key]
     if (!target) return
@@ -2518,6 +2523,12 @@ function LeagueTabRouter({
     case 'dynasty_taxi':
     case 'dynasty_picks':
       return <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+    case 'devy':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <DevyHome leagueId={leagueId} isCommissioner={isCommissioner} />
+        </div>
+      )
     case 'survivor':
       return <SurvivorHome leagueId={leagueId} />
     case 'survivor_tribal':
@@ -3340,7 +3351,7 @@ function LeagueHeader({
               ['Picks', `/devy/${leagueId}/picks`],
               ['Matchup', `/league/${leagueId}`],
               ['Chat', `/league/${leagueId}`],
-              ['History', `/devy/${leagueId}/history`],
+              ['History', `/league/${leagueId}?view=history`],
               ['Commissioner', '__commish__'],
             ] as const
           ).map(([label, href]) =>

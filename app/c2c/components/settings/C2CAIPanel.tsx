@@ -190,7 +190,7 @@ export function C2CAIPanel({
       ) : null}
 
       <div className="space-y-3 rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (AfSub)</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (AF Commissioner)</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

@@ -40,7 +40,7 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const age = now.getTime() - Date.parse(checked[date] ?? "")
     return !Number.isFinite(age) || age >= (live ? input.mode === "live" ? 30_000 : 45_000 : date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
   }).slice(0, 4)
-  if (live && !dates.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
+  if (live && !dates.length && !previous?.fanout?.eventIds?.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
   const responses = await Promise.all(dates.map(async (date) => {
     try {
       const response = await fetch(`${ESPN_SITE_API_BASE}/basketball/nba/scoreboard?dates=${date}&limit=1000`, {
@@ -88,14 +88,30 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const games = assignNbaCupSlots([...merged.values()], current?.games ?? previous?.games)
     const priorSync = current?.syncedAt ?? previous?.syncedAt ?? ""
     const acceptedResponse = responses.some((row) => !row.error && Date.parse(checkedDates[row.date]) === now.getTime())
-    const data = { games, checkedDates, cursor: live ? current?.cursor ?? previous?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92,
-      syncedAt: acceptedResponse && (!Number.isFinite(Date.parse(priorSync)) || Date.parse(priorSync) <= now.getTime()) ? now.toISOString() : priorSync }
-    const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
-    await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
-    // Rotate large populations through bounded batches, and never alter test pools.
-    const pools = await tx.playoffBracketChallenge.findMany({ where: { sport: "nba_cup", seasonYear: input.season, isTestMode: false }, orderBy: { updatedAt: "asc" }, take: 100, select: { id: true } })
+    // Keep changed events until every league has received them. A later provider
+    // change while a sweep is in progress requires one more pass so leagues
+    // already visited receive the newer snapshot too.
+    const priorFanout = current ? current.fanout ?? null : previous?.fanout ?? null
+    const eventIds = [...new Set([...(priorFanout?.eventIds ?? []), ...changed])]
+    const pending = eventIds.length > 0
+    const sweepCursor = pending ? priorFanout?.cursor ?? null : null
+    const restart = Boolean(priorFanout?.restart || (sweepCursor && changed.size))
+    const where = { sport: "nba_cup", seasonYear: input.season, isTestMode: false,
+      ...(sweepCursor ? { id: { gt: sweepCursor } } : {}) }
+    // Read one extra id to know whether the persisted cursor needs another pass.
+    const candidates = await tx.playoffBracketChallenge.findMany({ where, orderBy: pending ? { id: "asc" } : { updatedAt: "asc" }, take: pending ? 101 : 100, select: { id: true } })
+    const pools = pending ? candidates.slice(0, 100) : candidates
     const ids = pools.map((pool) => pool.id)
-    const rows = nbaCupSeriesRows(live ? games.filter((game) => changed.has(game.eventId)) : games)
+    const pendingSet = new Set(eventIds)
+    const rows = nbaCupSeriesRows(pending ? games.filter((game) => pendingSet.has(game.eventId)) : live ? [] : games)
+    const fanout = !pending ? null : candidates.length > 100
+      ? { eventIds, cursor: pools[pools.length - 1].id, restart }
+      : restart ? { eventIds, cursor: null, restart: false } : null
+    const data = { games, checkedDates, cursor: live ? current?.cursor ?? previous?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92,
+      syncedAt: acceptedResponse && (!Number.isFinite(Date.parse(priorSync)) || Date.parse(priorSync) <= now.getTime()) ? now.toISOString() : priorSync, fanout }
+    const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
+    // Cache and per-league writes commit together: a failed batch stays pending.
+    await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
     if (ids.length && rows.length) {
       // Capture the persisted winner before this transaction writes verified finals.
       // Newly created series have no entry pick yet, so they establish the baseline.

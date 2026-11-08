@@ -114,7 +114,7 @@ export function DevyPlayerCard({
         {classYear ? <p className="text-[11px] text-white/40">Class {classYear}</p> : null}
         {isDevy ? (
           <p className="mt-1 text-[11px] text-violet-200/80">
-            {projectedYear ? `NFL entry: ${projectedYear}` : 'Undeclared'}
+            {projectedYear ? `Projected NFL entry: ${projectedYear}` : 'Undeclared'}
           </p>
         ) : null}
         {newsTag ? <p className="mt-1 text-[11px] text-amber-200/80">{newsTag}</p> : null}

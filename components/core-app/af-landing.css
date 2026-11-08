@@ -169,6 +169,29 @@
   text-decoration: none;
 }
 
+/* The commissioner line under the hero: one quiet line, the link in the violet Commissioner OS uses. */
+.af-lp-commish-line {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-lp-commish-line-text {
+  font-weight: 700;
+  color: var(--text);
+}
+.af-lp-commish-line-link {
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-lp-commish-line-link:hover {
+  text-decoration: underline;
+}
+
 .af-lp-reassure {
   margin: 16px 0 0;
   font-size: 12.5px;

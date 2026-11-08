@@ -87,6 +87,9 @@ export type LandingCopy = {
     ctaPrimary: string
     ctaSecondary: string
     reassure: string
+    /** The commissioner line under the hero, linking to /commissioners. */
+    commishLine: string
+    commishLink: string
     cardTitle: string
     cardWeek: string
     /** Precedes the example uplift figure, e.g. "Two fixes worth " + "+13.0". */
@@ -170,6 +173,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       ctaPrimary: 'Create free account',
       ctaSecondary: 'See how it works',
       reassure: 'Free for every league · Read-only — we never change your league · Sleeper needs just your username',
+      commishLine: 'Built by a commissioner, for commissioners.',
+      commishLink: 'See Commissioner OS →',
       cardTitle: 'Your leagues',
       cardWeek: 'Week 12 · example',
       cardFootBefore: 'Two fixes worth ',
@@ -338,6 +343,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       ctaPrimary: 'Crea tu cuenta gratis',
       ctaSecondary: 'Mira cómo funciona',
       reassure: 'Gratis para todas tus ligas · Solo lectura: nunca cambiamos tu liga · En Sleeper basta con tu usuario',
+      commishLine: 'Hecho por un comisionado, para comisionados.',
+      commishLink: 'Conoce Commissioner OS →',
       cardTitle: 'Tus ligas',
       cardWeek: 'Semana 12 · ejemplo',
       cardFootBefore: 'Dos ajustes que valen ',

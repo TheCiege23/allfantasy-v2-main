@@ -43,8 +43,10 @@ export type TradeOrigin = {
   rawStatus: string
 }
 
+import type { PlayerIdSpace, ResolvedTradePlayer } from './tradePlayers'
+
 export type LoadedTradeAsset =
-  | { kind: 'player'; playerId: string; name: string; position: string | null }
+  | { kind: 'player'; playerId: string; name: string; position: string | null; idSpace?: PlayerIdSpace; identity?: Extract<ResolvedTradePlayer, { ok: true }> }
   | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string }
   | { kind: 'faab'; amount: number }
 

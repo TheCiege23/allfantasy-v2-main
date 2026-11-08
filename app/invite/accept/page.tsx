@@ -27,6 +27,7 @@ interface Preview {
   destinationHref: string | null
   destinationLabel: string | null
   createdByLabel: string | null
+  careerBlocked?: ClassGateBlocked | null
 }
 
 export default function AcceptInvitePage() {
@@ -156,6 +157,7 @@ export default function AcceptInvitePage() {
     )
   }
 
+  const careerBlocked = result?.classBlocked ?? preview.careerBlocked
   const acceptLabel =
     sessionStatus === 'loading'
       ? 'Loading account...'
@@ -186,7 +188,7 @@ export default function AcceptInvitePage() {
           createdByLabel={preview.createdByLabel}
           acceptLabel={acceptLabel}
           acceptDisabled={accepting || sessionStatus === 'loading'}
-          onAccept={handleAccept}
+          onAccept={careerBlocked ? null : handleAccept}
         />
 
         {preview.status === 'expired' || preview.status === 'max_used' ? (
@@ -195,13 +197,13 @@ export default function AcceptInvitePage() {
           </p>
         ) : null}
 
-        {result?.classBlocked ? (
+        {careerBlocked ? (
           <div className="mt-4">
-            <ClassGateNotice blocked={result.classBlocked} code={code} tone="theme" />
+            <ClassGateNotice blocked={careerBlocked} code={code} tone="theme" />
           </div>
         ) : null}
 
-        {result && !result.classBlocked && (
+        {result && !careerBlocked && (
           <div
             className="mt-4 rounded-xl border p-4"
             style={{

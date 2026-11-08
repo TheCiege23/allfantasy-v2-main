@@ -11,6 +11,7 @@
 
 import 'server-only'
 import { preserveSnapshotNames } from './preserveSnapshotNames'
+import { withFantraxDisplayNames } from './fantraxPlayerName'
 
 import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
@@ -190,7 +191,7 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfb, nfl, mlb, nba, nhl, ncaab, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
@@ -202,6 +203,13 @@ export async function importFantraxLeague(args: {
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
+  /*
+   * Fantrax's directories name players "Last, First"; the season rosters and the draft board store
+   * what is read from here on, so it is read in "First Last". The NFL identity link below takes the
+   * RAW names, because it tells a team defense from a player by the comma.
+   */
+  const inDisplayOrder = (r: typeof cfbRaw): typeof cfbRaw => (r.ok ? { ...r, data: withFantraxDisplayNames(r.data) } : r)
+  const cfb = inDisplayOrder(cfbRaw), nfl = inDisplayOrder(nflRaw), mlb = inDisplayOrder(mlbRaw), nba = inDisplayOrder(nbaRaw), nhl = inDisplayOrder(nhlRaw), ncaab = inDisplayOrder(ncaabRaw)
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
@@ -478,8 +486,8 @@ export async function importFantraxLeague(args: {
    * map read above; link this league's rostered and drafted players (by id first, then exact name +
    * team + position — `nflFantraxIdentityPlan.ts`). Never fails the import.
    */
-  if (best.sport === 'nfl' && nfl.ok) {
-    const nflMap = nfl.data as Record<string, FantraxPlayerRef | undefined>
+  if (best.sport === 'nfl' && nflRaw.ok) {
+    const nflMap = nflRaw.data as Record<string, FantraxPlayerRef | undefined>
     const leaguePlayerIds = new Set([
       ...resolved.flatMap((r) => r.players.map((p) => p.fantraxId)),
       ...(boardOnFile?.picks ?? []).map((p) => p.playerId),

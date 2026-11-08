@@ -35,7 +35,12 @@ import CupGroupPlaySection from "./cup/CupGroupPlaySection"
 import CupStandingsRail from "./cup/CupStandingsRail"
 import CupPhaseTrack from "./cup/CupPhaseTrack"
 import { useClientTime } from "./cup/useClientTime"
+import { dayHeading, localDayKey } from "./cup/cupFormat"
 import BracketCoachPanel from "./BracketCoachPanel"
+import CfpBowlSchedule from "./CfpBowlSchedule"
+import CfpProjectionPreview from "./CfpProjectionPreview"
+import { getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
+import { matchCfpLiveScore, type CfpLiveScore } from "@/lib/playoffs/cfpLiveScores"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -173,13 +178,39 @@ export default function MlbBracketBoard({
   const clientTime = useClientTime()
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [finalizingDay, setFinalizingDay] = useState<string | null>(null)
   const [liveNode, setLiveNode] = useState<string | null>(null)
+  const [cfpScores, setCfpScores] = useState<CfpLiveScore[]>([])
+  const [, setCfpClock] = useState(0)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
   const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : sport === "nfl" ? "NFL" : null
   const teamLogos = view.teamLogos ?? {}
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup" || sport === "nfl")
   const rollingCup = singleGame && sport === "nba_cup"
+  useEffect(() => {
+    if (!singleGame || sport !== "ncaaf") return
+    let stopped = false, pending = false
+    const controller = new AbortController()
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return
+      setCfpClock(Date.now())
+      if (pending) return
+      pending = true
+      try {
+        const response = await fetch("/api/brackets/cfp/live-scores", { cache: "no-store", signal: controller.signal })
+        if (!response.ok) { if (!stopped) setCfpScores([]); return }
+        const data = await response.json()
+        if (!stopped && Array.isArray(data.scores)) setCfpScores(data.scores)
+      } catch { if (!stopped) setCfpScores([]) }
+      finally { pending = false }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { void refresh() }, 30_000)
+    const visible = () => { void refresh() }
+    document.addEventListener("visibilitychange", visible)
+    return () => { stopped = true; controller.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", visible) }
+  }, [singleGame, sport])
   const [compactCup, setCompactCup] = useState(false)
   const [tipoffTick, setTipoffTick] = useState(0)
   useEffect(() => {
@@ -214,6 +245,7 @@ export default function MlbBracketBoard({
     () => rollingCup ? view.series : buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
     [view.series, view.picks, rollingCup],
   )
+  const officialById = useMemo(() => new Map(buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: false }).map((game) => [game.id, game])), [view.series, view.picks])
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
   const knockoutPublished = rollingCup && view.series.some((game) =>
@@ -224,9 +256,14 @@ export default function MlbBracketBoard({
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()
-    for (const p of view.picks) m.set(p.seriesId, p.pickTeamName)
+    for (const p of view.picks) {
+      const game = view.series.find((row) => row.id === p.seriesId)
+      m.set(p.seriesId, rollingCup && game && nbaCupLockedReason(game) && p.confirmedAt
+        ? p.confirmedTeamName ?? p.pickTeamName : p.pickTeamName)
+    }
     return m
-  }, [view.picks])
+  }, [view.picks, view.series, rollingCup, tipoffTick])
+  const pendingCupPickIds = useMemo(() => new Set(view.picks.filter((pick) => !pick.confirmedAt || Boolean(pick.draftTeamName)).map((pick) => pick.seriesId)), [view.picks])
   /** The un-projected rows, for anything that must not treat a pick as a result. */
   const rawById = useMemo(() => {
     const m = new Map<string, PlayoffSeriesView>()
@@ -263,7 +300,7 @@ export default function MlbBracketBoard({
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ seriesId: series.id, pickTeamName: teamName }),
+            body: JSON.stringify({ seriesId: series.id, pickTeamName: teamName, ...(rollingCup ? { confirmationMode: "per_day" } : {}) }),
           },
         )
         const data = await res.json().catch(() => ({}))
@@ -287,6 +324,25 @@ export default function MlbBracketBoard({
     },
     [bracketReady, entryId, onViewChange, tournamentLocked, view.challenge.id, rollingCup],
   )
+
+  async function finalizeDay(day: string) {
+    if (!entryId || finalizingDay) return
+    setError(null)
+    setFinalizingDay(day)
+    try {
+      const response = await fetch(`/api/brackets/playoffs/${view.challenge.id}/entries/${entryId}/finalize-day`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ day, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error ?? "Unable to finalize this day.")
+      onViewChange(await getPlayoffBracketViewClient(view.challenge.id, entryId))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to finalize this day.")
+    } finally {
+      setFinalizingDay(null)
+    }
+  }
 
   const totalSeries = view.series.length
   const pickedCount = view.picks.length
@@ -328,15 +384,27 @@ export default function MlbBracketBoard({
     [canLatePick, lockRule, singleGame, tournamentLocked, rollingCup],
   )
 
-  const scoringExcludedReasonFor = (game: PlayoffSeriesView): "draft" | "late" | null => !rollingCup || !picksBySeries.has(game.id) ? null : !view.activeEntry?.finalizedAt ? "draft" : !eligibleCoachPick(view,game,view.activeEntry.finalizedAt) ? "late" : null
+  const scoringExcludedReasonFor = (game: PlayoffSeriesView): "draft" | "late" | null => {
+    if (!rollingCup || !picksBySeries.has(game.id)) return null
+    const pick = view.picks.find((item) => item.seriesId === game.id)
+    if (!pick?.confirmedAt) return "draft"
+    return !eligibleCoachPick(view, game, pick.confirmedAt) ? "late" : null
+  }
 
   const renderMatch = (node: BracketNode) => {
-    const s = node.series
+    const original = node.series
+    const official = officialById.get(original.id)
+    const live = sport === "ncaaf" && official ? matchCfpLiveScore(official, cfpScores) : null
+    const final = sport === "ncaaf" && official?.status === "final" && official.winnerTeamName
+    const s = official && (live || final) ? { ...original, homeTeamName: official.homeTeamName, awayTeamName: official.awayTeamName,
+      ...(live && !final ? { status: "in_progress" as const, liveStatus: "Live", providerGamesJson: {}, liveHomeScore: live.home.trim().replace(/\s+/g, " ").toLowerCase() === official.homeTeamName.trim().replace(/\s+/g, " ").toLowerCase() ? live.homeScore : live.awayScore, liveAwayScore: live.home.trim().replace(/\s+/g, " ").toLowerCase() === official.homeTeamName.trim().replace(/\s+/g, " ").toLowerCase() ? live.awayScore : live.homeScore } : {}) } : original
     const resolved = isOfficial(s.homeTeamName) && isOfficial(s.awayTeamName)
     const kind = seriesStatusKind(s, resolved)
     const locked = lockedReasonFor(s)
-    // NBA Cup knockout cards carry the live clock and score, the same as Group Play.
-    const cupState = rollingCup ? cupGameState(s) : null
+    // Do not attach an official score to a user's projected matchup when the
+    // teams differ. Earlier picks may project a different later-round opponent.
+    const sameTeams = !!official && official.homeTeamName === s.homeTeamName && official.awayTeamName === s.awayTeamName
+    const cupState = rollingCup || (sport === "ncaaf" && sameTeams) ? cupGameState(s) : null
     const showScore = cupState === "live" || cupState === "final"
     const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: clientTime ? undefined : "UTC" }) : "Time TBA"
     return (
@@ -500,8 +568,8 @@ export default function MlbBracketBoard({
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
             {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString(undefined, { timeZone: clientTime ? undefined : "UTC" })}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
-            {rollingCup && view.activeEntry && view.viewerUserId === view.activeEntry.userId && !view.activeEntry.finalizedAt ? <p className="af-pb-sub" role="status" data-testid="cup-entry-draft-status">Picks saved — bracket not finalized. Select Finalize picks to join the standings.</p> : null}
-            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Pick each new round as its matchups are confirmed. Saved picks lock at each game’s tipoff." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
+            {rollingCup && view.activeEntry && view.viewerUserId === view.activeEntry.userId && !view.activeEntry.finalizedAt ? <p className="af-pb-sub" role="status" data-testid="cup-entry-draft-status">Picks saved — bracket not finalized. Finalize a complete game day to join the standings.</p> : null}
+            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Bracket active. Finalize each game day after saving your picks. Each game locks at tipoff." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
           </div>
           <div className="af-pb-status">
             {!bracketReady ? "Field or schedule pending" : tournamentLocked ? "Brackets locked" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
@@ -534,6 +602,8 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {sport === "ncaaf" && view.challenge.seasonYear === 2026 && !view.challenge.isTestMode && waitingForField ? <CfpProjectionPreview /> : null}
+          {sport === "ncaaf" && !view.challenge.isTestMode ? <CfpBowlSchedule season={view.challenge.seasonYear} series={view.series} /> : null}
           {!rollingCup ? <BracketCoachPanel view={view} /> : null}
           {rollingCup ? <details className="af-pb-card af-cup-disclosure" aria-label="NBA Cup scoring">
             <summary>Scoring rules</summary>
@@ -547,9 +617,14 @@ export default function MlbBracketBoard({
             <CupGroupPlaySection
               scoringExcludedReasonFor={scoringExcludedReasonFor}
               games={groupGames}
+              allGames={view.series}
               groups={cupGroups}
               sport={sport}
               picks={picksBySeries}
+              pendingIds={pendingCupPickIds}
+              canFinalize={Boolean(entryId && view.activeEntry?.userId === view.viewerUserId)}
+              finalizingDay={finalizingDay}
+              onFinalizeDay={(day) => { void finalizeDay(day) }}
               teamLogos={teamLogos}
               savingId={saving}
               lockedReasonFor={(game) => lockedReasonFor(game)}
@@ -559,6 +634,22 @@ export default function MlbBracketBoard({
           ) : null}
           <section className="af-pb-card">
             {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>{knockoutPublished ? "Pick each matchup once its teams and tipoff are confirmed. Each game locks at tipoff." : "Knockout picks open after Group Play ends and the NBA confirms the quarterfinal teams and tipoff times."}</p></div></div> : null}
+            {rollingCup && knockoutPublished && entryId && view.activeEntry?.userId === view.viewerUserId ? (
+              <div className="af-cup-day">
+                {[...new Set(view.series.filter((game) => game.round !== "cup_group_play" && !lockedReasonFor(game)).map((game) => localDayKey(game.startsAt, clientTime ? undefined : "UTC")))].filter((day) => day !== "tba").sort().map((day) => {
+                  const open = view.series.filter((game) => localDayKey(game.startsAt, clientTime ? undefined : "UTC") === day && !lockedReasonFor(game))
+                  const saved = open.filter((game) => picksBySeries.has(game.id)).length
+                  const pending = open.some((game) => pendingCupPickIds.has(game.id))
+                  return <div className="af-cup-day-head" key={day}>
+                    <strong>{dayHeading(day, undefined, clientTime ? undefined : "UTC", clientTime)}</strong>
+                    <span>{saved}/{open.length} open picks saved · {saved < open.length ? "Picks missing" : pending ? "Saved — not finalized" : "Finalized"}</span>
+                    <button type="button" className="af-pb-btn af-pb-btn--accent" disabled={Boolean(saving || finalizingDay) || saved < open.length || !pending} onClick={() => { void finalizeDay(day) }}>
+                      {finalizingDay === day ? "Finalizing…" : "Finalize this day"}
+                    </button>
+                  </div>
+                })}
+              </div>
+            ) : null}
             {rollingCup && !knockoutPublished ? (
               <ol className="af-cup-knockout-steps" aria-label="Knockout rounds">
                 <li>Quarterfinals</li><li>Semifinals</li><li>Championship</li>
@@ -589,6 +680,7 @@ export default function MlbBracketBoard({
                             lockedReason={lockedReasonFor(game)}
                             scoringExcludedReason={scoringExcludedReasonFor(game)}
                             saving={saving === game.id}
+                            isDraft={pendingCupPickIds.has(game.id)}
                             onPick={(team) => { void savePick(game, team) }}
                             onOpen={() => setLiveNode(game.id)}
                           />
@@ -685,7 +777,7 @@ export default function MlbBracketBoard({
 
             <p className="af-pb-footnote">
               {singleGame
-                ? rollingCup ? "Each NBA Cup game locks at tipoff. Finalize before your first selected game begins; later changes to upcoming games save automatically. AllFantasy offers no prizes or gambling." : "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
+                ? rollingCup ? "Each NBA Cup game locks at tipoff. Save your picks and finalize each game day. Unfinalized edits do not replace your last finalized pick. AllFantasy offers no prizes or gambling." : "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
                 : "Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each league hold a bye and enter at the Division round, so their opponent stays unknown until the Wild Card round resolves. The bracket scrolls sideways on a phone."}
             </p>
           </section>
@@ -727,4 +819,3 @@ export default function MlbBracketBoard({
     </div>
   )
 }
-

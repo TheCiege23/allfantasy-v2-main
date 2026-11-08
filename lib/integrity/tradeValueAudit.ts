@@ -81,16 +81,59 @@ export function auditRowFromReview(r: StoredTradeReview, ref: TradeRef, now: Dat
     sideBGave: names('get'),
     sideAValue: g.giveValue,
     sideBValue: g.getValue,
-    gapPct: g.percentDiff,
+    gapPct: g.market?.percentDiff ?? g.percentDiff,
     basis,
     completedAt: trade.completedAt,
     pricedAt: now.toISOString(),
   }
 }
 
+type FrozenLike = { v: number; basis?: string; pricedAsOf?: string; grade: { giveValue: number; getValue: number; percentDiff: number; lines?: Array<{ side: 'give' | 'get'; name: string }> } }
+
+const nameSet = (names: readonly string[]) => [...new Set(names.map((n) => n.trim().toLowerCase()))].sort().join('|')
+
+/**
+ * PURE. A saved Sleeper original priced on the trade's own date, turned into this audit row's values —
+ * or null when it cannot be: not a `trade_date` original, or its assets are not this trade's on either
+ * side. Oriented by asset NAMES: the original keys players by Sleeper id and the audit carries names, so
+ * matching keys would never meet. A side that matches the other way round is mirrored.
+ */
+export function tradeDateValuesFrom(frozen: FrozenLike | null | undefined, row: Pick<AuditRow, 'sideAGave' | 'sideBGave'>): { sideAValue: number; sideBValue: number; gapPct: number; pricedAt: string | null } | null {
+  if (!frozen || frozen.v !== 2 || frozen.basis !== 'trade_date' || !Array.isArray(frozen.grade?.lines)) return null
+  const give = nameSet(frozen.grade.lines.filter((l) => l.side === 'give').map((l) => l.name))
+  const get = nameSet(frozen.grade.lines.filter((l) => l.side === 'get').map((l) => l.name))
+  const a = nameSet(row.sideAGave)
+  const b = nameSet(row.sideBGave)
+  if (!a || !b) return null
+  const pricedAt = typeof frozen.pricedAsOf === 'string' && Number.isFinite(Date.parse(frozen.pricedAsOf)) ? new Date(frozen.pricedAsOf).toISOString() : null
+  if (a === give && b === get) return { sideAValue: frozen.grade.giveValue, sideBValue: frozen.grade.getValue, gapPct: frozen.grade.percentDiff, pricedAt }
+  if (a === get && b === give) return { sideAValue: frozen.grade.getValue, sideBValue: frozen.grade.giveValue, gapPct: -frozen.grade.percentDiff, pricedAt }
+  return null
+}
+
+/**
+ * An imported Sleeper trade first reached long after it settled: if AllFantasy already priced it on its
+ * own date (`frozenCompletedGrade.ts`, `basis: 'trade_date'`), that price is the audit's — labelled
+ * `trade_date` — instead of a `first_audited` price from today. Anything else is returned unchanged.
+ */
+async function preferTradeDatePrice(leagueId: string, row: AuditRow & { source: string; pricedAt: string }): Promise<AuditRow & { source: string; pricedAt: string }> {
+  if (row.source !== 'provider' || row.basis !== 'first_audited') return row
+  try {
+    const { loadFrozenCompletedGrades } = await import('@/lib/decision-os/trade/frozenCompletedGrade')
+    const tradeId = row.tradeKey.replace(/^sleeper:/, '')
+    const frozen = (await loadFrozenCompletedGrades(leagueId, [tradeId])).get(tradeId) as unknown as FrozenLike | undefined
+    const values = tradeDateValuesFrom(frozen, row)
+    if (!values) return row
+    return { ...row, sideAValue: values.sideAValue, sideBValue: values.sideBValue, gapPct: values.gapPct, basis: 'trade_date', pricedAt: values.pricedAt ?? row.pricedAt }
+  } catch {
+    return row
+  }
+}
+
 /** Records a completed trade's values once. Returns the stored row (the first one, if it existed). */
-export async function recordTradeValueAudit(leagueId: string, row: AuditRow & { source: string; pricedAt: string }): Promise<void> {
+export async function recordTradeValueAudit(leagueId: string, input: AuditRow & { source: string; pricedAt: string }): Promise<void> {
   if (!(await tradeValueAuditsReady())) return
+  const row = await preferTradeDatePrice(leagueId, input)
   await prisma.$executeRaw`
     INSERT INTO trade_value_audits (id, league_id, trade_key, source, side_a_team_id, side_b_team_id, side_a_name, side_b_name,
       side_a_gave, side_b_gave, side_a_value, side_b_value, gap_pct, basis, completed_at, priced_at, created_at)
