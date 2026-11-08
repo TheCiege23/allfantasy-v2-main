@@ -24,6 +24,7 @@ import {
   type DivisionPlayoffRule,
   type LeagueDivisionConfig,
 } from '@/lib/league/divisions/leagueDivisions'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,7 +102,7 @@ export async function GET(
 
   return NextResponse.json({
     config,
-    isCommissioner: league.userId === session.user.id,
+    isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id),
     isSurvivor,
     sport: league.sport,
     leagueVariant: league.leagueVariant,
@@ -121,7 +122,7 @@ export async function PUT(
     select: { userId: true, settings: true, leagueVariant: true, teams: { select: { id: true, teamName: true, ownerName: true, avatarUrl: true, lifecycleState: true } } },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const currentSettings = (league.settings as Record<string, unknown>) ?? {}
