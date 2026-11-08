@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 type TeamRow = {
   id: string
   claimedByUserId: string | null
+  platformUserId?: string
+  externalId?: string
   lifecycleState?: string
   wins: number
   losses: number
@@ -46,6 +48,10 @@ const state = {
   legacy: [] as Array<Record<string, unknown>>,
   teams: [] as TeamRow[],
   seasons: [] as Array<{ leagueId: string; season: number; championTeamId: string | null }>,
+  history: [] as Array<Record<string, unknown>>,
+  standings: [] as Array<Record<string, unknown>>,
+  survival: [] as Array<Record<string, unknown>>,
+  importedSurvival: [] as Array<Record<string, unknown>>,
   failTeams: false,
   failSeasons: false,
 }
@@ -70,6 +76,13 @@ vi.mock('@/lib/prisma', () => ({
       ),
     },
     franchiseSeason: { findMany: vi.fn(async () => []) },
+    seasonResult: { findMany: vi.fn(async ({ where }: { where: { rosterId: { in: string[] } } }) =>
+      state.history.filter((row) => where.rosterId.in.includes(String(row.rosterId)))) },
+    seasonStandingFact: { findMany: vi.fn(async () => state.standings) },
+    sleeperCareerSurvival: { findMany: vi.fn(async () => state.importedSurvival) },
+    guillotineSurvivalLog: { findMany: vi.fn(async () => state.survival) },
+    survivorSeasonSnapshot: { findMany: vi.fn(async () => []) },
+    $queryRaw: vi.fn(async () => [{ leagueId: 'league-1', season: 2023, platformLeagueId: 'ESPN-2023', size: '14', scoring: 'PPR' }]),
     leagueTeam: {
       findMany: vi.fn(async (args: { where: Record<string, any> }) => {
         h.teamWhere.push(args.where)
@@ -161,6 +174,7 @@ function importedLeague(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   state.imported = []
+  state.importedSurvival = []
   state.links = []
   state.legacy = []
   state.teams = []
@@ -354,4 +368,61 @@ describe('loadCareerLedger — claimed-team source', () => {
     const rows = await loadCareerLedger(['joiner'])
     expect(rows.map((r) => r.userId)).toEqual(['joiner'])
   })
+})
+
+describe('verified history shared by Rankings and Career', () => {
+  it('uses the historical manager ID and excludes a different owner’s reused team slot', async () => {
+    state.teams = [team({ platformUserId: 'manager-id', externalId: 'slot-1', league: { platform: 'espn' } })]
+    state.history = [
+      { leagueId: 'league-1', season: '2023', rosterId: 'manager-id', wins: 9, losses: 5, pointsFor: 1400, champion: true },
+      { leagueId: 'league-1', season: '2024', rosterId: 'other-manager', wins: 13, losses: 1 },
+    ]
+    state.standings = [{ leagueId: 'league-1', season: 2024, teamId: 'slot-1', wins: 13, losses: 1 }]
+    try {
+      const rows = await loadCareerLedger(['joiner'])
+      expect(rows.find((r) => r.season === 2023)).toMatchObject({
+        key: 'espn:ESPN-2023:2023', leagueSize: 14, wins: 9, wonChampionship: true,
+      })
+      expect(rows.some((r) => r.season === 2024)).toBe(false)
+      const { loadCareerRows } = await import('@/lib/core-app/career')
+      const career = await loadCareerRows('joiner', null)
+      expect(career.rows.map((r) => r.key)).toEqual(rows.map((r) => r.key))
+    } finally {
+      state.history = []
+      state.standings = []
+    }
+  })
+
+  it('maps audited Guillotine scoring periods into the shared ledger', async () => {
+    const season = {
+      id: 'g-2024', season: 2024, totalTeamsStarted: 16, currentScoringPeriod: 14, updatedAt: T0,
+      league: { id: 'g-league', name: 'Weekly Chop', platform: 'manual', platformLeagueId: null, sport: 'NFL', leagueSize: 16 },
+    }
+    state.survival = Array.from({ length: 11 }, (_, i) => ({
+      scoringPeriod: i + 1, survivalStatus: i < 10 ? 'survived' : 'eliminated',
+      roster: { ownerId: 'joiner' }, season,
+    }))
+    try {
+      const rows = await loadCareerLedger(['joiner'])
+      expect(rows.find((r) => r.refId === 'g-league')).toMatchObject({
+        key: 'allfantasy:g-league:2024', specialty: 'guillotine', completed: true,
+        survival: { periods: 10, totalPeriods: 14 },
+      })
+    } finally {
+      state.survival = []
+    }
+  })
+})
+
+it('attaches one verified Sleeper result to the existing league-season for the right account', async () => {
+  state.imported = [importedLeague({ userId: 'joiner', platform: 'sleeper', platformLeagueId: 'sleeper-league', season: 2025 })]
+  state.importedSurvival = [
+    { userId: 'someone-else', platformLeagueId: 'sleeper-league', season: 2025, updatedAt: T0, evidence: {} },
+    { userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2025, updatedAt: T0, evidence: {
+      version: 1, method: 'sleeper_chopped', rosterId: 2, firstWeek: 1, finalWeek: 17, eliminatedWeek: 11,
+    } },
+  ]
+  const rows = await loadCareerLedger(['joiner'])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ specialty: 'guillotine', completed: true, survival: { periods: 10, totalPeriods: 17 } })
 })

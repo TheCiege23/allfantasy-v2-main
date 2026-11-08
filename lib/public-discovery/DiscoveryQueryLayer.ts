@@ -152,11 +152,7 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
   return enabled.slice(0, 4)
 }
 
-/**
- * Exported for the division gate (`lib/league-join/joinDivisionGate.ts`): a league this
- * returns true for publishes its join code, so joining it is self-service, not an invitation.
- * One predicate for "public", not two that drift.
- */
+/** Whether a fantasy league publishes a join link in discovery. */
 export function isFantasyLeagueDiscoverable(settings: Record<string, unknown>): boolean {
   const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
   const allowInviteLink =

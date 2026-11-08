@@ -127,6 +127,7 @@
     "test:commissioner-os:types": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js -p tsconfig.commissioner-os-types.json",
     "simulate:league-engine": "tsx scripts/run-league-engine-simulation.ts",
     "simulate:league-engine:full": "tsx scripts/run-league-engine-simulation.ts --full",
+    "sim:season": "tsx scripts/run-season-sim.ts",
     "test:watch": "vitest",
     "test:i18n": "vitest run __tests__/i18n-placeholder-parity.test.ts",
     "test:no-ai-copy": "vitest run __tests__/no-ai-customer-copy.test.ts",

@@ -23,8 +23,8 @@ import {
 } from '@/lib/core-app/homeScope'
 import { leagueSportIcon, leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
-import { FAVORITES_SECTION, moveInOrder, railSections } from '@/lib/core-app/railArrange'
-import { hideLeagueForAccount, saveLeaguePreference, unhideLeagueForAccount } from '@/components/core-app/RailLeagueMenu'
+import { FAVORITES_SECTION, moveInOrder, railSections, reorderWithinSection } from '@/lib/core-app/railArrange'
+import { hideLeagueForAccount, saveLeaguePreference, unhideLeagueForAccount, useRailDrag } from '@/components/core-app/RailLeagueMenu'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -359,6 +359,19 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
     setOrderOverride(next)
     saveLeaguePreference('order', next, () => router.refresh())
   }
+  /*
+   * ⚠ DRAG TO REORDER, BY THE ⠿ GRIP ONLY (user ask, 2026-11-08). The rail's own drag (useRailDrag), so
+   * a drop lands exactly where the same drag on the desktop rail would and saves the same order. Only
+   * the grip takes the finger: the rest of the row still scrolls the sheet, which a phone list must
+   * keep doing. The ↑ ↓ buttons stay — a precise one-step move, and the way in without a pointer.
+   */
+  const drag = useRailDrag((sectionIds, id, toIndex) => {
+    const fullOrder = orderOverride ?? leagues.map((l) => l.id)
+    const next = reorderWithinSection(fullOrder, sectionIds, id, toIndex)
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  })
   const toggleHidden = (id: string) => {
     const next = new Set(hidden)
     if (next.has(id)) {
@@ -396,7 +409,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
       ? f.week != null ? railMsg.choppedWeek(f.week) : railMsg.chopped
       : f.rank != null ? `${railMsg.rank(f.rank)}${railMsg.ofAlive(f.outOf)}` : railMsg.aliveCount(f.outOf)
 
-  const renderRow = (league: ScopeSwitcherLeague, isExile: boolean, sectionIds: string[]) => {
+  const renderRow = (league: ScopeSwitcherLeague, isExile: boolean, sectionIds: string[], sectionKey: string) => {
     const starred = favorites.has(league.id)
     const isHidden = hidden.has(league.id) && league.id !== selectedLeagueId
     const at = sectionIds.indexOf(league.id)
@@ -410,7 +423,20 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
         data-exile={isExile ? 'true' : undefined}
         data-hidden={isHidden ? 'true' : undefined}
         data-platform={tone}
+        {...(editing ? drag.rowAttrs(league.id, sectionKey) : {})}
       >
+        {/* A sport with one league has nothing to drag past: its grip is drawn, dimmed, so the rows still line up. */}
+        {editing ? (
+          <span
+            className="af-scope-grip"
+            data-testid="scope-drag-handle"
+            data-disabled={sectionIds.length < 2 ? 'true' : undefined}
+            aria-hidden
+            {...(sectionIds.length < 2 ? {} : drag.handleProps(league.id, sectionKey))}
+          >
+            ⠿
+          </span>
+        ) : null}
         <button
           type="button"
           className="af-scope-star"
@@ -575,7 +601,8 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         filter.sport === sport,
                         count,
                         () => setFilter((f) => ({ ...f, sport: f.sport === sport ? null : sport })),
-                        <>{icon ? <span aria-hidden>{icon}</span> : null}{o.label}</>,
+                        // The list headings' short names (CFB, CBB): "NCAAF" is what pushed a chip off a phone.
+                        <>{icon ? <span className="af-scope-chip-icon" aria-hidden>{icon}</span> : null}{leagueSportKey(sport) ? leagueSportLabel(leagueSportKey(sport), { short: true }) : o.label}</>,
                         { disabled: count === 0 },
                       )
                     })}
@@ -635,7 +662,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
               </p>
             ) : null}
 
-            <ul className="af-scope-list" aria-label={m.leagues}>
+            <ul className="af-scope-list" aria-label={m.leagues} data-rail-list="">
               {shownLeagues.length === 0 ? (
                 <li className="af-scope-empty">
                   {q ? <>{m.noLeagueMatches} &ldquo;{query}&rdquo;.</> : m.noLeaguesInFilter}
@@ -664,7 +691,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                     ) : null,
                     ...section.rows.map((league) => {
                       const isExile = exileRows.has(league.id)
-                      const row = renderRow(league, isExile, sectionIds)
+                      const row = renderRow(league, isExile, sectionIds, section.key ?? 'other')
                       if (!isExile) return row
                       return [
                         <li key={`exile-link-${league.id}`} className="af-scope-exile-link" data-testid="scope-exile-link" aria-hidden>↕</li>,

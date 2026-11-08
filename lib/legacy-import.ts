@@ -1,5 +1,6 @@
 // lib/legacy-import.ts
 import { computeAndSaveRank } from '@/lib/ranking/computeAndSaveRank';
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { prisma } from './prisma';
 import {
   getUserLeagues,
@@ -569,6 +570,10 @@ async function importLeague(
   );
 
   if (userRoster) {
+    if (league.status === 'complete' && (specialtyFormat === 'guillotine' || Number(league.settings?.type) === 3)) {
+      const linked = await prisma.appUser.findUnique({ where: { legacyUserId: userId }, select: { id: true } }).catch(() => null);
+      if (linked) await importSleeperSurvival({ userId: linked.id, platformLeagueId: leagueId, season }, league, rosters, sleeperUserId);
+    }
     const isChampion = championRosterId !== null && championRosterId === userRoster.rosterId;
     
     // Compute finalStanding: champion = 1, else fallback to rank

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
+import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSurvival'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
@@ -834,6 +835,9 @@ export async function persistImportedLeagueFromNormalization(
       sourceManagerId: options.importerSourceManagerId,
     })
     if (joined) {
+      if (provider === 'sleeper' && normalized.league.status === 'complete') {
+        await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
+      }
       /*
        * ⚠ THE JOIN RETURNS BEFORE THE ORDINARY PATH'S `calculateAndSaveRank` BELOW, so
        * without this a joiner is never ranked (measured: `rank_calculated_at` stayed null
@@ -1301,6 +1305,15 @@ export async function persistImportedLeagueFromNormalization(
   } catch {
     /* non-fatal settings stamp */
   }
+  if (provider === 'sleeper' && normalized.league.status === 'complete' && options.importerSourceManagerId) {
+    await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
+  }
+  try {
+    await calculateAndSaveRank(userId)
+  } catch (err) {
+    console.warn('[ImportedLeagueCommitService] calculateAndSaveRank non-fatal:', err)
+  }
+
   const historicalBackfillTask = runHistoricalBackfill({
     provider,
     leagueId: league.id,
@@ -1347,6 +1360,7 @@ export async function persistImportedLeagueFromNormalization(
             (outcome.failureMessage ? ` — ${outcome.failureMessage}` : ''),
         )
       }
+      if (outcome.seasonsImported && outcome.seasonsImported > 0) await calculateAndSaveRank(userId)
       return result
     })
     .catch(async (err) => {
@@ -1402,11 +1416,7 @@ export async function persistImportedLeagueFromNormalization(
     void historicalBackfillTask
   }
 
-  try {
-    await calculateAndSaveRank(userId)
-  } catch (err) {
-    console.warn('[ImportedLeagueCommitService] calculateAndSaveRank non-fatal:', err)
-  }
+
 
   return {
     league: {

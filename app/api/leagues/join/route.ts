@@ -17,7 +17,7 @@ import { getServerSession } from 'next-auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
-import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
+import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
 import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
@@ -42,20 +42,20 @@ async function resolveInvitedLeagueId(code: string | null, token: string | null)
   if (token) {
     const invite = await prisma.leagueInvite.findFirst({
       where: { token, isActive: true },
-      select: { leagueId: true },
+      select: { leagueId: true, expiresAt: true, useCount: true, maxUses: true },
     })
-    if (invite) return invite.leagueId
+    if (invite && (!invite.expiresAt || invite.expiresAt.getTime() > Date.now()) && invite.useCount < invite.maxUses) return invite.leagueId
   }
   if (code) {
     // A tracked invite link (`/invite/accept`) carries its own token, not the league's code.
-    const { getInviteByToken } = await import('@/lib/invite-engine/InviteEngine')
+    const { getInviteByToken, deriveInviteStatus } = await import('@/lib/invite-engine/InviteEngine')
     const { normalizeToken } = await import('@/lib/invite-engine/tokenGenerator')
     const tracked = normalizeToken(code)
     const link = tracked ? await getInviteByToken(tracked).catch(() => null) : null
-    if (link?.type === 'league' && link.targetId) return link.targetId
+    if (link?.type === 'league' && link.targetId && deriveInviteStatus(link) === 'active') return link.targetId
     const validation = await validateFantasyInviteCode(code)
     if (validation.valid) return validation.preview.leagueId
-    return validation.preview?.leagueId ?? null
+    return validation.error === 'PASSWORD_REQUIRED' ? validation.preview?.leagueId ?? null : null
   }
   return null
 }
@@ -157,11 +157,6 @@ export async function POST(req: NextRequest) {
   const result = validation.preview
 
   /*
-   * The division gate (ADR F2.10a), replacing the XP-level gate retired 2026-10-01: career XP
-   * measures volume, not skill, and gating on it is what the owner ruled out. Only an OPEN join
-   * — this league publishes its code — can be refused; a private league's code is an invitation.
-   */
-  /*
    * Paid leagues are restricted in some states (lib/geo/restrictedStates). Find a League already
    * hides them there; this is the gate for a code that arrives some other way. Paid means the
    * settings say so or league finance does — either is enough.
@@ -182,15 +177,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const divisionGate = await evaluateJoinDivisionGate({
-    userId,
-    leagueId: result.leagueId,
-    credential: { kind: 'league_code' },
-  })
-  if (divisionGate.outcome === 'deny') {
-    return NextResponse.json(divisionGateRefusal(divisionGate, result.leagueId), { status: 403 })
-  }
-
   const joinResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Serialize capacity checks and seat claims for this league. Two requests must
     // not both accept the final open seat from the same pre-claim snapshot.
@@ -201,6 +187,12 @@ export async function POST(req: NextRequest) {
     })
     if (existing) {
       return { success: true as const, leagueId: result.leagueId, alreadyMember: true as const }
+    }
+
+    const careerGate = await evaluateCareerJoinGate(userId, result.leagueId, undefined, tx)
+    if (!careerGate) return { success: false as const, status: 404, error: 'League not found' }
+    if (!careerGate.canJoin) {
+      return { success: false as const, status: 403, ...careerJoinRefusal(careerGate, result.leagueId) }
     }
 
     // DUPLICATE-ACCOUNT GATE. The `leagueId_platformUserId` lookup above only catches this
@@ -491,6 +483,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (!joinResult.success) {
+    if ('canRequest' in joinResult) return NextResponse.json(joinResult, { status: 403 })
     // An explicit code from the branch wins: the duplicate-account refusal needs its own
     // code so the client can offer "sign in with your other account" instead of rendering
     // a generic failure. Status-derived codes stay as the fallback for the older branches.
@@ -511,11 +504,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  return NextResponse.json(
-    divisionGate.outcome === 'allow_flagged' && !joinResult.alreadyMember
-      ? { ...joinResult, divisionFlag: { reason: divisionGate.reason, userDivision: divisionGate.userDivision, leagueDivision: divisionGate.leagueDivision } }
-      : joinResult,
-  )
+  return NextResponse.json(joinResult)
 }
 
 /**

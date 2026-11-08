@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 /**
  * The phone league picker, brought level with the desktop rail (user report, 2026-11-08):
@@ -71,6 +71,17 @@ describe('sport on every row, and the list grouped by sport', () => {
     expect(document.querySelector('[data-section="other"]')?.textContent).toContain('Other')
     const row = Array.from(document.querySelectorAll('.af-scope-row')).find((r) => r.textContent?.includes('Mystery League'))!
     expect(row.querySelector('[data-testid="scope-league-sport"]')).toBeNull()
+  })
+
+  it('names college sports on the filter chips by their short names, as the headings do', () => {
+    open({ leagues: [...LEAGUES, { id: 'c1', name: 'Campus', sport: 'NCAAF', platform: 'sleeper' }, { id: 'c2', name: 'Hoops U', sport: 'NCAAB', platform: 'sleeper' }] })
+    const chips = Array.from(document.querySelectorAll('.af-scope-filters .af-scope-chip')).map((c) => c.textContent ?? '')
+    expect(chips.some((t) => /CFB\s*1/.test(t))).toBe(true)
+    expect(chips.some((t) => /CBB\s*1/.test(t))).toBe(true)
+    expect(chips.some((t) => /NCAA/.test(t))).toBe(false)
+    // …and the chip still filters by the real sport code.
+    fireEvent.click(chip(/CFB/))
+    expect(names()).toEqual(['Campus'])
   })
 
   it('CONTROL: one sport draws no heading', () => {
@@ -202,5 +213,77 @@ describe('Customize: show hidden, reorder, hide', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(true))
     const post = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')!
     expect(JSON.parse(String(post[1]!.body))).toEqual({ field: 'hidden', leagueIds: ['other'] })
+  })
+})
+
+describe('drag to reorder, by the grip', () => {
+  /** Lay the rows out 50px apart, top to bottom, the way they render. jsdom has no layout of its own. */
+  const layOut = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('.af-scope-list > li')).forEach((el, i) => {
+      el.getBoundingClientRect = () => ({ top: i * 50, height: 40, bottom: i * 50 + 40, left: 0, right: 300, width: 300, x: 0, y: i * 50, toJSON: () => ({}) })
+    })
+  const grip = (name: string) =>
+    Array.from(document.querySelectorAll('.af-scope-row')).find((r) => r.textContent?.includes(name))!.querySelector<HTMLElement>('[data-testid="scope-drag-handle"]')!
+  const rowOf = (name: string) => Array.from(document.querySelectorAll<HTMLElement>('.af-scope-row')).find((r) => r.textContent?.includes(name))!
+
+  it('draws a grip only while customizing', () => {
+    open()
+    expect(document.querySelector('[data-testid="scope-drag-handle"]')).toBeNull()
+    fireEvent.click(screen.getByTestId('scope-customize'))
+    expect(document.querySelectorAll('[data-testid="scope-drag-handle"]')).toHaveLength(5)
+  })
+
+  it('a finger on the grip drags a league within its sport, and the order is saved', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    open()
+    fireEvent.click(screen.getByTestId('scope-customize'))
+    layOut()
+    // List: [NFL heading 0] Dynasty Dragons 50, Work League 100, AF Guillotine 150, [NBA heading 200] …
+    fireEvent.pointerDown(grip('Dynasty Dragons'), { button: 0, pointerType: 'touch', clientX: 10, clientY: 70 })
+    fireEvent.pointerMove(window, { pointerType: 'touch', clientX: 10, clientY: 190 })
+    expect(rowOf('AF Guillotine').getAttribute('data-drop')).toBe('after')
+    expect(rowOf('Dynasty Dragons').getAttribute('data-dragging')).toBe('true')
+    await act(async () => {
+      fireEvent.pointerUp(window, { pointerType: 'touch', clientX: 10, clientY: 190 })
+    })
+    expect(names().slice(0, 3)).toEqual(['Work League', 'AF Guillotine', 'Dynasty Dragons'])
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ field: 'order', leagueIds: ['n2', 'b1', 'n3', 'n1', 'b2'] })
+    expect(rowOf('Dynasty Dragons').getAttribute('data-dragging')).toBeNull()
+  })
+
+  it('CONTROL: a finger on the row itself scrolls — it does not drag', () => {
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    open()
+    fireEvent.click(screen.getByTestId('scope-customize'))
+    layOut()
+    const link = rowOf('Dynasty Dragons').querySelector<HTMLElement>('.af-scope-league')!
+    fireEvent.pointerDown(link, { button: 0, pointerType: 'touch', clientX: 10, clientY: 70 })
+    fireEvent.pointerMove(window, { pointerType: 'touch', clientX: 10, clientY: 190 })
+    fireEvent.pointerUp(window, { pointerType: 'touch', clientX: 10, clientY: 190 })
+    expect(names().slice(0, 3)).toEqual(['Dynasty Dragons', 'Work League', 'AF Guillotine'])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a small wobble on the grip is not a move', () => {
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    open()
+    fireEvent.click(screen.getByTestId('scope-customize'))
+    layOut()
+    fireEvent.pointerDown(grip('Dynasty Dragons'), { button: 0, pointerType: 'touch', clientX: 10, clientY: 70 })
+    fireEvent.pointerMove(window, { pointerType: 'touch', clientX: 11, clientY: 72 })
+    fireEvent.pointerUp(window, { pointerType: 'touch', clientX: 11, clientY: 72 })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a sport with one league draws its grip dimmed, and it does not drag', () => {
+    open({ leagues: LEAGUES.filter((l) => l.id !== 'b2') })
+    fireEvent.click(screen.getByTestId('scope-customize'))
+    expect(grip('Hoops Club').getAttribute('data-disabled')).toBe('true')
+    expect(grip('Dynasty Dragons').getAttribute('data-disabled')).toBeNull()
   })
 })

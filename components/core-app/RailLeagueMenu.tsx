@@ -61,6 +61,19 @@ export function useRailHold(open: (id: string) => void) {
   }
 }
 
+/** How near a list's top or bottom edge a dragged grip must be for the list to scroll, and how fast. */
+const AUTO_SCROLL_EDGE_PX = 72
+const AUTO_SCROLL_MAX_PX = 16
+
+/** The nearest ancestor that actually scrolls vertically, or null. */
+function scrollParentOf(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el; node; node = node.parentElement) {
+    const overflowY = window.getComputedStyle(node).overflowY
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
+  }
+  return null
+}
+
 /**
  * Drag a league up or down within its section. A mouse drags a row straight away; a finger drags only in
  * reorder mode (opened from the sheet), where the rows stop being links and show a handle, because on a
@@ -72,7 +85,7 @@ export function useRailHold(open: (id: string) => void) {
 export function useRailDrag(onReorder: (sectionIds: string[], id: string, toIndex: number) => void) {
   const [reorderMode, setReorderMode] = useState(false)
   const [drag, setDrag] = useState<{ id: string; overId: string | null; after: boolean } | null>(null)
-  const live = useRef<{ id: string; rows: HTMLElement[]; x: number; y: number; active: boolean; toIndex: number; ids: string[] } | null>(null)
+  const live = useRef<{ id: string; rows: HTMLElement[]; x: number; y: number; lastY: number; active: boolean; toIndex: number; ids: string[] } | null>(null)
   const swallow = useRef(false)
   const reorderRef = useRef(onReorder)
   reorderRef.current = onReorder
@@ -86,45 +99,78 @@ export function useRailDrag(onReorder: (sectionIds: string[], id: string, toInde
     return () => window.removeEventListener('keydown', escape)
   }, [reorderMode])
 
-  const start = (event: ReactPointerEvent<HTMLElement>, id: string, section: string) => {
+  /**
+   * `fromHandle`: the press landed on a grip (`handleProps`), not on the row. A grip exists only to be
+   * dragged, so a finger drags it straight away with no reorder mode, and the list scrolls itself when
+   * the finger nears its top or bottom edge — the grip takes the touch, so the finger cannot scroll it.
+   */
+  const start = (event: ReactPointerEvent<HTMLElement>, id: string, section: string, fromHandle = false) => {
     if (event.button !== 0) return
-    if (!reorderMode && event.pointerType !== 'mouse') return
-    const list = event.currentTarget.parentElement
+    if (!fromHandle && !reorderMode && event.pointerType !== 'mouse') return
+    // A grip sits inside its row, so the list is the nearest `[data-rail-list]`, not the parent.
+    const list = (fromHandle ? event.currentTarget.closest<HTMLElement>('[data-rail-list]') : null) ?? event.currentTarget.parentElement
     if (!list) return
     const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-rail-id][data-rail-section]')).filter(
       (el) => el.getAttribute('data-rail-section') === section,
     )
     const ids = rows.map((el) => el.getAttribute('data-rail-id')!)
     if (ids.length < 2) return
-    live.current = { id, rows, x: event.clientX, y: event.clientY, active: false, toIndex: ids.indexOf(id), ids }
-    const move = (e: PointerEvent) => {
+    if (fromHandle) event.preventDefault()
+    live.current = { id, rows, x: event.clientX, y: event.clientY, lastY: event.clientY, active: false, toIndex: ids.indexOf(id), ids }
+    // Where would it land: the number of OTHER rows whose middle is above the pointer.
+    const place = (clientY: number) => {
       const d = live.current
       if (!d) return
-      if (!d.active) {
-        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < (reorderMode ? 4 : 6)) return
-        d.active = true
-      }
-      e.preventDefault()
-      // Where would it land: the number of OTHER rows whose middle is above the pointer.
       const others = d.rows.filter((el) => el.getAttribute('data-rail-id') !== d.id)
       const mids = others.map((el) => {
         const r = el.getBoundingClientRect()
         return r.top + r.height / 2
       })
-      const toIndex = mids.filter((m) => m < e.clientY).length
+      const toIndex = mids.filter((m) => m < clientY).length
       d.toIndex = toIndex
       const target = others[Math.min(toIndex, others.length - 1)]
       setDrag({ id: d.id, overId: target?.getAttribute('data-rail-id') ?? null, after: toIndex >= others.length })
+    }
+    const scroller = fromHandle ? scrollParentOf(list) : null
+    let frame = 0
+    const autoScroll = () => {
+      const d = live.current
+      if (!d || !scroller) return
+      if (d.active) {
+        const box = scroller.getBoundingClientRect()
+        const edge = AUTO_SCROLL_EDGE_PX
+        const over = d.lastY < box.top + edge ? d.lastY - (box.top + edge) : d.lastY > box.bottom - edge ? d.lastY - (box.bottom - edge) : 0
+        if (over) {
+          const before = scroller.scrollTop
+          scroller.scrollTop += Math.max(-AUTO_SCROLL_MAX_PX, Math.min(AUTO_SCROLL_MAX_PX, over / 3))
+          if (scroller.scrollTop !== before) place(d.lastY)
+        }
+      }
+      frame = window.requestAnimationFrame(autoScroll)
+    }
+    if (scroller) frame = window.requestAnimationFrame(autoScroll)
+    const move = (e: PointerEvent) => {
+      const d = live.current
+      if (!d) return
+      d.lastY = e.clientY
+      if (!d.active) {
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < (reorderMode || fromHandle ? 4 : 6)) return
+        d.active = true
+      }
+      e.preventDefault()
+      place(e.clientY)
     }
     const end = (e: PointerEvent) => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
+      if (frame) window.cancelAnimationFrame(frame)
       const d = live.current
       live.current = null
       setDrag(null)
       if (!d?.active) return
-      swallow.current = true
+      // A grip is not inside the row's link, so there is no click on the link to swallow.
+      if (!fromHandle) swallow.current = true
       if (e.type === 'pointerup') reorderRef.current(d.ids, d.id, d.toIndex)
     }
     window.addEventListener('pointermove', move)
@@ -132,15 +178,28 @@ export function useRailDrag(onReorder: (sectionIds: string[], id: string, toInde
     window.addEventListener('pointercancel', end)
   }
 
+  /** The attributes the drag reads a row by, and the two it draws with (dragging, drop line). */
+  const rowAttrs = (id: string, section: string) => ({
+    'data-rail-id': id,
+    'data-rail-section': section,
+    'data-dragging': drag?.id === id ? 'true' : undefined,
+    'data-drop': drag && drag.overId === id && drag.id !== id ? (drag.after ? 'after' : 'before') : undefined,
+  })
+
   return {
     reorderMode,
     setReorderMode,
+    /**
+     * For a list whose rows are dragged by a grip (the league picker): spread `rowAttrs` on the row,
+     * `handleProps` on the grip inside it, and mark the list `data-rail-list`.
+     */
+    rowAttrs,
+    handleProps: (id: string, section: string) => ({
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) => start(event, id, section, true),
+    }),
     /** Spread onto the row's link, next to the hold handlers. */
     rowProps: (id: string, section: string) => ({
-      'data-rail-id': id,
-      'data-rail-section': section,
-      'data-dragging': drag?.id === id ? 'true' : undefined,
-      'data-drop': drag && drag.overId === id && drag.id !== id ? (drag.after ? 'after' : 'before') : undefined,
+      ...rowAttrs(id, section),
       // The browser's own link drag would take the pointer away from ours.
       draggable: false,
       onDragStart: (event: DragEvent) => event.preventDefault(),
