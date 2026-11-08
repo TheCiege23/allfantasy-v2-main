@@ -404,14 +404,19 @@
   color: var(--faint);
 }
 
+/*
+ * ⚠ BLOCK, NOT FLEX. The note is a sentence with a <strong> spliced into it by renderRich, and
+ * a flex container turns every text run and the <strong> into separate columns — the sentence
+ * rendered as three side-by-side fragments ("…on most" | "allfantasy.ai" | "on your computer…").
+ * The lock rides inline at the start instead.
+ */
 .af-core .af-espn-note--mobile {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: block;
 }
 .af-core .af-espn-lock {
-  flex: 0 0 auto;
-  margin-top: 1px;
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 6px;
   color: var(--faint);
 }
 

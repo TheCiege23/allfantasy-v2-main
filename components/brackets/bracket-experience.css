@@ -71,7 +71,7 @@
 .af-bx-detail > p { margin-bottom: 15px; font-size: 13px; }
 .af-bx-sidebody > .af-bx-btn { margin-top: 14px; }
 .af-bx-invite { display: flex; justify-content: space-between; align-items: center; background: #193e3c; border: 1px dashed #5db69a; border-radius: 10px; padding: 7px 9px; margin-top: 15px; }
-.af-bx-invite code { color: #afffdc; font-size: 14px; }
+.af-bx-invite code { min-width: 0; overflow-wrap: anywhere; color: #afffdc; font-size: 14px; }
 .af-bx-icon-btn { background: transparent; color: #b6f2d8; border: 0; min-height: 44px; min-width: 44px; display: grid; place-items: center; cursor: pointer; }
 .af-bx-text-link { display: flex; align-items: center; justify-content: center; gap: 8px; color: #a4cdbd; font-size: 12px; padding: 14px 0 0; text-decoration: none; }
 .af-bx-select { display: block; margin: 15px 0; font-size: 12px; color: #a4c2bf; }

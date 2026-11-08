@@ -1301,6 +1301,12 @@ export async function persistImportedLeagueFromNormalization(
   } catch {
     /* non-fatal settings stamp */
   }
+  try {
+    await calculateAndSaveRank(userId)
+  } catch (err) {
+    console.warn('[ImportedLeagueCommitService] calculateAndSaveRank non-fatal:', err)
+  }
+
   const historicalBackfillTask = runHistoricalBackfill({
     provider,
     leagueId: league.id,
@@ -1347,6 +1353,7 @@ export async function persistImportedLeagueFromNormalization(
             (outcome.failureMessage ? ` — ${outcome.failureMessage}` : ''),
         )
       }
+      if (outcome.seasonsImported && outcome.seasonsImported > 0) await calculateAndSaveRank(userId)
       return result
     })
     .catch(async (err) => {
@@ -1402,11 +1409,7 @@ export async function persistImportedLeagueFromNormalization(
     void historicalBackfillTask
   }
 
-  try {
-    await calculateAndSaveRank(userId)
-  } catch (err) {
-    console.warn('[ImportedLeagueCommitService] calculateAndSaveRank non-fatal:', err)
-  }
+
 
   return {
     league: {

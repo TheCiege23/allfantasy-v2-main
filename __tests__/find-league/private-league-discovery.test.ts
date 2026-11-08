@@ -14,7 +14,12 @@ const q = vi.hoisted(() => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    league: { findMany: vi.fn(async () => []) },
+    // The career-level placement (lib/league-join/careerJoinGate.ts) reads each fantasy card's league row.
+    league: {
+      findMany: vi.fn(async (args?: { where?: { id?: { in?: string[] } } }) =>
+        (args?.where?.id?.in ?? []).map((id) => ({ id, userId: "owner", settings: {} }))),
+    },
+    userProfile: { findMany: vi.fn(async () => []) },
     bracketLeague: { findMany: vi.fn(async () => []) },
     creatorLeague: { findMany: vi.fn(async () => []) },
   },

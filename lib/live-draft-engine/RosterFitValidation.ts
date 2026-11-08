@@ -29,6 +29,13 @@ export async function validateRosterFitForDraftPick(input: RosterFitValidationIn
   const draftEligible = getDraftEligiblePositionsFromPayload(payload)
   const posUpper = (input.newPickPosition || '').trim().toUpperCase()
   if (!posUpper) return { valid: false, error: 'Position is required' }
+  /*
+   * 🛑 A SKIPPED PICK IS NOT A PLAYER. Forfeited picks (./forfeitedPickSkips.ts), the commissioner's
+   * skip, expired-timer skips and slow-draft skips all submit position "SKIP" — which no template lists,
+   * so every one of them was refused here as "not starter-eligible". A forfeited pick then fell through
+   * to its original team, who made it: a tanking penalty with no effect (dynasty simulation, 2026-11-08).
+   */
+  if (posUpper === 'SKIP') return { valid: true }
   if (!draftPoolRowMatchesEligiblePositions(input.newPickPosition, draftEligible, payload.sport)) {
     return {
       valid: false,
@@ -37,7 +44,8 @@ export async function validateRosterFitForDraftPick(input: RosterFitValidationIn
   }
 
   const totalSlots = payload.totalRosterSlots
-  const thisRosterPickCount = input.existingPicks.filter((p) => p.rosterId === input.rosterId).length
+  // A skipped pick takes no roster spot.
+  const thisRosterPickCount = input.existingPicks.filter((p) => p.rosterId === input.rosterId && String(p.position ?? '').trim().toUpperCase() !== 'SKIP').length
   if (thisRosterPickCount + 1 > totalSlots) {
     return {
       valid: false,

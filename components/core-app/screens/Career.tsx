@@ -254,6 +254,7 @@ function CareerMobile({
       </header>
 
       <CareerTabs view="overview" filter={data.filter} />
+      <CareerRankingLinks data={data} />
 
       <div className="af-crm-body">
         {/* Last week as a story — the thing to tap first on a phone. */}
@@ -580,6 +581,22 @@ function SharePreview({ share, isEmpty }: { share: ShareCardData | null; isEmpty
  * and renders as a card naming the missing data; the legacy card shows rivalry
  * and awards dashed and unmeasured rather than scored zero.
  */
+function CareerRankingLinks({ data }: { data: CareerData }) {
+  const params = new URLSearchParams({ scope: 'portfolio' })
+  if (data.filter.platform) params.set('platform', data.filter.platform)
+  if (data.filter.sport) params.set('sport', data.filter.sport)
+  if (data.filter.fromSeason != null && data.filter.fromSeason === data.filter.toSeason) {
+    params.set('season', String(data.filter.fromSeason))
+  }
+  return (
+    <nav className="af-cr-actions" aria-label="Career rankings">
+      <Link className="af-cr-btn af-cr-btn--ghost" href={`/core/rankings?${params}`}>My Manager Score</Link>
+      <Link className="af-cr-btn af-cr-btn--ghost" href="/core/rankings?view=compare">Compare managers</Link>
+      <Link className="af-cr-btn af-cr-btn--ghost" href="/find-league">Find a League</Link>
+    </nav>
+  )
+}
+
 function CareerDesktop({
   screen,
   share,
@@ -646,6 +663,7 @@ function CareerDesktop({
 
       {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
       {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}
+      {view === 'overview' ? <CareerRankingLinks data={data} /> : null}
 
       {view === 'share' ? (
         <SharePreview share={share} isEmpty={data.isEmpty} />

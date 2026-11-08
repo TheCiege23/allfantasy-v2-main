@@ -100,6 +100,8 @@ export interface DiscoveryCard {
   inviteOnlyByTier?: boolean
   /** Whether the current viewer can join directly without an invite override. */
   canJoinByRanking?: boolean
+  leagueCareerLevel?: number
+  requiresCareerApproval?: boolean
   /** Ranking-fit score used for discovery ordering (higher = better fit). */
   rankingEffectScore?: number
   /** Absolute tier distance between viewer and league tier. */

@@ -1,49 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
+import { loadCareerSurvival } from './careerSurvival'
 
-/**
- * The career ledger — one row per manager per league-season, from every source
- * that records a season result.
- *
- * ⚠ ONE LOADER FOR TWO CONSUMERS, ON PURPOSE. `calculateAndSaveRank` scores XP
- * from these rows and `/core/rankings` ranks managers from them. They used to
- * read different things: the writer merged three sources into rows, and the
- * screen read the two counters the writer left behind on `user_profiles`. When
- * `0e8b9de5b` (2026-08-24) corrected which of those counters holds distinct
- * years and which holds league-seasons, the screen — written the day before —
- * kept the old orientation. Measured on production 2026-09-16: all seven ranked
- * profiles store `career_seasons_played` = distinct years, and the screen read
- * that as league-seasons, so it flagged two sound careers as contradictory and
- * printed "296 seasons × 10" in an XP breakdown. Reading the rows themselves
- * removes the question of what a denormalised column means.
- *
- * FOUR SOURCES, merged first-wins on `platform:platformLeagueId:season` per user:
- *   1. `import`  — `League.import_*` on leagues the user OWNS (a frozen import-time snapshot)
- *   2. `legacy`  — Sleeper history tables (`legacyLeague` / owner `legacyRoster`)
- *   3. `team`    — a `LeagueTeam` the user has CLAIMED, on any non-native league
- *   4. `native`  — finalized AllFantasy `franchise_seasons`
- * One exception to first-wins: when an `import` or `legacy` row and a `team` row share a key and
- * the team has played MORE games, the team's W/L/T/PF replace the frozen snapshot
- * (see `refreshImportFromTeams`).
- *
- * ⚠ WHY THE `team` SOURCE EXISTS. The first three only ever saw leagues a user owns a
- * `League` row for, and populated `import_*` columns. A member who joins a league
- * someone else imported (`claimExistingLeagueForMember`) owns no `League` row at all —
- * only `LeagueTeam.claimedByUserId` — and Sleeper unified-commit, MFL and Fleaflicker
- * imports never write `import_*` (225 of 225 Sleeper imports on the test DB). Both got
- * zero ledger rows and were never ranked. The claimed team is the one record every
- * import path writes, and the sync crons keep its W/L/PF current.
- *
- * ⚠ ONLY THE OWNER'S OWN ROSTER IS STORED PER LEGACY LEAGUE. Measured
- * 2026-09-16: 1,139 of 1,165 legacy leagues carry exactly one roster, the
- * importing manager's, and none carries the full league. So nothing here can
- * rank a manager against their opponents' points or judge opponent quality —
- * the rankings engine normalises with what one roster can honestly say.
- */
+/** One verified record per manager and league-season, shared by XP, Rankings and Your Career. */
 
-export type LedgerSource = 'import' | 'legacy' | 'team' | 'native'
+export type LedgerSource = 'import' | 'legacy' | 'team' | 'standing' | 'native'
 export type LedgerLeagueType = 'redraft' | 'keeper' | 'dynasty' | 'unknown'
-export type LedgerSpecialty = 'standard' | 'bestball' | 'guillotine' | 'draft_only' | 'other'
+export type LedgerSpecialty = 'standard' | 'bestball' | 'guillotine' | 'survivor' | 'draft_only' | 'other'
 export type LedgerScoring = 'ppr' | 'half' | 'standard' | 'other' | 'unknown'
 
 export type CareerLedgerRow = {
@@ -59,6 +22,13 @@ export type CareerLedgerRow = {
   leagueName: string | null
   /** `League.id` for imported, team and native rows; `LegacyLeague.id` for legacy rows. */
   refId: string
+  providerLeagueId?: string | null
+  teamExternalId?: string | null
+  status?: string | null
+  pointsAgainst?: number | null
+  playoffKnown?: boolean
+  titleKnown?: boolean
+  survival?: { periods: number; totalPeriods: number }
   /** Falls back to 12 when unknown — the fallback the XP formula has always used. */
   leagueSize: number
   leagueSizeKnown: boolean
@@ -107,7 +77,8 @@ export function normalizeSpecialty(raw: string | null | undefined): LedgerSpecia
   const s = String(raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
   if (!s || s === 'standard' || s === 'none') return 'standard'
   if (s === 'bestball' || s === 'best_ball') return 'bestball'
-  if (s === 'guillotine') return 'guillotine'
+  if (s === 'guillotine' || s === 'guilly') return 'guillotine'
+  if (s === 'survivor') return 'survivor'
   if (s === 'draft_only') return 'draft_only'
   return 'other'
 }
@@ -133,6 +104,7 @@ export function normalizeLeagueType(raw: string | null | undefined, isDynasty?: 
 /** Specialty signalled by `League.leagueType` / `leagueVariant` on imported and native rows. */
 function specialtyFromLeague(leagueType: string | null, variant: string | null): LedgerSpecialty {
   const joined = `${leagueType ?? ''} ${variant ?? ''}`.toLowerCase()
+  if (joined.includes('survivor')) return 'survivor'
   if (joined.includes('guillotine')) return 'guillotine'
   if (joined.includes('best')) return 'bestball'
   return 'standard'
@@ -220,7 +192,8 @@ export function refreshImportFromTeams(imported: CareerLedgerRow[], team: Career
   }
   return imported.map((row) => {
     const t = byKey.get(`${row.userId}|${row.key}`)
-    if (!t || t.gamesPlayed <= row.gamesPlayed) return row
+    if (!t) return row
+    if (t.gamesPlayed <= row.gamesPlayed) return { ...row, teamExternalId: row.teamExternalId ?? t.teamExternalId }
     const updated = [row.updatedAt, t.updatedAt].filter(Boolean).sort().pop() ?? null
     return {
       ...row,
@@ -228,6 +201,8 @@ export function refreshImportFromTeams(imported: CareerLedgerRow[], team: Career
       losses: t.losses,
       ties: t.ties,
       pointsFor: t.pointsFor,
+      pointsAgainst: t.pointsAgainst ?? row.pointsAgainst,
+      teamExternalId: row.teamExternalId ?? t.teamExternalId,
       gamesPlayed: t.gamesPlayed,
       madePlayoffs: row.madePlayoffs || t.madePlayoffs,
       wonChampionship: row.wonChampionship || t.wonChampionship,
@@ -272,6 +247,9 @@ async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
       select: {
         id: true,
         claimedByUserId: true,
+        externalId: true,
+        platformUserId: true,
+        pointsAgainst: true,
         wins: true,
         losses: true,
         ties: true,
@@ -313,7 +291,7 @@ async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
     const championOf = new Map<string, string>()
     for (const s of seasons) if (s.championTeamId) championOf.set(`${s.leagueId}:${s.season}`, s.championTeamId)
 
-    return live.map((t) => {
+    const current = live.map((t): CareerLedgerRow => {
       const l = t.league
       const wins = t.wins ?? 0
       const losses = t.losses ?? 0
@@ -321,7 +299,7 @@ async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
       const games = wins + losses + ties
       const champion = championOf.get(`${l.id}:${l.season}`)
       const won = champion === t.id
-      const completed = champion != null || String(l.status ?? '').toLowerCase() === 'complete'
+      const completed = champion != null || /^completed?$/i.test(l.status?.trim() ?? '')
       /*
        * ⚠ `currentRank` IS A LIVE STANDING, NOT A RESULT. Mid-season it is the seed
        * the team holds this week, so it only counts as a berth once the season is
@@ -331,13 +309,18 @@ async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
         completed && t.currentRank != null && l.playoffTeams != null && t.currentRank <= l.playoffTeams
       return {
         userId: t.claimedByUserId as string,
-        key: `${l.platform ?? 'unknown'}:${l.platformLeagueId ?? ''}:${l.season}`,
+        key: `${l.platform ?? 'unknown'}:${l.platformLeagueId ?? l.id}:${l.season}`,
         source: 'team' as const,
         platform: String(l.platform ?? 'unknown').toLowerCase(),
         sport: normalizeSport(l.sport),
         season: l.season,
         leagueName: l.name ?? null,
         refId: l.id,
+        providerLeagueId: l.platformLeagueId,
+        teamExternalId: t.externalId,
+        status: l.status,
+        pointsAgainst: games > 0 && t.pointsAgainst > 0 ? t.pointsAgainst : null,
+        playoffKnown: won || (completed && l.playoffTeams != null && t.currentRank != null),
         leagueSize: l.leagueSize ?? 12,
         leagueSizeKnown: l.leagueSize != null,
         playoffTeams: l.playoffTeams ?? null,
@@ -357,6 +340,112 @@ async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
         updatedAt: iso(newer(t.lastUpdatedAt, newer(l.updatedAt, l.lastSyncedAt))),
       }
     })
+
+    const facts = await Promise.resolve().then(() => prisma.seasonStandingFact.findMany({
+      where: {
+        leagueId: { in: leagueIds },
+        teamId: { in: [...new Set(live.map((t) => t.externalId))] },
+      },
+      select: { leagueId: true, season: true, teamId: true, wins: true, losses: true, ties: true, pointsFor: true, pointsAgainst: true, createdAt: true },
+    })).catch((err: unknown) => {
+      console.error('[loadCareerLedger] historical standings read failed', err)
+      return []
+    })
+    const byTeam = new Map(current.map((row, index) =>
+      [JSON.stringify([row.refId, row.teamExternalId]), { row, teamId: live[index].id }]))
+    const historical: CareerLedgerRow[] = []
+    for (const fact of facts) {
+      const match = byTeam.get(JSON.stringify([fact.leagueId, fact.teamId]))
+      if (!match || fact.season !== match.row.season) continue
+      const { row: team, teamId } = match
+      const games = fact.wins + fact.losses + fact.ties
+      if (games === 0 && fact.pointsFor <= 0) continue
+      const won = championOf.get(`${fact.leagueId}:${fact.season}`) === teamId
+      const completed = won || fact.season < team.season || (fact.season === team.season && team.completed)
+      historical.push({
+        ...team,
+        key: `${team.platform}:${team.providerLeagueId ?? team.refId}:${fact.season}`,
+        source: 'standing',
+        season: fact.season,
+        wins: fact.wins,
+        losses: fact.losses,
+        ties: fact.ties,
+        gamesPlayed: games,
+        pointsFor: fact.pointsFor > 0 ? fact.pointsFor : null,
+        pointsAgainst: fact.pointsAgainst > 0 ? fact.pointsAgainst : null,
+        playoffTeams: null,
+        playoffKnown: won,
+        titleKnown: championOf.has(`${fact.leagueId}:${fact.season}`),
+        madePlayoffs: won,
+        wonChampionship: won,
+        completed,
+        status: completed ? 'complete' : null,
+        updatedAt: iso(fact.createdAt),
+      })
+    }
+
+    // Provider team slots can change owners from year to year. Backfilled SeasonResult rows
+    // use the manager ID when known. Only those rows can place a past result in this career.
+    const managers = live.flatMap((team) => team.platformUserId && team.platformUserId !== team.externalId
+      ? [team.platformUserId] : [])
+    if (managers.length) {
+      try {
+        const prior = await prisma.seasonResult.findMany({
+          where: { leagueId: { in: leagueIds }, rosterId: { in: [...new Set(managers)] } },
+          select: { leagueId: true, season: true, rosterId: true, wins: true, losses: true, pointsFor: true, pointsAgainst: true, champion: true, createdAt: true },
+        })
+        const historyLeagues = [...new Set(prior.map((r) => r.leagueId))]
+        const settings = historyLeagues.length ? await prisma.$queryRaw<Array<{
+          leagueId: string; season: number; platformLeagueId: string; size: string | null; scoring: string | null
+        }>>`
+          SELECT "leagueId", season, "platformLeagueId",
+                 COALESCE(metadata->>'size', metadata->>'numTeams') AS size,
+                 COALESCE(metadata->>'scoringType', metadata->'settings'->>'scoringType') AS scoring
+          FROM league_dynasty_seasons WHERE "leagueId" = ANY(${historyLeagues}::text[])
+        ` : []
+        const seasonSettings = new Map(settings.map((r) => [`${r.leagueId}:${r.season}`, r]))
+        const byManager = new Map(live.map((team, index) => [JSON.stringify([team.league.id, team.platformUserId]), current[index]]))
+        for (const result of prior) {
+          const team = byManager.get(JSON.stringify([result.leagueId, result.rosterId]))
+          const season = Number(result.season)
+          if (!team || !Number.isInteger(season) || season < 1990 || season >= team.season) continue
+          const wins = result.wins ?? 0
+          const losses = result.losses ?? 0
+          const points = result.pointsFor == null ? 0 : Number(result.pointsFor)
+          if (wins + losses === 0 && points <= 0 && !result.champion) continue
+          const meta = seasonSettings.get(`${result.leagueId}:${season}`)
+          const providerLeagueId = meta?.platformLeagueId ?? team.providerLeagueId
+          const size = Number(meta?.size)
+          const sizeKnown = Number.isInteger(size) && size > 1
+          historical.push({
+            ...team,
+            key: `${team.platform}:${providerLeagueId ?? team.refId}:${season}`,
+            providerLeagueId,
+            source: 'standing',
+            season,
+            status: 'complete',
+            completed: true,
+            leagueSize: sizeKnown ? size : 12,
+            leagueSizeKnown: sizeKnown,
+            scoring: normalizeScoring(meta?.scoring),
+            wins,
+            losses,
+            ties: 0,
+            gamesPlayed: wins + losses,
+            pointsFor: points > 0 ? points : null,
+            pointsAgainst: result.pointsAgainst == null ? null : Number(result.pointsAgainst),
+            playoffTeams: null,
+            playoffKnown: result.champion,
+            madePlayoffs: result.champion,
+            wonChampionship: result.champion,
+            updatedAt: iso(result.createdAt),
+          })
+        }
+      } catch (err) {
+        console.error('[loadCareerLedger] provider manager history read failed', err)
+      }
+    }
+    return mergeLedgerSources(refreshImportFromTeams(current, historical), historical)
   } catch (err: unknown) {
     console.error('[loadCareerLedger] claimed-team read failed', err)
     return []
@@ -402,6 +491,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
       importMadePlayoffs: true,
       importWonChampionship: true,
       importPointsFor: true,
+      importPointsAgainst: true,
       updatedAt: true,
       lastSyncedAt: true,
     },
@@ -415,13 +505,17 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
     const won = l.importWonChampionship === true
     return {
       userId: l.userId,
-      key: `${l.platform ?? 'unknown'}:${l.platformLeagueId ?? ''}:${l.season}`,
+      key: `${l.platform ?? 'unknown'}:${l.platformLeagueId ?? l.id}:${l.season}`,
       source: 'import',
       platform: String(l.platform ?? 'unknown').toLowerCase(),
       sport: normalizeSport(l.sport),
       season: l.season,
       leagueName: l.name ?? null,
       refId: l.id,
+      providerLeagueId: l.platformLeagueId,
+      status: l.status,
+      pointsAgainst: games > 0 && (l.importPointsAgainst ?? 0) > 0 ? l.importPointsAgainst : null,
+      playoffKnown: l.importMadePlayoffs != null || won,
       leagueSize: l.leagueSize ?? 12,
       leagueSizeKnown: l.leagueSize != null,
       playoffTeams: l.playoffTeams ?? null,
@@ -437,7 +531,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
       gamesPlayed: games,
       madePlayoffs: berthCredited(l.importMadePlayoffs === true, won, games),
       wonChampionship: won,
-      completed: won || String(l.status ?? '').toLowerCase() === 'complete',
+      completed: won || /^completed?$/i.test(l.status?.trim() ?? ''),
       updatedAt: iso(newer(l.updatedAt, l.lastSyncedAt)),
     }
   })
@@ -477,6 +571,8 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
             losses: true,
             ties: true,
             pointsFor: true,
+            pointsAgainst: true,
+            rosterId: true,
             isChampion: true,
             finalStanding: true,
             playoffSeed: true,
@@ -506,6 +602,11 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
         season: ll.season,
         leagueName: ll.name ?? null,
         refId: ll.id,
+        providerLeagueId: ll.sleeperLeagueId,
+        teamExternalId: roster.rosterId > 0 ? String(roster.rosterId) : null,
+        status: ll.status,
+        pointsAgainst: games > 0 && (roster.pointsAgainst ?? 0) > 0 ? roster.pointsAgainst : null,
+        playoffKnown: cutoff != null || roster.isChampion === true,
         leagueSize: ll.teamCount ?? 12,
         leagueSizeKnown: ll.teamCount != null,
         playoffTeams: cutoff,
@@ -524,7 +625,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
         completed:
           roster.isChampion === true ||
           ll.winnerRosterId != null ||
-          String(ll.status ?? '').toLowerCase() === 'complete',
+          /^completed?$/i.test(ll.status?.trim() ?? ''),
         updatedAt: iso(newer(ll.updatedAt, roster.updatedAt)),
       })
     }
@@ -540,6 +641,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
         losses: true,
         ties: true,
         pointsFor: true,
+      pointsAgainst: true,
         madePlayoffs: true,
         wonChampionship: true,
         updatedAt: true,
@@ -568,7 +670,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
   const native: CareerLedgerRow[] = nativeSeasons.flatMap((s) => {
     if (!s.userId) return []
     const league = s.league
-    const platform = league?.platform ?? 'allfantasy'
+    const platform = 'allfantasy'
     // Native leagues have no external platformLeagueId — key on the AF league id.
     const leagueRef = league?.platformLeagueId ?? league?.id ?? 'unknown'
     const games = (s.wins ?? 0) + (s.losses ?? 0) + (s.ties ?? 0)
@@ -583,6 +685,10 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
         season: s.season,
         leagueName: league?.name ?? null,
         refId: league?.id ?? leagueRef,
+        providerLeagueId: league?.platformLeagueId,
+        status: 'complete',
+        pointsAgainst: s.pointsAgainst,
+        playoffKnown: league?.playoffTeams != null || won,
         leagueSize: league?.leagueSize ?? 12,
         leagueSizeKnown: league?.leagueSize != null,
         playoffTeams: league?.playoffTeams ?? null,
@@ -605,7 +711,21 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
     ]
   })
 
-  const team = await loadClaimedTeamRows(ids)
-
-  return mergeLedgerSources(refreshImportFromTeams(imported, team), refreshImportFromTeams(legacy, team), team, native)
+  const [team, survival] = await Promise.all([loadClaimedTeamRows(ids), loadCareerSurvival(ids)])
+  const rows = mergeLedgerSources(refreshImportFromTeams(imported, team), refreshImportFromTeams(legacy, team), team, native)
+  const survivalByKey = new Map(survival.map((row) => [`${row.userId}|${row.key}`, row]))
+  return mergeLedgerSources(rows.map((row) => {
+    const measured = survivalByKey.get(`${row.userId}|${row.key}`)
+    if (!measured) return row
+    return {
+      ...row,
+      survival: measured.survival,
+      specialty: measured.specialty,
+      wonChampionship: row.wonChampionship || measured.wonChampionship,
+      madePlayoffs: false,
+      playoffTeams: null,
+      playoffKnown: false,
+      completed: true,
+    }
+  }), survival)
 }

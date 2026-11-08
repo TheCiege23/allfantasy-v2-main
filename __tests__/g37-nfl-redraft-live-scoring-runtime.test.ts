@@ -257,6 +257,55 @@ describe('G37 canonical NFL redraft live scoring runtime', () => {
     ])
   })
 
+  /**
+   * The week finalizer (lib/redraft/weekFinalizer.ts) seals a starter who did not play — bye, inactive —
+   * with an EMPTY finalized row (`stats: {}`, `isFinalized: true`). That row is a certified zero, not a
+   * missing stat line. Treating it as missing kept the matchup `live`, and `persistNflRedraftLiveScoringWeek`
+   * then wrote a sealed matchup back to `active`, dropping it out of standings — found by the season sim.
+   */
+  describe('a finalized empty row is a certified zero', () => {
+    const fullRows: NflRedraftRuntimeScoreInput[] = [
+      { playerId: 'qb-1', stats: { pass_yds: 250, pass_td: 2 }, isFinalized: true },
+      { playerId: 'rb-1', stats: { rush_yds: 80 }, isFinalized: true },
+      { playerId: 'k-1', stats: { xp_made: 3 }, isFinalized: true },
+      { playerId: 'nfl:def:KC', stats: { def_sack: 2, def_points_allowed: 10 }, isFinalized: true },
+    ]
+    const run = (teRow: NflRedraftRuntimeScoreInput | null) =>
+      buildNflRedraftLiveScoringRuntimeState({
+        leagueId: rules.leagueId,
+        seasonId: 'season-1',
+        season: 2026,
+        week: 1,
+        rules,
+        teams,
+        matchups,
+        scoreRows: teRow ? [...fullRows, teRow] : fullRows,
+        now: new Date('2026-07-02T12:00:00.000Z'),
+      })
+
+    it('closes the matchup when the non-playing starter was sealed at zero', () => {
+      const state = run({ playerId: 'te-1', stats: {}, isFinalized: true })
+      const alpha = state.teams.find((team) => team.rosterId === 'alpha')!
+      expect(alpha.missingStarterPlayerIds).toEqual([])
+      expect(alpha.allStartersFinal).toBe(true)
+      expect(alpha.starters.find((player) => player.playerId === 'te-1')?.fantasyPoints).toBe(0)
+      expect(state.matchups[0]).toMatchObject({ status: 'final', complete: true })
+      expect(state.standings.every((row) => row.wins + row.losses + row.ties === 1)).toBe(true)
+    })
+
+    it('keeps it open while the empty row is still live', () => {
+      const state = run({ playerId: 'te-1', stats: {}, isFinalized: false })
+      expect(state.teams.find((team) => team.rosterId === 'alpha')!.missingStarterPlayerIds).toEqual(['te-1'])
+      expect(state.matchups[0].complete).toBe(false)
+    })
+
+    it('keeps it open when the starter has no row at all', () => {
+      const state = run(null)
+      expect(state.teams.find((team) => team.rosterId === 'alpha')!.missingStarterPlayerIds).toEqual(['te-1'])
+      expect(state.matchups[0].complete).toBe(false)
+    })
+  })
+
   it('versions stat corrections and emits canonical scoring events including illegal lineup flags', () => {
     const correction = applyNflRedraftStatCorrection({
       playerId: 'qb-1',

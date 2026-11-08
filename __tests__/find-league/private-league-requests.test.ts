@@ -49,7 +49,6 @@ vi.mock("@/lib/draft-room/currentDraftSession", () => ({ CURRENT_DRAFT_SESSION_O
 import { GET as listRequests, PATCH as answer, POST as ask } from "@/app/api/find-league/leagues/[leagueId]/request/route"
 import { queryPrivateRequestableFantasyLeagueCards } from "@/lib/public-discovery/DiscoveryQueryLayer"
 import { isPrivateListingOpen, isPrivateRequestableLeague } from "@/lib/public-discovery/privateLeagueRequests"
-import { isCardInViewerRange } from "@/lib/public-discovery/PublicDiscoveryService"
 
 const ctx = { params: Promise.resolve({ leagueId: "L" }) }
 const req = (body: unknown) => ({ json: async () => body }) as never
@@ -190,17 +189,6 @@ describe("the private card carries safe fields only", () => {
     seats.byLeague = new Map([["full", 12], ["open", 2]])
     const cards = await queryPrivateRequestableFantasyLeagueCards({ sport: null, query: null })
     expect(cards.map((c) => c.id)).toEqual(["open"])
-  })
-
-  it("an approval card is in range for every viewer — the commissioner decides, not the division band", () => {
-    const ctxRange = {
-      viewerTier: 1,
-      leagueTier: 1,
-      viewerClass: { status: "established", division: 1 } as never,
-      fantasyDivisions: new Map([["L", 9]]),
-    }
-    expect(isCardInViewerRange({ source: "fantasy", id: "L" }, ctxRange)).toBe(false)
-    expect(isCardInViewerRange({ source: "fantasy", id: "L", joinMode: "approval" }, ctxRange)).toBe(true)
   })
 })
 

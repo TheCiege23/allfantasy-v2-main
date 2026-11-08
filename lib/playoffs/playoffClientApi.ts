@@ -52,8 +52,11 @@ export async function listPlayoffBracketChallengesClient(sport?: PlayoffSport): 
   return Array.isArray(payload?.challenges) ? payload.challenges : []
 }
 
-export async function getPlayoffBracketViewClient(challengeId: string, entryId?: string): Promise<PlayoffChallengeView> {
-  const response = await fetch(`/api/brackets/playoffs/${challengeId}${entryId ? `?entryId=${encodeURIComponent(entryId)}` : ""}`, {
+export async function getPlayoffBracketViewClient(challengeId: string, entryId?: string, inviteCode?: string | null): Promise<PlayoffChallengeView> {
+  const query = new URLSearchParams()
+  if (entryId) query.set("entryId", entryId)
+  if (inviteCode) query.set("code", inviteCode)
+  const response = await fetch(`/api/brackets/playoffs/${challengeId}${query.size ? `?${query}` : ""}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -95,6 +98,7 @@ export async function savePlayoffBracketPickClient(input: {
 export async function createPlayoffBracketEntryClient(input: {
   challengeId: string
   name?: string
+  inviteCode?: string | null
 }): Promise<{ challengeId: string; entryId: string; redirectUrl: string }> {
   const response = await fetch(`/api/brackets/playoffs/${input.challengeId}`, {
     method: "POST",
@@ -102,6 +106,7 @@ export async function createPlayoffBracketEntryClient(input: {
     body: JSON.stringify({
       action: "create_entry",
       name: input.name,
+      inviteCode: input.inviteCode ?? undefined,
     }),
   })
 

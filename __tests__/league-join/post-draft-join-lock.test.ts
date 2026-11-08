@@ -23,6 +23,7 @@ const m = vi.hoisted(() => ({
   rosterCreate: vi.fn(async () => ({ id: 'roster-new' })),
   validate: vi.fn(async () => ({ valid: true, preview: { leagueId: 'L1' } })),
   gate: vi.fn(async () => ({ outcome: 'allow' })),
+  careerGate: vi.fn(async () => ({ canJoin: true })),
   request: null as { status: string } | null,
   existingRoster: null as { id: string } | null,
   outerLeague: { id: 'L1', platform: 'manual', settings: {} } as Record<string, unknown> | null,
@@ -34,6 +35,10 @@ vi.mock('@/lib/http/served-origin', () => ({ getServedOrigin: () => 'https://all
 vi.mock('@/lib/geo/paidLeagueGeo', () => ({ paidLeagueGeoVerdict: vi.fn(), paidLeagueGeoMessage: vi.fn() }))
 vi.mock('@/lib/league-invite', () => ({ validateFantasyInviteCode: m.validate }))
 vi.mock('@/lib/league-join/joinDivisionGate', () => ({ evaluateJoinDivisionGate: m.gate, divisionGateRefusal: vi.fn() }))
+vi.mock('@/lib/league-join/careerJoinGate', () => ({
+  evaluateCareerJoinGate: m.careerGate,
+  careerJoinRefusal: vi.fn(),
+}))
 vi.mock('@/lib/league-join/classRequests', () => ({ requestClassException: vi.fn() }))
 vi.mock('@/lib/league-join/notifyCommissionerOfJoin', () => ({ notifyCommissionerOfJoin: vi.fn(async () => undefined) }))
 vi.mock('@/lib/league-finance/joinGate', () => ({
@@ -201,11 +206,13 @@ describe('formats that were open after the draft stay open', () => {
 describe('joining a private league after the commissioner approved the request', () => {
   it('takes the seat without a code, through every usual gate', async () => {
     m.request = { status: 'accepted' }
+    m.careerGate.mockClear()
     const res = await POST(req({ action: 'join_approved_request', leagueId: 'L1' }))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ success: true, leagueId: 'L1', alreadyMember: false })
     expect(m.validate).not.toHaveBeenCalled()
-    expect(m.gate).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', userId: 'u-new' }))
+    // The join's rank gate is the career-level gate (lib/league-join/careerJoinGate.ts) since #3420.
+    expect(m.careerGate).toHaveBeenCalledWith('u-new', 'L1', undefined, expect.anything())
     expect(m.rosterCreate).toHaveBeenCalledTimes(1)
   })
 

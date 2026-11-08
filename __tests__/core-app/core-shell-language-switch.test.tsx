@@ -74,6 +74,8 @@ describe('the shell follows en → es → en', () => {
     const leagues = [
       { id: 'L1', name: 'Its Just Too Deep!', sport: 'NFL', platform: 'sleeper', isCommissioner: false },
       { id: 'L2', name: 'Peach Bowl', sport: 'NFL', platform: 'espn', isCommissioner: false },
+      // No sport on record: filed under "Other", which is the picker's word and so translated.
+      { id: 'L3', name: 'Mystery League', sport: '', platform: 'sleeper', isCommissioner: false },
     ] as never
     const view = () => <ScopeSwitcher leagues={leagues} scopeValue={null} label="All leagues" selectedLeagueId={null} favoriteIds={[]} />
     const { rerender } = render(view())
@@ -86,13 +88,14 @@ describe('the shell follows en → es → en', () => {
     expect(text()).toContain('Viendo')
     fireEvent.click(screen.getByRole('button', { name: /Viendo/ }))
     expect(text()).toContain('¿Qué ligas?')
-    expect(text()).toContain('Las favoritas se guardan en este dispositivo.')
+    expect(text()).toContain('Las favoritas se guardan en tu cuenta, en todos tus dispositivos.')
     expect(screen.getByPlaceholderText('Busca una liga, deporte o plataforma')).toBeTruthy()
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Elige qué ligas ver')
-    expect(screen.getAllByLabelText(/^Añadir .* a favoritas$/).length).toBe(2)
+    expect(screen.getAllByLabelText(/^Añadir .* a favoritas$/).length).toBe(3)
+    expect(document.querySelector('[data-section="other"]')?.textContent).toContain('Otros')
     // League names are user content and stay exactly as written.
     expect(text()).toContain('Its Just Too Deep!')
-    expect(text()).not.toMatch(/Which leagues|Favorites are saved|Viewing/)
+    expect(text()).not.toMatch(/Which leagues|Favorites are saved|Viewing|Other/)
 
     h.language = 'en'
     rerender(view())

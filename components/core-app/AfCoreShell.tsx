@@ -45,7 +45,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
-import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
   FAVORITES_SECTION,
@@ -2507,7 +2507,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 /* The rail row's own rule: a field race's line is its place among the survivors, so no W-L there. */
                 const m = row ? railRowState(row).m : null
                 const record = m?.guillotine || m?.standing?.elimination ? null : props.railRecords?.[league.id] ?? null
-                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf, record }
+                /*
+                  …and in its place, where you stand among the survivors — the rail row's own line, so a
+                  Guillotine league on the phone list says something instead of nothing.
+                */
+                const g = m?.guillotine
+                const field: ScopeSwitcherField | null = g
+                  ? g.state === 'eliminated'
+                    ? { state: 'chopped', week: g.choppedWeek ?? null }
+                    : g.state === 'preseason' ? null : { state: 'alive', rank: g.rank, outOf: g.aliveCount }
+                  : m?.standing?.elimination
+                    ? { state: 'alive', rank: m.standing.rank, outOf: m.standing.outOf }
+                    : null
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf, record, field }
               })}
               scopeValue={props.scope.value}
               label={props.scope.label}

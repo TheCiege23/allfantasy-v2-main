@@ -54,7 +54,17 @@ export async function saveLeagueNflScoringConfig(leagueId: string, config: { pre
   const currentSettings = (league?.settings as Record<string, unknown>) ?? {}
   const preset = getNflScoringPreset(config.presetKey)
   const warningFlags: string[] = []; if (preset.warning) warningFlags.push('external_preset')
-  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...currentSettings, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectNflPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } } } })
+  /*
+   * 🛑 THE TE PREMIUM IS SCORED ONLY WITH THE ENGINE'S TOGGLE ON (`sportConfig.enableTEPremium`), and this
+   * store never set it. Creation and import both derive the toggle from the rules
+   * (`nflScoringSeedForCreate`, `importedNflScoring`); a commissioner's later edit on the scoring panel
+   * did not, so a TE premium saved there scored nothing — a TE's catch worth the same as a WR's
+   * (dynasty simulation, 2026-11-08). Same rule as the import: on exactly when the rules carry a
+   * non-zero `te_premium`, so removing it here switches it off too.
+   */
+  const sportConfig = currentSettings.sportConfig && typeof currentSettings.sportConfig === 'object' && !Array.isArray(currentSettings.sportConfig) ? (currentSettings.sportConfig as Record<string, unknown>) : {}
+  const enableTEPremium = Number(config.rules.te_premium ?? 0) !== 0
+  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...currentSettings, sportConfig: { ...sportConfig, enableTEPremium }, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectNflPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } } } })
 }
 
 /**

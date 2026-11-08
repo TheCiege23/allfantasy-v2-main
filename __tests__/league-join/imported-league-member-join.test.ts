@@ -32,9 +32,9 @@ vi.mock('@/lib/http/served-origin', () => ({ getServedOrigin: () => 'https://all
 vi.mock('@/lib/league-invite', () => ({
   validateFantasyInviteCode: vi.fn(async () => ({ valid: true, preview: { leagueId: 'L1' } })),
 }))
-vi.mock('@/lib/league-join/joinDivisionGate', () => ({
-  evaluateJoinDivisionGate: vi.fn(async () => ({ outcome: 'allow' })),
-  divisionGateRefusal: vi.fn(),
+vi.mock('@/lib/league-join/careerJoinGate', () => ({
+  evaluateCareerJoinGate: vi.fn(async () => ({ canJoin: true })),
+  careerJoinRefusal: vi.fn(),
 }))
 vi.mock('@/lib/league-join/classRequests', () => ({ requestClassException: vi.fn() }))
 vi.mock('@/lib/league-finance/joinGate', () => ({

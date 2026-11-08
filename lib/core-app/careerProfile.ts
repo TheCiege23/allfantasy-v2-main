@@ -54,7 +54,7 @@ import { tradeAssetCount } from '@/lib/core-app/careerTrades'
  * v2 — rows carry `finalResult` (career Finals, from stored Sleeper brackets). A v1 document
  * has no such field, so it fails `isStoredProfile` and is rebuilt on its next read.
  */
-export const CAREER_PROFILE_VERSION = 2
+export const CAREER_PROFILE_VERSION = 3
 export const CAREER_PROFILE_PREFIX = `core-career:profile:v${CAREER_PROFILE_VERSION}:`
 /** A profile is rebuilt whenever its sources move; this only bounds an abandoned account's row. */
 const PROFILE_RETENTION_DAYS = 400
@@ -139,7 +139,7 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
     .join(',')
   const claimsNewest = claimed.reduce<number>((m, c) => Math.max(m, c.lastUpdatedAt?.getTime() ?? 0), 0)
 
-  const [imports, facts, legacyLeagues, legacyRosters, trades, titleGames] = await Promise.all([
+  const [imports, facts, legacyLeagues, legacyRosters, trades, titleGames, native, guillotine, survivor] = await Promise.all([
     prisma.league.aggregate({
       where: { userId, importWins: { not: null } },
       _count: { _all: true },
@@ -174,6 +174,16 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
         })
       : null,
     storedTitleGameStamp(userId, legacyUserId, claimedLeagueIds),
+    Promise.resolve().then(() => prisma.franchiseSeason.aggregate({
+      where: { userId }, _count: { _all: true }, _max: { updatedAt: true },
+    })).catch(() => null),
+    Promise.resolve().then(() => prisma.guillotineSeason.aggregate({
+      where: { status: { in: ['complete', 'completed'] }, survivalLog: { some: { roster: { ownerId: userId } } } },
+      _count: { _all: true }, _max: { updatedAt: true },
+    })).catch(() => null),
+    Promise.resolve().then(() => prisma.survivorSeasonSnapshot.aggregate({
+      where: { league: { survivorPlayers: { some: { userId } } } }, _count: { _all: true }, _max: { createdAt: true },
+    })).catch(() => null),
   ])
 
   const t = (d: Date | null | undefined) => (d ? d.getTime() : 0)
@@ -187,6 +197,9 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
     legacyRosters ? `r${legacyRosters._count._all}@${t(legacyRosters._max.updatedAt)}` : 'r0',
     trades ? `t${trades._count._all}@${t(trades._max.createdAt)}` : 't0',
     titleGames,
+    native ? `n${native._count._all}@${t(native._max.updatedAt)}` : 'n0',
+    guillotine ? `g${guillotine._count._all}@${t(guillotine._max.updatedAt)}` : 'g0',
+    survivor ? `s${survivor._count._all}@${t(survivor._max.createdAt)}` : 's0',
     `u${legacyUserId ?? '-'}`,
   ]
   return { stamp: parts.join('|'), tradeKeys }

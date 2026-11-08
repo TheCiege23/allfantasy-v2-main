@@ -9,37 +9,22 @@ import { useCallback, useEffect, useState } from 'react'
  * Reads GET / writes PATCH on `/api/commissioner/leagues/:id/invite`.
  */
 
-type Person = {
-  userId: string
-  username: string | null
-  displayName: string | null
-  classLevel: number | null
-  division: number | null
-  provisional: boolean
-}
-type Summary = {
-  division: number | null
-  band: [number, number] | null
-  open: boolean
-  exceptions: Array<Person & { grantedAt: string; via: 'direct' | 'request'; divisionAtGrant: number | null }>
-  requests: Array<Person & { requestedAt: string; divisionAtRequest: number | null }>
-}
-
+type Person = { userId: string; username: string | null; displayName: string | null; careerLevel: number; history: string }
 type Action = 'grant' | 'approve' | 'decline' | 'revoke'
+type Summary = {
+  leagueLevel: number
+  band: [number, number]
+  exceptions: Array<Person & { grantedAt: string; via: 'direct' | 'request' }>
+  requests: Array<Person & { requestedAt: string }>
+}
 
 function who(p: Person): string {
   if (p.username) return `@${p.username}`
   return p.displayName ?? 'Manager'
 }
 
-/** "Class 17 · Division 4", or why there is no Class yet. */
 function standing(p: Person): string {
-  if (p.classLevel != null && p.division != null) return `Class ${p.classLevel} · Division ${p.division}`
-  return p.provisional ? 'Provisional — no Class yet' : 'Not rated yet'
-}
-
-function range([lo, hi]: [number, number]): string {
-  return lo === hi ? `Division ${lo}` : `Divisions ${lo}–${hi}`
+  return `Career Level ${p.careerLevel}`
 }
 
 function fmtDay(iso: string): string {
@@ -112,13 +97,11 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
 
   return (
     <div data-testid="manager-class-panel">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">Division</h4>
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">Career Level eligibility</h4>
       <p className="mt-1 text-xs text-white/50">
-        {summary?.division == null || !band
-          ? 'This league has no division yet — none of its managers has an established Class — so nobody is turned away.'
-          : summary.open
-            ? `This league plays in Division ${summary.division}. Because it is open to the public, managers outside ${range(band)} cannot join on their own; they can ask you, and you decide one manager at a time. Anyone you invite directly can always join.`
-            : `This league plays in Division ${summary.division}. It is private, so everyone who joins was handed the link by someone in it — nobody is turned away by division. Exceptions only matter once the league is public.`}
+        {summary && band
+          ? `League Career Level ${summary.leagueLevel}. Levels ${band[0]}–${band[1]} can join directly. Approve other managers individually.`
+          : 'Career Level eligibility is unavailable.'}
       </p>
 
       <div className="mt-3">
@@ -139,6 +122,7 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
                   <p className="text-xs text-white/50">
                     {standing(r)} · asked {fmtDay(r.requestedAt)}
                   </p>
+                  <p className="text-xs text-white/60">{r.history}</p>
                 </div>
                 <div className="flex gap-2">
                   <button

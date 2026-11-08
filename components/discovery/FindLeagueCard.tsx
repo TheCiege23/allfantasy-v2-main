@@ -386,6 +386,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           View
         </Link>
         )}
+        {league.leagueCareerLevel != null ? <span className="self-center text-xs" style={{ color: "var(--muted)" }}>Career Level {league.leagueCareerLevel}</span> : null}
         {isApproval && !isFull ? (
           <AskToJoinButton league={league} />
         ) : league.joinMode === "request" && !isFull ? (
@@ -398,6 +399,15 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           >
             {t("findLeague.card.full")}
           </span>
+        ) : league.requiresCareerApproval ? (
+          <Link
+            href={league.joinUrl}
+            data-testid={`find-league-career-request-${league.id}`}
+            className="rounded-lg border px-3 py-2.5 text-sm font-medium"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          >
+            Request to join
+          </Link>
         ) : league.inviteOnlyByTier === true || league.canJoinByRanking === false ? (
           <span
             data-testid={`find-league-invite-required-${league.id}`}
