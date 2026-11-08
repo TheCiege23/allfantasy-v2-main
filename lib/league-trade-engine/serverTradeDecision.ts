@@ -149,9 +149,9 @@ export async function evaluateServerTradeDecision(input: {
           : base
       }) }
   }
-  const blockedHistoryRead = historical?.some((row) => row.reason === 'Stored NHL history is temporarily unavailable.' ||
-    row.reason === 'Stored roster contains malformed player references.')
-  if (historical && input.participantRosterIds.length !== 2) return historicalResult()
+  const malformedHistoryRoster = historical?.some((row) => row.reason === 'Stored roster contains malformed player references.')
+  if (historical && (input.participantRosterIds.length !== 2 || malformedHistoryRoster)) return historicalResult()
+  const unavailableHistory = historical?.some((row) => row.reason === 'Stored NHL history is temporarily unavailable.')
   if (input.participantRosterIds.length !== 2) {
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: false,
@@ -202,7 +202,7 @@ export async function evaluateServerTradeDecision(input: {
         }).catch((): TradeGradeView => ({ graded: false, reason: 'The grade could not be computed when this offer was sent.', basis: null })),
     },
   )
-  if (historical && (!receipt.canonical || blockedHistoryRead)) return historicalResult(receipt)
+  if (historical && (!receipt.canonical || unavailableHistory)) return historicalResult(receipt)
   return {
     modelVersion: receipt.canonical?.participants[0]?.memoVersion ?? 'canonical-trade-market-v1',
     capturedAt,
