@@ -159,7 +159,7 @@ export function EspnLeagueCheck({ leagueInput, espnConnected, onStatus }: EspnLe
               : status.viewerTeamFound === false
                 ? "Your connected ESPN account has no team in this league. Reconnect with the account that does."
                 : status.access === 'public'
-                  ? 'Found it. To import, connect ESPN once below so we can confirm which team is yours.'
+                  ? "Found it. Press Connect above and pick your team — no ESPN sign-in needed. Commissioners connect ESPN below to get the commissioner tools."
                   : "Connected. You're ready to import."}
           </span>
         </div>

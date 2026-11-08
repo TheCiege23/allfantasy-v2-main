@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { SYSTEM_LEAGUE_OWNER_ID } from '@/lib/league-import/systemLeagueOwner'
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 100
@@ -296,7 +297,8 @@ export async function getMostActiveLeaderboard(options: {
   const [chatCounts, sentTradeCounts, opponentTradeCounts, waiverCounts] = await Promise.all([
     prisma.leagueChatMessage.groupBy({
       by: ['userId'],
-      where: { createdAt: { gte: since } },
+      // Not the system account that owns joined-by-pick ESPN leagues: its automated posts are not a person's activity.
+      where: { createdAt: { gte: since }, userId: { not: SYSTEM_LEAGUE_OWNER_ID } },
       _count: { _all: true },
     }),
     prisma.tradeOfferEvent.groupBy({

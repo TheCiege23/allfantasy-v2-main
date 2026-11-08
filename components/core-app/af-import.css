@@ -2028,3 +2028,62 @@
   padding: 0;
   background: transparent;
 }
+
+/* ── ESPN: "Who's the commissioner of this league?" ─────────────────────────
+   Shown only for a public ESPN league previewed without proof of membership.
+   Each option is a full-width 44px+ touch row, same surface as the team list. */
+.af-im-runby {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-im-runby > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.af-im-runby-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+}
+
+.af-im-runby-option[data-selected='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-im-runby-option input {
+  margin-top: 3px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.af-im-runby-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.af-im-runby-text .af-im-field-help {
+  margin: 0;
+}
+
+.af-im-league-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
