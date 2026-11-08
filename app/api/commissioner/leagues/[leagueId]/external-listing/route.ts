@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
+import { listingAccountId, ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -24,7 +24,8 @@ export const dynamic = "force-dynamic"
  *
  * Only the importer of THIS copy may act, and only when the import showed them to be the
  * commissioner (externalListing.ts). Anyone can import a league they play in; that alone must
- * never let them advertise it.
+ * never let them advertise it. A league owned by the AllFantasy system account (a public ESPN
+ * league joined by picking a team) belongs to its PROVEN commissioner instead (listingAccountId).
  *
  *   GET    → { verification, platform, listing, leagueSize, requests[] }
  *   POST   { listed, openSpots, note } → saves the listing
@@ -45,7 +46,7 @@ async function loadOwnedImportedLeague(leagueId: string) {
     where: { id: leagueId },
     select: { id: true, name: true, userId: true, platform: true, isCommissioner: true, settings: true, leagueSize: true },
   })
-  if (!league || league.userId !== userId) {
+  if (!league || (await listingAccountId(league)) !== userId) {
     return { error: NextResponse.json({ error: "League not found." }, { status: 404 }) }
   }
   if (isNativePlatform(league.platform)) {

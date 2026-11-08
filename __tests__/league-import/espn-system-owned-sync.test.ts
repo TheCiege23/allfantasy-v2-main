@@ -77,6 +77,7 @@ describe('collector: a system-owned public ESPN league', () => {
 describe('resync: never a member-owned copy', () => {
   it('a member of a system-owned league refreshes the system row', async () => {
     h.leagues.push({ id: 'L-sys', userId: SYSTEM_LEAGUE_OWNER_ID, platform: 'espn', platformLeagueId: '777', season: 2026 })
+    h.teams.push({ leagueId: 'L-sys', claimedByUserId: 'alice' })
     const out = await resyncImportedLeague({ userId: 'alice', provider: 'espn', sourceId: '777' })
     expect(out.ok).toBe(true)
     expect(h.persist).toHaveBeenCalledWith(expect.objectContaining({ userId: SYSTEM_LEAGUE_OWNER_ID }))
@@ -93,8 +94,29 @@ describe('resync: never a member-owned copy', () => {
     expect(h.persist).toHaveBeenCalledWith(expect.objectContaining({ userId: 'carol' }))
   })
 
-  it('other providers are untouched', async () => {
-    h.leagues.push({ id: 'L-sys', userId: SYSTEM_LEAGUE_OWNER_ID, platform: 'sleeper', platformLeagueId: '777', season: 2026 })
+  it('someone holding no team writes nothing: no copy, no refresh of the system row', async () => {
+    h.leagues.push({ id: 'L-sys', userId: SYSTEM_LEAGUE_OWNER_ID, platform: 'espn', platformLeagueId: '777', season: 2026 })
+    const out = await resyncImportedLeague({ userId: 'mallory', provider: 'espn', sourceId: '777' })
+    expect(out).toMatchObject({ ok: false, httpStatus: 403 })
+    expect(h.persist).not.toHaveBeenCalled()
+    expect(h.manualRefresh).not.toHaveBeenCalled()
+  })
+
+  it('every provider, not only ESPN: a Sleeper member refreshes the league their commissioner imported', async () => {
+    h.leagues.push({ id: 'L-dana', userId: 'dana', platform: 'sleeper', platformLeagueId: '777', season: 2026 })
+    h.teams.push({ leagueId: 'L-dana', claimedByUserId: 'alice' })
+    await resyncImportedLeague({ userId: 'alice', provider: 'sleeper', sourceId: '777' })
+    expect(h.persist).toHaveBeenCalledWith(expect.objectContaining({ userId: 'dana' }))
+    expect(h.manualRefresh).toHaveBeenCalledWith(expect.objectContaining({ userId: 'alice' }))
+  })
+
+  it("a league nobody has imported yet is still the caller's to import", async () => {
+    await resyncImportedLeague({ userId: 'alice', provider: 'sleeper', sourceId: '777' })
+    expect(h.persist).toHaveBeenCalledWith(expect.objectContaining({ userId: 'alice' }))
+  })
+
+  it('a different season is a different league row', async () => {
+    h.leagues.push({ id: 'L-dana-25', userId: 'dana', platform: 'sleeper', platformLeagueId: '777', season: 2025 })
     await resyncImportedLeague({ userId: 'alice', provider: 'sleeper', sourceId: '777' })
     expect(h.persist).toHaveBeenCalledWith(expect.objectContaining({ userId: 'alice' }))
   })

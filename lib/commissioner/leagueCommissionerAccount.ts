@@ -48,6 +48,46 @@ export async function leagueCommissionerAccountId(
   return provenClaimedCommissionerId(leagueId)
 }
 
+/**
+ * `provenClaimedCommissionerId` for many leagues in two queries, for list surfaces (Find a League)
+ * that would otherwise ask once per card. Same rule; a league with no proven commissioner is absent.
+ */
+export async function provenClaimedCommissionerIds(leagueIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const ids = [...new Set(leagueIds.filter(Boolean))]
+  if (ids.length === 0) return out
+  try {
+    const teams = (await prisma.leagueTeam.findMany({
+      where: { leagueId: { in: ids }, isCommissioner: true, claimedByUserId: { not: null } },
+      select: { leagueId: true, claimedByUserId: true, externalId: true },
+    })) as Array<{ leagueId: string; claimedByUserId: string | null; externalId: string }>
+    const candidates = teams.filter(
+      (t): t is { leagueId: string; claimedByUserId: string; externalId: string } =>
+        Boolean(t.claimedByUserId) && !isSystemLeagueOwner(t.claimedByUserId),
+    )
+    if (candidates.length === 0) return out
+    const claims = (await prisma.leagueManagerClaim.findMany({
+      where: {
+        leagueId: { in: [...new Set(candidates.map((t) => t.leagueId))] },
+        afUserId: { in: [...new Set(candidates.map((t) => t.claimedByUserId))] },
+        isConfirmed: true,
+      },
+      select: { leagueId: true, afUserId: true, teamExternalId: true },
+    })) as Array<{ leagueId: string; afUserId: string; teamExternalId: string | null }>
+    const proven = new Set(claims.map((c) => JSON.stringify([c.leagueId, c.afUserId, c.teamExternalId])))
+    for (const team of candidates) {
+      if (out.has(team.leagueId)) continue
+      if (proven.has(JSON.stringify([team.leagueId, team.claimedByUserId, team.externalId]))) {
+        out.set(team.leagueId, team.claimedByUserId)
+      }
+    }
+  } catch {
+    // Fail closed, as the single-league form does.
+    return new Map()
+  }
+  return out
+}
+
 /** The confirmed claimant of the team ESPN flags as head commissioner, if any. */
 export async function provenClaimedCommissionerId(leagueId: string): Promise<string | null> {
   try {

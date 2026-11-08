@@ -7,9 +7,8 @@
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
-import type { ImportProvider, NormalizedImportResult } from '@/lib/league-import/types'
-import { prisma } from '@/lib/prisma'
-import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
+import type { ImportProvider } from '@/lib/league-import/types'
+import { OUTSIDER_RESYNC_ERROR, resolveLeagueCopyTarget } from '@/lib/league-import/existingLeagueCopy'
 
 /**
  * Honest, sanitized outcome of the durable read-model refresh — no provider payload,
@@ -21,40 +20,6 @@ export type SleeperResyncRefresh =
   | { kind: 'sync'; status: string; advancedFreshness: boolean; executed: boolean }
   | { kind: 'auth'; httpStatus: 400 | 403 | 404; error: string }
   | null
-
-/**
- * Whose League row a re-sync writes.
- *
- * 🛑 A MEMBER OF A SYSTEM-OWNED LEAGUE MUST REFRESH THAT LEAGUE, NOT CREATE THEIR OWN COPY. The
- * persist below is keyed on `(userId, platform, platformLeagueId, season)`. A member who reached a
- * public ESPN league by picking a team owns no row, so re-syncing as themselves would CREATE one —
- * owned by them, which every owner-based commissioner check reads as "commissioner". Picking a team
- * would then become control of a league copy with one extra click. So when the caller has no row of
- * their own and the system account owns one, the system row is the one refreshed.
- *
- * Everything else keeps the old behaviour (the caller's own row). The refresh step that follows
- * still authorizes the CALLER against the league, so a non-member gets a 403 there.
- */
-async function resolveResyncOwner(
-  userId: string,
-  provider: ImportProvider,
-  normalized: NormalizedImportResult,
-): Promise<string> {
-  if (provider !== 'espn') return userId
-  const season = normalized.league?.season
-  if (typeof season !== 'number') return userId
-  const rows = (await Promise.resolve()
-    .then(() =>
-      prisma.league.findMany({
-        where: { platform: 'espn', platformLeagueId: String(normalized.source.source_league_id), season },
-        select: { userId: true },
-      }),
-    )
-    .catch(() => [])) as Array<{ userId: string }>
-  if (rows.some((r) => r.userId === userId)) return userId
-  const system = rows.find((r) => isSystemLeagueOwner(r.userId))
-  return system ? system.userId : userId
-}
 
 export async function resyncImportedLeague(input: {
   userId: string
@@ -70,7 +35,7 @@ export async function resyncImportedLeague(input: {
       /** Honest, sanitized outcome of the durable read-model refresh; null when unavailable. */
       refresh: SleeperResyncRefresh
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; httpStatus?: 403 }
 > {
   const result = await runImportedLeagueNormalizationPipeline({
     provider: input.provider,
@@ -85,7 +50,21 @@ export async function resyncImportedLeague(input: {
 
   const canonical = buildCanonicalImportBundle(result.normalized)
   try {
-    const ownerUserId = await resolveResyncOwner(input.userId, input.provider, result.normalized)
+    /*
+     * Whose row this writes (lib/league-import/existingLeagueCopy.ts). The caller's own, or — for a
+     * member of a league someone else imported, including a system-owned public ESPN league — THAT
+     * league's row. Never a fresh copy owned by the member, and nothing at all for an outsider:
+     * checked BEFORE the persist, because the persist writes whichever owner it is handed.
+     */
+    const season = result.normalized.league?.season
+    const target = await resolveLeagueCopyTarget({
+      userId: input.userId,
+      platform: input.provider,
+      platformLeagueId: String(result.normalized.source.source_league_id),
+      season: typeof season === 'number' ? season : null,
+    })
+    if (target.kind === 'outsider') return { ok: false, error: OUTSIDER_RESYNC_ERROR, httpStatus: 403 }
+    const ownerUserId = target.kind === 'member' ? target.ownerUserId : input.userId
     const { persisted, runId } = await persistImportWithCanonicalAudit({
       userId: ownerUserId,
       provider: input.provider,

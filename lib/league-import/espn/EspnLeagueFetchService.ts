@@ -18,6 +18,7 @@ import {
   ESPN_TEAM_ABBREVIATIONS,
 } from './espnLookups'
 import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
+import { fillEspnPlayerDirectory, type EspnPlayerSummary } from './espnPlayerDirectoryFill'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -71,12 +72,6 @@ type EspnMemberSummary = {
   id: string
   displayName: string
   isCommissioner?: boolean
-}
-
-type EspnPlayerSummary = {
-  name: string | null
-  position: string | null
-  team: string | null
 }
 
 export class EspnImportConnectionError extends Error {}
@@ -1416,7 +1411,18 @@ export async function fetchEspnLeagueForImport(
   const schedule = parseEspnSchedule(raw, season, currentWeek)
   fillEspnPointsAgainst(teams, schedule)
   const playerDirectory = buildEspnPlayerDirectory(teams)
-  const draftPicks = parseEspnDraftPicks(draftRaw, playerDirectory)
+  let draftPicks = parseEspnDraftPicks(draftRaw, playerDirectory)
+  /*
+   * A pick names its player from the CURRENT rosters, so a player drafted and since dropped had no
+   * name or position (GAPS.md D-01). Fill those from the id itself (team defenses) or our own player
+   * table, never from ESPN, then label the picks again. Transactions below read the same directory.
+   */
+  const unlabeled = draftPicks
+    .filter((p) => !p.playerName || !p.position || p.position === 'N/A')
+    .map((p) => p.playerId)
+  if (unlabeled.length > 0 && (await fillEspnPlayerDirectory(playerDirectory, unlabeled)) > 0) {
+    draftPicks = parseEspnDraftPicks(draftRaw, playerDirectory)
+  }
   const transactions = parseEspnTransactions(transactionsRaw, playerDirectory)
   const previousSeasons = opts.includePreviousSeasons
     ? await discoverEspnPreviousSeasons({
