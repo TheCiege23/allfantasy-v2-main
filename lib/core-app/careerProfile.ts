@@ -54,7 +54,7 @@ import { tradeAssetCount } from '@/lib/core-app/careerTrades'
  * v2 — rows carry `finalResult` (career Finals, from stored Sleeper brackets). A v1 document
  * has no such field, so it fails `isStoredProfile` and is rebuilt on its next read.
  */
-export const CAREER_PROFILE_VERSION = 3
+export const CAREER_PROFILE_VERSION = 4
 export const CAREER_PROFILE_PREFIX = `core-career:profile:v${CAREER_PROFILE_VERSION}:`
 /** A profile is rebuilt whenever its sources move; this only bounds an abandoned account's row. */
 const PROFILE_RETENTION_DAYS = 400

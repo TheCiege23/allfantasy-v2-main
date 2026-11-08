@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -352,6 +353,7 @@ export async function POST(req: NextRequest) {
             ...(leagueImportData as any),
           } as any,
         })
+        await importSleeperSurvival({ userId, platformLeagueId, season: validatedSeason }, sleeperLeague, rosters, resolvedSleeperUserId)
         return 1
       } catch (e) {
         console.error(`[import/batch] league ${league.platformLeagueId}:`, e)

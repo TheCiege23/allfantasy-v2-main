@@ -51,6 +51,7 @@ const state = {
   history: [] as Array<Record<string, unknown>>,
   standings: [] as Array<Record<string, unknown>>,
   survival: [] as Array<Record<string, unknown>>,
+  importedSurvival: [] as Array<Record<string, unknown>>,
   failTeams: false,
   failSeasons: false,
 }
@@ -78,6 +79,7 @@ vi.mock('@/lib/prisma', () => ({
     seasonResult: { findMany: vi.fn(async ({ where }: { where: { rosterId: { in: string[] } } }) =>
       state.history.filter((row) => where.rosterId.in.includes(String(row.rosterId)))) },
     seasonStandingFact: { findMany: vi.fn(async () => state.standings) },
+    sleeperCareerSurvival: { findMany: vi.fn(async () => state.importedSurvival) },
     guillotineSurvivalLog: { findMany: vi.fn(async () => state.survival) },
     survivorSeasonSnapshot: { findMany: vi.fn(async () => []) },
     $queryRaw: vi.fn(async () => [{ leagueId: 'league-1', season: 2023, platformLeagueId: 'ESPN-2023', size: '14', scoring: 'PPR' }]),
@@ -172,6 +174,7 @@ function importedLeague(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   state.imported = []
+  state.importedSurvival = []
   state.links = []
   state.legacy = []
   state.teams = []
@@ -409,4 +412,17 @@ describe('verified history shared by Rankings and Career', () => {
       state.survival = []
     }
   })
+})
+
+it('attaches one verified Sleeper result to the existing league-season for the right account', async () => {
+  state.imported = [importedLeague({ userId: 'joiner', platform: 'sleeper', platformLeagueId: 'sleeper-league', season: 2025 })]
+  state.importedSurvival = [
+    { userId: 'someone-else', platformLeagueId: 'sleeper-league', season: 2025, updatedAt: T0, evidence: {} },
+    { userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2025, updatedAt: T0, evidence: {
+      version: 1, method: 'sleeper_chopped', rosterId: 2, firstWeek: 1, finalWeek: 17, eliminatedWeek: 11,
+    } },
+  ]
+  const rows = await loadCareerLedger(['joiner'])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ specialty: 'guillotine', completed: true, survival: { periods: 10, totalPeriods: 17 } })
 })

@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -230,6 +231,8 @@ export async function importLegacySeasonAtIndex(
               importPointsFor: fpts,
             },
           })
+
+          await importSleeperSurvival({ userId, platformLeagueId, season }, league, rosters, sleeperUserId)
 
           sw += wins
           sl += losses
