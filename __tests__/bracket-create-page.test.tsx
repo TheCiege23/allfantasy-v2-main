@@ -62,6 +62,51 @@ describe("/brackets/leagues/new create page", () => {
     expect(createPlayoffMock).not.toHaveBeenCalled()
   })
 
+  it("shows the CFP board and allows replacing the participant limit", async () => {
+    render(<NewBracketLeaguePage />)
+    fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
+    expect(screen.getByText("Classic CFP Playoff Board")).toBeInTheDocument()
+    expect(screen.queryByText("Classic NCAA Board")).not.toBeInTheDocument()
+    expect(screen.queryByText("Include NBA Play-In Tournament")).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId("bracket-create-name-input"), { target: { value: "Friends CFP" } })
+    const limit = screen.getByTestId("bracket-create-max-users-input")
+    fireEvent.change(limit, { target: { value: "" } })
+    expect(limit).toHaveValue(null)
+    fireEvent.change(limit, { target: { value: "200" } })
+    fireEvent.click(screen.getByTestId("bracket-create-submit-button"))
+    await waitFor(() => expect(createPlayoffMock).toHaveBeenCalledWith(expect.objectContaining({ sport: "ncaaf", maxUsers: 200 })))
+  })
+
+  it("explains invalid CFP participant limits without submitting", async () => {
+    render(<NewBracketLeaguePage />)
+    fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
+    fireEvent.change(screen.getByTestId("bracket-create-name-input"), { target: { value: "Friends CFP" } })
+    fireEvent.change(screen.getByTestId("bracket-create-max-users-input"), { target: { value: "50200" } })
+    fireEvent.click(screen.getByTestId("bracket-create-submit-button"))
+    expect(await screen.findByRole("alert")).toHaveTextContent("participant limit from 2 to 500")
+    expect(createPlayoffMock).not.toHaveBeenCalled()
+  })
+
+  it("explains why an empty CFP pool name cannot be submitted", async () => {
+    render(<NewBracketLeaguePage />)
+    fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
+    fireEvent.click(screen.getByTestId("bracket-create-submit-button"))
+    expect(await screen.findByRole("alert")).toHaveTextContent("pool name between 2 and 80")
+    expect(createPlayoffMock).not.toHaveBeenCalled()
+  })
+
+  it("saves the CFP visibility selection and explains current invite limitations", async () => {
+    render(<NewBracketLeaguePage />)
+    fireEvent.click(screen.getByTestId("bracket-create-sport-NCAAF"))
+    expect(screen.getByText(/anyone with the pool link can join/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText("Public pool label"))
+    fireEvent.change(screen.getByTestId("bracket-create-name-input"), { target: { value: "CFP Friends" } })
+    fireEvent.click(screen.getByTestId("bracket-create-submit-button"))
+    await waitFor(() => expect(createPlayoffMock).toHaveBeenCalledWith(expect.objectContaining({
+      sport: "ncaaf", visibility: "public", config: expect.objectContaining({ visibility: "public" }),
+    })))
+  })
+
   /*
    * The sentence as reported, on the sport it was reported for.
    *
