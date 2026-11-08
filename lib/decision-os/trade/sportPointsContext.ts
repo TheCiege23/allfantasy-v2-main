@@ -483,7 +483,9 @@ async function finishBoard(args: {
   lines: BoardLine[]
 }): Promise<SportPointsBaseResult> {
   const { sport, league, valuation, season, games, lines } = args
-  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
+  const savedTeamCount = league?.leagueSize
+  const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
+  const teams = hasSavedTeamCount ? savedTeamCount : DEFAULT_TEAMS
   const lineup = lineupSlotsFor(sport, league?.settings ?? null)
 
   // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
@@ -564,6 +566,7 @@ async function finishBoard(args: {
       },
       scoringBasis: league ? 'league' : 'default',
       teams,
+      ...(league && !hasSavedTeamCount ? { teamCountAssumed: true } : {}),
       valueKind: valuation.kind,
       categoryList: valuation.kind === 'categories' ? categoryList(valuation.categories) : null,
     },

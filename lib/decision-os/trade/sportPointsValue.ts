@@ -106,6 +106,7 @@ export type SportPointsContext = {
   /** How the scoring was chosen: this league's rules, or the sport's defaults with no league. */
   scoringBasis: 'league' | 'default'
   teams: number
+  teamCountAssumed?: boolean
   /**
    * What `perGame` measures: fantasy points, or — in a category league — the sum of the player's per-game
    * category scores (`./sportCategoryValue.ts`). Absent means points.
@@ -128,9 +129,10 @@ export const SPORT_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 export function sportPointsBasis(
-  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'valueKind' | 'categoryList'>,
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList'>,
 ): string {
   const label = SPORT_LABEL[ctx.sport]
+  const teamCountNote = ctx.teamCountAssumed ? ` This league has no verified team count. The grade uses ${ctx.teams} teams.` : ''
   const baseline = ctx.window.baselineSeasonLabel
     ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
     : ''
@@ -164,7 +166,7 @@ export function sportPointsBasis(
         ].filter(Boolean)
     const how = notes.length ? ` ${notes.join(mlb ? '; ' : ' and ').replace(/^./, (c) => c.toUpperCase())}.` : ''
     const per = mlb ? 'per team game' : 'per game'
-    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, ${per}, then summed across ${ctx.categoryList ?? 'the categories'}.${how}${pitchers} Punting a category is not modelled.${baseline}`
+    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, ${per}, then summed across ${ctx.categoryList ?? 'the categories'}.${how}${pitchers} Punting a category is not modelled.${baseline}${teamCountNote}`
   }
   const scoring =
     ctx.scoringBasis === 'league'
@@ -178,7 +180,7 @@ export function sportPointsBasis(
   const clubs = soccer
     ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in. Own goals are not projected.`
     : ''
-  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}`
+  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}${teamCountNote}`
 }
 
 /**

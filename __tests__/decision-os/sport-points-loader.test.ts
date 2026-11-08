@@ -48,6 +48,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
+import { sportPointsBasis } from '@/lib/decision-os/trade/sportPointsValue'
 
 const NOW = new Date('2026-10-20T12:00:00Z')
 
@@ -77,6 +78,21 @@ beforeEach(() => {
 })
 
 describe('loadSportPointsBase', () => {
+  it('reports an assumed team count in the points grade basis', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
+    nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
+    schedule(['T1', 'T2'], 40, null)
+    const out = await loadSportPointsBase({
+      sport: 'NBA', now: NOW,
+      league: { id: 'L', settings: { scoringSettings: { rules: { points: 1 } } }, leagueType: 'redraft', leagueSize: null },
+    })
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.ctx.teams).toBe(12)
+      expect(sportPointsBasis(out.ctx)).toContain('This league has no verified team count. The grade uses 12 teams.')
+    }
+  })
+
   it('counts upcoming games whose season type is NULL, and leaves out marked preseason games', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
     nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })

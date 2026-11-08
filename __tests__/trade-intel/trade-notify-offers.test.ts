@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   store: new Map<string, unknown>(),
   leagueFindMany: vi.fn(),
   currentIds: vi.fn(),
+  sportsPlayers: vi.fn(),
   rosters: vi.fn(),
   getTradeGrades: vi.fn(),
   sendEmail: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock('@/lib/prisma', () => ({
       },
     },
     league: { findMany: h.leagueFindMany },
+    sportsPlayer: { findMany: h.sportsPlayers },
     appUser: {
       findMany: async () => [
         { id: 'uA', email: 'a@example.org' },
@@ -197,6 +199,7 @@ beforeEach(() => {
   // Not a first run: an empty v2 record, so the bootstrap path is not what gets tested.
   h.store.set(SEEN_KEY, { version: 2, seen: [], lastRunIso: '2026-09-24T00:00:00Z' })
   h.leagueFindMany.mockResolvedValue(ROWS)
+  h.sportsPlayers.mockResolvedValue([])
   h.rosters.mockResolvedValue(ROSTERS)
   h.sendEmail.mockResolvedValue({ ok: true })
   h.sendPush.mockResolvedValue([])
@@ -275,6 +278,32 @@ describe('🛑 an offer goes only to the managers in it, linked to their own cop
     expect(h.sendPush).toHaveBeenCalledWith('uB', expect.objectContaining({ href: '/core/trades?league=af-B&trade=T1' }))
     // No grade email for an offer: it is not a completed trade.
     expect(h.gradeEmail).not.toHaveBeenCalled()
+  })
+
+  it('names and prices NBA offer assets from stored Sleeper IDs', async () => {
+    h.leagueFindMany.mockResolvedValue(ROWS.map(row => ({ ...row, sport: 'NBA' })))
+    h.currentIds.mockResolvedValue([trade('pending')])
+    h.sportsPlayers.mockResolvedValue([
+      { sleeperId: 'p1', name: 'Luka Doncic', position: 'PG', team: 'LAL', sport: 'NBA', source: 'sleeper' },
+      { sleeperId: 'p2', name: 'Jayson Tatum', position: 'SF', team: 'BOS', sport: 'NBA', source: 'sleeper' },
+    ])
+    const result = await detectAndNotifyLeague('SL1')
+
+    expect(result.newOffers).toBe(1)
+    expect(h.sportsPlayers).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sport: 'NBA', OR: [
+        { sleeperId: { in: expect.arrayContaining(['p1', 'p2']) } },
+        { externalId: { in: expect.arrayContaining(['sleeper:p1', 'sleeper:p2']) } },
+      ] },
+    }))
+    expect(h.gradeDeal).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'af-B' }), {
+      give: { assets: [{ kind: 'player', name: 'Jayson Tatum', rosterPlayerId: 'p2',
+        providerIdentity: { provider: 'sleeper', id: 'p2', position: 'SF', team: 'BOS' } }], unpriceable: [] },
+      get: { assets: [{ kind: 'player', name: 'Luka Doncic', rosterPlayerId: 'p1',
+        providerIdentity: { provider: 'sleeper', id: 'p1', position: 'PG', team: 'LAL' } }], unpriceable: [] },
+      viewerSide: true,
+    })
+    expect(h.sendEmail.mock.calls[0][0].subject).toContain('B for you: you get Luka Doncic for Jayson Tatum')
   })
 
   it('the offer push carries a signed trade-card picture', async () => {

@@ -912,10 +912,12 @@ export async function resolveLeagueTradeChart(args: {
   const { leagueRow, leagueSnapshot, leagueNormCtx } = args
   const coverage = leagueRow ? tradeFormatCoverage(leagueRow) : { gaps: [], prohibitedReason: null }
   const input = args.overrides ?? {}
-  const leagueSize =
-    input.leagueSize ??
-    leagueSnapshot?.leagueSize ??
-    12
+  const savedTeamCount = leagueSnapshot?.leagueSize ?? leagueRow?.leagueSize
+  const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
+  const leagueSize = input.leagueSize ?? (hasSavedTeamCount ? savedTeamCount : 12)
+  const valuationGaps = leagueRow && !hasSavedTeamCount
+    ? [...coverage.gaps, `This league has no verified team count. The grade uses ${leagueSize} teams.`]
+    : coverage.gaps
   /*
    * 🛑 THE LEAGUE'S OWN CHART, BY THE SAME RULE EVERY OTHER SURFACE PRICES IT WITH.
    *
@@ -1044,7 +1046,7 @@ export async function resolveLeagueTradeChart(args: {
     fcSyncedAt,
     nflCtx,
     pickSlots,
-    valuationGaps: coverage.gaps,
+    valuationGaps,
     rosterSpots: leagueRow ? rosterSpotsFromSettings(leagueRow.settings) : null,
   }
 }

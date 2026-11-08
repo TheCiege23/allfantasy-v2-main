@@ -34,8 +34,8 @@ vi.mock('@/lib/league-values/leagueTradeValues', () => ({ loadLeagueTradeValues:
 import { resolveLeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
 import { captureLiveTradeOffer } from '@/lib/league-trade-engine/tradeLearningCapture'
 
-const leagueRow = (sport: string, platform: string | undefined) =>
-  ({ id: `lg-${sport}-${platform}`, sport, platform, platformLeagueId: 'source-league-1', leagueType: 'redraft', settings: {}, leagueSize: 12, season: 2026, status: 'in_season' }) as never
+const leagueRow = (sport: string, platform: string | undefined, leagueSize: number | null = 12) =>
+  ({ id: `lg-${sport}-${platform}`, sport, platform, platformLeagueId: 'source-league-1', leagueType: 'redraft', settings: {}, leagueSize, season: 2026, status: 'in_season' }) as never
 
 const chartFor = (sport: string, platform: string | undefined) =>
   resolveLeagueTradeChart({ leagueRow: leagueRow(sport, platform), leagueSnapshot: null, leagueNormCtx: null })
@@ -81,6 +81,18 @@ describe("the Sleeper-built league values are read only for a Sleeper league", (
     await chartFor('NFL', undefined)
     expect(h.leagueValues).toHaveBeenCalledTimes(1)
   })
+})
+
+it('discloses an assumed count and honors a stored large-league count', async () => {
+  const read = (count: number | null) => resolveLeagueTradeChart({
+    leagueRow: leagueRow('NBA', 'fantrax', count), leagueSnapshot: null, leagueNormCtx: null,
+  })
+  const unknown = await read(null)
+  expect(unknown.leagueSize).toBe(12)
+  expect(unknown.valuationGaps).toContain('This league has no verified team count. The grade uses 12 teams.')
+  const large = await read(150)
+  expect(large.leagueSize).toBe(150)
+  expect(large.valuationGaps?.join(' ')).not.toContain('no verified team count')
 })
 
 describe('the trade-learning capture', () => {

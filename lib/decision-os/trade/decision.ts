@@ -75,9 +75,9 @@ export function snapshotToEvaluation(proposalId: string, snap: TradeValueSnapsho
   const leanedTo = snap.grade.insufficientData
     ? null
     : diff > 0
-      ? (snap.sides[0]?.rosterId ?? 'proposer')
+      ? (snap.sides[1]?.rosterId ?? 'receiver')
       : diff < 0
-        ? (snap.sides[1]?.rosterId ?? 'receiver')
+        ? (snap.sides[0]?.rosterId ?? 'proposer')
         : 'even'
   return {
     proposalId,

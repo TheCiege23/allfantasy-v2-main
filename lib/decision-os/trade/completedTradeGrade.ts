@@ -102,7 +102,7 @@ export function sleeperPlayerInput(name: string, sleeperId?: string | null, posi
   return {
     kind: 'player',
     name,
-    ...(id ? { providerIdentity: { provider: 'sleeper' as const, id, ...(pos ? { position: pos } : {}) } } : {}),
+    ...(id ? { rosterPlayerId: id, providerIdentity: { provider: 'sleeper' as const, id, ...(pos ? { position: pos } : {}) } } : {}),
   }
 }
 
