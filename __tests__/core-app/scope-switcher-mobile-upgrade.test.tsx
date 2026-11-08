@@ -65,9 +65,24 @@ describe('sport on every row, and the list grouped by sport', () => {
     expect(names()[0]).toBe('Fantrax Hoops')
   })
 
+  it('files a league with no sport under "Other", last, with no empty sport tag on the row', () => {
+    open({ leagues: [...LEAGUES, { id: 'x', name: 'Mystery League', sport: '', platform: 'sleeper' }] })
+    expect(headings()).toEqual(['NFL', 'NBA', 'other'])
+    expect(document.querySelector('[data-section="other"]')?.textContent).toContain('Other')
+    const row = Array.from(document.querySelectorAll('.af-scope-row')).find((r) => r.textContent?.includes('Mystery League'))!
+    expect(row.querySelector('[data-testid="scope-league-sport"]')).toBeNull()
+  })
+
   it('CONTROL: one sport draws no heading', () => {
     open({ leagues: LEAGUES.filter((l) => l.sport === 'NFL') })
     expect(headings()).toEqual([])
+  })
+})
+
+describe('the favorites note', () => {
+  it('says favorites follow the account, which is where a star is saved', () => {
+    open()
+    expect(document.querySelector('.af-scope-note')?.textContent).toBe('Favorites are saved to your account, across devices.')
   })
 })
 
