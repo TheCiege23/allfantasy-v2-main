@@ -18,7 +18,7 @@
 .year>b { font: 700 15px 'JetBrains Mono', monospace; color: #e8eaf2; }
 .year>span { font: 500 12px 'JetBrains Mono', monospace; color: #7d84a3; }
 
-.tblWrap { overflow-x: auto; margin: 0 -4px; }
+.tblWrap { overflow-x: auto; margin: 0 -4px; container: sc-contracts / inline-size; }
 .tbl { width: 100%; border-collapse: collapse; min-width: 520px; }
 .tbl th { font: 600 11px 'Archivo', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #7d84a3; text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
 .tbl td { padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, .05); font-size: 13px; color: #c9cee0; vertical-align: middle; }
@@ -26,6 +26,11 @@
 .tbl .n { font-family: 'JetBrains Mono', monospace; text-align: right; }
 .pos { display: inline-grid; place-items: center; min-width: 36px; height: 24px; padding: 0 6px; border-radius: 99px; background: #151926; font: 700 11px 'Archivo', sans-serif; color: #a3a9c2; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Status tags under the player's name: only on a narrow card (see the sc-contracts band). */
+.tagsUnder { display: none; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.thShort { display: none; }
+.tbl th { white-space: nowrap; }
+.allContracts { margin-top: 12px; width: 100%; justify-content: center; }
 
 /* Bid check (signature moment) */
 .bid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
@@ -59,4 +64,16 @@
   .stepper>output { font-size: 40px; }
   .preview>li { grid-template-columns: 48px minmax(0, 1fr) 84px; gap: 10px; }
   .col { height: 140px; }
+}
+/* Narrow contracts card (264px at a 390px viewport): no 520px floor, and Pos and Status move under the name, so the table fits
+   instead of scrolling sideways and clipping its last header ("YEAR LEF" at 390px). */
+@container sc-contracts (max-width: 519px) {
+  .tbl { min-width: 0; }
+  .statusCol { display: none; }
+  .tagsUnder { display: flex; }
+  .posCol { display: none; }
+  .thLong { display: none; }
+  .thShort { display: inline; }
+  /* A long tag ("Expiring · tag candidate") is nowrap by default and held the column at 199px of a 264px card. */
+  .tagsUnder > span { white-space: normal; }
 }

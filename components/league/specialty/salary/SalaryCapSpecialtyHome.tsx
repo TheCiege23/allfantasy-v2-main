@@ -12,6 +12,9 @@ import {
 } from '@/components/league/specialty/SpecialtyShell'
 import type { SalaryCapSummary } from '@/components/salary-cap/types'
 import { OFFSEASON_STEPS, capBarSegments, contractTags } from '@/lib/salary-cap/capHomeView'
+
+/** Contract rows Cap home shows before "All N contracts" (the Contracts view has the full table). */
+const HOME_CONTRACT_ROWS = 6
 import s from './salary-specialty.module.css'
 
 /*
@@ -49,6 +52,7 @@ export function SalaryCapSpecialtyHome({
   const ceiling = thisYear?.capCeiling ?? cfg.startupCap
   const ledger = summary.ledger
   const bar = ledger ? capBarSegments(ledger, ceiling) : null
+  const shownContracts = [...summary.contracts].sort((a, b) => b.salary - a.salary).slice(0, HOME_CONTRACT_ROWS)
   const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, y.totalCapHit)))
   const phase = cfg.offseasonPhase ?? 'in_season'
   const dead = summary.deadContracts ?? []
@@ -160,6 +164,11 @@ export function SalaryCapSpecialtyHome({
               ) : null}
             </SpecialtyCard>
 
+            {/*
+              The biggest contracts, not all of them: the full list (20+ tall rows on a phone) pushed the offseason
+              calendar and the cap rules out of reach (2026-11-07, Salary Cap audit item 4). The Contracts view has the
+              full table; cut players' dead money always shows here because it is this year's cap charge.
+            */}
             <SpecialtyCard label="Contracts" icon={specialtyAsset('salary', 'icon-contract.svg')} testId="salary-contracts">
               {summary.contracts.length === 0 && dead.length === 0 ? (
                 <p className={spStyles.empty}>No contracts on your roster yet.</p>
@@ -169,28 +178,37 @@ export function SalaryCapSpecialtyHome({
                     <thead>
                       <tr>
                         <th scope="col">Player</th>
-                        <th scope="col">Pos</th>
+                        <th scope="col" className={s.posCol}>Pos</th>
                         <th scope="col" className={s.n}>
                           Salary
                         </th>
-                        <th scope="col" className={s.n}>
-                          Years left
+                        <th scope="col" className={s.n} aria-label="Years left">
+                          <span className={s.thLong}>Years left</span>
+                          <span className={s.thShort} aria-hidden="true">Yrs</span>
                         </th>
-                        <th scope="col">Status</th>
+                        <th scope="col" className={s.statusCol}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {summary.contracts.map((c) => (
+                      {shownContracts.map((c) => (
                         <tr key={c.id}>
                           <td>
                             <strong>{c.playerName ?? 'Unknown player'}</strong>
+                            <span className={s.tagsUnder}>
+                              <span className={s.pos}>{c.position ?? '—'}</span>
+                              {contractTags(c, cfg, capYear + 1).map((t) => (
+                                <SpecialtyTag key={t.label} tone={t.tone}>
+                                  {t.label}
+                                </SpecialtyTag>
+                              ))}
+                            </span>
                           </td>
-                          <td>
+                          <td className={s.posCol}>
                             <span className={s.pos}>{c.position ?? '—'}</span>
                           </td>
                           <td className={s.n}>{money(c.salary)}</td>
                           <td className={s.n}>{Math.max(0, c.yearsRemaining) + 1}</td>
-                          <td>
+                          <td className={s.statusCol}>
                             <div className={s.tags}>
                               {contractTags(c, cfg, capYear + 1).map((t) => (
                                 <SpecialtyTag key={t.label} tone={t.tone}>
@@ -205,19 +223,28 @@ export function SalaryCapSpecialtyHome({
                         <tr key={d.id}>
                           <td>
                             <strong>{d.playerName ?? 'Unknown player'}</strong>
+                            <span className={s.tagsUnder}>
+                              <span className={s.pos}>{d.position ?? '—'}</span>
+                              <SpecialtyTag tone="zone">Cut · dead money</SpecialtyTag>
+                            </span>
                           </td>
-                          <td>
+                          <td className={s.posCol}>
                             <span className={s.pos}>{d.position ?? '—'}</span>
                           </td>
                           <td className={s.n}>{money(d.deadThisYear)}</td>
                           <td className={s.n}>—</td>
-                          <td>
+                          <td className={s.statusCol}>
                             <SpecialtyTag tone="zone">Cut · dead money</SpecialtyTag>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {summary.contracts.length > shownContracts.length ? (
+                    <button type="button" className={`${spStyles.btn} ${s.allContracts}`} onClick={onOpenContracts}>
+                      All {summary.contracts.length} contracts
+                    </button>
+                  ) : null}
                 </div>
               )}
             </SpecialtyCard>
