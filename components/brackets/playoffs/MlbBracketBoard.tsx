@@ -40,6 +40,7 @@ import BracketCoachPanel from "./BracketCoachPanel"
 import CfpBowlSchedule from "./CfpBowlSchedule"
 import CfpProjectionPreview from "./CfpProjectionPreview"
 import { getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
+import { matchCfpLiveScore, type CfpLiveScore } from "@/lib/playoffs/cfpLiveScores"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -179,12 +180,37 @@ export default function MlbBracketBoard({
   const [error, setError] = useState<string | null>(null)
   const [finalizingDay, setFinalizingDay] = useState<string | null>(null)
   const [liveNode, setLiveNode] = useState<string | null>(null)
+  const [cfpScores, setCfpScores] = useState<CfpLiveScore[]>([])
+  const [, setCfpClock] = useState(0)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
   const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : sport === "nfl" ? "NFL" : null
   const teamLogos = view.teamLogos ?? {}
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup" || sport === "nfl")
   const rollingCup = singleGame && sport === "nba_cup"
+  useEffect(() => {
+    if (!singleGame || sport !== "ncaaf") return
+    let stopped = false, pending = false
+    const controller = new AbortController()
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return
+      setCfpClock(Date.now())
+      if (pending) return
+      pending = true
+      try {
+        const response = await fetch("/api/brackets/cfp/live-scores", { cache: "no-store", signal: controller.signal })
+        if (!response.ok) { if (!stopped) setCfpScores([]); return }
+        const data = await response.json()
+        if (!stopped && Array.isArray(data.scores)) setCfpScores(data.scores)
+      } catch { if (!stopped) setCfpScores([]) }
+      finally { pending = false }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { void refresh() }, 30_000)
+    const visible = () => { void refresh() }
+    document.addEventListener("visibilitychange", visible)
+    return () => { stopped = true; controller.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", visible) }
+  }, [singleGame, sport])
   const [compactCup, setCompactCup] = useState(false)
   const [tipoffTick, setTipoffTick] = useState(0)
   useEffect(() => {
@@ -219,6 +245,7 @@ export default function MlbBracketBoard({
     () => rollingCup ? view.series : buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
     [view.series, view.picks, rollingCup],
   )
+  const officialById = useMemo(() => new Map(buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: false }).map((game) => [game.id, game])), [view.series, view.picks])
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
   const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
   const knockoutPublished = rollingCup && view.series.some((game) =>
@@ -365,12 +392,19 @@ export default function MlbBracketBoard({
   }
 
   const renderMatch = (node: BracketNode) => {
-    const s = node.series
+    const original = node.series
+    const official = officialById.get(original.id)
+    const live = sport === "ncaaf" && official ? matchCfpLiveScore(official, cfpScores) : null
+    const final = sport === "ncaaf" && official?.status === "final" && official.winnerTeamName
+    const s = official && (live || final) ? { ...original, homeTeamName: official.homeTeamName, awayTeamName: official.awayTeamName,
+      ...(live && !final ? { status: "in_progress" as const, liveStatus: "Live", providerGamesJson: {}, liveHomeScore: live.home.trim().replace(/\s+/g, " ").toLowerCase() === official.homeTeamName.trim().replace(/\s+/g, " ").toLowerCase() ? live.homeScore : live.awayScore, liveAwayScore: live.home.trim().replace(/\s+/g, " ").toLowerCase() === official.homeTeamName.trim().replace(/\s+/g, " ").toLowerCase() ? live.awayScore : live.homeScore } : {}) } : original
     const resolved = isOfficial(s.homeTeamName) && isOfficial(s.awayTeamName)
     const kind = seriesStatusKind(s, resolved)
     const locked = lockedReasonFor(s)
-    // NBA Cup knockout cards carry the live clock and score, the same as Group Play.
-    const cupState = rollingCup ? cupGameState(s) : null
+    // Do not attach an official score to a user's projected matchup when the
+    // teams differ. Earlier picks may project a different later-round opponent.
+    const sameTeams = !!official && official.homeTeamName === s.homeTeamName && official.awayTeamName === s.awayTeamName
+    const cupState = rollingCup || (sport === "ncaaf" && sameTeams) ? cupGameState(s) : null
     const showScore = cupState === "live" || cupState === "final"
     const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: clientTime ? undefined : "UTC" }) : "Time TBA"
     return (
