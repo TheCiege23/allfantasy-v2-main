@@ -40,7 +40,8 @@ export async function syncCfpPreview(input: { season: number; apply: boolean; no
           else value[index] = { ...value[index], ...Object.fromEntries(Object.entries(bowl).filter(([, val]) => val !== undefined)) }
         }
       }
-      const data = { fetchedAt: now.toISOString(), value }
+      // Strip absent optional provider fields before writing Prisma JSON.
+      const data = JSON.parse(JSON.stringify({ fetchedAt: now.toISOString(), value }))
       const expiresAt = new Date("2029-01-01T00:00:00Z")
       if (old) {
         const updated = await prisma.sportsDataCache.updateMany({ where: { cacheKey, data: { equals: old.data as any } }, data: { data: data as any, expiresAt } })
