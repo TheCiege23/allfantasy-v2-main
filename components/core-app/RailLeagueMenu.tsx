@@ -191,6 +191,24 @@ export function hideLeagueForAccount(leagueId: string, onSaved?: () => void): vo
     })
 }
 
+/**
+ * Bring one hidden league back into the account's lists — `hideLeagueForAccount` in reverse, and read
+ * back first for the same reason: the pages carry archived leagues in their hidden set, and saving that
+ * set wholesale would write them into the account's hidden list.
+ */
+export function unhideLeagueForAccount(leagueId: string, onSaved?: () => void): void {
+  void fetch('/api/core/league-preferences', { credentials: 'same-origin', cache: 'no-store' })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+    .then((prefs: { hidden?: unknown }) => {
+      const hidden = Array.isArray(prefs?.hidden) ? prefs.hidden.filter((x): x is string => typeof x === 'string') : []
+      if (!hidden.includes(leagueId)) return onSaved?.()
+      saveLeaguePreference('hidden', hidden.filter((id) => id !== leagueId), onSaved)
+    })
+    .catch(() => {
+      /* the row goes back to hidden on the next render, which is the truthful state */
+    })
+}
+
 export function RailLeagueMenu({
   name,
   pinned,

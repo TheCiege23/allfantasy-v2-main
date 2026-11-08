@@ -127,13 +127,81 @@
 }
 .af-scope-chip b { color: var(--muted); font: 700 11px/1 'JetBrains Mono', monospace; }
 .af-scope-chip:hover { text-decoration: none; border-color: var(--accent-line); }
-.af-scope-chip[aria-current='true'] {
+.af-scope-chip[aria-current='true'],
+.af-scope-chip[aria-pressed='true'] {
   border-color: transparent;
   background: var(--accent);
   color: var(--accent-ink);
 }
-.af-scope-chip[aria-current='true'] b { color: inherit; }
-.af-scope-chip[aria-disabled='true'] { opacity: 0.55; cursor: default; }
+.af-scope-chip[aria-current='true'] b,
+.af-scope-chip[aria-pressed='true'] b { color: inherit; }
+.af-scope-chip[aria-disabled='true'],
+.af-scope-chip:disabled { opacity: 0.45; cursor: default; }
+button.af-scope-chip { cursor: pointer; }
+/*
+ * The platform's own colour, as a dot on its filter chip. `.af-platform` (af-core.css) paints the
+ * platform's dark background and sets `color` to its bright foreground; the ring draws in that
+ * foreground, because the background alone is near-black on a dark sheet.
+ */
+.af-scope-chip-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 3px solid currentColor;
+  background: var(--muted);
+}
+
+/* "Use this filter on Home" — the deliberate way to filter Home, now that the chips only filter the list. */
+.af-scope-apply {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font: 700 13px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-decoration: none;
+}
+.af-scope-apply:hover { text-decoration: underline; }
+
+/* Customize, in the sheet's header beside the close button. */
+.af-scope-head strong { flex: 1; min-width: 0; }
+.af-scope-head .af-scope-close { margin-left: -6px; }
+.af-scope-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text2);
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+.af-scope-tool:hover { border-color: var(--accent-line); }
+.af-scope-tool[aria-pressed='true'] { border-color: var(--accent-line); color: var(--text); background: var(--accent-soft); }
+.af-scope-tool[data-variant='done'] { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+.af-scope-eye { flex: none; }
+.af-scope-edit-hint { margin: -4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.af-scope-edit-hint a { color: var(--accent); font-weight: 700; }
+
+/* A sport's heading in the list, the rail's (`.af-rail-sport`): ball, short name, count, between rules. */
+.af-scope-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 2px 4px;
+  color: var(--muted);
+  font: 700 11px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.af-scope-section::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.af-scope-section-icon { font-size: 14px; letter-spacing: 0; }
+.af-scope-section-label { color: var(--text2); }
+.af-scope-section-count { color: var(--muted); }
 
 .af-scope-search input {
   width: 100%;
@@ -196,7 +264,46 @@
   white-space: nowrap;
   font: 700 14px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
-.af-scope-league-meta { color: var(--muted); font: 500 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif); }
+.af-scope-league-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  color: var(--muted);
+  font: 500 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-scope-league-sport { display: inline-flex; align-items: center; gap: 4px; color: var(--text2); font-weight: 700; white-space: nowrap; }
+.af-scope-league-ball { font-size: 13px; line-height: 1; }
+.af-scope-league-plat { text-transform: none; letter-spacing: 0.02em; }
+.af-scope-league-hidden {
+  padding: 1px 6px;
+  border: 1px dashed var(--line2);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.af-scope-row[data-hidden='true'] .af-scope-league-art,
+.af-scope-row[data-hidden='true'] .af-scope-league-name { opacity: 0.55; }
+
+/* Customize: move up, move down, hide. 44px each, the phone tap-target floor (see below). */
+.af-scope-edit { display: inline-flex; flex: none; align-items: center; }
+.af-scope-edit-btn {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text2);
+  font: 800 17px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+.af-scope-edit-btn:hover:not(:disabled) { background: var(--chip); color: var(--text); }
+.af-scope-edit-btn:disabled { opacity: 0.3; cursor: default; }
+.af-scope-edit-btn[aria-pressed='true'] { color: var(--warn); }
 .af-scope-empty { padding: 14px 4px; color: var(--muted); font-size: 13px; }
 .af-scope-note { margin: 0; color: var(--muted); font-size: 12px; }
 
@@ -275,10 +382,54 @@
 .af-core .af-scope-league-name { align-self: end; font-size: 14px; }
 .af-core .af-scope-league-meta { grid-column: 2; font-size: 12px; }
 /* Your record and place, after the platform — brighter than the meta so it reads as yours. */
-.af-core .af-scope-league-record { color: var(--text2); font-weight: 700; white-space: nowrap; }
-.af-core .af-scope-league-record::before { content: ' · '; color: var(--muted); font-weight: 500; }
+.af-core .af-scope-league-record { color: var(--text); font-weight: 800; white-space: nowrap; }
+.af-core .af-scope-league-record[data-state='chopped'] { color: var(--bad, var(--muted)); }
+
+/*
+ * The platform's colour on the row's leading edge as well as its chip, so a long list reads as
+ * Sleeper / ESPN / AllFantasy before a single name is read (user report, 2026-11-08). Same tokens as
+ * `.af-platform` in af-core.css; AllFantasy's own in AF blue, as the rail draws it.
+ */
+.af-core .af-scope-row { box-shadow: inset 4px 0 0 var(--af-scope-plat, transparent); }
+.af-core .af-scope-row[data-platform='sleeper'] { --af-scope-plat: var(--p-sleeper-fg); }
+.af-core .af-scope-row[data-platform='espn'] { --af-scope-plat: var(--p-espn-fg); }
+.af-core .af-scope-row[data-platform='yahoo'] { --af-scope-plat: var(--p-yahoo-fg); }
+.af-core .af-scope-row[data-platform='fantrax'] { --af-scope-plat: var(--p-fantrax-fg); }
+.af-core .af-scope-row[data-platform='mfl'] { --af-scope-plat: var(--p-mfl-fg); }
+.af-core .af-scope-row[data-platform='fleaflicker'] { --af-scope-plat: var(--p-fleaflicker-fg); }
+.af-core .af-scope-row[data-platform='native'] { --af-scope-plat: #2563eb; }
+.af-core .af-scope-league-plat[data-platform='native'] { background: #2563eb; color: #ffffff; }
+.af-core .af-scope-chip-dot[data-platform='native'] { background: #2563eb; color: #8fb4ff; }
+.af-core .af-scope-league { padding-left: 2px; }
 @media (max-width: 720px) {
   .af-core .af-scope-btn { max-width: min(64vw, 260px); }
+  /*
+   * On a phone each chip row scrolls sideways instead of wrapping: five sports and four platforms
+   * wrapped to four lines and left the league list a third of the sheet (measured off the 2026-11-08
+   * screenshot). The list is what the sheet is for.
+   */
+  .af-core .af-scope-chips { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -14px; padding-right: 14px; }
+  /* The group's name sits left of its chips rather than over them: two rows of the sheet back. */
+  .af-core .af-scope-group { flex-direction: row; align-items: center; gap: 8px; }
+  .af-core .af-scope-group-title { flex: none; width: 4.6em; font-size: 10px; letter-spacing: 0.08em; }
+  .af-core .af-scope-filters { gap: 6px; }
+  .af-core .af-scope-panel { gap: 10px; }
+  .af-core .af-scope-head strong { font-size: 17px; }
+  .af-core .af-scope-head .af-scope-tool { padding: 0 10px; }
+  /*
+   * ⚠ THE WHOLE SHEET SCROLLS ON A PHONE, NOT ONLY THE LIST. With the filters, search and Customize
+   * above it, a list that scrolled by itself was left one row tall (measured at 390px, 2026-11-08).
+   * Scrolling the sheet gives the list every pixel below the fold; the header stays pinned.
+   */
+  .af-core .af-scope-panel { overflow-y: auto; overscroll-behavior: contain; }
+  .af-core .af-scope-list { flex: none; overflow: visible; }
+  .af-core .af-scope-head { position: sticky; top: -14px; z-index: 1; margin: -14px -14px 0; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface2, var(--surface)); }
+  .af-core .af-scope-chips::-webkit-scrollbar { display: none; }
+  .af-core .af-scope-chip { flex: 0 0 auto; }
+  /* Customize needs the width for its three buttons; the crest is the first thing to give it up. */
+  .af-core .af-scope-panel[data-editing='true'] .af-scope-league { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-scope-panel[data-editing='true'] .af-scope-league-art { display: none; }
+  .af-core .af-scope-panel[data-editing='true'] .af-scope-league-meta { grid-column: 1; }
   .af-core .af-scope-panel { inset: auto 8px calc(76px + env(safe-area-inset-bottom, 0px)); padding: 14px; width: auto; max-height: 76dvh; }
   .af-core .af-scope-search input { font-size: 16px; }
 }
