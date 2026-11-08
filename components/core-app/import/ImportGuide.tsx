@@ -24,7 +24,7 @@
  */
 
 import Link from 'next/link'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-import-guide.css'
@@ -40,14 +40,23 @@ type UrlHint = {
   caption?: ReactNode
 }
 
-type BrowserPath = { key: string; label: string; path: ReactNode[] }
+/**
+ * A screenshot slot. The file lives under `public/import-guides/…` (see the README there for the
+ * exact names). Until a file is added the slot renders NOTHING in production — a broken image or a
+ * "screenshot coming soon" box on a live screen is worse than no picture — and a labelled dashed
+ * box in development, so whoever adds the images can see where each one goes.
+ */
+type GuideShot = { src: string; alt: string }
+
+type BrowserPath = { key: string; label: string; path: ReactNode[]; shot?: GuideShot }
 
 type GuideStep = {
   title: string
   body?: ReactNode
   url?: UrlHint
   browsers?: BrowserPath[]
-  /** The step is satisfied by a connected ESPN account (steps 1-3 of ESPN). */
+  shot?: GuideShot
+  /** The step is satisfied by a connected ESPN account (the cookie steps of ESPN). */
   doneWhenEspnConnected?: boolean
 }
 
@@ -83,6 +92,10 @@ const ESPN_BROWSERS: BrowserPath[] = [
         <strong>Cookies</strong> → <strong>https://fantasy.espn.com</strong>
       </>,
     ],
+    shot: {
+      src: '/import-guides/espn/02-chrome-devtools-application-cookies.png',
+      alt: 'Chrome DevTools, Application tab, Cookies for fantasy.espn.com, with SWID and espn_s2 highlighted',
+    },
   },
   {
     key: 'safari',
@@ -98,6 +111,10 @@ const ESPN_BROWSERS: BrowserPath[] = [
         <strong>Cookies</strong> → <strong>fantasy.espn.com</strong>
       </>,
     ],
+    shot: {
+      src: '/import-guides/espn/02-safari-web-inspector-storage-cookies.png',
+      alt: 'Safari Web Inspector, Storage tab, Cookies for fantasy.espn.com, with SWID and espn_s2 highlighted',
+    },
   },
   {
     key: 'firefox',
@@ -113,6 +130,10 @@ const ESPN_BROWSERS: BrowserPath[] = [
         <strong>Cookies</strong> → <strong>https://fantasy.espn.com</strong>
       </>,
     ],
+    shot: {
+      src: '/import-guides/espn/02-firefox-devtools-storage-cookies.png',
+      alt: 'Firefox DevTools, Storage tab, Cookies for fantasy.espn.com, with SWID and espn_s2 highlighted',
+    },
   },
 ]
 
@@ -179,7 +200,35 @@ const GUIDES: Partial<Record<ImportProvider, Guide>> = {
       {
         key: 'cookies',
         label: 'Connect ESPN',
+        /*
+         * ⚠ LEAGUE FIRST (2026-11-08). The form now asks for the league and tests it before the
+         * cookie step, so the guide follows the same order: someone with a public league learns
+         * that at step 1, and the cookie steps are labelled as what confirms their team.
+         */
         steps: [
+          {
+            title: 'Paste your league ID or link, then Test connection',
+            body: (
+              <>
+                We check the league straight away and tell you its name, how many teams it has, and
+                whether it&rsquo;s public or private.
+              </>
+            ),
+            url: {
+              before: 'fantasy.espn.com/football/league?leagueId=',
+              id: '123456',
+              caption: (
+                <>
+                  ESPN app: <strong>League</strong> → <strong>League Info</strong>. Paste the number
+                  or the whole link.
+                </>
+              ),
+            },
+            shot: {
+              src: '/import-guides/espn/01-league-id-in-address-bar.png',
+              alt: 'An ESPN fantasy football league page with the leagueId number highlighted in the address bar',
+            },
+          },
           {
             title: 'Sign in at fantasy.espn.com on a computer',
             body: <>Chrome, Edge, Safari or Firefox all work. Open any page of your league.</>,
@@ -201,24 +250,16 @@ const GUIDES: Partial<Record<ImportProvider, Guide>> = {
             title: 'Paste both below and save',
             body: (
               <>
-                Stored encrypted. They let us read your leagues as you — they are not your password,
-                and we never ask for it.
+                We test them against your league first, then store them encrypted. They let us read
+                your leagues as you — they are not your password, and we never ask for it. Disconnect
+                ESPN any time.
               </>
             ),
-            doneWhenEspnConnected: true,
-          },
-          {
-            title: 'Paste your league ID or link',
-            url: {
-              before: 'fantasy.espn.com/football/league?leagueId=',
-              id: '123456',
-              caption: (
-                <>
-                  ESPN app: <strong>League</strong> → <strong>League Info</strong>. Paste the number
-                  or the whole link.
-                </>
-              ),
+            shot: {
+              src: '/import-guides/espn/03-paste-cookies-into-allfantasy.png',
+              alt: 'The AllFantasy ESPN cookie form with SWID and espn_s2 pasted',
             },
+            doneWhenEspnConnected: true,
           },
         ],
       },
@@ -393,6 +434,46 @@ function UrlBar({ hint }: { hint: UrlHint }) {
   )
 }
 
+function GuideScreenshot({ shot }: { shot: GuideShot }) {
+  /* Hidden until it actually loads, so a missing file never flashes a broken-image icon. */
+  const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading')
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  /*
+   * ⚠ A server-rendered <img> can finish (or fail) BEFORE React attaches onLoad/onError, and then
+   * neither ever fires — the slot would sit hidden in 'loading' forever. Read the settled state
+   * once on mount instead of trusting the events alone.
+   */
+  useEffect(() => {
+    const img = imgRef.current
+    if (img && img.complete) setState(img.naturalWidth > 0 ? 'ok' : 'missing')
+  }, [shot.src])
+  if (state === 'missing') {
+    if (process.env.NODE_ENV === 'production') return null
+    return (
+      <figure className="af-guide-shot af-guide-shot--placeholder" data-testid="guide-shot-placeholder">
+        <figcaption>
+          Screenshot slot — add <code>public{shot.src}</code>
+          <br />
+          {shot.alt}
+        </figcaption>
+      </figure>
+    )
+  }
+  return (
+    <figure className="af-guide-shot" data-state={state} hidden={state !== 'ok'}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static guide image; next/image needs dimensions we do not have until the screenshots exist */}
+      <img
+        ref={imgRef}
+        src={shot.src}
+        alt={shot.alt}
+        decoding="async"
+        onLoad={() => setState('ok')}
+        onError={() => setState('missing')}
+      />
+    </figure>
+  )
+}
+
 function BrowserTabs({ browsers }: { browsers: BrowserPath[] }) {
   const [active, setActive] = useState(browsers[0]?.key ?? '')
   /* Open on the browser the reader is actually using. Safari's UA also says "Safari" inside
@@ -427,6 +508,7 @@ function BrowserTabs({ browsers }: { browsers: BrowserPath[] }) {
           ))}
         </ol>
       ) : null}
+      {current?.shot ? <GuideScreenshot key={current.key} shot={current.shot} /> : null}
     </div>
   )
 }
@@ -476,7 +558,10 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
 
   const activeTrack = guide.tracks.find((t) => t.key === track) ?? guide.tracks[0]
   const steps = activeTrack?.steps ?? []
-  const doneCount = steps.filter((s) => s.doneWhenEspnConnected && espnConnected === true).length
+  const isDone = (s: GuideStep) => Boolean(s.doneWhenEspnConnected && espnConnected === true)
+  const doneCount = steps.filter(isDone).length
+  /* The first step not yet done — done steps are no longer always the leading ones. */
+  const currentIndex = steps.findIndex((s) => !isDone(s))
 
   return (
     <aside
@@ -508,7 +593,7 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
           <span className="af-guide-chip af-num">{guide.effort}</span>
           <span className="af-guide-chip af-num">{guide.setup}</span>
           {doneCount > 0 ? (
-            <span className="af-guide-chip af-guide-chip--good af-num">Steps 1–3 done</span>
+            <span className="af-guide-chip af-guide-chip--good af-num">Cookie steps done</span>
           ) : null}
         </div>
 
@@ -537,7 +622,7 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
         <ol className="af-guide-steps">
           {steps.map((s, i) => {
             const done = Boolean(s.doneWhenEspnConnected && espnConnected === true)
-            const current = !done && i === doneCount
+            const current = !done && i === currentIndex
             return (
               <li
                 key={`${activeTrack?.key}-${i}`}
@@ -556,6 +641,7 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
                   {s.body && !done ? <p className="af-guide-step-body">{s.body}</p> : null}
                   {s.browsers && !done ? <BrowserTabs browsers={s.browsers} /> : null}
                   {s.url && !done ? <UrlBar hint={s.url} /> : null}
+                  {s.shot && !done ? <GuideScreenshot shot={s.shot} /> : null}
                 </div>
               </li>
             )

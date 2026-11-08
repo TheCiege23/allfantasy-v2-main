@@ -260,10 +260,17 @@ describe('6b — ESPN connect is in the import flow, not a trip to Settings', ()
     render(<ImportV4 />)
     fireEvent.click(pill(/ESPN/))
     await waitFor(() => expect(document.querySelector('.af-im-espn')).toBeTruthy())
-    /* And it leads — before the league-ID field, not after a failed import. */
+    /*
+     * It is on screen from the start — never only after a failed import. Since the guided flow
+     * (owner request, 2026-11-08) it sits AFTER the league box and its Test connection button:
+     * step 1 is the league, step 2 is connecting, and the test result labels step 2.
+     */
     const block = document.querySelector('.af-im-espn')!
     const field = document.querySelector('.af-im-field-row')!
-    expect(block.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const test = document.querySelector('[data-testid="espn-test-connection"]')!
+    expect(field.compareDocumentPosition(test) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(test.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(document.getElementById('espn-swid-input')).toBeTruthy()
   })
 
   it('never sends the user to /settings to connect ESPN', async () => {

@@ -10,6 +10,8 @@ import {
 import {
   EspnImportConnectionError,
   EspnImportLeagueNotFoundError,
+  EspnFormatChangedError,
+  EspnUnavailableError,
   fetchEspnLeagueForImport,
 } from './espn/EspnLeagueFetchService'
 import {
@@ -277,6 +279,14 @@ export async function runImportedLeagueNormalizationPipeline(
     }
     if (e instanceof EspnImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
+    }
+    /*
+     * ESPN timed out / 5xx'd through every retry, or answered with something that is not a league
+     * object. Both messages are written for users ("ESPN import temporarily unavailable…") and
+     * neither is a missing league, so they must not fall through to the generic code below.
+     */
+    if (e instanceof EspnUnavailableError || e instanceof EspnFormatChangedError) {
+      return { success: false, error: e.message, code: 'PROVIDER_UNAVAILABLE' }
     }
     if (e instanceof YahooImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }
