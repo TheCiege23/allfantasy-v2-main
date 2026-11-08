@@ -128,12 +128,22 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         matchup.teamId2 == null
           ? []
           : [
-              {
-                roster_id_1: matchup.teamId1,
-                roster_id_2: matchup.teamId2,
-                points_1: matchup.points1,
-                points_2: matchup.points2,
-              },
+              /*
+               * 🛑 AN UNDECIDED MATCHUP CARRIES NO POINTS INTO THE IMPORT. ESPN sends
+               * `totalPoints: 0` for every week not yet played, and the bootstrap derives a result
+               * from points — 0 vs 0 is 'T'. Measured on a week-9 league: weeks 9–14 became six
+               * fake TIES per team in `TeamPerformance`, which Chimmy's league history and the
+               * class-rating week log both count. The pairing is kept; the score arrives on the
+               * sync after ESPN decides the matchup.
+               */
+              matchup.undecided
+                ? { roster_id_1: matchup.teamId1, roster_id_2: matchup.teamId2 }
+                : {
+                    roster_id_1: matchup.teamId1,
+                    roster_id_2: matchup.teamId2,
+                    points_1: matchup.points1,
+                    points_2: matchup.points2,
+                  },
             ],
       ),
     }))

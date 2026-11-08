@@ -620,7 +620,11 @@ function buildEspnTeamName(team: Record<string, any>, fallback: string): string 
   return fallback
 }
 
-function parseEspnRosterEntries(entries: unknown): {
+function parseEspnRosterEntries(
+  entries: unknown,
+  /** Collects `defaultPositionId`s with no label, for one log line per import (GAPS.md L-03). */
+  unmappedPositions?: Map<number, number>,
+): {
   playerIds: string[]
   starterIds: string[]
   reserveIds: string[]
@@ -661,9 +665,13 @@ function parseEspnRosterEntries(entries: unknown): {
     } else if (!isBench) {
       starterIds.push(playerId)
     }
+    const positionLabel = ESPN_POSITION_LABELS[positionId]
+    if (!positionLabel && positionId > 0 && unmappedPositions) {
+      unmappedPositions.set(positionId, (unmappedPositions.get(positionId) ?? 0) + 1)
+    }
     playerMap[playerId] = {
       name: playerName,
-      position: ESPN_POSITION_LABELS[positionId] ?? 'N/A',
+      position: positionLabel ?? 'N/A',
       team: ESPN_TEAM_ABBREVIATIONS[teamId] ?? '',
     }
   }
@@ -671,12 +679,27 @@ function parseEspnRosterEntries(entries: unknown): {
   return { playerIds, starterIds, reserveIds, playerMap }
 }
 
+/**
+ * A team's standing, in the order ESPN's own fields can be trusted for it.
+ *
+ * 🛑 MEASURED ON A REAL LEAGUE (contracts/espn/fixtures/fantasy-league.NFL.2026.json, week 9):
+ *   - `rankCalculatedFinal` / `rankFinal` are 0 for EVERY team until the season ends. 0 is a number,
+ *     so `??` took it and every mid-season ESPN import stored `currentRank: 0` for all teams.
+ *   - `currentProjectedRank` is ESPN's simulation of where a team will FINISH, not where it stands:
+ *     the 3-5 team seeded 8th was projected 9th, the 2-6 team seeded 9th projected 8th.
+ *   - `playoffSeed` is the current standing (1..size), already ordered by the league's tiebreak rule.
+ * So: a real final rank once there is one, else the current seed, else the computed fallback.
+ */
 function getEspnTeamRank(team: Record<string, any>): number | null {
+  const positive = (value: unknown) => {
+    const n = parseNumber(value, null)
+    return n != null && n > 0 ? n : null
+  }
   return (
-    parseNumber(team.rankCalculatedFinal, null) ??
-    parseNumber(team.currentProjectedRank, null) ??
-    parseNumber(team.playoffSeed, null) ??
-    parseNumber(team.record?.overall?.rank, null)
+    positive(team.rankCalculatedFinal) ??
+    positive(team.rankFinal) ??
+    positive(team.playoffSeed) ??
+    positive(team.record?.overall?.rank)
   )
 }
 
@@ -700,6 +723,7 @@ function computeEspnStandingsRanks(teams: EspnImportTeam[]): Map<string, number>
 function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImportTeam[] {
   const members = buildEspnMemberDirectory(raw?.members)
   const teamsRaw = Array.isArray(raw?.teams) ? raw.teams : []
+  const unmappedPositions = new Map<number, number>()
   const teams = teamsRaw
     .filter(isRecord)
     .map((team: Record<string, any>) => {
@@ -707,7 +731,7 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
       if (!teamId) return null
 
       const { managerId, managerName } = resolveEspnOwners(team, members)
-      const roster = parseEspnRosterEntries(team.roster?.entries)
+      const roster = parseEspnRosterEntries(team.roster?.entries, unmappedPositions)
       const record = isRecord(team.record?.overall) ? team.record.overall : {}
       const acquisitionBudgetSpent = parseNumber(team.transactionCounter?.acquisitionBudgetSpent, null)
       const faabRemaining =
@@ -739,6 +763,21 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
       }
     })
     .filter(Boolean) as EspnImportTeam[]
+
+  /*
+   * ⚠ IDP POSITIONS ARE UNMAPPED ON PURPOSE, AND THIS IS HOW THEY GET MAPPED. ESPN's defensive
+   * `defaultPositionId`s have never been seen in a capture (GAPS.md L-03), and guessing them would
+   * label players wrong with no way to notice. They import as 'N/A'; this line names the ids, with
+   * counts, so the first real IDP import says exactly what to add to `ESPN_POSITION_LABELS`.
+   * Ids and counts only — no player or league names.
+   */
+  if (unmappedPositions.size > 0) {
+    const detail = [...unmappedPositions.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, count]) => `${id}x${count}`)
+      .join(', ')
+    console.warn(`[espn-import] unmapped defaultPositionId(s): ${detail} (imported as N/A; see contracts/espn/GAPS.md L-03)`)
+  }
 
   const computedRanks = computeEspnStandingsRanks(teams)
   for (const team of teams) {
@@ -923,6 +962,8 @@ function parseEspnSchedule(raw: any, season: number, currentWeek: number | null)
     ? [...new Set<string>(scoring.scoringItems.map((item: any): string => String(item?.statId ?? '')).filter((id: string) => /^\d{1,4}$/.test(id)))]
     : []
 
+  // `${week}:${teamA}:${teamB}` (both orders) for every matchup ESPN has not decided yet.
+  const undecided = new Set<string>()
   for (const matchup of scheduleRaw) {
     if (!isRecord(matchup)) continue
     const week = parseNumber(matchup.matchupPeriodId, null)
@@ -931,6 +972,10 @@ function parseEspnSchedule(raw: any, season: number, currentWeek: number | null)
     const away = isRecord(matchup.away) ? matchup.away : {}
     const teamId1 = String(home.teamId ?? '').trim()
     const teamId2 = String(away.teamId ?? '').trim()
+    if (String(matchup.winner ?? '').toUpperCase() === 'UNDECIDED') {
+      undecided.add(`${week}:${teamId1}:${teamId2}`)
+      undecided.add(`${week}:${teamId2}:${teamId1}`)
+    }
     upsertEspnMatchup(
       weeks,
       week,
@@ -970,7 +1015,9 @@ function parseEspnSchedule(raw: any, season: number, currentWeek: number | null)
     .map(([week, matchups]) => ({
       week,
       season,
-      matchups,
+      matchups: matchups.map((m) =>
+        undecided.has(`${week}:${m.teamId1}:${m.teamId2 ?? ''}`) ? { ...m, undecided: true } : m,
+      ),
     }))
 }
 

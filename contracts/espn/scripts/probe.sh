@@ -12,6 +12,12 @@
 #   ./probe.sh teams  <SPORT>
 #   ./probe.sh roster <SPORT> <espn_team_id>
 #   ./probe.sh fantasy-league MLB <league_id> <season>
+#   ./probe.sh fantasy-league NFL <league_id> <season>
+#   ./probe.sh fantasy-communication NFL <league_id> <season>
+#
+# The fantasy endpoints carry PEOPLE (member names, ESPN member ids, team names, chat). Their
+# capture is redacted in place by redact-fantasy.mjs before this script reports success; a capture
+# the redactor refuses is deleted, never left in fixtures/.
 #   ./probe.sh summary NFL <espn_event_id>
 #   ./probe.sh summary NCAAB <espn_event_id>
 #   ./probe.sh scoreboard NCAAB <YYYYMMDD>
@@ -47,7 +53,10 @@ case "$SPORT" in
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
   NFL)
     # scoreboard: the postseason rounds behind NFL playoff bracket pools (lib/playoffs/nflPlayoffs.ts).
-    if [[ "$ENDPOINT" != "summary" && "$ENDPOINT" != "scoreboard" ]]; then echo "NFL currently supports only summary and scoreboard capture" >&2; exit 2; fi
+    # fantasy-league / fantasy-communication: the ESPN fantasy football import (2026-11-08).
+    case "$ENDPOINT" in summary|scoreboard|fantasy-league|fantasy-communication) ;; *)
+      echo "NFL currently supports summary, scoreboard, fantasy-league and fantasy-communication capture" >&2; exit 2 ;;
+    esac
     SPORT_PATH="football/nfl"
     ;;
   MLB)
@@ -74,13 +83,31 @@ case "$ENDPOINT" in
     NAME="scoreboard.${SPORT}.${TEAM_ID}"
     ;;
   fantasy-league)
-    if [[ "$SPORT" != "MLB" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ ]]; then
-      echo "usage: probe.sh fantasy-league MLB <public_league_id> <season>" >&2; exit 2
+    if ! [[ "$SPORT" == "MLB" || "$SPORT" == "NFL" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ ]]; then
+      echo "usage: probe.sh fantasy-league <MLB|NFL> <public_league_id> <season>" >&2; exit 2
     fi
-    BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb"
     PATH_SEG="/seasons/${SEASON}/segments/0/leagues/${TEAM_ID}"
-    QS="view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mDraftDetail"
-    NAME="fantasy-league.MLB.${SEASON}"
+    if [[ "$SPORT" == "MLB" ]]; then
+      BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb"
+      QS="view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mDraftDetail"
+    else
+      # Every view the NFL import reads or may read: standings, weekly scores, keepers, draft, trades.
+      BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl"
+      QS="view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mMatchupScore&view=mStandings&view=mDraftDetail&view=mTransactions2"
+    fi
+    NAME="fantasy-league.${SPORT}.${SEASON}"
+    REDACT_LEAGUE_ID="$TEAM_ID"
+    ;;
+  fantasy-communication)
+    # The activity feed EspnLeagueFetchService parses for transactions (GAPS.md T-01/T-02).
+    if [[ "$SPORT" != "NFL" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ ]]; then
+      echo "usage: probe.sh fantasy-communication NFL <public_league_id> <season>" >&2; exit 2
+    fi
+    BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl"
+    PATH_SEG="/seasons/${SEASON}/segments/0/leagues/${TEAM_ID}/communication/"
+    QS="view=kona_league_communication"
+    NAME="fantasy-communication.${SPORT}.${SEASON}"
+    REDACT_LEAGUE_ID="$TEAM_ID"
     ;;
   summary)
     # The game summary behind every live game view and every game alert (lib/live/espnGameSummary.ts).
@@ -107,7 +134,7 @@ case "$ENDPOINT" in
     NAME="roster.${SPORT}.team${TEAM_ID}"
     ;;
   *)
-    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster, fantasy-league, summary. See ENDPOINTS.yaml." >&2
+    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster, fantasy-league, fantasy-communication, summary, scoreboard. See ENDPOINTS.yaml." >&2
     exit 1
     ;;
 esac
@@ -144,6 +171,14 @@ else
   echo "ERROR: neither jq nor node is available. This is a TOOLING problem on this machine," >&2
   echo "       NOT a provider problem — the request above already returned ${CODE}." >&2
   exit 3
+fi
+
+if [[ -n "${REDACT_LEAGUE_ID:-}" ]]; then
+  if ! node "$(dirname "${BASH_SOURCE[0]}")/redact-fantasy.mjs" "$OUT" "$REDACT_LEAGUE_ID"; then
+    rm -f "$OUT"
+    echo "ERROR: redaction refused; the raw capture was deleted, nothing is left in fixtures/." >&2
+    exit 1
+  fi
 fi
 
 echo "✅ fixture written: ${OUT} ($(wc -c < "$OUT") bytes)" >&2
