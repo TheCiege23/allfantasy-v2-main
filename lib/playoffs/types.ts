@@ -284,6 +284,9 @@ export type PlayoffPickView = {
   entryId: string
   seriesId: string
   pickTeamName: string
+  confirmedAt?: string | null
+  confirmedTeamName?: string | null
+  draftTeamName?: string | null
   createdAt: string
   updatedAt: string
 }

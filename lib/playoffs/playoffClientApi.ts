@@ -72,6 +72,7 @@ export async function savePlayoffBracketPickClient(input: {
   entryId: string
   seriesId: string
   pickTeamName: string
+  confirmationMode?: "per_day"
 }): Promise<PlayoffChallengeView> {
   const response = await fetch(`/api/brackets/playoffs/${input.challengeId}/entries/${input.entryId}/picks`, {
     method: "POST",
@@ -79,6 +80,7 @@ export async function savePlayoffBracketPickClient(input: {
     body: JSON.stringify({
       seriesId: input.seriesId,
       pickTeamName: input.pickTeamName,
+      confirmationMode: input.confirmationMode,
     }),
   })
 

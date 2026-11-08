@@ -21,7 +21,7 @@ export async function loadProvisionalStandings(view: PlayoffChallengeView) {
   if (!view.series.some(g => g.bestOf === 1)) return null
   const locked = view.series.filter(g => g.bestOf === 1 && g.status === "in_progress" && gameHasLocked(g, Date.now())).map(g => g.id)
   const entries = await finalizedEntryReader.findMany({ where: { challengeId: view.challenge.id, finalizedAt: { not: null } }, select: { id: true, tiebreakerTotalScore: true } })
-  const picks = locked.length ? await prisma.playoffBracketPick.findMany({ where: { challengeId: view.challenge.id, entryId: { in: entries.map(e => e.id) }, seriesId: { in: locked } }, select: { entryId: true, seriesId: true, pickTeamName: true } }) : []
+  const picks = locked.length ? await prisma.playoffBracketPick.findMany({ where: { challengeId: view.challenge.id, entryId: { in: entries.map(e => e.id) }, seriesId: { in: locked } }, select: { entryId: true, seriesId: true, pickTeamName: true, confirmedAt: true } }) : []
   return provisionalStandings(view, projectionEntries(view, new Map(entries.map(e => [e.id,e.tiebreakerTotalScore]))), picks)
 }
 export async function loadBracketExperience(view: PlayoffChallengeView): Promise<BracketExperience> {
@@ -135,7 +135,7 @@ export async function sweepBracketExperience(sport: PlayoffSport, season: number
       try {
         const canonical = base?.entries.find(e => e.id === entry.id && e.userId === entry.userId)
         if (!base || !canonical) throw new Error("ENTRY_SNAPSHOT_UNAVAILABLE")
-        const view: PlayoffChallengeView = { ...base, viewerUserId: entry.userId, activeEntry: canonical, picks: picks.filter(p => p.entryId === entry.id).map(p => ({ ...p, createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : "", updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : "" })) }
+        const view: PlayoffChallengeView = { ...base, viewerUserId: entry.userId, activeEntry: canonical, picks: picks.filter(p => p.entryId === entry.id).map(p => ({ ...p, confirmedAt: p.confirmedAt instanceof Date ? p.confirmedAt.toISOString() : null, createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : "", updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : "" })) }
         const profile = await prisma.userProfile.findUnique({ where: { userId: entry.userId }, select: { notificationPreferences: true } })
         const prefs = readBracketAlerts(profile?.notificationPreferences, pool.id)
         const snapshot = await observeEntry(view,prefs)
