@@ -103,6 +103,31 @@ covers it; neither an empty scoreboard nor the previous season proves a future s
   completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
   if private), committed with the grouping fix.
 
+## NFL fantasy league capture, 2026-11-08
+
+Owner-chosen public league, 10 teams, week 9 of 14, read without cookies; redacted and trimmed into
+`fixtures/fantasy-league.NFL.2026.json` (see `fantasy_nfl` in ENDPOINTS.yaml). Do not re-probe for shape.
+
+- `R-01` FOUND BY THE FIXTURE, FIXED: every team imported with rank 0. `rankCalculatedFinal` is 0
+  until the season ends and `??` took it; the next fallback was `currentProjectedRank`, a projection.
+  Rank now reads a positive final rank, else `playoffSeed`. Pinned by `__tests__/league-import/espn-nfl-fixture.test.ts`.
+- `U-01` FOUND BY THE FIXTURE, FIXED: every unplayed week imported as a 0–0 TIE (`winner: UNDECIDED`
+  carries `totalPoints: 0`; the bootstrap derives 'T' from equal points). Undecided matchups now import
+  their pairing with no points. The live-scoring path is unchanged. Pinned by the same test.
+- `M-01` RECORDED: without cookies `members[]` carries no names, so owner names fall back to team names.
+- `D-01` OPEN: a draft pick carries only `playerId`; the 17 of 160 drafted players since dropped have no
+  name or position in this response. Filling them needs a player lookup (e.g. a players view), not probed.
+- `T-01` UPDATED: `kona_league_communication` answers **401 `AUTH_COMMUNICATION_NOT_VISIBLE` without
+  cookies even for a public league**. Its shape is still uncaptured.
+- `T-02` STILL OPEN: this league has no trade (`transactionCounter.trades` 0 for every team, and
+  `mTransactions2` returned 8 recent roster moves only). Needs a league with a completed multi-player trade,
+  read with cookies.
+- `K-01` OPEN: keepers — `keeperCount` is 0 here, so keeper fields are unverified.
+- `L-01` STILL OPEN: slot 24 (EDR) has count 0 here.
+- `L-03` OPEN: IDP `defaultPositionId`s have never been seen. Unknown ids now import as N/A and are
+  logged once per import with counts and no names (`[espn-import] unmapped defaultPositionId(s): …`),
+  so the first real IDP import names the ids to add to `ESPN_POSITION_LABELS`.
+
 ## NFL fantasy lineup slots, 2026-10-30 — recorded without probing
 
 - `L-01` UNVERIFIED: ESPN lineup slot `24` (`EDR`, `ESPN_SLOT_LABELS` in

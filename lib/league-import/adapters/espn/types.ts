@@ -57,6 +57,12 @@ export interface EspnImportScheduleWeek {
     points2?: number
     categories1?: Record<string, number>
     categories2?: Record<string, number>
+    /**
+     * ESPN's `winner === 'UNDECIDED'`: not played yet, or still being played. Its `totalPoints` are
+     * 0 (future) or partial (live). Kept on the matchup so the IMPORT can leave its result unset —
+     * the live-scoring path (`fetchEspnScheduleForSync`) still wants the partial points.
+     */
+    undecided?: boolean
   }>
 }
 
