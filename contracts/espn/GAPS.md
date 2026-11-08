@@ -115,8 +115,12 @@ Owner-chosen public league, 10 teams, week 9 of 14, read without cookies; redact
   carries `totalPoints: 0`; the bootstrap derives 'T' from equal points). Undecided matchups now import
   their pairing with no points. The live-scoring path is unchanged. Pinned by the same test.
 - `M-01` RECORDED: without cookies `members[]` carries no names, so owner names fall back to team names.
-- `D-01` OPEN: a draft pick carries only `playerId`; the 17 of 160 drafted players since dropped have no
-  name or position in this response. Filling them needs a player lookup (e.g. a players view), not probed.
+- `D-01` FIXED WITHOUT A PROBE: a draft pick carries only `playerId`; the 17 of 160 drafted players since
+  dropped have no name or position in this response. The importer now fills them without calling ESPN
+  (`lib/league-import/espn/espnPlayerDirectoryFill.ts`): the 4 team defenses from the id itself
+  (`-16000 - proTeamId`), the rest from `PlayerIdentityMap.espnId` (NFL, unambiguous ids only). Measured
+  2026-11-08 on production: 13 of those 13 ids resolve, but only 928 of 9,567 NFL identity rows carry an
+  `espnId`, so a league drafting deeper players can still leave some unnamed.
 - `T-01` UPDATED: `kona_league_communication` answers **401 `AUTH_COMMUNICATION_NOT_VISIBLE` without
   cookies even for a public league**. Its shape is still uncaptured.
 - `T-02` STILL OPEN: this league has no trade (`transactionCounter.trades` 0 for every team, and

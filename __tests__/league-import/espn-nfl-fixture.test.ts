@@ -15,7 +15,8 @@ import path from 'node:path'
 import fixture from '../../contracts/espn/fixtures/fantasy-league.NFL.2026.json'
 
 vi.mock('@/lib/league-sync-core', () => ({ getDecryptedAuth: vi.fn(async () => null) }))
-vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+const db = vi.hoisted(() => ({ playerIdentityMap: { findMany: vi.fn(async () => [] as unknown[]) } }))
+vi.mock('@/lib/prisma', () => ({ prisma: db }))
 
 import { fetchEspnLeagueForImport } from '@/lib/league-import/espn/EspnLeagueFetchService'
 import { EspnAdapter } from '@/lib/league-import/adapters/espn/EspnAdapter'
@@ -88,12 +89,13 @@ describe('ESPN NFL import against a real league', () => {
     expect([...positions].sort()).toEqual(['D/ST', 'K', 'QB', 'RB', 'TE', 'WR'])
     expect(payload.draftPicks).toHaveLength(160)
     /*
-     * ⚠ KNOWN GAP (GAPS.md D-01): a draft pick carries only a player id, and names/positions come
-     * from current rosters. The 17 players drafted and since dropped have neither. Pinned so a fix
-     * (or a regression) shows up as a changed number rather than nothing at all.
+     * GAPS.md D-01: a pick carries only a player id, and names come from CURRENT rosters, so the 17
+     * players drafted and since dropped arrive unnamed. The 4 team defenses among them are named
+     * from the id alone; the other 13 need our player table, which is empty here.
      */
-    const labelled = payload.draftPicks.filter((p) => p.position && p.position !== 'N/A')
-    expect(labelled).toHaveLength(143)
+    const labelled = payload.draftPicks.filter((p) => p.playerName && p.position && p.position !== 'N/A')
+    expect(labelled).toHaveLength(147)
+    expect(payload.draftPicks.find((p) => p.playerId === '-16034')).toMatchObject({ playerName: 'HOU D/ST', position: 'D/ST', team: 'HOU' })
     expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining('unmapped defaultPositionId'))
   })
 
@@ -132,6 +134,35 @@ describe('ESPN NFL import against a real league', () => {
     const { payload, normalized } = await importFixture()
     expect(payload.transactionsFetched).toBe(false)
     expect((normalized as any).coverage.tradeHistory.state).toBe('missing')
+  })
+})
+
+describe('drafted-then-dropped players (GAPS.md D-01)', () => {
+  // The 13 non-defense picks whose players are on no roster, as `PlayerIdentityMap` holds them.
+  const DROPPED = ['4697815', '4689114', '4575131', '4685415', '4428209', '4361529', '4426338', '4362081', '4362249', '4361432', '4385690', '4034949', '4360689']
+
+  it('names every pick from our own player table', async () => {
+    db.playerIdentityMap.findMany.mockResolvedValueOnce(
+      DROPPED.map((espnId) => ({ espnId, canonicalName: `Player ${espnId}`, position: 'WR', currentTeam: 'NE' })),
+    )
+    serve(raw)
+    const payload = await fetchEspnLeagueForImport('u1', '2026:123456', { includePreviousSeasons: false })
+    expect(payload.draftPicks.filter((p) => p.playerName && p.position && p.position !== 'N/A')).toHaveLength(160)
+    expect(db.playerIdentityMap.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sport: 'NFL', espnId: { in: expect.arrayContaining(DROPPED) } } }),
+    )
+    // Only the 13 unnamed ids are looked up, never a rostered player's.
+    expect((db.playerIdentityMap.findMany.mock.calls[0] as any)[0].where.espnId.in).toHaveLength(13)
+  })
+
+  it('leaves an id unnamed when two players share it, rather than guess', async () => {
+    db.playerIdentityMap.findMany.mockResolvedValueOnce([
+      { espnId: DROPPED[0], canonicalName: 'One Player', position: 'RB', currentTeam: 'WAS' },
+      { espnId: DROPPED[0], canonicalName: 'Another Player', position: 'RB', currentTeam: 'KC' },
+    ])
+    const { payload } = await importFixture()
+    const pick = payload.draftPicks.find((p) => p.playerId === DROPPED[0])!
+    expect(pick.playerName ?? null).toBeNull()
   })
 })
 

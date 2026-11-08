@@ -1,4 +1,37 @@
 import { prisma } from "@/lib/prisma"
+import { isSystemLeagueOwner } from "@/lib/league-import/systemLeagueOwner"
+import { provenClaimedCommissionerIds } from "@/lib/commissioner/leagueCommissionerAccount"
+
+/**
+ * Whose account a league's listing belongs to. Almost always the owner (`League.userId`).
+ *
+ * The exception is a league owned by the AllFantasy SYSTEM account: a public ESPN league people
+ * joined by picking a team (lib/league-import/systemLeagueOwner.ts). Nobody owns that row, so its
+ * listing belongs to the member PROVEN (with their own ESPN cookies) to hold the team ESPN flags as
+ * league manager. 🛑 Never someone who only picked that team: absent from the map means nobody may
+ * list the league, which is what reading the system account always produced.
+ *
+ * Person-owned leagues cost no query.
+ */
+export async function listingAccountIds(
+  leagues: Array<{ id: string; userId: string | null }>
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const systemOwned: string[] = []
+  for (const league of leagues) {
+    if (!league.userId) continue
+    if (isSystemLeagueOwner(league.userId)) systemOwned.push(league.id)
+    else out.set(league.id, league.userId)
+  }
+  if (systemOwned.length > 0) {
+    for (const [leagueId, accountId] of await provenClaimedCommissionerIds(systemOwned)) out.set(leagueId, accountId)
+  }
+  return out
+}
+
+export async function listingAccountId(league: { id: string; userId: string | null }): Promise<string | null> {
+  return (await listingAccountIds([league])).get(league.id) ?? null
+}
 
 /**
  * Imported leagues whose AllFantasy owner holds the team the source platform marked as its head
@@ -11,14 +44,20 @@ import { prisma } from "@/lib/prisma"
  * a claimed commissioner team for a single user. So no Sleeper commissioner could list a league.
  * The commissioner flag lives on the TEAM, and this reads it there.
  *
- * One query for any number of leagues. Owner only: the listing belongs to whoever's row it is.
+ * One query for any number of leagues. Listing account only (listingAccountIds above): the owner,
+ * or the proven commissioner of a system-owned league. Never any other member.
  */
 export async function leaguesWhoseOwnerCommissions(
   leagues: Array<{ id: string; userId: string }>
 ): Promise<Set<string>> {
+  if (leagues.length === 0) return new Set<string>()
+  return leaguesCommissionedByAccount(await listingAccountIds(leagues))
+}
+
+/** As above, for callers that already resolved each league's listing account. */
+export async function leaguesCommissionedByAccount(ownerById: Map<string, string>): Promise<Set<string>> {
   const out = new Set<string>()
-  if (leagues.length === 0) return out
-  const ownerById = new Map(leagues.map((l) => [l.id, l.userId]))
+  if (ownerById.size === 0) return out
   const teams = await prisma.leagueTeam.findMany({
     where: {
       leagueId: { in: [...ownerById.keys()] },
