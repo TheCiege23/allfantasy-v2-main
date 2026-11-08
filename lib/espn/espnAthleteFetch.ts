@@ -32,7 +32,7 @@
 import {
   ESPN_POSITION_LABELS,
   ESPN_TEAM_ABBREVIATIONS,
-} from '@/lib/league-import/espn/EspnLeagueFetchService'
+} from '@/lib/league-import/espn/espnLookups'
 import { espnDefenseTeamAbbreviation } from '@/lib/league-import/espn/espnTeamDefenseIds'
 
 /** db-first-exception: provider adapter, sole importer is the ingestion module. */

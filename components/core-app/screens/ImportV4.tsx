@@ -32,6 +32,7 @@ import {
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
+import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
@@ -362,7 +363,7 @@ const FIELD_BY_PROVIDER: Partial<
      * the ESPN URL — parseEspnSourceInput already accepts the full league URL
      * (extracts `leagueId=`), the help text just never told anyone that.
      */
-    help: 'Connect ESPN above, then paste a league ID here — it’s the leagueId= number in your league URL, fantasy.espn.com/football/league?leagueId=123456. Paste either. We never ask for your ESPN password.',
+    help: 'Step 1 · Paste your league ID or the whole league URL — it’s the leagueId= number in fantasy.espn.com/football/league?leagueId=123456 — then press Test connection. We never ask for your ESPN password.',
   },
   /*
    * ⚠ THIS IS A LEAGUE ID, NOT A SNAPSHOT ID — the provider changed shape under
@@ -924,6 +925,8 @@ export function ImportV4({
    * connect.
    */
   const [espnConnected, setEspnConnected] = useState<boolean | null>(null)
+  /* The guided ESPN flow's last "Test connection" answer; it labels the cookie step below. */
+  const [espnCheck, setEspnCheck] = useState<EspnLeagueCheckStatus>({ k: 'idle' })
 
   const selectable = isImportProviderAvailable(provider)
   // Provider display name comes from the shared config, never a local literal — the same
@@ -2654,42 +2657,6 @@ export function ImportV4({
         {selectable ? (
           <div className="af-im-field-block">
             {/*
-              ── 6b: ESPN connects HERE, not on another page ─────────────────
-              ⚠ THE OLD ANSWER WAS A LINK OUT, AND A LINK OUT ENDS THE IMPORT.
-              ESPN is the one provider on this screen that cannot be read without a
-              connection — commissionerGate resolves your team from the SWID cookie,
-              so a PUBLIC ESPN league needs one too. The screen knew that and handled
-              it by pointing at /settings, which means: leave with no league id in
-              hand, connect, find your way back, start over. 6a build rule 6 calls
-              ESPN's case one click; this is where that click has to be.
-
-              ⚠ AND IT IS SHOWN BEFORE THE FIELD, NOT AFTER A FAILURE. Rendering it
-              only once an import had already failed would still be teaching the
-              prerequisite by punishment. It leads for as long as ESPN is
-              unconnected, and collapses to a one-line confirmation once it is.
-            */}
-            {provider === 'espn' ? (
-              <div className="af-im-espn" data-connected={espnConnected === true ? 'true' : 'false'}>
-                {espnConnected === true ? null : (
-                  <p className="af-im-espn-lead">
-                    <span className="af-label">Connect ESPN first</span>
-                    {/*
-                      ⚠ SAYS "PRIVATE OR PUBLIC" ON PURPOSE. The previous copy on this
-                      screen implied public ESPN leagues imported directly. They do not,
-                      and that sentence cost a real user a long detour — it sent them to
-                      type an id that could never work.
-                    */}
-                    <span>
-                      ESPN has no sign-in for us to use, so we read your leagues as you.
-                      This is needed for every ESPN league, public ones included.
-                    </span>
-                  </p>
-                )}
-                <EspnConnectPanel onConnectedChange={handleEspnConnectedChange} />
-              </div>
-            ) : null}
-
-            {/*
               ── Fantrax: connect once, then there is nothing to type.
               A league id is public and says nothing about who is asking, which is why
               that path has to follow up with "which team is yours". A Secret ID is the
@@ -2896,6 +2863,57 @@ export function ImportV4({
                 </span>
               </div>
             )}
+
+            {/*
+              ── 6b: ESPN connects HERE, not on another page ─────────────────
+              ⚠ THE OLD ANSWER WAS A LINK OUT, AND A LINK OUT ENDS THE IMPORT.
+              ESPN is the one provider on this screen that cannot be read without a
+              connection — commissionerGate resolves your team from the SWID cookie,
+              so a PUBLIC ESPN league needs one too. Pointing at /settings meant:
+              leave with no league id in hand, connect, find your way back, start over.
+
+              ⚠ GUIDED ORDER (2026-11-08): league box → Test connection → this step. The
+              panel is still on screen from the start — it is a prerequisite for every
+              ESPN import and must not be taught by failure — but it now sits AFTER the
+              league box, and its heading follows the test: "private league", "confirm
+              your team", "reconnect". The test is what moves someone here, not an error.
+            */}
+            {provider === 'espn' ? (
+              <EspnLeagueCheck leagueInput={account} espnConnected={espnConnected} onStatus={setEspnCheck} />
+            ) : null}
+            {provider === 'espn' ? (
+              <div
+                className="af-im-espn"
+                data-connected={espnConnected === true ? 'true' : 'false'}
+                data-check={espnCheck.k}
+              >
+                {espnConnected === true ? null : (
+                  <p className="af-im-espn-lead">
+                    <span className="af-label">
+                      {espnCheck.k === 'needs_cookies'
+                        ? 'Step 2 · Private league — add your ESPN cookies'
+                        : espnCheck.k === 'cookies_rejected'
+                          ? 'Step 2 · Reconnect ESPN'
+                          : espnCheck.k === 'ok'
+                            ? 'Step 2 · Confirm which team is yours'
+                            : 'Step 2 · Connect ESPN'}
+                    </span>
+                    {/*
+                      ⚠ SAYS "PUBLIC ONES INCLUDED" ON PURPOSE. Earlier copy implied public ESPN
+                      leagues imported directly. They do not, and that sentence cost a real user
+                      a long detour.
+                    */}
+                    <span>
+                      ESPN has no sign-in for other apps, so we read your league as you using two
+                      browser cookies — that is also how we confirm which team is yours, so every
+                      ESPN league needs it, public ones included. They are stored encrypted, only
+                      used to read, and you can disconnect ESPN at any time.
+                    </span>
+                  </p>
+                )}
+                <EspnConnectPanel onConnectedChange={handleEspnConnectedChange} leagueInputForTest={account} />
+              </div>
+            ) : null}
 
             {/*
               Yahoo's block renders its own input above and has no `field`, so the

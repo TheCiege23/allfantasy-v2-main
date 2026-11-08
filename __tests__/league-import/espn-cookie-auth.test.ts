@@ -50,6 +50,14 @@ import { POST, GET, DELETE } from '@/app/api/league/auth/route'
 
 const AUTH_URL = 'http://localhost/api/league/auth'
 
+/*
+ * Synthetic values in the SHAPE of real ESPN cookies (a braced GUID; a long URL-encoded token).
+ * The route format-checks both before saving, so placeholder strings like '{X}' / 'y' are now
+ * refused with a 400 — which is the behaviour, not a test artefact. Never real cookies.
+ */
+const FAKE_SWID = '{ABCD1234-EF56-7890-ABCD-1234567890AB}'
+const FAKE_S2 = `AEB${'k3Pq9ZtW1xYv%2B7mN0rLs'.repeat(14)}%3D%3D`
+
 function postRequest(body: unknown, origin?: string) {
   return new NextRequest(AUTH_URL, {
     method: 'POST',
@@ -78,8 +86,8 @@ beforeEach(() => {
 
 describe('ESPN cookie connect — save/load round trip', () => {
   it('saves SWID + espn_s2 encrypted, GET reports connected, DELETE clears it', async () => {
-    const swid = '{ABCD1234-EF56-7890-ABCD-1234567890AB}'
-    const espnS2 = 'AEZplaceholderCookieValueThatIsFairlyLongLikeARealOne123=='
+    const swid = FAKE_SWID
+    const espnS2 = FAKE_S2
 
     const saveRes = await POST(postRequest({ platform: 'espn', espnSwid: swid, espnS2 }))
     const savePayload = await saveRes.json()
@@ -141,7 +149,7 @@ describe('ESPN cookie connect — save/load round trip', () => {
 
     const res = await POST(
       postRequest(
-        { platform: 'espn', espnSwid: '{EXT-SWID}', espnS2: 'ext-s2-value' },
+        { platform: 'espn', espnSwid: FAKE_SWID, espnS2: FAKE_S2 },
         'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
       ),
     )
@@ -175,7 +183,31 @@ describe('ESPN cookie connect — save/load round trip', () => {
   })
 
   it('still allows the same-origin manual-paste-form request unaffected by the origin check', async () => {
-    const res = await POST(postRequest({ platform: 'espn', espnSwid: '{X}', espnS2: 'y' }, APP_ORIGIN))
+    const res = await POST(postRequest({ platform: 'espn', espnSwid: FAKE_SWID, espnS2: FAKE_S2 }, APP_ORIGIN))
     expect(res.status).toBe(200)
+  })
+
+  it('refuses mis-copied cookies with a field-specific message and writes nothing', async () => {
+    const truncated = await POST(postRequest({ platform: 'espn', espnSwid: FAKE_SWID, espnS2: FAKE_S2.slice(0, 40) }))
+    expect(truncated.status).toBe(400)
+    expect(await truncated.json()).toMatchObject({ code: 'INVALID_COOKIES', field: 'espnS2' })
+
+    const swapped = await POST(postRequest({ platform: 'espn', espnSwid: FAKE_S2, espnS2: FAKE_SWID }))
+    expect(swapped.status).toBe(400)
+    expect((await swapped.json()).error).toMatch(/swapped/i)
+
+    expect(prismaMock.leagueAuth.upsert).not.toHaveBeenCalled()
+  })
+
+  it('restores braces a paste dropped, and never echoes the cookies back', async () => {
+    const bare = FAKE_SWID.slice(1, -1)
+    const res = await POST(postRequest({ platform: 'espn', espnSwid: bare, espnS2: `espn_s2=${FAKE_S2}` }))
+    expect(res.status).toBe(200)
+    const body = JSON.stringify(await res.json())
+    expect(body).not.toContain(bare)
+    expect(body).not.toContain(FAKE_S2)
+    const stored = store.get('user-1:espn')!
+    expect(decrypt(stored.espnSwid!)).toBe(FAKE_SWID)
+    expect(decrypt(stored.espnS2!)).toBe(FAKE_S2)
   })
 })

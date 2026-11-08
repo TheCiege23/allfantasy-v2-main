@@ -13,6 +13,7 @@ import {
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import { XMLParser } from 'fast-xml-parser';
+import { EspnApiResponseError, buildEspnCookieHeader, fetchEspnLeagueJson } from '@/lib/league-import/espn/espnFantasyClient';
 
 export interface LeaguePayload {
   name: string;
@@ -167,17 +168,22 @@ export async function fetchMflLeague(platformLeagueId: string, apiKey: string): 
 
 export async function fetchEspnLeague(platformLeagueId: string, swid: string, s2: string): Promise<LeaguePayload> {
   const year = new Date().getFullYear();
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${platformLeagueId}?view=mRoster&view=mTeam&view=mSettings`;
 
-  const res = await fetch(url, {
-    headers: {
-      Cookie: `SWID=${swid}; espn_s2=${s2}`,
-    },
-  });
+  // Shared ESPN transport: timeout, retries with backoff, and errors that never carry the cookies.
+  let data: any;
+  try {
+    data = await fetchEspnLeagueJson(
+      { game: 'ffl', season: year, leagueId: platformLeagueId, views: ['mRoster', 'mTeam', 'mSettings'] },
+      { cookieHeader: buildEspnCookieHeader({ swid, espnS2: s2 }) },
+    );
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 404) throw new Error(`ESPN league ${platformLeagueId} was not found for ${year}.`);
+      throw new Error('Failed to fetch ESPN league — check your SWID and ESPN_S2 cookies');
+    }
+    throw error;
+  }
 
-  if (!res.ok) throw new Error('Failed to fetch ESPN league — check your SWID and ESPN_S2 cookies');
-
-  const data = await res.json();
   const settings = data.settings || {};
   const teams = data.teams || [];
 
