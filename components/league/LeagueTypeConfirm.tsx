@@ -77,6 +77,24 @@ const HINT_TYPES = new Set<LeagueConceptType>([
   'devy', 'c2c', 'efl', 'zombie', 'pirate', 'salary_cap', 'big_brother',
 ])
 
+/*
+ * ⚠ CHECK THE SHAPE BEFORE IT IS STORED. `load` used to `setState(data)` and only then read
+ * `data.suggestion.suggested`: a body without `suggestion` (an older deployment, an error page that
+ * happened to be JSON, a test double) threw AFTER the bad object was in state, the try/catch
+ * swallowed the throw, and the next render crashed on `state.suggestion.suggested` — taking the
+ * import done screen this card sits on down with it. A body that is not this shape now leaves the
+ * card hidden, which is what the catch below always intended.
+ */
+function isLeagueTypeState(data: unknown): data is State {
+  if (!data || typeof data !== 'object') return false
+  const suggestion = (data as { suggestion?: unknown }).suggestion
+  return (
+    !!suggestion &&
+    typeof suggestion === 'object' &&
+    Array.isArray((suggestion as { reasons?: unknown }).reasons)
+  )
+}
+
 export function LeagueTypeConfirm({
   leagueId,
   className,
@@ -100,7 +118,8 @@ export function LeagueTypeConfirm({
     try {
       const res = await fetch(`/api/leagues/${leagueId}/league-type`, { cache: 'no-store' })
       if (!res.ok) return
-      const data: State = await res.json()
+      const data: unknown = await res.json()
+      if (!isLeagueTypeState(data)) return
       setState(data)
       /*
        * Prefill from the suggestion so the common case is one click. The buy-in
@@ -147,7 +166,7 @@ export function LeagueTypeConfirm({
         setError(typeof data?.error === 'string' ? data.error : t('lsRules.lt.saveFailed'))
         return
       }
-      setState(data)
+      if (isLeagueTypeState(data)) setState(data)
       window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
     } catch {
       setError(t('lsRules.lt.saveRetry'))
