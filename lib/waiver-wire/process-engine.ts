@@ -29,6 +29,7 @@ import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 import { isRedraftLeagueMovesLocked } from '@/lib/redraft/tradeMoveLock'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import {
   isFantraxProspectId,
   resolveNhlProspectClaimAward,
@@ -77,6 +78,8 @@ export async function processWaiverClaimsForLeague(
     onSkip?: (reason: WaiverRunSkipReason) => void
   }
 ): Promise<ProcessedClaimResult[]> {
+  // Before any claim is planned: an unlinked team's won claims would never reach the season roster.
+  await ensureSeasonRosterLinksBeforeMove(leagueId)
   if (opts?.idempotencyKey != null) {
     logEngineInvariantOptional(assertNonEmptyIdempotencyKey(opts.idempotencyKey), 'waiver_process.idempotency_key', {
       leagueId,

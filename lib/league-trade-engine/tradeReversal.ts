@@ -43,6 +43,7 @@ import {
   transferRedraftDraftPick,
 } from '@/lib/league-trade-engine/redraftDraftPicks'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -223,6 +224,11 @@ export async function reverseGenericTrade(
   // below inside the transaction, because everything it checked can change in between.
   const preflight = await evaluateGenericTradeReversalReadiness(prisma, input.tradeId)
   if (!preflight.ok) return { ok: false, readiness: preflight }
+
+  // Outside the transaction (it writes the Roster rows the reversal locks): an unlinked team would skip
+  // the season-roster half of the reversal below.
+  const reversalLeague = await prisma.afLeagueTrade.findUnique({ where: { id: input.tradeId }, select: { leagueId: true } })
+  if (reversalLeague?.leagueId) await ensureSeasonRosterLinksBeforeMove(reversalLeague.leagueId)
 
   try {
     return await prisma.$transaction(async (tx) => {
