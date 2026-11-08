@@ -65,8 +65,10 @@ describe('salary cap home view', () => {
   })
 
   it('splits the cap bar into active, dead and rollover', () => {
-    const seg = capBarSegments({ totalCapHit: 231.6, deadMoneyHit: 6, rolloverUsed: 12, capSpace: 18.4 }, 250)
+    // totalCapHit is active contracts only (the engine's definition): 225.6 active + 6 dead, 12 rollover on 250.
+    const seg = capBarSegments({ totalCapHit: 225.6, deadMoneyHit: 6, rolloverUsed: 12, capSpace: 30.4 }, 250)
     expect(seg.active).toBe(225.6)
+    expect(seg.committed).toBe(231.6)
     expect(seg.dead).toBe(6)
     expect(seg.rollover).toBe(12)
     expect(seg.activePct + seg.deadPct + seg.rolloverPct).toBeLessThanOrEqual(100)
