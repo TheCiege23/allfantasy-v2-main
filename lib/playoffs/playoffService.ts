@@ -9,7 +9,7 @@ import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBrack
 import { nflDivisionalMatchups } from "./nflPlayoffs"
 import { nflSeriesRows, readNflPlayoffsSnapshot } from "./syncNflPlayoffs"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
-import { assertBracketOpen, defaultPlayoffSeasonYear, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
+import { assertBracketOpen, canCreateCfp2026EntryBeforeSchedule, defaultPlayoffSeasonYear, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import { planFlagsFromSnapshot } from "@/lib/subscription/livePlanFlags"
 import { loadBracketTeamProfiles } from "./teamIntelligence"
@@ -646,7 +646,7 @@ export async function createPlayoffBracketEntry(input: {
     throw new Error("Challenge not found")
   }
   if (!challenge.isTestMode && isSingleGameBracketSport(challenge.sport)) {
-    if (challenge.sport !== "nba_cup") assertBracketOpen(challenge.series)
+    if (challenge.sport !== "nba_cup" && !(challenge.sport === "ncaaf" && canCreateCfp2026EntryBeforeSchedule(challenge.seasonYear, challenge.series))) assertBracketOpen(challenge.series)
     const snapshot = await new EntitlementResolver().resolveSnapshot(input.user.id, input.user.email).catch(() => null)
     const paid = Boolean(snapshot && planFlagsFromSnapshot(snapshot).pro)
     const limit = paid ? PAID_BRACKETS_PER_TOURNAMENT : FREE_BRACKETS_PER_TOURNAMENT
