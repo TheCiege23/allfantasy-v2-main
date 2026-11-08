@@ -53,8 +53,10 @@ import '@/components/core-app/af-scope-switcher.css'
  *   - A LEAGUE keeps the screen you are on when that screen can show one league (the in-league
  *     tabs), and otherwise opens that league's home — the same destination as its rail tile.
  *
- * ⚠ THE STAR IS THIS DEVICE'S — see `FAVORITES_COOKIE` in lib/core-app/homeScope.ts. The switcher
- * says so, rather than letting someone star leagues on a phone and wonder where they went.
+ * ⚠ THE STAR IS THE ACCOUNT'S (since 2026-10-02, see `toggleFavorite`): saved to the account's
+ * favorites list, which the server reads first, with `FAVORITES_COOKIE` (lib/core-app/homeScope.ts)
+ * only this device's fallback until a first save exists. The note under the list said "saved on this
+ * device" for five weeks after that stopped being true (fixed 2026-11-08).
  */
 
 /**
@@ -433,10 +435,12 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
           </span>
           <span className="af-scope-league-meta">
             {/* The sport with its ball, then the platform in its own colour — the rail row's chip (RailRowBody). */}
-            <span className="af-scope-league-sport" data-testid="scope-league-sport">
-              {leagueSportIcon(sportKey) ? <span className="af-scope-league-ball" aria-hidden>{leagueSportIcon(sportKey)}</span> : null}
-              {sportKey ? leagueSportLabel(sportKey, { short: true }) : league.sport}
-            </span>
+            {sportKey || league.sport ? (
+              <span className="af-scope-league-sport" data-testid="scope-league-sport">
+                {leagueSportIcon(sportKey) ? <span className="af-scope-league-ball" aria-hidden>{leagueSportIcon(sportKey)}</span> : null}
+                {sportKey ? leagueSportLabel(sportKey, { short: true }) : league.sport}
+              </span>
+            ) : null}
             <span className="af-platform af-platform-chip af-scope-league-plat" data-platform={tone} data-testid="scope-league-platform">
               {platformLabel(league.platform)}
             </span>
@@ -641,7 +645,8 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                   const exileRows = pairedExileIds(section.rows)
                   const sectionIds = section.rows.map((l) => l.id)
                   const isFav = section.key === FAVORITES_SECTION
-                  const title = isFav ? m.favorites : leagueSportLabel(section.key, { short: true })
+                  // A league with no sport files under "Other" — the shared label is English-only, so the heading uses ours.
+                  const title = isFav ? m.favorites : section.key == null ? m.otherSport : leagueSportLabel(section.key, { short: true })
                   const icon = isFav ? '★' : leagueSportIcon(section.key)
                   return [
                     headed ? (
