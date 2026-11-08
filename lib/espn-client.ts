@@ -4,7 +4,11 @@
  * `lib/league-import/espn/espnFantasyClient.ts` and `espnLookups.ts` — so this file only shapes the
  * response. Output labels are kept exactly as this route has always returned them ('DEF', 'UNK').
  */
-import { EspnApiResponseError, fetchEspnLeagueJson } from '@/lib/league-import/espn/espnFantasyClient'
+import {
+  EspnApiResponseError,
+  espnDefaultSeasonCandidates,
+  fetchEspnLeagueJsonFirstSeason,
+} from '@/lib/league-import/espn/espnFantasyClient'
 import { classifyEspnLineupSlot, espnPositionLabel, espnProTeamAbbreviation } from '@/lib/league-import/espn/espnLookups'
 
 function legacyPositionLabel(positionId: unknown): string {
@@ -38,9 +42,10 @@ export type EspnLeagueData = {
   teams: EspnTeam[]
 }
 
-async function fetchEspnJson(leagueId: string, season: number): Promise<any> {
+/** An explicit season is tried alone; without one, the importer's season candidates are tried in order. */
+async function fetchEspnJson(leagueId: string, seasons: readonly number[]): Promise<{ season: number; raw: any }> {
   try {
-    return await fetchEspnLeagueJson({ game: 'ffl', season, leagueId, views: ['mRoster', 'mTeam', 'mSettings'] })
+    return await fetchEspnLeagueJsonFirstSeason({ game: 'ffl', seasons, leagueId, views: ['mRoster', 'mTeam', 'mSettings'] })
   } catch (error) {
     if (error instanceof EspnApiResponseError) {
       if (error.status === 404) throw new Error('League not found. Make sure the league ID is correct and the league is public.')
@@ -64,9 +69,15 @@ function slotToRosterSlot(slotId: number): 'Starter' | 'Bench' | 'IR' {
   return placement === 'ir' ? 'IR' : placement === 'bench' ? 'Bench' : 'Starter'
 }
 
-export async function fetchEspnLeague(leagueId: string | number, season?: number): Promise<EspnLeagueData> {
-  const yr = season || new Date().getFullYear()
-  const data = await fetchEspnJson(String(leagueId), yr)
+export async function fetchEspnLeague(
+  leagueId: string | number,
+  season?: number,
+  now: Date = new Date(),
+): Promise<EspnLeagueData> {
+  const { season: yr, raw: data } = await fetchEspnJson(
+    String(leagueId),
+    season ? [season] : espnDefaultSeasonCandidates(now),
+  )
 
   const settings = data.settings || {}
   const leagueName = settings.name || `ESPN League ${leagueId}`

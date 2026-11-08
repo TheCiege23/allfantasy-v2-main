@@ -174,7 +174,6 @@ describe('POST /api/leagues/import/preview — ESPN preview-only', () => {
 describe('leagueReadable is read by the unified preview route only', () => {
   const repo = path.resolve(__dirname, '..')
   const mustNotRead = [
-    'app/api/leagues/import/commit/route.ts',
     'app/api/leagues/[leagueId]/import/commit/route.ts',
     'app/api/leagues/[leagueId]/import/preview/route.ts',
     'app/api/league/create/route.ts',
@@ -188,6 +187,22 @@ describe('leagueReadable is read by the unified preview route only', () => {
       expect(src).not.toContain('leagueReadable')
     })
   }
+
+  /*
+   * Owner decision 2026-11-08 REVERSES "A1" for one case: a public ESPN league may be imported with no
+   * cookies by someone who says they are NOT its commissioner and picks their team. The league is owned
+   * by the system account and the claim is unconfirmed (`espnPublicMemberImport.ts`). So the unified
+   * commit route now reads the flag — but only together with that answer, never on its own.
+   */
+  it('the unified commit route reads it only inside the ESPN member-import branch', () => {
+    const src = readFileSync(path.join(repo, 'app/api/leagues/import/commit/route.ts'), 'utf8')
+    expect(src).toContain('assertImportCommissioner')
+    const lines = src.split(/\r?\n/).filter((l) => l.includes('leagueReadable'))
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines.filter((l) => !/^\s*(\*|\/\/)/.test(l))) {
+      expect(line).toContain("espnRunBy === 'espn' || espnRunBy === 'member'")
+    }
+  })
 
   it('the unified preview route does reference it', () => {
     const src = readFileSync(path.join(repo, 'app/api/leagues/import/preview/route.ts'), 'utf8')
