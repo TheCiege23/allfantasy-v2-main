@@ -23,6 +23,7 @@ const field = { season: 2024, competition: "cfp", status: "selected", teamCount:
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.useFakeTimers().setSystemTime(new Date("2024-12-08T18:00:00Z"))
   vi.stubEnv("CFBD_API_KEY", "test-only")
   mocks.prior.mockResolvedValue(null)
   mocks.save.mockResolvedValue({ ok: true, sweep: { errors: [] } })
@@ -32,9 +33,13 @@ beforeEach(() => {
   mocks.sweep.mockResolvedValue({ errors: [] })
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(field), { status: 200 })))
 })
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe("official CFP field sync", () => {
+  it("does not consume provider requests during the regular season", async () => {
+    expect(await syncCfpOfficialField({ season: 2026, apply: true, now: new Date("2026-11-08T12:00:00Z") })).toMatchObject({ status: "before-selection-window", ok: true })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it("uses playoff seeds rather than ranking order and requires a complete selected field", () => {
     expect(parseOfficialCfpField(field, 2024)).toEqual(teams)
     expect(parseOfficialCfpField({ ...field, status: "scheduled" }, 2024)).toBeNull()

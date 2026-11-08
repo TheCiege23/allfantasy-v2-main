@@ -21,7 +21,10 @@ export function parseOfficialCfpField(payload: unknown, season: number): string[
   return checked.ok ? checked.seeds : null
 }
 
-export async function syncCfpOfficialField(input: { season: number; apply: boolean }) {
+export async function syncCfpOfficialField(input: { season: number; apply: boolean; now?: Date }) {
+  const now = input.now ?? new Date()
+  // The selection is in December. Avoid polling the paid feed throughout the regular season.
+  if (input.season === now.getUTCFullYear() && now.getUTCMonth() < 11) return { status: "before-selection-window" as const, ok: true }
   const key = getCfbdApiKey()
   if (!key) return { status: "provider-not-configured" as const, ok: false }
   let response: Response
