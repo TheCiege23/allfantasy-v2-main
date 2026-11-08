@@ -5,6 +5,7 @@ import { cfpSeedsCacheKey, readCfpSeeds, validateCfpSeeds } from "./cfpSeeds"
 import { applyPlayoffSeedsToChallenges } from "./playoffSeeding"
 import { mapOfficialCfpGames } from "./cfpOfficialBracket"
 import { readSingleGameSchedule, scheduleCacheKey, validateSingleGameSchedule } from "./singleGameSchedule"
+import { syncCfpOfficialResults } from "./syncCfpOfficialResults"
 
 /** CFBD publishes actual playoff seeds separately from its committee rankings. */
 export function parseOfficialCfpField(payload: unknown, season: number): string[] | null {
@@ -103,5 +104,7 @@ export async function syncCfpOfficialField(input: { season: number; apply: boole
   })
   // Retry any pools missed by a previous partial sweep; already seeded pools are idempotent.
   const sweep = await applyPlayoffSeedsToChallenges(poolIds)
-  return sweep.errors.length ? { status: "publish-failed" as const, ok: false } : { status: prior ? "current" as const : "published" as const, ok: true }
+  if (sweep.errors.length) return { status: "publish-failed" as const, ok: false }
+  const results = poolIds.length ? await syncCfpOfficialResults({ season: input.season, payload, games }) : { published: 0, failures: 0 }
+  return results.failures ? { status: "results-failed" as const, ok: false, results } : { status: prior ? "current" as const : "published" as const, ok: true, results }
 }

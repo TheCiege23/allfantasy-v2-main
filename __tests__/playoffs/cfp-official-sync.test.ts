@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ prior: vi.fn(), save: vi.fn(), sweep: vi.fn(), pools: vi.fn(), series: vi.fn(), update: vi.fn(), upsert: vi.fn(), previousSchedule: vi.fn() }))
+const mocks = vi.hoisted(() => ({ prior: vi.fn(), save: vi.fn(), sweep: vi.fn(), pools: vi.fn(), series: vi.fn(), update: vi.fn(), upsert: vi.fn(), previousSchedule: vi.fn(), results: vi.fn() }))
 vi.mock("@/lib/prisma", () => ({ prisma: { playoffBracketChallenge: { findMany: mocks.pools }, playoffBracketSeries: { findMany: mocks.series }, $transaction: async (fn: any) => fn({ playoffBracketSeries: { updateMany: mocks.update }, sportsDataCache: { create: mocks.upsert } }) } }))
 vi.mock("@/lib/playoffs/cfpSeedAdmin", () => ({ saveCfpSeedsAndApply: mocks.save }))
 vi.mock("@/lib/playoffs/playoffSeeding", () => ({ applyPlayoffSeedsToChallenges: mocks.sweep }))
 vi.mock("@/lib/playoffs/cfpSeeds", async (load) => ({ ...(await load<typeof import("@/lib/playoffs/cfpSeeds")>()), readCfpSeeds: mocks.prior }))
 vi.mock("@/lib/playoffs/singleGameSchedule", async (load) => ({ ...(await load<typeof import("@/lib/playoffs/singleGameSchedule")>()), readSingleGameSchedule: mocks.previousSchedule }))
+vi.mock("@/lib/playoffs/syncCfpOfficialResults", () => ({ syncCfpOfficialResults: mocks.results }))
 
 import { parseOfficialCfpField, syncCfpOfficialField } from "@/lib/playoffs/syncCfpOfficialField"
 
@@ -31,6 +32,7 @@ beforeEach(() => {
   mocks.series.mockResolvedValue([])
   mocks.previousSchedule.mockResolvedValue(null)
   mocks.sweep.mockResolvedValue({ errors: [] })
+  mocks.results.mockResolvedValue({ published: 0, failures: 0 })
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(field), { status: 200 })))
 })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })

@@ -1,5 +1,5 @@
 /** Validate provider bracket wiring before assigning any CFP game to an AllFantasy slot. */
-export function mapOfficialCfpGames(payload: unknown): Array<{ seriesNumber: number; startsAt: string; label: string; venue: string; location: string }> | null {
+export function mapOfficialCfpGames(payload: unknown): Array<{ seriesNumber: number; matchupId: number; startsAt: string; label: string; venue: string; location: string }> | null {
   const rounds = (payload as { rounds?: unknown } | null)?.rounds
   if (!Array.isArray(rounds)) return null
   type Slot = { seed?: number | null; source?: { matchupId?: number | null } | null }
@@ -35,7 +35,7 @@ export function mapOfficialCfpGames(payload: unknown): Array<{ seriesNumber: num
   const result = ordered.map((game, i) => {
     const startsAt = game!.startDate || ""
     const label = game!.bowlName?.trim() || (i < 4 ? "CFP First Round" : i < 8 ? "CFP Quarterfinal" : i < 10 ? "CFP Semifinal" : "CFP National Championship")
-    return { seriesNumber: i + 1, startsAt, label, venue: game!.game?.venue?.trim() || "Venue TBA", location: "Location TBA" }
+    return { seriesNumber: i + 1, matchupId: game!.id!, startsAt, label, venue: game!.game?.venue?.trim() || "Venue TBA", location: "Location TBA" }
   })
   if (result.some(game => !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(game.startsAt) || !Number.isFinite(Date.parse(game.startsAt)))) return null
   return result
