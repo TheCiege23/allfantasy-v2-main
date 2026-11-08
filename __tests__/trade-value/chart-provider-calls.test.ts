@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   chart: vi.fn(async () => ({ players: [], syncedAt: null })),
   marketValues: vi.fn(async () => []),
+  cached: vi.fn(async () => ({ players: [], syncedAt: null })),
   leagueValues: vi.fn(async () => ({ bySleeperId: new Map(), byNameLower: new Map(), unpricedReasonBySleeperId: new Map(), unpricedReasonByNameLower: new Map() })),
 }))
 
@@ -28,6 +29,7 @@ vi.mock('@/lib/fantasycalc-db', async (load) => ({
   ...(await load<typeof import('@/lib/fantasycalc-db')>()),
   getFantasyCalcChartDbFirst: h.chart,
   getFantasyCalcValuesDbFirst: h.marketValues,
+  readFantasyCalcValuesFromDb: h.cached,
 }))
 vi.mock('@/lib/league-values/leagueTradeValues', () => ({ loadLeagueTradeValues: h.leagueValues }))
 
@@ -45,6 +47,7 @@ beforeEach(() => {
   h.chart.mockReset().mockImplementation(async () => ({ players: [], syncedAt: null }))
   h.marketValues.mockReset().mockImplementation(async () => [])
   h.leagueValues.mockClear()
+  h.cached.mockClear()
 })
 
 describe('the FantasyCalc chart is read only where the NFL path reads it', () => {
@@ -58,6 +61,14 @@ describe('the FantasyCalc chart is read only where the NFL path reads it', () =>
   it.each([['NFL', 'sleeper'], ['NFL', 'fantrax']])('%s (%s): fetched as before', async (sport, platform) => {
     await chartFor(sport, platform)
     expect(h.chart).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads an existing 12-team dynasty profile for 150 teams without fetching', async () => {
+    const league = { ...(leagueRow('NFL', 'manual', 150) as Record<string, unknown>), leagueType: 'dynasty' } as never
+    const chart = await resolveLeagueTradeChart({ leagueRow: league, leagueSnapshot: null, leagueNormCtx: null })
+    expect(h.chart).not.toHaveBeenCalled()
+    expect(h.cached).toHaveBeenCalledWith(expect.objectContaining({ numTeams: 12, isDynasty: true }), { allowStale: false })
+    expect(chart.nflCtx).toMatchObject({ numTeams: 150, largeLeagueRookiePicks: true })
   })
 
   it('a league of unknown sport (the console with no league) still gets it', async () => {
@@ -107,6 +118,13 @@ describe('the trade-learning capture', () => {
 
   it.each(['NBA', 'NHL', 'MLB'])('%s: skips before the NFL chart read', async (sport) => {
     await expect(captureLiveTradeOffer(offer(sport) as never)).resolves.toBeNull()
+    expect(h.marketValues).not.toHaveBeenCalled()
+  })
+
+  it('omits 150-team dynasty offers from the round-based learning sample', async () => {
+    const input = offer('NFL')
+    input.league = { ...(input.league as object), leagueSize: 150, leagueType: 'dynasty' } as never
+    await expect(captureLiveTradeOffer(input as never)).resolves.toBeNull()
     expect(h.marketValues).not.toHaveBeenCalled()
   })
 

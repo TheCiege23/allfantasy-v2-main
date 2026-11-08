@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import { findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/trade-engine'
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'
@@ -305,6 +306,9 @@ export async function captureLiveTradeOffer(input: {
     if (String(input.league.sport ?? 'NFL').trim().toUpperCase() !== 'NFL') return null
     const { isSuperFlex, isTEP, isDynasty, ppr, scoringType } = resolveLeagueScoringContext(input.league)
     const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
+    // The acceptance model uses its own round-based pick inputs. Leave large leagues out of
+    // that training sample because their grades use overall draft position.
+    if (isDynasty && Math.max(input.league.leagueSize ?? 0, rosterCount) > LARGE_LEAGUE_PICK_THRESHOLD) return null
 
     const fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty,

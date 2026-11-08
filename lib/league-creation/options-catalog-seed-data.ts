@@ -1,6 +1,6 @@
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
-import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
+import { NFL_DYNASTY_TEAM_COUNTS, SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
@@ -299,7 +299,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: [4, 6, 8, 10, 12, 14, 16],
     },
     dynasty: {
-      NFL: [4, 6, 8, 10, 12, 14, 16],
+      NFL: [...NFL_DYNASTY_TEAM_COUNTS],
       NBA: [4, 6, 8, 10, 12, 14, 16],
       MLB: [4, 6, 8, 10, 12, 14, 16],
       NHL: [4, 6, 8, 10, 12, 14, 16],

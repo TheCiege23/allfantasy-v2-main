@@ -58,6 +58,8 @@ import {
   type SportPointsContext,
 } from './sportPointsValue'
 
+import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
+
 export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB'
 
 export function isDynastyGradedSport(sport: string | null | undefined): sport is DynastyGradedSport {
@@ -168,15 +170,22 @@ export function pickDynastyValue(args: {
     return { ok: false, reason: `The ${pick.year} draft has already been held, so that pick is a player now. Trade the player drafted with it — this deal is not graded as it stands.` }
   }
   const teams = Math.max(1, Math.round(args.teams))
-  const spot = (Math.round(pick.round) - 1) * teams + pickSlotInRound(pick.tier, teams)
+  const picksBeforeRound = (Math.round(pick.round) - 1) * teams
+  const exact = pick.overall
+  if (exact != null && (!Number.isInteger(exact) || exact <= picksBeforeRound || exact > picksBeforeRound + teams)) {
+    return { ok: false, reason: `${label} has an overall pick number outside its round.` }
+  }
+  const spot = exact != null ? exact - 1 : picksBeforeRound + pickSlotInRound(pick.tier, teams)
   const last = args.pool[args.pool.length - 1]
   if (last == null) {
     return { ok: false, reason: `No young ${sport} player has a projection to price ${label} against, so this deal is not graded.` }
   }
-  // Past the pool's end: the weakest young player, cut for each round deeper (round up, so the first
-  // spot past the end already counts as one round deeper).
+  // Past the pool's end, discount the weakest young player by draft depth. Large boards use
+  // fractional rounds so adjacent picks don't get the same tail value.
   const deep = spot >= args.pool.length
-  const base = deep ? last * DEEP_PICK_ROUND_SHARE ** Math.ceil((spot - (args.pool.length - 1)) / teams) : args.pool[spot]!
+  const extraRounds = (spot - (args.pool.length - 1)) / teams
+  const depth = teams > LARGE_LEAGUE_PICK_THRESHOLD ? extraRounds : Math.ceil(extraRounds)
+  const base = deep ? last * DEEP_PICK_ROUND_SHARE ** depth : args.pool[spot]!
   const wait = pick.year - args.nextDraftYear + PROSPECT_WAIT_SEASONS[sport]
   return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }

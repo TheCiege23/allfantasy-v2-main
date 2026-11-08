@@ -98,8 +98,8 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
       linkedToThisSeason: rosters.filter((r) => r.redraftRosterId && seasonRosterIds.has(r.redraftRosterId)).length,
     }
   }
-  const before = seasonHoldings(env, ctx.seasonId)
-  const holdingsOf = (userId: string) => before.get(userId) ?? []
+  let holdings = seasonHoldings(env, ctx.seasonId)
+  const holdingsOf = (userId: string) => holdings.get(userId) ?? []
   const bench = (userId: string) => holdingsOf(userId).filter((p) => /^bn|^bench$/i.test(String(p.slotType)))
   const starters = (userId: string) => holdingsOf(userId).filter((p) => !/^bn|^bench$|^ir$|^taxi$/i.test(String(p.slotType)))
   const adpOf = (playerId: string) => Number(/-(\d+)$/.exec(playerId)?.[1] ?? 999)
@@ -139,6 +139,7 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
   const pickId = `fdp:${nextYear}:1:${e.rosterId}`
   // Balanced head count: a full roster (at the active limit) cannot take one more player, so the team
   // sending the pick also sends a bench player — 1 player each way plus the pick.
+  holdings = seasonHoldings(env, ctx.seasonId)
   const back = bench(f.userId)[0]
   const sendWithPick = bench(e.userId).sort((x, y) => adpOf(y.playerId) - adpOf(x.playerId))[0]
   if (back && sendWithPick) {

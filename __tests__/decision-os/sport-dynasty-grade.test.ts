@@ -105,6 +105,18 @@ describe('draft picks', () => {
     expect(nhl.ok && nhl.value).toBeCloseTo(100 * FUTURE_DISCOUNT ** PROSPECT_WAIT_SEASONS.NHL, 6)
   })
 
+  it.each(['NBA', 'NHL', 'MLB'] as const)('%s prices adjacent picks by overall position on a 150-team board', sport => {
+    const options = { sport, pool: [100, 80, 50], teams: 150, nextDraftYear: 2027 }
+    const endOfFirst = pickDynastyValue({ ...options, pick: { ...pick(2027, 1), overall: 150 } })
+    const startOfSecond = pickDynastyValue({ ...options, pick: { ...pick(2027, 2), overall: 151 } })
+    expect(endOfFirst).toMatchObject({ ok: true, deep: true })
+    expect(startOfSecond).toMatchObject({ ok: true, deep: true })
+    if (endOfFirst.ok && startOfSecond.ok) {
+      expect(endOfFirst.value).toBeGreaterThan(startOfSecond.value)
+      expect(startOfSecond.value).toBeGreaterThan(0)
+    }
+  })
+
   it('refuses a pick for a draft already held, and any pick when no young player has a projection', () => {
     expect(pickDynastyValue({ sport: 'MLB', pick: pick(2026, 1), pool: [50], teams: 12, nextDraftYear: 2027 })).toMatchObject({ ok: false, reason: expect.stringContaining('The 2026 draft has already been held') })
     expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 1), pool: [], teams: 12, nextDraftYear: 2027 })).toMatchObject({ ok: false, reason: expect.stringContaining('No young NBA player') })
