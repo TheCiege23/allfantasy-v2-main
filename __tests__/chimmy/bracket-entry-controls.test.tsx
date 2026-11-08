@@ -24,6 +24,13 @@ function view(sport: string, owner: boolean): PlayoffChallengeView {
   } as unknown as PlayoffChallengeView
 }
 
+it('hides invite actions when a private CFP participant does not receive an invite code', () => {
+  const participant = view('ncaaf', true)
+  participant.challenge.inviteCode = ''
+  render(<PlayoffBracketEntryShell initialView={participant} />)
+  expect(screen.queryByRole('button', { name: 'Invite friends' })).toBeNull()
+})
+
 it.each(['mlb', 'ncaaf', 'nba_cup', 'nfl', 'nba', 'nhl'])('shows contextual Chimmy controls to the %s entry owner', (sport) => {
   render(<PlayoffBracketEntryShell initialView={view(sport, true)} />)
   const link = screen.getByRole('link', { name: 'Ask Chimmy about my picks' })

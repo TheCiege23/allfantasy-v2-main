@@ -28,6 +28,7 @@ import BracketCoachPanel from "./BracketCoachPanel"
 
 type Props = {
   initialView: PlayoffChallengeView
+  initialInviteCode?: string | null
 }
 
 type PlayoffDashboardSyncMode = "teams_schedule_only" | "results_only" | "official_bracket" | "autofill_results"
@@ -50,7 +51,7 @@ const SYNC_SUCCESS_MESSAGES: Record<PlayoffDashboardSyncMode, string> = {
  * Commissioner sync tools stay English on purpose: they are staff and
  * commissioner diagnostics, and their messages are asserted verbatim.
  */
-export default function PlayoffBracketShell({ initialView }: Props) {
+export default function PlayoffBracketShell({ initialView, initialInviteCode }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
   const { language } = useOptionalLanguage()
@@ -176,7 +177,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   function handleRefresh() {
     startRefreshing(async () => {
-      const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+      const latest = await getPlayoffBracketViewClient(safeChallenge.id, undefined, initialInviteCode)
       setView(latest)
     })
   }
@@ -187,7 +188,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   function handleCreateEntry() {
     if (!view.viewerUserId) {
-      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}`)}`)
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}${initialInviteCode ? `?code=${encodeURIComponent(initialInviteCode)}` : ""}`)}`)
       return
     }
     startCreatingEntry(async () => {
@@ -200,6 +201,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
         const created = await createPlayoffBracketEntryClient({
           challengeId: safeChallenge.id,
+          inviteCode: initialInviteCode,
         })
 
         toast.success(copy.created(nextEntryIndex))

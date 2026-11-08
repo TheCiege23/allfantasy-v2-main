@@ -9,7 +9,7 @@ import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBrack
 import { nflDivisionalMatchups } from "./nflPlayoffs"
 import { nflSeriesRows, readNflPlayoffsSnapshot } from "./syncNflPlayoffs"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
-import { assertBracketOpen, defaultPlayoffSeasonYear, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
+import { assertBracketOpen, canCreateCfp2026EntryBeforeSchedule, defaultPlayoffSeasonYear, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import { planFlagsFromSnapshot } from "@/lib/subscription/livePlanFlags"
 import { loadBracketTeamProfiles } from "./teamIntelligence"
@@ -19,6 +19,7 @@ import { hasAfCommissionerPlan } from "@/lib/entitlements/afCommissionerPlan"
 import { getPlayoffCompletionSummary } from "./playoffCompletion"
 import { eligibleNbaCupPicks, nbaCupLockedReason } from "./nbaCupTournament"
 import { nbaCupSeriesRows, readNbaCupSnapshot } from "./nbaCupCache"
+import { cfpInviteCode, isPrivateCfpPool, verifyCfpInvite } from "./cfpInvite"
 
 type SessionUser = {
   id?: string | null
@@ -103,6 +104,8 @@ export async function createPlayoffBracketChallenge(input: {
   const config = sanitizePlayoffChallengeConfig(input.config, {
     afCommissionerEnabled: await hasAfCommissionerPlan(input.user),
   })
+  // Fail before writing if a private CFP pool cannot issue secure invitations.
+  if (isPrivateCfpPool(input.sport, config)) cfpInviteCode("configurationcheck")
   // Live single-game pools use one fair lock and scoring rule, even for direct API requests.
   if (!input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup" || input.sport === "nfl")) {
     config.lockRule = "series_start"
@@ -267,7 +270,9 @@ export async function listUserPlayoffChallenges(userId: string): Promise<Playoff
       seasonYear: challenge.seasonYear,
       participantCount: participantUserIds.size,
       entryCount: challenge.entries.length,
-      inviteCode: toInviteCode(challenge.id),
+      inviteCode: isPrivateCfpPool(challenge.sport, challenge.config)
+        ? challenge.ownerUserId === userId ? cfpInviteCode(challenge.id) : ""
+        : toInviteCode(challenge.id),
       config: challenge.config ?? defaultPlayoffChallengeConfig(),
     }
   })
@@ -277,6 +282,9 @@ export async function getPlayoffBracketView(input: {
   challengeId: string
   user: SessionUser | null
   requestedEntryId?: string | null
+  inviteCode?: string | null
+  /** Only for trusted server-side jobs; never derived from a request. */
+  trustedInternal?: boolean
 }): Promise<PlayoffChallengeView | null> {
   const challenge = await (prisma as any).playoffBracketChallenge.findUnique({
     where: { id: input.challengeId },
@@ -313,6 +321,11 @@ export async function getPlayoffBracketView(input: {
   })
 
   if (!challenge) return null
+
+  const privateCfp = isPrivateCfpPool(challenge.sport, challenge.config)
+  const isCfpMember = Boolean(input.user?.id && (input.user.id === challenge.ownerUserId ||
+    challenge.entries.some((entry: { userId: string }) => entry.userId === input.user!.id)))
+  if (privateCfp && !input.trustedInternal && !isCfpMember && !verifyCfpInvite(challenge.id, input.inviteCode)) return null
 
   const singleGameSport = !challenge.isTestMode && isSingleGameBracketSport(challenge.sport)
   const seasonSchedule = singleGameSport && challenge.sport === "ncaaf" ? await readSingleGameSchedule(challenge.sport, challenge.seasonYear) : null
@@ -501,7 +514,9 @@ export async function getPlayoffBracketView(input: {
       lockRule,
       firstGameStartsAt: firstStart == null ? null : new Date(firstStart).toISOString(),
       config,
-      inviteCode: toInviteCode(challenge.id),
+      inviteCode: privateCfp
+        ? input.user?.id === challenge.ownerUserId ? cfpInviteCode(challenge.id) : ""
+        : toInviteCode(challenge.id),
       inviteUrl: toChallengeDashboardHref(challenge.id),
       createdAt: toIso(challenge.createdAt) ?? new Date().toISOString(),
       updatedAt: toIso(challenge.updatedAt) ?? new Date().toISOString(),
@@ -617,6 +632,7 @@ export async function createPlayoffBracketEntry(input: {
   challengeId: string
   user: SessionUser
   name?: string
+  inviteCode?: string | null
 }) {
   if (!input.user.id) {
     throw new Error("Authenticated user required")
@@ -630,7 +646,7 @@ export async function createPlayoffBracketEntry(input: {
     throw new Error("Challenge not found")
   }
   if (!challenge.isTestMode && isSingleGameBracketSport(challenge.sport)) {
-    if (challenge.sport !== "nba_cup") assertBracketOpen(challenge.series)
+    if (challenge.sport !== "nba_cup" && !(challenge.sport === "ncaaf" && canCreateCfp2026EntryBeforeSchedule(challenge.seasonYear, challenge.series))) assertBracketOpen(challenge.series)
     const snapshot = await new EntitlementResolver().resolveSnapshot(input.user.id, input.user.email).catch(() => null)
     const paid = Boolean(snapshot && planFlagsFromSnapshot(snapshot).pro)
     const limit = paid ? PAID_BRACKETS_PER_TOURNAMENT : FREE_BRACKETS_PER_TOURNAMENT
@@ -662,6 +678,11 @@ export async function createPlayoffBracketEntry(input: {
     },
     orderBy: { createdAt: "asc" },
   })
+
+  if (isPrivateCfpPool(challenge.sport, challenge.config) && challenge.ownerUserId !== input.user.id &&
+      existingEntries.length === 0 && !verifyCfpInvite(challenge.id, input.inviteCode)) {
+    throw new Error("A valid CFP invitation is required to join this pool.")
+  }
 
   if (existingEntries.length >= maxEntriesPerParticipant) {
     throw new Error(

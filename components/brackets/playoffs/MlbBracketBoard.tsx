@@ -37,6 +37,7 @@ import CupPhaseTrack from "./cup/CupPhaseTrack"
 import { useClientTime } from "./cup/useClientTime"
 import { dayHeading, localDayKey } from "./cup/cupFormat"
 import BracketCoachPanel from "./BracketCoachPanel"
+import CfpBowlSchedule from "./CfpBowlSchedule"
 import { getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
 
 /**
@@ -566,6 +567,7 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {sport === "ncaaf" && !view.challenge.isTestMode ? <CfpBowlSchedule season={view.challenge.seasonYear} series={view.series} /> : null}
           {!rollingCup ? <BracketCoachPanel view={view} /> : null}
           {rollingCup ? <details className="af-pb-card af-cup-disclosure" aria-label="NBA Cup scoring">
             <summary>Scoring rules</summary>
