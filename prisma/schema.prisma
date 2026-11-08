@@ -8868,6 +8868,15 @@ model LeagueAuth {
   oauthSecret String?
   espnSwid    String?
   espnS2      String?
+  /// 'ok' | 'needs_reconnect'. NULL = not checked since the column existed; reads as healthy.
+  /// Written by lib/league-import/espn/espnConnectionHealth.ts. Migration:
+  /// prisma/migrations-pending/20261108120000_league_auth_connection_health.
+  connectionStatus    String?
+  lastVerifiedAt      DateTime?
+  lastFailureAt       DateTime?
+  lastFailureCode     String?
+  /// When the user was last told to reconnect — throttles the notification to once per outage.
+  reconnectNotifiedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
