@@ -155,7 +155,7 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         startupType={summary.config.startupDraftType}
         rookieType={summary.config.rookieDraftType}
         devyType={summary.config.devyDraftType}
-        devySlotsUsed={0}
+        devySlotsUsed={devySlots.used}
         devySlotCount={summary.config.devySlotCount}
         bestBallEnabled={summary.config.bestBallEnabled}
       />
