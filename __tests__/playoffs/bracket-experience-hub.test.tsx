@@ -60,6 +60,14 @@ describe("approved bracket experience workspace", () => {
     expect(screen.getByText("#2")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /Review & finalize/ })).toHaveAttribute("href", "/brackets/leagues/mine/entries/entry")
   })
+  it("does not offer an unusable invite when a private-pool member has no invite code", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ challenges: [ownLeague] }), { status: 200 }))
+    getView.mockResolvedValue({ ...ownedView, challenge: { ...ownedView.challenge, inviteCode: "", ownerUserId: "someone-else" } })
+    render(<BracketExperienceHub language="en" season={2026} tournaments={CFP_FIRST} />)
+    await screen.findByTestId("owned-board")
+    expect(screen.queryByRole("button", { name: /Share invite link/i })).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /League dashboard/i })).toBeInTheDocument()
+  })
   it("distinguishes saved picks from a finalized NBA Cup bracket and explains missing draft entries", async () => {
     const cup = { ...ownLeague, sport: "nba_cup" }
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ challenges: [cup] }), { status: 200 }))

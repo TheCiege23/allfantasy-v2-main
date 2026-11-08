@@ -88,7 +88,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const firstGameStartsAt = view.challenge.firstGameStartsAt ?? null
   const pastDeadline = isLiveSingleGame && !rollingCup && firstGameStartsAt != null && Date.now() >= Date.parse(firstGameStartsAt)
   async function copyShareLink() {
-    if (!activeEntry) return
+    if (!activeEntry || !view.challenge.inviteCode) return
     try {
       await navigator.clipboard.writeText(bracketInviteUrl(window.location.origin, view.challenge.id, view.challenge.inviteCode))
       toast.success("League invitation copied.")
@@ -298,7 +298,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
                 </div>
               ) : null}
               {showTiebreaker ? <label className="af-pb-tiebreaker">{rollingCup ? "Optional championship tiebreaker" : "Final game combined score"} <input type="number" min={0} max={500} inputMode="numeric" value={tiebreakerGuess} onChange={(e) => setTiebreakerGuess(e.target.value)} aria-label="Final game combined score tiebreaker" /></label> : null}
-              {canShareEntry ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Invite friends</button> : null}
+              {canShareEntry && view.challenge.inviteCode ? <button type="button" className="af-pb-btn" onClick={copyShareLink}>Invite friends</button> : null}
               {!rollingCup || !activeEntry.finalizedAt || cupHasDrafts || showTiebreaker ? <button
                 type="button"
                 className="af-pb-btn af-pb-btn--accent"
@@ -369,7 +369,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickCount}/{totalSeries} picks</span>
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">Autosave on</span>
-            {canShareEntry ? <button type="button" onClick={copyShareLink} className="rounded-full border border-teal-500 px-3 py-1 text-teal-900">Invite friends</button> : null}
+            {canShareEntry && view.challenge.inviteCode ? <button type="button" onClick={copyShareLink} className="rounded-full border border-teal-500 px-3 py-1 text-teal-900">Invite friends</button> : null}
             {saving ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-amber-900">
                 <Loader2 className="h-4 w-4 animate-spin" />
