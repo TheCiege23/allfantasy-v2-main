@@ -22,7 +22,7 @@ import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 
 export type DraftRoundsSyncResult =
   | { synced: true; rounds: number; previousRounds: number | null }
-  | { synced: false; reason: 'draft_started' | 'no_template' | 'unchanged' | 'manual_override' }
+  | { synced: false; reason: 'draft_started' | 'no_template' | 'unchanged' | 'manual_override' | 'not_startup_draft' }
 
 export const DRAFT_ROUNDS_MANUAL_KEY = 'draft_rounds_manual'
 
@@ -45,15 +45,24 @@ export async function syncDraftRoundsToRoster(
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { status: true },
+    select: { status: true, draftModeLabel: true, rounds: true },
   })
   if (session && session.status !== 'pre_draft') return { synced: false, reason: 'draft_started' }
+  // A rookie (or other next-season) draft's rounds are its own setting; the roster size never set them.
+  const mode = String(session?.draftModeLabel ?? '').trim().toLowerCase()
+  if (mode && mode !== 'startup') return { synced: false, reason: 'not_startup_draft' }
 
   const after = await getComputedDraftRounds(leagueId)
   if (!after) return { synced: false, reason: 'no_template' }
 
   const saved = (await getDraftConfigForLeague(leagueId).catch(() => null))?.rounds ?? null
-  if (saved === after.rounds) return { synced: false, reason: 'unchanged' }
+  /*
+   * "Unchanged" means the SESSION already has these rounds. The config's value can be the sport
+   * default rather than anything stored — a dynasty startup the creation step sized to 24 read
+   * "saved 25" (the default) against a computed 25 and was never resized (dynasty simulation,
+   * 2026-11-08). The session is what the draft board runs.
+   */
+  if (saved === after.rounds && (session?.rounds == null || session.rounds === after.rounds)) return { synced: false, reason: 'unchanged' }
   if (opts.keepManualOverride && saved != null) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
     const settings = (league?.settings as Record<string, unknown> | null) ?? {}
