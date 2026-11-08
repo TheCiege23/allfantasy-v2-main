@@ -90,8 +90,22 @@ function getStarterAllowedSet(template: RosterTemplateDto): Set<string> {
 /** Persist lineup_sections + legacy starters/bench fields after AutoCoach or manual edits. */
 export function buildPlayerDataFromSections(
   existingPlayerData: unknown,
-  sections: Record<RosterSectionKey, Array<Record<string, unknown>>>
+  rawSections: Record<RosterSectionKey, Array<Record<string, unknown>>>
 ): Record<string, unknown> {
+  /*
+   * Rows written as bare ids by the old waiver helper (`syncLineupSections`) are still stored in live
+   * leagues. Read them as `{ id }` — as a string, `withoutSlotIndex` threw ("Cannot use 'in' operator")
+   * and `String(p.id)` named the player "undefined".
+   */
+  const asRows = (rows: unknown): Array<Record<string, unknown>> =>
+    (Array.isArray(rows) ? rows : []).map((r) => (typeof r === 'string' ? { id: r } : (r as Record<string, unknown>))).filter((r) => r && typeof r === 'object')
+  const sections = {
+    starters: asRows(rawSections.starters),
+    bench: asRows(rawSections.bench),
+    ir: asRows(rawSections.ir),
+    taxi: asRows(rawSections.taxi),
+    devy: asRows(rawSections.devy),
+  } as Record<RosterSectionKey, Array<Record<string, unknown>>>
   const base =
     existingPlayerData && typeof existingPlayerData === 'object' && !Array.isArray(existingPlayerData)
       ? (existingPlayerData as Record<string, unknown>)
