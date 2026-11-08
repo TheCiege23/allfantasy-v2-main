@@ -421,8 +421,13 @@ button.af-scope-chip { cursor: pointer; }
 .af-core .af-scope-row[data-platform='mfl'] { --af-scope-plat: var(--p-mfl-fg); }
 .af-core .af-scope-row[data-platform='fleaflicker'] { --af-scope-plat: var(--p-fleaflicker-fg); }
 .af-core .af-scope-row[data-platform='native'] { --af-scope-plat: #2563eb; }
-.af-core .af-scope-league-plat[data-platform='native'] { background: #2563eb; color: #ffffff; }
-.af-core .af-scope-chip-dot[data-platform='native'] { background: #2563eb; color: #8fb4ff; }
+/*
+ * ⚠ ONE CLASS HEAVIER THAN `.af-core .af-platform[data-platform='native']` (af-core.css), ON PURPOSE.
+ * At equal weight the winner was whichever stylesheet loaded last, and that order differs between the
+ * production build (AF blue) and a dev server (the grey `manual` tokens) — measured 2026-11-08.
+ */
+.af-core .af-scope-league-meta .af-scope-league-plat[data-platform='native'] { background: #2563eb; color: #ffffff; }
+.af-core .af-scope-chip .af-scope-chip-dot[data-platform='native'] { background: #2563eb; color: #8fb4ff; }
 .af-core .af-scope-league { padding-left: 2px; }
 /*
  * The drop line (af-core-shell.css draws it for every `[data-rail-id]` row) drawn WITH the platform
@@ -433,15 +438,35 @@ button.af-scope-chip { cursor: pointer; }
 @media (max-width: 720px) {
   .af-core .af-scope-btn { max-width: min(64vw, 260px); }
   /*
-   * On a phone each chip row scrolls sideways instead of wrapping: five sports and four platforms
-   * wrapped to four lines and left the league list a third of the sheet (measured off the 2026-11-08
-   * screenshot). The list is what the sheet is for.
+   * ⚠ EVERY CHIP ON SCREEN, NOT A SIDEWAYS SCROLL (user report, 2026-11-08, second pass). The rows
+   * used to scroll sideways, and on a real account (NFL · NBA · NCAAB · NCAAF · NHL, four platforms)
+   * the fifth sport and ESPN sat past the edge with nothing saying they were there. Now the chips are
+   * compact, the sports use the short names the list's headings already use (CFB / CBB), the row
+   * labels give their width back (the balls and the platform dots already say which row is which;
+   * screen readers still get the group's name), and a row that still does not fit WRAPS — a second
+   * line is visible, a hidden chip is not. Measured at 375 and 390px against that account's chips.
+   *
+   * And the three groups FLOW AS ONE ROW SET (`display: contents` on the group and chip boxes), so a
+   * short row of sports leaves its space to the platforms instead of ending a line half empty: five
+   * rows of chips became three on that account. The order still reads All · Favorites · sports ·
+   * platforms, and each kind keeps its own mark (★, the ball, the platform's coloured dot).
    */
-  .af-core .af-scope-chips { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -14px; padding-right: 14px; }
-  /* The group's name sits left of its chips rather than over them: two rows of the sheet back. */
-  .af-core .af-scope-group { flex-direction: row; align-items: center; gap: 8px; }
-  .af-core .af-scope-group-title { flex: none; min-width: 6.2em; font-size: 11px; letter-spacing: 0.06em; }
-  .af-core .af-scope-filters { gap: 6px; }
+  .af-core .af-scope-filters { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 4px; }
+  .af-core .af-scope-filters .af-scope-group,
+  .af-core .af-scope-filters .af-scope-chips { display: contents; }
+  .af-core .af-scope-apply { flex: 1 1 100%; min-height: 40px; }
+  .af-core .af-scope-group-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .af-core .af-scope-chip { gap: 4px; padding: 0 9px; font-size: 11px; }
+  .af-core .af-scope-chip b { font-size: 11px; }
+  .af-core .af-scope-chip-icon { font-size: 12px; line-height: 1; }
+  .af-core .af-scope-chip-dot { width: 9px; height: 9px; border-width: 2.5px; }
   .af-core .af-scope-panel { gap: 10px; }
   .af-core .af-scope-head strong { font-size: 17px; }
   .af-core .af-scope-head .af-scope-tool { padding: 0 10px; }
@@ -453,8 +478,6 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-panel { overflow-y: auto; overscroll-behavior: contain; }
   .af-core .af-scope-list { flex: none; overflow: visible; }
   .af-core .af-scope-head { position: sticky; top: -14px; z-index: 1; margin: -14px -14px 0; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface2, var(--surface)); }
-  .af-core .af-scope-chips::-webkit-scrollbar { display: none; }
-  .af-core .af-scope-chip { flex: 0 0 auto; }
   /* Customize needs the width for its three buttons; the crest is the first thing to give it up. */
   .af-core .af-scope-panel[data-editing='true'] .af-scope-league { grid-template-columns: minmax(0, 1fr); }
   .af-core .af-scope-panel[data-editing='true'] .af-scope-league-art { display: none; }
