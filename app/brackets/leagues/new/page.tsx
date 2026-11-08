@@ -359,7 +359,7 @@ export default function NewBracketLeaguePage() {
           </div>
 
           {sport === "NCAAF" && season === 2026 ? <p className="rounded-xl border p-3 text-xs mode-muted" style={{ borderColor: "var(--border)" }}>
-            The official 2026 CFP field and matchups will be announced on December 6. The board uses confirmed teams once published; rankings are not playoff selections.
+            The official 2026 CFP field and matchups are scheduled to be announced on December 6. The board uses confirmed teams once published; rankings are not playoff selections.
           </p> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
