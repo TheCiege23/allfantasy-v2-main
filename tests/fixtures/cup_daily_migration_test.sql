@@ -14,3 +14,24 @@ BEGIN
   IF (SELECT pick_team_name FROM playoff_bracket_picks WHERE id='unconfirmed') <> 'Chicago Bulls' THEN RAISE EXCEPTION 'existing draft changed'; END IF;
 END $$;
 SELECT 'migration assertions passed' AS result;
+-- Old app writes during a rolling deployment keep the former semantics.
+INSERT INTO playoff_bracket_picks VALUES ('legacy-new','cup','done','Boston Celtics',NULL,NULL);
+DO $$ BEGIN
+  IF (SELECT confirmed_at FROM playoff_bracket_picks WHERE id='legacy-new') IS DISTINCT FROM TIMESTAMP '2026-11-01 12:00' THEN RAISE EXCEPTION 'legacy save not preserved'; END IF;
+END $$;
+UPDATE playoff_bracket_entries SET finalized_at='2026-11-02 12:00' WHERE id='draft';
+DO $$ BEGIN
+  IF (SELECT confirmed_at FROM playoff_bracket_picks WHERE id='unconfirmed') IS DISTINCT FROM TIMESTAMP '2026-11-02 12:00' THEN RAISE EXCEPTION 'legacy finalize not preserved'; END IF;
+END $$;
+BEGIN;
+SELECT set_config('allfantasy.cup_daily_mode','on',true);
+INSERT INTO playoff_bracket_picks VALUES ('new-draft','cup','done','Boston Celtics',NULL,NULL);
+UPDATE playoff_bracket_entries SET finalized_at=NULL WHERE id='draft';
+UPDATE playoff_bracket_picks SET confirmed_at=NULL WHERE id='unconfirmed';
+UPDATE playoff_bracket_entries SET finalized_at='2026-11-03 12:00' WHERE id='draft';
+DO $$ BEGIN
+  IF (SELECT confirmed_at FROM playoff_bracket_picks WHERE id='new-draft') IS NOT NULL THEN RAISE EXCEPTION 'new draft auto-confirmed'; END IF;
+  IF (SELECT confirmed_at FROM playoff_bracket_picks WHERE id='unconfirmed') IS NOT NULL THEN RAISE EXCEPTION 'new daily finalize confirmed another draft'; END IF;
+END $$;
+COMMIT;
+SELECT 'rolling deployment compatibility passed' AS result;

@@ -712,6 +712,8 @@ export async function createPlayoffBracketEntry(input: {
 }
 
 async function lockCupEntryAndGames(tx: any, challengeId: string, entryId: string) {
+  // Keep old app instances compatible during rollout without auto-confirming new drafts.
+  await tx.$queryRaw`SELECT set_config('allfantasy.cup_daily_mode', 'on', true)`
   // A save, a day confirmation and provider result updates must not interleave.
   await tx.$queryRaw`SELECT id FROM playoff_bracket_entries WHERE id = ${entryId} FOR UPDATE`
   await tx.$queryRaw`SELECT id FROM playoff_bracket_series WHERE challenge_id = ${challengeId} ORDER BY id FOR UPDATE`
