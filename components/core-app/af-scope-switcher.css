@@ -411,7 +411,7 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-chips { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -14px; padding-right: 14px; }
   /* The group's name sits left of its chips rather than over them: two rows of the sheet back. */
   .af-core .af-scope-group { flex-direction: row; align-items: center; gap: 8px; }
-  .af-core .af-scope-group-title { flex: none; width: 4.6em; font-size: 10px; letter-spacing: 0.08em; }
+  .af-core .af-scope-group-title { flex: none; min-width: 6.2em; font-size: 11px; letter-spacing: 0.06em; }
   .af-core .af-scope-filters { gap: 6px; }
   .af-core .af-scope-panel { gap: 10px; }
   .af-core .af-scope-head strong { font-size: 17px; }
