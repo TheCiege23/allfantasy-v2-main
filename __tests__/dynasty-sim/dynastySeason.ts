@@ -46,7 +46,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   const seasonId = season.id as string
   const seasonYear = Number(season.season)
   const sport = run.sport
-  const daily = sport !== 'NFL'
+  const daily = sport !== 'NFL' && sport !== 'NCAAF'
 
   const { buildLeagueStatScorer, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } = await import('@/lib/redraft/scoringEngine')
   const { updateStandings } = await import('@/lib/redraft/standingsEngine')

@@ -16,7 +16,7 @@
 import type { InMemoryPrisma } from '../redraft-season-simulation/inMemoryPrisma'
 import { rowsOf } from '../redraft-season-simulation/inMemoryPrisma'
 
-export type DynastySport = 'NFL' | 'NBA' | 'NHL' | 'MLB'
+export type DynastySport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 export type StartupDraftKind = 'snake' | 'snake_3rr' | 'linear' | 'auction' | 'auto' | 'offline'
 
 export type SimEnv = {
@@ -27,7 +27,7 @@ export type SimEnv = {
 export type Finding = {
   /** Stable id, e.g. `DRAFT_PICK_REFUSED`. */
   code: string
-  stage: 'create' | 'join' | 'draft' | 'finalize'
+  stage: 'create' | 'join' | 'draft' | 'finalize' | 'season'
   message: string
   detail?: Record<string, unknown>
 }
@@ -190,6 +190,42 @@ export async function joinManagers(env: SimEnv, run: LeagueRun): Promise<void> {
 // ── 3. Player pool, from the positions the draft enforces ─────────────────
 
 export type PoolPlayer = { id: string; name: string; position: string; team: string; adp: number }
+
+/** Match the real stored projection shapes for sports with a native dynasty value model. */
+export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]) {
+  if (!run.leagueId || !['NBA', 'NHL', 'MLB'].includes(run.sport)) return
+  const { sport } = run
+  const league = await env.db.league.findUnique({ where: { id: run.leagueId }, select: { season: true } })
+  const season = Number(league?.season ?? new Date().getUTCFullYear())
+  const now = Date.now()
+  const day = 86_400_000
+  await env.db.playerIdentityMap.createMany({ data: pool.map((p) => ({
+    id: 'sim-value-' + p.id, canonicalName: p.name, normalizedName: p.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    sport, position: p.position, rollingInsightsId: p.id,
+  })) })
+  await env.db.aFProjectionSnapshot.createMany({ data: pool.map((p) => {
+    const points = Math.max(5, 42 - p.adp / 4)
+    const perGameRates = sport === 'NHL'
+      ? { goals: points / 20, assists: points / 20, shots: points / 5, saves: points, goals_against: 2 }
+      : sport === 'MLB'
+        ? { ab: 4, h: points / 20, hr: points / 80, r: points / 40, rbi: points / 40, ip: 5, outs: 15, so: points / 5, er: 2 }
+        : { points, total_rebounds: points / 4, assists: points / 5 }
+    return {
+      playerId: 'sim-value-' + p.id, playerName: p.name, sport, position: p.position, season,
+      baselineProjection: points, afProjection: points, snapshotLookupKey: 'sim-value-' + p.id,
+      adjustmentFactors: { perGameRates, confidenceReasons: ['60 games in the season sample'], sourceSeason: season },
+    }
+  }) })
+  const teams = [...new Set(pool.map((p) => p.team))]
+  await env.db.sportsGame.createMany({ data: Array.from({ length: 24 }, (_, i) => teams
+    .filter((_, index) => index % 2 === 0 && teams[index + 1])
+    .map((team) => ({
+      sport, externalId: 'sim-value-' + i + '-' + team, homeTeam: team,
+      awayTeam: teams[teams.indexOf(team) + 1], source: 'simulation', season, seasonType: 'regular',
+      startTime: new Date(now + (i + 1) * day), expiresAt: new Date(now + 200 * day),
+    }))).flat() })
+}
+
 
 export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolPlayer[]> {
   if (!run.leagueId) return []

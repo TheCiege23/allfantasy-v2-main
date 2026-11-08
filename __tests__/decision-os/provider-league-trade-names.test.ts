@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
   leagues: new Map<string, { platform: string | null; sport: string }>(),
   identities: [] as Array<{ fantraxId: string | null; sleeperId: string | null; canonicalName: string; position: string | null; sport: string }>,
-  sportsPlayers: [] as Array<{ sleeperId: string; name: string }>,
+  sportsPlayers: [] as Array<{ id: string; sleeperId: string | null; externalId: string; sport: string; name: string; position: string | null }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -28,8 +28,10 @@ vi.mock('@/lib/prisma', () => ({
           .map((r) => ({ ...r, currentTeam: null, espnId: null, fleaflickerId: null, mflId: null }))),
     },
     sportsPlayer: {
-      findMany: vi.fn(async ({ where }: { where: { sleeperId?: { in: string[] } } }) =>
-        db.sportsPlayers.filter((p) => where.sleeperId?.in.includes(p.sleeperId)).map((p) => ({ ...p, imageUrl: null, position: null, team: null }))),
+      findMany: vi.fn(async ({ where }: { where: { sport: string; OR: Array<Partial<Record<'id' | 'sleeperId' | 'externalId', { in: string[] }>>> } }) =>
+        db.sportsPlayers.filter((p) => p.sport === where.sport && where.OR.some((branch) =>
+          branch.id?.in.includes(p.id) || (p.sleeperId && branch.sleeperId?.in.includes(p.sleeperId)) ||
+          branch.externalId?.in.includes(p.externalId)))),
     },
   },
 }))
@@ -49,7 +51,10 @@ beforeEach(() => {
   // Linked: the import / weekly cron put the Fantrax id on his identity row.
   db.identities.push({ fantraxId: '04yk2', sleeperId: '4034', canonicalName: 'Aaron Judge', position: 'OF', sport: 'MLB' })
   db.identities.push({ fantraxId: 'n0006j', sleeperId: '6794', canonicalName: 'Justin Jefferson', position: 'WR', sport: 'NFL' })
-  db.sportsPlayers.push({ sleeperId: '6794', name: 'Justin Jefferson' })
+  db.sportsPlayers.push(
+    { id: 'sl-jefferson', sleeperId: '6794', externalId: 'sleeper:6794', sport: 'NFL', name: 'Justin Jefferson', position: 'WR' },
+    { id: 'other-player', sleeperId: null, externalId: '6794', sport: 'NFL', name: 'Different Player', position: 'QB' },
+  )
 })
 
 describe('trade names in a Fantrax league', () => {
@@ -70,19 +75,19 @@ describe('trade names in a Fantrax league', () => {
     const inputs = gradeInputsFromNativeItems(items, names)
     expect(inputs.unpriceable).toEqual([])
     expect(inputs.assets).toEqual([
-      { kind: 'player', name: 'Justin Jefferson', providerIdentity: { provider: 'sleeper', id: '6794', position: 'WR' } },
+      { kind: 'player', name: 'Justin Jefferson', rosterPlayerId: 'n0006j', providerIdentity: { provider: 'sleeper', id: '6794', position: 'WR' } },
       // Unlinked: a name to look up, and no identity at all — a Fantrax id is not a Sleeper id.
-      { kind: 'player', name: 'Puka Nacua' },
+      { kind: 'player', name: 'Puka Nacua', rosterPlayerId: 'n00xyz' },
     ])
   })
 
-  it('leaves a Sleeper league exactly as before', async () => {
+  it('resolves Sleeper ids without matching another provider’s numeric id', async () => {
     const items = [{ itemType: 'player', itemReference: '6794', metadata: {} }]
     for (const leagueId of ['sl-nfl', undefined]) {
       const names = await loadNativePlayerNames(items, leagueId)
       expect(names('6794')).toBe('Justin Jefferson')
       expect(gradeInputsFromNativeItems(items, names).assets).toEqual([
-        { kind: 'player', name: 'Justin Jefferson', providerIdentity: { provider: 'sleeper', id: '6794' } },
+        { kind: 'player', name: 'Justin Jefferson', rosterPlayerId: '6794', providerIdentity: { provider: 'sleeper', id: '6794', position: 'WR' } },
       ])
     }
   })

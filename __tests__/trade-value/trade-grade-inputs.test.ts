@@ -15,9 +15,9 @@ describe('pending-offer assets → the one grader', () => {
   it('retains distinct provider namespaces and position hints', () => {
     const asset = { playerName: 'Justin Jefferson', playerId: '42', position: 'LB', team: 'CLE' }
     expect(gradeInputsFromPending([asset], 'sleeper').assets).toEqual([
-      { kind: 'player', name: 'Justin Jefferson', providerIdentity: { provider: 'sleeper', id: '42', position: 'LB', team: 'CLE' } },
+      { kind: 'player', name: 'Justin Jefferson', rosterPlayerId: '42', providerIdentity: { provider: 'sleeper', id: '42', position: 'LB', team: 'CLE' } },
     ])
-    expect(gradeInputsFromPending([asset], 'yahoo').assets[0]).toMatchObject({ providerIdentity: { provider: 'yahoo', id: '42' } })
+    expect(gradeInputsFromPending([asset], 'yahoo').assets[0]).toMatchObject({ rosterPlayerId: '42', providerIdentity: { provider: 'yahoo', id: '42' } })
     expect(gradeInputsFromPending([asset]).assets[0]).not.toHaveProperty('providerIdentity')
   })
 

@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { rowsOf, type InMemoryPrisma } from '../redraft-season-simulation/inMemoryPrisma'
 
-export type ScaleSport = 'NFL' | 'NBA' | 'NHL' | 'MLB'
+export type ScaleSport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 
 export type Finding = { code: string; stage: string; message: string; detail?: unknown }
 
@@ -45,18 +45,27 @@ const FIXTURES: Record<ScaleSport, string> = {
   NBA: 'nba-public-2026.json',
   NHL: 'nhl-public-2026.json',
   MLB: 'mlb-points-public.json',
+  NCAAF: 'nfl-public-2026.json',
+  NCAAB: 'nba-public-2026.json',
+  SOCCER: 'epl-public-2026.json',
 }
 
 /** Per-team roster mix that fills each capture's `maxTotalPlayers` with positions its constraints accept. */
 const ROSTER_MIX: Record<ScaleSport, Array<[string, number]>> = {
   NFL: [['QB', 3], ['RB', 6], ['WR', 8], ['TE', 3], ['K', 1], ['DL', 5], ['LB', 6], ['DB', 6]],
   NBA: [['PG', 3], ['SG', 3], ['SF', 3], ['PF', 3], ['C', 2]],
+  NCAAB: [['PG', 3], ['SG', 3], ['SF', 3], ['PF', 3], ['C', 2]],
+  NCAAF: [['QB', 3], ['RB', 6], ['WR', 8], ['TE', 3], ['K', 1]],
+  SOCCER: [['FWD', 4], ['MID', 5], ['DEF', 5], ['GK', 2]],
   NHL: [['C', 4], ['LW', 4], ['RW', 4], ['D', 4], ['G', 2]],
   MLB: [['C', 2], ['1B', 2], ['2B', 2], ['3B', 2], ['SS', 2], ['OF', 6], ['SP', 8], ['RP', 6]],
 }
 const PRO_TEAMS: Record<ScaleSport, string[]> = {
   NFL: ['KC', 'BUF', 'SF', 'PHI', 'DAL', 'MIA', 'DET', 'BAL', 'CIN', 'GB', 'LAR', 'NYJ'],
   NBA: ['BOS', 'DEN', 'MIL', 'PHX', 'LAL', 'GSW', 'MIA', 'NYK', 'DAL', 'OKC'],
+  NCAAB: ['DUKE', 'UNC', 'KANS', 'UK', 'UCONN', 'GONZ', 'UCLA', 'BAY', 'HOU', 'TENN'],
+  NCAAF: ['TEX', 'OHST', 'MICH', 'IOWA', 'USC', 'UGA', 'UCLA', 'BAY', 'HOU', 'TENN'],
+  SOCCER: ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'NEW', 'BHA', 'AVL', 'WHU', 'FUL'],
   NHL: ['BOS', 'TOR', 'EDM', 'COL', 'NYR', 'VGK', 'FLA', 'DAL', 'CAR', 'NJD'],
   MLB: ['NYY', 'LAD', 'ATL', 'HOU', 'TEX', 'BAL', 'PHI', 'SEA', 'TOR', 'SD'],
 }
@@ -168,9 +177,9 @@ export function firstLast(name: string): string {
  *     fills) and a Rolling Insights id, named "First Last";
  *   - AFProjectionSnapshot rows keyed on the identity id, with per-game rates (sport-points-loader.test.ts);
  *   - an upcoming schedule, so the games left can be counted.
- * Only NBA's projection keys are pinned by an existing test; other sports are left unseeded.
+ * The stock matrix seeds NBA. The audit matrix also seeds NHL, MLB and the college sports.
  */
-export async function seedNbaValues(env: ScaleEnv, run: ScaleRun): Promise<void> {
+export async function seedTradeValues(env: ScaleEnv, run: ScaleRun): Promise<void> {
   if (!run.leagueId || process.env.SIM_SEED_VALUES === '0') return
   if (run.sport === 'NFL') {
     // What `linkNflFantraxIdentities` leaves after an import: the Fantrax id on the player's identity row,
@@ -188,33 +197,48 @@ export async function seedNbaValues(env: ScaleEnv, run: ScaleRun): Promise<void>
     run.stats.seededValues = { identities: i, sleeperLinked: true }
     return
   }
-  if (run.sport !== 'NBA') return
+  if (!['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'].includes(run.sport)) return
+  if (run.sport !== 'NBA' && process.env.SIM_AUDIT_VALUES !== '1') return
+  const sport = run.sport
   const league = (rowsOf(env.db, 'League') as any[]).find((l) => l.id === run.leagueId)
   const season = Number(league?.season ?? 2025)
+  if (sport === 'NCAAF' && !Object.keys(league.settings?.scoring_settings ?? {}).length) {
+    await env.db.league.update({ where: { id: run.leagueId }, data: { settings: {
+      ...league.settings, scoring_settings: { pass_yd: 0.04, pass_td: 4, rush_yd: 0.1, rec: 1, rec_yd: 0.1, fg: 3 },
+    } } })
+  }
   const fx = env.fx!
   const t0 = now()
   for (const [id, ref] of Object.entries(fx.playerMap)) {
     const rank = fx.valueRank[id] ?? 30
     const pim = `pim-${id}`
+    const cfbdId = sport === 'NCAAF' ? `cfbd-${id}` : null
     const name = firstLast(ref.name)
     await env.db.playerIdentityMap.create({
-      data: { id: pim, canonicalName: name, normalizedName: name.toLowerCase().replace(/[^a-z]/g, ''), sport: 'NBA', position: ref.position, rollingInsightsId: `ri-${id}`, fantraxId: id },
+      data: { id: pim, canonicalName: name, normalizedName: name.toLowerCase().replace(/[^a-z]/g, ''), sport, position: ref.position, rollingInsightsId: `ri-${id}`, fantraxId: id, cfbdId },
     })
     const pts = Math.max(4, 34 - rank * 2)
     await env.db.aFProjectionSnapshot.create({
       data: {
-        playerId: pim, playerName: name, sport: 'NBA', position: ref.position, season, week: null,
-        baselineProjection: pts, afProjection: pts, snapshotLookupKey: `sim:NBA:${season}:${pim}`, computedAt: new Date(),
-        adjustmentFactors: { perGameRates: { points: pts, total_rebounds: Math.max(1, 10 - rank * 0.5), assists: Math.max(1, 8 - rank * 0.4) }, confidenceReasons: ['60 games in the season sample'], sourceSeason: season - 1 },
+        playerId: cfbdId ?? pim, playerName: name, sport, position: ref.position, season, week: null,
+        baselineProjection: pts, afProjection: pts, snapshotLookupKey: `sim:${sport}:${season}:${pim}`, computedAt: new Date(),
+        adjustmentFactors: { perGameRates: sport === 'NCAAF'
+          ? { pass_yd: pts * 10, rush_yd: pts * 3, rec: pts / 8, rec_yd: pts * 2, fg: pts / 10 }
+          : sport === 'NHL'
+          ? { goals: pts / 20, assists: pts / 20, shots: pts / 5, saves: pts, goals_against: 2, wins: pts / 50 }
+          : sport === 'MLB'
+            ? { ab: 4, h: pts / 20, hr: pts / 80, r: pts / 40, rbi: pts / 40, ip: 5, outs: 15, so: pts / 5, er: 2 }
+            : { points: pts, total_rebounds: Math.max(1, 10 - rank * 0.5), assists: Math.max(1, 8 - rank * 0.4) },
+          confidenceReasons: ['60 games in the season sample'], sourceSeason: sport === 'NCAAB' ? season : season - 1 },
       },
     })
   }
-  const teams = PRO_TEAMS.NBA
+  const teams = PRO_TEAMS[sport]
   const start = Date.now()
   for (let day = 1; day <= 60; day += 1) {
     for (let t = 0; t < teams.length; t += 2) {
       await env.db.sportsGame.create({
-        data: { sport: 'NBA', externalId: `sim-${season}-${day}-${t}`, homeTeam: teams[t]!, awayTeam: teams[t + 1]!, source: 'sim', season, seasonType: null, startTime: new Date(start + day * 86_400_000), expiresAt: new Date(start + 400 * 86_400_000) },
+        data: { sport, externalId: `sim-${season}-${day}-${t}`, homeTeam: teams[t]!, awayTeam: teams[t + 1]!, source: 'sim', season, week: sport === 'NCAAF' ? Math.min(day, 13) : null, seasonType: sport === 'NCAAF' ? 'regular' : null, startTime: new Date(start + day * 86_400_000), expiresAt: new Date(start + 400 * 86_400_000) },
       })
     }
   }
@@ -620,9 +644,14 @@ export async function runRankAndChimmy(env: ScaleEnv, run: ScaleRun): Promise<vo
   const { executeChimmyTool } = await import('@/lib/chimmy/tools/chimmyTools')
   const ctx = { leagueId: run.leagueId, userId: COMMISH.id } as any
   const mine = seats(env, run)[0]
-  const myPlayers = mine ? seasonHoldings(env, mine.seasonRosterId) : []
+  const playersFor = (seat: Seat | undefined) => {
+    if (!seat) return []
+    const season = seasonHoldings(env, seat.seasonRosterId)
+    return season.length ? season : leagueHoldings(env, seat.rosterId).map((id) => ({ playerName: env.fx?.playerMap[id]?.name }))
+  }
+  const myPlayers = playersFor(mine)
   const theirs = seats(env, run)[seats(env, run).length - 1]
-  const theirPlayers = theirs ? seasonHoldings(env, theirs.seasonRosterId) : []
+  const theirPlayers = playersFor(theirs)
   const out: Record<string, unknown> = {}
   const toolTimes: Record<string, number> = {}
   for (const [name, args] of [

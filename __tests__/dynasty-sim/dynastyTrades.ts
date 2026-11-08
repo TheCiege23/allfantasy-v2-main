@@ -169,7 +169,15 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     const t = (rowsOf(db, 'AfLeagueTrade') as any[]).find((x) => x.id === r.tradeId)
     const snap = (rowsOf(db, 'TradeDecisionSnapshot') as any[]).find((s) => s.tradeId === r.tradeId) ?? null
     const decision = t?.decision ?? t?.serverDecision ?? snap?.decision ?? snap ?? null
-    return { label: r.label, status: r.status, decision: decision ? JSON.stringify(decision).slice(0, 400) : null }
+    const receipt = snap?.evaluationReceipt ?? decision?.serverDecisionResult?.evaluationReceipt
+    const participants = snap?.decisionResult?.participants
+    return {
+      label: r.label,
+      status: r.status,
+      grade: receipt?.grade?.letter ?? participants?.[0]?.grade ?? null,
+      withheld: receipt?.grade?.reason ?? participants?.[0]?.gradeWithheld ?? null,
+      decision: decision ? JSON.stringify(decision).slice(0, 400) : null,
+    }
   })
   run.stats.trades = results.map((r) => ({ label: r.label, ok: r.ok, tradeId: r.tradeId ?? null, status: r.status, acceptStatus: r.acceptStatus, stage: r.stage, error: r.error }))
 

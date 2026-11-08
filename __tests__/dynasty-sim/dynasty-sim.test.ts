@@ -9,6 +9,8 @@
  *
  *   SIM_MATRIX=smoke  (default) one NFL 12-team league per draft type
  *   SIM_MATRIX=full   NFL/NBA/NHL/MLB × 4/8/12/16 teams × every draft type
+ *   SIM_MATRIX=audit  all seven sports, four teams, snake draft
+ *   SIM_AUDIT_VALUES=1  seed stored NBA, NHL and MLB dynasty values
  *   SIM_OUT=<path>    where the JSON report goes (default: dynasty-sim-report.json in the OS temp dir)
  *   SIM_SEASON=1      also play the season, playoffs and offseason (./dynastySeason.ts)
  *
@@ -63,7 +65,7 @@ vi.mock('@/lib/subscription/FeatureGateService', async (load) => {
   const real = await load<typeof import('@/lib/subscription/FeatureGateService')>()
   class SimFeatureGateService extends (real.FeatureGateService as any) {
     async evaluateUserFeatureAccess(...args: unknown[]) {
-      if (process.env.SIM_SCENARIOS === '1') return { allowed: true, reason: 'simulation: AF Commissioner' }
+        if (process.env.SIM_SCENARIOS === '1') return { allowed: true, reason: 'simulation: AF Commissioner' }
       return (super.evaluateUserFeatureAccess as any)(...args)
     }
   }
@@ -73,7 +75,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', async (load) => {
   const real = await load<typeof import('@/lib/subscription/EntitlementResolver')>()
   class SimEntitlementResolver extends (real.EntitlementResolver as any) {
     async resolveForUser(...args: unknown[]) {
-      if (process.env.SIM_SCENARIOS === '1') return { hasAccess: true, message: 'simulation: AF Commissioner' }
+        if (process.env.SIM_SCENARIOS === '1') return { hasAccess: true, message: 'simulation: AF Commissioner' }
       return (super.resolveForUser as any)(...args)
     }
   }
@@ -110,6 +112,10 @@ const FOOTBALL_LIKE = new Set(['NFL'])
 type Case = { sport: DynastySport; teamCount: number; draft: StartupDraftKind }
 function matrix(): Case[] {
   const mode = process.env.SIM_MATRIX ?? 'smoke'
+  if (mode === 'audit') {
+    const auditSports: DynastySport[] = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
+    return auditSports.map((sport) => ({ sport, teamCount: 4, draft: 'snake' }))
+  }
   if (mode === 'full') {
     return SPORTS.flatMap((sport) =>
       [4, 8, 12, 16].flatMap((teamCount) => KINDS.filter((k) => k !== 'snake_3rr' || FOOTBALL_LIKE.has(sport)).map((draft) => ({ sport, teamCount, draft }))),
@@ -189,14 +195,23 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
       const started = Date.now()
       const env: SimEnv = { db: holder.db, signIn: (user) => (holder.session = user ? { user } : null) }
       const run = await sim.createDynastyLeague(env, c)
-      await sim.joinManagers(env, run)
-      if (process.env.SIM_SCENARIOS === '1') await (await import('./dynastyScenarios')).preDraftSettings(env, run)
-      const pool = await sim.seedPlayerPool(env, run)
-      await sim.runStartupDraft(env, run, pool)
-      if (process.env.SIM_SEASON === '1') await sim.runDynastySeason(env, run)
+      try {
+        await sim.joinManagers(env, run)
+        if (process.env.SIM_SCENARIOS === '1') await (await import('./dynastyScenarios')).preDraftSettings(env, run)
+        const pool = await sim.seedPlayerPool(env, run)
+        await sim.runStartupDraft(env, run, pool)
+        if (process.env.SIM_AUDIT_VALUES === '1') await sim.seedDynastyTradeValues(env, run, pool)
+        if (process.env.SIM_SEASON === '1') await sim.runDynastySeason(env, run)
+      } catch (error) {
+        run.findings.push({ code: 'AUDIT_CASE_THREW', stage: 'season', message: (error as Error).message })
+      }
       results.push({ ...run, network: [...network], logged: [...logged], ms: Date.now() - started })
-      // The report is the deliverable; the assertion is only that the run itself did not crash.
-      expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
+      if (process.env.SIM_MATRIX === 'audit') {
+        expect(run.leagueId, JSON.stringify(run.findings)).toBeTruthy()
+        expect(run.findings.some((finding) => finding.code === 'AUDIT_CASE_THREW'), JSON.stringify(run.findings)).toBe(false)
+      } else {
+        expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
+      }
     })
   }
 })

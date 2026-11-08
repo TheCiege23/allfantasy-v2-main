@@ -27,6 +27,7 @@ describe('playerIdSpaceFor — the league decides the id space', () => {
     [{ platform: 'manual', sport: 'NBA' }, 'rolling_insights'], // …every other native sport is not
     [{ platform: null, sport: 'NHL' }, 'rolling_insights'],
     [{ platform: 'espn', sport: 'NFL' }, { provider: 'espn' }],
+    [{ platform: 'yahoo', sport: 'NFL' }, { provider: 'yahoo' }],
   ] as const)('%j → %j', (league, want) => {
     expect(playerIdSpaceFor(league)).toEqual(want)
   })
@@ -66,27 +67,32 @@ describe('resolveTradePlayers', () => {
     const out = await resolveTradePlayers(['4984', '9999'], { space: 'sleeper', sport: 'nfl' })
     const where = sportsFindMany.mock.calls[0]![0].where
     expect(where.sport).toBe('NFL')
-    expect(where.OR).toEqual([{ sleeperId: { in: ['4984', '9999'] } }, { externalId: { in: ['sleeper:4984', 'sleeper:9999'] } }])
+    expect(where.OR).toEqual([{ id: { in: ['4984', '9999'] } }, { sleeperId: { in: ['4984', '9999'] } }, { externalId: { in: ['sleeper:4984', 'sleeper:9999'] } }])
     expect(out.get('4984')).toEqual({ ok: true, name: 'Josh Allen', position: 'QB' })
     expect(out.get('9999')).toEqual({ ok: false, why: 'unresolved' })
   })
 
   it('a native NBA trade is looked up as Rolling Insights ids — never as Sleeper ids', async () => {
-    sportsFindMany.mockResolvedValue([{ externalId: '1234', name: 'Nikola Jokic', position: 'C' }])
+    sportsFindMany.mockResolvedValue([{ id: 'nba-row', source: 'rolling_insights', externalId: '1234', name: 'Nikola Jokic', position: 'C' }])
     const out = await resolveTradePlayers(['1234'], { space: 'rolling_insights', sport: 'NBA' })
     const where = sportsFindMany.mock.calls[0]![0].where
-    expect(where).toMatchObject({ source: 'rolling_insights', externalId: { in: ['1234'] }, sport: 'NBA' })
-    expect(where.OR).toBeUndefined()
+    expect(where).toEqual({ sport: 'NBA', OR: [{ id: { in: ['1234'] } }, { source: 'rolling_insights', externalId: { in: ['1234'] } }] })
     expect(out.get('1234')).toMatchObject({ ok: true, name: 'Nikola Jokic' })
   })
 
   it('ESPN-style ids go through the platform’s identity column', async () => {
     providerResolve.mockResolvedValue(new Map([['15847', { name: 'Travis Kelce', position: 'TE' }]]))
     const out = await resolveTradePlayers(['15847', '1'], { space: { provider: 'espn' }, sport: 'NFL' })
-    expect(providerResolve).toHaveBeenCalledWith('espn', ['15847', '1'], 'NFL')
+    expect(providerResolve).toHaveBeenCalledWith('espn', ['15847', '1'], 'NFL', expect.any(Set))
     expect(sportsFindMany).not.toHaveBeenCalled()
     expect(out.get('15847')).toMatchObject({ ok: true, name: 'Travis Kelce' })
     expect(out.get('1')).toEqual({ ok: false, why: 'unresolved' })
+  })
+
+  it('keeps the provider link when the roster stores an AllFantasy row id', async () => {
+    sportsFindMany.mockResolvedValue([{ id: 'nba-row', source: 'rolling_insights', externalId: '1234', name: 'Nikola Jokic', position: 'C' }])
+    const out = await resolveTradePlayers(['nba-row'], { space: 'rolling_insights', sport: 'NBA' })
+    expect(out.get('nba-row')).toEqual({ ok: true, name: 'Nikola Jokic', position: 'C', externalId: '1234' })
   })
 
   it('an unreadable table leaves every id unresolved — refused, never thrown', async () => {

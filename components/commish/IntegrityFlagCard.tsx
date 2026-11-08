@@ -28,7 +28,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 // ── Contract mirrors ────────────────────────────────────────────────────────
-type TradeAsset = { name: string; position: string; estimatedValue: number }
+type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
 export type CollusionEvidenceLike = {
   tradeTransactionId?: string
@@ -36,9 +36,10 @@ export type CollusionEvidenceLike = {
   team2?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
   assetsTeam1Gave?: TradeAsset[]
   assetsTeam2Gave?: TradeAsset[]
-  team1TotalValue?: number
-  team2TotalValue?: number
-  valueDifferentialPct?: number
+  valuation?: { status: 'priced' } | { status: 'unavailable'; reason: string }
+  team1TotalValue?: number | null
+  team2TotalValue?: number | null
+  valueDifferentialPct?: number | null
   priorTradesBetweenPair?: number
   isPlayoffContender?: { team1?: boolean; team2?: boolean }
   redFlags?: string[]
@@ -475,6 +476,7 @@ export function IntegrityFlagCard({
   }, [highlighted])
   const detailId = `integrity-flag-detail-${flag.id}`
 
+  const valuation = isCollusion ? (ev as CollusionEvidenceLike).valuation : undefined
   const gapPct = isCollusion ? (ev as CollusionEvidenceLike).valueDifferentialPct : undefined
   const gapLabel =
     typeof gapPct === 'number' && Number.isFinite(gapPct) && Math.round(Math.abs(gapPct)) > 0
@@ -532,6 +534,7 @@ export function IntegrityFlagCard({
 
       <div className="af-cm-flagcard-detail" id={detailId}>
         <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
+        {valuation?.status === 'unavailable' && <p>Trade valuation unavailable. {valuation.reason}</p>}
 
         {isCollusion ? (
           <TradeSides ev={ev as CollusionEvidenceLike} a={managerA} b={managerB} />

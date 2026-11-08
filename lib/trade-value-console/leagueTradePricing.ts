@@ -977,7 +977,7 @@ export async function resolveLeagueTradeChart(args: {
    * A league of unknown sport — the console's global mode — still gets the chart.
    */
   const leagueSport = String(leagueRow?.sport ?? leagueSnapshot?.sport ?? '').trim().toUpperCase()
-  const readsNflChart = !leagueSport || leagueSport === 'NFL' || leagueSport === 'NCAAF'
+  const readsNflChart = !leagueSport || leagueSport === 'NFL'
   const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless || !readsNflChart
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
     : await getFantasyCalcChartDbFirst(
