@@ -6,6 +6,8 @@ import {
   EspnUnavailableError,
   assertEspnLeagueObject,
   buildEspnCookieHeader as buildCookieHeaderFromCredentials,
+  espnCurrentFantasySeason,
+  espnDefaultSeasonCandidates,
   fetchEspnLeagueJson,
 } from './espnFantasyClient'
 import {
@@ -25,7 +27,6 @@ import type {
   EspnImportTransaction,
 } from '@/lib/league-import/adapters/espn/types'
 
-const CURRENT_IMPORT_SEASON = new Date().getFullYear()
 const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mScoreboard', 'mSettings']
 const ESPN_DISCOVERY_VIEWS = ['mTeam', 'mSettings']
 const ESPN_DRAFT_VIEWS = ['mDraftDetail']
@@ -246,8 +247,7 @@ export function parseEspnSourceInput(sourceInput: string): { leagueId: string; s
  */
 export function espnSeasonCandidates(input: EspnLeagueInput, now: Date = new Date()): number[] {
   if (input.seasonExplicit) return [input.season]
-  const year = now.getFullYear()
-  return now.getMonth() === 0 ? [year - 1, year] : [year, year - 1]
+  return espnDefaultSeasonCandidates(now)
 }
 
 /**
@@ -1210,7 +1210,12 @@ function inferEspnSeasonFinished(args: {
   currentWeek: number | null
   raw: any
 }): boolean {
-  if (args.season < CURRENT_IMPORT_SEASON) return true
+  /*
+   * Read at call time, not module load: a server that started in December otherwise keeps last
+   * year's value forever. And the FANTASY season, not the calendar year — in January the 2026
+   * playoffs may still be running, so 2026 must not read as finished just because it is 2027.
+   */
+  if (args.season < espnCurrentFantasySeason()) return true
 
   const finalScoringPeriod = parseNumber(args.raw?.status?.finalScoringPeriod, null)
   if (finalScoringPeriod != null && args.currentWeek != null) {
