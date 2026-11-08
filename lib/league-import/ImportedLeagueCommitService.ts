@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
+import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSurvival'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
@@ -624,6 +625,99 @@ export async function runBootstrapStep(
 }
 
 /**
+ * The provider has proven `userId` manages `sourceManagerId` in this league. If that team is held by
+ * an UNCONFIRMED claim (picked from a list, never proven), make it this caller's confirmed team:
+ *
+ *   - held unconfirmed by THIS caller → the claim is upgraded to confirmed ('confirmed-own');
+ *   - held unconfirmed by someone else → it moves to this caller, and any other unconfirmed team this
+ *     caller held in the league is released so they keep exactly one ('took-over').
+ *
+ * Returns null when the team is unclaimed, held by a confirmed claim, or has no claim row at all —
+ * every such case keeps its existing behaviour.
+ */
+export async function confirmOrTakeOverUnprovenClaim(args: {
+  leagueId: string
+  userId: string
+  sourceManagerId: string
+}): Promise<'confirmed-own' | 'took-over' | null> {
+  const { leagueId, userId, sourceManagerId } = args
+  /*
+   * ⚠ FAILS SOFT. This is an add-on to the cross-account join: when it cannot read or write, the join
+   * must carry on exactly as it did before this existed (null = "no unproven claim to resolve").
+   */
+  let held: { id: string; externalId: string; claimedByUserId: string } | null
+  let holderClaim: { id: string; teamExternalId: string } | null
+  try {
+    held = (await (prisma as any).leagueTeam.findFirst({
+      where: { leagueId, platformUserId: sourceManagerId, claimedByUserId: { not: null } },
+      select: { id: true, externalId: true, claimedByUserId: true },
+    })) as { id: string; externalId: string; claimedByUserId: string } | null
+    if (!held) return null
+    holderClaim = (await (prisma as any).leagueManagerClaim.findFirst({
+      where: { leagueId, afUserId: held.claimedByUserId, isConfirmed: false },
+      select: { id: true, teamExternalId: true },
+    })) as { id: string; teamExternalId: string } | null
+  } catch {
+    return null
+  }
+  if (!holderClaim || holderClaim.teamExternalId !== held.externalId) return null
+
+  if (held.claimedByUserId === userId) {
+    try {
+      await (prisma as any).leagueManagerClaim.update({
+        where: { id: holderClaim.id },
+        data: { isConfirmed: true, platformUserId: sourceManagerId },
+      })
+    } catch {
+      return null
+    }
+    return 'confirmed-own'
+  }
+
+  const displacedUserId = held.claimedByUserId
+  try {
+    await prisma.$transaction(async (tx: any) => {
+      // This caller's own unconfirmed pick elsewhere in the league, if any, is released first.
+      const ownPick = await tx.leagueManagerClaim.findFirst({
+        where: { leagueId, afUserId: userId },
+        select: { id: true, teamExternalId: true, isConfirmed: true },
+      })
+      if (ownPick?.isConfirmed) throw new Error('caller already holds a confirmed team in this league')
+      if (ownPick) {
+        await tx.leagueManagerClaim.delete({ where: { id: ownPick.id } })
+        await tx.leagueTeam.updateMany({
+          where: { leagueId, externalId: ownPick.teamExternalId, claimedByUserId: userId },
+          data: { claimedByUserId: null },
+        })
+      }
+      await tx.leagueManagerClaim.delete({ where: { id: holderClaim.id } })
+      const moved = await tx.leagueTeam.updateMany({
+        where: { id: held.id, claimedByUserId: displacedUserId },
+        data: { claimedByUserId: userId, isOrphan: false },
+      })
+      if (moved.count !== 1) throw new Error('team changed hands during takeover')
+      await tx.leagueManagerClaim.create({
+        data: {
+          leagueId,
+          afUserId: userId,
+          teamExternalId: held.externalId,
+          platformUserId: sourceManagerId,
+          isConfirmed: true,
+        },
+      })
+    })
+  } catch (err) {
+    console.warn('[ImportedLeagueCommitService] unproven-claim takeover skipped:', err instanceof Error ? err.message : 'unknown')
+    return null
+  }
+  console.warn('[ImportedLeagueCommitService] a proven member took over a team held by an unconfirmed claim', {
+    leagueId,
+    teamExternalId: held.externalId,
+  })
+  return 'took-over'
+}
+
+/**
  * Attach a real, provider-verified member to a League someone else already imported,
  * instead of creating a second copy of the same real-world league.
  *
@@ -675,6 +769,29 @@ export async function claimExistingLeagueForMember(args: {
     where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: null },
     select: { id: true, externalId: true },
   })
+
+  /*
+   * PROOF BEATS A PICK. A public ESPN league can be joined without cookies by choosing a team from
+   * the list (`espn/espnPublicMemberImport.ts`), recorded as an UNCONFIRMED claim. The provider has
+   * just proven this caller manages that team, so an unconfirmed holder — someone else, or this
+   * caller's own earlier pick — gives way. A CONFIRMED holder is still never displaced.
+   */
+  if (!team) {
+    const proven = await confirmOrTakeOverUnprovenClaim({
+      leagueId: otherLeague.id,
+      userId,
+      sourceManagerId,
+    })
+    if (proven) {
+      return {
+        league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+        historicalBackfill: null,
+        existed: proven === 'confirmed-own',
+        joinedExisting: true,
+        incompleteSteps: [],
+      }
+    }
+  }
 
   if (!team) {
     /*
@@ -834,6 +951,9 @@ export async function persistImportedLeagueFromNormalization(
       sourceManagerId: options.importerSourceManagerId,
     })
     if (joined) {
+      if (provider === 'sleeper' && normalized.league.status === 'complete') {
+        await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
+      }
       /*
        * ⚠ THE JOIN RETURNS BEFORE THE ORDINARY PATH'S `calculateAndSaveRank` BELOW, so
        * without this a joiner is never ranked (measured: `rank_calculated_at` stayed null
@@ -1300,6 +1420,9 @@ export async function persistImportedLeagueFromNormalization(
     })
   } catch {
     /* non-fatal settings stamp */
+  }
+  if (provider === 'sleeper' && normalized.league.status === 'complete' && options.importerSourceManagerId) {
+    await importSleeperSurvivalById({ userId, platformLeagueId, season: seasonYear }, options.importerSourceManagerId)
   }
   try {
     await calculateAndSaveRank(userId)

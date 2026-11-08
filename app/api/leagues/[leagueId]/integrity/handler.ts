@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
 import { assertCommissioner } from "@/lib/commissioner/permissions"
+import { isOwnerOrLeagueCommissioner } from "@/lib/commissioner/leagueCommissionerAccount"
 import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
@@ -86,7 +87,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     },
     openFlags: openFlags.map(withManagers),
     recentDismissed: recentDismissed.map(withManagers),
-    canReview: league.userId === userId,
+    // The head commissioner, by the shared rule: the owner, or a proven commissioner who joined a
+    // league someone else imported (a system-owned ESPN league has no owner who is a person).
+    canReview: await isOwnerOrLeagueCommissioner(league, leagueId, userId),
     coverage,
     stats: {
       totalFlagsAllTime: totalFlags,

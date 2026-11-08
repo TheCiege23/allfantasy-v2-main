@@ -664,6 +664,30 @@ function CareerDesktop({
       {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
       {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}
       {view === 'overview' ? <CareerRankingLinks data={data} /> : null}
+      {(view === 'overview' || view === 'seasons') && data.survivalResults?.length ? (
+        <section className="af-c13-card">
+          <h2 className="af-c13-head">Survival scores</h2>
+          <div className="af-crx-tablewrap">
+            <table className="af-crx-table">
+              <caption>Completed elimination seasons. Scores require verified elimination results.</caption>
+              <thead>
+                <tr><th scope="col">Season</th><th scope="col">League</th><th scope="col">Format</th><th scope="col">Weeks survived</th><th scope="col">Score</th></tr>
+              </thead>
+              <tbody>
+                {data.survivalResults.map(result => (
+                  <tr key={result.key}>
+                    <td>{result.season}</td>
+                    <th scope="row">{result.leagueName}</th>
+                    <td>{result.format === 'survivor' ? 'Survivor' : 'Guillotine'}</td>
+                    <td>{result.survival ? [result.survival.periods, result.survival.totalPeriods].join(' / ') : '—'}</td>
+                    <td>{result.score == null ? 'Unavailable' : result.score.toFixed(1) + ' / 100'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {view === 'share' ? (
         <SharePreview share={share} isEmpty={data.isEmpty} />

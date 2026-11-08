@@ -3976,6 +3976,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  sleeperCareerSurvival                    SleeperCareerSurvival[]
   fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
@@ -8867,6 +8868,15 @@ model LeagueAuth {
   oauthSecret String?
   espnSwid    String?
   espnS2      String?
+  /// 'ok' | 'needs_reconnect'. NULL = not checked since the column existed; reads as healthy.
+  /// Written by lib/league-import/espn/espnConnectionHealth.ts. Migration:
+  /// prisma/migrations-pending/20261108120000_league_auth_connection_health.
+  connectionStatus    String?
+  lastVerifiedAt      DateTime?
+  lastFailureAt       DateTime?
+  lastFailureCode     String?
+  /// When the user was last told to reconnect — throttles the notification to once per outage.
+  reconnectNotifiedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -20357,4 +20367,16 @@ model CommunityReport {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("community_reports")
+}
+
+model SleeperCareerSurvival {
+  userId           String   @map("user_id")
+  platformLeagueId String   @map("platform_league_id")
+  season           Int
+  evidence         Json
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, platformLeagueId, season])
+  @@map("sleeper_career_survival")
 }

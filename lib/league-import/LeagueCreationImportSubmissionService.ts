@@ -308,6 +308,11 @@ export async function submitImportCreation(
      * The server validates it against the league's rosters and uses it ONLY to claim that team.
      */
     claimSourceTeamId?: string
+    /**
+     * ESPN: who runs the league on ESPN. With `espn` or `member` plus a picked team, a public league
+     * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
+     */
+    espnLeagueRunBy?: 'espn' | 'member' | 'me'
   }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
@@ -329,6 +334,7 @@ export async function submitImportCreation(
         ...(options?.force ? { force: true } : {}),
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
+        ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
       }),
     });
     const data = await readImportResponseBody(res);

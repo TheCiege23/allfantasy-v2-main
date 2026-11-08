@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth';
 import { encrypt, decrypt } from '@/lib/league-auth-crypto';
 import { isAllowedLeagueAuthRequestOrigin } from '@/lib/extension/allowedRequestOrigin';
 import { getPublicSiteOrigin } from '@/lib/site-public-origin';
+import { validateEspnCookieInput } from '@/lib/league-import/espn/espnFantasyClient';
+import { ESPN_NEEDS_RECONNECT, espnHealthResetFields } from '@/lib/league-import/espn/espnConnectionHealth';
 
 const SUPPORTED_PLATFORMS = ['mfl', 'yahoo', 'espn', 'fantrax'];
 
@@ -42,8 +44,21 @@ export async function POST(req: NextRequest) {
 
     const normalizedPlatform = platform.toLowerCase();
 
-    if (normalizedPlatform === 'espn' && (!espnSwid || !espnS2)) {
-      return NextResponse.json({ error: 'ESPN requires both SWID and ESPN_S2 cookies' }, { status: 400 });
+    let espnCookies: { swid: string; espnS2: string } | null = null;
+    if (normalizedPlatform === 'espn') {
+      if (!espnSwid || !espnS2) {
+        return NextResponse.json({ error: 'ESPN requires both SWID and ESPN_S2 cookies' }, { status: 400 });
+      }
+      /*
+       * Format-checked before anything is stored: a mis-copied value used to overwrite a working
+       * connection and only fail later, as "ESPN rejected me". The extension sends real cookies and
+       * passes this unchanged; the manual paste gets told exactly which box is wrong.
+       */
+      const check = validateEspnCookieInput({ swid: String(espnSwid), espnS2: String(espnS2) });
+      if (!check.ok) {
+        return NextResponse.json({ error: check.message, field: check.field, code: 'INVALID_COOKIES' }, { status: 400 });
+      }
+      espnCookies = { swid: check.swid, espnS2: check.espnS2 };
     }
 
     if (normalizedPlatform === 'mfl' && !apiKey) {
@@ -58,8 +73,11 @@ export async function POST(req: NextRequest) {
     if (apiKey) data.apiKey = encrypt(apiKey);
     if (oauthToken) data.oauthToken = encrypt(oauthToken);
     if (oauthSecret) data.oauthSecret = encrypt(oauthSecret);
-    if (espnSwid) data.espnSwid = encrypt(espnSwid);
-    if (espnS2) data.espnS2 = encrypt(espnS2);
+    if (espnCookies) {
+      data.espnSwid = encrypt(espnCookies.swid);
+      data.espnS2 = encrypt(espnCookies.espnS2);
+      Object.assign(data, espnHealthResetFields());
+    }
 
     await (prisma as any).leagueAuth.upsert({
       where: {
@@ -75,7 +93,7 @@ export async function POST(req: NextRequest) {
       message: `${normalizedPlatform.toUpperCase()} credentials saved securely`,
     });
   } catch (error: any) {
-    console.error('[League Auth Save]', error);
+    console.error('[League Auth Save]', error instanceof Error ? error.name : 'error');
     return NextResponse.json({ error: 'Failed to save credentials' }, { status: 500 });
   }
 }
@@ -98,6 +116,8 @@ export async function GET() {
         oauthToken: true,
         espnSwid: true,
         espnS2: true,
+        connectionStatus: true,
+        lastFailureAt: true,
       },
     });
 
@@ -106,6 +126,9 @@ export async function GET() {
       hasApiKey: !!a.apiKey,
       hasOauthToken: !!a.oauthToken,
       hasEspnCookies: !!(a.espnSwid && a.espnS2),
+      /* ESPN refused the saved cookies on a recent read; the panel asks for fresh ones. */
+      needsReconnect: a.platform === 'espn' && a.connectionStatus === ESPN_NEEDS_RECONNECT,
+      lastFailureAt: a.platform === 'espn' ? a.lastFailureAt ?? null : null,
       connectedAt: a.createdAt,
       updatedAt: a.updatedAt,
     }));

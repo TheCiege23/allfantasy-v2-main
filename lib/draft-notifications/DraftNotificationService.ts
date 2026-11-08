@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
+import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { buildDraftStartingEmail } from './draftEmails'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
@@ -54,7 +55,27 @@ export async function getLeagueMemberAppUserIds(leagueId: string): Promise<strin
   for (const r of rosters) {
     if (r.platformUserId && !String(r.platformUserId).startsWith('orphan-')) ids.add(r.platformUserId)
   }
-  return resolveAppUserIds(Array.from(ids))
+  const resolved = await resolveAppUserIds(Array.from(ids))
+  /*
+   * ⚠ PLUS EVERY CLAIMED TEAM. `Roster.platformUserId` is the PROVIDER's id on an imported league —
+   * an ESPN SWID, a Yahoo guid — and `resolveAppUserIds` only translates AF and Sleeper ids, so a
+   * member of an ESPN league was never reached. `LeagueTeam.claimedByUserId` is always an AF id, and
+   * for a public ESPN league joined by picking a team (owned by the system account) it is the ONLY
+   * place the members are recorded. Read through `.then` so a narrow test double without the
+   * delegate degrades to the old behaviour rather than throwing.
+   */
+  const claimed = await Promise.resolve()
+    .then(() =>
+      prisma.leagueTeam.findMany({
+        where: { leagueId, claimedByUserId: { not: null } },
+        select: { claimedByUserId: true },
+      }),
+    )
+    .catch(() => [] as Array<{ claimedByUserId: string | null }>)
+  const out = new Set(resolved)
+  for (const t of claimed ?? []) if (t.claimedByUserId) out.add(t.claimedByUserId)
+  for (const id of Array.from(out)) if (isSystemLeagueOwner(id)) out.delete(id)
+  return Array.from(out)
 }
 
 async function getDraftAudience(leagueId: string): Promise<string[]> {
@@ -62,7 +83,9 @@ async function getDraftAudience(leagueId: string): Promise<string[]> {
     getLeagueMemberAppUserIds(leagueId),
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
   ])
-  return [...new Set([...members, ...(league?.userId ? [league.userId] : [])])]
+  // The system account owns leagues nobody proved they run; it is not a person to notify.
+  const owner = league?.userId && !isSystemLeagueOwner(league.userId) ? [league.userId] : []
+  return [...new Set([...members, ...owner])]
 }
 
 /**

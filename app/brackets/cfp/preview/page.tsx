@@ -3,7 +3,7 @@ import CfpProjectionPreview from "@/components/brackets/playoffs/CfpProjectionPr
 
 export const metadata: Metadata = {
   title: "2026 CFP projected bracket | AllFantasy",
-  description: "A look at the projected 2026 College Football Playoff bracket, based on the November 3 CFP rankings. Subject to change.",
+  description: "A look at the projected 2026 College Football Playoff bracket, based on the latest available CFP rankings. Subject to change.",
 }
 
 export default function CfpPreviewPage() {

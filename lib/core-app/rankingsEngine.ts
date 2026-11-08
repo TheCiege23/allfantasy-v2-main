@@ -361,6 +361,11 @@ export type ManagerScore = {
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 const round1 = (n: number) => Math.round(n * 10) / 10
+const survivalRatio = ({ periods, totalPeriods }: NonNullable<CareerLedgerRow['survival']>) => clamp01(periods / totalPeriods)
+
+export function survivalSeasonScore(survival: NonNullable<CareerLedgerRow['survival']>): number {
+  return round1(survivalRatio(survival) * 100)
+}
 const pct1 = (n: number) => `${round1(n * 100).toFixed(1)}%`
 
 function logCredit(ratio: number, span: number): number {
@@ -372,7 +377,7 @@ export function scoreRows(rows: CareerLedgerRow[], cohorts: ScoringCohorts): Man
   const results = allResults.filter((r) => !r.survival)
   const survival = allResults.flatMap((r) => r.survival ? [r.survival] : [])
   const survivalCredit = survival.length
-    ? survival.reduce((total, r) => total + clamp01(r.periods / r.totalPeriods), 0) / survival.length
+    ? survival.reduce((total, r) => total + survivalRatio(r), 0) / survival.length
     : null
   const completed = results.filter((r) => r.completed)
   const titleRows = completed.filter((r) => r.leagueSizeKnown && r.titleKnown !== false)

@@ -30,6 +30,10 @@ import {
 import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
 import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
 import { redactAndCap } from '@/lib/security/redactSecrets'
+import {
+  importPublicEspnLeagueAsMember,
+  parseEspnLeagueRunBy,
+} from '@/lib/league-import/espn/espnPublicMemberImport'
 
 /**
  * What the caller sees when something we did not anticipate throws.
@@ -64,6 +68,71 @@ function mapImportCommitErrorStatus(code: string): number {
   /* A sport this provider's import does not support: understood, and a retry will not change it. */
   if (code === 'UNSUPPORTED_SPORT') return 422
   return 500
+}
+
+/**
+ * The no-cookie member import of a public ESPN league. The league is owned by the AllFantasy system
+ * account and the caller's team claim is recorded UNCONFIRMED — see `espnPublicMemberImport.ts` for
+ * why that combination is what keeps a picked team from turning into control of the league.
+ */
+async function commitPublicEspnLeagueAsMember(args: {
+  userId: string
+  sourceId: string
+  claimSourceTeamId: string
+}): Promise<Response> {
+  const result = await runImportedLeagueNormalizationPipeline({
+    provider: 'espn',
+    sourceId: args.sourceId,
+    userId: args.userId,
+  })
+  if (!result.success) {
+    return NextResponse.json({ error: result.error }, { status: mapImportCommitErrorStatus(result.code) })
+  }
+  try {
+    const outcome = await importPublicEspnLeagueAsMember({
+      userId: args.userId,
+      normalized: result.normalized,
+      claimSourceTeamId: args.claimSourceTeamId,
+      persistAsOwner: async (ownerUserId) => {
+        const { persisted } = await persistImportWithCanonicalAudit({
+          userId: ownerUserId,
+          provider: 'espn',
+          normalized: result.normalized,
+          canonical: buildCanonicalImportBundle(result.normalized),
+          allowUpdateExisting: false,
+          importerSourceManagerId: null,
+          importerSourceTeamId: null,
+        })
+        return persisted
+      },
+    })
+    if (!outcome.ok) {
+      return NextResponse.json({ error: outcome.error, code: outcome.code }, { status: outcome.status })
+    }
+    return NextResponse.json({
+      leagueId: outcome.league.id,
+      name: outcome.league.name,
+      sport: outcome.league.sport,
+      league: outcome.league,
+      historicalBackfill: null,
+      importRunId: null,
+      existed: outcome.existed,
+      joinedExisting: outcome.joinedExisting,
+      incompleteSteps: [],
+      skipped: false,
+      /* The team is the caller's on AllFantasy, but nothing proved it on ESPN. */
+      claimUnconfirmed: true,
+    })
+  } catch (error) {
+    // Two people importing the same public league at once: the second retries into a join.
+    if (error instanceof ImportRunInFlightError || error instanceof ImportedLeagueConflictError) {
+      return NextResponse.json(
+        { error: 'Someone is importing this league right now. Try again in a moment.', code: 'IMPORT_IN_PROGRESS' },
+        { status: 409 },
+      )
+    }
+    throw error
+  }
 }
 
 /* The gate-refusal status mapping (404 / 429 / 503 / 403) lives in
@@ -109,6 +178,12 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * only ever claims a team in the league row this request creates or already owns.
      */
     claimSourceTeamId?: string
+    /**
+     * ESPN only — the answer to "Who's the commissioner of this league on ESPN?": `espn` (ESPN runs
+     * it), `member` (someone else in the league) or `me`. With `espn`/`member` and a picked team, a
+     * PUBLIC league imports without cookies as a member — see `espnPublicMemberImport.ts`.
+     */
+    espnLeagueRunBy?: string
   }
   try {
     body = await req.json()
@@ -145,6 +220,25 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     requireCommissioner: true,
     attestation,
   })
+
+  /*
+   * A PUBLIC ESPN league with no proof of membership: the gate read it fine (`leagueReadable`) but
+   * could not tell which team is the caller's. If they said they are NOT the commissioner, they join
+   * as a member by picking their team — no cookies. "I am the commissioner" still needs proof, so it
+   * falls through to the gate's refusal, which tells them to connect ESPN.
+   */
+  const espnRunBy = provider === 'espn' ? parseEspnLeagueRunBy(body.espnLeagueRunBy) : null
+  if (!gate.ok && provider === 'espn' && gate.leagueReadable === true && (espnRunBy === 'espn' || espnRunBy === 'member')) {
+    const picked = typeof body.claimSourceTeamId === 'string' ? body.claimSourceTeamId.trim() : ''
+    if (!picked) {
+      return NextResponse.json(
+        { error: 'Pick your team from the list first.', code: 'PICK_TEAM_REQUIRED' },
+        { status: 400 },
+      )
+    }
+    return commitPublicEspnLeagueAsMember({ userId: auth.userId, sourceId, claimSourceTeamId: picked })
+  }
+
   if (!gate.ok) {
     return commissionerGateFailureResponse(gate)
   }

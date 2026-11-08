@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import pLimit from "p-limit";
 import { LeagueSport } from "@prisma/client";
 
@@ -441,7 +442,8 @@ export async function processLeague(
   leagueData: SleeperLeague,
   userId: string,
   season: number,
-  sportLabel: LeagueSport
+  sportLabel: LeagueSport,
+  sleeperUserId?: string,
 ): Promise<{ leagueId: string; commentaryTelemetry: MatchupCommentaryTelemetry } | null> {
   const platformLeagueId = leagueData.league_id?.toString();
   if (!platformLeagueId) return null;
@@ -497,6 +499,10 @@ export async function processLeague(
     getLeagueUsers(platformLeagueId) as Promise<SleeperUser[]>,
     getLeagueRosters(platformLeagueId) as Promise<SleeperRoster[]>,
   ]);
+
+  if (sleeperUserId) {
+    await importSleeperSurvival({ userId, platformLeagueId, season }, leagueData, rosters, sleeperUserId)
+  }
 
   if (!Array.isArray(users) || !Array.isArray(rosters)) {
     return {

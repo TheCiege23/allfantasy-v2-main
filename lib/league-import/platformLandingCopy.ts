@@ -111,16 +111,16 @@ const LANDINGS: readonly PlatformLanding[] = [
     name: 'ESPN',
     title: 'Import your ESPN fantasy league to AllFantasy — read-only',
     description:
-      'Connect an ESPN fantasy football league to AllFantasy. One-click with the browser extension, or paste two cookies. Read-only, stored encrypted, no password.',
+      'Connect an ESPN fantasy football league to AllFantasy. Public leagues need only the league ID; private leagues connect with the browser extension or two cookies. Read-only, no password.',
     heading: 'Import your ESPN league',
     intro:
-      'ESPN gives no public way to read a league, so AllFantasy reads it as you — using your own browser session, stored encrypted. We never ask for your ESPN password.',
+      'A public ESPN league imports from its league ID — you pick your team. For a private league, or to run your league here as its commissioner, AllFantasy reads it as you using your own browser session, stored encrypted. We never ask for your ESPN password.',
     needs:
-      'A connected ESPN session, via the AllFantasy browser extension or two cookies you paste once. This is needed for every ESPN league, public ones included.',
+      'For a public league, just your league ID — you pick your team. A private league, or a commissioner who wants the commissioner tools, also needs a connected ESPN session: the AllFantasy browser extension or two cookies you paste once.',
     steps: [
       'Choose ESPN on the connect screen.',
-      'Connect once — one click with the AllFantasy extension, or paste your SWID and espn_s2 cookie values.',
-      'Paste the league ID from your ESPN league URL.',
+      'Paste the league ID or the whole league URL.',
+      'Public league: say who runs it and pick your team. Private league or commissioner: connect once — one click with the AllFantasy extension, or paste your SWID and espn_s2 cookie values.',
       'Your read-only copy is built: rosters, matchups, scoring settings and past seasons.',
     ],
     faq: [

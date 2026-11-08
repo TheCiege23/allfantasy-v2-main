@@ -117,6 +117,7 @@ export async function loadCareerRows(
       counted: row.completed,
       inRollup: row.source !== 'standing',
       survival: row.survival,
+      survivalFormat: row.specialty === 'guillotine' || row.specialty === 'survivor' ? row.specialty : undefined,
     }
   })
   const sleeper = rows.filter((r) => r.platform === 'sleeper')

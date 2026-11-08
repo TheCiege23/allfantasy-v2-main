@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { ESPN_TEAM_ABBREVIATIONS } from '@/lib/league-import/espn/EspnLeagueFetchService'
+import { ESPN_TEAM_ABBREVIATIONS } from '@/lib/league-import/espn/espnLookups'
 import {
   espnDefenseIdentity,
   fetchEspnAthleteById,
