@@ -239,5 +239,10 @@ function stableJson(value: unknown): string {
 export function scoringRulesFingerprint(league: { sport: string | null | undefined; settings: unknown }): string | null {
   const rules = resolveLeagueScoringRules({ sport: String(league.sport ?? 'NFL'), settings: league.settings })
   if (!rules) return null
-  return createHash('sha256').update(stableJson({ categories: rules.categories, overrides: rules.overrides })).digest('hex').slice(0, 16)
+  // `fantraxSoccer` (a goalkeeper's own weights) is part of the rules too; absent for every other league, and
+  // `stableJson` drops an undefined key, so their fingerprints are unchanged.
+  return createHash('sha256')
+    .update(stableJson({ categories: rules.categories, overrides: rules.overrides, fantraxSoccer: rules.fantraxSoccer }))
+    .digest('hex')
+    .slice(0, 16)
 }
