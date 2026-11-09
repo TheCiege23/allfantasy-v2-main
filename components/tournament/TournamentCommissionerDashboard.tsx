@@ -337,7 +337,9 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
           </div>
         ) : null}
 
-        <div className="flex gap-1.5 overflow-x-auto px-2 py-3 sm:px-3">
+        {/* Wraps rather than scrolls: as a sideways scroller it hid 3 of the 12 tabs at 1440, 8 at 820 and 10 on a
+            phone, with nothing showing more existed (tournament gaps audit, 2026-11-09). Two columns on a phone. */}
+        <div className="grid grid-cols-2 gap-1.5 px-2 py-3 [&>button]:text-left sm:flex sm:flex-wrap sm:px-3" data-testid="tournament-commissioner-tabs">
           {tabs.map((tb) => (
             <WarRoomTabButton
               key={tb.id}
