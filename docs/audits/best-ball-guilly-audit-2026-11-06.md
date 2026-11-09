@@ -374,3 +374,36 @@ or mocks a changed module.
 - **One-tap renewal** for Classic/Guilly, after fixing the tournament-contest reset.
 - **Keep it quiet.** Classic managers get no lineup nags. Best Ball notifications are limited to results,
   recaps and draft events.
+
+## 9. Checked against a copy of production (2026-11-09)
+
+A throwaway Neon branch of the production database was created, read, and deleted the same hour. Every
+query ran against the copy's own endpoint; production was never connected to. ⚠ The copy was meant to be
+read-only (`ALTER DATABASE … SET default_transaction_read_only`), but the pooled connection did not pick
+the setting up, so the only writes the probe could make (a temporary table, and the daily-schedule
+check's attempt to record a season opener) landed on the copy and were deleted with it.
+
+What the data showed:
+
+- **Every best ball league in production is an imported Sleeper league.** 140 leagues: 138 resolve as
+  Classic-shaped and 2 as Guilly + Best Ball (Sleeper guillotine leagues with `bestBallMode` on). There
+  are no native best ball leagues, no `RedraftMatchup` rows for any of them, and no best ball contests or
+  entries. So the native scoring, sealing and stat-correction paths in this audit protect leagues that do
+  not exist yet; they are verified by tests only.
+- **Their weekly scores come from the import, not the league-engine worker.** All 30,406 `TeamPerformance`
+  rows for these leagues carry the platform's W/L/T and no worker `data`. The worker's `scoreLeagueWeek`
+  pairs a roster to its team by `Roster.platformUserId` = `LeagueTeam.externalId`; on an imported Sleeper
+  league those are the Sleeper user id and the Sleeper roster number, so it matches no team and writes
+  nothing. That is left as is on purpose: the platform scores an imported league, and matching them would
+  let the worker overwrite the platform's official scores.
+- **Unplayed Sleeper weeks were stored as ties.** Sleeper returns every scheduled week with `points: 0`,
+  and the import derives W/L/T from points, so 0 vs 0 became a tie: 62,988 rows across 578 Sleeper
+  leagues (weeks 10–18 of a week-9 season), plus 628 on ESPN left over from before the ESPN adapter's own
+  fix. The Sleeper schedule mapper now drops points for a week in which no roster has scored. Readers that
+  count ties (Chimmy history, the Class rating) already skip 0–0 games. ⚠ The rows already stored stay
+  until each week is played and synced; removing them early is a production data change, not made here.
+- **Discovery's Prisma filters work on Postgres.** The private "ask to join" query returned 10 real
+  leagues; public, Guilly and best ball filtering ran without error. With visibility "all" — the finder's
+  default — 10 of the 12 cards were private leagues and 2 were public.
+- **Daily best ball openers** are derived from stored schedules for the 2026 NBA, NHL and MLB seasons.
+
