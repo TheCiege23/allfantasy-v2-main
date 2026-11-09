@@ -36,7 +36,7 @@ export default function TournamentForumPage() {
   const readOnly = state.status === 'eliminated'
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_280px]">
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
       <div>
         <h1 className="text-[18px] font-bold text-white">Tournament forum</h1>
         <div className="scrollbar-none mt-3 flex gap-1 overflow-x-auto">

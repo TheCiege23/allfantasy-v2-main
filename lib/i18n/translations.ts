@@ -5687,6 +5687,8 @@ export const translations: Record<string, Record<string, string>> = {
     "tournament.hub.conferenceRace": "Conference race",
     "tournament.hub.qualificationLine": "— QUALIFICATION LINE — Top {{adv}} advance —",
     "tournament.hub.bubbleZone": "— BUBBLE ZONE — Next {{n}} —",
+    "tournament.hub.raceAdvance": "Top {{adv}} in each league advance",
+    "tournament.hub.raceBubble": "the next {{n}} go to the bubble",
     "tournament.hub.overall.title": "Overall snapshot",
     "tournament.hub.overall.rankLine": "You rank #{{rank}} of {{total}} by points for",
     "tournament.hub.overall.tiebreakerNote":
@@ -9330,6 +9332,8 @@ export const translations: Record<string, Record<string, string>> = {
     "tournament.hub.conferenceRace": "Carrera de conferencia",
     "tournament.hub.qualificationLine": "— LÍNEA DE CLASIFICACIÓN — Pasan los {{adv}} primeros —",
     "tournament.hub.bubbleZone": "— ZONA BURBUJA — Siguientes {{n}} —",
+    "tournament.hub.raceAdvance": "Pasan los {{adv}} primeros de cada liga",
+    "tournament.hub.raceBubble": "los {{n}} siguientes van a la burbuja",
     "tournament.hub.overall.title": "Panorama general",
     "tournament.hub.overall.rankLine": "Quedas #{{rank}} de {{total}} por puntos a favor",
     "tournament.hub.overall.tiebreakerNote":

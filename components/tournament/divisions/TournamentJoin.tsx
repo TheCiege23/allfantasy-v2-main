@@ -121,7 +121,7 @@ export function TournamentJoin({ view, refName, previewState }: { view: JoinView
   )
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
+    <main className="af-draft-dark mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
       <header className="flex flex-col gap-5 rounded-2xl p-2 md:flex-row md:items-center" style={{ background: `linear-gradient(90deg, ${side(dA.sideId).dark}66, transparent 40%, transparent 60%, ${side(dB.sideId).dark}55)` }}>
         <div className="flex items-center gap-3">
           <DivisionBadge division={dA} size={96} /><span className="text-3xl font-black text-slate-500" aria-hidden="true">VS</span><DivisionBadge division={dB} size={96} />
@@ -132,7 +132,7 @@ export function TournamentJoin({ view, refName, previewState }: { view: JoinView
           <p className="text-slate-300">{view.invitedBy ? <>You’re invited by <b className="text-white">{view.invitedBy}</b>. </> : null}{view.capacity} managers, {leagues} leagues, one champion.</p>
         </div>
       </header>
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="order-2 min-w-0 space-y-5 lg:order-1">
           <ul className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {facts.map(([k, v]) => <li key={k} className={card + ' p-4'}><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{k}</p><div className="mt-1 font-bold text-white">{v}</div></li>)}

@@ -80,7 +80,7 @@ export function SeasonTournamentPlanner({ saved, initial }: { saved?: SavedPlan;
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not update staff access.') }
     finally { setBusy(false) }
   }
-  return <main className="mx-auto min-h-screen max-w-6xl space-y-6 bg-slate-950 px-4 py-6 text-white sm:px-6">
+  return <main className="af-draft-dark mx-auto min-h-screen max-w-6xl space-y-6 bg-slate-950 px-4 py-6 text-white sm:px-6">
     <nav className="flex flex-wrap gap-4 text-sm text-cyan-300"><Link href="/core/commissioner">Commissioner Hub</Link><Link href="/tournament-hub">Tournament Hub</Link></nav>
     <SeasonIdentityHero config={plan?.config ?? config}>
       <p className="text-sm font-semibold uppercase tracking-widest text-amber-300">Tournament leagues · NFL + NBA</p>
