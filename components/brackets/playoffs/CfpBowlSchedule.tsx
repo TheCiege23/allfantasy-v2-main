@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react"
 import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
+import { cfpBowlCrestKey } from "@/lib/playoffs/cfpBowlCrest"
+import CfpBowlCrest from "./CfpBowlCrest"
 
 type BowlGame = { gameLabel?: string | null; startsAt?: string | null; venue?: string | null; location?: string | null; awayTeamName?: string; homeTeamName?: string }
 const BOWLS = [
@@ -42,7 +44,7 @@ export default function CfpBowlSchedule({ season, series, live = false }: { seas
   return <section className="af-pb-card" aria-label="CFP bowl games" data-testid="cfp-bowl-schedule">
     <h2>CFP bowl games</h2>
     <p className="af-pb-note">Teams and bracket paths are confirmed on selection day. Times are Eastern; matchups appear when officially published.</p>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))", gap: 8 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 10 }}>
       {BOWLS.map(bowl => {
         const game = games.find(row => row.gameLabel?.toLowerCase().includes(bowl.name.toLowerCase()))
         const teams = officialTeam(game?.awayTeamName) && officialTeam(game?.homeTeamName) ? `${game!.awayTeamName} vs ${game!.homeTeamName}` : "Matchup to be announced"
@@ -50,9 +52,15 @@ export default function CfpBowlSchedule({ season, series, live = false }: { seas
           ? `${new Date(game.startsAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} ET` : bowl.date
         const venue = known(game?.venue), location = known(game?.location)
         const place = venue ? [venue, location ?? bowl.venue.split(" · ")[1]].filter(Boolean).join(" · ") : bowl.venue
-        return <div key={bowl.name} style={{ border: "1px solid var(--pb-border, #345)", borderRadius: 10, padding: 10 }}>
-          <strong>{bowl.name}</strong><div>{bowl.round}</div><div>{date}</div><div>{place}</div><div>{teams}</div>
-        </div>
+        const crest = cfpBowlCrestKey(bowl.name)
+        return <article key={bowl.name} className="af-pb-bowl-card" data-bowl={crest ?? undefined}>
+          <div className="af-pb-bowl-head">
+            {crest ? <CfpBowlCrest bowl={crest} size={44} decorative /> : null}
+            <div className="af-pb-bowl-title"><span className="af-pb-bowl-round">{bowl.round}</span><strong>{bowl.name}</strong><div className="af-pb-bowl-when">{date}</div></div>
+          </div>
+          <div className="af-pb-bowl-place">{place}</div>
+          <div className="af-pb-bowl-teams">{teams}</div>
+        </article>
       })}
     </div>
     <p className="af-pb-note"><a href="https://collegefootballplayoff.com/news/2026/6/1/26-27-broadcast-sked" target="_blank" rel="noreferrer">Official CFP schedule</a></p>
