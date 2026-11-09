@@ -185,6 +185,30 @@ export async function joinManagers(env: SimEnv, run: LeagueRun): Promise<void> {
   if (open.length) run.findings.push({ code: 'SEATS_STILL_OPEN', stage: 'join', message: `${open.length} seat(s) still open after every manager joined.` })
   const people = new Set(seats.filter((s) => !s.startsWith('open-slot-')))
   if (people.size !== seats.filter((s) => !s.startsWith('open-slot-')).length) run.findings.push({ code: 'MANAGER_HOLDS_TWO_SEATS', stage: 'join', message: 'One user holds more than one seat.' })
+
+  await checkDraftRoomNames(env, run)
+}
+
+/**
+ * What the draft room shows for each team once everyone has joined: the board reads the session's
+ * `slotOrder`, and a joined manager's slot must not still read "Open Team N".
+ */
+async function checkDraftRoomNames(env: SimEnv, run: LeagueRun): Promise<void> {
+  const { GET } = await import('@/app/api/leagues/[leagueId]/draft/session/route')
+  const { NextRequest } = await import('next/server')
+  env.signIn(COMMISH)
+  const res = await GET(new NextRequest(`http://sim.allfantasy.test/api/leagues/${run.leagueId}/draft/session`), { params: Promise.resolve({ leagueId: run.leagueId! }) } as never)
+  const body = (await res.json().catch(() => null)) as any
+  const slots: Array<{ slot?: number; rosterId?: string; displayName?: string; open?: boolean }> = body?.session?.slotOrder ?? []
+  const owners = new Map((rowsOf(env.db, 'Roster') as any[]).filter((r) => r.leagueId === run.leagueId).map((r) => [String(r.id), String(r.platformUserId ?? '')]))
+  const joined = slots.filter((s) => s.rosterId && !String(owners.get(String(s.rosterId)) ?? '').startsWith('open-slot-'))
+  const stale = joined.filter((s) => /^open team\b/i.test(String(s.displayName ?? '')) || s.open === true)
+  run.stats.draftRoomNames = { status: res.status, slots: slots.length, joined: joined.length, stillOpen: stale.length, sample: slots.slice(0, 3).map((s) => s.displayName ?? null) }
+  if (res.status !== 200 || slots.length === 0) {
+    run.findings.push({ code: 'DRAFT_ROOM_NOT_READABLE', stage: 'join', message: `The draft room's session returned ${res.status} with ${slots.length} slots.` })
+  } else if (stale.length) {
+    run.findings.push({ code: 'DRAFT_ROOM_SHOWS_OPEN_TEAM', stage: 'join', message: `${stale.length} of ${joined.length} joined managers still show as ${JSON.stringify(stale.slice(0, 3).map((s) => s.displayName))} in the draft room.` })
+  }
 }
 
 // ── 3. Player pool, from the positions the draft enforces ─────────────────

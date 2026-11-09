@@ -381,6 +381,22 @@ async function runRookieDraft(
     if (exp.detail.champion && ctx.championId && toGeneric(String(exp.detail.champion)) !== toGeneric(ctx.championId)) add({ code: 'ROOKIE_FACTS_WRONG_CHAMPION', stage: 'offseason', message: `The rookie order's facts name ${exp.detail.champion} champion; the season closed with ${ctx.championId}.` })
     const actual = slotOrder.map((s) => s.rosterId)
     run.stats.liveRookieOrderCheck = { orderSource: created.orderSource, matches: JSON.stringify(expected) === JSON.stringify(actual), expected, actual, detail: exp.detail }
+    // The commissioner's rookie order SCREEN: it loads, it is final once the season is over, and the
+    // order it shows is the order the rookie draft was seated in, team for team.
+    const view: any = run.stats.liveRookieView
+    if (!view || view.threw || view.status !== 200) {
+      add({ code: 'ROOKIE_ORDER_SCREEN_NOT_READABLE', stage: 'offseason', message: `The live rookie order screen returned ${view?.status ?? view?.threw ?? 'nothing'}.` })
+    } else {
+      if (view.phase !== 'final') add({ code: 'ROOKIE_ORDER_SCREEN_NOT_FINAL', stage: 'offseason', message: `After the season the screen says phase "${view.phase}"; it should be final.` })
+      const screen = [...(view.slots ?? [])].sort((a: any, b: any) => a.slot - b.slot).map((s: any) => toGeneric(String(s.team)))
+      if (JSON.stringify(screen) !== JSON.stringify(actual)) add({ code: 'ROOKIE_ORDER_SCREEN_DISAGREES_WITH_DRAFT', stage: 'offseason', message: 'The rookie order screen shows a different order from the one the rookie draft was seated in.', detail: { screen, draft: actual } })
+    }
+    const member = run.managerIds[0]
+    if (member) {
+      const preview = await sc.readRookiePreview(env, run, member).catch((e: Error) => ({ status: 0, slots: 0, error: e.message }))
+      run.stats.rookiePreviewForMember = preview
+      if (preview.status !== 200 || preview.slots !== run.teamCount) add({ code: 'ROOKIE_ORDER_PREVIEW_FAILED_FOR_MEMBER', stage: 'offseason', message: `A member opening the rookie order preview got ${preview.status} with ${preview.slots} of ${run.teamCount} slots${preview.error ? `: ${preview.error}` : ''}.` })
+    }
     if (JSON.stringify(expected) !== JSON.stringify(actual)) {
       add({ code: 'ROOKIE_ORDER_NOT_THE_COMMISSIONERS_RULE', stage: 'offseason', message: `Order source ${created.orderSource}; the order does not follow "non-playoff by reverse max PF, playoff by finish, runner-up 2nd-last, champion last".`, detail: { expected, actual, ...exp.detail } })
     }

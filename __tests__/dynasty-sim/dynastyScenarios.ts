@@ -259,14 +259,24 @@ async function freeAgentAdd(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record
   if (tooFewSeats(seats(env, run), 6, S, 'free-agent add')) return
   const seat = seats(env, run)[5]!
   const drop = holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0]
-  if (!fa || !drop) return
+  if (!fa || !drop) {
+    S.freeAgent = { skipped: !fa ? 'no unrostered TE in the pool' : 'no bench player to drop' }
+    return
+  }
   signInAs(env, seat.userId)
   const route = await import('@/app/api/waiver-wire/leagues/[leagueId]/add-drop/route')
   const res = await call(route.POST, `/api/waiver-wire/leagues/${leagueId}/add-drop`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId } }, { leagueId })
   const on = holdings(env, seat.seasonRosterId).some((p) => String(p.playerId) === fa.id)
   const stillHasDrop = holdings(env, seat.seasonRosterId).some((p) => String(p.playerId) === String(drop.playerId))
   S.freeAgent = { status: res.status, error: (res.body as any)?.error ?? null, added: on, dropped: !stillHasDrop }
-  if (res.status !== 200) ctx.add({ code: 'FREE_AGENT_ADD_REFUSED', stage: 'season', message: `${res.status} ${JSON.stringify(res.body).slice(0, 200)}` })
+  if (res.status === 409 && (res.body as any)?.code === 'WAIVER_REQUIRED') {
+    // The league's own rule (e.g. FAAB waivers with instant free agency off): every pickup is a claim.
+    const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
+    const claim = await call(claims.POST, `/api/waiver-wire/leagues/${leagueId}/claims`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId, faabBid: 1 } }, { leagueId })
+    const pending = (rowsOf(env.db, 'WaiverClaim') as any[]).some((c) => c.leagueId === leagueId && String(c.addPlayerId) === fa.id && c.status === 'pending')
+    S.freeAgent.claim = { status: claim.status, error: (claim.body as any)?.error ?? null, pending }
+    if (claim.status >= 300 || !pending) ctx.add({ code: 'FREE_AGENT_CLAIM_REFUSED', stage: 'season', message: `The add needs a waiver claim here, and the claim was refused: ${claim.status} ${JSON.stringify(claim.body).slice(0, 200)}` })
+  } else if (res.status !== 200) ctx.add({ code: 'FREE_AGENT_ADD_REFUSED', stage: 'season', message: `${res.status} ${JSON.stringify(res.body).slice(0, 200)}` })
   else if (!on || stillHasDrop) ctx.add({ code: 'FREE_AGENT_ADD_NOT_ON_SEASON_ROSTER', stage: 'season', message: `Add/drop returned 200; season roster added=${on} dropped=${!stillHasDrop}.` })
 }
 
@@ -596,6 +606,15 @@ async function setLiveRookieOrder(env: SimEnv, run: LeagueRun, S: Record<string,
   const route = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/live/route')
   const res = await call(route.PUT, `/api/commissioner/leagues/${run.leagueId}/rookie-draft-order/live`, { method: 'PUT', body: { enabled: true, config: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' } } }, { leagueId: run.leagueId! })
   S.liveRookieOrder = { status: res.status, error: (res.body as any)?.error ?? null, saved: JSON.stringify((res.body as any)?.settings ?? (res.body as any) ?? null).slice(0, 300) }
+  if (res.status !== 200) run.findings.push({ code: 'ROOKIE_ORDER_SCREEN_SAVE_FAILED', stage: 'season', message: `Saving the commissioner's rookie order rule returned ${res.status}: ${(res.body as any)?.error ?? ''}` })
+}
+
+/** The rookie order preview, as a member opens it (free: any member may see the order). */
+export async function readRookiePreview(env: SimEnv, run: LeagueRun, userId: string): Promise<{ status: number; slots: number; error: string | null }> {
+  signInAs(env, userId)
+  const route = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
+  const res = await call(route.GET, `/api/commissioner/leagues/${run.leagueId}/rookie-draft-order`, null, { leagueId: run.leagueId! })
+  return { status: res.status, slots: ((res.body as any)?.slots ?? []).length, error: (res.body as any)?.error ?? null }
 }
 
 /**
