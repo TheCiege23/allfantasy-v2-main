@@ -10,7 +10,9 @@
  * college display names ("Ole Miss Rebels") are what the live slate carries; the
  * bare school name is accepted too for feeds that send only that.
  */
-export type RivalryCrestKey = "iron" | "game" | "river" | "egg" | "service" | "apple" | "holy" | "brawl"
+export type RivalryCrestKey =
+  | "iron" | "game" | "river" | "egg" | "service" | "apple" | "holy" | "brawl"
+  | "flga" | "hate" | "palmetto" | "sunshine" | "lonestar" | "territorial" | "biggame" | "coast"
 
 export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   iron: "Iron Bowl",
@@ -21,6 +23,14 @@ export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   apple: "Apple Cup",
   holy: "Holy War",
   brawl: "Backyard Brawl",
+  flga: "Florida–Georgia",
+  hate: "Clean, Old-Fashioned Hate",
+  palmetto: "Palmetto Bowl",
+  sunshine: "Sunshine Showdown",
+  lonestar: "Lone Star Showdown",
+  territorial: "Territorial Cup",
+  biggame: "Big Game",
+  coast: "Notre Dame–USC",
 }
 
 const SCHOOLS: Record<string, string[]> = {
@@ -40,6 +50,19 @@ const SCHOOLS: Record<string, string[]> = {
   utah: ["Utah Utes", "Utah"],
   pitt: ["Pittsburgh Panthers", "Pittsburgh", "Pitt Panthers", "Pitt"],
   westVirginia: ["West Virginia Mountaineers", "West Virginia"],
+  florida: ["Florida Gators", "Florida"],
+  georgia: ["Georgia Bulldogs", "Georgia"],
+  georgiaTech: ["Georgia Tech Yellow Jackets", "Georgia Tech"],
+  clemson: ["Clemson Tigers", "Clemson"],
+  southCarolina: ["South Carolina Gamecocks", "South Carolina"],
+  floridaState: ["Florida State Seminoles", "Florida State"],
+  texasAm: ["Texas A&M Aggies", "Texas A&M"],
+  arizona: ["Arizona Wildcats", "Arizona"],
+  arizonaState: ["Arizona State Sun Devils", "Arizona State"],
+  cal: ["California Golden Bears", "California", "Cal Golden Bears", "Cal"],
+  stanford: ["Stanford Cardinal", "Stanford"],
+  notreDame: ["Notre Dame Fighting Irish", "Notre Dame"],
+  usc: ["USC Trojans", "USC"],
 }
 
 const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
@@ -51,6 +74,14 @@ const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
   ["apple", "washington", "washState"],
   ["holy", "byu", "utah"],
   ["brawl", "pitt", "westVirginia"],
+  ["flga", "florida", "georgia"],
+  ["hate", "georgia", "georgiaTech"],
+  ["palmetto", "clemson", "southCarolina"],
+  ["sunshine", "florida", "floridaState"],
+  ["lonestar", "texas", "texasAm"],
+  ["territorial", "arizona", "arizonaState"],
+  ["biggame", "cal", "stanford"],
+  ["coast", "notreDame", "usc"],
 ]
 
 const norm = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase()

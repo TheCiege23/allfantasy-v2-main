@@ -13,6 +13,26 @@ describe("collegeRivalry", () => {
     expect(collegeRivalry("NCAAF", "West Virginia Mountaineers", "Pittsburgh Panthers")).toBe("brawl")
   })
 
+  it("names the second eight, either way round", () => {
+    expect(collegeRivalry("NCAAF", "Georgia Bulldogs", "Florida Gators")).toBe("flga")
+    expect(collegeRivalry("NCAAF", "Georgia Tech Yellow Jackets", "Georgia Bulldogs")).toBe("hate")
+    expect(collegeRivalry("NCAAF", "South Carolina Gamecocks", "Clemson Tigers")).toBe("palmetto")
+    expect(collegeRivalry("NCAAF", "Florida State Seminoles", "Florida Gators")).toBe("sunshine")
+    expect(collegeRivalry("NCAAF", "Texas A&M Aggies", "Texas Longhorns")).toBe("lonestar")
+    expect(collegeRivalry("NCAAF", "Arizona State Sun Devils", "Arizona Wildcats")).toBe("territorial")
+    expect(collegeRivalry("NCAAF", "Stanford Cardinal", "California Golden Bears")).toBe("biggame")
+    expect(collegeRivalry("NCAAF", "USC Trojans", "Notre Dame Fighting Irish")).toBe("coast")
+  })
+
+  it("tells a school in two rivalries apart by its opponent", () => {
+    // Georgia plays both Florida and Georgia Tech; Texas plays both Oklahoma and Texas A&M; Florida both Georgia and FSU.
+    expect(collegeRivalry("NCAAF", "Georgia Bulldogs", "Florida Gators")).toBe("flga")
+    expect(collegeRivalry("NCAAF", "Georgia Bulldogs", "Georgia Tech Yellow Jackets")).toBe("hate")
+    expect(collegeRivalry("NCAAF", "Texas Longhorns", "Oklahoma Sooners")).toBe("river")
+    expect(collegeRivalry("NCAAF", "Texas Longhorns", "Texas A&M Aggies")).toBe("lonestar")
+    expect(collegeRivalry("NCAAF", "Florida Gators", "Florida State Seminoles")).toBe("sunshine")
+  })
+
   it("accepts a bare school name", () => {
     expect(collegeRivalry("ncaaf", "Alabama", "Auburn")).toBe("iron")
   })
@@ -23,6 +43,12 @@ describe("collegeRivalry", () => {
     expect(collegeRivalry("NCAAF", "BYU Cougars", "Utah State Aggies")).toBeNull()
     expect(collegeRivalry("NCAAF", "Texas A&M Aggies", "Oklahoma Sooners")).toBeNull()
     expect(collegeRivalry("NCAAF", "Oklahoma State Cowboys", "Texas Longhorns")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Florida Atlantic Owls", "Florida State Seminoles")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Georgia State Panthers", "Georgia Tech Yellow Jackets")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Georgia Southern Eagles", "Georgia Bulldogs")).toBeNull()
+    expect(collegeRivalry("NCAAF", "South Carolina State Bulldogs", "Clemson Tigers")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Northern Arizona Lumberjacks", "Arizona State Sun Devils")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Texas State Bobcats", "Texas A&M Aggies")).toBeNull()
   })
 
   it("is college football only, and needs both teams", () => {

@@ -180,6 +180,91 @@ const CRESTS: Record<CollegeCrestKey, { color: string; word: string; art: ReactN
       <path d="M26 68 H94 V74 H26 Z M26 86 H94 V92 H26 Z" fill="#5E8C4C" />
     </>,
   },
+  flga: {
+    color: "#F28C38",
+    word: "FLA · UGA",
+    wordSize: 9.5,
+    art: <>
+      <path d="M60 38 C80 44 86 66 76 78 C68 86 52 86 44 78 C34 66 40 44 60 38 Z" fill="#F28C38" transform="rotate(-35 60 62)" />
+      <path d="M50 68 L70 56" stroke="#F4F7FF" strokeWidth="3" strokeLinecap="round" />
+      <path d="M54 60 L57 65 M58 58 L61 63 M62 56 L65 61" stroke="#F4F7FF" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M26 96 Q34 90 42 96 T58 96 T74 96 T94 96" fill="none" stroke="#5EC2E6" strokeWidth="4" strokeLinecap="round" />
+    </>,
+  },
+  hate: {
+    color: "#FF5A36",
+    word: "HATE",
+    art: <>
+      <path d="M60 34 C66 46 80 52 80 72 C80 88 70 98 60 98 C50 98 40 88 40 72 C40 60 48 56 50 46 C54 52 56 54 58 54 C58 46 58 40 60 34 Z" fill="#FF5A36" />
+      <path d="M60 62 C64 70 70 74 70 82 C70 90 66 94 60 94 C54 94 50 90 50 82 C50 76 54 74 56 68 C58 72 59 72 60 62 Z" fill="#FFD84D" />
+    </>,
+  },
+  palmetto: {
+    color: "#5B7FD6",
+    word: "PALMETTO",
+    wordSize: 10,
+    art: <>
+      <path d="M36 36 A10 10 0 1 0 46 48 A8 8 0 1 1 36 36 Z" fill="#F4F7FF" />
+      <path d="M64 98 V60" stroke="#F4F7FF" strokeWidth="5" strokeLinecap="round" />
+      <g fill="none" stroke="#5B7FD6" strokeWidth="5" strokeLinecap="round">
+        <path d="M64 60 C56 52 46 52 40 58" /><path d="M64 60 C72 52 82 52 88 58" /><path d="M64 60 C60 48 54 44 48 42" /><path d="M64 60 C68 48 74 44 80 42" /><path d="M64 60 V44" />
+      </g>
+      <path d="M44 98 H84" stroke="#5B7FD6" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  sunshine: {
+    color: "#FFC233",
+    word: "SUNSHINE",
+    wordSize: 10,
+    art: <>
+      <g stroke="#FFC233" strokeWidth="3.5" strokeLinecap="round"><path d="M60 34 V42" /><path d="M38 44 L43 50" /><path d="M82 44 L77 50" /></g>
+      <path d="M26 62 H94" stroke="#FFC233" strokeWidth="4" strokeLinecap="round" />
+      <path d="M30 62 H56 V68 C56 78 50 84 42 84 C34 84 30 78 30 70 Z" fill="#FFC233" />
+      <path d="M64 62 H90 V70 C90 78 86 84 78 84 C70 84 64 78 64 68 Z" fill="#FFC233" />
+      <path d="M36 66 C40 66 44 68 46 72" fill="none" stroke="#FFF1C9" strokeWidth="3" strokeLinecap="round" />
+      <path d="M70 66 C74 66 78 68 80 72" fill="none" stroke="#FFF1C9" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  lonestar: {
+    color: "#C96B3C",
+    word: "LONE STAR",
+    wordSize: 10,
+    art: <>
+      <circle cx="60" cy="66" r="30" fill="none" stroke="#C96B3C" strokeWidth="4" strokeDasharray="7 5" />
+      <path d="M60 40 L67 58 L86 58 L71 69 L77 88 L60 77 L43 88 L49 69 L34 58 L53 58 Z" fill="#F4F7FF" />
+    </>,
+  },
+  territorial: {
+    color: "#D17A3B",
+    word: "TERRITORIAL",
+    wordSize: 9,
+    art: <>
+      <path d="M24 92 L42 62 H56 L64 74 L74 56 H84 L96 92 Z" fill="#D17A3B" />
+      <path d="M60 36 V100" stroke="#F4F7FF" strokeWidth="3" strokeDasharray="5 5" strokeLinecap="round" />
+      <circle cx="40" cy="44" r="6" fill="#FFB547" />
+    </>,
+  },
+  biggame: {
+    color: "#F2C14E",
+    word: "BIG GAME",
+    art: <>
+      <path d="M24 86 C34 66 46 62 56 72 C64 60 78 58 96 80 V98 H24 Z" fill="#F2C14E" />
+      <path d="M30 54 H58 M42 46 H78 M62 58 H90" stroke="#C9D5EC" strokeWidth="3.5" strokeLinecap="round" strokeOpacity="0.8" />
+      <path d="M24 92 Q40 86 60 92 T96 92" fill="none" stroke="#5EC2E6" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  coast: {
+    color: "#D4AF37",
+    word: "ND · USC",
+    wordSize: 10,
+    art: <>
+      <path d="M30 84 C40 46 80 46 90 72" fill="none" stroke="#D4AF37" strokeWidth="4" strokeDasharray="6 5" strokeLinecap="round" />
+      <circle cx="30" cy="84" r="7" fill="#E5484D" />
+      <circle cx="90" cy="72" r="7" fill="#6FA3FF" />
+      <path d="M60 40 L62.5 47 L70 47.5 L64 52 L66 59 L60 55 L54 59 L56 52 L50 47.5 L57.5 47 Z" fill="#D4AF37" />
+      <path d="M26 98 H94" stroke="#D4AF37" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.6" />
+    </>,
+  },
 }
 
 export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CollegeCrestKey; size?: number; decorative?: boolean }) {
