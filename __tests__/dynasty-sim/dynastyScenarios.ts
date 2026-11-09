@@ -375,8 +375,21 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
       const accepted = await acceptAfLeagueTrade({ tradeId: created.id, userId: d.userId, leagueId } as any)
       const row = (rowsOf(env.db, 'AfLeagueTrade') as any[]).find((t) => t.id === created.id)
       // Under instant review a held trade waits for the commissioner instead of processing.
-      C.fourth = { reviewMode: 'instant', acceptStatus: accepted.status, status: row?.status, held: row?.status !== 'processed' }
-      if (!C.fourth.held) ctx.add({ code: 'SEVERE_COLLUSION_TRADE_NOT_HELD', stage: 'season', message: `"Hold severe" is on, the league reviews instantly, and a 4th lopsided deal between a flagged pair processed (${accepted.status}).` })
+      C.fourth = { tradeId: created.id, reviewMode: 'instant', acceptStatus: accepted.status, status: row?.status, held: row?.status !== 'processed' }
+      // What the review concluded for each lopsided deal: a held trade needs a SEVERE flag on itself.
+      C.reviews = await Promise.all([...lopsidedTradeIds(trades), created.id].map((id) => reviewSummary(env, run, id)))
+      // The app's rule: "hold severe" holds a trade the review itself flags SEVERE (heavily lopsided, or an
+      // eliminated team dumping starters). Repeat partners alone alert and let it through, by design. The
+      // deals here are chosen by ADP, and in an uneven roster (an auction, baseball's split pitcher values)
+      // the app can fairly grade one under the 40% line — that is a deal that should NOT be held.
+      const r4: any = C.reviews.at(-1)
+      const severe = (r4?.flags ?? []).some((f: string) => /^(heavily_lopsided|eliminated_team_dumping):/.test(f))
+      C.fourth.expectedHold = severe
+      if (severe && !C.fourth.held) {
+        ctx.add({ code: 'SEVERE_COLLUSION_TRADE_NOT_HELD', stage: 'season', message: `"Hold severe" is on, the league reviews instantly, and the review flagged this deal severe — yet it processed (${accepted.status}). Its review: ${JSON.stringify(r4)}` })
+      } else if (!severe && C.fourth.held) {
+        ctx.add({ code: 'TRADE_HELD_WITHOUT_A_SEVERE_FLAG', stage: 'season', message: `"Hold severe" held a deal its review did not flag severe. Its review: ${JSON.stringify(r4)}` })
+      }
     } catch (e) {
       C.fourth = { threw: (e as Error).message }
     }
@@ -386,6 +399,9 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
   // The commissioner reverses the LATEST processed lopsided deal: an earlier one is refused by design
   // once those rosters have traded again (ROSTER_CHANGED_SINCE_EXECUTION) — recorded separately below.
   const lopsidedIds = trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId)
+  // A 4th deal the app rightly let through is now the latest between this pair; undoing an earlier one
+  // would be refused, correctly, because the 4th changed those rosters.
+  if (C.fourth?.status === 'processed' && C.fourth.tradeId) lopsidedIds.push(C.fourth.tradeId)
   const lopsidedRows = (rowsOf(env.db, 'AfLeagueTrade') as any[]).filter((t) => lopsidedIds.includes(t.id) && t.status === 'processed')
   // The last one in the order the deals were made. `processedAt` is a Date and the deals settle in the
   // same second, so sorting on it as text picked the FIRST deal, whose rosters the later two had changed.
@@ -607,6 +623,22 @@ async function setLiveRookieOrder(env: SimEnv, run: LeagueRun, S: Record<string,
   const res = await call(route.PUT, `/api/commissioner/leagues/${run.leagueId}/rookie-draft-order/live`, { method: 'PUT', body: { enabled: true, config: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' } } }, { leagueId: run.leagueId! })
   S.liveRookieOrder = { status: res.status, error: (res.body as any)?.error ?? null, saved: JSON.stringify((res.body as any)?.settings ?? (res.body as any) ?? null).slice(0, 300) }
   if (res.status !== 200) run.findings.push({ code: 'ROOKIE_ORDER_SCREEN_SAVE_FAILED', stage: 'season', message: `Saving the commissioner's rookie order rule returned ${res.status}: ${(res.body as any)?.error ?? ''}` })
+}
+
+const lopsidedTradeIds = (trades: any[]) => trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId as string)
+
+/** One trade as the integrity scan's review sees it: its flags, its value gap, and the lopsided check's verdict. */
+async function reviewSummary(env: SimEnv, run: LeagueRun, tradeId: string): Promise<Record<string, unknown>> {
+  const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
+  const r: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId }, userId: run.commissionerId, surface: 'integrity-scan' } as never).catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
+  if (!r?.ok) return { tradeId, refused: r?.refusal?.reason ?? 'unknown' }
+  const lopsided = (r.review?.checks ?? []).find((c: any) => c.code === 'heavily_lopsided')
+  return {
+    tradeId,
+    flags: (r.review?.flags ?? []).map((f: any) => `${f.code}:${f.severity}`),
+    gapPct: r.facts?.gapPct?.ok ? Math.round(Number(r.facts.gapPct.value) * 10) / 10 : null,
+    lopsided: lopsided ? `${lopsided.status}: ${String(lopsided.explanation ?? '').slice(0, 160)}` : null,
+  }
 }
 
 /** The rookie order preview, as a member opens it (free: any member may see the order). */

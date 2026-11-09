@@ -335,8 +335,28 @@ export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolP
       data: fresh.map((p) => ({ id: p.id, sport: run.sport, externalId: p.id, ...(run.sport === 'NFL' ? { sleeperId: p.id } : {}), name: p.name, position: p.position, team: p.team, source: 'simulation', expiresAt: new Date('2030-01-01T00:00:00Z') })),
     })
   }
+  await seedPoolAdp(env, run, pool)
   run.stats.poolSize = pool.length
   return pool
+}
+
+/**
+ * The market ADP the draft pool ranks by (`AdpDataRecord`, filled in production by the ADP importer).
+ * Without it the resolved pool falls back to ALPHABETICAL order, so an automatic draft and the auction's
+ * automatic nominations took players by name — the stars stayed in free agency, every rostered player
+ * sat below replacement, and no trade in those leagues could be graded (dynasty simulation 2026-11-09:
+ * "Nobody in this deal is projected above the best free agent at his position"). The same ADP the pool
+ * already carries, under every scoring and format name the pool may ask for.
+ */
+async function seedPoolAdp(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]): Promise<void> {
+  const league = rowsOf(env.db, 'League').find((l: any) => l.id === run.leagueId) as any
+  const season = Math.min(Number(league?.season ?? new Date().getUTCFullYear()), new Date().getUTCFullYear())
+  const scorings = [...new Set(['ppr', 'halfPPR', 'standard', String(league?.scoring ?? '').trim()].filter(Boolean))]
+  const existing = new Set((rowsOf(env.db, 'AdpDataRecord') as any[]).map((r) => `${r.sport}|${r.format}|${r.scoring}|${r.playerId}`))
+  const data = (['dynasty', 'redraft'] as const).flatMap((format) => scorings.flatMap((scoring) => pool
+    .filter((p) => !existing.has(`${run.sport}|${format}|${scoring}|${p.id}`))
+    .map((p) => ({ sport: run.sport, format, scoring, playerId: p.id, playerName: p.name, position: p.position, team: p.team, adp: p.adp, week: 1, season, source: 'sleeper' }))))
+  if (data.length) await env.db.adpDataRecord.createMany({ data })
 }
 
 /**
