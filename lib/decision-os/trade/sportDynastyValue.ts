@@ -1,5 +1,5 @@
 /**
- * The multi-season (dynasty) grade for NBA, NHL and MLB: the same points-over-replacement price as the
+ * The multi-season (dynasty) grade for NBA, NHL, MLB and Soccer: the same points-over-replacement price as the
  * one-season grade (`./sportPointsValue.ts`), counted for this season AND the next four, each future
  * season moved by the player's age on his sport's aging curve. Draft picks are priced too.
  *
@@ -60,11 +60,12 @@ import {
 
 import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 
-export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB'
+export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB' | 'SOCCER' | 'NCAAF' | 'NCAAB'
+type DynastyGradeContext = Omit<SportPointsContext, 'sport'> & { sport: DynastyGradedSport }
 
 export function isDynastyGradedSport(sport: string | null | undefined): sport is DynastyGradedSport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NBA' || s === 'NHL' || s === 'MLB'
+  return s === 'NBA' || s === 'NHL' || s === 'MLB' || s === 'SOCCER' || s === 'NCAAF' || s === 'NCAAB'
 }
 
 /** League types this grade covers. Keeper, salary-cap, devy and C2C keep their own refusal. */
@@ -77,11 +78,11 @@ export const DYNASTY_SEASONS = 5
 /** Each season after this one counts for this share of the one before it. */
 export const FUTURE_DISCOUNT = 0.85
 /** A full regular season, for every season after this one. */
-export const FULL_SEASON_GAMES: Record<DynastyGradedSport, number> = { NBA: 82, NHL: 82, MLB: 162 }
+export const FULL_SEASON_GAMES: Record<DynastyGradedSport, number> = { NBA: 82, NHL: 82, MLB: 162, SOCCER: 38, NCAAF: 12, NCAAB: 31 }
 /** Players this age or younger make up the pool a draft pick is priced from. */
-export const YOUNG_POOL_MAX_AGE: Record<DynastyGradedSport, number> = { NBA: 22, NHL: 22, MLB: 24 }
+export const YOUNG_POOL_MAX_AGE: Record<DynastyGradedSport, number> = { NBA: 22, NHL: 22, MLB: 24, SOCCER: 22, NCAAF: 22, NCAAB: 22 }
 /** Seasons a new draftee usually waits before he scores: junior hockey, the minor leagues. */
-export const PROSPECT_WAIT_SEASONS: Record<DynastyGradedSport, number> = { NBA: 0, NHL: 2, MLB: 2 }
+export const PROSPECT_WAIT_SEASONS: Record<DynastyGradedSport, number> = { NBA: 0, NHL: 2, MLB: 2, SOCCER: 0, NCAAF: 0, NCAAB: 0 }
 
 /** A pick this many rounds past the end of the young pool is worth this share, per round, of its last player. */
 export const DEEP_PICK_ROUND_SHARE = 0.5
@@ -95,6 +96,8 @@ export function missingAgeAssumption(sport: DynastyGradedSport, position: string
 export type SportDynastyContext = {
   /** Board id → age today. A player missing here has no age on file. */
   ages: ReadonlyMap<string, number>
+  /** Season-qualified class year for college players. Years 1–4 estimate the standard horizon. */
+  classYears?: ReadonlyMap<string, number>
   /** The next rookie draft's year: a pick for an earlier one has been used. */
   nextDraftYear: number
 }
@@ -105,15 +108,16 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 export function playerDynastyValue(args: {
   sport: DynastyGradedSport
   player: Pick<BoardPlayer, 'position' | 'perGame'>
-  age: number
+  age?: number
+  collegeSeasons?: number
   replacementPerGame: number
   gamesRemaining: number
 }): number {
   const { sport, player, age, replacementPerGame } = args
-  const now = ageMultiplierAtAge(sport, player.position, age)
+  const now = age == null ? 0 : ageMultiplierAtAge(sport, player.position, age)
   let total = Math.max(0, player.perGame - replacementPerGame) * Math.max(0, args.gamesRemaining)
-  for (let y = 1; y < DYNASTY_SEASONS; y++) {
-    const perGame = now > 0 ? (player.perGame * ageMultiplierAtAge(sport, player.position, age + y)) / now : player.perGame
+  for (let y = 1; y < (args.collegeSeasons ?? DYNASTY_SEASONS); y++) {
+    const perGame = age != null && now > 0 ? (player.perGame * ageMultiplierAtAge(sport, player.position, age + y)) / now : player.perGame
     total += Math.max(0, perGame - replacementPerGame) * FULL_SEASON_GAMES[sport] * FUTURE_DISCOUNT ** y
   }
   return total
@@ -123,14 +127,19 @@ export function playerDynastyValue(args: {
  * The young players a pick is priced from, best first. Only projections that clear the sample bar and
  * have a replacement level count — the same players the grade itself can price.
  */
-export function youngPlayerPool(ctx: SportPointsContext & { sport: DynastyGradedSport }, dynasty: SportDynastyContext): number[] {
+export function youngPlayerPool(ctx: DynastyGradeContext, dynasty: SportDynastyContext): number[] {
+  const college = ctx.sport === 'NCAAF' || ctx.sport === 'NCAAB'
   const out: number[] = []
   for (const p of ctx.board) {
     const age = dynasty.ages.get(p.id)
-    if (age == null || age > YOUNG_POOL_MAX_AGE[ctx.sport] || !meetsSampleBar(p)) continue
+    if (college ? dynasty.classYears?.get(p.id) !== 1 : age == null || age > YOUNG_POOL_MAX_AGE[ctx.sport]) continue
+    if (!meetsSampleBar(p)) continue
     const replacement = ctx.replacementByPosition.get(p.position.trim().toUpperCase())
     if (!replacement) continue
-    out.push(playerDynastyValue({ sport: ctx.sport, player: p, age, replacementPerGame: replacement.perGame, gamesRemaining: ctx.window.gamesRemaining }))
+    out.push(playerDynastyValue({
+      sport: ctx.sport, player: p, age, ...(college ? { collegeSeasons: 4 } : {}),
+      replacementPerGame: replacement.perGame, gamesRemaining: college ? FULL_SEASON_GAMES[ctx.sport] : ctx.window.gamesRemaining,
+    }))
   }
   return out.sort((a, b) => b - a)
 }
@@ -190,8 +199,13 @@ export function pickDynastyValue(args: {
   return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }
 
-export function sportDynastyBasis(ctx: SportPointsContext & { sport: DynastyGradedSport }): string {
-  const pointsBasis = sportPointsBasis(ctx)
+export function sportDynastyBasis(ctx: DynastyGradeContext): string {
+  const pointsBasis = ctx.sport === 'NCAAF'
+    ? `Points over the best free agent at each position for the ${ctx.window.seasonLabel} college football season, using this league’s rules and its remaining weeks.`
+    : sportPointsBasis({ ...ctx, sport: ctx.sport })
+  if (ctx.sport === 'NCAAF' || ctx.sport === 'NCAAB') {
+    return `Dynasty value. ${pointsBasis} Future seasons use the player’s recorded class year to estimate a standard four-year horizon, discounted by 15% each year. Picks use the ranked projected ${ctx.sport === 'NCAAF' ? 'rostered ' : ''}freshmen as a proxy for future entrants. Redshirts, waivers, transfers and early pro exits can change the actual horizon.`
+  }
   const wait = PROSPECT_WAIT_SEASONS[ctx.sport]
   const waitNote = wait > 0 ? `, then waits ${wait} more season${wait === 1 ? '' : 's'} for a draftee to reach the ${ctx.sport}` : ''
   return (
@@ -212,12 +226,13 @@ type Priced = { name: string; value: number; kind: 'player' | 'pick' }
 export function gradeSportDynastyDeal(args: {
   give: readonly TradeAssetInput[]
   get: readonly TradeAssetInput[]
-  ctx: SportPointsContext & { sport: DynastyGradedSport }
+  ctx: DynastyGradeContext
   dynasty: SportDynastyContext
 }): TradeGradeView {
   const { ctx, dynasty } = args
   const basis = sportDynastyBasis(ctx)
   const index = indexBoard(ctx.board)
+  const college = ctx.sport === 'NCAAF' || ctx.sport === 'NCAAB'
   let pool: number[] | null = null
   const assumedAge: string[] = []
   const deepPicks: string[] = []
@@ -234,7 +249,7 @@ export function gradeSportDynastyDeal(args: {
         priced.push({ name: pickLabel(asset), value: p.value, kind: 'pick' })
         continue
       }
-      const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex)
+      const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
       const { player } = found
       if (!meetsSampleBar(player)) {
@@ -248,13 +263,21 @@ export function gradeSportDynastyDeal(args: {
         return { withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.` }
       }
       let age = dynasty.ages.get(player.id)
-      if (age == null) {
+      let collegeSeasons: number | undefined
+      if (college) {
+        const year = dynasty.classYears?.get(player.id)
+        if (year == null || !Number.isInteger(year) || year < 1 || year > 4) {
+          return { withheld: `${player.name} has no verified class year for this college season, so the dynasty horizon cannot be priced.` }
+        }
+        collegeSeasons = 5 - year
+        age = undefined
+      } else if (age == null) {
         age = missingAgeAssumption(ctx.sport, player.position)
         assumedAge.push(player.name)
       }
       priced.push({
         name: player.name,
-        value: playerDynastyValue({ sport: ctx.sport, player, age, replacementPerGame: replacement.perGame, gamesRemaining: ctx.window.gamesRemaining }),
+        value: playerDynastyValue({ sport: ctx.sport, player, age, collegeSeasons, replacementPerGame: replacement.perGame, gamesRemaining: ctx.window.gamesRemaining }),
         kind: 'player',
       })
     }
@@ -272,7 +295,7 @@ export function gradeSportDynastyDeal(args: {
     return {
       graded: false,
       valuationGap: 'at_replacement',
-      reason: 'Nobody in this deal is projected above the best free agent at his position, this season or the next four.',
+      reason: 'Nobody in this deal is projected above the best free agent at his position, over the seasons covered by the grade.',
       basis,
     }
   }

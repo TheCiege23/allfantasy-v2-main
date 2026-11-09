@@ -397,13 +397,13 @@ export async function createLeagueTradeGrader(args: {
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
-  /*
-   * A college league is not graded on the NFL chart where it can be helped (Phase 8): a redraft league
-   * on points over replacement, and a pick refused in every college league. See `./ncaafLeagueGrader.ts`.
-   */
+  // College football redraft and dynasty use the league’s stored projections and scoring.
   const college =
     sport === 'NCAAF'
-      ? createNcaafLeagueGrader({ id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType })
+      ? createNcaafLeagueGrader({
+          id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType,
+          leagueSize: leagueRow.leagueSize, season: leagueRow.season, status: leagueRow.status,
+        })
       : null
   /*
    * NBA, college basketball and NHL: points over replacement under the league's own rules

@@ -209,10 +209,22 @@ describe('createNcaafLeagueGrader', () => {
 
   it('another college league type is left to the chart path — unless the deal carries a pick', async () => {
     const loadBase = vi.fn()
-    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: dynasty }, { loadBase })
+    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type: 'keeper' } }, { loadBase })
     expect(await grader.grade([p('Arch Manning')], [p('Jeremiah Smith')])).toBeNull()
     expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toEqual({ graded: false, reason: NCAAF_PICKS_UNPRICED_REASON, basis: null })
     expect(loadBase).not.toHaveBeenCalled()
+  })
+
+  it('prices college dynasty players and picks using verified class years', async () => {
+    const grader = createNcaafLeagueGrader({
+      id: 'L1', platform: null, settings: RULES.settings, leagueType: dynasty,
+      leagueSize: 4, season: 2026, status: 'in_season',
+    }, { loadBase: loadNcaafRedraftBase, loadClassYears: async () => new Map([['101', 1], ['102', 4]]) })
+    const trade = await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])
+    expect(trade).toMatchObject({ graded: true, getValue: 66, basis: expect.stringContaining('recorded class year') })
+    if (trade?.graded) expect(trade.giveValue).toBeGreaterThan(trade.getValue)
+    const pick = await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1, overall: 1 }])
+    expect(pick).toMatchObject({ graded: true, basis: expect.stringContaining('rostered freshmen') })
   })
 
   it('a league that cannot be read is withheld with its reason, never graded on the chart', async () => {

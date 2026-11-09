@@ -68,6 +68,10 @@ const KNOWN_NFL_EVENT = '2475349' // GAPS.md R-01..R-03 recorded nulls here
 
 /** @type {{name:string, endpoint:string, params:Record<string,string>, why:string}[]} */
 const PLAN = [
+  { name: 'lookuptimeline.EPL', endpoint: 'lookuptimeline.php', params: { id: '2267418' },
+    why: 'Public EPL final already stored in SportsGame. Verify goal and assist evidence fields.' },
+  { name: 'lookuptimeline.EPL-own-goal', endpoint: 'lookuptimeline.php', params: { id: '2267349' },
+    why: 'Liverpool 5–2 West Ham, 2026-02-28. Premier League match report confirms an own goal by Axel Disasi.' },
   { name: 'lookupplayerstats.NFL_defender', endpoint: 'lookupplayerstats.php', params: { id: NFL_DEFENDER },
     why: 'GAPS G-04 — does a DEFENDER return defensive categories, or only the offensive ones a QB showed?' },
   { name: 'lookupleague.NFL', endpoint: 'lookupleague.php', params: { id: String(NFL) }, why: 'confirm R-05 idLeague 4391' },
@@ -112,7 +116,7 @@ async function probe(item) {
     why: item.why,
     redacted_url: redactedUrl(item.endpoint, item.params),
     captured_at: CAPTURED_AT,
-    season_phase: SEASON_PHASE,
+    season_phase: item.name.startsWith('lookuptimeline.EPL') ? 'completed regular season game' : SEASON_PHASE,
     key_tier: IS_FREE_KEY ? 'free' : 'paid-or-unknown',
     http_status: null,
     api_message: null,
@@ -214,7 +218,7 @@ async function main() {
     if (i < plan.length - 1) await sleep(2500) // stay under the 30/min free cap
   }
 
-  fs.writeFileSync(
+  if (!only) fs.writeFileSync(
     path.join(FIXTURE_DIR, '_manifest.json'),
     JSON.stringify({ captured_at: CAPTURED_AT, season_phase: SEASON_PHASE, key_tier: IS_FREE_KEY ? 'free' : 'paid-or-unknown', probes: manifest }, null, 2) + '\n'
   )

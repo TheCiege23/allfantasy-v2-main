@@ -299,9 +299,10 @@ The committed EPL capture identifies Soccer through its `SOCCER_GOALIE` and `SOC
 scoring groups. The roster and player pool supply IDs and positions. Import retains those IDs and
 uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Grades require the same
 one-to-one Fantrax ID across the Soccer registry, including identities without match rows.
-A read-only database audit on 2026-11-09 found 4,323 Soccer identities, zero Fantrax links in
-either identity registry, zero Fantrax Soccer snapshots, and zero Soccer Fantrax directory
-cache entries. A verified Fantrax ID-to-player directory or export is needed to populate live links.
+A read-only database audit on 2026-11-09 found 4,323 Soccer identities and zero Fantrax links.
+The public EPL directory returned 771 players. A dry run against the registry proposed 635
+unique name, club, and role matches, with 135 unmatched and one ambiguous. The weekly import
+fills verified links in the existing identity registry. The dry run wrote zero links.
 
 The capture gives position maxima that sum to 14 and a total of 11 starters. The maxima alone
 cannot define a fixed lineup. The capture also has different goalie and outfield weights for
@@ -310,7 +311,9 @@ goalkeeper, defender, midfielder, and forward overrides for supported stats. It 
 unsupported or conflicting position rule out of the projection and records the gap.
 
 The same audit found 44,271 Soccer match rows for 2,121 players, all from Rolling Insights. The
-stored fields cover 17 of the 60 rules in the captured league. Exact secondary assists, own goals,
-and Fantrax clean-sheet and result eligibility still need compatible event data or verified scoring
-definitions. The season view reads published Fantrax team totals, and projections report partial
-scoring when source rules are omitted.
+stored fields cover 17 of the 60 rules in the captured league. TheSportsDB EPL timelines can
+supply own goals when every match in the pricing sample has a final-score-verified receipt and
+each own-goal scorer matches a unique participant. Secondary assists, clean-sheet eligibility,
+and result eligibility still need compatible events or verified scoring definitions.
+The season view reads published Fantrax team totals. Projections report partial scoring when
+source rules are omitted.

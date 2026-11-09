@@ -120,7 +120,10 @@ export type SportPointsContext = {
    * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
    * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.
    */
-  dynasty?: { ages: ReadonlyMap<string, number>; nextDraftYear: number }
+  dynasty?: { ages: ReadonlyMap<string, number>; classYears?: ReadonlyMap<string, number>; nextDraftYear: number }
+  verifiedSoccerOwnGoals?: boolean
+  /** Only this provider’s alias may resolve an explicit roster ID. */
+  rosterProvider?: string
 }
 
 export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
@@ -131,7 +134,7 @@ export const SPORT_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 export function sportPointsBasis(
-  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList'>,
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals'>,
 ): string {
   const label = SPORT_LABEL[ctx.sport]
   const teamCountNote = ctx.teamCountAssumed ? ` This league has no verified team count. The grade uses ${ctx.teams} teams.` : ''
@@ -181,10 +184,9 @@ export function sportPointsBasis(
   const bonus = ctx.sport === 'NBA' || ctx.sport === 'NCAAB' ? ' Double-double and triple-double bonuses are not projected.' : ''
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
-  // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`); the feed names no
-  // own-goal scorer, so own goals cannot be projected for anyone.
+  // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`).
   const clubs = soccer
-    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in. Own goals are not projected.`
+    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
     : ''
   return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}${teamCountNote}`
 }
@@ -260,15 +262,14 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
 /**
  * Why a league that keeps players past this season is not graded here. This grade counts THIS season
  * only; in a dynasty or keeper league that ignores every season after it — young players most of all —
- * and no market prices those seasons for this sport yet. NBA, NHL and MLB dynasty leagues are the
- * exception: they are graded over five seasons by `./sportDynastyValue.ts` (2026-10-27).
+ * and no model prices those seasons for this sport yet. The supported pro dynasty leagues use
+ * the five-season model in `./sportDynastyValue.ts`.
  */
 export function multiSeasonFormatReason(leagueType: string | null | undefined, sport: PointsGradedSport): string | null {
   const t = String(leagueType ?? '').trim().toLowerCase()
   const kept = t.includes('dynasty') || t === 'keeper' || t === 'devy' || t === 'c2c' || t === 'salary_cap'
   if (!kept) return null
-  // NBA, NHL and MLB dynasty leagues have their own multi-season grade (`./sportDynastyValue.ts`).
-  if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB')) return null
+  if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB' || sport === 'SOCCER' || sport === 'NCAAB')) return null
   return `This is a ${t.replace('_', ' ')} league, and ${SPORT_LABEL[sport]} grades so far count this season only — that would ignore every season after it, young players most of all. This deal is not graded.`
 }
 
@@ -292,6 +293,7 @@ export function resolveBoardPlayer(
   index?: ReadonlyMap<string, BoardPlayer>,
   rosterIndex?: ReadonlyMap<string, BoardPlayer>,
   requireProviderId = false,
+  rosterProvider?: string,
 ): { ok: true; player: BoardPlayer } | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const label = String(asset.name ?? '').trim() || String(asset.playerId ?? '').trim() || 'A player'
   const raw = String(asset.playerId ?? '').trim()
@@ -302,7 +304,7 @@ export function resolveBoardPlayer(
       : { ok: false, reason: `${label} has no projection linked to a verified Fantrax player ID.`, valuationGap: 'unresolved_player' }
   }
   if (rosterId && rosterIndex) {
-    const hit = rosterIndex.get(rosterId) ?? (raw ? rosterIndex.get(raw) : undefined)
+    const hit = rosterIndex.get(rosterId) ?? (!rosterProvider && raw ? rosterIndex.get(raw) : undefined)
     return hit ? { ok: true, player: hit }
       : { ok: false, reason: `${label} has no projection linked to this league’s player ID.`, valuationGap: 'unresolved_player' }
   }
@@ -406,7 +408,7 @@ function priceSide(
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId)
+    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
     if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
     const { player } = found
     if (!meetsSampleBar(player)) {
