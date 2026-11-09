@@ -26,7 +26,7 @@ import { prisma } from '@/lib/prisma'
 import { linkNflFantraxIdentities } from '@/lib/player-identity/linkNflFantraxIdentities'
 import { resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { fantraxScoringRules, isFantraxSoccerScoring, type FantraxScoringRule } from './fantraxScoring'
-import { fantraxImportSeason, isFantraxSplitSeasonSport } from './fantraxProSports'
+import { fantraxImportSeason, isFantraxSplitSeasonSport, usesFantraxPeriodCalendar } from './fantraxProSports'
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
@@ -417,6 +417,7 @@ export async function importFantraxLeague(args: {
   const boardOnFile = storedDraft ?? readStoredFantraxDraft((refreshTarget ?? existing)?.transactions)
   const observedAt = new Date().toISOString()
   const observedPeriod = schedule.position?.period ?? null
+  const retainPeriodCalendar = usesFantraxPeriodCalendar(best.sport)
   const derived = prior
     ? deriveFantraxMovesBetweenSnapshots({
         previousRoster: prior.roster,
@@ -548,16 +549,16 @@ export async function importFantraxLeague(args: {
     sourceSettings: {
       scoringSystem: info.data.scoringSystem ?? null,
       rosterInfo: info.data.rosterInfo,
-      ...(soccer ? soccerCalendar(info.data) : {}),
+      ...(retainPeriodCalendar ? fantraxPeriodCalendar(info.data) : {}),
     },
-    seasonState: schedule.position?.state ?? (soccer ? soccerSeasonState(info.data) : null),
+    seasonState: schedule.position?.state ?? (retainPeriodCalendar ? fantraxSeasonDateState(info.data) : null),
     currentPeriod: schedule.position?.period ?? null,
     scoredPeriodsRead: schedule.periodsRead,
     scoredPeriodsFailed: schedule.periodsFailed,
   }
 }
 
-function soccerSeasonState(info: FantraxLeagueInfo, now = new Date()) {
+function fantraxSeasonDateState(info: FantraxLeagueInfo, now = new Date()) {
   const start = new Date(info.startDate ?? '').getTime()
   const endDate = info.endDate ?? ''
   const end = new Date(endDate).getTime()
@@ -567,7 +568,7 @@ function soccerSeasonState(info: FantraxLeagueInfo, now = new Date()) {
   return Number.isFinite(start) || Number.isFinite(end) ? 'in_progress' : null
 }
 
-function soccerCalendar(info: FantraxLeagueInfo) {
+function fantraxPeriodCalendar(info: FantraxLeagueInfo) {
   const periods = [
     ...(info.scoringPeriods ?? []).map((period) => period.number),
     ...(info.matchups ?? []).map((period) => period.period),
