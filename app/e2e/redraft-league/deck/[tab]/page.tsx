@@ -13,6 +13,7 @@ const TABS: DeckTab[] = ['decide', 'draft_intel', 'legacy', 'commissioner']
  *
  * `view` pins the tab (the workspace otherwise restores the last-open section from localStorage).
  * `leagueType=dynasty` renders a non-redraft league through the same harness, for the gate check.
+ * `platform=sleeper` renders an imported league in the same workspace.
  */
 export default async function RedraftDeckHarnessPage({
   params,
@@ -29,5 +30,7 @@ export default async function RedraftDeckHarnessPage({
   const sport = String(sp.sport ?? 'NFL').toUpperCase() as DeckSport
   if (!(sport in DECK_SPORTS)) notFound()
   const state: DeckState = sp.state === 'empty' ? 'empty' : 'season'
-  return <RedraftDeckHarnessClient tab={pinned} sport={sport} state={state} leagueType={sp.leagueType ?? 'redraft'} />
+  // `platform=sleeper` renders the imported-league workspace (hosting chips, source link, sync strip).
+  const platform = sp.platform === 'sleeper' ? 'sleeper' : 'allfantasy'
+  return <RedraftDeckHarnessClient tab={pinned} sport={sport} state={state} leagueType={sp.leagueType ?? 'redraft'} platform={platform} />
 }

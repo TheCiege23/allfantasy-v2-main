@@ -14,6 +14,8 @@ import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
@@ -498,6 +500,14 @@ export function LeagueShell({
   )
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  /*
+   * The LAYOUT, separate from hosting. Imported leagues open in the same league workspace as a native
+   * one (rail, sidebar, header card) instead of the legacy three-panel shell with its own tab bar
+   * (user call, 2026-11-09: "the imported leagues should match the AF native league views").
+   * `nativeWorkspace` still decides everything that depends on AF hosting: the tab set, the settings
+   * page, native screens and the guillotine engine. Embedded views keep their old frame.
+   */
+  const nativeShell = nativeWorkspace || !embedMode
   // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
   // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
   const guillyTab = guillyTabKind(league, nativeWorkspace)
@@ -1508,10 +1518,24 @@ export function LeagueShell({
 
   const showSpecialtyHero = specialtyHeroVariant !== null
 
+  // Imported leagues: the league on its own platform, for the workspace header's "Open in …" button.
+  // Same provider id the legacy LeagueWorkspaceNavigation used, so the deep link does not change.
+  const importedSourceLink = useMemo(() => {
+    if (nativeWorkspace) return null
+    const link = resolveSourceLink({
+      platform: league.platform,
+      sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId,
+      leagueName: selectedLeague.name ?? 'League',
+      season: league.season,
+    })
+    const platformLabel = sourcePlatformLabel(league.platform)
+    return link && platformLabel ? { href: link.href, platformLabel } : null
+  }, [nativeWorkspace, league.platform, league.platformLeagueId, league.season, sourceLinkLeagueId, selectedLeague.name])
+
   // `specialtyImmersive` controls the global immersive atmosphere layer (full-viewport
   // background + AppShell padding tweaks). Tournament leagues opt in once their
   // tournament context resolves so the bracket-themed background reaches every tab.
-  const specialtyImmersive = !nativeWorkspace && (
+  const specialtyImmersive = !nativeShell && (
     league.leagueVariant === 'survivor' ||
     league.leagueVariant === 'big_brother' ||
     Boolean(tournamentHeroContext)
@@ -1615,6 +1639,8 @@ export function LeagueShell({
         ) : null}
         <NativeLeagueWorkspace
           native={nativeWorkspace}
+          workspaceShell={nativeShell}
+          sourceLink={importedSourceLink}
           league={selectedLeague}
           leagues={leagueList}
           tabs={tabDefs}
@@ -1696,7 +1722,7 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-            {!embedMode && !nativeWorkspace ? (
+            {!embedMode && !nativeShell ? (
               <LeagueWorkspaceNavigation
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1705,7 +1731,7 @@ export function LeagueShell({
                 season={league.season}
               />
             ) : null}
-            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeWorkspace ? 'hidden' : ''}`}>
+            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeShell ? 'hidden' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1728,7 +1754,7 @@ export function LeagueShell({
                 </button>
               </div>
             </div>
-            {!nativeWorkspace && showSpecialtyHero && specialtyHeroVariant ? (
+            {!nativeShell && showSpecialtyHero && specialtyHeroVariant ? (
               <SpecialtyLeagueHomeHero
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1749,7 +1775,7 @@ export function LeagueShell({
                 onOpenCommissionerSettings={() => setCommissionerSettingsOpen(true)}
               />
             ) : null}
-            {!nativeWorkspace && showDevyHero ? (
+            {!nativeShell && showDevyHero ? (
               <DevyLeagueHomeHero
                 leagueName={selectedLeague.name ?? 'League'}
                 sport={String(selectedLeague.sport)}
@@ -1763,7 +1789,7 @@ export function LeagueShell({
                 }
               />
             ) : null}
-            {!nativeWorkspace && <LeagueHeader
+            {!nativeShell && <LeagueHeader
               league={selectedLeague}
               leagueId={league.id}
               tabs={tabDefs}
@@ -1808,6 +1834,7 @@ export function LeagueShell({
                 leagueName={selectedLeague.name ?? 'League'}
                 platform={league.platform}
                 canRemove={isOwner}
+                strip={nativeShell}
               />
             ) : null}
 
@@ -1838,7 +1865,7 @@ export function LeagueShell({
             ) : null}
 
             {/* Live scores strip */}
-            {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
+            {!nativeShell && <LeagueLiveStrip sport={String(league.sport)} />}
 
             {/* League story card - shown on league tab */}
             {activeTab === 'league' && (
