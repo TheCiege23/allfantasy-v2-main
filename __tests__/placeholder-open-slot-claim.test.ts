@@ -57,6 +57,8 @@ describe('claimPlaceholderRoster native open slots', () => {
         }),
         update: vi.fn().mockResolvedValue({ id: 'team-2' }),
       },
+      // A native league relabels its reserved draft slot on claim; this league has no draft yet.
+      draftSession: { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() },
       leagueEntrySlot: {
         findFirst: vi.fn().mockResolvedValue({ id: 'slot-2', slotNumber: 2, status: 'OPEN' }),
         update: vi.fn().mockResolvedValue({ id: 'slot-2' }),
