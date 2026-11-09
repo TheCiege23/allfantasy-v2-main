@@ -33,6 +33,36 @@ describe("collegeRivalry", () => {
     expect(collegeRivalry("NCAAF", "Florida Gators", "Florida State Seminoles")).toBe("sunshine")
   })
 
+  it("names batch 7, either way round", () => {
+    expect(collegeRivalry("NCAAF", "Tennessee Volunteers", "Alabama Crimson Tide")).toBe("october")
+    expect(collegeRivalry("NCAAF", "Georgia Bulldogs", "Auburn Tigers")).toBe("oak")
+    expect(collegeRivalry("NCAAF", "Michigan State Spartans", "Michigan Wolverines")).toBe("mitten")
+    expect(collegeRivalry("NCAAF", "Kansas State Wildcats", "Kansas Jayhawks")).toBe("sunflower")
+    expect(collegeRivalry("NCAAF", "Iowa State Cyclones", "Iowa Hawkeyes")).toBe("cyhawk")
+    expect(collegeRivalry("NCAAF", "Louisville Cardinals", "Kentucky Wildcats")).toBe("governor")
+    expect(collegeRivalry("NCAAF", "Virginia Tech Hokies", "Virginia Cavaliers")).toBe("ridge")
+    expect(collegeRivalry("NCAAF", "Florida State Seminoles", "Miami Hurricanes")).toBe("storm")
+  })
+
+  it("keeps three-rivalry schools straight", () => {
+    // Alabama: Auburn and Tennessee. Auburn: Alabama and Georgia. Georgia: Florida, Georgia Tech and Auburn.
+    // Michigan: Ohio State and Michigan State. Florida State: Florida and Miami.
+    expect(collegeRivalry("NCAAF", "Alabama Crimson Tide", "Auburn Tigers")).toBe("iron")
+    expect(collegeRivalry("NCAAF", "Alabama Crimson Tide", "Tennessee Volunteers")).toBe("october")
+    expect(collegeRivalry("NCAAF", "Auburn Tigers", "Georgia Bulldogs")).toBe("oak")
+    expect(collegeRivalry("NCAAF", "Michigan Wolverines", "Ohio State Buckeyes")).toBe("game")
+    expect(collegeRivalry("NCAAF", "Michigan Wolverines", "Michigan State Spartans")).toBe("mitten")
+    expect(collegeRivalry("NCAAF", "Florida State Seminoles", "Miami Hurricanes")).toBe("storm")
+  })
+
+  it("keeps Miami (OH) and other look-alikes off batch 7", () => {
+    expect(collegeRivalry("NCAAF", "Miami (OH) RedHawks", "Florida State Seminoles")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Kentucky Wildcats", "Kansas State Wildcats")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Northern Iowa Panthers", "Iowa State Cyclones")).toBeNull()
+    expect(collegeRivalry("NCAAF", "East Tennessee State Buccaneers", "Alabama Crimson Tide")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Western Michigan Broncos", "Michigan State Spartans")).toBeNull()
+  })
+
   it("accepts a bare school name", () => {
     expect(collegeRivalry("ncaaf", "Alabama", "Auburn")).toBe("iron")
   })

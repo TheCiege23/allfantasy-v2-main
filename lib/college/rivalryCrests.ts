@@ -13,6 +13,7 @@
 export type RivalryCrestKey =
   | "iron" | "game" | "river" | "egg" | "service" | "apple" | "holy" | "brawl"
   | "flga" | "hate" | "palmetto" | "sunshine" | "lonestar" | "territorial" | "biggame" | "coast"
+  | "october" | "oak" | "mitten" | "sunflower" | "cyhawk" | "governor" | "ridge" | "storm"
 
 export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   iron: "Iron Bowl",
@@ -31,6 +32,14 @@ export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   territorial: "Territorial Cup",
   biggame: "Big Game",
   coast: "Notre Dame–USC",
+  october: "Third Saturday in October",
+  oak: "Deep South's Oldest Rivalry",
+  mitten: "Michigan–Michigan State",
+  sunflower: "Sunflower Showdown",
+  cyhawk: "Cy-Hawk",
+  governor: "Governor's Cup",
+  ridge: "Commonwealth Clash",
+  storm: "Miami–Florida State",
 }
 
 const SCHOOLS: Record<string, string[]> = {
@@ -63,6 +72,18 @@ const SCHOOLS: Record<string, string[]> = {
   stanford: ["Stanford Cardinal", "Stanford"],
   notreDame: ["Notre Dame Fighting Irish", "Notre Dame"],
   usc: ["USC Trojans", "USC"],
+  tennessee: ["Tennessee Volunteers", "Tennessee"],
+  michiganState: ["Michigan State Spartans", "Michigan State"],
+  kansas: ["Kansas Jayhawks", "Kansas"],
+  kansasState: ["Kansas State Wildcats", "Kansas State"],
+  iowa: ["Iowa Hawkeyes", "Iowa"],
+  iowaState: ["Iowa State Cyclones", "Iowa State"],
+  kentucky: ["Kentucky Wildcats", "Kentucky"],
+  louisville: ["Louisville Cardinals", "Louisville"],
+  virginia: ["Virginia Cavaliers", "Virginia"],
+  virginiaTech: ["Virginia Tech Hokies", "Virginia Tech"],
+  // ⚠ Not "Miami (OH) RedHawks": exact names keep the MAC school off this crest.
+  miami: ["Miami Hurricanes", "Miami"],
 }
 
 const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
@@ -82,6 +103,14 @@ const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
   ["territorial", "arizona", "arizonaState"],
   ["biggame", "cal", "stanford"],
   ["coast", "notreDame", "usc"],
+  ["october", "alabama", "tennessee"],
+  ["oak", "auburn", "georgia"],
+  ["mitten", "michigan", "michiganState"],
+  ["sunflower", "kansas", "kansasState"],
+  ["cyhawk", "iowa", "iowaState"],
+  ["governor", "kentucky", "louisville"],
+  ["ridge", "virginia", "virginiaTech"],
+  ["storm", "miami", "floridaState"],
 ]
 
 const norm = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase()
