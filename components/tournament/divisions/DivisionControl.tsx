@@ -75,7 +75,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
   const rp = control.roundPreview
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
+    <main className="af-draft-dark mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
       <header className="flex flex-wrap items-center gap-4 border-b border-white/10 pb-5">
         <Link href={`/tournament-hub/${tid}`} aria-label="Back to the tournament" className="grid h-12 w-12 place-items-center rounded-xl border border-white/15 bg-[#0e1018] text-xl">‹</Link>
         <div className="min-w-0 flex-1"><h1 className="text-2xl font-bold sm:text-4xl">Seeding and round control</h1><p className="text-slate-300">{view.identity.divisions[0].name} vs {view.identity.divisions[1].name} · commissioner only</p></div>
@@ -93,7 +93,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Registration · {control.state.status}</h2>
           <p className="text-slate-200">{control.counts.registered ?? 0} of {control.state.capacity} registered · {control.counts.waitlisted ?? 0} on the waitlist · {control.counts.following ?? 0} following.</p>
           {control.state.status === 'blueprint' && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm text-slate-300">Registration closes<input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-white/15 bg-[#07080d] px-3 text-white" /></label>
               <div className="space-y-2">
                 <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={allowPreference} onChange={e => setAllowPreference(e.target.checked)} />Let entrants state a division preference (honoured while divisions stay balanced)</label>
@@ -114,7 +114,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
           {control.leagues.length > 0 && (
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Draft times</h3>
-              <ul className="grid gap-2 sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {control.leagues.map(l => <DraftRow key={l.id} league={l} disabled={busy || preview} onSave={at => act({ action: 'set_draft_time', tournamentLeagueId: l.id, at }, json => `Draft time set for ${l.name}. Its managers have been told. ${draftSyncText((json.leagues as Array<{ outcome: string; error?: string }> | undefined)?.[0] ?? null)}`)} />)}
               </ul>
             </div>
@@ -128,7 +128,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
       )}
 
       {tab === 'seeding' && (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_620px]">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_620px]">
           <div className="space-y-5">
             <section className={card + ' p-5'}>
               <div className="mb-3 flex justify-between"><h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Checklist before seeding locks</h2><span className="text-sm text-slate-400" style={mono}>{seedingDone.filter(Boolean).length} of 5 done</span></div>
@@ -206,7 +206,7 @@ export function DivisionControl({ control, preview = false }: { control: Control
       )}
 
       {tab === 'rounds' && (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
           <section className={card + ' space-y-3 p-5'}>
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Checklist before the next round</h2>
             {!seeding.committed ? <p className="text-slate-300">Commit seeding first.</p> : !rp ? <p className="text-slate-300">Every round is complete.</p> : (
@@ -289,7 +289,7 @@ export function LeagueSetup({ leagues, audits, disabled, onRetry, onApplySchedul
       {onApplySchedule && leagues.some(l => l.ready) && (
         <p className="mb-2 text-sm text-slate-400">Puts leagues created before the tournament calendar on it: one regular season through the championship week, no league playoffs. A league whose season has started is left as it is.</p>
       )}
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {leagues.map(l => {
           const problem = problems.get(l.name)
           return (
@@ -346,7 +346,7 @@ export function CoCommissioners({ control, disabled, onAdd, onRemove }: { contro
       <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Co-commissioners</h3>
       <p className="mb-2 text-sm text-slate-400">They can change settings in every conference league. Nobody gets a team for this.</p>
       {control.coCommissioners.length === 0 ? <p className="text-sm text-slate-400">None yet.</p> : (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {control.coCommissioners.map(c => (
             <li key={c.userId} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#0e1018] p-3">
               <span className="min-w-0 flex-1"><b>{c.name}</b> <span className="text-sm text-slate-400">· {linked.length ? `co-commissioner in ${linked.length - problems.length} of ${linked.length} leagues` : 'leagues not set up yet'}</span></span>

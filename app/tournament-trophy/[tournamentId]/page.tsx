@@ -29,7 +29,7 @@ export default async function TrophyPage({ params, searchParams }: { params: Pro
   const session = (await getServerSession(authOptions).catch(() => null)) as { user?: { id?: string } } | null
   const chatShare = (await canPostShareCard(tournamentId, session?.user?.id)) ? { tournamentId, entryId: teamId } : null
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
+    <main className="af-draft-dark mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
       <header><h1 className="text-2xl font-bold sm:text-4xl">Share your title</h1><p className="text-slate-300">Trophy page · share card</p></header>
       <ChampionShareStudio card={card} view={view} shareUrl={shareUrl} chatShare={chatShare} />
       <section aria-label="Full bracket"><DivisionsHub view={view} initialScreen="bracket" /></section>

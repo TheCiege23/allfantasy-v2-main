@@ -28,7 +28,7 @@ export function TournamentReveal({ view, preview = false }: { view: RevealView; 
   const draft = view.league.draftAt ? new Date(view.league.draftAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,#2a2a2e,#07080d_60%)] px-4 py-6 text-white sm:px-8">
+    <main className="af-draft-dark min-h-screen bg-[radial-gradient(ellipse_at_top,#2a2a2e,#07080d_60%)] px-4 py-6 text-white sm:px-8">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">{view.tournament} · League reveal</p>
       {phase === 'before' ? (
         <section className="mx-auto mt-16 flex max-w-md flex-col items-center gap-6 text-center">

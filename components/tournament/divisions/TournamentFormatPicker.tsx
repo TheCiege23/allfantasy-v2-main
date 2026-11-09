@@ -47,9 +47,10 @@ function Flow({ steps, gold }: { steps: string[]; gold: number[] }) {
 function FormatCard({ selected, onSelect, icon, title, subtitle, children }: { selected: boolean; onSelect: () => void; icon: ReactNode; title: string; subtitle: string; children: ReactNode }) {
   return (
     <section className={card + ' flex min-w-0 flex-col gap-4 p-5 sm:p-6 ' + (selected ? 'border-[#e8b84a] bg-gradient-to-b from-[#1a160c] to-[#0b0d14] shadow-[0_0_0_3px_rgba(232,184,74,0.12)]' : '')}>
-      <div className="flex items-start gap-4">
+      {/* Wraps on a phone: the title takes the row and Choose drops below, instead of a ~120px column. */}
+      <div className="flex flex-wrap items-start gap-4">
         {icon}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{title}</h2>
           <p className="text-slate-300">{subtitle}</p>
         </div>
@@ -95,7 +96,7 @@ export function TournamentFormatPicker({ format, onFormat, settings, onSettings,
   const pointsLeagues = Math.ceil(points.participants / 32) * 4
   return (
     <div className="space-y-6">
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <FormatCard selected={format === 'points_race'} onSelect={() => onFormat('points_race')} icon={<PointsIcon />} title="Points race" subtitle="Global points, mass cuts and redrafts">
           <Flow steps={[`Stage 1 · ${points.participants}`, 'Cut', `Redraft · ${points.participants / 2}`, 'Cut', `Redraft · ${points.participants / 4}`, 'Bracket']} gold={[1, 3, 5]} />
           <Rules items={['Every entrant is in one points race across all leagues.', 'Top half advances at each cut. Pools don’t reserve spots.', 'Advancers redraft into new leagues. Scores reset.', 'One cross-league bracket at the end.']} />
@@ -114,7 +115,7 @@ export function TournamentFormatPicker({ format, onFormat, settings, onSettings,
             <h2 id="div-settings" className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Divisions &amp; conferences · settings</h2>
             <span className="rounded-lg border border-white/15 px-3 py-1 text-sm text-slate-200">{report.totalTeams} entrants · {report.leagues} leagues</span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Seg label="Sport" value={settings.sport} options={['NFL', 'NBA'] as const} onChange={v => onSettings({ ...settings, sport: v, seasonLength: DEFAULT_SEASON_LENGTH[v] })} />
             <Seg label="Conferences per division" value={settings.conferencesPerDivision} options={SETTING_OPTIONS.conferencesPerDivision} onChange={v => set('conferencesPerDivision', v)} />
             <Seg label="Teams per conference" value={settings.teamsPerConference} options={SETTING_OPTIONS.teamsPerConference} onChange={v => set('teamsPerConference', v)} />
@@ -146,7 +147,7 @@ export function TournamentFormatPicker({ format, onFormat, settings, onSettings,
             <h2 id="pr-settings" className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Points race · settings</h2>
             <span className="rounded-lg border border-white/15 px-3 py-1 text-sm text-slate-200">{points.participants} entrants · {pointsLeagues} leagues</span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Seg label="Sport" value={points.sport} options={['NFL', 'NBA'] as const} onChange={v => onPoints({ ...points, sport: v })} />
             <Seg label="Field size" value={points.participants} options={POINTS_FIELD_SIZES} onChange={v => onPoints({ ...points, participants: v })} />
             <Seg label="Mass cuts" value={2} options={[2]} />
