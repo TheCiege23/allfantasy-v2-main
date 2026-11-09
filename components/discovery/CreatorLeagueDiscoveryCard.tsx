@@ -40,7 +40,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
   return (
     <article
       data-testid={`creator-league-card-${league.id}`}
-      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[var(--accent)]/30 hover:shadow-lg"
+      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[color:color-mix(in_srgb,var(--accent)_30%,transparent)] hover:shadow-lg"
       style={{
         borderColor: "var(--border)",
         background: "var(--panel)",

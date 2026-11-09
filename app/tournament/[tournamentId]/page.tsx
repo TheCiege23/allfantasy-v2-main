@@ -539,7 +539,7 @@ export default function TournamentHomePage() {
             ))}
           </ul>
           {adv > 0 ? (
-            <div className="mt-3 border-t border-dashed border-[var(--tournament-gold)]/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-[var(--tournament-gold)]">
+            <div className="mt-3 border-t border-dashed border-tournament-gold/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-[var(--tournament-gold)]">
               {tInterpolate('tournament.hub.qualificationLine', { adv: String(adv) })}
             </div>
           ) : null}

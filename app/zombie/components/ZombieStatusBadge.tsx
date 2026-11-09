@@ -45,14 +45,14 @@ export function ZombieStatusBadge({
 
   const styles: Record<string, string> = {
     survivor:
-      'border-[var(--zombie-green)]/50 bg-[var(--zombie-green)]/12 text-[var(--zombie-green)] shadow-[0_0_0_1px_rgba(34,197,94,0.12)]',
+      'border-zombie-green/50 bg-zombie-green/[0.12] text-[var(--zombie-green)] shadow-[0_0_0_1px_rgba(34,197,94,0.12)]',
     whisperer:
-      'animate-pulse border-[var(--zombie-crimson)]/60 bg-[var(--zombie-crimson)]/12 text-[var(--zombie-crimson)] shadow-[0_0_18px_rgba(220,38,38,0.16)]',
+      'animate-pulse border-zombie-crimson/60 bg-zombie-crimson/[0.12] text-[var(--zombie-crimson)] shadow-[0_0_18px_rgba(220,38,38,0.16)]',
     zombie:
-      'border-[var(--zombie-purple)]/50 bg-[var(--zombie-purple)]/12 text-[var(--zombie-purple)] shadow-[0_0_18px_rgba(124,58,237,0.12)]',
+      'border-zombie-purple/50 bg-zombie-purple/[0.12] text-[var(--zombie-purple)] shadow-[0_0_18px_rgba(124,58,237,0.12)]',
     revived_survivor:
-      'border-[var(--zombie-gold)]/50 bg-[var(--zombie-gold)]/12 text-[var(--zombie-gold)] shadow-[0_0_18px_rgba(245,184,0,0.1)]',
-    eliminated: 'border-[var(--zombie-gray)]/50 bg-white/[0.04] text-[var(--zombie-gray)]',
+      'border-zombie-gold/50 bg-zombie-gold/[0.12] text-[var(--zombie-gold)] shadow-[0_0_18px_rgba(245,184,0,0.1)]',
+    eliminated: 'border-zombie-gray/50 bg-white/[0.04] text-[var(--zombie-gray)]',
   }
   const dangerChip =
     dangerLevel && DANGER_LABEL[dangerLevel]

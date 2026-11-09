@@ -35,7 +35,7 @@ export default function TournamentMyLeaguePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <div className="sticky top-0 z-20 flex min-h-[48px] items-center justify-between gap-2 border-b border-[var(--tournament-border)] bg-[var(--tournament-bg)]/95 py-2 text-[12px] backdrop-blur">
+      <div className="sticky top-0 z-20 flex min-h-[48px] items-center justify-between gap-2 border-b border-[var(--tournament-border)] bg-tournament-bg/95 py-2 text-[12px] backdrop-blur">
         <div className="min-w-0">
           <span className="text-[var(--tournament-gold)]">🏆</span>{' '}
           <span className="font-semibold text-white">{ctx.shell.name}</span>

@@ -302,7 +302,7 @@ export default function SurvivorIslandHomePage() {
       {/* Host message */}
       <section className="mt-6 survivor-panel rounded-2xl p-4">
         <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--survivor-torch)]/20 text-lg">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--survivor-torch)_20%,transparent)] text-lg">
             🔥
           </div>
           <div>

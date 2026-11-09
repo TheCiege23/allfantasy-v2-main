@@ -197,7 +197,7 @@ export default function ZombieUniverseHubPage() {
 
         <div className="relative z-[1] p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--zombie-toxic)]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zombie-toxic/35 bg-black/35 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--zombie-toxic)]">
               <Radio className="h-3.5 w-3.5" aria-hidden />
               Universe tracker
             </span>
@@ -208,7 +208,7 @@ export default function ZombieUniverseHubPage() {
           </div>
 
           <div className="zombie-universe-title mt-5 flex flex-wrap items-start gap-4">
-            <div className="zombie-toxic-ring flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--zombie-toxic)]/40 bg-black/45 sm:h-16 sm:w-16">
+            <div className="zombie-toxic-ring flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-zombie-toxic/40 bg-black/45 sm:h-16 sm:w-16">
               <Globe className="h-8 w-8 text-[var(--zombie-toxic)] sm:h-9 sm:w-9" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">

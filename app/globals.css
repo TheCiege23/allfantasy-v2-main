@@ -142,6 +142,14 @@
   --tournament-safe: #22c55e;
   --tournament-elim: #6b7280;
   --tournament-accent: #3b82f6;
+  /* As RGB channels for the `tournament-*` Tailwind palette, which needs channels to apply an opacity:
+     `bg-[var(--tournament-x)]/15` compiles to NOTHING in Tailwind 3. */
+  --tournament-gold-rgb: 245 184 0;
+  --tournament-panel-rgb: 12 18 25;
+  --tournament-bubble-rgb: 245 158 11;
+  --tournament-bg-rgb: 6 10 16;
+  --tournament-active-rgb: 0 198 255;
+  --tournament-accent-rgb: 59 130 246;
   --tournament-text-dim: rgba(255, 255, 255, 0.45);
   --tournament-text-mid: rgba(255, 255, 255, 0.7);
   --tournament-text-full: rgba(255, 255, 255, 0.95);
@@ -160,6 +168,16 @@
   --zombie-gold: #f59e0b;
   --zombie-amber: #fbbf24;
   --zombie-gray: #4b5563;
+  /* As RGB channels for the `zombie-*` Tailwind palette, which needs channels to apply an opacity:
+     `bg-[var(--zombie-x)]/15` compiles to NOTHING in Tailwind 3. */
+  --zombie-crimson-rgb: 155 28 28;
+  --zombie-green-rgb: 22 163 74;
+  --zombie-toxic-rgb: 74 222 128;
+  --zombie-red-rgb: 239 68 68;
+  --zombie-purple-rgb: 124 58 237;
+  --zombie-gold-rgb: 245 158 11;
+  --zombie-panel-rgb: 10 12 18;
+  --zombie-gray-rgb: 75 85 99;
   --zombie-text-dim: rgba(255, 255, 255, 0.42);
   --zombie-text-mid: rgba(255, 255, 255, 0.68);
   --zombie-text-full: rgba(255, 255, 255, 0.94);

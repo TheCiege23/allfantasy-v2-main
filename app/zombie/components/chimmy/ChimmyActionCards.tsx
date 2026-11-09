@@ -96,7 +96,7 @@ export function AmbushActionCard({
 }: ActionCardProps & { ambushType: string; targetMatchup?: string }) {
   return (
     <div className={clsx(
-      'rounded-xl border border-[var(--zombie-crimson)]/30 bg-[var(--zombie-crimson)]/[0.06] p-4',
+      'rounded-xl border border-zombie-crimson/30 bg-[var(--zombie-crimson)]/[0.06] p-4',
       status === 'confirmed' && 'ambush-anim',
     )}>
       <div className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export function AmbushActionCard({
         </p>
       )}
       {status === 'confirmed' && (
-        <p className="mt-1 text-[11px] text-[var(--zombie-crimson)]/80">
+        <p className="mt-1 text-[11px] text-zombie-crimson/80">
           Matchup remap active. New pairings take effect at next lock.
         </p>
       )}
@@ -179,7 +179,7 @@ export function RevivalNotificationCard({
   timestamp,
 }: { playerName: string; timestamp?: string }) {
   return (
-    <div className="rounded-xl border border-[var(--zombie-gold)]/30 bg-[var(--zombie-gold)]/[0.06] p-4 revival-anim">
+    <div className="rounded-xl border border-zombie-gold/30 bg-[var(--zombie-gold)]/[0.06] p-4 revival-anim">
       <div className="flex items-center gap-2">
         <span className="text-2xl">⚡</span>
         <div>
@@ -201,7 +201,7 @@ export function InfectionNotificationCard({
   timestamp,
 }: { victimName: string; infectorName: string; margin?: number; timestamp?: string }) {
   return (
-    <div className="rounded-xl border border-[var(--zombie-purple)]/30 bg-[var(--zombie-purple)]/[0.06] p-4 zombie-turn-anim">
+    <div className="rounded-xl border border-zombie-purple/30 bg-[var(--zombie-purple)]/[0.06] p-4 zombie-turn-anim">
       <div className="flex items-center gap-2">
         <span className="text-2xl">🧟</span>
         <div>
@@ -220,7 +220,7 @@ export function InfectionNotificationCard({
 function StatusChip({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: 'bg-amber-500/20 text-amber-200',
-    confirmed: 'bg-[var(--zombie-green)]/20 text-[var(--zombie-green)]',
+    confirmed: 'bg-zombie-green/20 text-[var(--zombie-green)]',
     rejected: 'bg-red-500/20 text-red-300',
     expired: 'bg-white/10 text-[var(--zombie-text-dim)]',
   }

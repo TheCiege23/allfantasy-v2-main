@@ -151,7 +151,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
   return (
     <article
       data-testid={`find-league-card-${league.id}`}
-      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[var(--accent)]/35 hover:shadow-lg"
+      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[color:color-mix(in_srgb,var(--accent)_35%,transparent)] hover:shadow-lg"
       style={{
         borderColor: "var(--border)",
         background:

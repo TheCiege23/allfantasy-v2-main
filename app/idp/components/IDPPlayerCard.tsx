@@ -127,7 +127,7 @@ export function IDPPlayerCard({
 
   const chipStyles: Record<IdpContractChip, string> = {
     ACTIVE: 'border-cap-contract/45 bg-cap-contract/15 text-blue-100',
-    EXPIRING: 'border-cap-amber/45 bg-cap-amber/12 text-amber-100',
+    EXPIRING: 'border-cap-amber/45 bg-cap-amber/[0.12] text-amber-100',
     TAGGED: 'border-amber-400/50 bg-amber-500/15 text-amber-50',
     DEAD_CAP: 'border-cap-dead/40 bg-white/[0.04] text-white/45',
   }
