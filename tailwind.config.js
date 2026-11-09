@@ -133,6 +133,26 @@ const config = {
   theme: {
     extend: {
       colors: {
+        // zombie colours with opacity support (see the cap note below): `bg-zombie-crimson/15`.
+        zombie: {
+          crimson: 'rgb(var(--zombie-crimson-rgb) / <alpha-value>)',
+          green: 'rgb(var(--zombie-green-rgb) / <alpha-value>)',
+          toxic: 'rgb(var(--zombie-toxic-rgb) / <alpha-value>)',
+          red: 'rgb(var(--zombie-red-rgb) / <alpha-value>)',
+          purple: 'rgb(var(--zombie-purple-rgb) / <alpha-value>)',
+          gold: 'rgb(var(--zombie-gold-rgb) / <alpha-value>)',
+          panel: 'rgb(var(--zombie-panel-rgb) / <alpha-value>)',
+          gray: 'rgb(var(--zombie-gray-rgb) / <alpha-value>)',
+        },
+        // tournament colours with opacity support (see the cap note below): `bg-tournament-gold/15`.
+        tournament: {
+          gold: 'rgb(var(--tournament-gold-rgb) / <alpha-value>)',
+          panel: 'rgb(var(--tournament-panel-rgb) / <alpha-value>)',
+          bubble: 'rgb(var(--tournament-bubble-rgb) / <alpha-value>)',
+          bg: 'rgb(var(--tournament-bg-rgb) / <alpha-value>)',
+          active: 'rgb(var(--tournament-active-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--tournament-accent-rgb) / <alpha-value>)',
+        },
         // IDP stat colours, same reason as `cap`: `bg-idp-defense/25`.
         idp: {
           defense: 'rgb(var(--idp-defense-rgb) / <alpha-value>)',

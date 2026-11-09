@@ -105,7 +105,7 @@ export default function TournamentProgressPage() {
                           key={l.id}
                           className={`rounded-xl border p-3 text-[11px] ${
                             mine
-                              ? 'border-[var(--tournament-gold)]/60 bg-yellow-500/10 shadow-[0_0_16px_rgba(245,184,0,0.12)]'
+                              ? 'border-tournament-gold/60 bg-yellow-500/10 shadow-[0_0_16px_rgba(245,184,0,0.12)]'
                               : 'border-[var(--tournament-border)] bg-[var(--tournament-panel)]'
                           }`}
                         >

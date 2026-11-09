@@ -76,7 +76,7 @@ export default function SurvivorChatPage() {
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border-l-4 border-[var(--survivor-torch)] bg-white/[0.04] p-3">
                 <div className="flex gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--survivor-torch)]/30 text-sm">🔥</div>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--survivor-torch)_30%,transparent)] text-sm">🔥</div>
                   <div>
                     <p className="sv-kicker text-[11px]">The Host</p>
                     <p className="text-[13px] text-white/75">Ceremony copy lands here — merges, swaps, and tribal stakes.</p>
