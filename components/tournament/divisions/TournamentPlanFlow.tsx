@@ -81,7 +81,7 @@ export function TournamentPlanFlow() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
+    <main className="af-draft-dark mx-auto min-h-screen max-w-[1440px] space-y-6 bg-[#07080d] px-4 py-6 text-white sm:px-8">
       {step === 'format' ? (
         <>
           <StepHeader title="Choose a tournament format" sub="Plan a tournament · step 1 of 4 · you can switch formats until registration opens" />
