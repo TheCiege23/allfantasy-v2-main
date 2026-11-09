@@ -297,12 +297,20 @@ when that combination is next added — and a level/draft field before ranking o
 
 The committed EPL capture identifies Soccer through its `SOCCER_GOALIE` and `SOCCER_NON_GOALIE`
 scoring groups. The roster and player pool supply IDs and positions. Import retains those IDs and
-uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Missing or ambiguous links
-leave the player unidentified. A captured Soccer player directory and production coverage for
-these links remain unverified.
+uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Grades require the same
+one-to-one Fantrax ID across the Soccer registry, including identities without match rows.
+A read-only database audit on 2026-11-09 found 4,323 Soccer identities, zero Fantrax links in
+either identity registry, zero Fantrax Soccer snapshots, and zero Soccer Fantrax directory
+cache entries. A verified Fantrax ID-to-player directory or export is needed to populate live links.
 
 The capture gives position maxima that sum to 14 and a total of 11 starters. The maxima alone
 cannot define a fixed lineup. The capture also has different goalie and outfield weights for
-shared stats such as assists. Import retains the raw categories and reports the scoring gaps.
-Trade grades use the existing Soccer match and schedule data with AllFantasy default points when
-the league has no supported scoring overrides.
+shared stats such as assists. The points scorer honors default weights for each group and explicit
+goalkeeper, defender, midfielder, and forward overrides for supported stats. It leaves an
+unsupported or conflicting position rule out of the projection and records the gap.
+
+The same audit found 44,271 Soccer match rows for 2,121 players, all from Rolling Insights. The
+stored fields cover 17 of the 60 rules in the captured league. Exact secondary assists, own goals,
+and Fantrax clean-sheet and result eligibility still need compatible event data or verified scoring
+definitions. The season view reads published Fantrax team totals, and projections report partial
+scoring when source rules are omitted.

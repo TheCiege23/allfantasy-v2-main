@@ -171,9 +171,21 @@ const SOCCER_STAT_KEYS: Readonly<Record<string, string>> = {
   INDIVIDUAL_PENALTY_KICKS_MISSED: 'pen_miss',
 }
 
+type SoccerScoringPosition = 'GK' | 'DEF' | 'MID' | 'FWD'
+const SOCCER_POSITIONS_BY_ROLE = { keeper: ['GK'], outfield: ['DEF', 'MID', 'FWD'] } as const
+const SOCCER_POSITION_ALIASES: Readonly<Record<string, SoccerScoringPosition>> = {
+  G: 'GK', GK: 'GK', GKP: 'GK', GOALKEEPER: 'GK',
+  D: 'DEF', DEF: 'DEF', DEFENDER: 'DEF',
+  M: 'MID', MID: 'MID', MIDFIELDER: 'MID',
+  F: 'FWD', FWD: 'FWD', FORWARD: 'FWD',
+}
+
+export function fantraxSoccerScoringPosition(position: string | null | undefined): SoccerScoringPosition | undefined {
+  return SOCCER_POSITION_ALIASES[String(position ?? '').trim().toUpperCase()]
+}
+
 export type FantraxSoccerScoring = {
-  keeper: Record<string, number>
-  outfield: Record<string, number>
+  positionWeights: Record<SoccerScoringPosition, Record<string, number>>
   gaps: string[]
 }
 
@@ -183,8 +195,9 @@ export function parseFantraxSoccerScoring(scoringSystem: FantraxLeagueInfo['scor
   if (!isFantraxSoccerScoring(scoringSystem) ||
       (typeof systemType === 'string' && !systemType.includes('POINTS_BASED'))) return null
 
-  const result: FantraxSoccerScoring = { keeper: {}, outfield: {}, gaps: [] }
-  const omitted = { keeper: new Set<string>(), outfield: new Set<string>() }
+  type Weights = { base?: number | null; override?: number | null }
+  const rules: Record<SoccerScoringPosition, Record<string, Weights>> = { GK: {}, DEF: {}, MID: {}, FWD: {} }
+  const gaps: string[] = []
   for (const config of readConfigs({ scoringSystem })) {
     const role = config.group === 'SOCCER_GOALIE' ? 'keeper'
       : config.group === 'SOCCER_NON_GOALIE' ? 'outfield'
@@ -193,22 +206,39 @@ export function parseFantraxSoccerScoring(scoringSystem: FantraxLeagueInfo['scor
     if (!role || !code) continue
     const key = SOCCER_STAT_KEYS[code]
     const label = config.scoringCategory?.name ?? code
-    const position = config.position?.shortName ?? config.position?.code
-    const points = config.points
     if (!key) {
-      result.gaps.push(`${label} (${role}) has no verified equivalent in stored Soccer stats`)
-    } else if (!isDefaultPosition(position) || typeof points !== 'number' || !Number.isFinite(points)
-      || (result[role][key] !== undefined && result[role][key] !== round(points))) {
-      // Drop the rule for this group when its weight cannot be applied consistently.
-      omitted[role].add(key)
-      delete result[role][key]
-      result.gaps.push(`${label} (${role}) has an unsupported position override or points weight`)
-    } else if (!omitted[role].has(key)) {
-      result[role][key] = round(points)
+      gaps.push(`${label} (${role}) has no verified equivalent in stored Soccer stats`)
+      continue
+    }
+
+    const rawPosition = config.position?.shortName ?? config.position?.code
+    const defaultRule = isDefaultPosition(rawPosition)
+    const position = fantraxSoccerScoringPosition(rawPosition)
+    const rolePositions: readonly SoccerScoringPosition[] = SOCCER_POSITIONS_BY_ROLE[role]
+    const specific = position && rolePositions.includes(position)
+    const targets = specific ? [position] : rolePositions
+    const scope = defaultRule ? 'base' : 'override'
+    const points = (defaultRule || specific) && typeof config.points === 'number' && Number.isFinite(config.points)
+      ? round(config.points)
+      : null
+    let omitted = false
+    for (const target of targets) {
+      const rule = (rules[target][key] ??= {})
+      const previous = rule[scope]
+      rule[scope] = previous !== undefined && previous !== points ? null : points
+      omitted ||= rule[scope] === null
+    }
+    if (omitted) gaps.push(`${label} (${rawPosition ?? role}) has an unsupported or conflicting position rule`)
+  }
+
+  const positionWeights: FantraxSoccerScoring['positionWeights'] = { GK: {}, DEF: {}, MID: {}, FWD: {} }
+  for (const position of Object.keys(rules) as SoccerScoringPosition[]) {
+    for (const [key, rule] of Object.entries(rules[position])) {
+      const points = rule.override === undefined ? rule.base : rule.override
+      if (points != null) positionWeights[position][key] = points
     }
   }
-  if (!Object.keys(result.keeper).length || !Object.keys(result.outfield).length) return null
-  return result
+  return Object.values(positionWeights).some((weights) => Object.keys(weights).length) ? { positionWeights, gaps } : null
 }
 
 /**
@@ -293,7 +323,7 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
 
 function isDefaultPosition(position: string | null | undefined): boolean {
   if (!position) return true
-  const normalized = position.trim().toUpperCase()
+  const normalized = String(position).trim().toUpperCase()
   return normalized === 'DEFAULT' || normalized === '-1'
 }
 

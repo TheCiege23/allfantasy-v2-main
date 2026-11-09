@@ -18,6 +18,7 @@
  *                       "First Last" / the same chart in Fantrax's "Last, First" order (a control).
  *                       Unset, FantasyCalc is unreachable like every other host.
  *   SIM_SEED_VALUES=0   skip seeding identity rows and trade values
+ *   SIM_SEED_SOCCER_LINKS=0   seed Soccer match values but omit Fantrax IDs from the registry
  *
  * No network: Fantrax's HTTP functions are fabricated; every other fetch throws and is recorded.
  * No notifications, no Meta CAPI conversions, no model calls.
@@ -227,7 +228,9 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
         const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null; basis: string | null; withheld: string | null }>
         expect(grades).toHaveLength(5)
         if (process.env.SIM_SEED_VALUES === '0') {
-          expect(grades.every((g) => !g.grade && g.withheld)).toBe(true)
+          expect(grades.every((g) => !g.grade && g.withheld?.includes('No soccer match data'))).toBe(true)
+        } else if (process.env.SIM_SEED_SOCCER_LINKS === '0') {
+          expect(grades.every((g) => !g.grade && g.withheld?.includes('verified Fantrax player ID'))).toBe(true)
         } else {
           expect(grades.find((g) => g.label === 'fair'), JSON.stringify(grades)).toMatchObject({ grade: 'C' })
           expect(grades.find((g) => g.label === 'collusion-1')?.grade).toMatch(/^[DF]$/)

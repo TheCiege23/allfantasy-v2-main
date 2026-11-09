@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { providerIdentityColumn } from '@/lib/player-identity/resolveProviderRosterPlayers'
+import { reduceCrosswalk } from '@/lib/core-app/crosswalkRules'
 import type { TradeValuationGap } from './tradeGrade'
 import { playerIdSpaceFor } from './tradePlayers'
 
@@ -381,20 +382,33 @@ async function loadSoccerLines(now: Date, column: RosterIdColumn): Promise<Lines
   }
 
   const ids = [...new Set(current.map((r) => r.playerId))]
+  // Fantrax ids must be unique across the sport, even when a competing identity has no match rows.
+  const where = column === 'fantraxId'
+    ? { sport: 'SOCCER', OR: [{ id: { in: ids } }, { fantraxId: { not: null } }] }
+    : { id: { in: ids } }
   const identities = await prisma.playerIdentityMap
-    .findMany({ where: { id: { in: ids } }, select: { ...identitySelect, canonicalName: true } })
+    .findMany({ where, select: { ...identitySelect, canonicalName: true } })
     .catch(() => [])
+  const fantraxLinks = column === 'fantraxId'
+    ? reduceCrosswalk(identities.map((i) => ({ from: i.fantraxId, to: i.id })))
+    : null
   const board = blendSoccerSeasons({
     current: soccerSeasonLines(current, new Map(identities.map((i) => [i.id, i.canonicalName])), season),
     prior: soccerSeasonLines(prior, new Map(), season - 1),
     clubMatches: { current: clubMatchCounts(current), prior: clubMatchCounts(prior) },
   })
   const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
-  const rosterAliasById = new Map(identities.map((i) => [i.id, column ? i[column] : null]))
+  const rosterAliasById = new Map(identities.map((i) => {
+    const alias = column ? i[column]?.trim() : null
+    return [i.id, alias && (!fantraxLinks || fantraxLinks.get(alias) === i.id) ? alias : null]
+  }))
   const lines: BoardLine[] = []
   for (const b of board) {
     if (!b.name || !b.position) continue
     lines.push({ id: b.playerId, name: b.name, position: b.position, sampleGames: b.sampleGames, aliases: aliasesById.get(b.playerId) ?? [], rosterAlias: rosterAliasById.get(b.playerId), sourceSeason: season, stats: b.stats })
+  }
+  if (fantraxLinks && !lines.some((line) => line.rosterAlias)) {
+    return { ok: false, reason: 'No Soccer match projections are linked to a verified Fantrax player ID.', valuationGap: 'unresolved_player' }
   }
   return { ok: true, season, games, lines }
 }
@@ -545,8 +559,9 @@ async function finishBoard(args: {
 
   let replacementByPosition = replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
   let rosterIndex: ReadonlyMap<string, BoardPlayer> | undefined
+  const requireProviderId = sport === 'SOCCER' && league?.platform?.trim().toLowerCase() === 'fantrax'
   if (league) {
-    rosterIndex = indexBoard(board, true)
+    rosterIndex = indexBoard(board, requireProviderId ? 'provider' : true)
     const rosterRows = await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } }).catch(() => null)
     const rostered = rosterRows ? [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))] : []
     if (rostered.length > 0) {
@@ -570,6 +585,7 @@ async function finishBoard(args: {
       board,
       replacementByPosition,
       ...(rosterIndex ? { rosterIndex } : {}),
+      ...(requireProviderId ? { requireProviderId } : {}),
       window: {
         season,
         seasonLabel: seasonLabelFor(season, sport),
