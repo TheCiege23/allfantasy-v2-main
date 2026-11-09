@@ -35,6 +35,9 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
     const schedule = FantraxScheduleMapper.map(raw)
     const history = FantraxHistoryMapper.map(raw)
     const playerMapCount = Object.keys(raw.playerMap ?? {}).length
+    const soccerUnmapped = raw.league.sport === 'SOCCER'
+      ? Object.entries(raw.playerMap ?? {}).filter(([id, player]) => player.name === `Unknown player (${id})`).length
+      : 0
     const rosterWithPlayersCount = rosters.filter((roster) => roster.player_ids.length > 0).length
     const preDraftEmptyRosters = league.status === 'pre_draft' && rosterWithPlayersCount === 0
     const publishedLineup = raw.settings?.raw?.rosterInfo
@@ -223,10 +226,12 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
           count: raw.previousSeasons.length,
         },
         playerIdentityMap: {
-          state: playerMapCount > 0 ? 'partial' : 'missing',
-          count: playerMapCount,
+          state: playerMapCount > soccerUnmapped ? 'partial' : 'missing',
+          count: playerMapCount - soccerUnmapped,
           note:
-            playerMapCount > 0
+            soccerUnmapped > 0
+              ? `${soccerUnmapped} Fantrax Soccer player IDs have no verified identity link on file.`
+              : playerMapCount > 0
               ? 'Fantrax player IDs are mapped from imported roster exports and remain stable for future sync.'
               : 'No Fantrax player identity map was available in imported roster exports.',
         },

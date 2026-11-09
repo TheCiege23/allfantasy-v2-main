@@ -56,10 +56,17 @@ const ROSTER_MIX: Record<ScaleSport, Array<[string, number]>> = {
   NBA: [['PG', 3], ['SG', 3], ['SF', 3], ['PF', 3], ['C', 2]],
   NCAAB: [['PG', 3], ['SG', 3], ['SF', 3], ['PF', 3], ['C', 2]],
   NCAAF: [['QB', 3], ['RB', 6], ['WR', 8], ['TE', 3], ['K', 1]],
-  SOCCER: [['FWD', 4], ['MID', 5], ['DEF', 5], ['GK', 2]],
+  SOCCER: [['FWD', 3], ['MID', 4], ['DEF', 3], ['GK', 1]],
   NHL: [['C', 4], ['LW', 4], ['RW', 4], ['D', 4], ['G', 2]],
   MLB: [['C', 2], ['1B', 2], ['2B', 2], ['3B', 2], ['SS', 2], ['OF', 6], ['SP', 8], ['RP', 6]],
 }
+const SOCCER_POSITIONS: Record<string, { fantrax: string; match: string }> = {
+  FWD: { fantrax: 'F', match: 'Forward' },
+  MID: { fantrax: 'M', match: 'Midfielder' },
+  DEF: { fantrax: 'D', match: 'Defender' },
+  GK: { fantrax: 'G', match: 'Goalkeeper' },
+}
+
 const PRO_TEAMS: Record<ScaleSport, string[]> = {
   NFL: ['KC', 'BUF', 'SF', 'PHI', 'DAL', 'MIA', 'DET', 'BAL', 'CIN', 'GB', 'LAR', 'NYJ'],
   NBA: ['BOS', 'DEN', 'MIL', 'PHX', 'LAL', 'GSW', 'MIA', 'NYK', 'DAL', 'OKC'],
@@ -122,7 +129,9 @@ export function fabricateFantraxLeague(sport: ScaleSport, teamCount: number, sou
     const items: Array<{ id: string; position: string; status: string }> = []
     perPos.clear()
     for (const [pos, count] of ROSTER_MIX[sport]) {
-      for (let k = 0; k < count; k += 1) items.push({ id: nextPlayer(pos), position: pos, status: 'ACTIVE' })
+      for (let k = 0; k < count; k += 1) {
+        items.push({ id: nextPlayer(pos), position: sport === 'SOCCER' ? SOCCER_POSITIONS[pos]!.fantrax : pos, status: 'ACTIVE' })
+      }
     }
     items.forEach((item, idx) => {
       if (idx >= maxActive) item.status = 'RESERVE'
@@ -171,6 +180,46 @@ export function firstLast(name: string): string {
   return m ? `${m[2]} ${m[1]}` : name
 }
 
+/** Existing identity links are present before Soccer import, as they would be in the registry. */
+export async function seedSoccerIdentities(env: ScaleEnv): Promise<void> {
+  if (process.env.SIM_SEED_VALUES === '0') return
+  await env.db.playerIdentityMap.createMany({ data: Object.entries(env.fx!.playerMap).map(([id, ref]) => {
+    const name = firstLast(ref.name)
+    return {
+      id: `pim-${id}`, canonicalName: name, normalizedName: name.toLowerCase().replace(/[^a-z]/g, ''),
+      sport: 'SOCCER', position: ref.position, currentTeam: ref.team, rollingInsightsId: `ri-${id}`, fantraxId: id,
+    }
+  }) })
+}
+
+async function seedSoccerMatchValues(env: ScaleEnv, run: ScaleRun): Promise<void> {
+  const fx = env.fx!
+  const season = Number(fx.info.seasonYear)
+  const dayMs = 86_400_000
+  const today = Date.now()
+  await env.db.playerGameStat.createMany({ data: Object.entries(fx.playerMap).flatMap(([id, ref]) => {
+    const strength = Math.max(1, 34 - fx.valueRank[id]! * 1.5)
+    const keeper = ref.position === 'GK'
+    return Array.from({ length: 12 }, (_, match) => ({
+      playerId: `pim-${id}`, gameId: `soc-${ref.team}-${match}`, sportType: 'SOCCER', season,
+      weekOrRound: match + 1, team: ref.team, gameDate: new Date(today - (12 - match) * dayMs), statPayload: {},
+      normalizedStatMap: {
+        group: keeper ? 'goalkeepers' : 'fielders',
+        position: SOCCER_POSITIONS[ref.position]!.match,
+        stats: keeper ? { minutes_played: 90, saves: strength } : { minutes_played: 90, goals: strength / 10 },
+      },
+    }))
+  }) })
+  const clubs = PRO_TEAMS.SOCCER
+  await env.db.sportsGame.createMany({ data: Array.from({ length: 18 }, (_, match) =>
+    clubs.filter((_, club) => club % 2 === 0).map((club, pair) => ({
+      sport: 'SOCCER', externalId: `soc-future-${match}-${pair}`, homeTeam: club, awayTeam: clubs[pair * 2 + 1]!,
+      source: 'sim', season, seasonType: 'regular', startTime: new Date(today + (match + 1) * dayMs),
+      expiresAt: new Date(today + 365 * dayMs),
+    }))).flat() })
+  run.stats.seededValues = { identities: Object.keys(fx.playerMap).length, matchesPerClub: 12, season }
+}
+
 /**
  * Production-shaped NBA values for every fabricated player, as the app holds them for real players:
  *   - PlayerIdentityMap rows carrying `fantraxId` (what the weekly `ingestProFantraxIdentities` cron
@@ -181,6 +230,7 @@ export function firstLast(name: string): string {
  */
 export async function seedTradeValues(env: ScaleEnv, run: ScaleRun): Promise<void> {
   if (!run.leagueId || process.env.SIM_SEED_VALUES === '0') return
+  if (run.sport === 'SOCCER') return seedSoccerMatchValues(env, run)
   if (run.sport === 'NFL') {
     // What `linkNflFantraxIdentities` leaves after an import: the Fantrax id on the player's identity row,
     // which carries his Sleeper id — the same id the served FantasyCalc chart uses (fantrax-scale.test.ts).
@@ -319,6 +369,7 @@ export async function importLeague(env: ScaleEnv, run: ScaleRun): Promise<void> 
     leagueSize: league.leagueSize,
     isDynasty: league.isDynasty,
     rosters: rosters.length,
+    rosteredPlayers: rosters.reduce((count, roster) => count + leagueHoldings(env, roster.id).length, 0),
     leagueTeams: teams.length,
     seasons: seasons.length,
     seasonRosters: seasonRosters.length,
@@ -583,7 +634,11 @@ export async function runTrades(env: ScaleEnv, run: ScaleRun): Promise<void> {
         proposedByUserId: trade.proposedByUserId,
         assets: items.map((i) => ({ itemType: i.itemType, itemReference: i.itemReference, fromRosterId: i.fromRosterId, toRosterId: i.toRosterId, faabAmount: i.faabAmount, metadata: i.metadata ?? {} })) as any,
       })
-      grades.push({ label: r.label, ms: now() - t0, grade: g?.grade ?? g?.letter ?? null, withheld: g?.withheld ?? g?.withheldReason ?? g?.reason ?? null, raw: JSON.stringify(g).slice(0, 260) })
+      grades.push({
+        label: r.label, ms: now() - t0, grade: g?.grade ?? g?.letter ?? null,
+        withheld: g?.withheld ?? g?.withheldReason ?? g?.reason ?? null,
+        basis: g?.basis ?? null, raw: JSON.stringify(g).slice(0, 260),
+      })
     } catch (e) {
       grades.push({ label: r.label, threw: (e as Error).message })
     }
