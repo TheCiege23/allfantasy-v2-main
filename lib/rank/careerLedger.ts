@@ -733,11 +733,13 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
       // End-of-season survival and the head-to-head bracket can be decided separately.
       const verifiedSurvival = evidence.method === 'verified_commissioner_survived'
       const verifiedRunnerUp = evidence.method === 'verified_commissioner_runner_up'
+      const verifiedChampion = evidence.method === 'verified_commissioner_champion' ||
+        (evidence.method === 'sleeper_chopped' && evidence.eliminatedWeek === null)
       return {
         ...row,
         specialty: 'guillotine' as const,
         survival: sleeperSurvivalPeriods(evidence),
-        wonChampionship: verifiedSurvival ? row.wonChampionship : evidence.method === 'sleeper_chopped' && evidence.eliminatedWeek === null,
+        wonChampionship: verifiedSurvival ? row.wonChampionship : verifiedChampion,
         madePlayoffs: verifiedSurvival ? row.madePlayoffs : verifiedRunnerUp,
         playoffTeams: verifiedSurvival || verifiedRunnerUp ? row.playoffTeams : null,
         playoffKnown: verifiedSurvival ? row.playoffKnown : verifiedRunnerUp,
