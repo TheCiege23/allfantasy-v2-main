@@ -25,7 +25,6 @@ export function LeagueIdentityCard({
   teamSlots,
   currentCount,
   status,
-  leagueId,
   href,
   leagueIndex = 0,
 }: {
@@ -35,7 +34,8 @@ export function LeagueIdentityCard({
   teamSlots: number
   currentCount: number
   status: string
-  leagueId: string
+  /** Kept for callers; no longer shown (it printed an internal id to users). */
+  leagueId?: string
   href?: string
   leagueIndex?: number
 }) {
@@ -69,7 +69,6 @@ export function LeagueIdentityCard({
         <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">
           Status: <span className="text-white/80">{status}</span>
         </p>
-        <p className="font-mono text-[11px] text-[var(--tournament-text-dim)]">ID: {leagueId.slice(0, 8)}…</p>
       </div>
     </div>
   )
