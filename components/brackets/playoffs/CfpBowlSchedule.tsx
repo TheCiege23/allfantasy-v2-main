@@ -4,6 +4,7 @@ import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
 import { cfpBowlCrestKey } from "@/lib/playoffs/cfpBowlCrest"
 import CfpBowlCrest from "./CfpBowlCrest"
+import "./cfp-bowl-schedule.css"
 
 type BowlGame = { gameLabel?: string | null; startsAt?: string | null; venue?: string | null; location?: string | null; awayTeamName?: string; homeTeamName?: string }
 const BOWLS = [
