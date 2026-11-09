@@ -20,7 +20,8 @@ vi.mock('@/lib/decision-os/trade/tradePlayers', async (importOriginal) => ({
 }))
 
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
-import { loadNcaafRedraftBase, rosteredIdsOf, type NcaafRedraftBaseResult } from '@/lib/decision-os/trade/ncaafRedraftContext'
+import { loadNcaafRedraftBase, ncaafTradeScoringRules, rosteredIdsOf, type NcaafRedraftBaseResult } from '@/lib/decision-os/trade/ncaafRedraftContext'
+import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { NCAAF_PICKS_UNPRICED_REASON } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
@@ -122,14 +123,68 @@ describe('loadNcaafRedraftBase — rosters, projections, the free-agent line and
   })
 
   it.each([
-    ['no scoring rules', () => undefined, { settings: {} }, /scoring/i],
+    ['no scoring rules', () => undefined, { platform: 'fantrax', settings: { roster_size: 24 } }, /scoring/i],
     ['no projections on file', () => projections.latestNcaafProjectionSeason.mockResolvedValue(null), RULES, /No college projections/],
     ['no week on the schedule', () => weeks.resolveSportWeek.mockResolvedValue({ ok: false, reason: 'NO_SCHEDULE_ROWS' }), RULES, /no week on file/],
     ['unreadable rosters', () => db.roster.findMany.mockRejectedValue(new Error('down')), RULES, /rosters could not be read/],
   ])('refuses with a reason when there is %s', async (_what, arrange, league, reason) => {
     arrange()
-    const out = await loadNcaafRedraftBase({ id: 'L1', platform: null, settings: league.settings })
+    const out = await loadNcaafRedraftBase({ id: 'L1', platform: (league as { platform?: string }).platform ?? null, settings: league.settings })
     expect(out).toMatchObject({ ok: false, reason: expect.stringMatching(reason) })
+  })
+})
+
+describe('ncaafTradeScoringRules — which rules a college league is priced under', () => {
+  it('an imported league is priced by its saved rulebook, as it is', () => {
+    expect(ncaafTradeScoringRules({ platform: 'fantrax', settings: RULES.settings })).toEqual(RULES.settings.scoring_settings)
+  })
+
+  it('a league created here is priced by its sport config, not the summary creation writes', () => {
+    // What the create flow stores in `scoring_settings`, read off a real created league: screen names, no stat.
+    const created = { roster_size: 24, sportConfig: {}, scoring_settings: { ppr: 0.5, passingTouchdown: 4, receivingTouchdown: 6, rushingTouchdown: 6, fieldGoalMade: 3, teamDefenseTouchdown: 6 } }
+    const rules = ncaafTradeScoringRules({ platform: 'manual', settings: created })
+    expect(rules).not.toBeNull()
+    // The weights the league's matchups are scored by, read through the same resolution.
+    const resolved = resolveLeagueScoringRules({ sport: 'NCAAF', settings: { roster_size: 24, sportConfig: {} } })!
+    const passYds = resolved.categories.find((c) => c.key === 'pass_yds')!
+    // Under the projection scorer's name for it: the engine's `pass_yds` is `pass_yd` there.
+    expect(rules!.pass_yd).toBe(resolved.overrides.pass_yds ?? passYds.defaultPoints)
+    expect(rules!.pass_yd).toBeGreaterThan(0)
+    expect(rules).not.toHaveProperty('pass_yds')
+    // Role two-point counts present, so the aggregate is not paid a second time.
+    expect(rules).not.toHaveProperty('two_pt')
+    // Never the settings blob: a roster size is not a stat weight.
+    expect(rules).not.toHaveProperty('roster_size')
+    expect(rules).not.toHaveProperty('passingTouchdown')
+  })
+
+  it('a commissioner’s points override the sport’s default', () => {
+    const rules = ncaafTradeScoringRules({ platform: 'allfantasy', settings: { sportConfig: { categoryPoints: { pass_td: 6 } } } })
+    expect(rules!.pass_td).toBe(6)
+  })
+
+  it('an imported league with no rulebook refuses, even when its settings hold numbers', () => {
+    // The old reader took this blob to BE the rulebook: it "had rules" and priced nobody.
+    expect(ncaafTradeScoringRules({ platform: 'fantrax', settings: { roster_size: 24 } })).toBeNull()
+  })
+
+  it('prices yards on the CFBD spellings production projections carry, not only touchdowns', async () => {
+    projections.lookupNcaafProjections.mockResolvedValue(new Map([
+      ['101', { playerId: '101', projectedPoints: 20, position: 'QB', componentStats: { 'passing.YDS': 300, 'passing.TD': 2 } }],
+    ]))
+    const out = await loadNcaafRedraftBase({ id: 'L1', platform: 'manual', settings: { sportConfig: {}, scoring_settings: { ppr: 0.5, passingTouchdown: 4 } } })
+    if (!out.ok) throw new Error(out.reason)
+    // 300 × 0.04 + 2 × 4 = 20. Touchdowns alone would be 8.
+    expect(out.base.perGameByRosterId.get('101')).toEqual({ perGame: 20, position: 'QB' })
+  })
+
+  it('prices a created league’s players instead of leaving them all unpriced', async () => {
+    const settings = { roster_size: 24, sportConfig: {}, scoring_settings: { ppr: 0.5, passingTouchdown: 4, fieldGoalMade: 3 } }
+    const out = await loadNcaafRedraftBase({ id: 'L1', platform: 'manual', settings })
+    if (!out.ok) throw new Error(out.reason)
+    const qb = out.base.perGameByRosterId.get('101')
+    expect(qb?.perGame).toBeGreaterThan(0)
+    expect(out.base.perGameByRosterId.size).toBe(3)
   })
 })
 
