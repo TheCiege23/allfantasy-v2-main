@@ -190,7 +190,10 @@ export type FantraxSoccerScoring = {
 }
 
 /** Translate only the rules the stored Soccer match stat normalizer can supply. */
-export function parseFantraxSoccerScoring(scoringSystem: FantraxLeagueInfo['scoringSystem']): FantraxSoccerScoring | null {
+export function parseFantraxSoccerScoring(
+  scoringSystem: FantraxLeagueInfo['scoringSystem'],
+  verifiedOwnGoals = false,
+): FantraxSoccerScoring | null {
   const systemType = scoringSystem?.type
   if (!isFantraxSoccerScoring(scoringSystem) ||
       (typeof systemType === 'string' && !systemType.includes('POINTS_BASED'))) return null
@@ -204,7 +207,7 @@ export function parseFantraxSoccerScoring(scoringSystem: FantraxLeagueInfo['scor
       : null
     const code = config.scoringCategory?.code
     if (!role || !code) continue
-    const key = SOCCER_STAT_KEYS[code]
+    const key = verifiedOwnGoals && code === 'INDIVIDUAL_GOALS_ON_OWN_NET' ? 'own_goal' : SOCCER_STAT_KEYS[code]
     const label = config.scoringCategory?.name ?? code
     if (!key) {
       gaps.push(`${label} (${role}) has no verified equivalent in stored Soccer stats`)

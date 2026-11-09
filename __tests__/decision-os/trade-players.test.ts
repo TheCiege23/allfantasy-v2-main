@@ -27,6 +27,9 @@ describe('playerIdSpaceFor — the league decides the id space', () => {
     [{ platform: 'manual', sport: 'NBA' }, 'rolling_insights'], // …every other native sport is not
     [{ platform: null, sport: 'NHL' }, 'rolling_insights'],
     [{ platform: 'espn', sport: 'NFL' }, { provider: 'espn' }],
+    [{ platform: 'fantrax', sport: 'SOCCER' }, { provider: 'fantrax' }],
+    [{ platform: 'mfl', sport: 'NFL' }, { provider: 'mfl' }],
+    [{ platform: 'fleaflicker', sport: 'NFL' }, { provider: 'fleaflicker' }],
     [{ platform: 'yahoo', sport: 'NFL' }, { provider: 'yahoo' }],
   ] as const)('%j → %j', (league, want) => {
     expect(playerIdSpaceFor(league)).toEqual(want)
@@ -80,10 +83,10 @@ describe('resolveTradePlayers', () => {
     expect(out.get('1234')).toMatchObject({ ok: true, name: 'Nikola Jokic' })
   })
 
-  it('ESPN-style ids go through the platform’s identity column', async () => {
+  it.each(['espn', 'mfl', 'fleaflicker'])('%s IDs go through the platform’s identity column', async (provider) => {
     providerResolve.mockResolvedValue(new Map([['15847', { name: 'Travis Kelce', position: 'TE' }]]))
-    const out = await resolveTradePlayers(['15847', '1'], { space: { provider: 'espn' }, sport: 'NFL' })
-    expect(providerResolve).toHaveBeenCalledWith('espn', ['15847', '1'], 'NFL', expect.any(Set))
+    const out = await resolveTradePlayers(['15847', '1'], { space: { provider }, sport: 'NFL' })
+    expect(providerResolve).toHaveBeenCalledWith(provider, ['15847', '1'], 'NFL', expect.any(Set))
     expect(sportsFindMany).not.toHaveBeenCalled()
     expect(out.get('15847')).toMatchObject({ ok: true, name: 'Travis Kelce' })
     expect(out.get('1')).toEqual({ ok: false, why: 'unresolved' })

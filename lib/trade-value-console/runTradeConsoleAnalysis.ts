@@ -393,7 +393,10 @@ export async function runTradeConsoleAnalysis(
    */
   const collegeGrader =
     leagueRow && consoleLeagueType && effectiveSport === 'NCAAF' && input.leagueId
-      ? createNcaafLeagueGrader({ id: input.leagueId.trim(), platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType: consoleLeagueType })
+      ? createNcaafLeagueGrader({
+          id: input.leagueId.trim(), platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType: consoleLeagueType,
+          leagueSize: leagueRow.leagueSize, season: leagueRow.season, status: leagueRow.status,
+        })
       : null
   const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
   if (collegeView) applyCollegeGrade(leagueGrade, collegeView)

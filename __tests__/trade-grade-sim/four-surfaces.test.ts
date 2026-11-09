@@ -63,7 +63,7 @@ const PLAYERS = [
 ]
 const day = 24 * 60 * 60 * 1000
 
-async function seedOffer(sport: Sport) {
+async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft') {
   const db = h.db!
   const season = new Date().getUTCFullYear()
   const platform = sport === 'NCAAF' ? 'fantrax' : 'native'
@@ -71,7 +71,7 @@ async function seedOffer(sport: Sport) {
   const scoring = sport === 'NCAAF' ? { pass_yd: 0.04, pass_td: 4 } : { rec: 1 }
   const league = await db.league.create({ data: {
     id: leagueId, userId: 'commish', platform, platformLeagueId: leagueId, sport, season,
-    leagueType: 'redraft', leagueSize: 4, name: 'Trade parity ' + sport,
+    leagueType: format, leagueSize: 4, name: 'Trade parity ' + sport,
     settings: { scoring_mode: 'points', scoring_settings: scoring, trade_settings: { reviewType: 'none' } },
   } })
   const pos = POSITIONS[sport]
@@ -84,13 +84,21 @@ async function seedOffer(sport: Sport) {
       id: p.canonical, canonicalName: p.name, normalizedName: p.name.toLowerCase().replaceAll(' ', ''),
       sport, position: pos, ...(sport === 'NFL' ? { sleeperId: p.id } : { rollingInsightsId: p.id }),
       ...(sport === 'NCAAF' ? { cfbdId: 'cfbd-' + p.id, fantraxId: p.id, rollingInsightsId: null } : {}),
+      ...(sport === 'NCAAB' && format === 'dynasty' ? { espnId: p.id } : {}),
     } })
     await db.sportsPlayer.create({ data: {
       id: 'sports-' + p.id, name: p.name, sport, position: pos, team: 'T1',
       source: sport === 'NFL' ? 'sleeper' : 'rolling_insights',
       externalId: sport === 'NFL' ? 'sleeper:' + p.id : p.id,
+      ...(sport === 'SOCCER' && format === 'dynasty' ? { age: 21 } : {}),
       ...(sport === 'NFL' ? { sleeperId: p.id } : {}), expiresAt: new Date(Date.now() + 200 * day),
     } })
+    if (sport === 'NCAAF' && format === 'dynasty') {
+      await db.devyPlayer.create({ data: {
+        sport, name: p.name, normalizedName: p.name.toLowerCase(), position: pos, school: 'T1',
+        cfbdId: 'cfbd-' + p.id, lastRosterYear: season, classYear: 2, draftStatus: 'college',
+      } })
+    }
     // The same bare id in the other namespace must never substitute a different player.
     if (sport === 'NBA' && p.owner) {
       await db.sportsPlayer.create({ data: {
@@ -127,6 +135,13 @@ async function seedOffer(sport: Sport) {
       } })
     }
   }
+  if (sport === 'NCAAB' && format === 'dynasty') {
+    await db.sportsDataCache.create({ data: {
+      cacheKey: 'espn:ncaab:roster:' + (season + 1) + ':1',
+      expiresAt: new Date(Date.now() + day),
+      data: { seasonYear: season + 1, athletes: records.map((p) => ({ id: p.id, fullName: p.name, classYear: 2 })) },
+    } })
+  }
   if (sport !== 'NFL') {
     for (let i = 0; i < 24; i++) {
       await db.sportsGame.create({ data: {
@@ -155,8 +170,13 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it.each(SPORTS)('%s with usable redraft inputs', { timeout: 120_000 }, async (sport) => {
-    const { db, league, records } = await seedOffer(sport)
+  const cases = [
+    ...SPORTS.map((sport) => [sport, 'redraft'] as const),
+    ...(['NCAAF', 'NCAAB', 'SOCCER'] as const).map((sport) => [sport, 'dynasty'] as const),
+  ]
+  // The first case loads all four real entry points and pays the cold transform cost.
+  it.each(cases)('%s with usable %s inputs', { timeout: 300_000 }, async (sport, format) => {
+    const { db, league, records } = await seedOffer(sport, format)
     const [{ createAfLeagueTrade, proposalOneGrade }, { POST }, { executeChimmyTool }, { scanTradeForCollusion }] = await Promise.all([
       import('@/lib/league-trade-engine/tradeService').then(async (service) => ({ ...service, ...(await import('@/lib/league-trade-engine/serverTradeDecision')) })),
       import('@/app/api/trade-evaluator/route'),
@@ -174,6 +194,7 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
     const proposed = await proposalOneGrade(input)
     expect(proposed, JSON.stringify(proposed)).toMatchObject({ graded: true })
     if (!proposed.graded) throw new Error(proposed.reason)
+    if (format === 'dynasty') expect(proposed.lines[0]?.source).toMatch(/-dynasty$/)
 
     const trade = await createAfLeagueTrade(input)
     const sent = h.notices.find((n) => n.type === 'trade_proposed' && n.meta?.tradeId === trade.id)

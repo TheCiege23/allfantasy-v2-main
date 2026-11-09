@@ -79,7 +79,11 @@ export type LeagueScoringRules = {
  * The scoring `buildLeagueStatScorer` applies. Null when the sport has no config.
  * `settings: null` resolves the sport's defaults (no league).
  */
-export function resolveLeagueScoringRules(league: { sport: string; settings: unknown }): LeagueScoringRules | null {
+export function resolveLeagueScoringRules(league: {
+  sport: string
+  settings: unknown
+  verifiedSoccerOwnGoals?: boolean
+}): LeagueScoringRules | null {
   const sport = resolveSportConfigKey(String(league.sport))
   const cfg = tryGetSportConfig(sport)
   if (!cfg) return null
@@ -100,7 +104,7 @@ export function resolveLeagueScoringRules(league: { sport: string; settings: unk
     const settings = league.settings as Record<string, unknown> | null
     const fantrax = settings?.fantrax_settings as { scoringSystem?: Record<string, unknown> | null } | undefined
     if (cfg.sport === 'SOCCER' && fantrax && !storeSavedByPerson(settings?.soccer_scoring_config)) {
-      const scoring = parseFantraxSoccerScoring(fantrax.scoringSystem)
+      const scoring = parseFantraxSoccerScoring(fantrax.scoringSystem, league.verifiedSoccerOwnGoals)
       if (scoring) {
         const groups = Object.values(scoring.positionWeights)
         categories = categories.filter(({ key }) => groups.some((weights) => weights[key] !== undefined))

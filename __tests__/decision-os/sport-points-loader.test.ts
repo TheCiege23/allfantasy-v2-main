@@ -4,13 +4,17 @@
  * NULL `seasonType`, identity rows carrying Rolling Insights ids, and rosters in that id space.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import eplFixture from '../../tests/fixtures/fantrax/epl-public-2026.json'
+import ownGoalTimeline from '../../contracts/thesportsdb/fixtures/v1.lookuptimeline.EPL-own-goal.json'
+import { eplGoalKeyForRollingMatch, parseEplGoalReceipt } from '@/lib/sports-data/soccerOwnGoalEvidence'
 
 const db = vi.hoisted(() => ({
   projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown; computedAt?: Date }>,
   // A game with no `season` stands in for every season; one with a season answers only for it.
   games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date; season?: number }>,
-  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string; fantraxId?: string }>,
+  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string; fantraxId?: string; espnId?: string; mflId?: string; fleaflickerId?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
+  cache: [] as Array<{ cacheKey: string; data: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
   matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
   // `SportsPlayer` age rows, for a dynasty league's multi-season grade.
@@ -39,6 +43,7 @@ vi.mock('@/lib/prisma', () => ({
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
     sportsPlayer: { findMany: vi.fn(async () => db.sportsPlayers) },
     roster: { findMany: vi.fn(async () => db.rosters) },
+    sportsDataCache: { findMany: vi.fn(async () => db.cache) },
     playerGameStat: {
       findFirst: vi.fn(async () => (db.matchRows.length ? { season: Math.max(...db.matchRows.map((r) => r.season)) } : null)),
       findMany: vi.fn(async ({ where }: { where: { season: number } }) => db.matchRows.filter((r) => r.season === where.season)),
@@ -75,6 +80,7 @@ beforeEach(() => {
   db.rosters = []
   db.matchRows = []
   db.sportsPlayers = []
+  db.cache = []
 })
 
 describe('loadSportPointsBase', () => {
@@ -91,6 +97,46 @@ describe('loadSportPointsBase', () => {
       expect(out.ctx.teams).toBe(12)
       expect(sportPointsBasis(out.ctx)).toContain('This league has no verified team count. The grade uses 12 teams.')
     }
+  })
+
+  it.each([
+    ['espn', 'espnId'],
+    ['mfl', 'mflId'],
+    ['fleaflicker', 'fleaflickerId'],
+    ['fantrax', 'fantraxId'],
+  ] as const)('reads %s roster IDs only from %s', async (platform, column) => {
+    nbaPlayer('p1', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('p2', 'Beta', 'C', { points: 30 })
+    nbaPlayer('900', 'Gamma', 'C', { points: 10 })
+    db.identities[0]![column] = '900'
+    db.identities[1]![column] = '901'
+    db.rosters = [{ playerData: { players: ['900', '901'] } }]
+    schedule(['T1', 'T2'], 10, null)
+    const league = { id: 'L', platform, settings: {}, leagueType: 'redraft', leagueSize: 2 }
+    const grader = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!
+    const beta = { kind: 'player' as const, rosterPlayerId: '901' }
+    const alpha = { kind: 'player' as const, rosterPlayerId: '900' }
+    expect(await grader.grade([alpha], [beta])).toMatchObject({ graded: true, giveValue: 300, getValue: 200 })
+    expect(await grader.grade([{ ...alpha, rosterPlayerId: 'unknown', playerId: '901' }], [beta]))
+      .toMatchObject({ graded: false, valuationGap: 'unresolved_player' })
+    db.identities.push({ id: 'unprojected', [column]: '900', rollingInsightsId: null, sleeperId: null })
+    const ambiguous = await loadSportPointsBase({ sport: 'NBA', league, now: NOW })
+    if (!ambiguous.ok) throw new Error(ambiguous.reason)
+    expect(ambiguous.ctx.rosterIndex?.has('900')).toBe(false)
+  })
+
+  it('does not read a Yahoo roster ID as a projection or Sleeper ID', async () => {
+    nbaPlayer('900', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('901', 'Beta', 'C', { points: 30 })
+    schedule(['T1', 'T2'], 10, null)
+    const league = { id: 'L', platform: 'yahoo', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+    const grader = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!
+    expect(await grader.grade([{ kind: 'player', rosterPlayerId: '900', name: 'Alpha' }], [{ kind: 'player', rosterPlayerId: '901' }]))
+      .toMatchObject({ graded: false, valuationGap: 'unresolved_player' })
   })
 
   it('counts upcoming games whose season type is NULL, and leaves out marked preseason games', async () => {
@@ -213,6 +259,44 @@ describe('loadSportPointsBase', () => {
       })!.grade([{ kind: 'player', name: 'ace', playerId: 'ri-ace' }], [{ kind: 'player', name: 'other', playerId: 'ri-other' }])
       console.info('AUDIT SOCCER', JSON.stringify(grade))
       expect(grade).toMatchObject({ graded: true })
+    })
+
+    it('applies the captured Fantrax own-goal penalty only with complete match receipts', async () => {
+      const gameId = '20260228-19-12'
+      const key = eplGoalKeyForRollingMatch(gameId)!
+      const receipt = parseEplGoalReceipt(ownGoalTimeline.response, { eventId: '2267349', home: 'LIV', away: 'WHU', homeScore: 5, awayScore: 2 })
+      expect(receipt?.ownGoals).toEqual([{ player: 'Axel Disasi', club: 'WHU' }])
+      expect(parseEplGoalReceipt(ownGoalTimeline.response, { eventId: '2267349', home: 'LIV', away: 'WHU', homeScore: 4, awayScore: 2 })).toBeNull()
+
+      soccerPlayer('disasi', 'Defender', 2026, '19', 12, { goals: 1 })
+      soccerPlayer('other', 'Defender', 2026, '12', 12, { goals: 0 })
+      for (const [index, row] of db.matchRows.entries()) {
+        const match = index % 12
+        if (match === 0) {
+          row.season = 2025
+          row.gameDate = new Date('2026-02-28T15:00:00Z')
+        }
+        row.gameId = match === 0 ? gameId : `202609${String(match).padStart(2, '0')}-19-12`
+      }
+      db.identities[0]!.canonicalName = 'Axel Disasi'
+      db.identities[0]!.fantraxId = 'fx-disasi'
+      db.identities[1]!.fantraxId = 'fx-other'
+      db.cache = [{ cacheKey: key, data: receipt }, ...Array.from({ length: 11 }, (_, i) => i + 1).map((n) => ({
+        cacheKey: eplGoalKeyForRollingMatch(`202609${String(n).padStart(2, '0')}-19-12`)!, data: { eventId: String(n), ownGoals: [] },
+      }))]
+      schedule(['LIV', 'WHU'], 30, null)
+      const league = {
+        id: 'L', platform: 'fantrax', leagueType: 'redraft', leagueSize: 2,
+        settings: { fantrax_settings: { scoringSystem: eplFixture.info.scoringSystem } },
+      }
+      const verified = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      db.cache.pop()
+      const partial = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      if (!verified.ok) throw new Error(verified.reason)
+      if (!partial.ok) throw new Error(partial.reason)
+      expect(verified.ctx.verifiedSoccerOwnGoals).toBe(true)
+      expect(partial.ctx.verifiedSoccerOwnGoals).toBeUndefined()
+      expect(verified.ctx.board[0]!.perGame).toBeCloseTo(partial.ctx.board[0]!.perGame - 3 / 12)
     })
 
     it('rejects ambiguous Fantrax IDs even when the other identity has no match stats', async () => {

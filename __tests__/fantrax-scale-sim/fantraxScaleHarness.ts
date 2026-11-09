@@ -230,7 +230,7 @@ async function seedSoccerMatchValues(env: ScaleEnv, run: ScaleRun): Promise<void
   await env.db.sportsGame.createMany({ data: Array.from({ length: 18 }, (_, match) =>
     clubs.filter((_, club) => club % 2 === 0).map((club, pair) => ({
       sport: 'SOCCER', externalId: `soc-future-${match}-${pair}`, homeTeam: club, awayTeam: clubs[pair * 2 + 1]!,
-      source: 'sim', season, seasonType: 'regular', startTime: new Date(today + (match + 1) * dayMs),
+      source: 'thesportsdb', season, seasonType: 'regular', startTime: new Date(today + (match + 1) * dayMs),
       expiresAt: new Date(today + 365 * dayMs),
     }))).flat() })
   run.stats.seededValues = { identities: Object.keys(fx.playerMap).length, matchesPerClub: 12, season }
