@@ -620,6 +620,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           leftForReview: repaired.leftForReview,
           newlyMapped: filled.written,
           coverage: filled.coverageAfter,
+          // ESPN ids filled from the same Sleeper directory (lib/player-match/sleeperEspnIdFill.ts).
+          espnIds: filled.espnIds ?? null,
         }
       } catch (identityError) {
         const message = identityError instanceof Error ? identityError.message : String(identityError)
