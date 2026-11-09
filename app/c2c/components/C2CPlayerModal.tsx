@@ -231,7 +231,7 @@ export function C2CPlayerModal({
               {aiLoading ? 'Analyzing…' : 'AI Analysis (AF Commissioner)'}
             </button>
           ) : campus ? (
-            <p className="text-center text-[11px] text-white/35">AI analysis requires AfSub.</p>
+            <p className="text-center text-[11px] text-white/35">AI analysis requires AF Commissioner.</p>
           ) : (
             <p className="text-center text-[11px] text-white/35">Campus AI evaluates college prospects (open a campus player).</p>
           )}

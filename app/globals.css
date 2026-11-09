@@ -176,6 +176,15 @@
   --idp-sack: #ef4444;
   --idp-int: #10b981;
   --idp-td: #f5b800;
+  /* As RGB channels for the `idp-*` Tailwind palette, which needs channels to apply an opacity (see the
+     --cap-*-rgb note below). */
+  --idp-defense-rgb: 220 38 38;
+  --idp-offense-rgb: 37 99 235;
+  --idp-combined-rgb: 124 58 237;
+  --idp-tackle-rgb: 245 158 11;
+  --idp-sack-rgb: 239 68 68;
+  --idp-int-rgb: 16 185 129;
+  --idp-td-rgb: 245 184 0;
   --idp-panel: #0b0d14;
   --idp-border: rgba(255, 255, 255, 0.06);
   --idp-creator-glow: 0 0 8px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.3);
@@ -186,6 +195,14 @@
   --cap-red: #dc2626;
   --cap-dead: #6b7280;
   --cap-contract: #2563eb;
+  /* The same five colours as RGB channels, for the `cap-*` Tailwind palette (tailwind.config.js), which
+     needs channels to apply an opacity: `bg-[color:var(--cap-green)]/25` compiles to NOTHING, which is
+     why the contract timeline, the cap bar's open segment and every cap chip tint were invisible. */
+  --cap-green-rgb: 22 163 74;
+  --cap-amber-rgb: 245 158 11;
+  --cap-red-rgb: 220 38 38;
+  --cap-dead-rgb: 107 114 128;
+  --cap-contract-rgb: 37 99 235;
   --cap-bar-bg: rgba(255, 255, 255, 0.08);
 
   /* Devy League — roster buckets & surfaces */

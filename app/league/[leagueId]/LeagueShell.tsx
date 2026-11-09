@@ -2968,10 +2968,10 @@ function LeagueHeader({
     capSummary && capSummary.totalCap > 0 ? capSummary.availableCap / capSummary.totalCap : 0
   const capPillClass =
     capPct > 0.3
-      ? 'border-[color:var(--cap-green)]/50 bg-[color:var(--cap-green)]/15 text-emerald-100'
+      ? 'border-cap-green/50 bg-cap-green/15 text-emerald-100'
       : capPct > 0.1
-        ? 'border-[color:var(--cap-amber)]/45 bg-[color:var(--cap-amber)]/15 text-amber-100'
-        : 'border-[color:var(--cap-red)]/45 bg-[color:var(--cap-red)]/15 text-red-100'
+        ? 'border-cap-amber/45 bg-cap-amber/15 text-amber-100'
+        : 'border-cap-red/45 bg-cap-red/15 text-red-100'
   return (
     <div
       className="sticky top-0 z-[45] isolate flex-shrink-0 border-b border-[#ff3d81]/[0.14] bg-[#050814]/95 shadow-[0_12px_34px_rgba(0,0,0,0.46)] backdrop-blur-xl"
@@ -3124,10 +3124,10 @@ function LeagueHeader({
                   className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide ${
                     idpViewMode === m
                       ? m === 'offense'
-                        ? 'bg-[color:var(--idp-offense)]/25 text-blue-100'
+                        ? 'bg-idp-offense/25 text-blue-100'
                         : m === 'defense'
-                          ? 'bg-[color:var(--idp-defense)]/25 text-red-100'
-                          : 'bg-[color:var(--idp-combined)]/25 text-violet-100'
+                          ? 'bg-idp-defense/25 text-red-100'
+                          : 'bg-idp-combined/25 text-violet-100'
                       : 'text-white/45 hover:bg-white/[0.04]'
                   }`}
                   data-testid={`idp-view-${m}`}
