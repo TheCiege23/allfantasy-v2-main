@@ -47,7 +47,7 @@ export function createSportPointsGrader(
   return {
     async grade(give, get) {
       const loaded = await baseOnce()
-      if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null }
+      if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null, ...(loaded.valuationGap ? { valuationGap: loaded.valuationGap } : {}) }
       const { ctx } = loaded
       // An NBA, NHL or MLB dynasty league: five seasons and draft picks (`./sportDynastyValue.ts`).
       if (ctx.dynasty && isDynastyGradedSport(ctx.sport)) {

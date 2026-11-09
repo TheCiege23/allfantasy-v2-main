@@ -10,7 +10,8 @@ import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcValuesDbFirst, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
+import { fantasyCalcSettingsForChart, LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
@@ -428,12 +429,14 @@ export async function GET(
     : {}
   const chartTeams = Number(league?.leagueSize) || 12
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
-  const chartSettings = {
-    isDynasty: pricesOnDynastyChart(marketContext.variant),
-    numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
-    numTeams: chartTeams,
-    ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
-  }
+  const chartIsDynasty = pricesOnDynastyChart(marketContext.variant)
+  const largeLeagueRookiePicks = league?.sport === 'NFL' && chartIsDynasty && chartTeams > LARGE_LEAGUE_PICK_THRESHOLD
+  const chartSettings = fantasyCalcSettingsForChart({
+    chartIsDynasty,
+    isSuperFlex: marketContext.variant.superflex,
+    leagueSize: chartTeams,
+    pprNfl: marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0,
+  })
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -782,7 +785,9 @@ export async function GET(
       ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
       : Promise.resolve(new Map()),
     // One chart read supplies both players and picks, using the evaluator's profile and freshness.
-    league ? getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 }).catch(() => null)
+    league ? (largeLeagueRookiePicks
+      ? readFantasyCalcValuesFromDb(chartSettings, { allowStale: false }).then(row => row.players)
+      : getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 })).catch(() => null)
       : Promise.resolve(null),
     loadLeagueTradeValues({
       prisma,
@@ -824,7 +829,8 @@ export async function GET(
   const pickPricing = {
     fcPlayers: marketRows,
     nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
-      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
+      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows,
+      largeLeagueRookiePicks },
   }
   // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
   // call a pick with no market "could not be loaded".

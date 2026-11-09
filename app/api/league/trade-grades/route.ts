@@ -7,6 +7,8 @@ import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   MULTI_TEAM_GRADE_WITHHELD,
   isMultiTeamTrade,
@@ -73,8 +75,8 @@ export async function GET(req: NextRequest) {
         proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true,
         proposerRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
         receiverRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
-        assets: { select: { playerName: true, assetType: true, pickSeason: true, pickRound: true, fromRosterId: true, toRosterId: true } },
-        valueSnapshot: { select: { grade: true, confidenceScore: true, payload: true } },
+        assets: { select: { playerId: true, playerName: true, assetType: true, pickSeason: true, pickRound: true,
+          fromRosterId: true, toRosterId: true, metadata: true } },
       },
     })
     const page = proposals.slice(0, 50)
@@ -84,8 +86,10 @@ export async function GET(req: NextRequest) {
       : []
     const assetLabel = (a: { playerName: string | null; assetType: string; pickSeason: number | null; pickRound: number | null }) =>
       a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)
+    let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
+    const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null))
     return NextResponse.json({
-      proposals: page.map(p => {
+      proposals: await Promise.all(page.map(async p => {
         if (isMultiTeamTrade(p)) {
           /*
            * A 3- or 4-team trade: every team and what each gives and gets. Not graded, ever: the
@@ -109,17 +113,25 @@ export async function GET(req: NextRequest) {
             teams: moves.map(m => ({ rosterId: m.rosterId, name: nameOf(m.rosterId), gives: m.gives.map(assetLabel), gets: m.gets.map(assetLabel) })),
           }
         }
-        const payload = p.valueSnapshot?.payload as { grade?: { insufficientData?: boolean; bullets?: string[] } } | null
-        const graded = p.valueSnapshot && p.valueSnapshot.confidenceScore >= 60 && payload?.grade?.insufficientData === false
+        // Use the same proposer perspective and inputs as the Trade Center list.
+        const grade = p.assets.some(a => a.assetType === 'zombie_item')
+          ? { graded: false as const, reason: 'The future scoring estimate does not yet include infection, revival, loot, or cash payout outcomes.' }
+          : p.assets.length === 0
+            ? { graded: false as const, reason: 'This proposal has no assets on record.' }
+            : await gradeDeal(await grader(), {
+                give: gradeInputsFromRedraftAssets(p.assets.filter(a => a.fromRosterId === p.proposerRosterId)),
+                get: gradeInputsFromRedraftAssets(p.assets.filter(a => a.toRosterId === p.proposerRosterId)),
+                viewerSide: false,
+              }).catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.' }))
         return {
           id: p.id, status: p.status, createdAt: p.createdAt,
           title: `${p.proposerRoster.teamName || p.proposerRoster.ownerName} → ${p.receiverRoster.teamName || p.receiverRoster.ownerName}`,
           involvesYou: p.proposerRoster.ownerId === userId || p.receiverRoster.ownerId === userId,
           assets: p.assets.map(assetLabel),
-          grade: graded ? p.valueSnapshot!.grade : null,
-          explanation: graded ? (payload?.grade?.bullets ?? []).join(' ') || 'Snapshot of trade fairness when proposed.' : 'Not enough verified valuation data to grade this proposal.',
+          grade: grade.graded ? grade.letter : null,
+          explanation: grade.graded ? grade.recommendation : grade.reason,
         }
-      }),
+      })),
       nextCursor: proposals.length > 50 ? proposals[49].id : null,
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   }

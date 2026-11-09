@@ -46,7 +46,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   const seasonId = season.id as string
   const seasonYear = Number(season.season)
   const sport = run.sport
-  const daily = sport !== 'NFL'
+  const daily = sport !== 'NFL' && sport !== 'NCAAF'
 
   const { buildLeagueStatScorer, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } = await import('@/lib/redraft/scoringEngine')
   const { updateStandings } = await import('@/lib/redraft/standingsEngine')
@@ -68,6 +68,9 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
 
   // ── Stat lines, as the ingest stores them ──
   const playerRows = () => (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => rosterIds.includes(p.rosterId) && !p.droppedAt)
+  // The ingest writes each line under the roster player's own sport, which is what scoring reads:
+  // college football's season and roster rows say `NCAAFB` where the league says `NCAAF`.
+  const statSport = (p: { sport?: string | null }) => p.sport || sport
   const writeWeek = async (week: number): Promise<boolean> => {
     const window = daily ? resolveDailySportWeekWindow(sport as never, seasonYear, week) : null
     if (daily && !window) {
@@ -78,7 +81,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       const rng = rngFor(seasonYear, `${p.playerId}:${week}`)
       const s = skill.get(p.rosterId) ?? 5
       if (!daily) {
-        await db.playerWeeklyScore.create({ data: { playerId: p.playerId, week, season: seasonYear, sport, stats: nflWeekStats(p.position, rng, s), isFinalized: true } })
+        await db.playerWeeklyScore.create({ data: { playerId: p.playerId, week, season: seasonYear, sport: statSport(p), stats: nflWeekStats(p.position, rng, s), isFinalized: true } })
         continue
       }
       const normalize = dailyNormalizer(sport as never)
@@ -88,12 +91,12 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
         if (!line) continue
         lines.push(line)
         await db.playerDailyScore.create({
-          data: { playerId: p.playerId, sport, season: seasonYear, week, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, gamesPlayed: 1, isFinalized: true },
+          data: { playerId: p.playerId, sport: statSport(p), season: seasonYear, week, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalize(line).stats, gamesPlayed: 1, isFinalized: true },
         })
       }
       // The ingest also rolls the days into a weekly line; a league scored by weekly lineup reads that.
       await db.playerWeeklyScore.create({
-        data: { playerId: p.playerId, week, season: seasonYear, sport, stats: aggregateWeeklyStats(lines, normalize).stats, isFinalized: true },
+        data: { playerId: p.playerId, week, season: seasonYear, sport: statSport(p), stats: aggregateWeeklyStats(lines, normalize).stats, isFinalized: true },
       })
     }
     return true

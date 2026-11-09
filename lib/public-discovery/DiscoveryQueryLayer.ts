@@ -13,7 +13,8 @@ import {
   readExternalListing,
 } from "./externalListing"
 import { readLeagueVibes } from "./vibes"
-import { leaguesWhoseOwnerCommissions } from "./ownerCommissionerTeams"
+import { leaguesCommissionedByAccount, listingAccountIds } from "./ownerCommissionerTeams"
+import { isSystemLeagueOwner } from "@/lib/league-import/systemLeagueOwner"
 import { isPrivateListingOpen, isPrivateRequestableLeague, PRIVATE_JOIN_MODE } from "./privateLeagueRequests"
 import { LEAGUE_PUBLIC_DASHBOARD_KEY, LEAGUE_VISIBILITY_KEY, leagueAudience } from "@/lib/league-privacy/leagueAudience"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
@@ -294,13 +295,24 @@ export async function queryPublicFantasyLeagueCards(options: {
     prisma as unknown as Prisma.TransactionClient,
     leagues.map((l) => l.id)
   )
-  const leaguesRun = await countLeaguesRunByCommissioner(leagues.map((l) => l.userId))
-  const ownerCommissioned = await leaguesWhoseOwnerCommissions(
-    leagues.filter((l) => !isNativePlatform(l.platform)).map((l) => ({ id: l.id, userId: l.userId }))
+  // Whose listing each league is: the owner, or for a public ESPN league owned by the AllFantasy
+  // system account, its proven commissioner (ownerCommissionerTeams.ts). The card names THAT person;
+  // the system account is never shown as a commissioner.
+  const accounts = await listingAccountIds(leagues.map((l) => ({ id: l.id, userId: l.userId })))
+  const leaguesRun = await countLeaguesRunByCommissioner([...accounts.values()])
+  const importedIds = new Set(leagues.filter((l) => !isNativePlatform(l.platform)).map((l) => l.id))
+  const ownerCommissioned = await leaguesCommissionedByAccount(
+    new Map([...accounts].filter(([id]) => importedIds.has(id)))
   )
+  const listedBy = await loadListingUsers(
+    leagues.filter((l) => isSystemLeagueOwner(l.userId)).map((l) => accounts.get(l.id) ?? "")
+  )
+  const shownOwner = (league: (typeof leagues)[number]) =>
+    isSystemLeagueOwner(league.userId) ? listedBy.get(accounts.get(league.id) ?? "") ?? null : league.user
 
   return leagues
     .map((league): DiscoveryCard | null => {
+      const owner = shownOwner(league)
       const settings = toRecord(league.settings)
       const native = isNativePlatform(league.platform)
       // A native league is joined here with its code; an imported one is listed by its verified
@@ -322,7 +334,7 @@ export async function queryPublicFantasyLeagueCards(options: {
       if (
         query &&
         !matchesSearchText(
-          [name, description, league.user?.displayName, league.user?.username],
+          [name, description, owner?.displayName, owner?.username],
           query
         )
       ) {
@@ -369,8 +381,8 @@ export async function queryPublicFantasyLeagueCards(options: {
         listingNote: external?.note ?? null,
         entryFee: leagueEntryFee(settings),
         detailUrl: `${baseUrl}/leagues/${league.id}`,
-        ownerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
-        ownerAvatar: league.user?.avatarUrl ?? null,
+        ownerName: owner?.displayName ?? owner?.username ?? "Commissioner",
+        ownerAvatar: owner?.avatarUrl ?? null,
         creatorSlug: null,
         creatorName: null,
         tournamentName: null,
@@ -394,16 +406,33 @@ export async function queryPublicFantasyLeagueCards(options: {
             ? String(settings.draftDate)
             : null),
         timezone: league.timezone ?? league.leagueSettings?.timezone ?? null,
-        commissionerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
+        commissionerName: owner?.displayName ?? owner?.username ?? "Commissioner",
         aiFeatures: resolveAiFeatures(settings),
         leagueTier,
         vibes: readLeagueVibes(settings),
-        commissionerUsername: league.user?.username ?? null,
-        commissionerLeaguesRun: leaguesRun.get(league.userId) ?? null,
-        commissionerSinceYear: league.user?.createdAt ? league.user.createdAt.getUTCFullYear() : null,
+        commissionerUsername: owner?.username ?? null,
+        commissionerLeaguesRun: leaguesRun.get(accounts.get(league.id) ?? "") ?? null,
+        commissionerSinceYear: owner?.createdAt ? owner.createdAt.getUTCFullYear() : null,
       }
     })
     .filter((card): card is DiscoveryCard => card != null)
+}
+
+/** The people a system-owned league's card names (see shownOwner). A failed read names nobody. */
+async function loadListingUsers(userIds: string[]) {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  const out = new Map<string, { username: string | null; displayName: string | null; avatarUrl: string | null; createdAt: Date | null }>()
+  if (ids.length === 0) return out
+  try {
+    const rows = await prisma.appUser.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, displayName: true, avatarUrl: true, createdAt: true },
+    })
+    for (const row of rows) out.set(row.id, row)
+  } catch {
+    // The card falls back to "Commissioner".
+  }
+  return out
 }
 
 /**

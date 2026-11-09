@@ -5,14 +5,14 @@ import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 
 const PILL_STYLES: Record<string, string> = {
-  SOLO: 'border-[color:var(--idp-tackle)]/50 bg-[color:var(--idp-tackle)]/15 text-amber-100',
+  SOLO: 'border-idp-tackle/50 bg-idp-tackle/15 text-amber-100',
   AST: 'border-white/20 bg-white/10 text-white/75',
-  SACK: 'border-[color:var(--idp-sack)]/50 bg-[color:var(--idp-sack)]/15 text-red-100',
-  INT: 'border-[color:var(--idp-int)]/50 bg-[color:var(--idp-int)]/15 text-emerald-100',
+  SACK: 'border-idp-sack/50 bg-idp-sack/15 text-red-100',
+  INT: 'border-idp-int/50 bg-idp-int/15 text-emerald-100',
   PD: 'border-violet-400/40 bg-violet-500/15 text-violet-100',
   FF: 'border-orange-400/40 bg-orange-500/15 text-orange-100',
   FR: 'border-amber-800/50 bg-amber-900/30 text-amber-100',
-  TD: 'border-[color:var(--idp-td)]/60 bg-[color:var(--idp-td)]/20 text-[color:var(--idp-td)]',
+  TD: 'border-idp-td/60 bg-idp-td/20 text-[color:var(--idp-td)]',
 }
 
 export type IdpContractChip =
@@ -126,10 +126,10 @@ export function IDPPlayerCard({
   const p = players[playerId]
 
   const chipStyles: Record<IdpContractChip, string> = {
-    ACTIVE: 'border-[color:var(--cap-contract)]/45 bg-[color:var(--cap-contract)]/15 text-blue-100',
-    EXPIRING: 'border-[color:var(--cap-amber)]/45 bg-[color:var(--cap-amber)]/12 text-amber-100',
+    ACTIVE: 'border-cap-contract/45 bg-cap-contract/15 text-blue-100',
+    EXPIRING: 'border-cap-amber/45 bg-cap-amber/12 text-amber-100',
     TAGGED: 'border-amber-400/50 bg-amber-500/15 text-amber-50',
-    DEAD_CAP: 'border-[color:var(--cap-dead)]/40 bg-white/[0.04] text-white/45',
+    DEAD_CAP: 'border-cap-dead/40 bg-white/[0.04] text-white/45',
   }
 
   return (
@@ -146,7 +146,7 @@ export function IDPPlayerCard({
       className="relative rounded-lg border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-2 shadow-sm transition hover:border-red-500/25"
       data-testid={`idp-card-${playerId}`}
     >
-      <span className="absolute right-2 top-2 rounded border border-[color:var(--idp-defense)]/45 bg-[color:var(--idp-defense)]/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-100">
+      <span className="absolute right-2 top-2 rounded border border-idp-defense/45 bg-idp-defense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-100">
         IDP
       </span>
       <div className="flex gap-2 pr-12">

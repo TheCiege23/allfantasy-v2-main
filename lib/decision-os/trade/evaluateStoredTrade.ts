@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { loadTradeRosterIds } from './tradePlayers'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { evaluateCanonicalTrade } from './canonicalEvaluator'
 import type { TradeAssetSummary } from './dco'
@@ -8,7 +10,7 @@ import { evaluateTrade, type StoredTradeContext, type TradeEvaluationReceipt } f
 import { loadTrade, type LoadTradeDeps } from './loadTrade'
 import { loadTeamBenefit } from './teamBenefitContext'
 import type { TeamBenefitResult } from './teamBenefit'
-import type { GradeInputs } from './tradeGradeInputs'
+import { gradePlayerFromRoster, type GradeInputs } from './tradeGradeInputs'
 import type { LoadedTrade, LoadedTradeAsset, TradeRef, TradeRefusal, TradeSide } from './tradeRecord'
 
 /**
@@ -70,7 +72,7 @@ export function gradeInputsOf(assets: readonly LoadedTradeAsset[]): GradeInputs 
   return {
     assets: assets.map((a) =>
       a.kind === 'player'
-        ? { kind: 'player' as const, name: a.name, ...(a.playerId ? { rosterPlayerId: a.playerId } : {}) }
+        ? gradePlayerFromRoster({ id: a.playerId, name: a.name, position: a.position, space: a.idSpace, identity: a.identity })
         : a.kind === 'pick'
           ? { kind: 'pick' as const, year: a.season, round: a.round, label: a.label }
           : { kind: 'faab' as const, amount: a.amount },
@@ -107,14 +109,15 @@ export function withCanonicalRosters(trade: LoadedTrade, world: CanonicalWorld |
 export function checkRosters(
   trade: LoadedTrade,
   world: CanonicalWorld | null,
+  rosterIds?: ReadonlyMap<string, string[]> | null,
 ): { check: StoredTradeContext['rosterCheck']; moved: string[] } {
   if (trade.status !== 'proposed') return { check: 'not_applicable', moved: [] }
   if (!world || !trade.sideA.rosterId || !trade.sideB.rosterId) return { check: 'unverified', moved: [] }
   const moved: string[] = []
   for (const s of [trade.sideA, trade.sideB]) {
-    const roster = world.rosters.find((r) => r.rosterId === s.rosterId)
-    if (!roster) return { check: 'unverified', moved: [] }
-    const held = new Set(roster.playerIds)
+    const ids = rosterIds !== undefined ? rosterIds?.get(s.rosterId!) : world.rosters.find((r) => r.rosterId === s.rosterId)?.playerIds
+    if (!ids) return { check: 'unverified', moved: [] }
+    const held = new Set(ids)
     for (const g of s.gives) if (g.kind === 'player' && !held.has(g.playerId)) moved.push(g.name)
   }
   return { check: moved.length ? 'unverified' : 'passed', moved }
@@ -159,7 +162,11 @@ export async function evaluateStoredTrade(
   const world = await d.resolveWorld(args.leagueId).catch(() => null)
   const trade = withCanonicalRosters(loaded.trade, world)
 
-  const roster = checkRosters(trade, world)
+  const foreign = isForeignIdSpace(trade.origin.platform)
+  const foreignRosterIds = foreign && trade.status === 'proposed' && trade.sideA.rosterId && trade.sideB.rosterId
+    ? await loadTradeRosterIds(args.leagueId, [trade.sideA.rosterId, trade.sideB.rosterId]).catch(() => null)
+    : foreign ? null : undefined
+  const roster = checkRosters(trade, world, foreignRosterIds)
   if (roster.moved.length) {
     return {
       ok: false,
@@ -188,7 +195,7 @@ export async function evaluateStoredTrade(
   }
 
   const canonical =
-    world && me.rosterId && them.rosterId
+    !foreign && world && me.rosterId && them.rosterId
       ? {
           proposerRosterId: me.rosterId,
           receiverRosterId: them.rosterId,

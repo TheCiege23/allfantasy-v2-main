@@ -17,6 +17,7 @@ const MAX_TEAMS_BY_SPORT: Record<string, number> = {
 }
 
 const NFL_TEAM_COUNT_OPTIONS = [16, 20, 24] as const
+export const NFL_DYNASTY_TEAM_COUNTS = [4, 6, 8, 10, 12, 14, 16, 150] as const
 
 /**
  * The cast sizes a NEW Survivor league is offered (owner's call, 2026-10-20): 12, 15, 16, 18, 20,

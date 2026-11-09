@@ -41,6 +41,8 @@ import CfpBowlSchedule from "./CfpBowlSchedule"
 import CfpProjectionPreview from "./CfpProjectionPreview"
 import { getPlayoffBracketViewClient } from "@/lib/playoffs/playoffClientApi"
 import { matchCfpLiveScore, type CfpLiveScore } from "@/lib/playoffs/cfpLiveScores"
+import { cfpBowlCrestKey } from "@/lib/playoffs/cfpBowlCrest"
+import CfpBowlCrest from "./CfpBowlCrest"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -407,9 +409,12 @@ export default function MlbBracketBoard({
     const cupState = rollingCup || (sport === "ncaaf" && sameTeams) ? cupGameState(s) : null
     const showScore = cupState === "live" || cupState === "final"
     const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: clientTime ? undefined : "UTC" }) : "Time TBA"
+    const metaLabel = s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))
+    // Our own crest per CFP bowl (never the official mark) leads the game header, above the teams.
+    const crest = sport === "ncaaf" ? cfpBowlCrestKey(s.gameLabel) ?? (s.round === "cfp_championship" ? "title" : null) : null
     return (
       <div id={`playoff-series-${s.id}`} className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
-        {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></button> : null}
+        {singleGame ? <button type="button" className={crest ? "af-pb-game-meta has-crest" : "af-pb-game-meta"} data-bowl={crest ?? undefined} onClick={() => setLiveNode(s.id)}>{crest ? <CfpBowlCrest bowl={crest} size={32} decorative /> : null}<span className="af-pb-game-meta-text">{metaLabel}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></span></button> : null}
         <TeamRow
           series={s}
           side="home"

@@ -175,17 +175,22 @@ const FOOTBALL_SLOT_CODES: Record<string, string> = {
   RWT: 'FLEX', SFX: 'SUPER_FLEX',
   DL: 'DL', DE: 'DE', DT: 'DT', LB: 'LB', DB: 'DB', CB: 'CB', S: 'S', ID: 'IDP_FLEX',
 }
-const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB', Record<string, string>> = {
+const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB' | 'SOCCER', Record<string, string>> = {
   NFL: FOOTBALL_SLOT_CODES,
   NCAAF: FOOTBALL_SLOT_CODES,
+  SOCCER: { G: 'GKP', D: 'DEF', M: 'MID', F: 'FWD' },
   MLB: {
     C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', CI: 'CI', MI: 'MI',
     SP: 'SP', RP: 'RP', P: 'P', UT: 'UTIL', UTIL: 'UTIL',
   },
 }
 
+export function fantraxSoccerPosition(position: string): string {
+  return LINEUP_SLOT_CODES.SOCCER[position] ?? position
+}
+
 /**
- * A Fantrax NFL, college-football or MLB league's starting lineup, as `SLOT:COUNT` entries.
+ * A Fantrax league's starting lineup, as `SLOT:COUNT` entries.
  *
  * 🛑 ALL OR NOTHING, unlike the NBA/NHL mapper. These slots feed `importedLineupTemplateSlots`, which
  * trusts a pair list as the whole lineup — so a lineup with one seat dropped would be a smaller lineup
@@ -194,7 +199,7 @@ const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB', Record<string, string>>
  * lineup" resolution.
  */
 export function mapFantraxLineupSlots(
-  sport: 'NFL' | 'NCAAF' | 'MLB',
+  sport: 'NFL' | 'NCAAF' | 'MLB' | 'SOCCER',
   rosterInfo: unknown,
 ): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
   const mapped = mapSlots(LINEUP_SLOT_CODES[sport], sport, rosterInfo)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
+import { listingAccountId, ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -67,7 +67,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   ) {
     return NextResponse.json({ error: "This league isn't taking requests right now." }, { status: 404 })
   }
-  if (league.userId === userId) return NextResponse.json({ error: "This is your league." }, { status: 400 })
+  // Whose listing it is: the owner, or the proven commissioner of a system-owned ESPN league. The
+  // request and its notification go to them, never to the system account.
+  const commissionerId = await listingAccountId(league)
+  if (!commissionerId) {
+    return NextResponse.json({ error: "This league isn't taking requests right now." }, { status: 404 })
+  }
+  if (commissionerId === userId) return NextResponse.json({ error: "This is your league." }, { status: 400 })
 
   if (isPaidLeagueSettings(league.settings)) {
     const paidGeo = await paidLeagueGeoVerdict(req, userId)
@@ -113,7 +119,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const requester = await prisma.appUser.findUnique({ where: { id: userId }, select: { displayName: true, username: true } })
   const who = requester?.displayName ?? requester?.username ?? "A player"
   await createPlatformNotification({
-    userId: league.userId,
+    userId: commissionerId,
     leagueId,
     type: "find_league_spot_request",
     title: `${who} wants a spot in ${league.name?.trim() || "your league"}`,

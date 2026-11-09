@@ -268,7 +268,7 @@ async function withPlayers(
       missing.push(`player ${asset.playerId} (${p && !p.ok && p.why === 'ambiguous' ? 'matches more than one player' : 'no player found'})`)
       return null
     }
-    return { kind: 'player', playerId: asset.playerId, name: p.name, position: p.position }
+    return { kind: 'player', playerId: asset.playerId, name: p.name, position: p.position, idSpace: space, identity: p }
   }
   const a = raw.sideA.gives.map(toLoaded)
   const b = raw.sideB.gives.map(toLoaded)
@@ -397,7 +397,7 @@ export async function loadTrade(
     proposedAt = iso(row.proposedAt ?? row.firstSeenAt)
     completedAt = status === 'completed' ? iso(row.respondedAt) : null
     rosterIdFor = () => null // External roster ids: mapped through the canonical world by the evaluator.
-    space = 'sleeper'
+    space = playerIdSpaceFor({ platform: row.provider, sport: league.sport })
   }
 
   const players = await withPlayers(raw, league, space, d.resolvePlayers)

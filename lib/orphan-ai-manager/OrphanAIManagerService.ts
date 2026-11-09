@@ -202,6 +202,9 @@ export async function executeDraftPickForOrphan(
   if (!uiSettings.orphanTeamAiManagerEnabled) {
     return { success: false, error: 'Orphan team AI manager is not enabled for this league.' }
   }
+  if (uiSettings.executionMode === 'offline') {
+    return { success: false, error: 'This is an offline draft: the commissioner enters every pick.' }
+  }
 
   const snapshot = await buildSessionSnapshot(leagueId)
   if (!snapshot || snapshot.status !== 'in_progress' || !snapshot.currentPick) {

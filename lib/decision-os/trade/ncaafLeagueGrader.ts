@@ -41,7 +41,7 @@ export function createNcaafLeagueGrader(
       if (pick) return { graded: false, reason: pick, basis: null }
       if (!isRedraft) return null
       const loaded = await baseOnce()
-      if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null }
+      if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null, ...(loaded.valuationGap ? { valuationGap: loaded.valuationGap } : {}) }
       const { rostered, perGameByRosterId, window } = loaded.base
       const replacementByPosition = await loaded.base.replacementFor(ncaafDealPositions([...give, ...get], rostered, perGameByRosterId))
       return gradeNcaafRedraftDeal({ give, get, ctx: { rostered, perGameByRosterId, replacementByPosition, window } })

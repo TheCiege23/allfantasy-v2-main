@@ -28,6 +28,15 @@ describe("CFP bowl schedule", () => {
     expect(screen.getByText("Jan 1, 2027, 12:00 PM ET")).toBeInTheDocument()
     expect(screen.getByText("AT&T Stadium · Arlington, Texas")).toBeInTheDocument()
   })
+  it("puts each bowl's own crest at the top of its card", () => {
+    render(<CfpBowlSchedule season={2026} series={[]} />)
+    const schedule = screen.getByTestId("cfp-bowl-schedule")
+    const crests = Array.from(schedule.querySelectorAll("svg.af-pb-crest")).map((svg) => svg.getAttribute("data-bowl"))
+    expect(crests).toEqual(["fiesta", "cotton", "peach", "rose", "orange", "sugar"])
+    // Decorative: the bowl name beside it already says which bowl this is.
+    expect(schedule.querySelector("svg.af-pb-crest")?.getAttribute("aria-hidden")).toBe("true")
+  })
+
   it("does not present 2026 bowl assignments as another season's schedule", () => {
     const { container } = render(<CfpBowlSchedule season={2027} series={[]} />)
     expect(container).toBeEmptyDOMElement()

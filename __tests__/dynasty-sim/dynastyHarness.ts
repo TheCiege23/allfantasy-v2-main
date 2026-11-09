@@ -16,7 +16,7 @@
 import type { InMemoryPrisma } from '../redraft-season-simulation/inMemoryPrisma'
 import { rowsOf } from '../redraft-season-simulation/inMemoryPrisma'
 
-export type DynastySport = 'NFL' | 'NBA' | 'NHL' | 'MLB'
+export type DynastySport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 export type StartupDraftKind = 'snake' | 'snake_3rr' | 'linear' | 'auction' | 'auto' | 'offline'
 
 export type SimEnv = {
@@ -27,7 +27,7 @@ export type SimEnv = {
 export type Finding = {
   /** Stable id, e.g. `DRAFT_PICK_REFUSED`. */
   code: string
-  stage: 'create' | 'join' | 'draft' | 'finalize'
+  stage: 'create' | 'join' | 'draft' | 'finalize' | 'season'
   message: string
   detail?: Record<string, unknown>
 }
@@ -191,6 +191,102 @@ export async function joinManagers(env: SimEnv, run: LeagueRun): Promise<void> {
 
 export type PoolPlayer = { id: string; name: string; position: string; team: string; adp: number }
 
+/** Match the real stored projection shapes for sports with a native dynasty value model. */
+/**
+ * What the app holds for real players so a trade can be graded, per sport:
+ *   - NBA, NHL, MLB, NCAAB: `AFProjectionSnapshot` rows with per-game rates, linked through
+ *     `PlayerIdentityMap` (lib/decision-os/trade/sportPointsContext.ts `loadSnapshotLines`);
+ *   - SOCCER: two seasons of per-match `PlayerGameStat` rows (`loadSoccerLines`);
+ *   - NCAAF: snapshots keyed on a CFBD id, reached from the roster id through the identity map
+ *     (lib/core-app/ncaafProjections.ts), plus a schedule with regular-season weeks;
+ *   - every sport: an upcoming schedule, so the games left can be counted.
+ * NFL grades from the FantasyCalc chart the test serves, so it needs none of this.
+ */
+export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]) {
+  if (!run.leagueId || run.sport === 'NFL') return
+  const { sport } = run
+  const league = await env.db.league.findUnique({ where: { id: run.leagueId }, select: { season: true } })
+  const season = Number(league?.season ?? new Date().getUTCFullYear())
+  const now = Date.now()
+  const day = 86_400_000
+  const points = (p: PoolPlayer) => Math.max(5, 42 - p.adp / 4)
+  const identity = (p: PoolPlayer, id: string, extra: Record<string, unknown> = {}) => ({
+    id, canonicalName: p.name, normalizedName: p.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    sport, position: p.position, rollingInsightsId: p.id, ...extra,
+  })
+
+  if (sport === 'NCAAF') {
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, 'sim-value-' + p.id, { cfbdId: 'sim-cfbd-' + p.id })) })
+    await env.db.aFProjectionSnapshot.createMany({ data: pool.map((p) => {
+      const pts = points(p)
+      return {
+        playerId: 'sim-cfbd-' + p.id, playerName: p.name, sport, position: p.position, season,
+        baselineProjection: pts, afProjection: pts, snapshotLookupKey: 'sim-value-' + p.id,
+        adjustmentFactors: {
+          perGameRates: { pass_yd: pts * 10, pass_td: pts / 15, rush_yd: pts * 3, rush_td: pts / 40, rec: pts / 8, rec_yd: pts * 2, rec_td: pts / 50, fg: pts / 10, fgm: pts / 10, xpm: pts / 15 },
+          confidenceReasons: ['12 games in the season sample'], sourceSeason: season,
+        },
+      }
+    }) })
+  } else if (sport === 'SOCCER') {
+    // The board is built from match rows, and named through the identity row with the player's own id.
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, p.id)) })
+    const role = (position: string) => {
+      const p = position.toUpperCase()
+      if (p.startsWith('G')) return { group: 'goalkeepers', position: 'Goalkeeper' }
+      if (p.startsWith('D')) return { group: 'fielders', position: 'Defender' }
+      if (p.startsWith('M')) return { group: 'fielders', position: 'Midfielder' }
+      return { group: 'fielders', position: 'Forward' }
+    }
+    const rows: Record<string, unknown>[] = []
+    for (const s of [season - 1, season]) {
+      for (const p of pool) {
+        const pts = points(p)
+        const r = role(p.position)
+        for (let m = 1; m <= 4; m += 1) {
+          const stats = r.group === 'goalkeepers'
+            ? { saves: Math.round(pts / 8), goals_conceded: 1, clean_sheets: m % 2, minutes_played: 90, goals: 0, assists: 0 }
+            : { goals: Math.round(pts / 30), assists: Math.round(pts / 40), shots_on_goal: Math.round(pts / 12), shots_attempted: Math.round(pts / 8), minutes_played: 90, clean_sheets: r.position === 'Defender' ? m % 2 : 0 }
+          const map = { ...r, positionCategory: null, scored: false, status: null, stats }
+          rows.push({
+            playerId: p.id, gameId: `sim-value-${s}-${m}-${p.team}`, season: s, weekOrRound: m, sportType: 'SOCCER',
+            statPayload: map, normalizedStatMap: map, team: p.team, gameDate: new Date(Date.UTC(s, 7, 7 * m)), source: 'simulation',
+          })
+        }
+      }
+    }
+    await env.db.playerGameStat.createMany({ data: rows as never })
+  } else {
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, 'sim-value-' + p.id)) })
+    await env.db.aFProjectionSnapshot.createMany({ data: pool.map((p) => {
+      const pts = points(p)
+      const perGameRates = sport === 'NHL'
+        ? { goals: pts / 20, assists: pts / 20, shots: pts / 5, saves: pts, goals_against: 2 }
+        : sport === 'MLB'
+          ? { ab: 4, h: pts / 20, hr: pts / 80, r: pts / 40, rbi: pts / 40, ip: 5, outs: 15, so: pts / 5, er: 2 }
+          : { points: pts, total_rebounds: pts / 4, assists: pts / 5 }
+      return {
+        playerId: 'sim-value-' + p.id, playerName: p.name, sport, position: p.position, season,
+        baselineProjection: pts, afProjection: pts, snapshotLookupKey: 'sim-value-' + p.id,
+        adjustmentFactors: { perGameRates, confidenceReasons: ['60 games in the season sample'], sourceSeason: season },
+      }
+    }) })
+  }
+
+  const teams = [...new Set(pool.map((p) => p.team))]
+  await env.db.sportsGame.createMany({ data: Array.from({ length: 24 }, (_, i) => teams
+    .filter((_, index) => index % 2 === 0 && teams[index + 1])
+    .map((team) => ({
+      sport, externalId: 'sim-value-' + i + '-' + team, homeTeam: team,
+      awayTeam: teams[teams.indexOf(team) + 1], source: 'simulation', season, seasonType: 'regular',
+      // College football counts the weeks left from the schedule's regular-season weeks.
+      ...(sport === 'NCAAF' ? { week: Math.min(i + 1, 13) } : {}),
+      startTime: new Date(now + (i + 1) * (sport === 'NCAAF' ? 7 : 1) * day), expiresAt: new Date(now + 200 * day),
+    }))).flat() })
+  run.stats.seededTradeValues = { sport, season, players: pool.length }
+}
+
+
 export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolPlayer[]> {
   if (!run.leagueId) return []
   const roster = (run.stats.enforcedRoster as EnforcedRoster | undefined) ?? (await enforcedRoster(run.leagueId))
@@ -254,7 +350,7 @@ function chooseFor(pool: PoolPlayer[], taken: Set<string>, roster: EnforcedRoste
   return [...open.filter((p) => (mustFill ? missing.includes(p.position) : (mine[p.position] ?? 0) < capFor(p.position))), ...open]
 }
 
-export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]): Promise<void> {
+export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPlayer[], pickLimit?: number): Promise<void> {
   if (!run.leagueId) return
   const leagueId = run.leagueId
   const { startDraftSession } = await import('@/lib/live-draft-engine/DraftSessionService')
@@ -265,14 +361,15 @@ export async function runStartupDraft(env: SimEnv, run: LeagueRun, pool: PoolPla
   }
   const session = rowsOf(env.db, 'DraftSession').find((s: any) => s.leagueId === leagueId) as any
   const slotOrder = (session.slotOrder ?? []) as Array<{ slot: number; rosterId: string; userId?: string | null }>
+  run.stats.startupSlots = slotOrder.length
   const roster = run.stats.enforcedRoster as EnforcedRoster
   const draftedBy = new Map<string, string>()
 
   if (run.draft === 'auction') await draftByAuction(env, run, pool, slotOrder, roster, draftedBy)
   else if (run.draft === 'auto') await draftByAutopick(env, run)
-  else await draftByPicks(env, run, pool, slotOrder, roster, draftedBy)
+  else await draftByPicks(env, run, pool, slotOrder, roster, draftedBy, pickLimit)
 
-  await checkFinalization(env, run, draftedBy)
+  if (pickLimit == null) await checkFinalization(env, run, draftedBy)
 }
 
 async function draftByPicks(
@@ -282,6 +379,7 @@ async function draftByPicks(
   slotOrder: Array<{ slot: number; rosterId: string; userId?: string | null }>,
   roster: EnforcedRoster,
   draftedBy: Map<string, string>,
+  pickLimit = run.rounds * run.teamCount,
 ): Promise<void> {
   const leagueId = run.leagueId!
   const { submitPick } = await import('@/lib/live-draft-engine/PickSubmissionService')
@@ -292,7 +390,7 @@ async function draftByPicks(
   const total = run.rounds * run.teamCount
   let made = 0
   let refusals = 0
-  for (let overall = 1; overall <= total; overall += 1) {
+  for (let overall = 1; overall <= Math.min(total, pickLimit); overall += 1) {
     const rosterId = expectedRosterForPick(slotOrder, overall, kind)
     const owner = slotOrder.find((s) => s.rosterId === rosterId)
     const mine = counts.get(rosterId) ?? {}

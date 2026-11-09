@@ -58,6 +58,8 @@ import {
   type SportPointsContext,
 } from './sportPointsValue'
 
+import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
+
 export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB'
 
 export function isDynastyGradedSport(sport: string | null | undefined): sport is DynastyGradedSport {
@@ -168,15 +170,22 @@ export function pickDynastyValue(args: {
     return { ok: false, reason: `The ${pick.year} draft has already been held, so that pick is a player now. Trade the player drafted with it — this deal is not graded as it stands.` }
   }
   const teams = Math.max(1, Math.round(args.teams))
-  const spot = (Math.round(pick.round) - 1) * teams + pickSlotInRound(pick.tier, teams)
+  const picksBeforeRound = (Math.round(pick.round) - 1) * teams
+  const exact = pick.overall
+  if (exact != null && (!Number.isInteger(exact) || exact <= picksBeforeRound || exact > picksBeforeRound + teams)) {
+    return { ok: false, reason: `${label} has an overall pick number outside its round.` }
+  }
+  const spot = exact != null ? exact - 1 : picksBeforeRound + pickSlotInRound(pick.tier, teams)
   const last = args.pool[args.pool.length - 1]
   if (last == null) {
     return { ok: false, reason: `No young ${sport} player has a projection to price ${label} against, so this deal is not graded.` }
   }
-  // Past the pool's end: the weakest young player, cut for each round deeper (round up, so the first
-  // spot past the end already counts as one round deeper).
+  // Past the pool's end, discount the weakest young player by draft depth. Large boards use
+  // fractional rounds so adjacent picks don't get the same tail value.
   const deep = spot >= args.pool.length
-  const base = deep ? last * DEEP_PICK_ROUND_SHARE ** Math.ceil((spot - (args.pool.length - 1)) / teams) : args.pool[spot]!
+  const extraRounds = (spot - (args.pool.length - 1)) / teams
+  const depth = teams > LARGE_LEAGUE_PICK_THRESHOLD ? extraRounds : Math.ceil(extraRounds)
+  const base = deep ? last * DEEP_PICK_ROUND_SHARE ** depth : args.pool[spot]!
   const wait = pick.year - args.nextDraftYear + PROSPECT_WAIT_SEASONS[sport]
   return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }
@@ -213,7 +222,7 @@ export function gradeSportDynastyDeal(args: {
   const assumedAge: string[] = []
   const deepPicks: string[] = []
 
-  const priceSide = (assets: readonly TradeAssetInput[]): { priced: Priced[] } | { withheld: string } => {
+  const priceSide = (assets: readonly TradeAssetInput[]): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } => {
     const priced: Priced[] = []
     for (const asset of assets) {
       if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
@@ -225,8 +234,8 @@ export function gradeSportDynastyDeal(args: {
         priced.push({ name: pickLabel(asset), value: p.value, kind: 'pick' })
         continue
       }
-      const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
-      if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+      const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex)
+      if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
       const { player } = found
       if (!meetsSampleBar(player)) {
         const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
@@ -253,15 +262,16 @@ export function gradeSportDynastyDeal(args: {
   }
 
   const give = priceSide(args.give)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position, this season or the next four.',
       basis,
     }

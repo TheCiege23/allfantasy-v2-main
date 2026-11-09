@@ -32,6 +32,8 @@ export type TradeAssetInput =
       kind: 'pick'
       year: number
       round: number
+      /** Overall selection number when a draft has assigned this pick a slot. */
+      overall?: number
       tier?: 'early' | 'mid' | 'late'
       label?: string
       /**

@@ -27,6 +27,11 @@ const games = () => [1, 2, 3].flatMap((i) => Array.from({ length: 5 }, (_, n) =>
   gameId: `g${i}-${n}:skaters`, providerGameId: `g${i}-${n}`, season: 2026,
   normalizedStatMap: { seasonType: 'regular', stats: { goals: i } } })))
 
+const grade = (giveValue: number, getValue: number) => gradeTrade({ giveValue, getValue,
+  giveMarket: giveValue, getMarket: getValue, unpriced: 0, giveCount: 1, getCount: 1,
+  basis: 'NHL league points over replacement', scoringApplied: true, needApplied: false,
+  needGap: null, lines: [], moves: [] })
+
 beforeEach(() => {
   vi.resetAllMocks()
   h.names.mockResolvedValue(() => null)
@@ -41,10 +46,6 @@ beforeEach(() => {
 describe('current-main NHL historical integration', () => {
   it.each([true, false])('preserves the supported two-team NHL grade with canonical evidence %s', async (canonical) => {
     h.rosters.mockResolvedValue(rosters.slice(0, 2))
-    const grade = (giveValue: number, getValue: number) => gradeTrade({ giveValue, getValue,
-      giveMarket: giveValue, getMarket: getValue, unpriced: 0, giveCount: 1, getCount: 1,
-      basis: 'NHL league points over replacement', scoringApplied: true, needApplied: false,
-      needGap: null, lines: [], moves: [] })
     h.evaluate.mockResolvedValue({ grade: grade(5000, 6000), partnerGrade: grade(6000, 5000),
       canonical: canonical ? { participants: ['r1', 'r2'].map((rosterId) => ({ rosterId,
         action: 'review', recommendation: '', coverageStatus: 'complete', coveragePct: 100,
@@ -66,9 +67,8 @@ describe('current-main NHL historical integration', () => {
     expect(rows?.[0]?.reason).toContain('malformed')
     expect(h.games).not.toHaveBeenCalled()
   })
-  it('withholds known NHL history failures without invoking the market grader', async () => {
-    h.games.mockRejectedValue(new Error('storage unavailable'))
-    h.rosters.mockResolvedValue(rosters.slice(0, 2))
+  it('withholds the proposal grade for malformed NHL roster data', async () => {
+    h.rosters.mockResolvedValue([{ ...rosters[0], playerData: { players: ['f1', null] } }, rosters[1]])
     const gradeProposal = vi.fn()
     const result = await evaluateServerTradeDecision({ ...input, participantRosterIds: ['r1', 'r2'],
       assets: [{ ...input.assets[0]! }, { ...input.assets[1]!, toRosterId: 'r1' }],
@@ -79,6 +79,20 @@ describe('current-main NHL historical integration', () => {
     expect(result.participants.every((row) => row.grade === null && row.lineupPointsDelta === null)).toBe(true)
     expect(gradeProposal).not.toHaveBeenCalled()
     expect(h.evaluate).not.toHaveBeenCalled()
+  })
+  it('preserves the market grade when NHL lineup history is unavailable', async () => {
+    h.games.mockRejectedValue(new Error('storage unavailable'))
+    h.rosters.mockResolvedValue(rosters.slice(0, 2))
+    h.evaluate.mockResolvedValue({ grade: grade(5000, 6000), partnerGrade: grade(6000, 5000), canonical: null })
+    const result = await evaluateServerTradeDecision({ ...input, participantRosterIds: ['r1', 'r2'],
+      assets: [{ ...input.assets[0]! }, { ...input.assets[1]!, toRosterId: 'r1' }],
+      proposerRosterId: 'r1', receiverRosterId: 'r2', season: 2026 })
+    expect(h.evaluate).toHaveBeenCalledOnce()
+    expect(result.lineupCoverage?.map((row) => row.status)).toEqual(['blocked', 'blocked'])
+    expect(result.participants).toMatchObject([
+      { grade: 'B', valueGiven: 5000, valueReceived: 6000, lineupPointsDelta: null },
+      { grade: 'D', valueGiven: 6000, valueReceived: 5000, lineupPointsDelta: null },
+    ])
   })
   it('requires every weighted stat, including a verified zero, and keeps goalie weights distinct', () => {
     expect(scoreNhlHistoricalBox({ stats: { goals: 0 } }, { goals: 4, assists: 3 }, false)).toBeNull()

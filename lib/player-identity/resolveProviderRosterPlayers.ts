@@ -62,6 +62,7 @@ export async function resolveProviderRosterPlayers(
   platform: string,
   playerIds: readonly string[],
   sport: string,
+  ambiguousIds?: Set<string>,
 ): Promise<Map<string, ResolvedProviderPlayer>> {
   const out = new Map<string, ResolvedProviderPlayer>()
   const column = providerIdentityColumn(platform)
@@ -120,6 +121,10 @@ export async function resolveProviderRosterPlayers(
       sleeperId: row.sleeperId ?? null,
     })
   }
-  for (const [key, count] of matches) if (count > 1) out.delete(key)
+  for (const [key, count] of matches) {
+    if (count < 2) continue
+    out.delete(key)
+    ambiguousIds?.add(key)
+  }
   return out
 }

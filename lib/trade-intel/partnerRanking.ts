@@ -89,7 +89,7 @@ export type PartnerRecommendation = {
  * different measure — the card shows the grade, never a letter derived from `percentApart`.
  */
 export type SuggestionGrade =
-  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
+  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; leagueValueLetter?: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
   | { graded: false; reason: string }
 
 export type PartnerRanking = {

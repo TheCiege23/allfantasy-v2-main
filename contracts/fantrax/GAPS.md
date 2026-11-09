@@ -292,3 +292,17 @@ Still unknown, and assumed rather than captured:
 **Needed:** one trimmed `getPlayerIds?sport=MLB` slice with a minor leaguer, an unsigned player and a
 two-way player, committed under `tests/fixtures/fantrax/` via `contracts/fantrax/scripts/probe.sh`
 when that combination is next added — and a level/draft field before ranking or age-gating.
+
+## F-17 — Soccer roster identity and scoring coverage
+
+The committed EPL capture identifies Soccer through its `SOCCER_GOALIE` and `SOCCER_NON_GOALIE`
+scoring groups. The roster and player pool supply IDs and positions. Import retains those IDs and
+uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Missing or ambiguous links
+leave the player unidentified. A captured Soccer player directory and production coverage for
+these links remain unverified.
+
+The capture gives position maxima that sum to 14 and a total of 11 starters. The maxima alone
+cannot define a fixed lineup. The capture also has different goalie and outfield weights for
+shared stats such as assists. Import retains the raw categories and reports the scoring gaps.
+Trade grades use the existing Soccer match and schedule data with AllFantasy default points when
+the league has no supported scoring overrides.

@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
   })
   if (!out.ok) {
     // Normalization / audit failed (e.g. league not found, normalization error) — a client-side issue.
-    return NextResponse.json({ ok: false, error: out.error }, { status: 400 })
+    // 403: someone else imported this league and the caller holds no team in it.
+    return NextResponse.json({ ok: false, error: out.error }, { status: out.httpStatus ?? 400 })
   }
 
   // Sanitized diagnostics only — never a provider payload, credentials, lock token, or raw error detail.

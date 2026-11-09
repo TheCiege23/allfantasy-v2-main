@@ -81,7 +81,7 @@ export function auditRowFromReview(r: StoredTradeReview, ref: TradeRef, now: Dat
     sideBGave: names('get'),
     sideAValue: g.giveValue,
     sideBValue: g.getValue,
-    gapPct: g.percentDiff,
+    gapPct: g.market?.percentDiff ?? g.percentDiff,
     basis,
     completedAt: trade.completedAt,
     pricedAt: now.toISOString(),

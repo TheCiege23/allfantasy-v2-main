@@ -9,6 +9,7 @@ import { selectSeasonAutodraft } from '@/lib/tournament/seasonDraftPolicy'
 import { prisma } from '@/lib/prisma'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { computeDraftRecommendation } from '@/lib/draft-helper/RecommendationEngine'
 import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { getLiveADP } from '@/lib/adp-data'
@@ -525,7 +526,9 @@ export async function submitBestAvailableAutopickForExpiredTimer(
   leagueId: string,
   onClockRosterId: string,
   expectedOverall?: number
-): Promise<{ ok: true; pick: BestAvailableAutopickResolved } | { ok: false; error: 'no_pool' | 'submit_failed' }> {
+): Promise<{ ok: true; pick: BestAvailableAutopickResolved } | { ok: false; error: 'no_pool' | 'submit_failed' | 'offline_draft' }> {
+  // The commissioner enters every pick of an offline draft — and the AI try below would spend a model call.
+  if (await isOfflineDraft(leagueId)) return { ok: false, error: 'offline_draft' }
   if (!(await loadSeasonDraftContext(leagueId))) {
     const { tryAiOpponentAutopickForExpiredTimer } = await import('@/lib/ai/opponents/liveDraftAiAutopick')
     const aiTry = await tryAiOpponentAutopickForExpiredTimer(leagueId, onClockRosterId)

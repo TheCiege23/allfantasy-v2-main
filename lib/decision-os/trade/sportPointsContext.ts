@@ -1,7 +1,12 @@
 import 'server-only'
 
+import { providerIdentityColumn } from '@/lib/player-identity/resolveProviderRosterPlayers'
+import type { TradeValuationGap } from './tradeGrade'
+import { playerIdSpaceFor } from './tradePlayers'
+
 import { prisma } from '@/lib/prisma'
 import { buildLeagueStatScorer, type LeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
@@ -41,6 +46,7 @@ import { FULL_SEASON_GAMES, isDynastyGradedSport, isDynastyLeagueType } from './
 
 export type SportPointsLeague = {
   id: string
+  platform?: string | null
   settings: unknown
   leagueType: string | null
   leagueSize: number | null
@@ -49,7 +55,7 @@ export type SportPointsLeague = {
   status?: string | null
 }
 
-export type SportPointsBaseResult = { ok: true; ctx: SportPointsContext } | { ok: false; reason: string }
+export type SportPointsBaseResult = { ok: true; ctx: SportPointsContext } | { ok: false; reason: string; valuationGap?: TradeValuationGap }
 
 const DEFAULT_TEAMS = 12
 
@@ -245,7 +251,10 @@ export async function loadSportPointsBase(args: {
   const normalize = sport === 'MLB' ? engineKeyedLine : getDailySportNormalizer(sport)
   if (!normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
 
-  const source = sport === 'SOCCER' ? await loadSoccerLines(now) : await loadSnapshotLines(sport, normalize, now)
+  const space = league ? playerIdSpaceFor({ platform: league.platform ?? null, sport }) : null
+  const column = typeof space === 'object' && space ? providerIdentityColumn(space.provider)
+    : space === 'sleeper' ? 'sleeperId' : space === 'rolling_insights' ? 'rollingInsightsId' : null
+  const source = sport === 'SOCCER' ? await loadSoccerLines(now, column) : await loadSnapshotLines(sport, normalize, now, column)
   if (!source.ok) return source
   const { season, games, lines } = source
   const finished = await finishBoard({ sport, league, valuation, season, games, lines })
@@ -340,22 +349,25 @@ export function pickBoardAges(
   return out
 }
 
+const identitySelect = { id: true, rollingInsightsId: true, sleeperId: true, espnId: true, fantraxId: true, mflId: true, fleaflickerId: true } as const
+type RosterIdColumn = Exclude<keyof typeof identitySelect, 'id'> | null
+
 type BoardLine = Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }
 /** `season` is the one priced: the lines' own, or the next one once an MLB regular season is over. */
 type LinesResult =
   | { ok: true; season: number; games: GamesLeft; lines: BoardLine[] }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; valuationGap?: TradeValuationGap }
 
 /**
  * Soccer reads its MATCH ROWS, both seasons, never the stored projections — those choose one season per
  * player and so rest on four to six matches in October. `./soccerBoard.ts` blends the seasons and puts
  * every player on his club's match scale; only players who have played this season are on the board.
  */
-async function loadSoccerLines(now: Date): Promise<LinesResult> {
+async function loadSoccerLines(now: Date, column: RosterIdColumn): Promise<LinesResult> {
   const latest = await prisma.playerGameStat
     .findFirst({ where: { sportType: 'SOCCER' }, orderBy: { season: 'desc' }, select: { season: true } })
     .catch(() => null)
-  if (!latest) return { ok: false, reason: 'No soccer match data is on file, so this deal cannot be graded yet.' }
+  if (!latest) return { ok: false, reason: 'No soccer match data is on file, so this deal cannot be graded yet.', valuationGap: 'missing_projections' }
   const season = latest.season
   const select = { playerId: true, gameId: true, team: true, gameDate: true, normalizedStatMap: true } as const
   const [current, prior, games] = await Promise.all([
@@ -363,25 +375,26 @@ async function loadSoccerLines(now: Date): Promise<LinesResult> {
     prisma.playerGameStat.findMany({ where: { sportType: 'SOCCER', season: season - 1 }, select }).catch(() => null),
     seasonGamesLeft('SOCCER', season, now),
   ])
-  if (!current || !prior) return { ok: false, reason: 'The soccer match data could not be read just now.' }
+  if (!current || !prior) return { ok: false, reason: 'The soccer match data could not be read just now.', valuationGap: 'missing_projections' }
   if (games == null) {
-    return { ok: false, reason: `The ${seasonLabelFor(season, 'SOCCER')} soccer schedule is not on file, so the matches left to play cannot be counted.` }
+    return { ok: false, reason: `The ${seasonLabelFor(season, 'SOCCER')} soccer schedule is not on file, so the matches left to play cannot be counted.`, valuationGap: 'missing_schedule' }
   }
 
   const ids = [...new Set(current.map((r) => r.playerId))]
   const identities = await prisma.playerIdentityMap
-    .findMany({ where: { id: { in: ids } }, select: { id: true, canonicalName: true, rollingInsightsId: true, sleeperId: true } })
-    .catch(() => [] as Array<{ id: string; canonicalName: string; rollingInsightsId: string | null; sleeperId: string | null }>)
+    .findMany({ where: { id: { in: ids } }, select: { ...identitySelect, canonicalName: true } })
+    .catch(() => [])
   const board = blendSoccerSeasons({
     current: soccerSeasonLines(current, new Map(identities.map((i) => [i.id, i.canonicalName])), season),
     prior: soccerSeasonLines(prior, new Map(), season - 1),
     clubMatches: { current: clubMatchCounts(current), prior: clubMatchCounts(prior) },
   })
   const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
+  const rosterAliasById = new Map(identities.map((i) => [i.id, column ? i[column] : null]))
   const lines: BoardLine[] = []
   for (const b of board) {
     if (!b.name || !b.position) continue
-    lines.push({ id: b.playerId, name: b.name, position: b.position, sampleGames: b.sampleGames, aliases: aliasesById.get(b.playerId) ?? [], sourceSeason: season, stats: b.stats })
+    lines.push({ id: b.playerId, name: b.name, position: b.position, sampleGames: b.sampleGames, aliases: aliasesById.get(b.playerId) ?? [], rosterAlias: rosterAliasById.get(b.playerId), sourceSeason: season, stats: b.stats })
   }
   return { ok: true, season, games, lines }
 }
@@ -391,6 +404,7 @@ async function loadSnapshotLines(
   sport: PointsGradedSport,
   normalize: (raw: unknown) => { stats: Record<string, number> },
   now: Date,
+  column: RosterIdColumn,
 ): Promise<LinesResult> {
   /*
    * 🛑 THE NEWEST RUN'S SEASON, NEVER THE HIGHEST SEASON ON FILE. The projection writer stamps MLB with the
@@ -408,7 +422,7 @@ async function loadSnapshotLines(
       select: { season: true },
     })
     .catch(() => null)
-  if (!latest) return { ok: false, reason: `No ${sport} projections are on file, so this deal cannot be graded yet.` }
+  if (!latest) return { ok: false, reason: `No ${sport} projections are on file, so this deal cannot be graded yet.`, valuationGap: 'missing_projections' }
   const season = latest.season
 
   const [rows, games] = await Promise.all([
@@ -420,16 +434,17 @@ async function loadSnapshotLines(
       .catch(() => null),
     seasonGamesLeft(sport, season, now),
   ])
-  if (!rows) return { ok: false, reason: `The ${sport} projections could not be read just now.` }
-  if (games == null) return { ok: false, reason: `The ${seasonLabelFor(season, sport)} ${sport} schedule is not on file, so the games left to play cannot be counted.` }
+  if (!rows) return { ok: false, reason: `The ${sport} projections could not be read just now.`, valuationGap: 'missing_projections' }
+  if (games == null) return { ok: false, reason: `The ${seasonLabelFor(season, sport)} ${sport} schedule is not on file, so the games left to play cannot be counted.`, valuationGap: 'missing_schedule' }
 
   const identities = await prisma.playerIdentityMap
     .findMany({
       where: { id: { in: rows.map((r) => r.playerId) } },
-      select: { id: true, rollingInsightsId: true, sleeperId: true },
+      select: identitySelect,
     })
-    .catch(() => [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>)
+    .catch(() => [])
   const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
+  const rosterAliasById = new Map(identities.map((i) => [i.id, column ? i[column] : null]))
 
   // Every scoreable projection as a per-game stat line first; the valuation is applied once all are read.
   const lines: BoardLine[] = []
@@ -451,6 +466,7 @@ async function loadSnapshotLines(
       position: String(r.position ?? '').trim().toUpperCase(),
       sampleGames: sampleGamesFromReasons(reasonsOf(r.adjustmentFactors)),
       aliases: aliasesById.get(r.playerId) ?? [],
+      rosterAlias: rosterAliasById.get(r.playerId),
       sourceSeason: sourceSeasonOf(r.adjustmentFactors),
       stats,
     })
@@ -468,8 +484,19 @@ async function finishBoard(args: {
   lines: BoardLine[]
 }): Promise<SportPointsBaseResult> {
   const { sport, league, valuation, season, games, lines } = args
-  const teams = league?.leagueSize && league.leagueSize > 1 ? league.leagueSize : DEFAULT_TEAMS
+  const savedTeamCount = league?.leagueSize
+  const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
+  const teams = hasSavedTeamCount ? savedTeamCount : DEFAULT_TEAMS
   const lineup = lineupSlotsFor(sport, league?.settings ?? null)
+  // Fantrax's Soccer categories are retained as raw settings. Until a league
+  // supplies supported overrides, the scorer uses AllFantasy points.
+  let fantraxSoccerDefaults = false
+  if (sport === 'SOCCER' && league?.platform?.toLowerCase() === 'fantrax' && valuation.kind === 'points') {
+    const leagueWeights = Object.entries(resolveLeagueScoringRules({ sport, settings: league.settings })?.overrides ?? {})
+    const defaultWeights = resolveLeagueScoringRules({ sport, settings: null })?.overrides ?? {}
+    fantraxSoccerDefaults = leagueWeights.length === Object.keys(defaultWeights).length &&
+      leagueWeights.every(([key, weight]) => weight === defaultWeights[key])
+  }
 
   // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
   const valued: Array<(typeof lines)[number] & { hitter?: boolean; pitcher?: boolean }> =
@@ -510,20 +537,20 @@ async function finishBoard(args: {
     board.push({ ...player, perGame })
   }
   const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport) })
-  if (notReady) return { ok: false, reason: notReady }
+  if (notReady) return { ok: false, reason: notReady, valuationGap: 'projection_coverage' }
   const baseline = baselineSeasonOf(board, season)
 
   let replacementByPosition = replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
+  let rosterIndex: ReadonlyMap<string, BoardPlayer> | undefined
   if (league) {
+    rosterIndex = indexBoard(board, true)
     const rosterRows = await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } }).catch(() => null)
     const rostered = rosterRows ? [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))] : []
     if (rostered.length > 0) {
-      const index = indexBoard(board)
       const onBoard = new Set<string>()
       let mapped = 0
       for (const id of rostered) {
-        const bare = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id
-        const hit = index.get(id) ?? index.get(bare)
+        const hit = rosterIndex.get(id) ?? (league.platform?.toLowerCase() === 'sleeper' ? rosterIndex.get(id.replace(/^sleeper:/, '')) : undefined)
         if (hit) {
           onBoard.add(hit.id)
           mapped += 1
@@ -539,6 +566,7 @@ async function finishBoard(args: {
       sport,
       board,
       replacementByPosition,
+      ...(rosterIndex ? { rosterIndex } : {}),
       window: {
         season,
         seasonLabel: seasonLabelFor(season, sport),
@@ -546,8 +574,9 @@ async function finishBoard(args: {
         baselineSeasonLabel: baseline != null ? seasonLabelFor(baseline, sport) : null,
         ...(games.scheduleKnown ? {} : { scheduleKnown: false }),
       },
-      scoringBasis: league ? 'league' : 'default',
+      scoringBasis: fantraxSoccerDefaults ? 'default_in_league' : league ? 'league' : 'default',
       teams,
+      ...(league && !hasSavedTeamCount ? { teamCountAssumed: true } : {}),
       valueKind: valuation.kind,
       categoryList: valuation.kind === 'categories' ? categoryList(valuation.categories) : null,
     },

@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { playerNamesAgree, providerIdWhere, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { ourIdOrSleeperIdWhere, playerNamesAgree, providerIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 
 /**
@@ -16,7 +17,7 @@ import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/play
  *     `lib/player-identity/externalIdNamespace.ts` — 42,031 of 42,032 bare-id collisions were).
  *   - ESPN / Fantrax / Fleaflicker / MFL leagues store that platform's id, resolved through its own
  *     `PlayerIdentityMap` column (`resolveProviderRosterPlayers`).
- * The existing `loadNativePlayerNames` only ever tried `SportsPlayer.sleeperId`, with no sport and
+ * The old `loadNativePlayerNames` only tried `SportsPlayer.sleeperId`, with no sport and
  * first-row-wins — so a native NBA trade resolved nothing, or the wrong man.
  *
  * ⚠ SEVERAL ROWS FOR ONE ID ARE USUALLY ONE PERSON. `SportsPlayer` carries 2–3 rows for ~1,400 NFL
@@ -24,17 +25,50 @@ import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/play
  * is ambiguity, and ambiguity is a refusal.
  */
 
+/** Every id a stored roster holds, including lineup sections used by older imports. */
+export function rosteredIdsOf(playerData: unknown): string[] {
+  const ids = new Set(getRosterPlayerIds(playerData).map(String))
+  const pd = (playerData ?? {}) as Record<string, unknown>
+  for (const key of ['starters', 'reserve', 'taxi', 'bench', 'ir']) {
+    const entries = pd[key]
+    if (!Array.isArray(entries)) continue
+    for (const raw of entries) {
+      const row = raw && typeof raw === 'object' ? (raw as { id?: unknown; player_id?: unknown }) : null
+      const id = typeof raw === 'string' ? raw : row ? String(row.id ?? row.player_id ?? '') : ''
+      if (id) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
+/** Use only for membership-checked trade reads. These IDs stay in the league's namespace. */
+export async function loadTradeRosterIds(leagueId: string, rosterIds?: string[]): Promise<Map<string, string[]>> {
+  const rows = await prisma.roster.findMany({
+    where: { leagueId, ...(rosterIds ? { id: { in: rosterIds } } : {}) },
+    select: { id: true, playerData: true },
+  })
+  return new Map(rows.map((row) => [row.id, rosteredIdsOf(row.playerData)]))
+}
+
+/** Imports can store Fantrax display names in surname-first order. */
+export function providerNameInChartOrder(provider: string, name: string): string {
+  const trimmed = name.trim()
+  if (provider.trim().toLowerCase() !== 'fantrax') return trimmed
+  const parts = /^([^,]+),\s*([^,]+)$/.exec(trimmed)
+  return parts ? parts[2]!.trim() + ' ' + parts[1]!.trim() : trimmed
+}
+
 export type PlayerIdSpace = 'sleeper' | 'rolling_insights' | { provider: string }
 
 export type ResolvedTradePlayer =
-  | { ok: true; name: string; position: string | null }
+  | { ok: true; name: string; position: string | null; sleeperId?: string; externalId?: string }
   | { ok: false; why: 'unresolved' | 'ambiguous' }
 
 /** Which id space a league's stored player ids are in. */
 export function playerIdSpaceFor(league: { platform: string | null; sport: string }): PlayerIdSpace {
   const platform = String(league.platform ?? '').trim().toLowerCase()
   if (platform === 'sleeper') return 'sleeper'
-  if (platform && providerIdentityColumn(platform)) return { provider: platform }
+  if (platform === 'yahoo' || (platform && providerIdentityColumn(platform))) return { provider: platform }
   // Native (AllFantasy-created): NFL pools are Sleeper-keyed, every other sport is Rolling Insights.
   return String(league.sport).toUpperCase() === 'NFL' ? 'sleeper' : 'rolling_insights'
 }
@@ -60,35 +94,64 @@ export async function resolveTradePlayers(
 
   if (typeof opts.space === 'object') {
     // The provider resolver already leaves an id that matches two identities unresolved.
-    const found = await resolveProviderRosterPlayers(opts.space.provider, ids, sport).catch(() => new Map())
+    const ambiguous = new Set<string>()
+    const found = await resolveProviderRosterPlayers(opts.space.provider, ids, sport, ambiguous).catch(() => new Map())
     for (const id of ids) {
       const p = found.get(id)
-      out.set(id, p ? { ok: true, name: p.name, position: p.position ?? null } : { ok: false, why: 'unresolved' })
+      out.set(id, p?.name ? { ok: true, name: p.name, position: p.position ?? null, ...(p.sleeperId ? { sleeperId: p.sleeperId } : {}) }
+        : { ok: false, why: ambiguous.has(id) ? 'ambiguous' : 'unresolved' })
     }
     return out
   }
 
-  const rowsById = new Map<string, Array<{ name: string | null; position: string | null }>>()
+  type IdentityRow = { name: string | null; position: string | null; sleeperId?: string | null; externalId?: string }
+  const rowsById = new Map<string, IdentityRow[]>()
+  const wanted = new Set(ids)
+  const record = (key: string | null | undefined, row: IdentityRow) => {
+    if (key && wanted.has(key)) rowsById.set(key, [...(rowsById.get(key) ?? []), row])
+  }
   try {
     if (opts.space === 'sleeper') {
       const rows = await prisma.sportsPlayer.findMany({
-        where: sleeperIdWhere(ids, sport),
-        select: { sleeperId: true, externalId: true, name: true, position: true },
+        where: ourIdOrSleeperIdWhere([...new Set(ids.flatMap((id) => [id, id.replace(/^sleeper:/, '')]))], sport),
+        select: { id: true, sleeperId: true, externalId: true, name: true, position: true },
       })
       for (const r of rows) {
         const key = r.sleeperId ?? (r.externalId.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
-        if (key) rowsById.set(key, [...(rowsById.get(key) ?? []), { name: r.name, position: r.position }])
+        record(key, r)
+        if (key) record('sleeper:' + key, r)
+        if (r.id !== key) record(r.id, r)
       }
     } else {
       const rows = await prisma.sportsPlayer.findMany({
-        where: providerIdWhere('rolling_insights', ids, sport),
-        select: { externalId: true, name: true, position: true },
+        where: { sport, OR: [{ id: { in: ids } }, providerIdWhere('rolling_insights', ids)] },
+        select: { id: true, source: true, externalId: true, name: true, position: true },
       })
-      for (const r of rows) rowsById.set(r.externalId, [...(rowsById.get(r.externalId) ?? []), { name: r.name, position: r.position }])
+      for (const r of rows) {
+        if (r.source === 'rolling_insights') record(r.externalId, r)
+        if (r.source !== 'rolling_insights') record(r.id, { ...r, externalId: undefined })
+        else if (r.id !== r.externalId) record(r.id, r)
+      }
     }
   } catch {
     // Fall through: every id is unresolved, and the trade is refused by name rather than guessed.
   }
-  for (const id of ids) out.set(id, decidePlayerIdentity(rowsById.get(id) ?? []))
+  for (const id of ids) {
+    const rows = rowsById.get(id) ?? []
+    const result = decidePlayerIdentity(rows)
+    if (result.ok) {
+      const linkedIds = [...new Set(rows.map((r) => opts.space === 'sleeper' ? r.sleeperId : r.externalId).filter((v): v is string => Boolean(v)))]
+      if (linkedIds.length > 1) {
+        out.set(id, { ok: false, why: 'ambiguous' })
+        continue
+      }
+      const linked = linkedIds[0]
+      if (linked && linked !== id) {
+        if (opts.space === 'sleeper') result.sleeperId = linked
+        else result.externalId = linked
+      }
+    }
+    out.set(id, result)
+  }
   return out
 }

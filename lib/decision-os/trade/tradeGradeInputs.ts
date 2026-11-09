@@ -14,8 +14,9 @@
  */
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { parsePickLabel } from '@/lib/parsePickLabel'
+import type { PlayerIdSpace, ResolvedTradePlayer } from './tradePlayers'
 
-export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[] }
+export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[]; valuationGap?: 'unresolved_player' }
 
 type PendingLike = {
   playerName: string
@@ -45,7 +46,7 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
     } else if (a.playerName?.trim()) {
       const id = a.playerId?.trim()
       out.assets.push({ kind: 'player', name: a.playerName.trim(),
-        ...(id && provider ? { providerIdentity: { provider, id,
+        ...(id && provider ? { rosterPlayerId: id, providerIdentity: { provider, id,
           ...(a.position?.trim() ? { position: a.position.trim() } : {}),
           ...(a.team?.trim() ? { team: a.team.trim() } : {}),
         } } : {}),
@@ -63,6 +64,31 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
  */
 export type NativeNameLookup = ((id: string) => string | null) & {
   sleeperIdFor?: (id: string) => string | null
+  space?: PlayerIdSpace
+  sport?: string
+  identityFor?: (id: string) => ResolvedTradePlayer | undefined
+}
+
+export function gradePlayerFromRoster(args: {
+  id: string
+  name?: string | null
+  position?: string | null
+  space?: PlayerIdSpace | null
+  identity?: Extract<ResolvedTradePlayer, { ok: true }>
+}): Extract<TradeAssetInput, { kind: 'player' }> {
+  const { id, space, identity } = args
+  const name = identity?.name ?? args.name
+  const position = identity?.position ?? args.position
+  const sleeperId = identity?.sleeperId ?? (space === 'sleeper' ? id.replace(/^sleeper:/, '') : null)
+  return {
+    kind: 'player',
+    rosterPlayerId: id,
+    ...(name ? { name } : {}),
+    ...(identity?.externalId ? { playerId: identity.externalId } : {}),
+    ...(sleeperId ? { providerIdentity: { provider: 'sleeper' as const, id: sleeperId, ...(position ? { position } : {}) } }
+      : typeof space === 'object' && space?.provider === 'yahoo'
+        ? { providerIdentity: { provider: 'yahoo' as const, id, ...(position ? { position } : {}) } } : {}),
+  }
 }
 
 type NativeItemLike = {
@@ -99,7 +125,8 @@ export function gradeInputsFromNativeItems(
 ): GradeInputs {
   // Present only for a provider league (Fantrax, ESPN, …): the stored id is that platform's, never a
   // Sleeper id, so the Sleeper identity is whatever the player's identity row links to — or none.
-  const sleeperIdFor = (nameForId as NativeNameLookup | undefined)?.sleeperIdFor
+  const lookup = nameForId as NativeNameLookup | undefined
+  const sleeperIdFor = lookup?.sleeperIdFor
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const item of items) {
     const meta = record(item.metadata)
@@ -123,6 +150,18 @@ export function gradeInputsFromNativeItems(
     const ref = str(item.itemReference)
     const verifiedName = ref ? str(nameForId?.(ref)) : null
     const name = verifiedName ?? str(meta.playerName ?? meta.name)
+    if (ref && lookup?.space) {
+      const identity = lookup.identityFor?.(ref)
+      if (identity?.ok === false && identity.why === 'ambiguous') {
+        out.unpriceable.push(`${name ?? 'a player'} matches more than one identity`)
+        out.valuationGap = 'unresolved_player'
+      } else {
+        out.assets.push(gradePlayerFromRoster({ id: ref, name, position: str(meta.position), space: lookup.space,
+          ...(identity?.ok ? { identity } : {}),
+        }))
+      }
+      continue
+    }
     // A Sleeper-keyed lookup verified `ref` itself as a Sleeper id; a provider lookup names the linked one.
     const sleeperId = ref && verifiedName ? (sleeperIdFor ? str(sleeperIdFor(ref)) : ref) : null
     if (name) out.assets.push({ kind: 'player', name,

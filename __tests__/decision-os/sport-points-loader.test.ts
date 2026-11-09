@@ -47,6 +47,8 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
+import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
+import { sportPointsBasis } from '@/lib/decision-os/trade/sportPointsValue'
 
 const NOW = new Date('2026-10-20T12:00:00Z')
 
@@ -76,6 +78,21 @@ beforeEach(() => {
 })
 
 describe('loadSportPointsBase', () => {
+  it('reports an assumed team count in the points grade basis', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
+    nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
+    schedule(['T1', 'T2'], 40, null)
+    const out = await loadSportPointsBase({
+      sport: 'NBA', now: NOW,
+      league: { id: 'L', settings: { scoringSettings: { rules: { points: 1 } } }, leagueType: 'redraft', leagueSize: null },
+    })
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.ctx.teams).toBe(12)
+      expect(sportPointsBasis(out.ctx)).toContain('This league has no verified team count. The grade uses 12 teams.')
+    }
+  })
+
   it('counts upcoming games whose season type is NULL, and leaves out marked preseason games', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
     nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
@@ -141,6 +158,23 @@ describe('loadSportPointsBase', () => {
     expect(redraft.ok && redraft.ctx.dynasty).toBeUndefined()
   })
 
+  it('audit: grades NCAAB on current-season projections and refuses last-season-only rosters', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 40 }, 20)
+    nbaPlayer('b', 'Beta', 'C', { points: 30 }, 20)
+    nbaPlayer('c', 'Gamma', 'C', { points: 10 }, 20)
+    schedule(['T1', 'T2'], 10, null)
+    db.rosters = [{ playerData: { players: ['ri-a'] } }, { playerData: { players: ['ri-b'] } }]
+    const league = { id: 'L1', settings: { scoring_mode: 'points' }, leagueType: 'redraft', leagueSize: 2 }
+    const grade = () => createSportPointsGrader({ sport: 'NCAAB', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!.grade([{ kind: 'player', name: 'Alpha', playerId: 'ri-a' }], [{ kind: 'player', name: 'Beta', playerId: 'ri-b' }])
+    expect(await grade()).toMatchObject({ graded: false, reason: expect.stringContaining('College rosters turn over') })
+    for (const p of db.projections) (p.adjustmentFactors as { sourceSeason: number }).sourceSeason = 2026
+    const out = await grade()
+    console.info('AUDIT NCAAB', JSON.stringify(out))
+    expect(out).toMatchObject({ graded: true, giveValue: 300, getValue: 200 })
+  })
+
   describe('soccer', () => {
     const GROUP: Record<string, string> = { Goalkeeper: 'goalkeepers' }
     // One player's matches: `apps` of `clubMatches`, each with the given per-match stats.
@@ -167,6 +201,19 @@ describe('loadSportPointsBase', () => {
       soccerPlayer('wing', 'Forward', 2025, 'ARS', 30, { goals: 0.2 })
       schedule(['ARS', 'CHE'], 30, null)
     }
+
+    it('audit: assigns a real letter to a points trade with match evidence', async () => {
+      soccerBoard()
+      soccerPlayer('other', 'Forward', 2026, 'CHE', 4, { goals: 0.45 })
+      soccerPlayer('other', 'Forward', 2025, 'CHE', 30, { goals: 0.3 })
+      db.rosters = [{ playerData: { players: ['ri-ace'] } }, { playerData: { players: ['ri-other'] } }]
+      const league = { id: 'L1', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+      const grade = await createSportPointsGrader({ sport: 'SOCCER', league }, {
+        loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+      })!.grade([{ kind: 'player', name: 'ace', playerId: 'ri-ace' }], [{ kind: 'player', name: 'other', playerId: 'ri-other' }])
+      console.info('AUDIT SOCCER', JSON.stringify(grade))
+      expect(grade).toMatchObject({ graded: true })
+    })
 
     it('grades from both seasons of match rows, on the 2026-27 season, never from stored projections', async () => {
       soccerBoard()

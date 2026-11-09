@@ -455,6 +455,7 @@ export const translationsEsParity: Record<string, string> = {
   "league.nav.dynasty": "Centro de dinastía",
   "league.nav.dynastyTaxi": "Plantel taxi",
   "league.nav.dynastyPicks": "Picks del draft",
+  "league.nav.devyPipeline": "Cantera devy",
   "league.nav.warRoom": "Sala de guerra",
   "league.nav.liveScores": "Marcadores en vivo",
   "league.nav.decisionOs": "Decision OS",
