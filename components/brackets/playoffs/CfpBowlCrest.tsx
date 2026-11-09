@@ -1,16 +1,22 @@
 import type { ReactNode } from "react"
 import { CFP_BOWL_CREST_NAMES, type CfpBowlCrestKey } from "@/lib/playoffs/cfpBowlCrest"
+import { RIVALRY_NAMES, type RivalryCrestKey } from "@/lib/college/rivalryCrests"
 
 /*
- * Original AllFantasy crests for the CFP bowls — NOT the bowls' official marks
- * (see lib/playoffs/cfpBowlCrest.ts). Each shield carries its own dark fill so it
- * reads the same on the dark, light and AF themes.
+ * Original AllFantasy crests for the CFP bowls and the big college rivalry games —
+ * NOT the bowls' official marks, a school's logo or a trophy's likeness (see
+ * lib/playoffs/cfpBowlCrest.ts). Each shield carries its own dark fill so it reads
+ * the same on the dark, light and AF themes.
  */
+
+export type CollegeCrestKey = CfpBowlCrestKey | RivalryCrestKey
+
+const CREST_NAMES: Record<CollegeCrestKey, string> = { ...CFP_BOWL_CREST_NAMES, ...RIVALRY_NAMES }
 
 const SHIELD = "M60 4 L112 20 V68 C112 102 88 124 60 136 C32 124 8 102 8 68 V20 Z"
 const LEAF = "#3CCB7F"
 
-const CRESTS: Record<CfpBowlCrestKey, { color: string; word: string; art: ReactNode }> = {
+const CRESTS: Record<CollegeCrestKey, { color: string; word: string; art: ReactNode; wordSize?: number }> = {
   rose: {
     color: "#F0506E",
     word: "ROSE",
@@ -90,11 +96,95 @@ const CRESTS: Record<CfpBowlCrestKey, { color: string; word: string; art: ReactN
       <path d="M60 46 L62.5 52 L69 52.5 L64 56.5 L65.5 63 L60 59.5 L54.5 63 L56 56.5 L51 52.5 L57.5 52 Z" fill="#111A2E" />
     </>,
   },
+  // ── Rivalry games ───────────────────────────────────────────────────
+  iron: {
+    color: "#B8BEC9",
+    word: "IRON",
+    art: <>
+      <g stroke="#FF7A3D" strokeWidth="3.5" strokeLinecap="round"><path d="M56 54 L50 42" /><path d="M62 52 L64 38" /><path d="M68 55 L78 45" /></g>
+      <path d="M30 62 H84 C84 70 78 74 70 74 V82 H78 V94 H42 V82 H50 V74 C42 74 34 70 30 62 Z" fill="#B8BEC9" />
+      <path d="M84 62 L96 58 L86 68 Z" fill="#B8BEC9" />
+      <path d="M30 62 H84" stroke="#E6E9EF" strokeWidth="3" />
+    </>,
+  },
+  game: {
+    color: "#E8EEF8",
+    word: "THE GAME",
+    art: <>
+      <path d="M28 48 L52 66 L28 84" fill="none" stroke="#E8EEF8" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M92 48 L68 66 L92 84" fill="none" stroke="#8E9BB5" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M60 56 L62.5 63 L70 64 L64 68.5 L66 76 L60 71.5 L54 76 L56 68.5 L50 64 L57.5 63 Z" fill="#FFB547" />
+    </>,
+  },
+  river: {
+    color: "#E5484D",
+    word: "RED RIVER",
+    wordSize: 10,
+    art: <>
+      <path d="M60 36 L63 45 L72 45.5 L65 51 L67.5 60 L60 55 L52.5 60 L55 51 L48 45.5 L57 45 Z" fill="#F4F7FF" />
+      <path d="M24 76 C38 62 50 90 62 76 C74 62 84 86 96 72" fill="none" stroke="#E5484D" strokeWidth="9" strokeLinecap="round" />
+      <path d="M26 94 C40 84 52 100 64 92 C76 84 86 98 94 90" fill="none" stroke="#E5484D" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.5" />
+    </>,
+  },
+  egg: {
+    color: "#E9C46A",
+    word: "EGG",
+    art: <>
+      <path d="M60 38 C74 38 83 60 83 75 C83 90 73 99 60 99 C47 99 37 90 37 75 C37 60 46 38 60 38 Z" fill="#E9C46A" />
+      <path d="M50 52 C46 58 44 66 45 72" fill="none" stroke="#FFF1C9" strokeWidth="4" strokeLinecap="round" />
+      <path d="M38 80 L48 74 L56 82 L64 74 L72 82 L82 76" fill="none" stroke="#B8902F" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </>,
+  },
+  service: {
+    color: "#6C8EBF",
+    word: "ARMY–NAVY",
+    wordSize: 10,
+    art: <>
+      <g fill="none" stroke="#6C8EBF" strokeWidth="5" strokeLinecap="round">
+        <circle cx="60" cy="44" r="6" />
+        <path d="M60 50 V96" />
+        <path d="M46 58 H74" />
+        <path d="M36 80 C40 92 50 98 60 98 C70 98 80 92 84 80" />
+      </g>
+      <path d="M32 80 L36 72 L42 82 Z M88 80 L84 72 L78 82 Z" fill="#6C8EBF" />
+      <path d="M88 34 L90 39.5 L96 40 L91.5 43.5 L93 49 L88 46 L83 49 L84.5 43.5 L80 40 L86 39.5 Z" fill="#F5C76B" />
+      <path d="M32 34 L34 39.5 L40 40 L35.5 43.5 L37 49 L32 46 L27 49 L28.5 43.5 L24 40 L30 39.5 Z" fill="#F5C76B" />
+    </>,
+  },
+  apple: {
+    color: "#E4572E",
+    word: "APPLE",
+    art: <>
+      <path d="M60 54 C46 42 32 54 34 72 C36 88 48 100 60 96 C72 100 84 88 86 72 C88 54 74 42 60 54 Z" fill="#E4572E" />
+      <path d="M60 54 C60 46 62 40 66 36" fill="none" stroke="#8A5A3C" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M62 46 C68 36 80 36 84 40 C78 48 70 50 62 46 Z" fill={LEAF} />
+      <path d="M44 64 C42 70 42 76 44 80" fill="none" stroke="#FFB59E" strokeWidth="3.5" strokeLinecap="round" />
+    </>,
+  },
+  holy: {
+    color: "#9C8AD6",
+    word: "HOLY WAR",
+    art: <>
+      <path d="M24 98 L48 56 L60 74 L72 50 L96 98 Z" fill="#9C8AD6" />
+      <path d="M48 56 L55 68 L50 66 L46 70 L41 68 Z" fill="#F4F7FF" />
+      <path d="M72 50 L80 64 L75 62 L71 66 L66 63 Z" fill="#F4F7FF" />
+      <path d="M28 98 H92" stroke="#6E5BB5" strokeWidth="3" />
+    </>,
+  },
+  brawl: {
+    color: "#7FB069",
+    word: "BACKYARD",
+    wordSize: 10,
+    art: <>
+      <path d="M30 58 L36 50 L42 58 V98 H30 Z M46 58 L52 50 L58 58 V98 H46 Z M62 58 L68 50 L74 58 V98 H62 Z M78 58 L84 50 L90 58 V98 H78 Z" fill="#7FB069" />
+      <path d="M26 68 H94 V74 H26 Z M26 86 H94 V92 H26 Z" fill="#5E8C4C" />
+    </>,
+  },
 }
 
-export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CfpBowlCrestKey; size?: number; decorative?: boolean }) {
+export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CollegeCrestKey; size?: number; decorative?: boolean }) {
   const crest = CRESTS[bowl]
-  const label = `${CFP_BOWL_CREST_NAMES[bowl]} crest`
+  const label = `${CREST_NAMES[bowl]} crest`
   return (
     <svg
       className="af-pb-crest"
@@ -110,7 +200,7 @@ export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { 
         ? <path d="M14 24 L60 10 L106 24" fill="none" stroke="#5EE6D3" strokeWidth="3" />
         : <path d="M22 27 L60 15 L98 27" fill="none" stroke={crest.color} strokeWidth="2.5" strokeOpacity="0.55" />}
       {crest.art}
-      {size >= 56 ? <text x="60" y="121" textAnchor="middle" fontSize="11" fontWeight="800" letterSpacing="1.5" fill={crest.color}>{crest.word}</text> : null}
+      {size >= 56 ? <text x="60" y="121" textAnchor="middle" fontSize={crest.wordSize ?? 11} fontWeight="800" letterSpacing={crest.wordSize ? 1 : 1.5} fill={crest.color}>{crest.word}</text> : null}
     </svg>
   )
 }

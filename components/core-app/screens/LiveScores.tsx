@@ -24,6 +24,8 @@ import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { playAgeLabel, starterStageDetail } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
+import CfpBowlCrest from '@/components/brackets/playoffs/CfpBowlCrest'
+import { collegeRivalry, RIVALRY_NAMES } from '@/lib/college/rivalryCrests'
 import {
   formatLeagueProjection,
   formatStarterPoints,
@@ -1127,6 +1129,8 @@ export function GameCard({
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
   /* The status bar's tone, lead word and period text (lib/core-app/redraftCoreScoreBug.ts). */
   const bug = liveGameBug(game)
+  /* A marquee college rivalry wears its own AllFantasy crest (never a school's logo). */
+  const rivalry = collegeRivalry(game.sport, game.home.name, game.away.name)
 
   /*
    * ⚠ `data-changed` IS THE ONLY THING THAT MOVES. The card is not re-mounted
@@ -1166,6 +1170,16 @@ export function GameCard({
           </Link>
         ) : null}
       </div>
+
+      {rivalry ? (
+        <div className="af-live-rivalry" data-rivalry={rivalry}>
+          <CfpBowlCrest bowl={rivalry} size={34} decorative />
+          <span className="af-live-rivalry-text">
+            <span className="af-live-rivalry-kicker af-label">{lsc('Rivalry game', language)}</span>
+            <span className="af-live-rivalry-name">{RIVALRY_NAMES[rivalry]}</span>
+          </span>
+        </div>
+      ) : null}
 
       <div className="af-live-teams">
         <Side
